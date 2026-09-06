@@ -245,6 +245,20 @@ tbody tr:hover {
     font-size: 1rem;
 }
 
+.section__header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-block-end: 1rem;
+}
+
+.section__header h2 {
+    margin: 0;
+}
+
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
@@ -400,6 +414,28 @@ tbody tr:hover {
     margin-block-end: 1.25rem;
 }
 
+.field--submit {
+    display: flex;
+    align-items: flex-end;
+}
+
+.inline-form {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    margin-inline-start: auto;
+}
+
+.inline-form select {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font: inherit;
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
 .button {
     display: inline-block;
     background: var(--color-accent);
@@ -411,6 +447,10 @@ tbody tr:hover {
     font: inherit;
     text-decoration: none;
     cursor: pointer;
+}
+
+.button--danger {
+    background: var(--color-danger);
 }
 
 @media (prefers-color-scheme: dark) {

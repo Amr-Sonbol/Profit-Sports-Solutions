@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
-from people.models import Technician
+from people.models import Technician, TechnicianSkill
 from reference.models import Brand, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
 
@@ -174,3 +174,150 @@ class TaskCreateTests(TaskTestCase):
             })
         numbers = set(Task.objects.values_list('task_number', flat=True))
         self.assertEqual(numbers, {'AE-0001', 'AE-0002'})
+
+
+class TaskAssignTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, required_skill=self.skill,
+            priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
+            created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        self.helper_user = User.objects.create_user('helper1', password='pass12345')
+        self.helper = Technician.objects.create(
+            user=self.helper_user, country=self.country, full_name='Omar Helper',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3,
+            set_by=self.technician, set_on=timezone.now().date(),
+        )
+        self.url = f'/tasks/{self.task.pk}/assign/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_set_lead_assigns_and_advances_status(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+        assignment = self.task.assignments.get(is_active=True)
+        self.assertEqual(assignment.technician, self.technician)
+        self.assertEqual(assignment.role, TaskAssignment.Role.LEAD)
+        event = self.task.events.get()
+        self.assertEqual(event.event_type, TaskEvent.EventType.ASSIGNED)
+
+    def test_replace_lead_without_reason_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['set_lead_form'].errors)
+        assignment = self.task.assignments.get(is_active=True)
+        self.assertEqual(assignment.technician, self.technician)
+
+    def test_replace_lead_with_reason_ends_old_assignment(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+
+        response = self.client.post(self.url, {
+            'action': 'set_lead', 'technician': self.helper.pk,
+            'end_reason': TaskAssignment.EndReason.OVERLOADED,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        old_assignment = self.task.assignments.get(technician=self.technician)
+        self.assertFalse(old_assignment.is_active)
+        self.assertEqual(old_assignment.end_reason, TaskAssignment.EndReason.OVERLOADED)
+
+        new_assignment = self.task.assignments.get(is_active=True)
+        self.assertEqual(new_assignment.technician, self.helper)
+        self.assertEqual(
+            list(self.task.events.values_list('event_type', flat=True)),
+            [TaskEvent.EventType.ASSIGNED, TaskEvent.EventType.REASSIGNED],
+        )
+
+    def test_add_helper_requires_an_active_lead(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_helper', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TaskAssignment.objects.filter(role=TaskAssignment.Role.HELPER).count(), 0)
+
+    def test_add_and_remove_helper(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+        response = self.client.post(self.url, {'action': 'add_helper', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 302)
+
+        helper_assignment = self.task.assignments.get(role=TaskAssignment.Role.HELPER)
+        self.assertTrue(helper_assignment.is_active)
+
+        response = self.client.post(self.url, {
+            'action': 'remove_helper', 'assignment_id': helper_assignment.pk,
+            'end_reason': TaskAssignment.EndReason.SICK,
+        })
+        self.assertEqual(response.status_code, 302)
+        helper_assignment.refresh_from_db()
+        self.assertFalse(helper_assignment.is_active)
+        self.assertEqual(helper_assignment.end_reason, TaskAssignment.EndReason.SICK)
+
+    def test_remove_helper_without_reason_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+        self.client.post(self.url, {'action': 'add_helper', 'technician': self.helper.pk})
+        helper_assignment = self.task.assignments.get(role=TaskAssignment.Role.HELPER)
+
+        response = self.client.post(self.url, {
+            'action': 'remove_helper', 'assignment_id': helper_assignment.pk,
+        })
+        self.assertEqual(response.status_code, 200)
+        helper_assignment.refresh_from_db()
+        self.assertTrue(helper_assignment.is_active)
+
+    def test_assignment_is_locked_once_in_progress(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+
+        response = self.client.get(self.url)
+        self.assertTrue(response.context['locked'])
+
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 200)
+        assignment = self.task.assignments.get(is_active=True)
+        self.assertEqual(assignment.technician, self.technician)
+
+    def test_candidates_exclude_technicians_already_on_the_task(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
+
+        response = self.client.get(self.url)
+        candidate_ids = {t.pk for t in response.context['candidates']}
+        self.assertNotIn(self.technician.pk, candidate_ids)
+        self.assertIn(self.helper.pk, candidate_ids)
+
+    def test_candidates_are_restricted_to_the_task_country(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        candidate_names = {t.full_name for t in response.context['candidates']}
+        self.assertNotIn('Nour Cairo', candidate_names)

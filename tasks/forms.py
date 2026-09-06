@@ -1,10 +1,12 @@
 from django import forms
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from customers.models import Site
+from people.models import Technician
 from reference.models import Brand, Skill, TaskType
 
-from .models import Task
+from .models import Task, TaskAssignment
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
 
@@ -38,3 +40,38 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['source'].initial = Task.Source.PHONE
         self.fields['billing_type'].initial = Task.BillingType.CHARGEABLE
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
+
+
+class SetLeadForm(forms.Form):
+    technician = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Technician'))
+    end_reason = forms.ChoiceField(
+        choices=[('', '---------')] + TaskAssignment.EndReason.choices, required=False,
+        label=_('Reason for replacing the current lead'),
+    )
+
+    def __init__(self, *args, technicians, requires_reason, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['technician'].queryset = technicians
+        self.requires_reason = requires_reason
+        if not requires_reason:
+            del self.fields['end_reason']
+
+    def clean_end_reason(self):
+        end_reason = self.cleaned_data['end_reason']
+        if self.requires_reason and not end_reason:
+            raise forms.ValidationError(_('Choose a reason for replacing the current lead.'))
+        return end_reason
+
+
+class AddHelperForm(forms.Form):
+    technician = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Technician'))
+
+    def __init__(self, *args, technicians, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['technician'].queryset = technicians
+
+
+class RemoveAssignmentForm(forms.Form):
+    end_reason = forms.ChoiceField(
+        choices=[('', '---------')] + TaskAssignment.EndReason.choices, label=_('Reason'),
+    )

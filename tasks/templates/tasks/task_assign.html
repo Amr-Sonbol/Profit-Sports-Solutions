@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Assign" %} — {{ task.task_number }}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:task_detail' task.pk %}" class="back-link">{% translate "Back to task" %}</a>
+        <h1><span class="task-number">{{ task.task_number }}</span></h1>
+    </div>
+    <div class="badge-row">
+        <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+    </div>
+</div>
+
+{% if locked %}
+<div class="section">
+    <p class="empty-state">
+        {% translate "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead." %}
+    </p>
+</div>
+{% endif %}
+
+<div class="section">
+    <h2>{% translate "Lead" %}</h2>
+    {% if active_lead %}
+    <ul class="plain-list">
+        <li>
+            <span class="badge badge--role-lead">{% translate "Lead" %}</span>
+            {{ active_lead.technician.full_name }}
+            <span class="muted">{% blocktranslate with time=active_lead.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
+        </li>
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No one is assigned yet." %}</p>
+    {% endif %}
+
+    {% if not locked %}
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="set_lead">
+        {% for field in set_lead_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">
+                {% if active_lead %}{% translate "Replace lead" %}{% else %}{% translate "Set as lead" %}{% endif %}
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+{% if active_lead %}
+<div class="section">
+    <h2>{% translate "Helpers" %}</h2>
+    {% if active_helpers %}
+    <ul class="plain-list">
+        {% for helper in active_helpers %}
+        <li>
+            <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {{ helper.technician.full_name }}
+            <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
+            {% if not locked %}
+            <form method="post" class="inline-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="remove_helper">
+                <input type="hidden" name="assignment_id" value="{{ helper.pk }}">
+                {{ remove_form.end_reason }}
+                <button type="submit" class="button button--danger">{% translate "Remove" %}</button>
+            </form>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No helpers on this task." %}</p>
+    {% endif %}
+
+    {% if not locked and add_helper_form %}
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_helper">
+        {% for field in add_helper_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Add helper" %}</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="section">
+    <h2>{% translate "Available technicians" %}</h2>
+    {% if candidates %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Employment" %}</th>
+                    <th>{% translate "Transport" %}</th>
+                    <th>{% translate "Large equipment" %}</th>
+                    {% if task.required_skill %}<th>{% blocktranslate with skill=task.required_skill.name %}Level — {{ skill }}{% endblocktranslate %}</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for technician in candidates %}
+                <tr>
+                    <td>{{ technician.full_name }}</td>
+                    <td>{{ technician.get_employment_type_display }}</td>
+                    <td>{% if technician.has_transport %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
+                    <td>{% if technician.can_carry_large %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
+                    {% if task.required_skill %}<td>{{ technician.skill_level|default:"—" }}</td>{% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active technicians available in this country." %}</p>
+    {% endif %}
+</div>
+{% endblock %}
