@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
@@ -12,6 +11,7 @@ from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
 from people.models import Technician, TechnicianSkill
+from people.permissions import require_supervisor
 
 from .forms import AddHelperForm, RemoveAssignmentForm, SetLeadForm, TaskCreateForm
 from .models import Task, TaskAssignment, TaskEvent
@@ -93,14 +93,6 @@ def _candidates_with_skill_level(candidates_qs, task):
     return candidates
 
 
-def _require_supervisor(request):
-    """Supervisor screens are restricted to supervisors/managers (see task_list)."""
-    technician = getattr(request.user, 'technician', None)
-    if technician is None or technician.role not in (Technician.Role.SUPERVISOR, Technician.Role.MANAGER):
-        raise PermissionDenied
-    return technician
-
-
 def _with_lead_prefetch(queryset):
     """Attach each task's active lead assignment as `.lead_assignments`, for _attach_lead_technician."""
     return queryset.prefetch_related(
@@ -123,7 +115,7 @@ def _attach_lead_technician(tasks):
 
 @login_required
 def task_list(request):
-    _require_supervisor(request)
+    require_supervisor(request)
 
     status = request.GET.get('status', 'open')
     search = request.GET.get('q', '').strip()
@@ -159,7 +151,7 @@ def task_list(request):
 
 @login_required
 def task_detail(request, pk):
-    _require_supervisor(request)
+    require_supervisor(request)
 
     task = get_object_or_404(
         Task.objects.select_related(
@@ -187,7 +179,7 @@ def task_detail(request, pk):
 
 @login_required
 def task_create(request):
-    _require_supervisor(request)
+    require_supervisor(request)
 
     if request.method == 'POST':
         form = TaskCreateForm(request.POST)
@@ -232,7 +224,7 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
 
 @login_required
 def task_assign(request, pk):
-    _require_supervisor(request)
+    require_supervisor(request)
 
     task = get_object_or_404(Task.objects.select_related('site__customer__country'), pk=pk)
     active_assignments = list(task.assignments.filter(is_active=True).select_related('technician'))
@@ -298,7 +290,7 @@ def task_assign(request, pk):
 
 @login_required
 def task_week(request):
-    _require_supervisor(request)
+    require_supervisor(request)
 
     today = timezone.localtime().date()
     start = parse_date(request.GET.get('start', '') or '') or (today - timedelta(days=today.weekday()))

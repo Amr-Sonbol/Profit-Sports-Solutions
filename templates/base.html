@@ -11,6 +11,10 @@
         <span class="site-header__brand">{% translate "Spots Solutions" %}</span>
         {% if user.is_authenticated %}
             <nav class="site-header__nav">
+                {% if user.technician.role == 'supervisor' or user.technician.role == 'manager' %}
+                    <a href="{% url 'tasks:task_list' %}">{% translate "Tasks" %}</a>
+                    <a href="{% url 'reports:report_list' %}">{% translate "Reports" %}</a>
+                {% endif %}
                 <span class="site-header__user">{{ user.technician.full_name|default:user.get_username }}</span>
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}

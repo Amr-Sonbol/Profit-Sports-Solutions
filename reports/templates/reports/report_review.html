@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Review report" %} — {{ task.task_number }}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'reports:report_list' %}" class="back-link">{% translate "Back to reports" %}</a>
+        <h1><span class="task-number">{{ task.task_number }}</span></h1>
+    </div>
+    <div class="badge-row">
+        {% if reviewed %}
+            <span class="badge badge--status-completed">{% translate "Approved" %}</span>
+        {% elif report.rejection_reason %}
+            <span class="badge badge--status-blocked">{% translate "Rejected" %}</span>
+        {% else %}
+            <span class="badge badge--status-new">{% translate "Pending" %}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Task" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Customer / Site" %}</dt>
+            <dd>{{ task.site.customer.name }} — {{ task.site.name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Lead" %}</dt>
+            <dd>{{ lead_technician.full_name|default:"—" }}</dd>
+        </div>
+    </dl>
+</div>
+
+<div class="section">
+    <h2>{% translate "Report" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Resolved" %}</dt>
+            <dd>{% if report.resolved %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Labour hours" %}</dt>
+            <dd>{{ report.labour_hours }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Signed by" %}</dt>
+            <dd>{{ report.customer_name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Submitted" %}</dt>
+            <dd>{{ report.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
+        </div>
+        {% if report.signature_url %}
+        <div>
+            <dt>{% translate "Signature" %}</dt>
+            <dd><a href="{{ report.signature_url }}" target="_blank" rel="noopener">{% translate "View" %}</a></dd>
+        </div>
+        {% endif %}
+    </dl>
+    <div class="description">
+        <dt>{% translate "Findings" %}</dt>
+        <p>{{ report.findings }}</p>
+    </div>
+    {% if report.action_taken %}
+    <div class="description">
+        <dt>{% translate "Action taken" %}</dt>
+        <p>{{ report.action_taken }}</p>
+    </div>
+    {% endif %}
+
+    {% if report.parts_used.all %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Part" %}</th>
+                    <th>{% translate "Description" %}</th>
+                    <th>{% translate "Qty" %}</th>
+                    <th>{% translate "Unit cost" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part in report.parts_used.all %}
+                <tr>
+                    <td>{{ part.part_code }}</td>
+                    <td>{{ part.description|default:"—" }}</td>
+                    <td>{{ part.quantity }}</td>
+                    <td>{{ part.unit_cost }} {{ part.currency_code }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Attachments" %}</h2>
+    {% if attachments %}
+    <ul class="plain-list">
+        {% for attachment in attachments %}
+        <li>
+            <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
+            <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+            <span class="muted">{{ attachment.get_source_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No attachments on this task — check whether a serial plate photo is missing before approving." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Decision" %}</h2>
+    {% if reviewed %}
+    <p class="empty-state">{% blocktranslate with time=report.approved_at|date:"SHORT_DATETIME_FORMAT" %}Approved on {{ time }}{% endblocktranslate %}</p>
+    {% else %}
+        {% if report.rejection_reason %}
+        <p class="muted">{% translate "Currently sent back with this reason:" %}</p>
+        <p>{{ report.rejection_reason }}</p>
+        {% endif %}
+        <div class="form-grid">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="approve">
+                <button type="submit" class="button">{% translate "Approve" %}</button>
+            </form>
+        </div>
+        <form method="post" class="form-grid">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject">
+            <div class="field {% if reject_form.rejection_reason.errors %}field--error{% endif %}">
+                <label for="{{ reject_form.rejection_reason.id_for_label }}">{{ reject_form.rejection_reason.label }}</label>
+                {{ reject_form.rejection_reason }}
+                <p class="field__help">{{ reject_form.rejection_reason.help_text }}</p>
+                {% for error in reject_form.rejection_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field field--submit">
+                <button type="submit" class="button button--danger">{% translate "Send back" %}</button>
+            </div>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}
