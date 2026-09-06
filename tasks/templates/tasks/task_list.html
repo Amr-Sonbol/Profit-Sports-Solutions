@@ -49,7 +49,7 @@
                     {{ task.site.customer.name }}
                     <div class="muted">{{ task.site.name }}</div>
                 </td>
-                <td>{{ task.task_type.name|default:"—" }}</td>
+                <td>{{ task.task_type.display_name|default:"—" }}</td>
                 <td><span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span></td>
                 <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
                 <td>{{ task.promised_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</td>

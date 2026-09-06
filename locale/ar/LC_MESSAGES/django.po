@@ -1,0 +1,1076 @@
+# Arabic translation for Spots Solutions.
+msgid ""
+msgstr ""
+"Project-Id-Version: spots\n"
+"Report-Msgid-Bugs-To: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ar\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
+
+msgid "%(source)s — %(time)s"
+msgstr "%(source)s — %(time)s"
+
+msgid "Accept task"
+msgstr "قبول المهمة"
+
+msgid "Accepted"
+msgstr "مقبولة"
+
+msgid "Access notes"
+msgstr "ملاحظات الدخول"
+
+msgid "Action taken"
+msgstr "الإجراء المتخذ"
+
+msgid "Active"
+msgstr "نشط"
+
+msgid "Add helper"
+msgstr "إضافة مساعد"
+
+msgid "Address"
+msgstr "العنوان"
+
+msgid "After"
+msgstr "بعد"
+
+msgid "All"
+msgstr "الكل"
+
+msgid "Approve"
+msgstr "اعتماد"
+
+msgid "Approved"
+msgstr "معتمد"
+
+msgid "Approved on %(time)s"
+msgstr "اعتمد في %(time)s"
+
+msgid "Approved — this report is final."
+msgstr "معتمد — هذا التقرير نهائي."
+
+msgid "Approved."
+msgstr "تم الاعتماد."
+
+msgid "Arabic"
+msgstr "العربية"
+
+msgid "Arrived"
+msgstr "وصل"
+
+msgid "Assign"
+msgstr "التعيين"
+
+msgid "Assigned"
+msgstr "معيّنة"
+
+msgid "Assignment"
+msgstr "التعيين"
+
+msgid "Attachments"
+msgstr "المرفقات"
+
+msgid "Available technicians"
+msgstr "الفنيون المتاحون"
+
+msgid "Back to list"
+msgstr "العودة إلى القائمة"
+
+msgid "Back to my week"
+msgstr "العودة إلى أسبوعي"
+
+msgid "Back to reports"
+msgstr "العودة إلى التقارير"
+
+msgid "Back to task"
+msgstr "العودة إلى المهمة"
+
+msgid "Back to tasks"
+msgstr "العودة إلى المهام"
+
+msgid "Be specific — missing serial photo, vague fault description, etc. The technician sees this."
+msgstr "كن محددًا — صورة الرقم التسلسلي مفقودة، وصف العطل غامض، إلخ. الفني يرى هذا."
+
+msgid "Before"
+msgstr "قبل"
+
+msgid "Billing type"
+msgstr "نوع الفوترة"
+
+msgid "Blocked"
+msgstr "معطّلة"
+
+msgid "Brand"
+msgstr "العلامة التجارية"
+
+msgid "Cancelled"
+msgstr "ملغاة"
+
+msgid "Chargeable"
+msgstr "مدفوعة"
+
+msgid "Choose a reason for replacing the current lead."
+msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
+
+msgid "Choose an outcome for this machine."
+msgstr "اختر نتيجة لهذا الجهاز."
+
+msgid "Closed"
+msgstr "مغلقة"
+
+msgid "Club"
+msgstr "نادٍ"
+
+msgid "Completed"
+msgstr "مكتملة"
+
+msgid "Contract"
+msgstr "عقد"
+
+msgid "Covered?"
+msgstr "تمت تغطيته؟"
+
+msgid "Create task"
+msgstr "إنشاء مهمة"
+
+msgid "Created"
+msgstr "أُنشئت"
+
+msgid "Currency"
+msgstr "العملة"
+
+msgid "Currently sent back with this reason:"
+msgstr "أُعيد حاليًا لهذا السبب:"
+
+msgid "Customer"
+msgstr "العميل"
+
+msgid "Customer / Site"
+msgstr "العميل / الموقع"
+
+msgid "Customer request"
+msgstr "طلب العميل"
+
+msgid "Customer signature"
+msgstr "توقيع العميل"
+
+msgid "Decision"
+msgstr "القرار"
+
+msgid "Description"
+msgstr "الوصف"
+
+msgid "Details"
+msgstr "التفاصيل"
+
+msgid "Document"
+msgstr "مستند"
+
+msgid "Email"
+msgstr "البريد الإلكتروني"
+
+msgid "Emergency"
+msgstr "طارئ"
+
+msgid "Employment"
+msgstr "نوع التوظيف"
+
+msgid "En route"
+msgstr "في الطريق"
+
+msgid "English"
+msgstr "الإنجليزية"
+
+msgid "Enter at least a brand, model, and outcome for each new machine, or leave the row blank."
+msgstr "أدخل العلامة التجارية والموديل والنتيجة على الأقل لكل جهاز جديد، أو اترك الصف فارغًا."
+
+msgid "Every open task has a day."
+msgstr "كل مهمة مفتوحة لها يوم."
+
+msgid "Fault"
+msgstr "عطل"
+
+msgid "Faulty"
+msgstr "معطل"
+
+msgid "File"
+msgstr "ملف"
+
+msgid "File report"
+msgstr "تقديم التقرير"
+
+msgid "Fill in part code, quantity, unit cost and currency, or leave this row blank."
+msgstr "أدخل رمز القطعة والكمية وسعر الوحدة والعملة، أو اترك هذا الصف فارغًا."
+
+msgid "Findings"
+msgstr "النتائج"
+
+msgid "Fix and resubmit"
+msgstr "تصحيح وإعادة الإرسال"
+
+msgid "Freelance"
+msgstr "مستقل"
+
+msgid "Goodwill"
+msgstr "مجاملة"
+
+msgid "Gym"
+msgstr "صالة رياضية"
+
+msgid "Helper"
+msgstr "مساعد"
+
+msgid "Helper added."
+msgstr "تمت إضافة المساعد."
+
+msgid "Helper removed."
+msgstr "تمت إزالة المساعد."
+
+msgid "Helpers"
+msgstr "المساعدون"
+
+msgid "High"
+msgstr "مرتفعة"
+
+msgid "History"
+msgstr "السجل الزمني"
+
+msgid "Hotel"
+msgstr "فندق"
+
+msgid "I've arrived"
+msgstr "لقد وصلت"
+
+msgid "IANA name, e.g. Asia/Riyadh"
+msgstr "اسم IANA، مثال: Asia/Riyadh"
+
+msgid "ISO code"
+msgstr "رمز ISO"
+
+msgid "In progress"
+msgstr "قيد التنفيذ"
+
+msgid "Incorrect username or password."
+msgstr "اسم المستخدم أو كلمة المرور غير صحيحة."
+
+msgid "Inspected OK"
+msgstr "تم الفحص وسليم"
+
+msgid "Installation"
+msgstr "تركيب"
+
+msgid "Internal"
+msgstr "داخلي"
+
+msgid "Job"
+msgstr "المهمة"
+
+msgid "Labour hours"
+msgstr "ساعات العمل"
+
+msgid "Large equipment"
+msgstr "معدات كبيرة"
+
+msgid "Lead"
+msgstr "الفني الرئيسي"
+
+msgid "Lead technician set."
+msgstr "تم تعيين الفني الرئيسي."
+
+msgid "Leave"
+msgstr "إجازة"
+
+msgid "Level — %(skill)s"
+msgstr "المستوى — %(skill)s"
+
+msgid "Link"
+msgstr "رابط"
+
+msgid "Log in"
+msgstr "تسجيل الدخول"
+
+msgid "Log out"
+msgstr "تسجيل الخروج"
+
+msgid "Low"
+msgstr "منخفضة"
+
+msgid "Machine"
+msgstr "الجهاز"
+
+msgid "Machines already at this site"
+msgstr "الأجهزة الموجودة بالفعل في هذا الموقع"
+
+msgid "Machines covered"
+msgstr "الأجهزة المشمولة"
+
+msgid "Maintenance"
+msgstr "صيانة"
+
+msgid "Manage assignment"
+msgstr "إدارة التعيين"
+
+msgid "Manager"
+msgstr "مدير"
+
+msgid "Mark complete"
+msgstr "وضع علامة مكتمل"
+
+msgid "Model"
+msgstr "الموديل"
+
+msgid "My week"
+msgstr "أسبوعي"
+
+msgid "Name"
+msgstr "الاسم"
+
+msgid "New"
+msgstr "جديدة"
+
+msgid "New machines found"
+msgstr "أجهزة جديدة تم العثور عليها"
+
+msgid "New task"
+msgstr "مهمة جديدة"
+
+msgid "Next"
+msgstr "التالي"
+
+msgid "Next week"
+msgstr "الأسبوع القادم"
+
+msgid "No"
+msgstr "لا"
+
+msgid "No active technicians available in this country."
+msgstr "لا يوجد فنيون نشطون متاحون في هذه الدولة."
+
+msgid "No attachments on this task — check whether a serial plate photo is missing before approving."
+msgstr "لا توجد مرفقات لهذه المهمة — تحقق مما إذا كانت صورة لوحة الرقم التسلسلي مفقودة قبل الاعتماد."
+
+msgid "No attachments yet."
+msgstr "لا توجد مرفقات بعد."
+
+msgid "No events yet."
+msgstr "لا توجد أحداث بعد."
+
+msgid "No helpers on this task."
+msgstr "لا يوجد مساعدون في هذه المهمة."
+
+msgid "No one is assigned yet."
+msgstr "لم يتم تعيين أحد بعد."
+
+msgid "No photos yet."
+msgstr "لا توجد صور بعد."
+
+msgid "No reports match this filter."
+msgstr "لا توجد تقارير مطابقة لهذا الفلتر."
+
+msgid "No tasks match these filters."
+msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
+
+msgid "No tasks scheduled."
+msgstr "لا توجد مهام مجدولة."
+
+msgid "Normal"
+msgstr "عادية"
+
+msgid "Not repairable"
+msgstr "غير قابل للإصلاح"
+
+msgid "Nothing waiting on a day."
+msgstr "لا يوجد شيء بانتظار هذا اليوم."
+
+msgid "On my way"
+msgstr "أنا في الطريق"
+
+msgid "Open"
+msgstr "مفتوحة"
+
+msgid "Other"
+msgstr "أخرى"
+
+msgid "Outcome"
+msgstr "النتيجة"
+
+msgid "Overloaded"
+msgstr "محمّل بالعمل أكثر من اللازم"
+
+msgid "Page %(number)s of %(total)s"
+msgstr "صفحة %(number)s من %(total)s"
+
+msgid "Part"
+msgstr "القطعة"
+
+msgid "Part code"
+msgstr "رمز القطعة"
+
+msgid "Parts used"
+msgstr "القطع المستخدمة"
+
+msgid "Password"
+msgstr "كلمة المرور"
+
+msgid "Pending"
+msgstr "قيد الانتظار"
+
+msgid "Phone"
+msgstr "هاتف"
+
+msgid "Photo"
+msgstr "صورة"
+
+msgid "Photo added."
+msgstr "تمت إضافة الصورة."
+
+msgid "Photo or video"
+msgstr "صورة أو فيديو"
+
+msgid "Photos"
+msgstr "الصور"
+
+msgid "Previous"
+msgstr "السابق"
+
+msgid "Previous week"
+msgstr "الأسبوع الماضي"
+
+msgid "Priority"
+msgstr "الأولوية"
+
+msgid "Promised"
+msgstr "الموعد الموعود"
+
+msgid "Qty"
+msgstr "الكمية"
+
+msgid "Reason"
+msgstr "السبب"
+
+msgid "Reason for replacing the current lead"
+msgstr "سبب استبدال الفني الرئيسي الحالي"
+
+msgid "Reassigned"
+msgstr "أُعيد تعيينه"
+
+msgid "Rejected"
+msgstr "مرفوض"
+
+msgid "Rejection reason"
+msgstr "سبب الرفض"
+
+msgid "Remove"
+msgstr "إزالة"
+
+msgid "Reopened"
+msgstr "أُعيد فتحه"
+
+msgid "Repaired"
+msgstr "تم الإصلاح"
+
+msgid "Replace lead"
+msgstr "استبدال الفني الرئيسي"
+
+msgid "Replaced"
+msgstr "تم الاستبدال"
+
+msgid "Report"
+msgstr "التقرير"
+
+msgid "Report approved"
+msgstr "تم اعتماد التقرير"
+
+msgid "Report approved."
+msgstr "تم اعتماد التقرير."
+
+msgid "Report blocked"
+msgstr "الإبلاغ عن عائق"
+
+msgid "Report rejected"
+msgstr "تم رفض التقرير"
+
+msgid "Report sent back to the technician."
+msgstr "أُعيد التقرير إلى الفني."
+
+msgid "Report submitted"
+msgstr "تم تقديم التقرير"
+
+msgid "Report submitted."
+msgstr "تم تقديم التقرير."
+
+msgid "Reported"
+msgstr "تاريخ الإبلاغ"
+
+msgid "Reports"
+msgstr "التقارير"
+
+msgid "Required skill"
+msgstr "المهارة المطلوبة"
+
+msgid "Rescheduled"
+msgstr "أُعيد جدولته"
+
+msgid "Resolved"
+msgstr "تم الحل"
+
+msgid "Retired"
+msgstr "خارج الخدمة"
+
+msgid "Review report"
+msgstr "مراجعة التقرير"
+
+msgid "Review status"
+msgstr "حالة المراجعة"
+
+msgid "Scheduled"
+msgstr "مجدولة"
+
+msgid "Search"
+msgstr "بحث"
+
+msgid "Search by task number, site, or customer"
+msgstr "ابحث برقم المهمة أو الموقع أو العميل"
+
+msgid "Send back"
+msgstr "إعادة"
+
+msgid "Sent back:"
+msgstr "أُعيد لهذا السبب:"
+
+msgid "Serial number"
+msgstr "الرقم التسلسلي"
+
+msgid "Serial plate"
+msgstr "لوحة الرقم التسلسلي"
+
+msgid "Set as lead"
+msgstr "تعيين كفني رئيسي"
+
+msgid "Sick"
+msgstr "مرض"
+
+msgid "Signature"
+msgstr "التوقيع"
+
+msgid "Signed by"
+msgstr "وقّعه"
+
+msgid "Site"
+msgstr "الموقع"
+
+msgid "Site contact"
+msgstr "جهة الاتصال بالموقع"
+
+msgid "Skill mismatch"
+msgstr "عدم تطابق المهارة"
+
+msgid "Source"
+msgstr "المصدر"
+
+msgid "Spots Solutions"
+msgstr "سبوتس سوليوشنز"
+
+msgid "Staff"
+msgstr "موظف"
+
+msgid "Start work"
+msgstr "بدء العمل"
+
+msgid "Start work on this task before filing a report."
+msgstr "ابدأ العمل على هذه المهمة قبل تقديم تقرير."
+
+msgid "Started"
+msgstr "بدأت"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Submit report"
+msgstr "إرسال التقرير"
+
+msgid "Submitted"
+msgstr "تاريخ التقديم"
+
+msgid "Submitted — waiting on office review."
+msgstr "تم التقديم — بانتظار مراجعة المكتب."
+
+msgid "Supervisor"
+msgstr "مشرف"
+
+msgid "Task"
+msgstr "المهمة"
+
+msgid "Task #"
+msgstr "رقم المهمة"
+
+msgid "Task %(number)s created."
+msgstr "تم إنشاء المهمة %(number)s."
+
+msgid "Task marked blocked."
+msgstr "تم وضع علامة معطّلة على المهمة."
+
+msgid "Tasks"
+msgstr "المهام"
+
+msgid "Technician"
+msgstr "الفني"
+
+msgid "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead."
+msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة — بدأ العمل بالفعل. أغلقها وأنشئ مهمة جديدة للتسليم بدلاً من ذلك."
+
+msgid "This week"
+msgstr "هذا الأسبوع"
+
+msgid "Today"
+msgstr "اليوم"
+
+msgid "Transport"
+msgstr "وسيلة نقل"
+
+msgid "Type"
+msgstr "النوع"
+
+msgid "URL"
+msgstr "الرابط"
+
+msgid "Unit cost"
+msgstr "سعر الوحدة"
+
+msgid "Unscheduled"
+msgstr "غير مجدولة"
+
+msgid "Updated."
+msgstr "تم التحديث."
+
+msgid "Upload"
+msgstr "رفع"
+
+msgid "Username"
+msgstr "اسم المستخدم"
+
+msgid "Vehicle"
+msgstr "مركبة"
+
+msgid "Video"
+msgstr "فيديو"
+
+msgid "View"
+msgstr "عرض"
+
+msgid "Warranty"
+msgstr "ضمان"
+
+msgid "Week view"
+msgstr "عرض الأسبوع"
+
+msgid "What happened"
+msgstr "ماذا حدث"
+
+msgid "What is this"
+msgstr "ما هذا"
+
+msgid "What the customer reported"
+msgstr "ما أبلغ به العميل"
+
+msgid "WhatsApp"
+msgstr "واتساب"
+
+msgid "Work report"
+msgstr "تقرير العمل"
+
+msgid "Yes"
+msgstr "نعم"
+
+msgid "access notes"
+msgstr "ملاحظات الدخول"
+
+msgid "action taken"
+msgstr "الإجراء المتخذ"
+
+msgid "active"
+msgstr "نشط"
+
+msgid "actor"
+msgstr "الفاعل"
+
+msgid "address"
+msgstr "العنوان"
+
+msgid "approved at"
+msgstr "اعتُمد في"
+
+msgid "asset"
+msgstr "جهاز"
+
+msgid "assets"
+msgstr "الأجهزة"
+
+msgid "assigned at"
+msgstr "عُيّن في"
+
+msgid "auto-generated per country, e.g. AE-0001"
+msgstr "يُنشأ تلقائيًا لكل دولة، مثال: AE-0001"
+
+msgid "billing type"
+msgstr "نوع الفوترة"
+
+msgid "brand"
+msgstr "العلامة التجارية"
+
+msgid "brands"
+msgstr "العلامات التجارية"
+
+msgid "can carry large equipment"
+msgstr "يستطيع حمل معدات كبيرة"
+
+msgid "can move a treadmill motor or locker bank"
+msgstr "يستطيع نقل محرك جهاز مشي أو خزانة أقفال"
+
+msgid "category"
+msgstr "الفئة"
+
+msgid "checklist template"
+msgstr "قالب قائمة التحقق"
+
+msgid "code"
+msgstr "الرمز"
+
+msgid "contact name"
+msgstr "اسم جهة الاتصال"
+
+msgid "contact phone"
+msgstr "هاتف جهة الاتصال"
+
+msgid "corrected at"
+msgstr "صُحح في"
+
+msgid "corrected by"
+msgstr "صححه"
+
+msgid "corrected to %(time)s by %(by_name)s"
+msgstr "صُحح إلى %(time)s بواسطة %(by_name)s"
+
+msgid "countries"
+msgstr "الدول"
+
+msgid "country"
+msgstr "الدولة"
+
+msgid "created by"
+msgstr "أنشأه"
+
+msgid "currency code"
+msgstr "رمز العملة"
+
+msgid "customer"
+msgstr "العميل"
+
+msgid "customer name"
+msgstr "اسم العميل"
+
+msgid "customers"
+msgstr "العملاء"
+
+msgid "description"
+msgstr "الوصف"
+
+msgid "e.g. gym closed, no key, customer absent"
+msgstr "مثال: الصالة الرياضية مغلقة، لا يوجد مفتاح، العميل غائب"
+
+msgid "employment type"
+msgstr "نوع التوظيف"
+
+msgid "end reason"
+msgstr "سبب الإنهاء"
+
+msgid "ended at"
+msgstr "انتهى في"
+
+msgid "event type"
+msgstr "نوع الحدث"
+
+msgid "false once replaced"
+msgstr "يصبح خطأ بعد الاستبدال"
+
+msgid "fields the report form shows for this type"
+msgstr "الحقول التي يعرضها نموذج التقرير لهذا النوع"
+
+msgid "findings"
+msgstr "النتائج"
+
+msgid "for Microsoft SSO later"
+msgstr "لتسجيل الدخول الموحد من مايكروسوفت لاحقًا"
+
+msgid "free text from the plate"
+msgstr "نص حر من اللوحة"
+
+msgid "full name"
+msgstr "الاسم الكامل"
+
+msgid "gate codes, best hours"
+msgstr "رموز البوابات، أفضل الأوقات"
+
+msgid "has transport"
+msgstr "لديه وسيلة نقل"
+
+msgid "hired on"
+msgstr "تاريخ التعيين"
+
+msgid "installed on"
+msgstr "تاريخ التركيب"
+
+msgid "is warranty"
+msgstr "ضمن الضمان"
+
+msgid "labour hours"
+msgstr "ساعات العمل"
+
+msgid "language"
+msgstr "اللغة"
+
+msgid "level"
+msgstr "المستوى"
+
+msgid "media type"
+msgstr "نوع الوسائط"
+
+msgid "minimum level"
+msgstr "الحد الأدنى للمستوى"
+
+msgid "model name"
+msgstr "اسم الموديل"
+
+msgid "name"
+msgstr "الاسم"
+
+msgid "name (Arabic)"
+msgstr "الاسم (بالعربية)"
+
+msgid "never store an amount without its currency"
+msgstr "لا تُخزّن مبلغًا دون عملته أبدًا"
+
+msgid "note"
+msgstr "ملاحظة"
+
+msgid "occurred at"
+msgstr "حدث في"
+
+msgid "outcome"
+msgstr "النتيجة"
+
+msgid "part code"
+msgstr "رمز القطعة"
+
+msgid "part used"
+msgstr "القطعة المستخدمة"
+
+msgid "parts used"
+msgstr "القطع المستخدمة"
+
+msgid "per person, not per country"
+msgstr "لكل شخص، وليس لكل دولة"
+
+msgid "phone"
+msgstr "الهاتف"
+
+msgid "portal URL"
+msgstr "رابط بوابة الشركة"
+
+msgid "priority"
+msgstr "الأولوية"
+
+msgid "promised at"
+msgstr "الموعد الموعود"
+
+msgid "purpose"
+msgstr "الغرض"
+
+msgid "quantity"
+msgstr "الكمية"
+
+msgid "rejection reason"
+msgstr "سبب الرفض"
+
+msgid "report"
+msgstr "التقرير"
+
+msgid "reported at"
+msgstr "تاريخ الإبلاغ"
+
+msgid "required on reassignment — one tap, never free text"
+msgstr "مطلوب عند إعادة التعيين — نقرة واحدة، وليس نصًا حرًا أبدًا"
+
+msgid "required skill"
+msgstr "المهارة المطلوبة"
+
+msgid "requires photos"
+msgstr "يتطلب صورًا"
+
+msgid "requires signature"
+msgstr "يتطلب توقيعًا"
+
+msgid "resolved"
+msgstr "تم الحل"
+
+msgid "role"
+msgstr "الدور"
+
+msgid "scheduled for"
+msgstr "مجدولة لتاريخ"
+
+msgid "segment"
+msgstr "القطاع"
+
+msgid "serial number"
+msgstr "الرقم التسلسلي"
+
+msgid "set by"
+msgstr "حدده"
+
+msgid "set on"
+msgstr "تاريخ التحديد"
+
+msgid "signature URL"
+msgstr "رابط التوقيع"
+
+msgid "since %(time)s"
+msgstr "منذ %(time)s"
+
+msgid "site"
+msgstr "الموقع"
+
+msgid "sites"
+msgstr "المواقع"
+
+msgid "skill"
+msgstr "المهارة"
+
+msgid "skills"
+msgstr "المهارات"
+
+msgid "source"
+msgstr "المصدر"
+
+msgid "stable key, never changes"
+msgstr "مفتاح ثابت، لا يتغير أبدًا"
+
+msgid "status"
+msgstr "الحالة"
+
+msgid "storage kind"
+msgstr "نوع التخزين"
+
+msgid "submitted at"
+msgstr "قُدّم في"
+
+msgid "supervisor's correction"
+msgstr "تصحيح المشرف"
+
+msgid "supervisors only"
+msgstr "للمشرفين فقط"
+
+msgid "task"
+msgstr "المهمة"
+
+msgid "task asset"
+msgstr "جهاز المهمة"
+
+msgid "task assets"
+msgstr "أجهزة المهمة"
+
+msgid "task assignment"
+msgstr "تعيين المهمة"
+
+msgid "task assignments"
+msgstr "تعيينات المهمة"
+
+msgid "task attachment"
+msgstr "مرفق المهمة"
+
+msgid "task attachments"
+msgstr "مرفقات المهمة"
+
+msgid "task event"
+msgstr "حدث المهمة"
+
+msgid "task events"
+msgstr "أحداث المهمة"
+
+msgid "task number"
+msgstr "رقم المهمة"
+
+msgid "task type"
+msgstr "نوع المهمة"
+
+msgid "task types"
+msgstr "أنواع المهام"
+
+msgid "tasks"
+msgstr "المهام"
+
+msgid "technician"
+msgstr "الفني"
+
+msgid "technician skill"
+msgstr "مهارة الفني"
+
+msgid "technician skills"
+msgstr "مهارات الفني"
+
+msgid "technicians"
+msgstr "الفنيون"
+
+msgid "the day the supervisor planned"
+msgstr "اليوم الذي خطط له المشرف"
+
+msgid "the only certain field at creation"
+msgstr "الحقل الوحيد المؤكد عند الإنشاء"
+
+msgid "timezone"
+msgstr "المنطقة الزمنية"
+
+msgid "unit cost"
+msgstr "سعر الوحدة"
+
+msgid "uploaded at"
+msgstr "رُفع في"
+
+msgid "uploaded by"
+msgstr "رفعه"
+
+msgid "user"
+msgstr "المستخدم"
+
+msgid "warranty end"
+msgstr "نهاية الضمان"
+
+msgid "what the customer is owed"
+msgstr "ما هو مستحق للعميل"
+
+msgid "what the customer reported"
+msgstr "ما أبلغ به العميل"
+
+msgid "what the technician found"
+msgstr "ما وجده الفني"
+
+msgid "where the office requests spare parts"
+msgstr "أين يطلب المكتب قطع الغيار"
+
+msgid "which supervisor decided"
+msgstr "أي مشرف قرر ذلك"
+
+msgid "who signed"
+msgstr "من وقّع"
+
+msgid "work report"
+msgstr "تقرير العمل"
+
+msgid "work reports"
+msgstr "تقارير العمل"
+
+msgid "— Report"
+msgstr "— التقرير"
+

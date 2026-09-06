@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import translation
 
 from .models import Brand, Country, Skill, TaskType
 
@@ -35,3 +36,12 @@ class SeedReferenceDataTests(TestCase):
             ).count(),
             12,
         )
+
+    def test_task_type_display_name_follows_active_language(self):
+        installation = TaskType.objects.get(code='new_installation')
+        with translation.override('en'):
+            self.assertEqual(installation.display_name, 'New Installation')
+            self.assertEqual(str(installation), 'New Installation')
+        with translation.override('ar'):
+            self.assertEqual(installation.display_name, 'تركيب جديد')
+            self.assertEqual(str(installation), 'تركيب جديد')

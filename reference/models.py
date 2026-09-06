@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
 
 
@@ -83,5 +84,9 @@ class TaskType(models.Model):
         verbose_name_plural = _('task types')
         ordering = ['name']
 
+    @property
+    def display_name(self):
+        return self.name_ar if get_language() == 'ar' else self.name
+
     def __str__(self):
-        return self.name
+        return self.display_name
