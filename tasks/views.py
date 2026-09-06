@@ -2,7 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 
 from people.models import Technician
 
@@ -26,11 +26,17 @@ PRIORITY_RANK = Case(
 )
 
 
-@login_required
-def task_list(request):
+def _require_supervisor(request):
+    """Supervisor screens are restricted to supervisors/managers (see task_list)."""
     technician = getattr(request.user, 'technician', None)
     if technician is None or technician.role not in (Technician.Role.SUPERVISOR, Technician.Role.MANAGER):
         raise PermissionDenied
+    return technician
+
+
+@login_required
+def task_list(request):
+    _require_supervisor(request)
 
     status = request.GET.get('status', 'open')
     search = request.GET.get('q', '').strip()
@@ -73,3 +79,31 @@ def task_list(request):
         'status_choices': Task.Status.choices,
     }
     return render(request, 'tasks/task_list.html', context)
+
+
+@login_required
+def task_detail(request, pk):
+    _require_supervisor(request)
+
+    task = get_object_or_404(
+        Task.objects.select_related(
+            'site__customer', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
+        ).prefetch_related('report__parts_used'),
+        pk=pk,
+    )
+    assignments = task.assignments.select_related('technician')
+    active_lead = next(
+        (a for a in assignments if a.role == TaskAssignment.Role.LEAD and a.is_active), None,
+    )
+    active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
+
+    context = {
+        'task': task,
+        'active_lead': active_lead,
+        'active_helpers': active_helpers,
+        'events': task.events.select_related('actor', 'corrected_by'),
+        'attachments': task.attachments.select_related('uploaded_by'),
+        'task_assets': task.task_assets.select_related('asset'),
+        'report': getattr(task, 'report', None),
+    }
+    return render(request, 'tasks/task_detail.html', context)

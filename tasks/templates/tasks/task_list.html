@@ -40,7 +40,7 @@
         <tbody>
             {% for task in page_obj %}
             <tr>
-                <td><span class="task-number">{{ task.task_number }}</span></td>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
                 <td>
                     {{ task.site.customer.name }}
                     <div class="muted">{{ task.site.name }}</div>

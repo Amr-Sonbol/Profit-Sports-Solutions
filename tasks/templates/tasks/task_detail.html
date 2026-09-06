@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ task.task_number }} — {% translate "Spots Solutions" %}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:task_list' %}" class="back-link">{% translate "← Back to tasks" %}</a>
+        <h1><span class="task-number">{{ task.task_number }}</span></h1>
+    </div>
+    <div class="badge-row">
+        <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+        <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Details" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Customer / Site" %}</dt>
+            <dd>{{ task.site.customer.name }} — {{ task.site.name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Address" %}</dt>
+            <dd>{{ task.site.address|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Type" %}</dt>
+            <dd>{{ task.task_type.name|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Brand" %}</dt>
+            <dd>{{ task.brand.name|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Required skill" %}</dt>
+            <dd>{{ task.required_skill.name|default:"—" }}{% if task.min_level %} ({% translate "level" %} {{ task.min_level }}){% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Billing type" %}</dt>
+            <dd>{{ task.get_billing_type_display }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Source" %}</dt>
+            <dd>{{ task.get_source_display }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Reported" %}</dt>
+            <dd>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Promised" %}</dt>
+            <dd>{{ task.promised_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Scheduled" %}</dt>
+            <dd>{{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
+        </div>
+    </dl>
+    {% if task.description %}
+    <div class="description">
+        <dt>{% translate "Description" %}</dt>
+        <p>{{ task.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Assignment" %}</h2>
+    {% if active_lead or active_helpers %}
+    <ul class="plain-list">
+        {% if active_lead %}
+        <li>
+            <span class="badge badge--role-lead">{% translate "Lead" %}</span>
+            {{ active_lead.technician.full_name }}
+            <span class="muted">{% blocktranslate with time=active_lead.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
+        </li>
+        {% endif %}
+        {% for helper in active_helpers %}
+        <li>
+            <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {{ helper.technician.full_name }}
+            <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No one is assigned yet." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Attachments" %}</h2>
+    {% if attachments %}
+    <ul class="plain-list">
+        {% for attachment in attachments %}
+        <li>
+            <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
+            <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+            <span class="muted">{% blocktranslate with source=attachment.get_source_display time=attachment.uploaded_at|date:"SHORT_DATETIME_FORMAT" %}{{ source }} — {{ time }}{% endblocktranslate %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No attachments yet." %}</p>
+    {% endif %}
+</div>
+
+{% if task_assets %}
+<div class="section">
+    <h2>{% translate "Machines covered" %}</h2>
+    <ul class="plain-list">
+        {% for task_asset in task_assets %}
+        <li>
+            {{ task_asset.asset }}
+            <span class="badge badge--muted">{{ task_asset.get_outcome_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if report %}
+<div class="section">
+    <h2>{% translate "Work report" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Resolved" %}</dt>
+            <dd>{% if report.resolved %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Labour hours" %}</dt>
+            <dd>{{ report.labour_hours }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Signed by" %}</dt>
+            <dd>{{ report.customer_name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Submitted" %}</dt>
+            <dd>{{ report.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Approved" %}</dt>
+            <dd>{{ report.approved_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
+        </div>
+    </dl>
+    <div class="description">
+        <dt>{% translate "Findings" %}</dt>
+        <p>{{ report.findings }}</p>
+    </div>
+    {% if report.action_taken %}
+    <div class="description">
+        <dt>{% translate "Action taken" %}</dt>
+        <p>{{ report.action_taken }}</p>
+    </div>
+    {% endif %}
+    {% if report.rejection_reason %}
+    <div class="description">
+        <dt>{% translate "Rejection reason" %}</dt>
+        <p>{{ report.rejection_reason }}</p>
+    </div>
+    {% endif %}
+    {% if report.parts_used.all %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Part" %}</th>
+                    <th>{% translate "Description" %}</th>
+                    <th>{% translate "Qty" %}</th>
+                    <th>{% translate "Unit cost" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part in report.parts_used.all %}
+                <tr>
+                    <td>{{ part.part_code }}</td>
+                    <td>{{ part.description|default:"—" }}</td>
+                    <td>{{ part.quantity }}</td>
+                    <td>{{ part.unit_cost }} {{ part.currency_code }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="section">
+    <h2>{% translate "History" %}</h2>
+    {% if events %}
+    <ul class="timeline">
+        {% for event in events %}
+        <li>
+            <span class="timeline__time">{{ event.occurred_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            <span class="timeline__type">{{ event.get_event_type_display }}</span>
+            <span class="muted">{{ event.actor.technician.full_name|default:event.actor.get_username }}</span>
+            {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
+            {% if event.corrected_at %}
+            <p class="muted">{% blocktranslate with time=event.corrected_at|date:"SHORT_DATETIME_FORMAT" by_name=event.corrected_by.technician.full_name %}corrected to {{ time }} by {{ by_name }}{% endblocktranslate %}</p>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No events yet." %}</p>
+    {% endif %}
+</div>
+{% endblock %}
