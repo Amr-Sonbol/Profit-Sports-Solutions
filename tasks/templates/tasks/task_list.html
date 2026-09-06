@@ -13,6 +13,7 @@
             <a href="?status={{ value }}{% if search %}&q={{ search }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
         {% endfor %}
     </nav>
+    <a href="{% url 'tasks:task_create' %}" class="button">{% translate "New task" %}</a>
 </div>
 
 <form method="get" class="filters">

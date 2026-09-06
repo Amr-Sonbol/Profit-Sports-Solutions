@@ -36,7 +36,10 @@ class Task(models.Model):
         BLOCKED = 'blocked', _('Blocked')
         CANCELLED = 'cancelled', _('Cancelled')
 
-    task_number = models.CharField(_('task number'), max_length=30, help_text=_('per country'))
+    task_number = models.CharField(
+        _('task number'), max_length=30, unique=True,
+        help_text=_('auto-generated per country, e.g. AE-0001'),
+    )
     site = models.ForeignKey(
         Site, on_delete=models.PROTECT, related_name='tasks',
         verbose_name=_('site'), help_text=_('the only certain field at creation'),

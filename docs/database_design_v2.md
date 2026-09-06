@@ -214,7 +214,7 @@ Write this on one page in Arabic and English. Without certificates, these four s
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| task_number | varchar | per country |
+| task_number | varchar | unique, auto-generated per country, e.g. `AE-0001` |
 | site_id | FK → site | **the only certain field at creation** |
 | task_type_id | FK → task_type | nullable |
 | brand_id | FK → brand | nullable |

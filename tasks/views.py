@@ -1,12 +1,19 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from people.models import Technician
 
-from .models import Task, TaskAssignment
+from .forms import TaskCreateForm
+from .models import Task, TaskAssignment, TaskEvent
+
+TASK_NUMBER_CREATE_ATTEMPTS = 5
 
 OPEN_STATUSES = [
     Task.Status.NEW,
@@ -24,6 +31,26 @@ PRIORITY_RANK = Case(
     default=Value(4),
     output_field=IntegerField(),
 )
+
+
+def _next_task_number(country):
+    prefix = f'{country.iso_code}-'
+    count = Task.objects.filter(task_number__startswith=prefix).count()
+    return f'{prefix}{count + 1:04d}'
+
+
+def _save_new_task(task):
+    """Assign a task_number and save, retrying on a rare numbering collision."""
+    country = task.site.customer.country
+    for _attempt in range(TASK_NUMBER_CREATE_ATTEMPTS):
+        task.task_number = _next_task_number(country)
+        try:
+            with transaction.atomic():
+                task.save()
+            return
+        except IntegrityError:
+            continue
+    raise IntegrityError('Could not generate a unique task number')
 
 
 def _require_supervisor(request):
@@ -107,3 +134,26 @@ def task_detail(request, pk):
         'report': getattr(task, 'report', None),
     }
     return render(request, 'tasks/task_detail.html', context)
+
+
+@login_required
+def task_create(request):
+    _require_supervisor(request)
+
+    if request.method == 'POST':
+        form = TaskCreateForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user
+            task.status = Task.Status.NEW
+            _save_new_task(task)
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.CREATED,
+                occurred_at=timezone.now(), actor=request.user,
+            )
+            messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
+            return redirect('tasks:task_detail', pk=task.pk)
+    else:
+        form = TaskCreateForm()
+
+    return render(request, 'tasks/task_create.html', {'form': form})
