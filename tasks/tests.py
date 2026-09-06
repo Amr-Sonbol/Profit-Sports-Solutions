@@ -479,6 +479,23 @@ class MyWeekTests(TaskTestCase):
 
         self.assertEqual(list(response.context['unscheduled']), [task])
 
+    def test_unscheduled_completed_task_of_mine_still_appears(self):
+        """A rejected report leaves the task at 'completed' — the technician
+
+        still needs to resubmit it, so it must not vanish from their week
+        just because it's no longer literally in-progress.
+        """
+        task = self._make_task('AE-0001', scheduled_for=None, status=Task.Status.COMPLETED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+
+        self.assertEqual(list(response.context['unscheduled']), [task])
+
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/my-week/')

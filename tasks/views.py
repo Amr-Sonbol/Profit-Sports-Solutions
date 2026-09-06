@@ -32,6 +32,7 @@ OPEN_STATUSES = [
     Task.Status.ASSIGNED,
     Task.Status.ACCEPTED,
     Task.Status.IN_PROGRESS,
+    Task.Status.COMPLETED,
     Task.Status.BLOCKED,
 ]
 
