@@ -130,13 +130,13 @@
         </div>
     </div>
 
+    {{ existing_formset.management_form }}
+    {% if existing_formset.non_form_errors %}
+        <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
+    {% endif %}
     {% if existing_assets_and_forms %}
     <div class="section">
         <h2>{% translate "Machines already at this site" %}</h2>
-        {{ existing_formset.management_form }}
-        {% if existing_formset.non_form_errors %}
-            <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
-        {% endif %}
         <div class="table-wrap">
             <table>
                 <thead>

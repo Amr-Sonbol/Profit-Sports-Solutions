@@ -822,6 +822,39 @@ class MyReportFormTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertFalse(response.context['can_edit'])
 
+    def test_existing_asset_management_form_renders_even_with_zero_assets(self):
+        # Regression: the management form must render unconditionally, or a
+        # site with no existing assets submits a formset Django can't bind
+        # ("ManagementForm data is missing"), and the whole report silently
+        # fails to save with no visible error — found via manual browser
+        # testing, since _base_payload above hand-writes the management
+        # form fields and so never exercises the real rendered template.
+        empty_site = Site.objects.create(customer=self.customer, name='Downtown Branch', address='Downtown')
+        task = Task.objects.create(
+            task_number='AE-0099', site=empty_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(f'/tasks/my/{task.pk}/report/')
+        self.assertContains(response, 'existing-TOTAL_FORMS')
+
+        payload = {
+            'findings': 'Elliptical clicking', 'action_taken': 'Tightened bolt', 'resolved': 'True',
+            'labour_hours': '0.75', 'customer_name': 'Layla',
+        }
+        payload.update(self._management_form('existing', total=0))
+        payload.update(self._management_form('new', total=self.NEW_ASSET_ROWS))
+        payload.update(self._management_form('parts', total=self.PART_ROWS))
+        response = self.client.post(f'/tasks/my/{task.pk}/report/', payload)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(WorkReport.objects.filter(task=task).exists())
+
     def test_resubmission_after_rejection_clears_reason_and_replaces_parts(self):
         report = WorkReport.objects.create(
             task=self.task, findings='old findings', resolved=False, labour_hours='1.00',
