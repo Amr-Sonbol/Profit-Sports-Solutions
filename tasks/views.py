@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -6,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
 from people.models import Technician, TechnicianSkill
@@ -14,6 +17,7 @@ from .forms import AddHelperForm, RemoveAssignmentForm, SetLeadForm, TaskCreateF
 from .models import Task, TaskAssignment, TaskEvent
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
+WEEK_LENGTH = 7
 
 OPEN_STATUSES = [
     Task.Status.NEW,
@@ -97,14 +101,9 @@ def _require_supervisor(request):
     return technician
 
 
-@login_required
-def task_list(request):
-    _require_supervisor(request)
-
-    status = request.GET.get('status', 'open')
-    search = request.GET.get('q', '').strip()
-
-    tasks = Task.objects.select_related('site__customer', 'task_type').prefetch_related(
+def _with_lead_prefetch(queryset):
+    """Attach each task's active lead assignment as `.lead_assignments`, for _attach_lead_technician."""
+    return queryset.prefetch_related(
         Prefetch(
             'assignments',
             queryset=TaskAssignment.objects.filter(
@@ -113,6 +112,23 @@ def task_list(request):
             to_attr='lead_assignments',
         ),
     )
+
+
+def _attach_lead_technician(tasks):
+    """Set `.lead_technician` on each task from the `_with_lead_prefetch` prefetch."""
+    for task in tasks:
+        leads = task.lead_assignments
+        task.lead_technician = leads[0].technician if leads else None
+
+
+@login_required
+def task_list(request):
+    _require_supervisor(request)
+
+    status = request.GET.get('status', 'open')
+    search = request.GET.get('q', '').strip()
+
+    tasks = _with_lead_prefetch(Task.objects.select_related('site__customer', 'task_type'))
 
     if status == 'open':
         tasks = tasks.filter(status__in=OPEN_STATUSES)
@@ -130,10 +146,7 @@ def task_list(request):
 
     paginator = Paginator(tasks, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
-
-    for task in page_obj:
-        leads = task.lead_assignments
-        task.lead_technician = leads[0].technician if leads else None
+    _attach_lead_technician(page_obj)
 
     context = {
         'page_obj': page_obj,
@@ -281,3 +294,41 @@ def task_assign(request, pk):
         'remove_form': RemoveAssignmentForm(),
     }
     return render(request, 'tasks/task_assign.html', context)
+
+
+@login_required
+def task_week(request):
+    _require_supervisor(request)
+
+    today = timezone.localtime().date()
+    start = parse_date(request.GET.get('start', '') or '') or (today - timedelta(days=today.weekday()))
+    end = start + timedelta(days=WEEK_LENGTH - 1)
+
+    scheduled = _with_lead_prefetch(
+        Task.objects.filter(scheduled_for__date__range=(start, end))
+        .select_related('site__customer', 'task_type').order_by('scheduled_for'),
+    )
+    _attach_lead_technician(scheduled)
+
+    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
+    tasks_by_date = {day['date']: day['tasks'] for day in days}
+    for task in scheduled:
+        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+
+    unscheduled = _with_lead_prefetch(
+        Task.objects.filter(scheduled_for__isnull=True, status__in=OPEN_STATUSES)
+        .select_related('site__customer', 'task_type')
+        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'),
+    )
+    _attach_lead_technician(unscheduled)
+
+    context = {
+        'days': days,
+        'unscheduled': unscheduled,
+        'start': start,
+        'today': today,
+        'prev_start': start - timedelta(days=WEEK_LENGTH),
+        'next_start': start + timedelta(days=WEEK_LENGTH),
+        'this_week_start': today - timedelta(days=today.weekday()),
+    }
+    return render(request, 'tasks/task_week.html', context)

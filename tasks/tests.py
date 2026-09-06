@@ -1,3 +1,6 @@
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -10,6 +13,10 @@ from reports.models import PartUsed, WorkReport
 from .models import Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
 
 User = get_user_model()
+
+
+def dubai_time(year, month, day, hour=10, minute=0):
+    return datetime(year, month, day, hour, minute, tzinfo=ZoneInfo('Asia/Dubai'))
 
 
 class TaskTestCase(TestCase):
@@ -321,3 +328,70 @@ class TaskAssignTests(TaskTestCase):
         response = self.client.get(self.url)
         candidate_names = {t.full_name for t in response.context['candidates']}
         self.assertNotIn('Nour Cairo', candidate_names)
+
+
+class TaskWeekTests(TaskTestCase):
+    # 2026-09-07 is a Monday.
+    WEEK_START = date(2026, 9, 7)
+
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/week/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_tasks_grouped_by_scheduled_local_day(self):
+        monday_task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0))
+        wednesday_task = self._make_task('AE-0002', scheduled_for=dubai_time(2026, 9, 9, 14, 0))
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(list(days[date(2026, 9, 7)]), [monday_task])
+        self.assertEqual(list(days[date(2026, 9, 9)]), [wednesday_task])
+        self.assertEqual(list(days[date(2026, 9, 8)]), [])
+
+    def test_task_outside_window_is_excluded(self):
+        self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 20, 9, 0))
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+
+        all_tasks = [task for day in response.context['days'] for task in day['tasks']]
+        self.assertEqual(all_tasks, [])
+
+    def test_open_unscheduled_task_appears_in_unscheduled_bucket(self):
+        task = self._make_task('AE-0001', scheduled_for=None, status=Task.Status.NEW)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+
+        self.assertEqual(list(response.context['unscheduled']), [task])
+
+    def test_closed_unscheduled_task_is_excluded(self):
+        self._make_task('AE-0001', scheduled_for=None, status=Task.Status.CLOSED)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+
+        self.assertEqual(list(response.context['unscheduled']), [])
+
+    def test_default_start_is_a_monday(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/')
+        self.assertEqual(response.context['start'].weekday(), 0)
+
+    def test_week_navigation(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+        self.assertEqual(response.context['prev_start'], date(2026, 8, 31))
+        self.assertEqual(response.context['next_start'], date(2026, 9, 14))

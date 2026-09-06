@@ -222,6 +222,37 @@ tbody tr:hover {
     content: "→";
 }
 
+.forward-link {
+    display: inline-block;
+    color: var(--color-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.forward-link::after {
+    content: "→";
+    margin-inline-start: 0.3em;
+}
+
+[dir="rtl"] .forward-link::after {
+    content: "←";
+}
+
+.button-row {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+}
+
+.week-nav {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    margin-block-end: 1rem;
+}
+
 .badge-row {
     display: flex;
     flex-direction: row;
@@ -447,6 +478,12 @@ tbody tr:hover {
     font: inherit;
     text-decoration: none;
     cursor: pointer;
+}
+
+.button--secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .button--danger {
