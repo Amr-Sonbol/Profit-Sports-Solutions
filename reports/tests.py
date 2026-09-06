@@ -2,10 +2,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from customers.models import Customer, Site
+from customers.models import Asset, Customer, Site
 from people.models import Technician
-from reference.models import Country
-from tasks.models import Task, TaskAssignment, TaskEvent
+from reference.models import Brand, Country
+from tasks.models import Task, TaskAsset, TaskAssignment, TaskEvent
 
 from .models import WorkReport
 
@@ -141,3 +141,24 @@ class ReportReviewTests(ReportReviewTestCase):
 
         self.report.refresh_from_db()
         self.assertEqual(self.report.rejection_reason, '')
+
+    def test_helpers_and_machines_covered_are_shown(self):
+        helper_user = User.objects.create_user('helper1', password='pass12345')
+        helper = Technician.objects.create(
+            user=helper_user, country=self.country, full_name='Omar Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        brand = Brand.objects.create(name='Technogym')
+        asset = Asset.objects.create(site=self.site, brand=brand, model_name='Excite Run 700')
+        TaskAsset.objects.create(task=self.task, asset=asset, outcome=TaskAsset.Outcome.REPAIRED)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.context['helper_technicians'], [helper])
+        self.assertContains(response, 'Omar Helper')
+        self.assertContains(response, 'Excite Run 700')

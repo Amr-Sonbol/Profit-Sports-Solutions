@@ -654,3 +654,198 @@ class MyTaskDetailTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.task.attachments.count(), 1)
+
+
+class MyReportFormTests(TaskTestCase):
+    NEW_ASSET_ROWS = 4
+    PART_ROWS = 5
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.helper_user = User.objects.create_user('helper1', password='pass12345')
+        self.helper = Technician.objects.create(
+            user=self.helper_user, country=self.country, full_name='Omar Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/my/{self.task.pk}/report/'
+
+    def _management_form(self, prefix, total, initial=0):
+        return {
+            f'{prefix}-TOTAL_FORMS': str(total),
+            f'{prefix}-INITIAL_FORMS': str(initial),
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '1000',
+        }
+
+    def _base_payload(self, **report_overrides):
+        payload = {
+            'findings': 'Belt worn out', 'action_taken': 'Replaced belt', 'resolved': 'True',
+            'labour_hours': '1.50', 'customer_name': 'Ali Manager',
+        }
+        payload.update(report_overrides)
+        payload.update(self._management_form('existing', total=1, initial=1))
+        payload['existing-0-asset_id'] = str(self.asset.pk)
+        payload.update(self._management_form('new', total=self.NEW_ASSET_ROWS))
+        payload.update(self._management_form('parts', total=self.PART_ROWS))
+        return payload
+
+    def test_helper_gets_404(self):
+        self.client.login(username='helper1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_status_not_editable_redirects_with_message(self):
+        self.task.status = Task.Status.ASSIGNED
+        self.task.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertRedirects(response, f'/tasks/my/{self.task.pk}/')
+
+    def test_minimal_submission_creates_report_and_event(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload())
+        self.assertEqual(response.status_code, 302)
+
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(report.findings, 'Belt worn out')
+        self.assertTrue(report.resolved)
+        self.assertIsNone(report.approved_at)
+        self.assertEqual(report.rejection_reason, '')
+
+        event = self.task.events.get()
+        self.assertEqual(event.event_type, TaskEvent.EventType.REPORT_SUBMITTED)
+        self.assertEqual(event.actor, self.tech_user)
+
+    def test_resolved_is_required(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        del payload['resolved']
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_existing_asset_included_creates_task_asset_without_new_asset(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['existing-0-include'] = 'on'
+        payload['existing-0-outcome'] = TaskAsset.Outcome.REPAIRED
+        self.client.post(self.url, payload)
+
+        task_asset = TaskAsset.objects.get(task=self.task)
+        self.assertEqual(task_asset.asset, self.asset)
+        self.assertEqual(task_asset.outcome, TaskAsset.Outcome.REPAIRED)
+        self.assertEqual(Asset.objects.count(), 1)
+
+    def test_new_asset_row_creates_asset_and_task_asset(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['new-0-brand'] = str(self.brand.pk)
+        payload['new-0-model_name'] = 'Excite Run 900'
+        payload['new-0-serial_no'] = 'SN-42'
+        payload['new-0-outcome'] = TaskAsset.Outcome.INSPECTED_OK
+        self.client.post(self.url, payload)
+
+        new_asset = Asset.objects.get(model_name='Excite Run 900')
+        self.assertEqual(new_asset.site, self.site)
+        self.assertEqual(new_asset.serial_no, 'SN-42')
+        task_asset = TaskAsset.objects.get(asset=new_asset)
+        self.assertEqual(task_asset.outcome, TaskAsset.Outcome.INSPECTED_OK)
+
+    def test_incomplete_new_asset_row_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['new-0-model_name'] = 'Excite Run 900'
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_part_row_creates_part_used(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['parts-0-part_code'] = 'BELT-42'
+        payload['parts-0-description'] = 'Drive belt'
+        payload['parts-0-quantity'] = '1'
+        payload['parts-0-unit_cost'] = '85.00'
+        payload['parts-0-currency_code'] = 'AED'
+        self.client.post(self.url, payload)
+
+        report = WorkReport.objects.get(task=self.task)
+        part = report.parts_used.get()
+        self.assertEqual(part.part_code, 'BELT-42')
+        self.assertEqual(part.quantity, 1)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_signature_upload_sets_absolute_url(self):
+        self.client.login(username='tech1', password='pass12345')
+        signature = SimpleUploadedFile('sig.png', b'fake-png-bytes', content_type='image/png')
+        payload = self._base_payload()
+        payload['signature'] = signature
+        self.client.post(self.url, payload)
+
+        report = WorkReport.objects.get(task=self.task)
+        self.assertTrue(report.signature_url.startswith('http'))
+
+    def test_pending_report_is_locked(self):
+        WorkReport.objects.create(
+            task=self.task, findings='x', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(),
+        )
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertFalse(response.context['can_edit'])
+
+        response = self.client.post(self.url, self._base_payload(findings='changed'))
+        self.assertEqual(response.status_code, 200)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(report.findings, 'x')
+
+    def test_approved_report_is_locked(self):
+        WorkReport.objects.create(
+            task=self.task, findings='x', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(), approved_at=timezone.now(),
+        )
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertFalse(response.context['can_edit'])
+
+    def test_resubmission_after_rejection_clears_reason_and_replaces_parts(self):
+        report = WorkReport.objects.create(
+            task=self.task, findings='old findings', resolved=False, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(), rejection_reason='Missing serial photo.',
+        )
+        PartUsed.objects.create(
+            report=report, part_code='OLD-1', quantity=1, unit_cost='10.00', currency_code='AED',
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertTrue(response.context['can_edit'])
+
+        payload = self._base_payload(findings='fixed findings')
+        payload['parts-0-part_code'] = 'NEW-1'
+        payload['parts-0-quantity'] = '2'
+        payload['parts-0-unit_cost'] = '20.00'
+        payload['parts-0-currency_code'] = 'AED'
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 302)
+
+        report.refresh_from_db()
+        self.assertEqual(report.findings, 'fixed findings')
+        self.assertEqual(report.rejection_reason, '')
+        parts = list(report.parts_used.all())
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(parts[0].part_code, 'NEW-1')

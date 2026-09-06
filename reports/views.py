@@ -52,6 +52,7 @@ def report_review(request, pk):
     active_lead = next(
         (a for a in assignments if a.role == TaskAssignment.Role.LEAD and a.is_active), None,
     )
+    active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
 
     reject_form = RejectReportForm(initial={'rejection_reason': report.rejection_reason})
 
@@ -86,6 +87,8 @@ def report_review(request, pk):
         'report': report,
         'task': task,
         'lead_technician': active_lead.technician if active_lead else None,
+        'helper_technicians': [a.technician for a in active_helpers],
+        'task_assets': task.task_assets.select_related('asset__brand'),
         'attachments': task.attachments.select_related('uploaded_by'),
         'reviewed': reviewed,
         'reject_form': reject_form,

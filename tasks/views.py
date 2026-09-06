@@ -6,16 +6,23 @@ from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
+from customers.models import Asset
 from people.models import Technician, TechnicianSkill
 from people.permissions import require_supervisor, require_technician
+from reports.forms import PartUsedItemForm, WorkReportForm
+from reports.models import PartUsed
 
-from .forms import AddHelperForm, BlockTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm
-from .models import Task, TaskAssignment, TaskAttachment, TaskEvent
+from .forms import (
+    AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, NewAssetForm, RemoveAssignmentForm, SetLeadForm,
+    TaskAttachmentUploadForm, TaskCreateForm,
+)
+from .models import Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
@@ -53,6 +60,11 @@ TECHNICIAN_ACTIONS = {
     'complete': (TaskEvent.EventType.COMPLETED, Task.Status.COMPLETED),
 }
 BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
+
+# A report can only be filed once work is underway or done.
+REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task.Status.CLOSED}
+NEW_ASSET_ROWS = 4
+PART_ROWS = 5
 
 PRIORITY_RANK = Case(
     When(priority=Task.Priority.EMERGENCY, then=Value(0)),
@@ -484,9 +496,131 @@ def my_task_detail(request, pk):
         'is_lead': is_lead,
         'next_action': next_action,
         'can_block': can_block,
+        'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES,
+        'report': getattr(task, 'report', None),
         'attachments': task.attachments.select_related('uploaded_by'),
         'events': task.events.order_by('occurred_at'),
         'upload_form': upload_form,
         'block_form': block_form,
     }
     return render(request, 'tasks/my_task_detail.html', context)
+
+
+def _report_can_edit(report):
+    """No report yet, or one that was sent back and hasn't been resubmitted."""
+    return report is None or (report.approved_at is None and bool(report.rejection_reason))
+
+
+@login_required
+def my_report_form(request, pk):
+    technician = require_technician(request)
+
+    assignment = get_object_or_404(
+        TaskAssignment.objects.select_related('task__site__customer__country'),
+        task__pk=pk, technician=technician, is_active=True, role=TaskAssignment.Role.LEAD,
+    )
+    task = assignment.task
+    report = getattr(task, 'report', None)
+
+    if task.status not in REPORT_EDITABLE_STATUSES:
+        messages.error(request, _('Start work on this task before filing a report.'))
+        return redirect('tasks:my_task_detail', pk=task.pk)
+
+    can_edit = _report_can_edit(report)
+    task_assets = task.task_assets.select_related('asset__brand')
+    parts = report.parts_used.all() if report else PartUsed.objects.none()
+
+    if not can_edit:
+        context = {
+            'task': task, 'report': report, 'can_edit': False,
+            'task_assets': task_assets, 'parts': parts,
+        }
+        return render(request, 'tasks/my_report_form.html', context)
+
+    existing_assets = list(Asset.objects.filter(site=task.site))
+    ExistingAssetFormSet = formset_factory(ExistingAssetOutcomeForm, extra=0)
+    NewAssetFormSet = formset_factory(NewAssetForm, extra=NEW_ASSET_ROWS)
+    PartFormSet = formset_factory(PartUsedItemForm, extra=PART_ROWS)
+
+    linked_by_asset_id = {ta.asset_id: ta for ta in task_assets}
+    existing_initial = []
+    for asset in existing_assets:
+        linked = linked_by_asset_id.get(asset.pk)
+        existing_initial.append({
+            'asset_id': asset.pk,
+            'include': linked is not None,
+            'outcome': linked.outcome if linked else '',
+        })
+    part_initial = [
+        {
+            'part_code': part.part_code, 'description': part.description, 'quantity': part.quantity,
+            'unit_cost': part.unit_cost, 'currency_code': part.currency_code,
+        }
+        for part in parts
+    ]
+
+    if request.method == 'POST':
+        report_form = WorkReportForm(request.POST, request.FILES, instance=report)
+        existing_formset = ExistingAssetFormSet(request.POST, initial=existing_initial, prefix='existing')
+        new_formset = NewAssetFormSet(request.POST, prefix='new')
+        part_formset = PartFormSet(request.POST, prefix='parts')
+
+        if (
+            report_form.is_valid() and existing_formset.is_valid()
+            and new_formset.is_valid() and part_formset.is_valid()
+        ):
+            with transaction.atomic():
+                saved_report = report_form.save(commit=False)
+                saved_report.task = task
+                saved_report.submitted_at = timezone.now()
+                saved_report.rejection_reason = ''
+                signature = report_form.cleaned_data.get('signature')
+                if signature:
+                    path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
+                    saved_report.signature_url = request.build_absolute_uri(default_storage.url(path))
+                saved_report.save()
+
+                TaskAsset.objects.filter(task=task).delete()
+                for cleaned, asset in zip(existing_formset.cleaned_data, existing_assets):
+                    if cleaned.get('include') and cleaned.get('outcome'):
+                        TaskAsset.objects.create(task=task, asset=asset, outcome=cleaned['outcome'])
+                for cleaned in new_formset.cleaned_data:
+                    if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
+                        new_asset = Asset.objects.create(
+                            site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'],
+                            serial_no=cleaned.get('serial_no', ''),
+                        )
+                        TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'])
+
+                saved_report.parts_used.all().delete()
+                for cleaned in part_formset.cleaned_data:
+                    if cleaned.get('part_code') and cleaned.get('quantity') and cleaned.get('unit_cost'):
+                        PartUsed.objects.create(
+                            report=saved_report, part_code=cleaned['part_code'],
+                            description=cleaned.get('description', ''), quantity=cleaned['quantity'],
+                            unit_cost=cleaned['unit_cost'], currency_code=cleaned['currency_code'],
+                        )
+
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
+                    occurred_at=timezone.now(), actor=request.user,
+                )
+            messages.success(request, _('Report submitted.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+    else:
+        report_form = WorkReportForm(instance=report)
+        existing_formset = ExistingAssetFormSet(initial=existing_initial, prefix='existing')
+        new_formset = NewAssetFormSet(prefix='new')
+        part_formset = PartFormSet(initial=part_initial, prefix='parts')
+
+    context = {
+        'task': task,
+        'report': report,
+        'can_edit': True,
+        'report_form': report_form,
+        'existing_formset': existing_formset,
+        'existing_assets_and_forms': list(zip(existing_assets, existing_formset)),
+        'new_formset': new_formset,
+        'part_formset': part_formset,
+    }
+    return render(request, 'tasks/my_report_form.html', context)
