@@ -42,6 +42,7 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 |---|---|---|
 | id | PK | |
 | name | varchar | |
+| name_ar | varchar | |
 | iso_code | char(2) | |
 | timezone | varchar | IANA name, e.g. `Asia/Riyadh` |
 | currency_code | char(3) | |

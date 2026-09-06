@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 class Country(models.Model):
     name = models.CharField(_('name'), max_length=100)
+    name_ar = models.CharField(_('name (Arabic)'), max_length=100)
     iso_code = models.CharField(_('ISO code'), max_length=2)
     timezone = models.CharField(
         _('timezone'), max_length=50,

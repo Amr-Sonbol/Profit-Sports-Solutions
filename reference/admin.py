@@ -5,8 +5,8 @@ from .models import Brand, Country, Skill, TaskType
 
 @admin.register(Country)
 class CountryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'iso_code', 'timezone', 'currency_code', 'is_active']
-    search_fields = ['name', 'iso_code']
+    list_display = ['name', 'name_ar', 'iso_code', 'timezone', 'currency_code', 'is_active']
+    search_fields = ['name', 'name_ar', 'iso_code']
     list_filter = ['is_active']
 
 
