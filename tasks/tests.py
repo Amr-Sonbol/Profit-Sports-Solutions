@@ -395,3 +395,101 @@ class TaskWeekTests(TaskTestCase):
         response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
         self.assertEqual(response.context['prev_start'], date(2026, 8, 31))
         self.assertEqual(response.context['next_start'], date(2026, 9, 14))
+
+
+class MyWeekTests(TaskTestCase):
+    WEEK_START = date(2026, 9, 7)
+
+    def setUp(self):
+        super().setUp()
+        self.other_user = User.objects.create_user('other_tech', password='pass12345')
+        self.other_technician = Technician.objects.create(
+            user=self.other_user, country=self.country, full_name='Nour Other',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_shows_task_where_i_am_lead(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0))
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(list(days[date(2026, 9, 7)]), [task])
+        self.assertEqual(days[date(2026, 9, 7)][0].my_role, TaskAssignment.Role.LEAD)
+
+    def test_shows_task_where_i_am_helper(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0))
+        TaskAssignment.objects.create(
+            task=task, technician=self.other_technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(days[date(2026, 9, 7)][0].my_role, TaskAssignment.Role.HELPER)
+
+    def test_does_not_show_other_technicians_tasks(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0))
+        TaskAssignment.objects.create(
+            task=task, technician=self.other_technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+
+        all_tasks = [t for day in response.context['days'] for t in day['tasks']]
+        self.assertEqual(all_tasks, [])
+
+    def test_unscheduled_open_task_of_mine_appears(self):
+        task = self._make_task('AE-0001', scheduled_for=None, status=Task.Status.NEW)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+
+        self.assertEqual(list(response.context['unscheduled']), [task])
+
+    def test_supervisor_can_view_their_own_week_too(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.status_code, 200)
+
+
+class HomeRedirectTests(TaskTestCase):
+    def test_supervisor_lands_on_task_list(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/')
+
+    def test_technician_lands_on_my_week(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/my-week/')

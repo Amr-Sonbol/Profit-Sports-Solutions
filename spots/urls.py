@@ -17,7 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
-from django.views.generic import RedirectView
+
+from . import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,5 +26,5 @@ urlpatterns = [
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('tasks/', include('tasks.urls')),
     path('reports/', include('reports.urls')),
-    path('', RedirectView.as_view(pattern_name='tasks:task_list', permanent=False)),
+    path('', views.home, name='home'),
 ]

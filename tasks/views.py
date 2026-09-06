@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
 from people.models import Technician, TechnicianSkill
-from people.permissions import require_supervisor
+from people.permissions import require_supervisor, require_technician
 
 from .forms import AddHelperForm, RemoveAssignmentForm, SetLeadForm, TaskCreateForm
 from .models import Task, TaskAssignment, TaskEvent
@@ -111,6 +111,24 @@ def _attach_lead_technician(tasks):
     for task in tasks:
         leads = task.lead_assignments
         task.lead_technician = leads[0].technician if leads else None
+
+
+def _week_window(request):
+    """The (today, start, end) of the 7-day window from ?start=, default this week's Monday."""
+    today = timezone.localtime().date()
+    start = parse_date(request.GET.get('start', '') or '') or (today - timedelta(days=today.weekday()))
+    end = start + timedelta(days=WEEK_LENGTH - 1)
+    return today, start, end
+
+
+def _week_nav_context(today, start):
+    return {
+        'today': today,
+        'start': start,
+        'prev_start': start - timedelta(days=WEEK_LENGTH),
+        'next_start': start + timedelta(days=WEEK_LENGTH),
+        'this_week_start': today - timedelta(days=today.weekday()),
+    }
 
 
 @login_required
@@ -292,9 +310,7 @@ def task_assign(request, pk):
 def task_week(request):
     require_supervisor(request)
 
-    today = timezone.localtime().date()
-    start = parse_date(request.GET.get('start', '') or '') or (today - timedelta(days=today.weekday()))
-    end = start + timedelta(days=WEEK_LENGTH - 1)
+    today, start, end = _week_window(request)
 
     scheduled = _with_lead_prefetch(
         Task.objects.filter(scheduled_for__date__range=(start, end))
@@ -317,10 +333,42 @@ def task_week(request):
     context = {
         'days': days,
         'unscheduled': unscheduled,
-        'start': start,
-        'today': today,
-        'prev_start': start - timedelta(days=WEEK_LENGTH),
-        'next_start': start + timedelta(days=WEEK_LENGTH),
-        'this_week_start': today - timedelta(days=today.weekday()),
+        **_week_nav_context(today, start),
     }
     return render(request, 'tasks/task_week.html', context)
+
+
+@login_required
+def my_week(request):
+    technician = require_technician(request)
+
+    today, start, end = _week_window(request)
+
+    scheduled_assignments = TaskAssignment.objects.filter(
+        technician=technician, is_active=True, task__scheduled_for__date__range=(start, end),
+    ).select_related('task__site__customer', 'task__task_type').order_by('task__scheduled_for')
+
+    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
+    tasks_by_date = {day['date']: day['tasks'] for day in days}
+    for assignment in scheduled_assignments:
+        task = assignment.task
+        task.my_role = assignment.role
+        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+
+    unscheduled_assignments = TaskAssignment.objects.filter(
+        technician=technician, is_active=True, task__scheduled_for__isnull=True,
+        task__status__in=OPEN_STATUSES,
+    )
+    role_by_task_id = {a.task_id: a.role for a in unscheduled_assignments}
+    unscheduled = Task.objects.filter(pk__in=role_by_task_id).select_related(
+        'site__customer', 'task_type',
+    ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
+    for task in unscheduled:
+        task.my_role = role_by_task_id[task.pk]
+
+    context = {
+        'days': days,
+        'unscheduled': unscheduled,
+        **_week_nav_context(today, start),
+    }
+    return render(request, 'tasks/my_week.html', context)

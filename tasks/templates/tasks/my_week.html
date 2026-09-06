@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My week" %} — {% translate "Spots Solutions" %}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "My week" %}</h1>
+</div>
+
+<div class="week-nav">
+    <a href="?start={{ prev_start|date:'Y-m-d' }}" class="back-link">{% translate "Previous week" %}</a>
+    <a href="?start={{ this_week_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "This week" %}</a>
+    <a href="?start={{ next_start|date:'Y-m-d' }}" class="forward-link">{% translate "Next week" %}</a>
+</div>
+
+{% for day in days %}
+<div class="section">
+    <div class="section__header">
+        <h2>
+            {{ day.date|date:"l, j F" }}
+            {% if day.date == today %}<span class="badge badge--muted">{% translate "Today" %}</span>{% endif %}
+        </h2>
+    </div>
+    {% if day.tasks %}
+    <ul class="plain-list">
+        {% for task in day.tasks %}
+        <li>
+            <span class="task-number">{{ task.task_number }}</span>
+            <span class="muted">{{ task.scheduled_for|date:"TIME_FORMAT" }}</span>
+            {{ task.site.customer.name }} — {{ task.site.name }}
+            {% if task.my_role == 'lead' %}
+                <span class="badge badge--role-lead">{% translate "Lead" %}</span>
+            {% else %}
+                <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {% endif %}
+            <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No tasks scheduled." %}</p>
+    {% endif %}
+</div>
+{% endfor %}
+
+<div class="section">
+    <h2>{% translate "Unscheduled" %}</h2>
+    {% if unscheduled %}
+    <ul class="plain-list">
+        {% for task in unscheduled %}
+        <li>
+            <span class="task-number">{{ task.task_number }}</span>
+            {{ task.site.customer.name }} — {{ task.site.name }}
+            {% if task.my_role == 'lead' %}
+                <span class="badge badge--role-lead">{% translate "Lead" %}</span>
+            {% else %}
+                <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {% endif %}
+            <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "Nothing waiting on a day." %}</p>
+    {% endif %}
+</div>
+{% endblock %}
