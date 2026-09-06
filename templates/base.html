@@ -1,0 +1,29 @@
+{% load i18n static %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}" dir="{% if LANGUAGE_BIDI %}rtl{% else %}ltr{% endif %}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% translate "Spots Solutions" %}{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+</head>
+<body>
+    <header class="site-header">
+        <span class="site-header__brand">{% translate "Spots Solutions" %}</span>
+        {% if user.is_authenticated %}
+            <nav class="site-header__nav">
+                <span class="site-header__user">{{ user.technician.full_name|default:user.get_username }}</span>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="link-button">{% translate "Log out" %}</button>
+                </form>
+            </nav>
+        {% endif %}
+    </header>
+    <main class="page">
+        {% for message in messages %}
+            <p class="flash flash--{{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
