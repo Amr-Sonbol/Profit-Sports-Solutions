@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ task.task_number }} — {% translate "Spots Solutions" %}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:my_week' %}" class="back-link">{% translate "Back to my week" %}</a>
+        <h1><span class="task-number">{{ task.task_number }}</span></h1>
+    </div>
+    <div class="badge-row">
+        <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+        <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Site" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Customer / Site" %}</dt>
+            <dd>{{ task.site.customer.name }} — {{ task.site.name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Address" %}</dt>
+            <dd>{{ task.site.address|default:"—" }}</dd>
+        </div>
+        {% if task.site.contact_name or task.site.contact_phone %}
+        <div>
+            <dt>{% translate "Site contact" %}</dt>
+            <dd>{{ task.site.contact_name|default:"—" }} <span class="task-number">{{ task.site.contact_phone }}</span></dd>
+        </div>
+        {% endif %}
+    </dl>
+    {% if task.site.access_notes %}
+    <div class="description">
+        <dt>{% translate "Access notes" %}</dt>
+        <p>{{ task.site.access_notes }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Job" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Type" %}</dt>
+            <dd>{{ task.task_type.name|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Brand" %}</dt>
+            <dd>{{ task.brand.name|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Promised" %}</dt>
+            <dd>{{ task.promised_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
+        </div>
+    </dl>
+    {% if task.description %}
+    <div class="description">
+        <dt>{% translate "What the customer reported" %}</dt>
+        <p>{{ task.description }}</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if is_lead and next_action %}
+<div class="section">
+    <h2>{% translate "Status" %}</h2>
+    <div class="button-row">
+        {% if next_action %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ next_action }}">
+            <button type="submit" class="button">
+                {% if next_action == 'accept' %}{% translate "Accept task" %}
+                {% elif next_action == 'en_route' %}{% translate "On my way" %}
+                {% elif next_action == 'arrive' %}{% translate "I've arrived" %}
+                {% elif next_action == 'start' %}{% translate "Start work" %}
+                {% elif next_action == 'complete' %}{% translate "Mark complete" %}
+                {% endif %}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    {% if can_block %}
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="block">
+        <div class="field {% if block_form.note.errors %}field--error{% endif %}">
+            <label for="{{ block_form.note.id_for_label }}">{{ block_form.note.label }}</label>
+            {{ block_form.note }}
+            <p class="field__help">{{ block_form.note.help_text }}</p>
+            {% for error in block_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Report blocked" %}</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="section">
+    <h2>{% translate "Photos" %}</h2>
+    {% if attachments %}
+    <ul class="plain-list">
+        {% for attachment in attachments %}
+        <li>
+            <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
+            {% if attachment.media_type == 'photo' %}
+                <a href="{{ attachment.url }}" target="_blank" rel="noopener">
+                    <img src="{{ attachment.url }}" alt="{{ attachment.get_purpose_display }}" class="attachment-thumb">
+                </a>
+            {% else %}
+                <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No photos yet." %}</p>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload">
+        <div class="field {% if upload_form.file.errors %}field--error{% endif %}">
+            <label for="{{ upload_form.file.id_for_label }}">{{ upload_form.file.label }}</label>
+            {{ upload_form.file }}
+            {% for error in upload_form.file.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if upload_form.purpose.errors %}field--error{% endif %}">
+            <label for="{{ upload_form.purpose.id_for_label }}">{{ upload_form.purpose.label }}</label>
+            {{ upload_form.purpose }}
+            {% for error in upload_form.purpose.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Upload" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
+    <h2>{% translate "History" %}</h2>
+    {% if events %}
+    <ul class="timeline">
+        {% for event in events %}
+        <li>
+            <span class="timeline__time">{{ event.occurred_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            <span class="timeline__type">{{ event.get_event_type_display }}</span>
+            {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No events yet." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

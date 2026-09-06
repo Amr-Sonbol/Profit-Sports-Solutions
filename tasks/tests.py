@@ -1,8 +1,10 @@
+import tempfile
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
@@ -493,3 +495,162 @@ class HomeRedirectTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/')
         self.assertRedirects(response, '/tasks/my-week/')
+
+
+class MyTaskDetailTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+        )
+        self.lead_assignment = TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.helper_user = User.objects.create_user('helper1', password='pass12345')
+        self.helper = Technician.objects.create(
+            user=self.helper_user, country=self.country, full_name='Omar Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/my/{self.task.pk}/'
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_unassigned_technician_gets_404(self):
+        other_user = User.objects.create_user('other1', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=self.country, full_name='Nour Other',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.client.login(username='other1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_lead_sees_accept_as_next_action(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['next_action'], 'accept')
+
+    def test_helper_has_no_next_action(self):
+        self.client.login(username='helper1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertIsNone(response.context['next_action'])
+
+    def test_accept_advances_status_and_logs_event(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'accept'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+        event = self.task.events.get()
+        self.assertEqual(event.event_type, TaskEvent.EventType.ACCEPTED)
+        self.assertEqual(event.actor, self.tech_user)
+
+    def test_helper_cannot_advance_status(self):
+        self.client.login(username='helper1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'accept'})
+        self.assertEqual(response.status_code, 200)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+        self.assertEqual(self.task.events.count(), 0)
+
+    def test_en_route_then_arrive_then_start_sequence(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post(self.url, {'action': 'accept'})
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['next_action'], 'en_route')
+
+        self.client.post(self.url, {'action': 'en_route'})
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['next_action'], 'arrive')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+
+        self.client.post(self.url, {'action': 'arrive'})
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['next_action'], 'start')
+
+        self.client.post(self.url, {'action': 'start'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+    def test_complete_advances_status(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post(self.url, {'action': 'complete'})
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        event = self.task.events.get()
+        self.assertEqual(event.event_type, TaskEvent.EventType.COMPLETED)
+
+    def test_block_requires_a_note(self):
+        self.task.status = Task.Status.ACCEPTED
+        self.task.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'block', 'note': ''})
+        self.assertEqual(response.status_code, 200)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+
+    def test_block_sets_status_and_event_note(self):
+        self.task.status = Task.Status.ACCEPTED
+        self.task.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'block', 'note': 'Gym closed.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.BLOCKED)
+        event = self.task.events.get()
+        self.assertEqual(event.event_type, TaskEvent.EventType.BLOCKED)
+        self.assertEqual(event.note, 'Gym closed.')
+
+    def test_cannot_block_before_accepted(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertFalse(response.context['can_block'])
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_upload_creates_photo_attachment(self):
+        self.client.login(username='tech1', password='pass12345')
+        upload = SimpleUploadedFile('serial.jpg', b'fake-image-bytes', content_type='image/jpeg')
+
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        attachment = self.task.attachments.get()
+        self.assertEqual(attachment.media_type, TaskAttachment.MediaType.PHOTO)
+        self.assertEqual(attachment.purpose, TaskAttachment.Purpose.SERIAL_PLATE)
+        self.assertEqual(attachment.storage_kind, TaskAttachment.StorageKind.FILE)
+        self.assertEqual(attachment.uploaded_by, self.tech_user)
+        self.assertTrue(attachment.url.startswith('http'))
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_helper_can_upload_a_photo(self):
+        self.client.login(username='helper1', password='pass12345')
+        upload = SimpleUploadedFile('before.jpg', b'fake-image-bytes', content_type='image/jpeg')
+
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.task.attachments.count(), 1)

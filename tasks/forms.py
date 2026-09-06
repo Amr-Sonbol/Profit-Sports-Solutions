@@ -6,7 +6,7 @@ from customers.models import Site
 from people.models import Technician
 from reference.models import Brand, Skill, TaskType
 
-from .models import Task, TaskAssignment
+from .models import Task, TaskAssignment, TaskAttachment
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
 
@@ -74,4 +74,16 @@ class AddHelperForm(forms.Form):
 class RemoveAssignmentForm(forms.Form):
     end_reason = forms.ChoiceField(
         choices=[('', '---------')] + TaskAssignment.EndReason.choices, label=_('Reason'),
+    )
+
+
+class TaskAttachmentUploadForm(forms.Form):
+    file = forms.FileField(label=_('Photo or video'))
+    purpose = forms.ChoiceField(choices=TaskAttachment.Purpose.choices, label=_('What is this'))
+
+
+class BlockTaskForm(forms.Form):
+    note = forms.CharField(
+        label=_('What happened'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('e.g. gym closed, no key, customer absent'),
     )

@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
@@ -13,8 +14,8 @@ from django.utils.translation import gettext as _
 from people.models import Technician, TechnicianSkill
 from people.permissions import require_supervisor, require_technician
 
-from .forms import AddHelperForm, RemoveAssignmentForm, SetLeadForm, TaskCreateForm
-from .models import Task, TaskAssignment, TaskEvent
+from .forms import AddHelperForm, BlockTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm
+from .models import Task, TaskAssignment, TaskAttachment, TaskEvent
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
@@ -40,6 +41,18 @@ ASSIGNMENT_LOCKED_STATUSES = {
 # "assigned" — the new lead has not accepted yet. Statuses outside this set
 # (e.g. blocked) are left alone.
 STATUSES_RESET_BY_ASSIGNMENT = {Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED}
+
+# The lead's button taps, in order. "en_route" and "arrived" don't move
+# task.status — only "start" and "complete" do; the step in between is read
+# from which events already exist (see _next_technician_action).
+TECHNICIAN_ACTIONS = {
+    'accept': (TaskEvent.EventType.ACCEPTED, Task.Status.ACCEPTED),
+    'en_route': (TaskEvent.EventType.EN_ROUTE, None),
+    'arrive': (TaskEvent.EventType.ARRIVED, None),
+    'start': (TaskEvent.EventType.STARTED, Task.Status.IN_PROGRESS),
+    'complete': (TaskEvent.EventType.COMPLETED, Task.Status.COMPLETED),
+}
+BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 
 PRIORITY_RANK = Case(
     When(priority=Task.Priority.EMERGENCY, then=Value(0)),
@@ -129,6 +142,43 @@ def _week_nav_context(today, start):
         'next_start': start + timedelta(days=WEEK_LENGTH),
         'this_week_start': today - timedelta(days=today.weekday()),
     }
+
+
+def _next_technician_action(task):
+    """Which button the lead should see next, or None if nothing is theirs to tap right now."""
+    if task.status == Task.Status.ASSIGNED:
+        return 'accept'
+    if task.status == Task.Status.ACCEPTED:
+        seen = set(task.events.filter(
+            event_type__in=[TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED],
+        ).values_list('event_type', flat=True))
+        if TaskEvent.EventType.ARRIVED in seen:
+            return 'start'
+        if TaskEvent.EventType.EN_ROUTE in seen:
+            return 'arrive'
+        return 'en_route'
+    if task.status == Task.Status.IN_PROGRESS:
+        return 'complete'
+    return None
+
+
+def _attachment_media_type(uploaded_file):
+    content_type = uploaded_file.content_type or ''
+    if content_type.startswith('image/'):
+        return TaskAttachment.MediaType.PHOTO
+    if content_type.startswith('video/'):
+        return TaskAttachment.MediaType.VIDEO
+    return TaskAttachment.MediaType.DOCUMENT
+
+
+def _save_attachment(request, task, uploaded_file, purpose):
+    path = default_storage.save(f'attachments/{task.pk}/{uploaded_file.name}', uploaded_file)
+    TaskAttachment.objects.create(
+        task=task, storage_kind=TaskAttachment.StorageKind.FILE,
+        url=request.build_absolute_uri(default_storage.url(path)),
+        media_type=_attachment_media_type(uploaded_file), purpose=purpose,
+        source=TaskAttachment.Source.TECHNICIAN, uploaded_by=request.user, uploaded_at=timezone.now(),
+    )
 
 
 @login_required
@@ -372,3 +422,71 @@ def my_week(request):
         **_week_nav_context(today, start),
     }
     return render(request, 'tasks/my_week.html', context)
+
+
+@login_required
+def my_task_detail(request, pk):
+    technician = require_technician(request)
+
+    assignment = get_object_or_404(
+        TaskAssignment.objects.select_related(
+            'task__site__customer', 'task__task_type', 'task__brand', 'task__required_skill',
+        ),
+        task__pk=pk, technician=technician, is_active=True,
+    )
+    task = assignment.task
+    is_lead = assignment.role == TaskAssignment.Role.LEAD
+    next_action = _next_technician_action(task) if is_lead else None
+    can_block = is_lead and task.status in BLOCKABLE_STATUSES
+
+    upload_form = TaskAttachmentUploadForm()
+    block_form = BlockTaskForm()
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action in TECHNICIAN_ACTIONS and action == next_action:
+            event_type, new_status = TECHNICIAN_ACTIONS[action]
+            with transaction.atomic():
+                TaskEvent.objects.create(
+                    task=task, event_type=event_type, occurred_at=timezone.now(), actor=request.user,
+                )
+                if new_status:
+                    task.status = new_status
+                    task.save(update_fields=['status'])
+            messages.success(request, _('Updated.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
+        elif action == 'block' and can_block:
+            block_form = BlockTaskForm(request.POST)
+            if block_form.is_valid():
+                with transaction.atomic():
+                    task.status = Task.Status.BLOCKED
+                    task.save(update_fields=['status'])
+                    TaskEvent.objects.create(
+                        task=task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
+                        actor=request.user, note=block_form.cleaned_data['note'],
+                    )
+                messages.success(request, _('Task marked blocked.'))
+                return redirect('tasks:my_task_detail', pk=task.pk)
+
+        elif action == 'upload':
+            upload_form = TaskAttachmentUploadForm(request.POST, request.FILES)
+            if upload_form.is_valid():
+                _save_attachment(
+                    request, task, upload_form.cleaned_data['file'], upload_form.cleaned_data['purpose'],
+                )
+                messages.success(request, _('Photo added.'))
+                return redirect('tasks:my_task_detail', pk=task.pk)
+
+    context = {
+        'task': task,
+        'is_lead': is_lead,
+        'next_action': next_action,
+        'can_block': can_block,
+        'attachments': task.attachments.select_related('uploaded_by'),
+        'events': task.events.order_by('occurred_at'),
+        'upload_form': upload_form,
+        'block_form': block_form,
+    }
+    return render(request, 'tasks/my_task_detail.html', context)

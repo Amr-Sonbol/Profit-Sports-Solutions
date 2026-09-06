@@ -26,7 +26,7 @@
     <ul class="plain-list">
         {% for task in day.tasks %}
         <li>
-            <span class="task-number">{{ task.task_number }}</span>
+            <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
             <span class="muted">{{ task.scheduled_for|date:"TIME_FORMAT" }}</span>
             {{ task.site.customer.name }} — {{ task.site.name }}
             {% if task.my_role == 'lead' %}
@@ -51,7 +51,7 @@
     <ul class="plain-list">
         {% for task in unscheduled %}
         <li>
-            <span class="task-number">{{ task.task_number }}</span>
+            <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
             {{ task.site.customer.name }} — {{ task.site.name }}
             {% if task.my_role == 'lead' %}
                 <span class="badge badge--role-lead">{% translate "Lead" %}</span>

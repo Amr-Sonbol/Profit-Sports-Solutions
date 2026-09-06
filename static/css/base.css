@@ -336,6 +336,14 @@ tbody tr:hover {
     flex-wrap: wrap;
 }
 
+.attachment-thumb {
+    display: block;
+    max-width: 8rem;
+    max-height: 8rem;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
 .timeline {
     list-style: none;
     margin: 0;
