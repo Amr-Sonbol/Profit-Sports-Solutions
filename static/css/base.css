@@ -497,25 +497,39 @@ tbody tr:hover {
     align-items: flex-end;
 }
 
-.new-item-toggle {
-    display: contents;
+/* A dropdown plus its own "+ Add new" toggle, kept as one flex row so the
+   two always stay next to each other instead of drifting apart in a grid's
+   auto-placement. The fieldset gets flex-basis: 100% to drop onto its own
+   full-width line, below both, only when that row's own toggle is checked —
+   each row is a separate flex container, so one row's checkbox state can
+   never affect another row's fieldset. */
+.creatable-field__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 1.5rem;
+    row-gap: 0.35rem;
+    margin-block-end: 1.25rem;
+}
+
+.creatable-field__row > .field {
+    flex: 1 1 16rem;
+    margin-block-end: 0;
 }
 
 .add-new-toggle {
-    display: block;
-    margin-block-start: 0.35rem;
+    flex: 0 0 auto;
     font-size: 0.85rem;
-    text-align: start;
     color: var(--color-accent);
     cursor: pointer;
 }
 
 .new-item-fieldset {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
     border: 1px dashed var(--color-border);
     border-radius: 8px;
     padding: 1rem;
-    margin-block: 0.75rem 1.25rem;
+    margin-block-start: 0.5rem;
 }
 
 .new-item-fieldset legend {
@@ -524,9 +538,7 @@ tbody tr:hover {
     font-size: 0.85rem;
 }
 
-/* Scoped to its own .new-item-toggle wrapper so one dropdown's unchecked
-   toggle can't hide another dropdown's fieldset — see the bug this fixed. */
-.new-item-toggle .toggle-checkbox:not(:checked) ~ .new-item-fieldset {
+.toggle-checkbox:not(:checked) ~ .new-item-fieldset {
     display: none;
 }
 

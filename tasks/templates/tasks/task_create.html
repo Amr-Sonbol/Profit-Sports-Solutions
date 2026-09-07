@@ -17,133 +17,134 @@
         {% if form.non_field_errors %}
             <p class="flash flash--error">{{ form.non_field_errors }}</p>
         {% endif %}
-        <div class="form-grid">
+
+        <div class="creatable-field__row">
             <div class="field {% if form.site.errors %}field--error{% endif %}">
                 <label for="{{ form.site.id_for_label }}">{{ form.site.label }} *</label>
                 {{ form.site }}
                 <p class="field__help">{{ form.site.help_text }}</p>
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="new-item-toggle">
-                <input type="checkbox" id="toggle-new-site" class="toggle-checkbox" hidden>
-                <label for="toggle-new-site" class="add-new-toggle">{% translate "+ Add new site" %}</label>
-                <fieldset class="new-item-fieldset">
-                    <legend>{% translate "New site" %}</legend>
-                    <div class="form-grid">
-                        <div class="field {% if form.new_site_customer.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_customer.id_for_label }}">{{ form.new_site_customer.label }}</label>
-                            {{ form.new_site_customer }}
-                            {% for error in form.new_site_customer.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_site_name.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_name.id_for_label }}">{{ form.new_site_name.label }}</label>
-                            {{ form.new_site_name }}
-                            {% for error in form.new_site_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_site_contact_name.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_contact_name.id_for_label }}">{{ form.new_site_contact_name.label }}</label>
-                            {{ form.new_site_contact_name }}
-                            {% for error in form.new_site_contact_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_site_contact_phone.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_contact_phone.id_for_label }}">{{ form.new_site_contact_phone.label }}</label>
-                            {{ form.new_site_contact_phone }}
-                            {% for error in form.new_site_contact_phone.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_site_address.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_address.id_for_label }}">{{ form.new_site_address.label }}</label>
-                            {{ form.new_site_address }}
-                            {% for error in form.new_site_address.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_site_access_notes.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_site_access_notes.id_for_label }}">{{ form.new_site_access_notes.label }}</label>
-                            {{ form.new_site_access_notes }}
-                            {% for error in form.new_site_access_notes.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
+            <input type="checkbox" id="toggle-new-site" class="toggle-checkbox" hidden>
+            <label for="toggle-new-site" class="add-new-toggle">{% translate "+ Add new site" %}</label>
+            <fieldset class="new-item-fieldset">
+                <legend>{% translate "New site" %}</legend>
+                <div class="form-grid">
+                    <div class="field {% if form.new_site_customer.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_customer.id_for_label }}">{{ form.new_site_customer.label }}</label>
+                        {{ form.new_site_customer }}
+                        {% for error in form.new_site_customer.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                     </div>
-                </fieldset>
-            </div>
+                    <div class="field {% if form.new_site_name.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_name.id_for_label }}">{{ form.new_site_name.label }}</label>
+                        {{ form.new_site_name }}
+                        {% for error in form.new_site_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_site_contact_name.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_contact_name.id_for_label }}">{{ form.new_site_contact_name.label }}</label>
+                        {{ form.new_site_contact_name }}
+                        {% for error in form.new_site_contact_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_site_contact_phone.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_contact_phone.id_for_label }}">{{ form.new_site_contact_phone.label }}</label>
+                        {{ form.new_site_contact_phone }}
+                        {% for error in form.new_site_contact_phone.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_site_address.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_address.id_for_label }}">{{ form.new_site_address.label }}</label>
+                        {{ form.new_site_address }}
+                        {% for error in form.new_site_address.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_site_access_notes.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_site_access_notes.id_for_label }}">{{ form.new_site_access_notes.label }}</label>
+                        {{ form.new_site_access_notes }}
+                        {% for error in form.new_site_access_notes.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                </div>
+            </fieldset>
+        </div>
 
+        <div class="creatable-field__row">
             <div class="field {% if form.task_type.errors %}field--error{% endif %}">
                 <label for="{{ form.task_type.id_for_label }}">{{ form.task_type.label }}</label>
                 {{ form.task_type }}
                 {% for error in form.task_type.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="new-item-toggle">
-                <input type="checkbox" id="toggle-new-task-type" class="toggle-checkbox" hidden>
-                <label for="toggle-new-task-type" class="add-new-toggle">{% translate "+ Add new task type" %}</label>
-                <fieldset class="new-item-fieldset">
-                    <legend>{% translate "New task type" %}</legend>
-                    <div class="form-grid">
-                        <div class="field {% if form.new_task_type_code.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_task_type_code.id_for_label }}">{{ form.new_task_type_code.label }}</label>
-                            {{ form.new_task_type_code }}
-                            {% for error in form.new_task_type_code.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_task_type_name.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_task_type_name.id_for_label }}">{{ form.new_task_type_name.label }}</label>
-                            {{ form.new_task_type_name }}
-                            {% for error in form.new_task_type_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_task_type_name_ar.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_task_type_name_ar.id_for_label }}">{{ form.new_task_type_name_ar.label }}</label>
-                            {{ form.new_task_type_name_ar }}
-                            {% for error in form.new_task_type_name_ar.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_task_type_category.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_task_type_category.id_for_label }}">{{ form.new_task_type_category.label }}</label>
-                            {{ form.new_task_type_category }}
-                            {% for error in form.new_task_type_category.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
+            <input type="checkbox" id="toggle-new-task-type" class="toggle-checkbox" hidden>
+            <label for="toggle-new-task-type" class="add-new-toggle">{% translate "+ Add new task type" %}</label>
+            <fieldset class="new-item-fieldset">
+                <legend>{% translate "New task type" %}</legend>
+                <div class="form-grid">
+                    <div class="field {% if form.new_task_type_code.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_task_type_code.id_for_label }}">{{ form.new_task_type_code.label }}</label>
+                        {{ form.new_task_type_code }}
+                        {% for error in form.new_task_type_code.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                     </div>
-                </fieldset>
-            </div>
+                    <div class="field {% if form.new_task_type_name.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_task_type_name.id_for_label }}">{{ form.new_task_type_name.label }}</label>
+                        {{ form.new_task_type_name }}
+                        {% for error in form.new_task_type_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_task_type_name_ar.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_task_type_name_ar.id_for_label }}">{{ form.new_task_type_name_ar.label }}</label>
+                        {{ form.new_task_type_name_ar }}
+                        {% for error in form.new_task_type_name_ar.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    <div class="field {% if form.new_task_type_category.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_task_type_category.id_for_label }}">{{ form.new_task_type_category.label }}</label>
+                        {{ form.new_task_type_category }}
+                        {% for error in form.new_task_type_category.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                </div>
+            </fieldset>
+        </div>
 
+        <div class="creatable-field__row">
             <div class="field {% if form.brand.errors %}field--error{% endif %}">
                 <label for="{{ form.brand.id_for_label }}">{{ form.brand.label }}</label>
                 {{ form.brand }}
                 {% for error in form.brand.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="new-item-toggle">
-                <input type="checkbox" id="toggle-new-brand" class="toggle-checkbox" hidden>
-                <label for="toggle-new-brand" class="add-new-toggle">{% translate "+ Add new brand" %}</label>
-                <fieldset class="new-item-fieldset">
-                    <legend>{% translate "New brand" %}</legend>
-                    <div class="form-grid">
-                        <div class="field {% if form.new_brand_name.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_brand_name.id_for_label }}">{{ form.new_brand_name.label }}</label>
-                            {{ form.new_brand_name }}
-                            {% for error in form.new_brand_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
-                        <div class="field {% if form.new_brand_portal_url.errors %}field--error{% endif %}">
-                            <label for="{{ form.new_brand_portal_url.id_for_label }}">{{ form.new_brand_portal_url.label }}</label>
-                            {{ form.new_brand_portal_url }}
-                            {% for error in form.new_brand_portal_url.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        </div>
+            <input type="checkbox" id="toggle-new-brand" class="toggle-checkbox" hidden>
+            <label for="toggle-new-brand" class="add-new-toggle">{% translate "+ Add new brand" %}</label>
+            <fieldset class="new-item-fieldset">
+                <legend>{% translate "New brand" %}</legend>
+                <div class="form-grid">
+                    <div class="field {% if form.new_brand_name.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_brand_name.id_for_label }}">{{ form.new_brand_name.label }}</label>
+                        {{ form.new_brand_name }}
+                        {% for error in form.new_brand_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                     </div>
-                </fieldset>
-            </div>
+                    <div class="field {% if form.new_brand_portal_url.errors %}field--error{% endif %}">
+                        <label for="{{ form.new_brand_portal_url.id_for_label }}">{{ form.new_brand_portal_url.label }}</label>
+                        {{ form.new_brand_portal_url }}
+                        {% for error in form.new_brand_portal_url.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                </div>
+            </fieldset>
+        </div>
 
+        <div class="creatable-field__row">
             <div class="field {% if form.required_skill.errors %}field--error{% endif %}">
                 <label for="{{ form.required_skill.id_for_label }}">{{ form.required_skill.label }}</label>
                 {{ form.required_skill }}
                 {% for error in form.required_skill.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="new-item-toggle">
-                <input type="checkbox" id="toggle-new-skill" class="toggle-checkbox" hidden>
-                <label for="toggle-new-skill" class="add-new-toggle">{% translate "+ Add new skill" %}</label>
-                <fieldset class="new-item-fieldset">
-                    <legend>{% translate "New skill" %}</legend>
-                    <div class="field {% if form.new_skill_wanted.errors %}field--error{% endif %}">
-                        <label for="{{ form.new_skill_wanted.id_for_label }}">
-                            {{ form.new_skill_wanted }} {{ form.new_skill_wanted.label }}
-                        </label>
-                        {% for error in form.new_skill_wanted.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                        <p class="field__help">{% translate "Uses whichever brand is picked or added above." %}</p>
-                    </div>
-                </fieldset>
-            </div>
+            <input type="checkbox" id="toggle-new-skill" class="toggle-checkbox" hidden>
+            <label for="toggle-new-skill" class="add-new-toggle">{% translate "+ Add new skill" %}</label>
+            <fieldset class="new-item-fieldset">
+                <legend>{% translate "New skill" %}</legend>
+                <div class="field {% if form.new_skill_wanted.errors %}field--error{% endif %}">
+                    <label for="{{ form.new_skill_wanted.id_for_label }}">
+                        {{ form.new_skill_wanted }} {{ form.new_skill_wanted.label }}
+                    </label>
+                    {% for error in form.new_skill_wanted.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    <p class="field__help">{% translate "Uses whichever brand is picked or added above." %}</p>
+                </div>
+            </fieldset>
+        </div>
 
+        <div class="form-grid">
             {% for field in form.plain_fields %}
             <div class="field {% if field.errors %}field--error{% endif %}">
                 <label for="{{ field.id_for_label }}">
