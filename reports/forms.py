@@ -1,7 +1,11 @@
 from django import forms
+from django.core.validators import FileExtensionValidator, RegexValidator
 from django.utils.translation import gettext_lazy as _
 
 from .models import WorkReport
+
+SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
 
 
 class RejectReportForm(forms.Form):
@@ -16,7 +20,10 @@ class WorkReportForm(forms.ModelForm):
         choices=[('True', _('Yes')), ('False', _('No'))], coerce=lambda value: value == 'True',
         widget=forms.RadioSelect, label=_('Resolved'),
     )
-    signature = forms.FileField(required=False, label=_('Customer signature'))
+    signature = forms.FileField(
+        required=False, label=_('Customer signature'),
+        validators=[FileExtensionValidator(allowed_extensions=SIGNATURE_EXTENSIONS)],
+    )
 
     class Meta:
         model = WorkReport
@@ -31,13 +38,30 @@ class WorkReportForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['resolved'].initial = str(self.instance.resolved)
 
+    def clean_signature(self):
+        signature = self.cleaned_data.get('signature')
+        if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 5 MB.'))
+        return signature
+
 
 class PartUsedItemForm(forms.Form):
-    part_code = forms.CharField(required=False, label=_('Part code'))
-    description = forms.CharField(required=False, label=_('Description'))
-    quantity = forms.IntegerField(required=False, min_value=1, label=_('Qty'))
+    # max_length matches PartUsed.part_code/description exactly — this is a
+    # plain forms.Form, not a ModelForm, so nothing else catches an
+    # oversized value before it reaches PartUsed.objects.create() and fails
+    # as an ugly DB error instead of a clean validation message.
+    part_code = forms.CharField(required=False, max_length=50, label=_('Part code'))
+    description = forms.CharField(required=False, max_length=200, label=_('Description'))
+    # PositiveIntegerField has no upper bound of its own; capped here to a
+    # figure no real parts count would ever reach, well short of Postgres's
+    # integer overflow, which would otherwise surface as the same kind of
+    # unhandled DB error.
+    quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Qty'))
     unit_cost = forms.DecimalField(required=False, min_value=0, max_digits=10, decimal_places=2, label=_('Unit cost'))
-    currency_code = forms.CharField(required=False, max_length=3, label=_('Currency'))
+    currency_code = forms.CharField(
+        required=False, max_length=3, label=_('Currency'),
+        validators=[RegexValidator(r'^[A-Z]{3}$', _('Enter a 3-letter currency code, e.g. AED.'))],
+    )
 
     def clean(self):
         cleaned = super().clean()

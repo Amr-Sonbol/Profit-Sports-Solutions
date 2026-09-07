@@ -155,3 +155,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'home'
 LOGOUT_REDIRECT_URL = 'login'
+
+# The app has no JS that reads the CSRF cookie (tokens go out via the
+# server-rendered {% csrf_token %} hidden field), so there's no reason for
+# it to be script-readable — keep it HttpOnly to limit what a future XSS
+# could do with it.
+CSRF_COOKIE_HTTPONLY = True
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

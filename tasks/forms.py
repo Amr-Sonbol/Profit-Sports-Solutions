@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import FileExtensionValidator, MaxValueValidator
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -18,25 +19,30 @@ class TaskCreateForm(forms.ModelForm):
     view once the whole form is known to be valid, in one atomic block.
     """
 
+    # max_length on each matches the target model field exactly (Site.name,
+    # Brand.name, TaskType.code, ...) — these plain forms.Form fields bypass
+    # ModelForm's automatic length validation, so without this an oversized
+    # value passes form validation clean and then crashes with a DB-level
+    # "value too long" error when the view creates the row directly.
     new_site_customer = forms.ModelChoiceField(
         queryset=Customer.objects.none(), required=False, label=_('Customer'),
     )
-    new_site_name = forms.CharField(required=False, label=_('Site name'))
+    new_site_name = forms.CharField(required=False, max_length=150, label=_('Site name'))
     new_site_address = forms.CharField(
         required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Address'),
     )
-    new_site_contact_name = forms.CharField(required=False, label=_('Contact name'))
-    new_site_contact_phone = forms.CharField(required=False, label=_('Contact phone'))
+    new_site_contact_name = forms.CharField(required=False, max_length=150, label=_('Contact name'))
+    new_site_contact_phone = forms.CharField(required=False, max_length=30, label=_('Contact phone'))
     new_site_access_notes = forms.CharField(
         required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Access notes'),
     )
 
-    new_brand_name = forms.CharField(required=False, label=_('Brand name'))
-    new_brand_portal_url = forms.URLField(required=False, label=_('Portal URL'))
+    new_brand_name = forms.CharField(required=False, max_length=100, label=_('Brand name'))
+    new_brand_portal_url = forms.URLField(required=False, max_length=200, label=_('Portal URL'))
 
-    new_task_type_code = forms.CharField(required=False, label=_('Code'))
-    new_task_type_name = forms.CharField(required=False, label=_('Name'))
-    new_task_type_name_ar = forms.CharField(required=False, label=_('Name (Arabic)'))
+    new_task_type_code = forms.CharField(required=False, max_length=50, label=_('Code'))
+    new_task_type_name = forms.CharField(required=False, max_length=100, label=_('Name'))
+    new_task_type_name_ar = forms.CharField(required=False, max_length=100, label=_('Name (Arabic)'))
     new_task_type_category = forms.ChoiceField(
         choices=[('', '---------')] + TaskType.Category.choices, required=False, label=_('Category'),
     )
@@ -45,7 +51,7 @@ class TaskCreateForm(forms.ModelForm):
 
     PLAIN_FIELD_NAMES = [
         'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
-        'reported_at', 'promised_at', 'scheduled_for',
+        'reported_at', 'scheduled_for',
     ]
 
     class Meta:
@@ -53,12 +59,11 @@ class TaskCreateForm(forms.ModelForm):
         fields = [
             'site', 'task_type', 'brand', 'required_skill', 'min_level',
             'description', 'priority', 'source', 'is_warranty', 'billing_type',
-            'reported_at', 'promised_at', 'scheduled_for',
+            'reported_at', 'scheduled_for',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
             'reported_at': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
-            'promised_at': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
@@ -70,8 +75,13 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
         self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True)
+        # The skill level scale tops out at 4 (see TechnicianSkill.level) —
+        # PositiveSmallIntegerField has no upper bound of its own, so without
+        # this a nonsense value here is a clean model concern, not just a
+        # display one.
+        self.fields['min_level'].validators.append(MaxValueValidator(4))
 
-        for name in ('reported_at', 'promised_at', 'scheduled_for'):
+        for name in ('reported_at', 'scheduled_for'):
             self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
 
         self.fields['priority'].initial = Task.Priority.NORMAL
@@ -170,9 +180,30 @@ class RemoveAssignmentForm(forms.Form):
     )
 
 
+ALLOWED_MEDIA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
+MAX_MEDIA_UPLOAD_BYTES = 25 * 1024 * 1024
+
+
 class TaskAttachmentUploadForm(forms.Form):
-    file = forms.FileField(label=_('Photo or video'))
+    """Extensions are allow-listed (no .svg/.html/...), not just content-type
+
+    checked, because attachments are served back same-origin as raw files
+    (see task_detail.html) and the server infers content-type from the
+    extension — accepting anything else would let a stored file execute as
+    script in the app's own origin when a supervisor opens the link.
+    """
+
+    file = forms.FileField(
+        label=_('Photo or video'),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
+    )
     purpose = forms.ChoiceField(choices=TaskAttachment.Purpose.choices, label=_('What is this'))
+
+    def clean_file(self):
+        file = self.cleaned_data['file']
+        if file.size > MAX_MEDIA_UPLOAD_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+        return file
 
 
 class BlockTaskForm(forms.Form):
@@ -218,8 +249,10 @@ class NewAssetForm(forms.Form):
     brand = forms.ModelChoiceField(
         queryset=Brand.objects.filter(is_active=True), required=False, label=_('Brand'),
     )
-    model_name = forms.CharField(required=False, label=_('Model'), help_text=_('free text from the plate'))
-    serial_no = forms.CharField(required=False, label=_('Serial number'))
+    model_name = forms.CharField(
+        required=False, max_length=150, label=_('Model'), help_text=_('free text from the plate'),
+    )
+    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )

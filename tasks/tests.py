@@ -294,6 +294,45 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(Task.objects.count(), 0)
         self.assertTrue(response.context['form'].errors.get('new_skill_wanted'))
 
+    def test_oversized_new_site_name_is_rejected_cleanly(self):
+        # Site.name is max_length=150 — this must fail as a normal form
+        # error, not crash with a database "value too long" error.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            new_site_customer=self.customer.pk, new_site_name='x' * 151,
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_site_name'))
+
+    def test_oversized_new_brand_name_is_rejected_cleanly(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_brand_name='x' * 101,
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_brand_name'))
+
+    def test_oversized_new_task_type_code_is_rejected_cleanly(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_task_type_code='x' * 51, new_task_type_name='Deep clean',
+            new_task_type_name_ar='تنظيف عميق', new_task_type_category='maintenance',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_task_type_code'))
+
+    def test_min_level_above_the_skill_scale_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, min_level='5',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('min_level'))
+
 
 class TaskAssignTests(TaskTestCase):
     def setUp(self):
@@ -782,6 +821,37 @@ class MyTaskDetailTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.task.attachments.count(), 1)
 
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_html_upload_disguised_as_image_content_type_is_rejected(self):
+        # Attachments are linked back as raw same-origin files (see
+        # task_detail.html), so accepting this would let a stored file
+        # execute as script in the app's own origin — the extension is
+        # what the server trusts when serving it back, not the client's
+        # claimed content_type, so that's what must be checked here too.
+        self.client.login(username='tech1', password='pass12345')
+        upload = SimpleUploadedFile(
+            'note.html', b'<script>alert(1)</script>', content_type='image/jpeg',
+        )
+
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.task.attachments.count(), 0)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_oversized_upload_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        upload = SimpleUploadedFile(
+            'huge.jpg', b'x' * (25 * 1024 * 1024 + 1), content_type='image/jpeg',
+        )
+
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.task.attachments.count(), 0)
+
 
 class MyReportFormTests(TaskTestCase):
     EXISTING_ASSET_ROWS = 4
@@ -919,6 +989,18 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
+    def test_oversized_new_asset_model_name_is_rejected_cleanly(self):
+        # Asset.model_name is max_length=150 — must fail as a form error,
+        # not a database crash.
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['new-0-brand'] = str(self.brand.pk)
+        payload['new-0-model_name'] = 'x' * 151
+        payload['new-0-outcome'] = TaskAsset.Outcome.INSPECTED_OK
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
     def test_part_row_creates_part_used(self):
         self.client.login(username='tech1', password='pass12345')
         payload = self._base_payload()
@@ -934,6 +1016,43 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(part.part_code, 'BELT-42')
         self.assertEqual(part.quantity, 1)
 
+    def test_oversized_part_code_is_rejected_cleanly(self):
+        # PartUsed.part_code is max_length=50 — must fail as a form error,
+        # not a database crash.
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['parts-0-part_code'] = 'x' * 51
+        payload['parts-0-quantity'] = '1'
+        payload['parts-0-unit_cost'] = '85.00'
+        payload['parts-0-currency_code'] = 'AED'
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_invalid_currency_code_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['parts-0-part_code'] = 'BELT-42'
+        payload['parts-0-quantity'] = '1'
+        payload['parts-0-unit_cost'] = '85.00'
+        payload['parts-0-currency_code'] = 'aed'
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_excessive_part_quantity_is_rejected_cleanly(self):
+        # PositiveIntegerField has no upper bound of its own; this must fail
+        # as a form error rather than a Postgres integer-overflow crash.
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['parts-0-part_code'] = 'BELT-42'
+        payload['parts-0-quantity'] = '100000'
+        payload['parts-0-unit_cost'] = '85.00'
+        payload['parts-0-currency_code'] = 'AED'
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_signature_upload_sets_absolute_url(self):
         self.client.login(username='tech1', password='pass12345')
@@ -944,6 +1063,19 @@ class MyReportFormTests(TaskTestCase):
 
         report = WorkReport.objects.get(task=self.task)
         self.assertTrue(report.signature_url.startswith('http'))
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_non_image_signature_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        signature = SimpleUploadedFile(
+            'sig.html', b'<script>alert(1)</script>', content_type='image/png',
+        )
+        payload = self._base_payload()
+        payload['signature'] = signature
+
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
     def test_pending_report_is_locked(self):
         WorkReport.objects.create(
