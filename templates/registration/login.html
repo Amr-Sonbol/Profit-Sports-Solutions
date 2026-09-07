@@ -6,7 +6,7 @@
 {% block content %}
 <div class="auth-card">
     <h1>{% translate "Log in" %}</h1>
-    <form method="post">
+    <form method="post" novalidate>
         {% csrf_token %}
         {% if form.errors %}
             <p class="flash flash--error">{% translate "Incorrect username or password." %}</p>

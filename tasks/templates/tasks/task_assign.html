@@ -37,7 +37,7 @@
     {% endif %}
 
     {% if not locked %}
-    <form method="post" class="form-grid">
+    <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="set_lead">
         {% for field in set_lead_form %}
@@ -67,7 +67,7 @@
             {{ helper.technician.full_name }}
             <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
             {% if not locked %}
-            <form method="post" class="inline-form">
+            <form method="post" class="inline-form" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="remove_helper">
                 <input type="hidden" name="assignment_id" value="{{ helper.pk }}">
@@ -83,7 +83,7 @@
     {% endif %}
 
     {% if not locked and add_helper_form %}
-    <form method="post" class="form-grid">
+    <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="add_helper">
         {% for field in add_helper_form %}

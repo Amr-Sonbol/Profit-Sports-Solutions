@@ -88,7 +88,7 @@
 {% endif %}
 
 {% else %}
-<form method="post" enctype="multipart/form-data">
+<form method="post" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
 
     <div class="section">

@@ -141,13 +141,13 @@
         <p>{{ report.rejection_reason }}</p>
         {% endif %}
         <div class="form-grid">
-            <form method="post">
+            <form method="post" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="approve">
                 <button type="submit" class="button">{% translate "Approve" %}</button>
             </form>
         </div>
-        <form method="post" class="form-grid">
+        <form method="post" class="form-grid" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="reject">
             <div class="field {% if reject_form.rejection_reason.errors %}field--error{% endif %}">
