@@ -3,12 +3,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{% translate "Spots Solutions" %}{% endblock %}</title>
+    <title>{% block title %}Profit Sports Solutions{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
 </head>
 <body>
     <header class="site-header">
-        <span class="site-header__brand">{% translate "Spots Solutions" %}</span>
+        <span class="site-header__brand">Profit Sports Solutions</span>
         {% if user.is_authenticated %}
             <nav class="site-header__nav">
                 {% if user.technician %}

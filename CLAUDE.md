@@ -1,8 +1,11 @@
-# Spots Solutions — Field Service App
+# Profit Sports Solutions — Field Service App
 
-Django + PostgreSQL app for Spots Solutions, a gym equipment agent operating
-across the Middle East. Field technicians, service requests, and equipment
-tracking are the core of the system.
+Django + PostgreSQL app for Profit Sports Solutions, a gym equipment agent
+operating across the Middle East. Field technicians, service requests, and
+equipment tracking are the core of the system.
+
+The company name is always displayed in English, regardless of the active
+language — it is never wrapped in `gettext`/`{% translate %}`.
 
 One developer maintains this project. Keep things simple and readable over
 clever or "enterprise" — prefer Django's built-in patterns, avoid unnecessary

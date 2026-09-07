@@ -12,9 +12,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
-from customers.models import Asset
+from customers.models import Asset, Site
 from people.models import Technician, TechnicianSkill
 from people.permissions import require_supervisor, require_technician
+from reference.models import Brand, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed
 
@@ -64,6 +65,7 @@ BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 
 # A report can only be filed once work is underway or done.
 REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task.Status.CLOSED}
+EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
 
@@ -265,14 +267,49 @@ def task_create(request):
     if request.method == 'POST':
         form = TaskCreateForm(request.POST)
         if form.is_valid():
-            task = form.save(commit=False)
-            task.created_by = request.user
-            task.status = Task.Status.NEW
-            _save_new_task(task)
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.CREATED,
-                occurred_at=timezone.now(), actor=request.user,
-            )
+            cleaned = form.cleaned_data
+            with transaction.atomic():
+                site = cleaned.get('site')
+                if not site:
+                    site = Site.objects.create(
+                        customer=cleaned['new_site_customer'], name=cleaned['new_site_name'].strip(),
+                        address=cleaned.get('new_site_address', '').strip(),
+                        contact_name=cleaned.get('new_site_contact_name', '').strip(),
+                        contact_phone=cleaned.get('new_site_contact_phone', '').strip(),
+                        access_notes=cleaned.get('new_site_access_notes', '').strip(),
+                    )
+
+                brand = cleaned.get('brand')
+                if not brand and cleaned.get('new_brand_name'):
+                    brand = Brand.objects.create(
+                        name=cleaned['new_brand_name'].strip(),
+                        portal_url=cleaned.get('new_brand_portal_url', ''),
+                    )
+
+                task_type = cleaned.get('task_type')
+                if not task_type and cleaned.get('new_task_type_name'):
+                    task_type = TaskType.objects.create(
+                        code=cleaned['new_task_type_code'].strip(), name=cleaned['new_task_type_name'].strip(),
+                        name_ar=cleaned['new_task_type_name_ar'].strip(),
+                        category=cleaned['new_task_type_category'],
+                    )
+
+                required_skill = cleaned.get('required_skill')
+                if not required_skill and cleaned.get('new_skill_wanted') and brand:
+                    required_skill, _created = Skill.objects.get_or_create(brand=brand, name=brand.name)
+
+                task = form.save(commit=False)
+                task.site = site
+                task.brand = brand
+                task.task_type = task_type
+                task.required_skill = required_skill
+                task.created_by = request.user
+                task.status = Task.Status.NEW
+                _save_new_task(task)
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.CREATED,
+                    occurred_at=timezone.now(), actor=request.user,
+                )
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:
@@ -539,19 +576,11 @@ def my_report_form(request, pk):
         return render(request, 'tasks/my_report_form.html', context)
 
     existing_assets = list(Asset.objects.filter(site=task.site))
-    ExistingAssetFormSet = formset_factory(ExistingAssetOutcomeForm, extra=0)
+    ExistingAssetFormSet = formset_factory(ExistingAssetOutcomeForm, extra=EXISTING_ASSET_ROWS)
     NewAssetFormSet = formset_factory(NewAssetForm, extra=NEW_ASSET_ROWS)
     PartFormSet = formset_factory(PartUsedItemForm, extra=PART_ROWS)
 
-    linked_by_asset_id = {ta.asset_id: ta for ta in task_assets}
-    existing_initial = []
-    for asset in existing_assets:
-        linked = linked_by_asset_id.get(asset.pk)
-        existing_initial.append({
-            'asset_id': asset.pk,
-            'include': linked is not None,
-            'outcome': linked.outcome if linked else '',
-        })
+    existing_initial = [{'asset': ta.asset_id, 'outcome': ta.outcome} for ta in task_assets]
     part_initial = [
         {
             'part_code': part.part_code, 'description': part.description, 'quantity': part.quantity,
@@ -562,7 +591,9 @@ def my_report_form(request, pk):
 
     if request.method == 'POST':
         report_form = WorkReportForm(request.POST, request.FILES, instance=report)
-        existing_formset = ExistingAssetFormSet(request.POST, initial=existing_initial, prefix='existing')
+        existing_formset = ExistingAssetFormSet(
+            request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
+        )
         new_formset = NewAssetFormSet(request.POST, prefix='new')
         part_formset = PartFormSet(request.POST, prefix='parts')
 
@@ -582,9 +613,9 @@ def my_report_form(request, pk):
                 saved_report.save()
 
                 TaskAsset.objects.filter(task=task).delete()
-                for cleaned, asset in zip(existing_formset.cleaned_data, existing_assets):
-                    if cleaned.get('include') and cleaned.get('outcome'):
-                        TaskAsset.objects.create(task=task, asset=asset, outcome=cleaned['outcome'])
+                for cleaned in existing_formset.cleaned_data:
+                    if cleaned.get('asset') and cleaned.get('outcome'):
+                        TaskAsset.objects.create(task=task, asset=cleaned['asset'], outcome=cleaned['outcome'])
                 for cleaned in new_formset.cleaned_data:
                     if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
                         new_asset = Asset.objects.create(
@@ -610,7 +641,9 @@ def my_report_form(request, pk):
             return redirect('tasks:my_task_detail', pk=task.pk)
     else:
         report_form = WorkReportForm(instance=report)
-        existing_formset = ExistingAssetFormSet(initial=existing_initial, prefix='existing')
+        existing_formset = ExistingAssetFormSet(
+            initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
+        )
         new_formset = NewAssetFormSet(prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
 
@@ -620,7 +653,7 @@ def my_report_form(request, pk):
         'can_edit': True,
         'report_form': report_form,
         'existing_formset': existing_formset,
-        'existing_assets_and_forms': list(zip(existing_assets, existing_formset)),
+        'has_existing_assets': bool(existing_assets),
         'new_formset': new_formset,
         'part_formset': part_formset,
     }

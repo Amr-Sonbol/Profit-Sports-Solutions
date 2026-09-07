@@ -134,27 +134,25 @@
     {% if existing_formset.non_form_errors %}
         <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
     {% endif %}
-    {% if existing_assets_and_forms %}
+    {% if has_existing_assets %}
     <div class="section">
-        <h2>{% translate "Machines already at this site" %}</h2>
+        <h2>{% translate "Machines covered this visit" %}</h2>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th>{% translate "Covered?" %}</th>
                         <th>{% translate "Machine" %}</th>
                         <th>{% translate "Outcome" %}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for asset, subform in existing_assets_and_forms %}
+                    {% for form in existing_formset %}
                     <tr>
-                        <td>{{ subform.include }}{{ subform.asset_id }}</td>
-                        <td>{{ asset }}</td>
-                        <td>{{ subform.outcome }}</td>
+                        <td>{{ form.asset }}</td>
+                        <td>{{ form.outcome }}</td>
                     </tr>
-                    {% if subform.errors %}
-                    <tr><td colspan="3"><p class="field__error">{{ subform.non_field_errors }}</p></td></tr>
+                    {% if form.errors %}
+                    <tr><td colspan="2"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>

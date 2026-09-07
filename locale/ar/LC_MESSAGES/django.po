@@ -1,4 +1,4 @@
-# Arabic translation for Spots Solutions.
+# Arabic translation for Profit Sports Solutions.
 msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
@@ -11,6 +11,27 @@ msgstr ""
 
 msgid "%(source)s — %(time)s"
 msgstr "%(source)s — %(time)s"
+
+msgid "+ Add new brand"
+msgstr "+ إضافة علامة تجارية جديدة"
+
+msgid "+ Add new site"
+msgstr "+ إضافة موقع جديد"
+
+msgid "+ Add new skill"
+msgstr "+ إضافة مهارة جديدة"
+
+msgid "+ Add new task type"
+msgstr "+ إضافة نوع مهمة جديد"
+
+msgid "A brand with that name already exists — pick it from the list instead."
+msgstr "توجد بالفعل علامة تجارية بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
+
+msgid "A task type with that code already exists."
+msgstr "يوجد بالفعل نوع مهمة بهذا الرمز."
+
+msgid "A task type with that name already exists — pick it from the list instead."
+msgstr "يوجد بالفعل نوع مهمة بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
 
 msgid "Accept task"
 msgstr "قبول المهمة"
@@ -26,6 +47,9 @@ msgstr "الإجراء المتخذ"
 
 msgid "Active"
 msgstr "نشط"
+
+msgid "Add a new skill for this brand"
+msgstr "إضافة مهارة جديدة لهذه العلامة التجارية"
 
 msgid "Add helper"
 msgstr "إضافة مساعد"
@@ -105,8 +129,14 @@ msgstr "معطّلة"
 msgid "Brand"
 msgstr "العلامة التجارية"
 
+msgid "Brand name"
+msgstr "اسم العلامة التجارية"
+
 msgid "Cancelled"
 msgstr "ملغاة"
+
+msgid "Category"
+msgstr "الفئة"
 
 msgid "Chargeable"
 msgstr "مدفوعة"
@@ -114,8 +144,23 @@ msgstr "مدفوعة"
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
 
-msgid "Choose an outcome for this machine."
-msgstr "اختر نتيجة لهذا الجهاز."
+msgid "Choose a site, or add a new one below."
+msgstr "اختر موقعًا، أو أضف موقعًا جديدًا أدناه."
+
+msgid "Choose an existing brand or add a new one below, not both."
+msgstr "اختر علامة تجارية موجودة أو أضف واحدة جديدة أدناه، وليس كلاهما."
+
+msgid "Choose an existing required skill or add a new one, not both."
+msgstr "اختر مهارة مطلوبة موجودة أو أضف مهارة جديدة، وليس كلاهما."
+
+msgid "Choose an existing site or add a new one below, not both."
+msgstr "اختر موقعًا موجودًا أو أضف موقعًا جديدًا أدناه، وليس كلاهما."
+
+msgid "Choose an existing task type or add a new one below, not both."
+msgstr "اختر نوع مهمة موجودًا أو أضف نوعًا جديدًا أدناه، وليس كلاهما."
+
+msgid "Choose the machine and an outcome, or leave this row blank."
+msgstr "اختر الجهاز والنتيجة، أو اترك هذا الصف فارغًا."
 
 msgid "Closed"
 msgstr "مغلقة"
@@ -123,14 +168,20 @@ msgstr "مغلقة"
 msgid "Club"
 msgstr "نادٍ"
 
+msgid "Code"
+msgstr "الرمز"
+
 msgid "Completed"
 msgstr "مكتملة"
 
+msgid "Contact name"
+msgstr "اسم جهة الاتصال"
+
+msgid "Contact phone"
+msgstr "هاتف جهة الاتصال"
+
 msgid "Contract"
 msgstr "عقد"
-
-msgid "Covered?"
-msgstr "تمت تغطيته؟"
 
 msgid "Create task"
 msgstr "إنشاء مهمة"
@@ -200,6 +251,9 @@ msgstr "ملف"
 
 msgid "File report"
 msgstr "تقديم التقرير"
+
+msgid "Fill in code, name, Arabic name, and category for the new task type, or leave them blank."
+msgstr "أدخل الرمز والاسم والاسم بالعربية والفئة لنوع المهمة الجديد، أو اتركها كلها فارغة."
 
 msgid "Fill in part code, quantity, unit cost and currency, or leave this row blank."
 msgstr "أدخل رمز القطعة والكمية وسعر الوحدة والعملة، أو اترك هذا الصف فارغًا."
@@ -300,11 +354,11 @@ msgstr "منخفضة"
 msgid "Machine"
 msgstr "الجهاز"
 
-msgid "Machines already at this site"
-msgstr "الأجهزة الموجودة بالفعل في هذا الموقع"
-
 msgid "Machines covered"
 msgstr "الأجهزة المشمولة"
+
+msgid "Machines covered this visit"
+msgstr "الأجهزة المشمولة في هذه الزيارة"
 
 msgid "Maintenance"
 msgstr "صيانة"
@@ -327,14 +381,29 @@ msgstr "أسبوعي"
 msgid "Name"
 msgstr "الاسم"
 
+msgid "Name (Arabic)"
+msgstr "الاسم (بالعربية)"
+
 msgid "New"
 msgstr "جديدة"
+
+msgid "New brand"
+msgstr "علامة تجارية جديدة"
 
 msgid "New machines found"
 msgstr "أجهزة جديدة تم العثور عليها"
 
+msgid "New site"
+msgstr "موقع جديد"
+
+msgid "New skill"
+msgstr "مهارة جديدة"
+
 msgid "New task"
 msgstr "مهمة جديدة"
+
+msgid "New task type"
+msgstr "نوع مهمة جديد"
 
 msgid "Next"
 msgstr "التالي"
@@ -431,6 +500,12 @@ msgstr "صورة أو فيديو"
 
 msgid "Photos"
 msgstr "الصور"
+
+msgid "Pick or add a brand first — a skill always belongs to one."
+msgstr "اختر أو أضف علامة تجارية أولاً — المهارة تنتمي دائمًا إلى علامة تجارية."
+
+msgid "Portal URL"
+msgstr "رابط البوابة"
 
 msgid "Previous"
 msgstr "السابق"
@@ -564,14 +639,14 @@ msgstr "الموقع"
 msgid "Site contact"
 msgstr "جهة الاتصال بالموقع"
 
+msgid "Site name"
+msgstr "اسم الموقع"
+
 msgid "Skill mismatch"
 msgstr "عدم تطابق المهارة"
 
 msgid "Source"
 msgstr "المصدر"
-
-msgid "Spots Solutions"
-msgstr "سبوتس سوليوشنز"
 
 msgid "Staff"
 msgstr "موظف"
@@ -618,6 +693,9 @@ msgstr "المهام"
 msgid "Technician"
 msgstr "الفني"
 
+msgid "This customer already has a site with that name."
+msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
+
 msgid "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead."
 msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة — بدأ العمل بالفعل. أغلقها وأنشئ مهمة جديدة للتسليم بدلاً من ذلك."
 
@@ -650,6 +728,9 @@ msgstr "رفع"
 
 msgid "Username"
 msgstr "اسم المستخدم"
+
+msgid "Uses whichever brand is picked or added above."
+msgstr "يستخدم أي علامة تجارية يتم اختيارها أو إضافتها أعلاه."
 
 msgid "Vehicle"
 msgstr "مركبة"

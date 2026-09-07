@@ -2,7 +2,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from customers.models import Site
+from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Skill, TaskType
 
@@ -12,6 +12,42 @@ DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
 
 
 class TaskCreateForm(forms.ModelForm):
+    """Site, brand, task type, and required skill can each be picked from the
+    existing list or added on the spot — see the matching new_* fields below.
+    Validation only; the actual create-or-reuse resolution happens in the
+    view once the whole form is known to be valid, in one atomic block.
+    """
+
+    new_site_customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(), required=False, label=_('Customer'),
+    )
+    new_site_name = forms.CharField(required=False, label=_('Site name'))
+    new_site_address = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Address'),
+    )
+    new_site_contact_name = forms.CharField(required=False, label=_('Contact name'))
+    new_site_contact_phone = forms.CharField(required=False, label=_('Contact phone'))
+    new_site_access_notes = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Access notes'),
+    )
+
+    new_brand_name = forms.CharField(required=False, label=_('Brand name'))
+    new_brand_portal_url = forms.URLField(required=False, label=_('Portal URL'))
+
+    new_task_type_code = forms.CharField(required=False, label=_('Code'))
+    new_task_type_name = forms.CharField(required=False, label=_('Name'))
+    new_task_type_name_ar = forms.CharField(required=False, label=_('Name (Arabic)'))
+    new_task_type_category = forms.ChoiceField(
+        choices=[('', '---------')] + TaskType.Category.choices, required=False, label=_('Category'),
+    )
+
+    new_skill_wanted = forms.BooleanField(required=False, label=_('Add a new skill for this brand'))
+
+    PLAIN_FIELD_NAMES = [
+        'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
+        'reported_at', 'promised_at', 'scheduled_for',
+    ]
+
     class Meta:
         model = Task
         fields = [
@@ -29,9 +65,11 @@ class TaskCreateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['site'].queryset = Site.objects.filter(customer__is_active=True).select_related('customer')
+        self.fields['site'].required = False
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
+        self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True)
 
         for name in ('reported_at', 'promised_at', 'scheduled_for'):
             self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
@@ -40,6 +78,61 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['source'].initial = Task.Source.PHONE
         self.fields['billing_type'].initial = Task.BillingType.CHARGEABLE
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
+
+    def plain_fields(self):
+        """The fields with no create-or-reuse toggle, for the template's generic loop."""
+        return [self[name] for name in self.PLAIN_FIELD_NAMES]
+
+    def clean(self):
+        cleaned = super().clean()
+
+        site = cleaned.get('site')
+        new_site_name = (cleaned.get('new_site_name') or '').strip()
+        new_site_customer = cleaned.get('new_site_customer')
+        if site and (new_site_name or new_site_customer):
+            self.add_error(None, _('Choose an existing site or add a new one below, not both.'))
+        elif not site and not (new_site_name and new_site_customer):
+            self.add_error('site', _('Choose a site, or add a new one below.'))
+        elif not site and Site.objects.filter(customer=new_site_customer, name__iexact=new_site_name).exists():
+            self.add_error('new_site_name', _('This customer already has a site with that name.'))
+
+        brand = cleaned.get('brand')
+        new_brand_name = (cleaned.get('new_brand_name') or '').strip()
+        if brand and new_brand_name:
+            self.add_error(None, _('Choose an existing brand or add a new one below, not both.'))
+        elif new_brand_name and Brand.objects.filter(name__iexact=new_brand_name).exists():
+            self.add_error(
+                'new_brand_name', _('A brand with that name already exists — pick it from the list instead.'),
+            )
+
+        task_type = cleaned.get('task_type')
+        new_task_type_fields = (
+            cleaned.get('new_task_type_code'), cleaned.get('new_task_type_name'),
+            cleaned.get('new_task_type_name_ar'), cleaned.get('new_task_type_category'),
+        )
+        if task_type and any(new_task_type_fields):
+            self.add_error(None, _('Choose an existing task type or add a new one below, not both.'))
+        elif any(new_task_type_fields) and not all(new_task_type_fields):
+            self.add_error(
+                None, _('Fill in code, name, Arabic name, and category for the new task type, or leave them blank.'),
+            )
+        elif all(new_task_type_fields):
+            if TaskType.objects.filter(code__iexact=cleaned['new_task_type_code'].strip()).exists():
+                self.add_error('new_task_type_code', _('A task type with that code already exists.'))
+            if TaskType.objects.filter(name__iexact=cleaned['new_task_type_name'].strip()).exists():
+                self.add_error(
+                    'new_task_type_name',
+                    _('A task type with that name already exists — pick it from the list instead.'),
+                )
+
+        required_skill = cleaned.get('required_skill')
+        new_skill_wanted = cleaned.get('new_skill_wanted')
+        if required_skill and new_skill_wanted:
+            self.add_error(None, _('Choose an existing required skill or add a new one, not both.'))
+        elif new_skill_wanted and not (brand or new_brand_name):
+            self.add_error('new_skill_wanted', _('Pick or add a brand first — a skill always belongs to one.'))
+
+        return cleaned
 
 
 class SetLeadForm(forms.Form):
@@ -90,18 +183,32 @@ class BlockTaskForm(forms.Form):
 
 
 class ExistingAssetOutcomeForm(forms.Form):
-    """One row per asset already known at the site — tick it if this visit covered it."""
+    """A machine already at this site that this visit actually covered.
 
-    asset_id = forms.IntegerField(widget=forms.HiddenInput())
-    include = forms.BooleanField(required=False, label='')
+    Blank optional rows, like NewAssetForm below — the technician picks only
+    the machine(s) this visit was about, not every machine the site owns.
+    """
+
+    asset = forms.ModelChoiceField(
+        queryset=Asset.objects.none(), required=False, label=_('Machine'),
+    )
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
 
+    def __init__(self, *args, site=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if site is not None:
+            self.fields['asset'].queryset = Asset.objects.filter(site=site).select_related('brand')
+
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get('include') and not cleaned.get('outcome'):
-            raise forms.ValidationError(_('Choose an outcome for this machine.'))
+        if not any(cleaned.get(f) for f in ('asset', 'outcome')):
+            return cleaned
+        if not cleaned.get('asset') or not cleaned.get('outcome'):
+            raise forms.ValidationError(
+                _('Choose the machine and an outcome, or leave this row blank.'),
+            )
         return cleaned
 
 

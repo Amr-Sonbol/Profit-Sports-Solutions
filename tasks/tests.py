@@ -184,6 +184,116 @@ class TaskCreateTests(TaskTestCase):
         numbers = set(Task.objects.values_list('task_number', flat=True))
         self.assertEqual(numbers, {'AE-0001', 'AE-0002'})
 
+    def _base_new_task_payload(self, **overrides):
+        payload = {
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00', 'is_warranty': '',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_new_site_is_created_under_the_chosen_customer(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            new_site_customer=self.customer.pk, new_site_name='Downtown Branch',
+            new_site_address='Downtown Dubai',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.site.name, 'Downtown Branch')
+        self.assertEqual(task.site.customer, self.customer)
+        self.assertEqual(task.site.address, 'Downtown Dubai')
+
+    def test_duplicate_new_site_name_for_same_customer_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            new_site_customer=self.customer.pk, new_site_name=self.site.name,
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_site_name'))
+
+    def test_site_and_new_site_together_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_site_customer=self.customer.pk, new_site_name='Downtown Branch',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+
+    def test_new_brand_is_created_and_used(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_brand_name='Life Fitness', new_brand_portal_url='https://portal.example.com',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.brand.name, 'Life Fitness')
+        self.assertEqual(task.brand.portal_url, 'https://portal.example.com')
+
+    def test_duplicate_new_brand_name_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_brand_name=self.brand.name,
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_brand_name'))
+
+    def test_new_task_type_is_created_and_used(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_task_type_code='deep_clean', new_task_type_name='Deep clean',
+            new_task_type_name_ar='تنظيف عميق', new_task_type_category='maintenance',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.task_type.code, 'deep_clean')
+        self.assertEqual(task.task_type.name_ar, 'تنظيف عميق')
+
+    def test_incomplete_new_task_type_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_task_type_name='Deep clean',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+
+    def test_new_skill_wanted_creates_skill_for_the_chosen_brand(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        other_brand = Brand.objects.create(name='Life Fitness')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, brand=other_brand.pk, new_skill_wanted='on',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.required_skill.brand, other_brand)
+        self.assertEqual(task.required_skill.name, other_brand.name)
+
+    def test_new_skill_wanted_with_new_brand_uses_the_newly_created_brand(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_brand_name='Life Fitness', new_skill_wanted='on',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.required_skill.brand, task.brand)
+        self.assertEqual(task.brand.name, 'Life Fitness')
+
+    def test_new_skill_wanted_without_a_brand_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, new_skill_wanted='on',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('new_skill_wanted'))
+
 
 class TaskAssignTests(TaskTestCase):
     def setUp(self):
@@ -674,6 +784,7 @@ class MyTaskDetailTests(TaskTestCase):
 
 
 class MyReportFormTests(TaskTestCase):
+    EXISTING_ASSET_ROWS = 4
     NEW_ASSET_ROWS = 4
     PART_ROWS = 5
 
@@ -713,8 +824,7 @@ class MyReportFormTests(TaskTestCase):
             'labour_hours': '1.50', 'customer_name': 'Ali Manager',
         }
         payload.update(report_overrides)
-        payload.update(self._management_form('existing', total=1, initial=1))
-        payload['existing-0-asset_id'] = str(self.asset.pk)
+        payload.update(self._management_form('existing', total=self.EXISTING_ASSET_ROWS))
         payload.update(self._management_form('new', total=self.NEW_ASSET_ROWS))
         payload.update(self._management_form('parts', total=self.PART_ROWS))
         return payload
@@ -755,10 +865,10 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-    def test_existing_asset_included_creates_task_asset_without_new_asset(self):
+    def test_existing_asset_row_creates_task_asset_without_new_asset(self):
         self.client.login(username='tech1', password='pass12345')
         payload = self._base_payload()
-        payload['existing-0-include'] = 'on'
+        payload['existing-0-asset'] = str(self.asset.pk)
         payload['existing-0-outcome'] = TaskAsset.Outcome.REPAIRED
         self.client.post(self.url, payload)
 
@@ -766,6 +876,25 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(task_asset.asset, self.asset)
         self.assertEqual(task_asset.outcome, TaskAsset.Outcome.REPAIRED)
         self.assertEqual(Asset.objects.count(), 1)
+
+    def test_incomplete_existing_asset_row_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['existing-0-asset'] = str(self.asset.pk)
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_existing_asset_dropdown_is_scoped_to_the_task_site(self):
+        other_site = Site.objects.create(customer=self.customer, name='Other Branch', address='Elsewhere')
+        other_asset = Asset.objects.create(site=other_site, brand=self.brand, model_name='Other Machine')
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+
+        asset_field = response.context['existing_formset'].forms[0].fields['asset']
+        self.assertIn(self.asset, asset_field.queryset)
+        self.assertNotIn(other_asset, asset_field.queryset)
 
     def test_new_asset_row_creates_asset_and_task_asset(self):
         self.client.login(username='tech1', password='pass12345')

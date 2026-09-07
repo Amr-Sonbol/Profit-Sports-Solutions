@@ -39,6 +39,8 @@ a {
 
 .site-header__brand {
     font-weight: 600;
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .site-header__nav {
@@ -187,10 +189,17 @@ tbody tr:hover {
     font-weight: 600;
 }
 
-.badge--priority-emergency { background: #fdecea; color: #c0392b; }
-.badge--priority-high { background: #fdf3e3; color: #b5760a; }
-.badge--priority-normal { background: #eaf0fb; color: #2f6feb; }
-.badge--priority-low { background: #eef1f3; color: var(--color-muted); }
+/* Priority badges are outlined, not filled, so they read as a secondary
+   tag next to the (filled) status badge rather than a second status. */
+.badge--priority-emergency, .badge--priority-high, .badge--priority-normal, .badge--priority-low {
+    background: transparent;
+    border: 1px solid currentColor;
+}
+
+.badge--priority-emergency { color: #c0392b; }
+.badge--priority-high { color: #b5760a; }
+.badge--priority-normal { color: #2f6feb; }
+.badge--priority-low { color: var(--color-muted); }
 
 .badge--status-new { background: #eaf0fb; color: #2f6feb; }
 .badge--status-assigned { background: #f1eafb; color: #7048c7; }
@@ -488,6 +497,39 @@ tbody tr:hover {
     align-items: flex-end;
 }
 
+.new-item-toggle {
+    display: contents;
+}
+
+.add-new-toggle {
+    display: block;
+    margin-block-start: 0.35rem;
+    font-size: 0.85rem;
+    text-align: start;
+    color: var(--color-accent);
+    cursor: pointer;
+}
+
+.new-item-fieldset {
+    grid-column: 1 / -1;
+    border: 1px dashed var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-block: 0.75rem 1.25rem;
+}
+
+.new-item-fieldset legend {
+    padding-inline: 0.4rem;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+/* Scoped to its own .new-item-toggle wrapper so one dropdown's unchecked
+   toggle can't hide another dropdown's fieldset — see the bug this fixed. */
+.new-item-toggle .toggle-checkbox:not(:checked) ~ .new-item-fieldset {
+    display: none;
+}
+
 .inline-form {
     display: flex;
     flex-direction: row;
@@ -526,16 +568,4 @@ tbody tr:hover {
 
 .button--danger {
     background: var(--color-danger);
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        color-scheme: dark;
-        --color-bg: #14171a;
-        --color-surface: #1c2126;
-        --color-border: #2c333a;
-        --color-text: #e6e9ec;
-        --color-muted: #8a94a0;
-        --color-accent: #5b9dff;
-    }
 }

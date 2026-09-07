@@ -1,4 +1,4 @@
-# Spots Solutions — Technician App
+# Profit Sports Solutions — Technician App
 ## Database design v2
 
 15 tables. Target stack: Django + PostgreSQL, one developer.
