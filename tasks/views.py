@@ -17,7 +17,7 @@ from people.models import Technician, TechnicianSkill
 from people.permissions import require_supervisor, require_technician
 from reference.models import Brand, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
-from reports.models import PartUsed
+from reports.models import PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm,
@@ -501,6 +501,49 @@ def my_week(request):
         **_week_nav_context(today, start),
     }
     return render(request, 'tasks/my_week.html', context)
+
+
+@login_required
+def my_progress(request):
+    """Skills the technician is rated on today, plus counts this week — no
+    computed rates (on-time %, first-time fix, ...), per the doc's own
+    build order: those need months of real event data to mean anything.
+    """
+    technician = require_technician(request)
+
+    levels_by_brand_id = dict(
+        TechnicianSkill.objects.filter(technician=technician).values_list('skill__brand_id', 'level'),
+    )
+    skills = [
+        {'brand': brand, 'level': levels_by_brand_id.get(brand.id)}
+        for brand in Brand.objects.filter(is_active=True).order_by('name')
+    ]
+
+    _today, start, end = _week_window(request)
+    my_assignments = TaskAssignment.objects.filter(technician=technician, is_active=True)
+
+    assigned_count = Task.objects.filter(
+        Q(pk__in=my_assignments.values('task_id')),
+        Q(scheduled_for__date__range=(start, end))
+        | (Q(scheduled_for__isnull=True) & Q(status__in=OPEN_STATUSES)),
+    ).count()
+
+    completed_count = TaskEvent.objects.filter(
+        actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
+    ).count()
+
+    lead_task_ids = my_assignments.filter(role=TaskAssignment.Role.LEAD).values('task_id')
+    pending_reports_count = WorkReport.objects.filter(
+        task_id__in=lead_task_ids, approved_at__isnull=True, rejection_reason='',
+    ).count()
+
+    context = {
+        'skills': skills,
+        'assigned_count': assigned_count,
+        'completed_count': completed_count,
+        'pending_reports_count': pending_reports_count,
+    }
+    return render(request, 'tasks/my_progress.html', context)
 
 
 @login_required

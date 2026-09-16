@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.task_list, name='task_list'),
     path('week/', views.task_week, name='task_week'),
     path('my-week/', views.my_week, name='my_week'),
+    path('my-progress/', views.my_progress, name='my_progress'),
     path('my/<int:pk>/', views.my_task_detail, name='my_task_detail'),
     path('my/<int:pk>/report/', views.my_report_form, name='my_report_form'),
     path('new/', views.task_create, name='task_create'),

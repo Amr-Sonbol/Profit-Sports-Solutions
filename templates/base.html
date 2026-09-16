@@ -13,6 +13,7 @@
             <nav class="site-header__nav">
                 {% if user.technician %}
                     <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
+                    <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                 {% endif %}
                 {% if user.technician.role == 'supervisor' or user.technician.role == 'manager' %}
                     <a href="{% url 'tasks:task_list' %}">{% translate "Tasks" %}</a>

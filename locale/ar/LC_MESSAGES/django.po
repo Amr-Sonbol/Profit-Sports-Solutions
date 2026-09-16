@@ -90,6 +90,9 @@ msgstr "التعيين"
 msgid "Assigned"
 msgstr "معيّنة"
 
+msgid "Assigned tasks"
+msgstr "المهام المسندة"
+
 msgid "Assignment"
 msgstr "التعيين"
 
@@ -351,6 +354,9 @@ msgstr "تم تعيين الفني الرئيسي."
 msgid "Leave"
 msgstr "إجازة"
 
+msgid "Level"
+msgstr "المستوى"
+
 msgid "Level — %(skill)s"
 msgstr "المستوى — %(skill)s"
 
@@ -402,6 +408,9 @@ msgstr "تم وضع علامة غير متاح."
 msgid "Model"
 msgstr "الموديل"
 
+msgid "My progress"
+msgstr "تقدّمي"
+
 msgid "My week"
 msgstr "أسبوعي"
 
@@ -449,6 +458,9 @@ msgstr "لا توجد مرفقات لهذه المهمة — تحقق مما إ�
 
 msgid "No attachments yet."
 msgstr "لا توجد مرفقات بعد."
+
+msgid "No brands set up yet."
+msgstr "لم يتم إعداد أي علامات تجارية بعد."
 
 msgid "No events yet."
 msgstr "لا توجد أحداث بعد."
@@ -609,6 +621,9 @@ msgstr "تاريخ الإبلاغ"
 msgid "Reports"
 msgstr "التقارير"
 
+msgid "Reports awaiting approval"
+msgstr "تقارير بانتظار الاعتماد"
+
 msgid "Required skill"
 msgstr "المهارة المطلوبة"
 
@@ -671,6 +686,9 @@ msgstr "اسم الموقع"
 
 msgid "Skill mismatch"
 msgstr "عدم تطابق المهارة"
+
+msgid "Skills"
+msgstr "المهارات"
 
 msgid "Source"
 msgstr "المصدر"

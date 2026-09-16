@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My progress" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "My progress" %}</h1>
+</div>
+
+<div class="section">
+    <h2>{% translate "This week" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Assigned tasks" %}</dt>
+            <dd>{{ assigned_count }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Completed" %}</dt>
+            <dd>{{ completed_count }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Reports awaiting approval" %}</dt>
+            <dd>{{ pending_reports_count }}</dd>
+        </div>
+    </dl>
+</div>
+
+<div class="section">
+    <h2>{% translate "Skills" %}</h2>
+    {% if skills %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Brand" %}</th>
+                    <th>{% translate "Level" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in skills %}
+                <tr>
+                    <td>{{ entry.brand.name }}</td>
+                    <td>{{ entry.level|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No brands set up yet." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

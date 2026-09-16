@@ -717,6 +717,151 @@ class MyWeekTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class MyProgressTests(TaskTestCase):
+    # 2026-09-07 is a Monday.
+    WEEK_START = date(2026, 9, 7)
+
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get('/tasks/my-progress/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_skill_shows_level_when_rated(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3,
+            set_by=self.technician, set_on=date(2026, 9, 1),
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        levels = {entry['brand']: entry['level'] for entry in response.context['skills']}
+        self.assertEqual(levels[self.brand], 3)
+
+    def test_unrated_brand_shows_as_unrated(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        levels = {entry['brand']: entry['level'] for entry in response.context['skills']}
+        self.assertIsNone(levels[self.brand])
+
+    def test_inactive_brand_not_shown(self):
+        self.brand.is_active = False
+        self.brand.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        brands = [entry['brand'] for entry in response.context['skills']]
+        self.assertNotIn(self.brand, brands)
+
+    def test_assigned_count_includes_scheduled_task_this_week(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 9, 9, 0))
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/', {'start': '2026-09-07'})
+
+        self.assertEqual(response.context['assigned_count'], 1)
+
+    def test_assigned_count_excludes_other_technicians_tasks(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 9, 9, 0))
+        other_user = User.objects.create_user('other_tech', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Nour Other',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=other_technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/', {'start': '2026-09-07'})
+
+        self.assertEqual(response.context['assigned_count'], 0)
+
+    def test_completed_count_counts_this_weeks_completed_events(self):
+        task = self._make_task('AE-0001')
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.COMPLETED,
+            occurred_at=dubai_time(2026, 9, 9, 9, 0), actor=self.tech_user,
+        )
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.COMPLETED,
+            occurred_at=dubai_time(2026, 9, 20, 9, 0), actor=self.tech_user,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/', {'start': '2026-09-07'})
+
+        self.assertEqual(response.context['completed_count'], 1)
+
+    def test_pending_reports_count_counts_unreviewed_report_on_my_lead_task(self):
+        task = self._make_task('AE-0001', status=Task.Status.COMPLETED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertEqual(response.context['pending_reports_count'], 1)
+
+    def test_pending_reports_count_excludes_approved_report(self):
+        task = self._make_task('AE-0001', status=Task.Status.CLOSED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(), approved_at=timezone.now(),
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertEqual(response.context['pending_reports_count'], 0)
+
+    def test_pending_reports_count_excludes_rejected_report(self):
+        task = self._make_task('AE-0001', status=Task.Status.COMPLETED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(), rejection_reason='Missing signature',
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertEqual(response.context['pending_reports_count'], 0)
+
+    def test_supervisor_can_view_their_own_progress_too(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        self.assertEqual(response.status_code, 200)
+
+
 class HomeRedirectTests(TaskTestCase):
     def test_supervisor_lands_on_task_list(self):
         self.client.login(username='supervisor1', password='pass12345')
