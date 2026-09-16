@@ -1,5 +1,5 @@
 from django import forms
-from django.core.validators import FileExtensionValidator, MaxValueValidator
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -51,7 +51,7 @@ class TaskCreateForm(forms.ModelForm):
 
     PLAIN_FIELD_NAMES = [
         'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
-        'reported_at', 'scheduled_for',
+        'reported_at', 'scheduled_for', 'estimated_hours',
     ]
 
     class Meta:
@@ -59,7 +59,7 @@ class TaskCreateForm(forms.ModelForm):
         fields = [
             'site', 'task_type', 'brand', 'required_skill', 'min_level',
             'description', 'priority', 'source', 'is_warranty', 'billing_type',
-            'reported_at', 'scheduled_for',
+            'reported_at', 'scheduled_for', 'estimated_hours',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -80,6 +80,11 @@ class TaskCreateForm(forms.ModelForm):
         # this a nonsense value here is a clean model concern, not just a
         # display one.
         self.fields['min_level'].validators.append(MaxValueValidator(4))
+        # No job realistically runs longer than a couple of days unattended;
+        # caught here so a typo (20 instead of 2.0) is a clean form error,
+        # not a silently absurd estimated finish time.
+        self.fields['estimated_hours'].validators.append(MinValueValidator(0))
+        self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
 
         for name in ('reported_at', 'scheduled_for'):
             self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]

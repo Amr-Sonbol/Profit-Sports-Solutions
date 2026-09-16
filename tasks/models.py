@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -70,6 +72,10 @@ class Task(models.Model):
         _('scheduled for'), null=True, blank=True,
         help_text=_('the day the supervisor planned'),
     )
+    estimated_hours = models.DecimalField(
+        _('estimated hours'), max_digits=4, decimal_places=2, null=True, blank=True,
+        help_text=_('roughly how long the job should take — shown as an estimated finish time'),
+    )
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tasks_created',
@@ -85,6 +91,13 @@ class Task(models.Model):
             models.Index(fields=['site', 'status']),
             models.Index(fields=['scheduled_for', 'status']),
         ]
+
+    @property
+    def estimated_finish(self):
+        """scheduled_for + estimated_hours, if both are known — None otherwise."""
+        if self.scheduled_for is None or self.estimated_hours is None:
+            return None
+        return self.scheduled_for + timedelta(hours=float(self.estimated_hours))
 
     def __str__(self):
         return self.task_number

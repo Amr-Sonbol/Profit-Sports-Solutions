@@ -15,6 +15,7 @@ urlpatterns = [
     path('my/<int:pk>/report/', views.my_report_form, name='my_report_form'),
     path('new/', views.task_create, name='task_create'),
     path('technicians/', views.technician_list, name='technician_list'),
+    path('technicians/<int:pk>/board/', views.technician_board, name='technician_board'),
     path('technicians/<int:pk>/skills/', views.technician_skills, name='technician_skills'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
     path('<int:pk>/assign/', views.task_assign, name='task_assign'),

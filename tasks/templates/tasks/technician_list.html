@@ -44,6 +44,7 @@
                         {% if row.solve_rate is not None %}{{ row.solve_rate|floatformat:0 }}%{% else %}—{% endif %}
                     </td>
                     <td>
+                        <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
                         <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
                     </td>
                 </tr>

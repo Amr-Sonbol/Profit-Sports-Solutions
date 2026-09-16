@@ -1,5 +1,5 @@
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -113,6 +113,63 @@ class TaskDetailTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/')
         self.assertContains(response, f'/tasks/{self.task.pk}/')
+
+
+class TaskListTests(TaskTestCase):
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_filter_by_customer(self):
+        other_customer = Customer.objects.create(country=self.country, name='Gold Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='JBR Branch', address='JBR')
+        matching = self._make_task('AE-0001')
+        self._make_task('AE-0002', site=other_site)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'customer': self.customer.pk})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
+    def test_filter_by_technician_matches_lead_or_helper(self):
+        lead_task = self._make_task('AE-0001')
+        TaskAssignment.objects.create(
+            task=lead_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        other_task = self._make_task('AE-0002')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'technician': self.technician.pk})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [lead_task.task_number])
+        self.assertNotIn(other_task.task_number, tasks)
+
+    def test_filter_by_scheduled_date_range(self):
+        in_range = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 10, 9, 0))
+        self._make_task('AE-0002', scheduled_for=dubai_time(2026, 9, 20, 9, 0))
+        self._make_task('AE-0003', scheduled_for=None)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {
+            'status': 'all', 'scheduled_from': '2026-09-08', 'scheduled_to': '2026-09-12',
+        })
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [in_range.task_number])
+
+    def test_filters_carry_across_status_tabs(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'customer': self.customer.pk})
+
+        self.assertContains(response, f'customer={self.customer.pk}')
 
 
 class TaskCreateTests(TaskTestCase):
@@ -334,6 +391,25 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Task.objects.count(), 0)
         self.assertTrue(response.context['form'].errors.get('min_level'))
+
+    def test_estimated_hours_over_48_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, estimated_hours='72',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertTrue(response.context['form'].errors.get('estimated_hours'))
+
+    def test_scheduled_task_with_estimated_hours_has_an_estimated_finish(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            site=self.site.pk, scheduled_for='2026-09-10T09:00', estimated_hours='2.5',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.estimated_finish, task.scheduled_for + timedelta(hours=2.5))
 
 
 class TaskAssignTests(TaskTestCase):
@@ -1134,6 +1210,67 @@ class DashboardTests(TaskTestCase):
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['tasks']), [])
+
+
+class TechnicianBoardTests(TaskTestCase):
+    WEEK_START = date(2026, 9, 7)
+
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/board/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_other_country_technician_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{other_technician.pk}/board/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_shows_scheduled_task_with_role_and_estimated_finish(self):
+        task = self._make_task(
+            'AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0), estimated_hours='2.00',
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/board/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(list(days[date(2026, 9, 7)]), [task])
+        self.assertEqual(days[date(2026, 9, 7)][0].estimated_finish, task.scheduled_for + timedelta(hours=2))
+
+    def test_shows_unscheduled_task(self):
+        task = self._make_task('AE-0001', scheduled_for=None, status=Task.Status.NEW)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/board/')
+
+        self.assertEqual(list(response.context['unscheduled']), [task])
+        self.assertEqual(response.context['unscheduled'][0].my_role, TaskAssignment.Role.HELPER)
 
 
 class TechnicianSkillsTests(TaskTestCase):

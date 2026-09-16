@@ -7,10 +7,10 @@
 <div class="page__header">
     <h1>{% translate "Tasks" %}</h1>
     <nav class="tabs">
-        <a href="?status=open{% if search %}&q={{ search }}{% endif %}" class="{% if status == 'open' %}is-active{% endif %}">{% translate "Open" %}</a>
-        <a href="?status=all{% if search %}&q={{ search }}{% endif %}" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
+        <a href="?status=open{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == 'open' %}is-active{% endif %}">{% translate "Open" %}</a>
+        <a href="?status=all{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
         {% for value, label in status_choices %}
-            <a href="?status={{ value }}{% if search %}&q={{ search }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
+            <a href="?status={{ value }}{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
         {% endfor %}
     </nav>
     <div class="button-row">
@@ -24,6 +24,20 @@
     <div class="filters__search">
         <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by task number, site, or customer' %}">
     </div>
+    <select name="customer">
+        <option value="">{% translate "All customers" %}</option>
+        {% for customer in customers %}
+        <option value="{{ customer.pk }}" {% if selected_customer == customer.pk|stringformat:"s" %}selected{% endif %}>{{ customer.name }}</option>
+        {% endfor %}
+    </select>
+    <select name="technician">
+        <option value="">{% translate "All technicians" %}</option>
+        {% for technician in technicians %}
+        <option value="{{ technician.pk }}" {% if selected_technician == technician.pk|stringformat:"s" %}selected{% endif %}>{{ technician.full_name }}</option>
+        {% endfor %}
+    </select>
+    <input type="date" name="scheduled_from" value="{{ scheduled_from }}" title="{% translate 'Scheduled from' %}">
+    <input type="date" name="scheduled_to" value="{{ scheduled_to }}" title="{% translate 'Scheduled to' %}">
     <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
 
@@ -70,11 +84,11 @@
 {% if page_obj.has_other_pages %}
 <div class="pagination">
     {% if page_obj.has_previous %}
-        <a href="?status={{ status }}&q={{ search }}&page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
     {% endif %}
     <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
     {% if page_obj.has_next %}
-        <a href="?status={{ status }}&q={{ search }}&page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
     {% endif %}
 </div>
 {% endif %}

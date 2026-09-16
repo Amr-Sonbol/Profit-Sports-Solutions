@@ -262,11 +262,14 @@ This status, plus each technician's report approval rate (approved ÷ submitted 
 | reported_at | timestamptz | |
 | promised_at | timestamptz | what the customer is owed |
 | scheduled_for | timestamptz | nullable — the day the supervisor planned |
+| estimated_hours | decimal | nullable — the supervisor's rough guess, not a computed average |
 | status | varchar | see below |
 | created_by_id | FK → user | |
 
 **Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
 Plus `blocked` and `cancelled` as endings.
+
+**`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
@@ -503,7 +506,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, review a technician's skills.
+**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, a technician's board, review a technician's skills.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
@@ -511,4 +514,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Eleven screens plus one public page. That is the whole application.
+Twelve screens plus one public page. That is the whole application.

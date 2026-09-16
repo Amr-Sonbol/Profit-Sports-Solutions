@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "My week" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "Board" %} — {{ technician.full_name }}{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "My week" %}</h1>
+    <div>
+        <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
+        <h1>{{ technician.full_name }}</h1>
+    </div>
 </div>
 
 <div class="week-nav">
@@ -26,7 +29,7 @@
     <ul class="plain-list">
         {% for task in day.tasks %}
         <li>
-            <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
+            <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
             <span class="muted">
                 {% if task.estimated_finish %}
                 {% blocktranslate with start=task.scheduled_for|date:"TIME_FORMAT" end=task.estimated_finish|date:"TIME_FORMAT" %}{{ start }}–{{ end }} (est.){% endblocktranslate %}
@@ -57,7 +60,7 @@
     <ul class="plain-list">
         {% for task in unscheduled %}
         <li>
-            <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
+            <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
             {{ task.site.customer.name }} — {{ task.site.name }}
             {% if task.my_role == 'lead' %}
                 <span class="badge badge--role-lead">{% translate "Lead" %}</span>

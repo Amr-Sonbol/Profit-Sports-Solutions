@@ -15,6 +15,9 @@ msgstr "#%(rank)s من %(leaderboard_size)s"
 msgid "%(source)s — %(time)s"
 msgstr "%(source)s — %(time)s"
 
+msgid "%(start)s–%(end)s (est.)"
+msgstr "%(start)s–%(end)s (متوقع)"
+
 msgid "+ Add new brand"
 msgstr "+ إضافة علامة تجارية جديدة"
 
@@ -71,6 +74,12 @@ msgstr "بعد"
 
 msgid "All"
 msgstr "الكل"
+
+msgid "All customers"
+msgstr "كل العملاء"
+
+msgid "All technicians"
+msgstr "كل الفنيين"
 
 msgid "Anything you'd like to add?"
 msgstr "هل تود إضافة أي شيء؟"
@@ -152,6 +161,9 @@ msgstr "نوع الفوترة"
 
 msgid "Blocked"
 msgstr "معطّلة"
+
+msgid "Board"
+msgstr "اللوحة"
 
 msgid "Brand"
 msgstr "العلامة التجارية"
@@ -317,6 +329,9 @@ msgstr "أدخل العلامة التجارية والموديل والنتيج
 
 msgid "Equipment skills confirmed"
 msgstr "مهارات المعدات المعتمدة"
+
+msgid "Estimated finish"
+msgstr "الانتهاء المتوقع"
 
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
@@ -795,6 +810,12 @@ msgstr "مجدولة"
 msgid "Scheduled for"
 msgstr "مجدولة في"
 
+msgid "Scheduled from"
+msgstr "مجدولة من"
+
+msgid "Scheduled to"
+msgstr "مجدولة إلى"
+
 msgid "Search"
 msgstr "بحث"
 
@@ -966,6 +987,9 @@ msgstr "فيديو"
 msgid "View"
 msgstr "عرض"
 
+msgid "View board"
+msgstr "عرض اللوحة"
+
 msgid "Warranty"
 msgstr "ضمان"
 
@@ -1125,6 +1149,9 @@ msgstr "سبب الإنهاء"
 msgid "ended at"
 msgstr "انتهى في"
 
+msgid "estimated hours"
+msgstr "الساعات المقدرة"
+
 msgid "event type"
 msgstr "نوع الحدث"
 
@@ -1262,6 +1289,9 @@ msgstr "تم الحل"
 
 msgid "role"
 msgstr "الدور"
+
+msgid "roughly how long the job should take — shown as an estimated finish time"
+msgstr "تقريبًا كم من الوقت ستستغرقه المهمة — يُعرض كوقت انتهاء متوقع"
 
 msgid "scheduled for"
 msgstr "مجدولة لتاريخ"

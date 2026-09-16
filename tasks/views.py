@@ -1,4 +1,5 @@
 from datetime import timedelta
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -12,7 +13,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
-from customers.models import Asset, Site
+from customers.models import Asset, Customer, Site
 from people.models import (
     RELIABLE_LEVEL, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
     TechnicianSkillAssessment,
@@ -354,6 +355,10 @@ def task_list(request):
 
     status = request.GET.get('status', 'open')
     search = request.GET.get('q', '').strip()
+    customer_id = request.GET.get('customer', '')
+    technician_id = request.GET.get('technician', '')
+    scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
+    scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
 
     tasks = _with_lead_prefetch(Task.objects.select_related('site__customer', 'task_type'))
 
@@ -369,17 +374,48 @@ def task_list(request):
             | Q(site__customer__name__icontains=search)
         )
 
+    if customer_id:
+        tasks = tasks.filter(site__customer_id=customer_id)
+
+    if technician_id:
+        tasks = tasks.filter(
+            assignments__technician_id=technician_id, assignments__is_active=True,
+        ).distinct()
+
+    if scheduled_from:
+        tasks = tasks.filter(scheduled_for__date__gte=scheduled_from)
+    if scheduled_to:
+        tasks = tasks.filter(scheduled_for__date__lte=scheduled_to)
+
     tasks = tasks.annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
 
     paginator = Paginator(tasks, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
     _attach_lead_technician(page_obj)
 
+    # One combined query string for every non-status filter, so the status
+    # tabs and pagination links carry the filters forward instead of
+    # silently dropping them.
+    filter_params = {
+        key: value for key, value in {
+            'q': search, 'customer': customer_id, 'technician': technician_id,
+            'scheduled_from': request.GET.get('scheduled_from', ''),
+            'scheduled_to': request.GET.get('scheduled_to', ''),
+        }.items() if value
+    }
+
     context = {
         'page_obj': page_obj,
         'status': status,
         'search': search,
         'status_choices': Task.Status.choices,
+        'customers': Customer.objects.filter(is_active=True).order_by('name'),
+        'technicians': Technician.objects.filter(is_active=True).order_by('full_name'),
+        'selected_customer': customer_id,
+        'selected_technician': technician_id,
+        'scheduled_from': request.GET.get('scheduled_from', ''),
+        'scheduled_to': request.GET.get('scheduled_to', ''),
+        'filter_qs': urlencode(filter_params),
     }
     return render(request, 'tasks/task_list.html', context)
 
@@ -619,10 +655,12 @@ def task_week(request):
     return render(request, 'tasks/task_week.html', context)
 
 
-@login_required
-def my_week(request):
-    technician = require_technician(request)
-
+def _week_board(technician, request):
+    """(days, unscheduled, nav_context) for one technician's week — the
+    start time and estimated finish (Task.estimated_finish) travel with
+    each task automatically, since that's a model property. Shared by
+    my_week (self) and technician_board (a supervisor viewing someone else).
+    """
     today, start, end = _week_window(request)
 
     scheduled_assignments = TaskAssignment.objects.filter(
@@ -647,11 +685,14 @@ def my_week(request):
     for task in unscheduled:
         task.my_role = role_by_task_id[task.pk]
 
-    context = {
-        'days': days,
-        'unscheduled': unscheduled,
-        **_week_nav_context(today, start),
-    }
+    return days, unscheduled, _week_nav_context(today, start)
+
+
+@login_required
+def my_week(request):
+    technician = require_technician(request)
+    days, unscheduled, nav_context = _week_board(technician, request)
+    context = {'days': days, 'unscheduled': unscheduled, **nav_context}
     return render(request, 'tasks/my_week.html', context)
 
 
@@ -778,6 +819,20 @@ def technician_list(request):
     ]
 
     return render(request, 'tasks/technician_list.html', {'rows': rows})
+
+
+@login_required
+def technician_board(request, pk):
+    """A supervisor's view of one technician's week — same shape as
+    my_week, just for someone else, with the same country scoping used
+    everywhere else a supervisor looks at a specific technician.
+    """
+    supervisor = require_supervisor(request)
+    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+
+    days, unscheduled, nav_context = _week_board(technician, request)
+    context = {'technician': technician, 'days': days, 'unscheduled': unscheduled, **nav_context}
+    return render(request, 'tasks/technician_board.html', context)
 
 
 @login_required
