@@ -258,6 +258,9 @@ msgstr "العملة"
 msgid "Current"
 msgstr "الحالي"
 
+msgid "Current tasks"
+msgstr "المهام الحالية"
+
 msgid "Currently sent back with this reason:"
 msgstr "أُعيد حاليًا لهذا السبب:"
 
@@ -275,6 +278,9 @@ msgstr "طلب العميل"
 
 msgid "Customer signature"
 msgstr "توقيع العميل"
+
+msgid "Dashboard"
+msgstr "لوحة التحكم"
 
 msgid "Decision"
 msgstr "القرار"
@@ -564,6 +570,9 @@ msgstr "لا يوجد مساعدون في هذه المهمة."
 msgid "No one is assigned yet."
 msgstr "لم يتم تعيين أحد بعد."
 
+msgid "No open tasks."
+msgstr "لا توجد مهام مفتوحة."
+
 msgid "No photos yet."
 msgstr "لا توجد صور بعد."
 
@@ -599,6 +608,9 @@ msgstr "أنا في الطريق"
 
 msgid "Open"
 msgstr "مفتوحة"
+
+msgid "Open tasks"
+msgstr "المهام المفتوحة"
 
 msgid "Other"
 msgstr "أخرى"
@@ -779,6 +791,9 @@ msgstr "الدور"
 
 msgid "Scheduled"
 msgstr "مجدولة"
+
+msgid "Scheduled for"
+msgstr "مجدولة في"
 
 msgid "Search"
 msgstr "بحث"

@@ -1039,6 +1039,103 @@ class TechnicianListTests(TaskTestCase):
         self.assertNotIn(other_technician, technicians)
 
 
+class DashboardTests(TaskTestCase):
+    def _make_task(self, number, **overrides):
+        fields = dict(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        fields.update(overrides)
+        return Task.objects.create(**fields)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_shows_technician_availability(self):
+        self.technician.is_available = False
+        self.technician.unavailable_reason = Technician.UnavailableReason.SICK
+        self.technician.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        self.assertEqual(response.status_code, 200)
+        technicians = list(response.context['technicians'])
+        self.assertEqual(technicians, [self.technician])
+        self.assertFalse(technicians[0].is_available)
+
+    def test_excludes_technicians_from_other_countries(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        self.assertEqual(list(response.context['technicians']), [self.technician])
+
+    def test_active_task_count_reflects_open_assignments(self):
+        task = self._make_task('AE-0001', status=Task.Status.ASSIGNED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        closed_task = self._make_task('AE-0002', status=Task.Status.CLOSED)
+        TaskAssignment.objects.create(
+            task=closed_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        technician = response.context['technicians'][0]
+        self.assertEqual(technician.active_task_count, 1)
+
+    def test_shows_open_tasks_with_lead_and_schedule(self):
+        task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 9, 9, 0), status=Task.Status.ASSIGNED)
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        tasks = list(response.context['tasks'])
+        self.assertEqual(tasks, [task])
+        self.assertEqual(tasks[0].lead_technician, self.technician)
+
+    def test_closed_task_excluded(self):
+        self._make_task('AE-0001', status=Task.Status.CLOSED)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        self.assertEqual(list(response.context['tasks']), [])
+
+    def test_other_country_task_excluded(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        self._make_task('EG-0001', site=other_site, status=Task.Status.NEW)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+
+        self.assertEqual(list(response.context['tasks']), [])
+
+
 class TechnicianSkillsTests(TaskTestCase):
     def setUp(self):
         super().setUp()

@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Case, IntegerField, Prefetch, Q, Sum, Value, When
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -313,6 +313,39 @@ def _save_attachment(request, task, uploaded_file, purpose):
         media_type=_attachment_media_type(uploaded_file), purpose=purpose,
         source=TaskAttachment.Source.TECHNICIAN, uploaded_by=request.user, uploaded_at=timezone.now(),
     )
+
+
+@login_required
+def dashboard(request):
+    """At a glance: who's available today, and every open task with its
+    lead and schedule. The landing page stays task_list — this is an
+    additional screen, not a replacement.
+    """
+    supervisor = require_supervisor(request)
+
+    technicians = Technician.objects.filter(
+        is_active=True, country=supervisor.country, role=Technician.Role.TECHNICIAN,
+    ).order_by('full_name')
+    active_task_counts = dict(
+        TaskAssignment.objects.filter(
+            technician__in=technicians, is_active=True, task__status__in=OPEN_STATUSES,
+        ).values('technician_id').annotate(count=Count('id')).values_list('technician_id', 'count'),
+    )
+    for technician in technicians:
+        technician.active_task_count = active_task_counts.get(technician.id, 0)
+
+    tasks = _with_lead_prefetch(
+        Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=supervisor.country)
+        .select_related('site__customer', 'task_type')
+        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
+    )
+    _attach_lead_technician(tasks)
+
+    context = {
+        'technicians': technicians,
+        'tasks': tasks,
+    }
+    return render(request, 'tasks/dashboard.html', context)
 
 
 @login_required

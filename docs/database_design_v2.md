@@ -503,10 +503,12 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** task list and week view, create task, assign, review reports, technician roster, review a technician's skills.
+**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, review a technician's skills.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app.
 
-Ten screens plus one public page. That is the whole application.
+**The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
+
+Eleven screens plus one public page. That is the whole application.
