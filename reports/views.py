@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
@@ -13,6 +15,15 @@ from .forms import CustomerFeedbackForm, RejectReportForm
 from .models import CustomerFeedback, WorkReport
 
 
+def _visit_date(task):
+    """The report's submission date, in the task's own country — not UTC,
+    per CLAUDE.md. Close enough to the actual visit: the technician files
+    the report right after finishing the job.
+    """
+    country_tz = ZoneInfo(task.site.customer.country.timezone)
+    return timezone.localtime(task.report.submitted_at, country_tz).date()
+
+
 def _send_feedback_email(request, feedback):
     """Best-effort — a failed send shouldn't stop the supervisor's flow or
     leave them staring at a 500. EMAIL_BACKEND defaults to the console in
@@ -26,14 +37,21 @@ def _send_feedback_email(request, feedback):
     task = feedback.task
     link = request.build_absolute_uri(reverse('reports:feedback_form', args=[feedback.token]))
     with translation.override('en'):
-        subject = _('How did we do? — %(number)s') % {'number': task.task_number}
+        visit_date = _visit_date(task).strftime('%B %d, %Y')
+        subject = _("We'd love your feedback on your recent Profit Sports Solutions visit")
         message = _(
-            'Hi %(contact)s,\n\n'
-            'Thank you for having Profit Sports Solutions service %(site)s. '
-            "We'd appreciate your feedback on the visit:\n\n%(link)s\n",
+            'Dear %(contact)s,\n\n'
+            'Thank you for choosing Profit Sports Solutions. We completed a service visit at '
+            '%(site)s on %(date)s, and would greatly appreciate a moment of your time to share '
+            'your feedback.\n\n'
+            '%(link)s\n\n'
+            'Your feedback helps us maintain the standard of service you expect from us.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
         ) % {
             'contact': task.site.contact_name or task.site.customer.name,
             'site': task.site.name,
+            'date': visit_date,
             'link': link,
         }
     send_mail(
@@ -150,7 +168,9 @@ def feedback_form(request, token):
     """Public — no login. A customer rates their service through the link
     sent after their report is approved; there's no other way in.
     """
-    feedback = get_object_or_404(CustomerFeedback.objects.select_related('task'), token=token)
+    feedback = get_object_or_404(
+        CustomerFeedback.objects.select_related('task__report', 'task__site__customer__country'), token=token,
+    )
     already_submitted = feedback.submitted_at is not None
 
     if request.method == 'POST' and not already_submitted:
@@ -164,5 +184,8 @@ def feedback_form(request, token):
     else:
         form = CustomerFeedbackForm()
 
-    context = {'feedback': feedback, 'task': feedback.task, 'form': form}
+    context = {
+        'feedback': feedback, 'task': feedback.task, 'form': form,
+        'visit_date': _visit_date(feedback.task),
+    }
     return render(request, 'reports/feedback_form.html', context)

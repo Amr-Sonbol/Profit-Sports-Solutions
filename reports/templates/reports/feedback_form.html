@@ -9,7 +9,9 @@
 </div>
 
 <div class="section">
-    <p class="muted">{% blocktranslate with number=task.task_number %}About visit {{ number }}{% endblocktranslate %}</p>
+    <p class="muted">
+        {% blocktranslate with number=task.task_number date=visit_date|date:"SHORT_DATE_FORMAT" %}About visit {{ number }} on {{ date }}{% endblocktranslate %}
+    </p>
 
     {% if feedback.submitted_at %}
     <p class="empty-state">{% translate "Thank you — your feedback has already been recorded." %}</p>

@@ -36,8 +36,8 @@ msgstr "يوجد بالفعل نوع مهمة بهذا الرمز."
 msgid "A task type with that name already exists — pick it from the list instead."
 msgstr "يوجد بالفعل نوع مهمة بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
 
-msgid "About visit %(number)s"
-msgstr "عن الزيارة %(number)s"
+msgid "About visit %(number)s on %(date)s"
+msgstr "عن الزيارة %(number)s بتاريخ %(date)s"
 
 msgid "Accept task"
 msgstr "قبول المهمة"
