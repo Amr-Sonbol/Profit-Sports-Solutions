@@ -454,6 +454,6 @@ Each is a real need eventually. None belongs in the first version.
 
 **Supervisor (web):** task list and week view, create task, assign, review reports.
 
-**Technician (phone):** my week, task detail with photos, report form.
+**Technician (phone):** my week, task detail with photos, report form, my progress.
 
-Six screens. That is the whole application.
+Seven screens. That is the whole application.
