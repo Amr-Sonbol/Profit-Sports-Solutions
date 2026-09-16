@@ -12,8 +12,8 @@ class CustomerAdmin(admin.ModelAdmin):
 
 @admin.register(Site)
 class SiteAdmin(admin.ModelAdmin):
-    list_display = ['name', 'customer', 'contact_name', 'contact_phone']
-    search_fields = ['name', 'customer__name', 'contact_name']
+    list_display = ['name', 'customer', 'contact_name', 'contact_phone', 'contact_email']
+    search_fields = ['name', 'customer__name', 'contact_name', 'contact_email']
     list_filter = ['customer']
 
 

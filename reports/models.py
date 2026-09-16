@@ -1,3 +1,6 @@
+import secrets
+
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -51,3 +54,39 @@ class PartUsed(models.Model):
 
     def __str__(self):
         return f'{self.report} — {self.part_code}'
+
+
+class CustomerFeedback(models.Model):
+    """A rating request sent to the customer once their report is approved.
+    Reached through `token`, not a login — the customer is never a user of
+    this system, so the link is the only thing standing in for one.
+    """
+
+    RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
+
+    task = models.OneToOneField(
+        Task, on_delete=models.CASCADE, related_name='feedback',
+        verbose_name=_('task'),
+    )
+    token = models.CharField(_('token'), max_length=43, unique=True, editable=False)
+    requested_at = models.DateTimeField(_('requested at'))
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='feedback_requests_sent',
+        verbose_name=_('requested by'),
+    )
+    rating = models.PositiveSmallIntegerField(_('rating'), choices=RATING_CHOICES, null=True, blank=True)
+    comment = models.TextField(_('comment'), blank=True)
+    submitted_at = models.DateTimeField(_('submitted at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('customer feedback')
+        verbose_name_plural = _('customer feedback')
+        ordering = ['-requested_at']
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'Feedback — {self.task.task_number}'

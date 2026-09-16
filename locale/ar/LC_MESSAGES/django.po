@@ -36,6 +36,9 @@ msgstr "يوجد بالفعل نوع مهمة بهذا الرمز."
 msgid "A task type with that name already exists — pick it from the list instead."
 msgstr "يوجد بالفعل نوع مهمة بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
 
+msgid "About visit %(number)s"
+msgstr "عن الزيارة %(number)s"
+
 msgid "Accept task"
 msgstr "قبول المهمة"
 
@@ -50,6 +53,9 @@ msgstr "الإجراء المتخذ"
 
 msgid "Active"
 msgstr "نشط"
+
+msgid "Add a contact email for this site before requesting feedback."
+msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل طلب التقييم."
 
 msgid "Add a new skill for this brand"
 msgstr "إضافة مهارة جديدة لهذه العلامة التجارية"
@@ -207,6 +213,9 @@ msgstr "نادٍ"
 msgid "Code"
 msgstr "الرمز"
 
+msgid "Comment"
+msgstr "تعليق"
+
 msgid "Completed"
 msgstr "مكتملة"
 
@@ -254,6 +263,9 @@ msgstr "العميل"
 
 msgid "Customer / Site"
 msgstr "العميل / الموقع"
+
+msgid "Customer feedback"
+msgstr "تقييم العميل"
 
 msgid "Customer request"
 msgstr "طلب العميل"
@@ -305,6 +317,9 @@ msgstr "عطل"
 
 msgid "Faulty"
 msgstr "معطل"
+
+msgid "Feedback request sent."
+msgstr "تم إرسال طلب التقييم."
 
 msgid "File"
 msgstr "ملف"
@@ -362,6 +377,9 @@ msgstr "إجازة رسمية"
 
 msgid "Hotel"
 msgstr "فندق"
+
+msgid "How did we do?"
+msgstr "كيف كان أداؤنا؟"
 
 msgid "I've arrived"
 msgstr "لقد وصلت"
@@ -645,6 +663,12 @@ msgstr "قيّم نفسك في مهارة أو مجال سلوك"
 msgid "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it."
 msgstr "قيّم نفسك مرة واحدة لكل مهارة أو مجال سلوك — إنه تخمينك الأول فقط، وليس شهادة. يراجعه المشرف عليك مقابل أدلة حقيقية ويعتمده أو يصححه؛ وبمجرد حدوث ذلك، هو وحده من يمكنه تغييره."
 
+msgid "Rating"
+msgstr "التقييم"
+
+msgid "Rating: %(rating)s/5"
+msgstr "التقييم: %(rating)s/5"
+
 msgid "Reason"
 msgstr "السبب"
 
@@ -711,11 +735,20 @@ msgstr "التقارير"
 msgid "Reports awaiting approval"
 msgstr "تقارير بانتظار الاعتماد"
 
+msgid "Request again"
+msgstr "طلب مرة أخرى"
+
+msgid "Requested on %(time)s — no response yet."
+msgstr "طُلب في %(time)s — لا يوجد رد بعد."
+
 msgid "Required skill"
 msgstr "المهارة المطلوبة"
 
 msgid "Rescheduled"
 msgstr "أُعيد جدولته"
+
+msgid "Resend request"
+msgstr "إعادة إرسال الطلب"
 
 msgid "Resolved"
 msgstr "تم الحل"
@@ -755,6 +788,9 @@ msgstr "تم حفظ التقييم الذاتي."
 
 msgid "Send back"
 msgstr "إعادة"
+
+msgid "Send feedback request"
+msgstr "إرسال طلب تقييم"
 
 msgid "Sent back:"
 msgstr "أُعيد لهذا السبب:"
@@ -816,6 +852,9 @@ msgstr "بدأت"
 msgid "Status"
 msgstr "الحالة"
 
+msgid "Submit"
+msgstr "إرسال"
+
 msgid "Submit report"
 msgstr "إرسال التقرير"
 
@@ -848,6 +887,9 @@ msgstr "الفني"
 
 msgid "Technicians"
 msgstr "الفنيون"
+
+msgid "Thank you — your feedback has already been recorded."
+msgstr "شكرًا لك — تم تسجيل تقييمك بالفعل."
 
 msgid "This customer already has a site with that name."
 msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
@@ -987,11 +1029,17 @@ msgstr "قالب قائمة التحقق"
 msgid "code"
 msgstr "الرمز"
 
+msgid "comment"
+msgstr "تعليق"
+
 msgid "conduct area"
 msgstr "مجال سلوك"
 
 msgid "conduct areas"
 msgstr "مجالات السلوك"
+
+msgid "contact email"
+msgstr "البريد الإلكتروني لجهة الاتصال"
 
 msgid "contact name"
 msgstr "اسم جهة الاتصال"
@@ -1022,6 +1070,9 @@ msgstr "رمز العملة"
 
 msgid "customer"
 msgstr "العميل"
+
+msgid "customer feedback"
+msgstr "تقييم العميل"
 
 msgid "customer name"
 msgstr "اسم العميل"
@@ -1146,6 +1197,9 @@ msgstr "الغرض"
 msgid "quantity"
 msgstr "الكمية"
 
+msgid "rating"
+msgstr "التقييم"
+
 msgid "rejection reason"
 msgstr "سبب الرفض"
 
@@ -1154,6 +1208,12 @@ msgstr "التقرير"
 
 msgid "reported at"
 msgstr "تاريخ الإبلاغ"
+
+msgid "requested at"
+msgstr "طُلب في"
+
+msgid "requested by"
+msgstr "طلبه"
 
 msgid "required on reassignment — one tap, never free text"
 msgstr "مطلوب عند إعادة التعيين — نقرة واحدة، وليس نصًا حرًا أبدًا"
@@ -1308,6 +1368,9 @@ msgstr "الفني نفسه للتقييم الذاتي، والمشرف للم�
 msgid "timezone"
 msgstr "المنطقة الزمنية"
 
+msgid "token"
+msgstr "الرمز"
+
 msgid "unavailable reason"
 msgstr "سبب عدم التوفر"
 
@@ -1335,6 +1398,9 @@ msgstr "ما أبلغ به العميل"
 msgid "what the technician found"
 msgstr "ما وجده الفني"
 
+msgid "where a feedback request goes after a report is approved"
+msgstr "أين يُرسل طلب التقييم بعد اعتماد التقرير"
+
 msgid "where the office requests spare parts"
 msgstr "أين يطلب المكتب قطع الغيار"
 
@@ -1343,6 +1409,9 @@ msgstr "ما إذا كان يمكن تكليف هذا الفني بعمل حال
 
 msgid "which supervisor decided"
 msgstr "أي مشرف قرر ذلك"
+
+msgid "which supervisor sent it"
+msgstr "أي مشرف أرسله"
 
 msgid "who signed"
 msgstr "من وقّع"

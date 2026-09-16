@@ -1,14 +1,46 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
+from django.urls import reverse
+from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
 from people.permissions import require_supervisor
 from tasks.models import Task, TaskAssignment, TaskEvent
 
-from .forms import RejectReportForm
-from .models import WorkReport
+from .forms import CustomerFeedbackForm, RejectReportForm
+from .models import CustomerFeedback, WorkReport
+
+
+def _send_feedback_email(request, feedback):
+    """Best-effort — a failed send shouldn't stop the supervisor's flow or
+    leave them staring at a 500. EMAIL_BACKEND defaults to the console in
+    dev, so this always "succeeds" locally.
+
+    Forced to English regardless of who sends it: there's nowhere to read a
+    customer's language preference from, and without this the email would
+    silently follow whichever language the supervisor's own UI happens to
+    be in — not the customer's.
+    """
+    task = feedback.task
+    link = request.build_absolute_uri(reverse('reports:feedback_form', args=[feedback.token]))
+    with translation.override('en'):
+        subject = _('How did we do? — %(number)s') % {'number': task.task_number}
+        message = _(
+            'Hi %(contact)s,\n\n'
+            'Thank you for having Profit Sports Solutions service %(site)s. '
+            "We'd appreciate your feedback on the visit:\n\n%(link)s\n",
+        ) % {
+            'contact': task.site.contact_name or task.site.customer.name,
+            'site': task.site.name,
+            'link': link,
+        }
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[task.site.contact_email],
+        fail_silently=True,
+    )
 
 
 @login_required
@@ -55,11 +87,12 @@ def report_review(request, pk):
     active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
 
     reject_form = RejectReportForm(initial={'rejection_reason': report.rejection_reason})
+    feedback = getattr(task, 'feedback', None)
 
-    if request.method == 'POST' and not reviewed:
+    if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'approve':
+        if action == 'approve' and not reviewed:
             report.approved_at = timezone.now()
             report.save(update_fields=['approved_at'])
             task.status = Task.Status.CLOSED
@@ -71,7 +104,7 @@ def report_review(request, pk):
             messages.success(request, _('Report approved.'))
             return redirect('reports:report_review', pk=report.pk)
 
-        elif action == 'reject':
+        elif action == 'reject' and not reviewed:
             reject_form = RejectReportForm(request.POST)
             if reject_form.is_valid():
                 report.rejection_reason = reject_form.cleaned_data['rejection_reason']
@@ -83,6 +116,22 @@ def report_review(request, pk):
                 messages.success(request, _('Report sent back to the technician.'))
                 return redirect('reports:report_review', pk=report.pk)
 
+        elif action == 'send_feedback_request' and reviewed:
+            if not task.site.contact_email:
+                messages.error(request, _('Add a contact email for this site before requesting feedback.'))
+                return redirect('reports:report_review', pk=report.pk)
+            if feedback is None:
+                feedback = CustomerFeedback.objects.create(
+                    task=task, requested_at=timezone.now(), requested_by=request.user,
+                )
+            else:
+                feedback.requested_at = timezone.now()
+                feedback.requested_by = request.user
+                feedback.save(update_fields=['requested_at', 'requested_by'])
+            _send_feedback_email(request, feedback)
+            messages.success(request, _('Feedback request sent.'))
+            return redirect('reports:report_review', pk=report.pk)
+
     context = {
         'report': report,
         'task': task,
@@ -92,5 +141,28 @@ def report_review(request, pk):
         'attachments': task.attachments.select_related('uploaded_by'),
         'reviewed': reviewed,
         'reject_form': reject_form,
+        'feedback': feedback,
     }
     return render(request, 'reports/report_review.html', context)
+
+
+def feedback_form(request, token):
+    """Public — no login. A customer rates their service through the link
+    sent after their report is approved; there's no other way in.
+    """
+    feedback = get_object_or_404(CustomerFeedback.objects.select_related('task'), token=token)
+    already_submitted = feedback.submitted_at is not None
+
+    if request.method == 'POST' and not already_submitted:
+        form = CustomerFeedbackForm(request.POST)
+        if form.is_valid():
+            feedback.rating = form.cleaned_data['rating']
+            feedback.comment = form.cleaned_data['comment']
+            feedback.submitted_at = timezone.now()
+            feedback.save(update_fields=['rating', 'comment', 'submitted_at'])
+            return redirect('reports:feedback_form', token=token)
+    else:
+        form = CustomerFeedbackForm()
+
+    context = {'feedback': feedback, 'task': feedback.task, 'form': form}
+    return render(request, 'reports/feedback_form.html', context)

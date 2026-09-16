@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "How did we do?" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "How did we do?" %}</h1>
+</div>
+
+<div class="section">
+    <p class="muted">{% blocktranslate with number=task.task_number %}About visit {{ number }}{% endblocktranslate %}</p>
+
+    {% if feedback.submitted_at %}
+    <p class="empty-state">{% translate "Thank you — your feedback has already been recorded." %}</p>
+    {% else %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <div class="field {% if form.rating.errors %}field--error{% endif %}">
+            <label>{{ form.rating.label }}</label>
+            {{ form.rating }}
+            {% for error in form.rating.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field">
+            <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
+            {{ form.comment }}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Submit" %}</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

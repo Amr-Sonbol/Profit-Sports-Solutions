@@ -2,7 +2,7 @@ from django import forms
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.utils.translation import gettext_lazy as _
 
-from .models import WorkReport
+from .models import CustomerFeedback, WorkReport
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -43,6 +43,15 @@ class WorkReportForm(forms.ModelForm):
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
             raise forms.ValidationError(_('File is too large — the limit is 5 MB.'))
         return signature
+
+
+class CustomerFeedbackForm(forms.Form):
+    rating = forms.ChoiceField(
+        choices=CustomerFeedback.RATING_CHOICES, widget=forms.RadioSelect, label=_('Rating'),
+    )
+    comment = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={'rows': 3}), label=_('Comment'),
+    )
 
 
 class PartUsedItemForm(forms.Form):

@@ -134,6 +134,7 @@ A hotel group is one customer with many sites.
 | address | text | |
 | contact_name | varchar | |
 | contact_phone | varchar | |
+| contact_email | varchar | nullable — where a feedback request goes; not always known |
 | access_notes | text | gate codes, best hours |
 
 ### asset
@@ -396,6 +397,24 @@ Technicians forget to press complete and remember in the car. **Only a superviso
 | unit_cost | decimal | |
 | currency_code | char(3) | never store an amount without its currency |
 
+### customer_feedback
+A rating request sent to the customer once their report is approved. Not automatic — a supervisor sends it deliberately, from the same screen where they approved the report.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | one per task |
+| token | varchar | random, unique — the public link's only credential |
+| requested_at | timestamptz | updated on every resend |
+| requested_by_id | FK → user | which supervisor sent it |
+| rating | int | nullable — 1–5, until the customer answers |
+| comment | text | nullable |
+| submitted_at | timestamptz | nullable |
+
+**The customer is never a user of this system.** The link is the only thing standing in for a login — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
+
+**Sending is manual, every time.** No automatic email fires on approval — a supervisor decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered.
+
 ---
 
 ## 6. Measuring reliability
@@ -488,4 +507,6 @@ Each is a real need eventually. None belongs in the first version.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
-Ten screens. That is the whole application.
+**Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app.
+
+Ten screens plus one public page. That is the whole application.

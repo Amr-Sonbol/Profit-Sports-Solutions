@@ -37,6 +37,10 @@ class Site(models.Model):
     address = models.TextField(_('address'))
     contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
+    contact_email = models.EmailField(
+        _('contact email'), blank=True,
+        help_text=_('where a feedback request goes after a report is approved'),
+    )
     access_notes = models.TextField(
         _('access notes'), blank=True,
         help_text=_('gate codes, best hours'),

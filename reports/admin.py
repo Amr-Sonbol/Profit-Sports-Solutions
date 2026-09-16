@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import PartUsed, WorkReport
+from .models import CustomerFeedback, PartUsed, WorkReport
 
 
 class PartUsedInline(admin.TabularInline):
@@ -20,3 +20,11 @@ class WorkReportAdmin(admin.ModelAdmin):
 class PartUsedAdmin(admin.ModelAdmin):
     list_display = ['report', 'part_code', 'quantity', 'unit_cost', 'currency_code']
     search_fields = ['part_code', 'report__task__task_number']
+
+
+@admin.register(CustomerFeedback)
+class CustomerFeedbackAdmin(admin.ModelAdmin):
+    list_display = ['task', 'rating', 'requested_at', 'requested_by', 'submitted_at']
+    search_fields = ['task__task_number']
+    list_filter = ['rating']
+    readonly_fields = ['token']
