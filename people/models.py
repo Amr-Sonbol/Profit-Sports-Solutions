@@ -2,7 +2,15 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from reference.models import Country, Skill
+from reference.models import ConductArea, Country, Skill
+
+# Shared by TechnicianSkill, TechnicianConduct, and their assessment logs.
+SKILL_LEVEL_CHOICES = [(i, str(i)) for i in range(1, 5)]
+
+# "Has led this work alone, repeatedly, with no callbacks" — the bar a
+# skill or conduct area must clear to count toward the technician
+# certification (docs/database_design_v2.md, §3).
+RELIABLE_LEVEL = 3
 
 
 class Technician(models.Model):
@@ -70,6 +78,14 @@ class Technician(models.Model):
 
 
 class TechnicianSkill(models.Model):
+    """The current level snapshot. `TechnicianSkillAssessment` holds the
+    full history of self-ratings and supervisor reviews behind it.
+    """
+
+    class Source(models.TextChoices):
+        SELF = 'self', _('Self-rated')
+        SUPERVISOR = 'supervisor', _('Supervisor')
+
     technician = models.ForeignKey(
         Technician, on_delete=models.CASCADE, related_name='skills',
         verbose_name=_('technician'),
@@ -78,13 +94,17 @@ class TechnicianSkill(models.Model):
         Skill, on_delete=models.PROTECT, related_name='technician_skills',
         verbose_name=_('skill'),
     )
-    level = models.PositiveSmallIntegerField(
-        _('level'), choices=[(i, str(i)) for i in range(1, 5)],
+    level = models.PositiveSmallIntegerField(_('level'), choices=SKILL_LEVEL_CHOICES)
+    source = models.CharField(
+        _('source'), max_length=10, choices=Source.choices,
+        help_text=_(
+            'a self-rating is a starting guess — only a supervisor review counts toward certification',
+        ),
     )
     set_by = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name='levels_set',
         verbose_name=_('set by'),
-        help_text=_("which supervisor decided"),
+        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
@@ -101,3 +121,119 @@ class TechnicianSkill(models.Model):
 
     def __str__(self):
         return f'{self.technician.full_name} — {self.skill} ({self.level})'
+
+
+class TechnicianSkillAssessment(models.Model):
+    """Append-only log of every self-rating and supervisor review. Never
+    edited or deleted — `TechnicianSkill` is just the latest entry's snapshot,
+    kept separately so it stays a single fast row per (technician, skill).
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='skill_assessments',
+        verbose_name=_('technician'),
+    )
+    skill = models.ForeignKey(
+        Skill, on_delete=models.PROTECT, related_name='technician_assessments',
+        verbose_name=_('skill'),
+    )
+    level = models.PositiveSmallIntegerField(_('level'), choices=SKILL_LEVEL_CHOICES)
+    source = models.CharField(_('source'), max_length=10, choices=TechnicianSkill.Source.choices)
+    set_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='skill_assessments_made',
+        verbose_name=_('set by'),
+        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+    )
+    set_on = models.DateField(_('set on'))
+    note = models.CharField(_('note'), max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _('technician skill assessment')
+        verbose_name_plural = _('technician skill assessments')
+        ordering = ['-set_on', '-id']
+
+    def __str__(self):
+        return f'{self.technician.full_name} — {self.skill} ({self.level}, {self.get_source_display()})'
+
+
+class TechnicianConduct(models.Model):
+    """Current level snapshot for a non-technical conduct area (cleanliness,
+    procedure adherence, ...) — the professionalism half of the
+    certification bar, tracked the same way as `TechnicianSkill` but never
+    tied to a brand. `TechnicianConductAssessment` holds its history.
+    """
+
+    class Source(models.TextChoices):
+        SELF = 'self', _('Self-rated')
+        SUPERVISOR = 'supervisor', _('Supervisor')
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='conduct_ratings',
+        verbose_name=_('technician'),
+    )
+    conduct_area = models.ForeignKey(
+        ConductArea, on_delete=models.PROTECT, related_name='technician_ratings',
+        verbose_name=_('conduct area'),
+    )
+    level = models.PositiveSmallIntegerField(_('level'), choices=SKILL_LEVEL_CHOICES)
+    source = models.CharField(
+        _('source'), max_length=10, choices=Source.choices,
+        help_text=_(
+            'a self-rating is a starting guess — only a supervisor review counts toward certification',
+        ),
+    )
+    set_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='conduct_ratings_set',
+        verbose_name=_('set by'),
+        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+    )
+    set_on = models.DateField(_('set on'))
+    note = models.CharField(_('note'), max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _('technician conduct rating')
+        verbose_name_plural = _('technician conduct ratings')
+        ordering = ['technician__full_name', 'conduct_area__name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['technician', 'conduct_area'], name='unique_technician_conduct',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.technician.full_name} — {self.conduct_area} ({self.level})'
+
+
+class TechnicianConductAssessment(models.Model):
+    """Append-only log of every self-rating and supervisor review for a
+    conduct area — mirrors `TechnicianSkillAssessment`.
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='conduct_assessments',
+        verbose_name=_('technician'),
+    )
+    conduct_area = models.ForeignKey(
+        ConductArea, on_delete=models.PROTECT, related_name='technician_assessments',
+        verbose_name=_('conduct area'),
+    )
+    level = models.PositiveSmallIntegerField(_('level'), choices=SKILL_LEVEL_CHOICES)
+    source = models.CharField(_('source'), max_length=10, choices=TechnicianConduct.Source.choices)
+    set_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='conduct_assessments_made',
+        verbose_name=_('set by'),
+        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+    )
+    set_on = models.DateField(_('set on'))
+    note = models.CharField(_('note'), max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _('technician conduct assessment')
+        verbose_name_plural = _('technician conduct assessments')
+        ordering = ['-set_on', '-id']
+
+    def __str__(self):
+        return (
+            f'{self.technician.full_name} — {self.conduct_area} '
+            f'({self.level}, {self.get_source_display()})'
+        )

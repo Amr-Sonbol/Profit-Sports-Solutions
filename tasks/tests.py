@@ -8,8 +8,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
-from people.models import Technician, TechnicianSkill
-from reference.models import Brand, Country, Skill, TaskType
+from people.models import (
+    Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
+)
+from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
 
 from .models import Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
@@ -349,7 +351,7 @@ class TaskAssignTests(TaskTestCase):
             language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
         )
         TechnicianSkill.objects.create(
-            technician=self.technician, skill=self.skill, level=3,
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SUPERVISOR,
             set_by=self.technician, set_on=timezone.now().date(),
         )
         self.url = f'/tasks/{self.task.pk}/assign/'
@@ -736,32 +738,31 @@ class MyProgressTests(TaskTestCase):
 
     def test_skill_shows_level_when_rated(self):
         TechnicianSkill.objects.create(
-            technician=self.technician, skill=self.skill, level=3,
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SUPERVISOR,
             set_by=self.technician, set_on=date(2026, 9, 1),
         )
 
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
 
-        levels = {entry['brand']: entry['level'] for entry in response.context['skills']}
-        self.assertEqual(levels[self.brand], 3)
+        levels = {skill: skill.current.level for skill in response.context['skills'] if skill.current}
+        self.assertEqual(levels[self.skill], 3)
 
-    def test_unrated_brand_shows_as_unrated(self):
+    def test_unrated_skill_has_no_current_rating(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
 
-        levels = {entry['brand']: entry['level'] for entry in response.context['skills']}
-        self.assertIsNone(levels[self.brand])
+        skills_by_pk = {skill.pk: skill for skill in response.context['skills']}
+        self.assertIsNone(skills_by_pk[self.skill.pk].current)
 
-    def test_inactive_brand_not_shown(self):
-        self.brand.is_active = False
-        self.brand.save()
+    def test_inactive_skill_not_shown(self):
+        self.skill.is_active = False
+        self.skill.save()
 
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
 
-        brands = [entry['brand'] for entry in response.context['skills']]
-        self.assertNotIn(self.brand, brands)
+        self.assertNotIn(self.skill, response.context['skills'])
 
     def test_assigned_count_includes_scheduled_task_this_week(self):
         task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 9, 9, 0))
@@ -860,6 +861,259 @@ class MyProgressTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
         self.assertEqual(response.status_code, 200)
+
+    def test_certified_once_every_non_cardio_skill_and_conduct_area_is_confirmed(self):
+        # Isolate to just this one non-cardio skill, so seeded reference
+        # data (other brands' skills) can't half-satisfy the bar.
+        Skill.objects.exclude(pk=self.skill.pk).filter(category=Skill.Category.OTHER).update(is_active=False)
+
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SUPERVISOR,
+            set_by=self.technician, set_on=date(2026, 9, 1),
+        )
+        for area in ConductArea.objects.filter(is_active=True):
+            TechnicianConduct.objects.create(
+                technician=self.technician, conduct_area=area, level=3,
+                source=TechnicianConduct.Source.SUPERVISOR, set_by=self.technician, set_on=date(2026, 9, 1),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertTrue(response.context['certification']['is_certified'])
+
+    def test_not_certified_while_a_conduct_area_is_missing(self):
+        Skill.objects.exclude(pk=self.skill.pk).filter(category=Skill.Category.OTHER).update(is_active=False)
+
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SUPERVISOR,
+            set_by=self.technician, set_on=date(2026, 9, 1),
+        )
+        # Confirm all but one conduct area.
+        for area in ConductArea.objects.filter(is_active=True)[1:]:
+            TechnicianConduct.objects.create(
+                technician=self.technician, conduct_area=area, level=3,
+                source=TechnicianConduct.Source.SUPERVISOR, set_by=self.technician, set_on=date(2026, 9, 1),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertFalse(response.context['certification']['is_certified'])
+
+    def test_self_rated_skill_does_not_count_toward_certification(self):
+        Skill.objects.exclude(pk=self.skill.pk).filter(category=Skill.Category.OTHER).update(is_active=False)
+
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SELF,
+            set_by=self.technician, set_on=date(2026, 9, 1),
+        )
+        for area in ConductArea.objects.filter(is_active=True):
+            TechnicianConduct.objects.create(
+                technician=self.technician, conduct_area=area, level=3,
+                source=TechnicianConduct.Source.SUPERVISOR, set_by=self.technician, set_on=date(2026, 9, 1),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertFalse(response.context['certification']['is_certified'])
+        self.assertEqual(response.context['certification']['non_cardio_certified'], 0)
+
+    def test_solve_rate_is_none_without_any_submitted_report(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        self.assertIsNone(response.context['solve_rate'])
+
+    def test_solve_rate_counts_approved_over_submitted(self):
+        for i, approved in enumerate([True, True, False]):
+            task = Task.objects.create(
+                task_number=f'AE-000{i}', site=self.site, priority=Task.Priority.NORMAL,
+                source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+                reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+            )
+            TaskAssignment.objects.create(
+                task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                assigned_at=timezone.now(), is_active=True,
+            )
+            WorkReport.objects.create(
+                task=task, findings='Belt worn', resolved=True, labour_hours='1.00', customer_name='Ali',
+                submitted_at=timezone.now(), approved_at=timezone.now() if approved else None,
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        self.assertAlmostEqual(response.context['solve_rate'], 2 / 3)
+
+
+class MySkillsTests(TaskTestCase):
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get('/tasks/my-skills/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_self_rate_skill_creates_self_sourced_rating(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 2,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
+        self.assertEqual(rating.level, 2)
+        self.assertEqual(rating.source, TechnicianSkill.Source.SELF)
+        self.assertEqual(rating.set_by, self.technician)
+        self.assertTrue(
+            TechnicianSkillAssessment.objects.filter(
+                technician=self.technician, skill=self.skill, source=TechnicianSkill.Source.SELF,
+            ).exists(),
+        )
+
+    def test_cannot_self_rate_a_skill_twice(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
+            set_by=self.technician, set_on=timezone.now().date(),
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 4,
+        })
+
+        rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
+        self.assertEqual(rating.level, 2)
+
+    def test_self_rate_conduct_area_creates_self_sourced_rating(self):
+        area = ConductArea.objects.filter(is_active=True).first()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_conduct', 'conduct_area_id': area.pk, 'level': 3,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        rating = TechnicianConduct.objects.get(technician=self.technician, conduct_area=area)
+        self.assertEqual(rating.level, 3)
+        self.assertEqual(rating.source, TechnicianConduct.Source.SELF)
+        self.assertTrue(
+            TechnicianConductAssessment.objects.filter(
+                technician=self.technician, conduct_area=area, source=TechnicianConduct.Source.SELF,
+            ).exists(),
+        )
+
+    def test_missing_level_does_not_create_a_rating(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {'action': 'rate_skill', 'skill_id': self.skill.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TechnicianSkill.objects.filter(technician=self.technician, skill=self.skill).exists())
+
+
+class TechnicianListTests(TaskTestCase):
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/technicians/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_sees_technicians_in_their_country(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/')
+        self.assertEqual(response.status_code, 200)
+
+        technicians = [row['technician'] for row in response.context['rows']]
+        self.assertIn(self.technician, technicians)
+
+    def test_other_country_technician_not_listed(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/')
+
+        technicians = [row['technician'] for row in response.context['rows']]
+        self.assertNotIn(other_technician, technicians)
+
+
+class TechnicianSkillsTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = f'/tasks/technicians/{self.technician.pk}/skills/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_missing_technician_gives_404(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/999999/skills/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_other_country_technician_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{other_technician.pk}/skills/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_supervisor_confirms_a_skill_level(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'review_skill', 'skill_id': self.skill.pk, 'level': 4, 'note': 'Led 6 jobs alone',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
+        self.assertEqual(rating.level, 4)
+        self.assertEqual(rating.source, TechnicianSkill.Source.SUPERVISOR)
+        self.assertEqual(rating.note, 'Led 6 jobs alone')
+
+    def test_supervisor_overrides_a_self_rating_and_keeps_history(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
+            set_by=self.technician, set_on=timezone.now().date(),
+        )
+        TechnicianSkillAssessment.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
+            set_by=self.technician, set_on=timezone.now().date(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {
+            'action': 'review_skill', 'skill_id': self.skill.pk, 'level': 3, 'note': '',
+        })
+
+        rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
+        self.assertEqual(rating.level, 3)
+        self.assertEqual(rating.source, TechnicianSkill.Source.SUPERVISOR)
+        self.assertEqual(
+            TechnicianSkillAssessment.objects.filter(technician=self.technician, skill=self.skill).count(), 2,
+        )
+
+    def test_supervisor_confirms_a_conduct_area(self):
+        area = ConductArea.objects.filter(is_active=True).first()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'review_conduct', 'conduct_area_id': area.pk, 'level': 3, 'note': '',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        rating = TechnicianConduct.objects.get(technician=self.technician, conduct_area=area)
+        self.assertEqual(rating.level, 3)
+        self.assertEqual(rating.source, TechnicianConduct.Source.SUPERVISOR)
 
 
 class HomeRedirectTests(TaskTestCase):

@@ -41,11 +41,19 @@ class Brand(models.Model):
 
 
 class Skill(models.Model):
+    class Category(models.TextChoices):
+        OTHER = 'other', _('Other')
+        CARDIO = 'cardio', _('Cardio')
+
     brand = models.ForeignKey(
         Brand, on_delete=models.PROTECT, related_name='skills',
         verbose_name=_('brand'),
     )
     name = models.CharField(_('name'), max_length=100)
+    category = models.CharField(
+        _('category'), max_length=10, choices=Category.choices, default=Category.OTHER,
+        help_text=_("cardio lines don't count toward the technician certification bar"),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
@@ -55,6 +63,28 @@ class Skill(models.Model):
 
     def __str__(self):
         return f'{self.brand.name} — {self.name}'
+
+
+class ConductArea(models.Model):
+    """A non-technical professionalism area every technician is rated on —
+    cleanliness, procedure adherence, etc. Not tied to any brand, and part
+    of the certification bar alongside `Skill` (see people.TechnicianConduct).
+    """
+    name = models.CharField(_('name'), max_length=100)
+    name_ar = models.CharField(_('name (Arabic)'), max_length=100)
+    is_active = models.BooleanField(_('active'), default=True)
+
+    class Meta:
+        verbose_name = _('conduct area')
+        verbose_name_plural = _('conduct areas')
+        ordering = ['name']
+
+    @property
+    def display_name(self):
+        return self.name_ar if get_language() == 'ar' else self.name
+
+    def __str__(self):
+        return self.display_name
 
 
 class TaskType(models.Model):

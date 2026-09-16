@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
-from people.models import Technician
+from people.models import SKILL_LEVEL_CHOICES, Technician
 from reference.models import Brand, Skill, TaskType
 
 from .models import Task, TaskAssignment, TaskAsset, TaskAttachment
@@ -184,6 +184,21 @@ class MarkUnavailableForm(forms.Form):
     reason = forms.ChoiceField(
         choices=[('', '---------')] + Technician.UnavailableReason.choices, label=_('Reason'),
     )
+
+
+class SelfRateLevelForm(forms.Form):
+    """A technician's own first guess at a skill or conduct-area level —
+    shared shape for both, since it's the same 1-4 scale either way.
+    """
+    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+
+
+class ReviewLevelForm(forms.Form):
+    """A supervisor's confirmed level — always overwrites whatever was
+    there, self-rated or previously supervisor-set.
+    """
+    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
 
 ALLOWED_MEDIA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']

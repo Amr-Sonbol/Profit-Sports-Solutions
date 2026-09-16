@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My skills" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:my_progress' %}" class="back-link">{% translate "Back to my progress" %}</a>
+        <h1>{% translate "My skills" %}</h1>
+    </div>
+</div>
+
+<p class="muted">
+    {% translate "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it." %}
+</p>
+
+<div class="section">
+    <h2>{% translate "Skills" %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Brand" %}</th>
+                    <th>{% translate "Line" %}</th>
+                    <th>{% translate "Level" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for skill in skills %}
+                <tr>
+                    <td>{{ skill.brand.name }}</td>
+                    <td>
+                        {{ skill.name }}
+                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
+                    </td>
+                    {% if skill.current %}
+                    <td>{{ skill.current.level }}</td>
+                    <td>
+                        {% if skill.current.source == 'self' %}
+                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-completed">
+                            {% blocktranslate with name=skill.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    {% else %}
+                    <td colspan="2">
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="rate_skill">
+                            <input type="hidden" name="skill_id" value="{{ skill.pk }}">
+                            {{ self_rate_form.level }}
+                            <button type="submit" class="button button--secondary">{% translate "Rate yourself" %}</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Conduct" %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Area" %}</th>
+                    <th>{% translate "Level" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for area in conduct_areas %}
+                <tr>
+                    <td>{{ area.display_name }}</td>
+                    {% if area.current %}
+                    <td>{{ area.current.level }}</td>
+                    <td>
+                        {% if area.current.source == 'self' %}
+                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-completed">
+                            {% blocktranslate with name=area.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    {% else %}
+                    <td colspan="2">
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="rate_conduct">
+                            <input type="hidden" name="conduct_area_id" value="{{ area.pk }}">
+                            {{ self_rate_form.level }}
+                            <button type="submit" class="button button--secondary">{% translate "Rate yourself" %}</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from .models import Technician, TechnicianSkill
+from .models import (
+    Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
+)
 
 
 @admin.register(Technician)
@@ -15,6 +17,27 @@ class TechnicianAdmin(admin.ModelAdmin):
 
 @admin.register(TechnicianSkill)
 class TechnicianSkillAdmin(admin.ModelAdmin):
-    list_display = ['technician', 'skill', 'level', 'set_by', 'set_on']
+    list_display = ['technician', 'skill', 'level', 'source', 'set_by', 'set_on']
     search_fields = ['technician__full_name', 'skill__name', 'skill__brand__name']
-    list_filter = ['skill__brand', 'level']
+    list_filter = ['skill__brand', 'level', 'source']
+
+
+@admin.register(TechnicianSkillAssessment)
+class TechnicianSkillAssessmentAdmin(admin.ModelAdmin):
+    list_display = ['technician', 'skill', 'level', 'source', 'set_by', 'set_on']
+    search_fields = ['technician__full_name', 'skill__name', 'skill__brand__name']
+    list_filter = ['skill__brand', 'level', 'source']
+
+
+@admin.register(TechnicianConduct)
+class TechnicianConductAdmin(admin.ModelAdmin):
+    list_display = ['technician', 'conduct_area', 'level', 'source', 'set_by', 'set_on']
+    search_fields = ['technician__full_name', 'conduct_area__name']
+    list_filter = ['conduct_area', 'level', 'source']
+
+
+@admin.register(TechnicianConductAssessment)
+class TechnicianConductAssessmentAdmin(admin.ModelAdmin):
+    list_display = ['technician', 'conduct_area', 'level', 'source', 'set_by', 'set_on']
+    search_fields = ['technician__full_name', 'conduct_area__name']
+    list_filter = ['conduct_area', 'level', 'source']

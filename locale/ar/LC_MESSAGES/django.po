@@ -9,6 +9,9 @@ msgstr ""
 "Language: ar\n"
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
 
+msgid "#%(rank)s of %(leaderboard_size)s"
+msgstr "#%(rank)s من %(leaderboard_size)s"
+
 msgid "%(source)s — %(time)s"
 msgstr "%(source)s — %(time)s"
 
@@ -81,6 +84,9 @@ msgstr "تم الاعتماد."
 msgid "Arabic"
 msgstr "العربية"
 
+msgid "Area"
+msgstr "المجال"
+
 msgid "Arrived"
 msgstr "وصل"
 
@@ -108,6 +114,9 @@ msgstr "الفنيون المتاحون"
 msgid "Back to list"
 msgstr "العودة إلى القائمة"
 
+msgid "Back to my progress"
+msgstr "العودة إلى تقدّمي"
+
 msgid "Back to my week"
 msgstr "العودة إلى أسبوعي"
 
@@ -119,6 +128,9 @@ msgstr "العودة إلى المهمة"
 
 msgid "Back to tasks"
 msgstr "العودة إلى المهام"
+
+msgid "Back to technicians"
+msgstr "العودة إلى الفنيين"
 
 msgid "Be specific — missing serial photo, vague fault description, etc. The technician sees this."
 msgstr "كن محددًا — صورة الرقم التسلسلي مفقودة، وصف العطل غامض، إلخ. الفني يرى هذا."
@@ -141,8 +153,26 @@ msgstr "اسم العلامة التجارية"
 msgid "Cancelled"
 msgstr "ملغاة"
 
+msgid "Cardio"
+msgstr "كارديو"
+
+msgid "Cardio-certified — ready for the supervisor track."
+msgstr "معتمد في الكارديو — جاهز لمسار الإشراف."
+
+msgid "Cardio-ready"
+msgstr "جاهز للكارديو"
+
 msgid "Category"
 msgstr "الفئة"
+
+msgid "Certification"
+msgstr "الاعتماد"
+
+msgid "Certified"
+msgstr "معتمد"
+
+msgid "Certified technician"
+msgstr "فني معتمد"
 
 msgid "Chargeable"
 msgstr "مدفوعة"
@@ -180,6 +210,21 @@ msgstr "الرمز"
 msgid "Completed"
 msgstr "مكتملة"
 
+msgid "Conduct"
+msgstr "السلوك"
+
+msgid "Conduct areas confirmed"
+msgstr "مجالات السلوك المعتمدة"
+
+msgid "Confirm"
+msgstr "اعتماد"
+
+msgid "Confirmed"
+msgstr "معتمد"
+
+msgid "Confirmed by %(name)s"
+msgstr "اعتمده %(name)s"
+
 msgid "Contact name"
 msgstr "اسم جهة الاتصال"
 
@@ -197,6 +242,9 @@ msgstr "أُنشئت"
 
 msgid "Currency"
 msgstr "العملة"
+
+msgid "Current"
+msgstr "الحالي"
 
 msgid "Currently sent back with this reason:"
 msgstr "أُعيد حاليًا لهذا السبب:"
@@ -245,6 +293,9 @@ msgstr "أدخل رمز عملة من 3 أحرف، مثال: AED."
 
 msgid "Enter at least a brand, model, and outcome for each new machine, or leave the row blank."
 msgstr "أدخل العلامة التجارية والموديل والنتيجة على الأقل لكل جهاز جديد، أو اترك الصف فارغًا."
+
+msgid "Equipment skills confirmed"
+msgstr "مهارات المعدات المعتمدة"
 
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
@@ -357,8 +408,14 @@ msgstr "إجازة"
 msgid "Level"
 msgstr "المستوى"
 
+msgid "Level confirmed."
+msgstr "تم اعتماد المستوى."
+
 msgid "Level — %(skill)s"
 msgstr "المستوى — %(skill)s"
+
+msgid "Line"
+msgstr "الخط"
 
 msgid "Link"
 msgstr "رابط"
@@ -411,6 +468,9 @@ msgstr "الموديل"
 msgid "My progress"
 msgstr "تقدّمي"
 
+msgid "My skills"
+msgstr "مهاراتي"
+
 msgid "My week"
 msgstr "أسبوعي"
 
@@ -453,6 +513,9 @@ msgstr "لا"
 msgid "No active technicians available in this country."
 msgstr "لا يوجد فنيون نشطون متاحون في هذه الدولة."
 
+msgid "No active technicians in your country."
+msgstr "لا يوجد فنيون نشطون في دولتك."
+
 msgid "No attachments on this task — check whether a serial plate photo is missing before approving."
 msgstr "لا توجد مرفقات لهذه المهمة — تحقق مما إذا كانت صورة لوحة الرقم التسلسلي مفقودة قبل الاعتماد."
 
@@ -461,6 +524,9 @@ msgstr "لا توجد مرفقات بعد."
 
 msgid "No brands set up yet."
 msgstr "لم يتم إعداد أي علامات تجارية بعد."
+
+msgid "No conduct areas set up yet."
+msgstr "لم يتم إعداد أي مجالات سلوك بعد."
 
 msgid "No events yet."
 msgstr "لا توجد أحداث بعد."
@@ -486,8 +552,17 @@ msgstr "لا توجد مهام مجدولة."
 msgid "Normal"
 msgstr "عادية"
 
+msgid "Not rated"
+msgstr "غير مقيّم"
+
 msgid "Not repairable"
 msgstr "غير قابل للإصلاح"
+
+msgid "Not yet certified"
+msgstr "غير معتمد بعد"
+
+msgid "Note"
+msgstr "ملاحظة"
 
 msgid "Nothing waiting on a day."
 msgstr "لا يوجد شيء بانتظار هذا اليوم."
@@ -561,6 +636,15 @@ msgstr "الموعد الموعود"
 msgid "Qty"
 msgstr "الكمية"
 
+msgid "Rate yourself"
+msgstr "قيّم نفسك"
+
+msgid "Rate yourself on a skill or conduct area"
+msgstr "قيّم نفسك في مهارة أو مجال سلوك"
+
+msgid "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it."
+msgstr "قيّم نفسك مرة واحدة لكل مهارة أو مجال سلوك — إنه تخمينك الأول فقط، وليس شهادة. يراجعه المشرف عليك مقابل أدلة حقيقية ويعتمده أو يصححه؛ وبمجرد حدوث ذلك، هو وحده من يمكنه تغييره."
+
 msgid "Reason"
 msgstr "السبب"
 
@@ -593,6 +677,9 @@ msgstr "تم الاستبدال"
 
 msgid "Report"
 msgstr "التقرير"
+
+msgid "Report approval rate"
+msgstr "معدل اعتماد التقارير"
 
 msgid "Report approved"
 msgstr "تم اعتماد التقرير"
@@ -639,8 +726,14 @@ msgstr "خارج الخدمة"
 msgid "Review report"
 msgstr "مراجعة التقرير"
 
+msgid "Review skills"
+msgstr "مراجعة المهارات"
+
 msgid "Review status"
 msgstr "حالة المراجعة"
+
+msgid "Role"
+msgstr "الدور"
 
 msgid "Scheduled"
 msgstr "مجدولة"
@@ -650,6 +743,15 @@ msgstr "بحث"
 
 msgid "Search by task number, site, or customer"
 msgstr "ابحث برقم المهمة أو الموقع أو العميل"
+
+msgid "Self-rated"
+msgstr "مقيّم ذاتيًا"
+
+msgid "Self-rated, unconfirmed"
+msgstr "مقيّم ذاتيًا، غير معتمد"
+
+msgid "Self-rating saved."
+msgstr "تم حفظ التقييم الذاتي."
 
 msgid "Send back"
 msgstr "إعادة"
@@ -665,6 +767,9 @@ msgstr "لوحة الرقم التسلسلي"
 
 msgid "Set as lead"
 msgstr "تعيين كفني رئيسي"
+
+msgid "Set level"
+msgstr "تحديد المستوى"
 
 msgid "Sick"
 msgstr "مرض"
@@ -695,6 +800,9 @@ msgstr "المصدر"
 
 msgid "Staff"
 msgstr "موظف"
+
+msgid "Standing in your country"
+msgstr "الترتيب في دولتك"
 
 msgid "Start work"
 msgstr "بدء العمل"
@@ -737,6 +845,9 @@ msgstr "المهام"
 
 msgid "Technician"
 msgstr "الفني"
+
+msgid "Technicians"
+msgstr "الفنيون"
 
 msgid "This customer already has a site with that name."
 msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
@@ -813,6 +924,9 @@ msgstr "تقرير العمل"
 msgid "Yes"
 msgstr "نعم"
 
+msgid "a self-rating is a starting guess — only a supervisor review counts toward certification"
+msgstr "التقييم الذاتي مجرد تخمين أولي — لا يُحتسب سوى مراجعة المشرف ضمن الاعتماد"
+
 msgid "access notes"
 msgstr "ملاحظات الدخول"
 
@@ -861,6 +975,9 @@ msgstr "يستطيع حمل معدات كبيرة"
 msgid "can move a treadmill motor or locker bank"
 msgstr "يستطيع نقل محرك جهاز مشي أو خزانة أقفال"
 
+msgid "cardio lines don't count toward the technician certification bar"
+msgstr "خطوط الكارديو لا تُحتسب ضمن معيار اعتماد الفني"
+
 msgid "category"
 msgstr "الفئة"
 
@@ -869,6 +986,12 @@ msgstr "قالب قائمة التحقق"
 
 msgid "code"
 msgstr "الرمز"
+
+msgid "conduct area"
+msgstr "مجال سلوك"
+
+msgid "conduct areas"
+msgstr "مجالات السلوك"
 
 msgid "contact name"
 msgstr "اسم جهة الاتصال"
@@ -1146,8 +1269,26 @@ msgstr "المهام"
 msgid "technician"
 msgstr "الفني"
 
+msgid "technician conduct assessment"
+msgstr "تقييم سلوك الفني"
+
+msgid "technician conduct assessments"
+msgstr "تقييمات سلوك الفني"
+
+msgid "technician conduct rating"
+msgstr "تقييم سلوك فني"
+
+msgid "technician conduct ratings"
+msgstr "تقييمات سلوك الفنيين"
+
 msgid "technician skill"
 msgstr "مهارة الفني"
+
+msgid "technician skill assessment"
+msgstr "تقييم مهارة الفني"
+
+msgid "technician skill assessments"
+msgstr "تقييمات مهارة الفني"
 
 msgid "technician skills"
 msgstr "مهارات الفني"
@@ -1160,6 +1301,9 @@ msgstr "اليوم الذي خطط له المشرف"
 
 msgid "the only certain field at creation"
 msgstr "الحقل الوحيد المؤكد عند الإنشاء"
+
+msgid "the technician himself for a self-rating, the supervisor for a review"
+msgstr "الفني نفسه للتقييم الذاتي، والمشرف للمراجعة"
 
 msgid "timezone"
 msgstr "المنطقة الزمنية"
@@ -1211,4 +1355,3 @@ msgstr "تقارير العمل"
 
 msgid "— Report"
 msgstr "— التقرير"
-

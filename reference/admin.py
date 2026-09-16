@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Brand, Country, Skill, TaskType
+from .models import Brand, ConductArea, Country, Skill, TaskType
 
 
 @admin.register(Country)
@@ -19,9 +19,16 @@ class BrandAdmin(admin.ModelAdmin):
 
 @admin.register(Skill)
 class SkillAdmin(admin.ModelAdmin):
-    list_display = ['brand', 'name', 'is_active']
+    list_display = ['brand', 'name', 'category', 'is_active']
     search_fields = ['name', 'brand__name']
-    list_filter = ['brand', 'is_active']
+    list_filter = ['brand', 'category', 'is_active']
+
+
+@admin.register(ConductArea)
+class ConductAreaAdmin(admin.ModelAdmin):
+    list_display = ['name', 'name_ar', 'is_active']
+    search_fields = ['name', 'name_ar']
+    list_filter = ['is_active']
 
 
 @admin.register(TaskType)

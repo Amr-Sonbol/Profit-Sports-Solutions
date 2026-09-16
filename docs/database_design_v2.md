@@ -61,24 +61,37 @@ Panatta, Skillcore, Digilock, and any future principal. Available in all countri
 No brand name is ever hardcoded in the application. Adding a principal is an office action.
 
 ### skill
-**One skill per brand. Three rows, not twelve.**
+**One skill per brand, unless the brand itself sells more than one line.**
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | brand_id | FK → brand | |
 | name | varchar | |
+| category | varchar | `other` or `cardio` — see below |
 | is_active | bool | |
 
-A finer split — mechanical versus electronic, strength versus cardio — is tempting but wrong at the start. Supervisors would be judging categories they have never had to name, so they would guess. One skill per brand is something they can answer confidently today, from memory, in a single meeting.
+A finer split — mechanical versus electronic, strength versus cardio — is tempting but wrong at the start, and stays wrong until someone can name one technician who is good at a category and another who is not. Most brands never clear that bar and stay a single row.
 
-**Splitting later is easy; merging later is not.** Add a skill when the data justifies it and set levels only for the technicians it affects. Start with twelve wrong skills and you have twelve columns of bad data with no way to tell which parts were right.
+**Panatta and Skillcore did clear it.** Both sell a cardio line alongside their other equipment, and the business needs to tell them apart: being a certified technician requires competence on every *non-cardio* line, while cardio competence is reserved as the marker of readiness for the supervisor track (see "How a supervisor sets a level," below). So each gets two skill rows — its original line (`category = other`) and a second `Cardio` row (`category = cardio`) — instead of the one row every other brand keeps.
 
-**Maintenance burden decides whether this survives.** Three rows per technician get updated. Twelve do not, and a stale matrix is worse than none because people trust it.
+**Splitting later is easy; merging later is not.** Only split a brand when there's a real reason two lines need different ratings, the way cardio does here. Start with skills nobody can tell apart and you have columns of bad data with no way to tell which parts were right.
 
-**The test for whether a new skill should exist:** can you name one technician who is good at it and another who is not? If not, it is a category of machine, not a skill.
+**Maintenance burden decides whether this survives.** A handful of rows per technician get updated regularly. Dozens do not, and a stale matrix is worse than none because people trust it.
 
-**Let the data find the split.** After a year, look at callback rates per technician broken down by machine category. If someone's record on a brand is clean for strength equipment and poor for cardio, that is evidence for splitting — and it tells you exactly where the line goes, instead of guessing now.
+**Let the data find further splits.** After a year, look at callback rates per technician broken down by machine category. If someone's record on a brand is clean for one line and poor for another, that is evidence for splitting that brand too — and it tells you exactly where the line goes, instead of guessing now.
+
+### conduct_area
+The non-technical half of the certification bar — cleanliness, procedure adherence, and the other things that make the difference between a technician and a professional. Not tied to any brand.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| name | varchar | |
+| name_ar | varchar | |
+| is_active | bool | |
+
+Seeded with five areas: cleanliness & site care, professional appearance & conduct, rule & procedure adherence, punctuality & communication, tool & vehicle care. Rated the same way, on the same 1–4 scale, as a skill — see `technician_conduct` below.
 
 ### task_type
 A managed list the office maintains. Never free text — free text becomes "repair", "Repair", "fixing" within a year.
@@ -172,9 +185,9 @@ Covers technicians, supervisors, and managers. One table, different roles.
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
 
 ### technician_skill
-The capability matrix. Answers "can he do this job", separately from "will he do it well".
+The capability matrix. Answers "can he do this job", separately from "will he do it well". Holds only the *current* level — `technician_skill_assessment`, below, keeps the full history behind it.
 
-**There are no certificates.** The level is a supervisor's judgement, so the table records whose judgement it was.
+**There are no certificates, but there is a starting guess.** A technician may self-rate a skill he's never been rated on; that self-rating is honest, but it never counts toward certification on its own. Only a supervisor's confirmation does — `source` records which kind this row is.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -182,17 +195,26 @@ The capability matrix. Answers "can he do this job", separately from "will he do
 | technician_id | FK → technician | |
 | skill_id | FK → skill | |
 | level | int | 1–4 |
-| set_by_id | FK → technician | which supervisor decided |
+| source | varchar | `self` or `supervisor` |
+| set_by_id | FK → technician | the technician himself for a self-rating, the supervisor for a review |
 | set_on | date | |
 | note | varchar | nullable |
 
-Unique on (technician_id, skill_id).
+Unique on (technician_id, skill_id) — a fresh rating overwrites this row; the old value survives in the history table.
 
-### How a supervisor sets a level
+### technician_skill_assessment
+Append-only. Every self-rating and every supervisor review that has ever touched a (technician, skill) pair, never edited or deleted. Same columns as `technician_skill` minus the uniqueness constraint. This is what makes a self-rating auditable: nothing is lost when a supervisor overwrites it.
 
-**The level is a count of evidence, not an opinion.** The supervisor answers one factual question per brand: *how many times has this man led this brand's work alone, and did it come back?*
+### technician_conduct / technician_conduct_assessment
+The same two tables, same columns, same self-then-supervisor flow — except `skill_id` becomes `conduct_area_id`, pointing at `conduct_area` instead. Kept as separate tables rather than folding conduct areas into `skill`, because a conduct area isn't tied to a brand and isn't something a task ever requires — merging them would blur what `skill` means everywhere else it's used (`task.required_skill`, the assign screen's candidate levels).
 
-**1 — Has never led this brand alone.** Helper only.
+### How a level gets set
+
+**Step one: the technician guesses.** The first time a skill or conduct area has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later. This is a starting point for the conversation, not a claim.
+
+**Step two: the supervisor confirms it against evidence, not opinion.** For a skill, the question is factual: *how many times has this man led this brand's work alone, and did it come back?* For a conduct area, it's whatever's observable for that area — cleanliness of the last few jobs, whether procedure was followed, and so on.
+
+**1 — Has never led this brand alone / not yet observed.** Helper only.
 **2 — Has done it under supervision and it went fine.** Leads simple jobs, calls for help on faults.
 **3 — Has led this work alone, repeatedly, with no callbacks.** Send him and do not worry.
 **4 — Others call him when they are stuck.** Can train.
@@ -201,15 +223,21 @@ Each of these is checkable. "Has he led a Panatta job alone?" has a yes or no an
 
 Write this on one page in Arabic and English. Without certificates, these four sentences are the only thing holding the levels together across countries.
 
-**Once there is history, show it before he decides.** The level screen should display the facts first — *led 11 Panatta tasks, 1 came back within 30 days* — so the supervisor judges against the record rather than from memory.
+**A level never changes by itself.** Nothing computed writes to `technician_skill` or `technician_conduct` — not a solve-rate crossing a threshold, not a self-rating sitting unreviewed for a month. A supervisor looks at the evidence and makes the call, deliberately, every time, in both directions.
 
-**Level 4 needs two supervisors to agree.** It is the level that gets inflated, because it usually carries pay or status. Requiring a second name costs nothing and keeps the top of the scale meaningful.
+**Once there is history, show it before he decides.** The review screen should display the facts first — *led 11 Panatta tasks, 1 came back within 30 days* — so the supervisor judges against the record rather than from memory.
+
+**Level 4 needs two supervisors to agree.** It is the level that gets inflated, because it usually carries pay or status. Requiring a second name costs nothing and keeps the top of the scale meaningful. *(Not yet enforced by the app — a process rule for now.)*
 
 **Recording `set_by_id` is what keeps it honest.** If a level is questioned later you know whose judgement it was, and supervisors are measurably more careful when their name is attached.
 
-**Set the initial levels in one room, together.** Get every supervisor around a table for two hours and go through the technician list brand by brand, agreeing out loud. The arguments in that room are the point — that is where the definitions get calibrated. Setting levels individually guarantees drift from the first day.
-
 **Let the data correct the judgement over time.** After a year, compare first-time fix rates by level. If level 3 technicians on a brand are no better than level 2, either the definitions are wrong or someone is inflating. The event log becomes the check on the opinion.
+
+### The certification bar
+
+**"Certified technician" means level ≥ 3, supervisor-confirmed, on every `other`-category skill and every conduct area.** Cardio skills don't count toward this bar — clearing one instead marks readiness for the supervisor track. Self-ratings don't count either, no matter how high; only a supervisor's confirmation moves the bar.
+
+This status, plus each technician's report approval rate (approved ÷ submitted — see §6), is shown to the technician themselves (My progress) and to supervisors reviewing their country's roster. It's a fact, not a gate: nothing in the app currently blocks a task assignment or pay decision on it.
 
 ---
 
@@ -380,7 +408,7 @@ Capability is the skill matrix — a supervisor's judgement about what a technic
 |---|---|---|
 | On-time arrival | `arrived` before `promised_at`, excluding `blocked` | Immediately |
 | Acceptance latency | Median minutes from `assigned` to `accepted` | Immediately |
-| Report rejection rate | rejected ÷ submitted | Immediately |
+| Report rejection rate / approval rate | rejected ÷ submitted, or its inverse | Immediately |
 | Tasks led vs helped | Count by `role` | Immediately |
 | First-time fix rate | Completed tasks with no new task on the same asset within 30 days | Around month nine |
 
@@ -393,6 +421,8 @@ Capability is the skill matrix — a supervisor's judgement about what a technic
 **Months 4–8: show facts, not scores.** Tasks completed, on-time percentage, rejection rate. Plain numbers a technician can check and argue with. No ranking, no single combined score.
 
 **Month 9 onward: add first-time fix, broken down by brand.** This is when the original question — who can I depend on — becomes genuinely answerable.
+
+**Exception, made deliberately: the certification bar and country leaderboard (§3) are visible from day one.** Unlike first-time fix or on-time %, they aren't inferred rates that need a sample size to mean anything — they're a direct count of supervisor-confirmed levels, which exists the moment a supervisor confirms one. The report approval rate shown alongside them follows the same "Immediately" classification as rejection rate in the table above.
 
 ### Four rules
 
@@ -418,6 +448,8 @@ CREATE INDEX ON task_event (event_type, occurred_at);
 CREATE INDEX ON task_assignment (technician_id, is_active);
 CREATE INDEX ON task_asset (asset_id);
 CREATE INDEX ON technician_skill (skill_id, level);
+CREATE INDEX ON technician_skill (source);
+CREATE INDEX ON technician_conduct (source);
 CREATE INDEX ON asset (site_id, status);
 ```
 
@@ -452,8 +484,8 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** task list and week view, create task, assign, review reports.
+**Supervisor (web):** task list and week view, create task, assign, review reports, technician roster, review a technician's skills.
 
-**Technician (phone):** my week, task detail with photos, report form, my progress.
+**Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
-Seven screens. That is the whole application.
+Ten screens. That is the whole application.

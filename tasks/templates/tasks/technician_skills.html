@@ -1,20 +1,27 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "My progress" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "Skills" %} — {{ technician.full_name }}{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "My progress" %}</h1>
+    <div>
+        <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
+        <h1>{{ technician.full_name }}</h1>
+    </div>
+    <div class="badge-row">
+        {% if certification.is_certified %}
+        <span class="badge badge--status-completed">{% translate "Certified technician" %}</span>
+        {% else %}
+        <span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span>
+        {% endif %}
+        {% if certification.cardio_ready %}
+        <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+        {% endif %}
+    </div>
 </div>
 
 <div class="section">
-    <h2>{% translate "Certification" %}</h2>
-    {% if certification.is_certified %}
-    <p><span class="badge badge--status-completed">{% translate "Certified technician" %}</span></p>
-    {% else %}
-    <p><span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span></p>
-    {% endif %}
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Equipment skills confirmed" %}</dt>
@@ -26,52 +33,21 @@
         </div>
         <div>
             <dt>{% translate "Report approval rate" %}</dt>
-            <dd>
-                {% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}
-            </dd>
-        </div>
-        <div>
-            <dt>{% translate "Standing in your country" %}</dt>
-            <dd>
-                {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
-            </dd>
-        </div>
-    </dl>
-    {% if certification.cardio_ready %}
-    <p class="muted">{% translate "Cardio-certified — ready for the supervisor track." %}</p>
-    {% endif %}
-    <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Rate yourself on a skill or conduct area" %}</a></p>
-</div>
-
-<div class="section">
-    <h2>{% translate "This week" %}</h2>
-    <dl class="detail-grid">
-        <div>
-            <dt>{% translate "Assigned tasks" %}</dt>
-            <dd>{{ assigned_count }}</dd>
-        </div>
-        <div>
-            <dt>{% translate "Completed" %}</dt>
-            <dd>{{ completed_count }}</dd>
-        </div>
-        <div>
-            <dt>{% translate "Reports awaiting approval" %}</dt>
-            <dd>{{ pending_reports_count }}</dd>
+            <dd>{% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}</dd>
         </div>
     </dl>
 </div>
 
 <div class="section">
     <h2>{% translate "Skills" %}</h2>
-    {% if skills %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>{% translate "Brand" %}</th>
                     <th>{% translate "Line" %}</th>
-                    <th>{% translate "Level" %}</th>
-                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Current" %}</th>
+                    <th>{% translate "Set level" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -82,59 +58,76 @@
                         {{ skill.name }}
                         {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
                     </td>
-                    <td>{{ skill.current.level|default:"—" }}</td>
                     <td>
+                        {% if skill.current %}
+                        {{ skill.current.level }} —
                         {% if skill.current.source == 'self' %}
                         <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
-                        {% elif skill.current.source == 'supervisor' %}
+                        {% else %}
                         <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="review_skill">
+                            <input type="hidden" name="skill_id" value="{{ skill.pk }}">
+                            {{ review_form.level }}
+                            {{ review_form.note }}
+                            <button type="submit" class="button">{% translate "Confirm" %}</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% else %}
-    <p class="empty-state">{% translate "No brands set up yet." %}</p>
-    {% endif %}
 </div>
 
 <div class="section">
     <h2>{% translate "Conduct" %}</h2>
-    {% if conduct_areas %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>{% translate "Area" %}</th>
-                    <th>{% translate "Level" %}</th>
-                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Current" %}</th>
+                    <th>{% translate "Set level" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for area in conduct_areas %}
                 <tr>
                     <td>{{ area.display_name }}</td>
-                    <td>{{ area.current.level|default:"—" }}</td>
                     <td>
+                        {% if area.current %}
+                        {{ area.current.level }} —
                         {% if area.current.source == 'self' %}
                         <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
-                        {% elif area.current.source == 'supervisor' %}
+                        {% else %}
                         <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="review_conduct">
+                            <input type="hidden" name="conduct_area_id" value="{{ area.pk }}">
+                            {{ review_form.level }}
+                            {{ review_form.note }}
+                            <button type="submit" class="button">{% translate "Confirm" %}</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% else %}
-    <p class="empty-state">{% translate "No conduct areas set up yet." %}</p>
-    {% endif %}
 </div>
 {% endblock %}

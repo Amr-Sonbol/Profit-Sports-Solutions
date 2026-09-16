@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,15 +13,19 @@ from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
 from customers.models import Asset, Site
-from people.models import Technician, TechnicianSkill
+from people.models import (
+    RELIABLE_LEVEL, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
+    TechnicianSkillAssessment,
+)
 from people.permissions import require_supervisor, require_technician
-from reference.models import Brand, Skill, TaskType
+from reference.models import Brand, ConductArea, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm,
-    RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
+    RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm,
+    TaskCreateForm,
 )
 from .models import Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
@@ -119,6 +123,121 @@ def _candidates_with_skill_level(candidates_qs, task):
     for technician in candidates:
         technician.skill_level = levels.get(technician.pk)
     return candidates
+
+
+def _skills_with_current_rating(technician):
+    """Every active skill, each annotated with `.current` — the
+    technician's TechnicianSkill row for it, or None if never rated.
+    """
+    skills = list(Skill.objects.filter(is_active=True).select_related('brand').order_by('brand__name', 'name'))
+    current_by_skill_id = {
+        rating.skill_id: rating
+        for rating in TechnicianSkill.objects.filter(
+            technician=technician, skill__in=skills,
+        ).select_related('set_by')
+    }
+    for skill in skills:
+        skill.current = current_by_skill_id.get(skill.id)
+    return skills
+
+
+def _conduct_areas_with_current_rating(technician):
+    """Every active conduct area, each annotated with `.current` the same way."""
+    areas = list(ConductArea.objects.filter(is_active=True).order_by('name'))
+    current_by_area_id = {
+        rating.conduct_area_id: rating
+        for rating in TechnicianConduct.objects.filter(
+            technician=technician, conduct_area__in=areas,
+        ).select_related('set_by')
+    }
+    for area in areas:
+        area.current = current_by_area_id.get(area.id)
+    return areas
+
+
+def _certification_status(technician):
+    """Confirmed-only progress toward the "reliable technician" bar: level
+    >= RELIABLE_LEVEL on every non-cardio skill and every conduct area,
+    counting only supervisor-confirmed ratings — a self-rating never counts
+    on its own (docs/database_design_v2.md, §3). Cardio skills are excluded
+    from the bar; clearing one instead marks readiness for the supervisor
+    track.
+    """
+    confirmed_skill_levels = dict(
+        TechnicianSkill.objects.filter(
+            technician=technician, source=TechnicianSkill.Source.SUPERVISOR,
+        ).values_list('skill_id', 'level'),
+    )
+    confirmed_conduct_levels = dict(
+        TechnicianConduct.objects.filter(
+            technician=technician, source=TechnicianConduct.Source.SUPERVISOR,
+        ).values_list('conduct_area_id', 'level'),
+    )
+
+    non_cardio_ids = list(
+        Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).values_list('id', flat=True),
+    )
+    cardio_ids = list(
+        Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).values_list('id', flat=True),
+    )
+    conduct_ids = list(ConductArea.objects.filter(is_active=True).values_list('id', flat=True))
+
+    non_cardio_certified = sum(1 for i in non_cardio_ids if confirmed_skill_levels.get(i, 0) >= RELIABLE_LEVEL)
+    conduct_certified = sum(1 for i in conduct_ids if confirmed_conduct_levels.get(i, 0) >= RELIABLE_LEVEL)
+    total_required = len(non_cardio_ids) + len(conduct_ids)
+    total_certified = non_cardio_certified + conduct_certified
+
+    return {
+        'non_cardio_certified': non_cardio_certified,
+        'non_cardio_total': len(non_cardio_ids),
+        'conduct_certified': conduct_certified,
+        'conduct_total': len(conduct_ids),
+        'is_certified': total_required > 0 and total_certified == total_required,
+        'cardio_ready': any(confirmed_skill_levels.get(i, 0) >= RELIABLE_LEVEL for i in cardio_ids),
+    }
+
+
+def _confirmed_points(technician):
+    """Sum of supervisor-confirmed levels across every non-cardio skill and
+    conduct area — the ranking number for the leaderboard. Self-ratings and
+    cardio skills don't count, matching the certification bar above.
+    """
+    skill_points = TechnicianSkill.objects.filter(
+        technician=technician, source=TechnicianSkill.Source.SUPERVISOR, skill__category=Skill.Category.OTHER,
+    ).aggregate(total=Sum('level'))['total'] or 0
+    conduct_points = TechnicianConduct.objects.filter(
+        technician=technician, source=TechnicianConduct.Source.SUPERVISOR,
+    ).aggregate(total=Sum('level'))['total'] or 0
+    return skill_points + conduct_points
+
+
+def _leaderboard(country):
+    """Technicians in this country ranked by confirmed certification
+    points, highest first. Visibility only — never used to change a level."""
+    technicians = Technician.objects.filter(
+        is_active=True, country=country, role=Technician.Role.TECHNICIAN,
+    ).order_by('full_name')
+    return sorted(
+        ((t, _confirmed_points(t)) for t in technicians),
+        key=lambda pair: pair[1], reverse=True,
+    )
+
+
+def _solve_rate(technician):
+    """Reports approved ÷ reports submitted, as lead technician. None if
+    nothing has been submitted yet — there's no rate to show. Tracked for
+    visibility only; no pass/fail cutoff until there's real data to set one
+    against (docs/database_design_v2.md, §9).
+    """
+    lead_task_ids = TaskAssignment.objects.filter(
+        technician=technician, role=TaskAssignment.Role.LEAD,
+    ).values('task_id')
+    reports = WorkReport.objects.filter(task_id__in=lead_task_ids)
+    submitted = reports.count()
+    if not submitted:
+        return None
+    approved = reports.filter(approved_at__isnull=False).count()
+    return approved / submitted
 
 
 def _with_lead_prefetch(queryset):
@@ -505,19 +624,21 @@ def my_week(request):
 
 @login_required
 def my_progress(request):
-    """Skills the technician is rated on today, plus counts this week — no
-    computed rates (on-time %, first-time fix, ...), per the doc's own
-    build order: those need months of real event data to mean anything.
+    """Skills and conduct areas the technician is rated on, certification
+    status, solve rate, and standing among peers in the same country — plus
+    counts for the current week. No computed on-time %/first-time-fix rates
+    beyond the solve rate: per the doc's own build order, those need months
+    of real event data to mean anything.
     """
     technician = require_technician(request)
 
-    levels_by_brand_id = dict(
-        TechnicianSkill.objects.filter(technician=technician).values_list('skill__brand_id', 'level'),
-    )
-    skills = [
-        {'brand': brand, 'level': levels_by_brand_id.get(brand.id)}
-        for brand in Brand.objects.filter(is_active=True).order_by('name')
-    ]
+    skills = _skills_with_current_rating(technician)
+    conduct_areas = _conduct_areas_with_current_rating(technician)
+    certification = _certification_status(technician)
+    solve_rate = _solve_rate(technician)
+
+    leaderboard = _leaderboard(technician.country)
+    rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
 
     _today, start, end = _week_window(request)
     my_assignments = TaskAssignment.objects.filter(technician=technician, is_active=True)
@@ -539,11 +660,158 @@ def my_progress(request):
 
     context = {
         'skills': skills,
+        'conduct_areas': conduct_areas,
+        'certification': certification,
+        'solve_rate': solve_rate,
+        'rank': rank,
+        'leaderboard_size': len(leaderboard),
         'assigned_count': assigned_count,
         'completed_count': completed_count,
         'pending_reports_count': pending_reports_count,
     }
     return render(request, 'tasks/my_progress.html', context)
+
+
+@login_required
+def my_skills(request):
+    """Self-assessment — a technician's own first guess at each skill and
+    conduct area, using the same rubric a supervisor later reviews it
+    against. A self-rating never counts toward certification on its own,
+    and once set it can only be changed by a supervisor from here on.
+    """
+    technician = require_technician(request)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        today = timezone.localtime().date()
+
+        if action == 'rate_skill':
+            skill = get_object_or_404(Skill, pk=request.POST.get('skill_id'), is_active=True)
+            form = SelfRateLevelForm(request.POST)
+            if not TechnicianSkill.objects.filter(technician=technician, skill=skill).exists() and form.is_valid():
+                level = int(form.cleaned_data['level'])
+                with transaction.atomic():
+                    TechnicianSkill.objects.create(
+                        technician=technician, skill=skill, level=level,
+                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today,
+                    )
+                    TechnicianSkillAssessment.objects.create(
+                        technician=technician, skill=skill, level=level,
+                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today,
+                    )
+                messages.success(request, _('Self-rating saved.'))
+                return redirect('tasks:my_skills')
+
+        elif action == 'rate_conduct':
+            area = get_object_or_404(ConductArea, pk=request.POST.get('conduct_area_id'), is_active=True)
+            form = SelfRateLevelForm(request.POST)
+            if not TechnicianConduct.objects.filter(technician=technician, conduct_area=area).exists() and form.is_valid():
+                level = int(form.cleaned_data['level'])
+                with transaction.atomic():
+                    TechnicianConduct.objects.create(
+                        technician=technician, conduct_area=area, level=level,
+                        source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+                    )
+                    TechnicianConductAssessment.objects.create(
+                        technician=technician, conduct_area=area, level=level,
+                        source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+                    )
+                messages.success(request, _('Self-rating saved.'))
+                return redirect('tasks:my_skills')
+
+    context = {
+        'skills': _skills_with_current_rating(technician),
+        'conduct_areas': _conduct_areas_with_current_rating(technician),
+        'self_rate_form': SelfRateLevelForm(),
+    }
+    return render(request, 'tasks/my_skills.html', context)
+
+
+@login_required
+def technician_list(request):
+    """The technician roster for a supervisor's own country — the "who can
+    I rely on" view. Never existed as a screen before this feature.
+    """
+    supervisor = require_supervisor(request)
+
+    technicians = Technician.objects.filter(is_active=True, country=supervisor.country).order_by('full_name')
+    rows = [
+        {
+            'technician': technician,
+            'certification': _certification_status(technician),
+            'solve_rate': _solve_rate(technician),
+        }
+        for technician in technicians
+    ]
+
+    return render(request, 'tasks/technician_list.html', {'rows': rows})
+
+
+@login_required
+def technician_skills(request, pk):
+    """A supervisor's review screen for one technician — confirm or
+    override every self-rating against real evidence. A level only ever
+    changes here, by a deliberate supervisor action; nothing computed
+    writes to it automatically.
+    """
+    supervisor = require_supervisor(request)
+    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        today = timezone.localtime().date()
+
+        if action == 'review_skill':
+            skill = get_object_or_404(Skill, pk=request.POST.get('skill_id'), is_active=True)
+            form = ReviewLevelForm(request.POST)
+            if form.is_valid():
+                level = int(form.cleaned_data['level'])
+                note = form.cleaned_data['note']
+                with transaction.atomic():
+                    TechnicianSkill.objects.update_or_create(
+                        technician=technician, skill=skill,
+                        defaults={
+                            'level': level, 'source': TechnicianSkill.Source.SUPERVISOR,
+                            'set_by': supervisor, 'set_on': today, 'note': note,
+                        },
+                    )
+                    TechnicianSkillAssessment.objects.create(
+                        technician=technician, skill=skill, level=level,
+                        source=TechnicianSkill.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
+                    )
+                messages.success(request, _('Level confirmed.'))
+                return redirect('tasks:technician_skills', pk=technician.pk)
+
+        elif action == 'review_conduct':
+            area = get_object_or_404(ConductArea, pk=request.POST.get('conduct_area_id'), is_active=True)
+            form = ReviewLevelForm(request.POST)
+            if form.is_valid():
+                level = int(form.cleaned_data['level'])
+                note = form.cleaned_data['note']
+                with transaction.atomic():
+                    TechnicianConduct.objects.update_or_create(
+                        technician=technician, conduct_area=area,
+                        defaults={
+                            'level': level, 'source': TechnicianConduct.Source.SUPERVISOR,
+                            'set_by': supervisor, 'set_on': today, 'note': note,
+                        },
+                    )
+                    TechnicianConductAssessment.objects.create(
+                        technician=technician, conduct_area=area, level=level,
+                        source=TechnicianConduct.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
+                    )
+                messages.success(request, _('Level confirmed.'))
+                return redirect('tasks:technician_skills', pk=technician.pk)
+
+    context = {
+        'technician': technician,
+        'skills': _skills_with_current_rating(technician),
+        'conduct_areas': _conduct_areas_with_current_rating(technician),
+        'review_form': ReviewLevelForm(),
+        'certification': _certification_status(technician),
+        'solve_rate': _solve_rate(technician),
+    }
+    return render(request, 'tasks/technician_skills.html', context)
 
 
 @login_required

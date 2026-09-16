@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Technicians" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Technicians" %}</h1>
+</div>
+
+<div class="section">
+    {% if rows %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Role" %}</th>
+                    <th>{% translate "Certification" %}</th>
+                    <th>{% translate "Report approval rate" %}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.technician.full_name }}</td>
+                    <td>{{ row.technician.get_role_display }}</td>
+                    <td>
+                        {% if row.certification.is_certified %}
+                        <span class="badge badge--status-completed">{% translate "Certified" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-blocked">
+                            {{ row.certification.non_cardio_certified|add:row.certification.conduct_certified }}
+                            /
+                            {{ row.certification.non_cardio_total|add:row.certification.conduct_total }}
+                        </span>
+                        {% endif %}
+                        {% if row.certification.cardio_ready %}
+                        <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.solve_rate is not None %}{{ row.solve_rate|floatformat:0 }}%{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active technicians in your country." %}</p>
+    {% endif %}
+</div>
+{% endblock %}
