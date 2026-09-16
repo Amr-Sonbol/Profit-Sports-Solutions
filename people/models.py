@@ -19,6 +19,12 @@ class Technician(models.Model):
         AR = 'ar', _('Arabic')
         EN = 'en', _('English')
 
+    class UnavailableReason(models.TextChoices):
+        SICK = 'sick', _('Sick')
+        LEAVE = 'leave', _('Leave')
+        HOLIDAY = 'holiday', _('Holiday')
+        OTHER = 'other', _('Other')
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='technician',
@@ -46,6 +52,13 @@ class Technician(models.Model):
     )
     hired_on = models.DateField(_('hired on'), null=True, blank=True)
     is_active = models.BooleanField(_('active'), default=True)
+    is_available = models.BooleanField(
+        _('available'), default=True,
+        help_text=_('whether this technician can currently be assigned work — separate from is_active'),
+    )
+    unavailable_reason = models.CharField(
+        _('unavailable reason'), max_length=20, choices=UnavailableReason.choices, blank=True,
+    )
 
     class Meta:
         verbose_name = _('technician')

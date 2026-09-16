@@ -164,6 +164,10 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | can_carry_large | bool | can move a treadmill motor or locker bank |
 | hired_on | date | |
 | is_active | bool | |
+| is_available | bool | can currently be assigned work — separate from `is_active` |
+| unavailable_reason | varchar | sick, leave, holiday, other — set when `is_available` is false |
+
+**`is_active` is employment; `is_available` is today.** A technician stays `is_active` for as long as they work here — deactivating that is an office action for someone who's left. `is_available` is the day-to-day toggle a supervisor flips from the assign screen when someone calls in sick or is on leave, so they stop showing up as a candidate for new lead/helper assignments without touching their employment record. It says nothing about tasks they're already on.
 
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
 

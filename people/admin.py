@@ -7,9 +7,10 @@ from .models import Technician, TechnicianSkill
 class TechnicianAdmin(admin.ModelAdmin):
     list_display = [
         'full_name', 'country', 'role', 'employment_type', 'language', 'is_active',
+        'is_available', 'unavailable_reason',
     ]
     search_fields = ['full_name', 'phone']
-    list_filter = ['country', 'role', 'employment_type', 'language', 'is_active']
+    list_filter = ['country', 'role', 'employment_type', 'language', 'is_active', 'is_available']
 
 
 @admin.register(TechnicianSkill)

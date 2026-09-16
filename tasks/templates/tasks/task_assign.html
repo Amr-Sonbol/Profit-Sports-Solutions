@@ -113,6 +113,7 @@
                     <th>{% translate "Transport" %}</th>
                     <th>{% translate "Large equipment" %}</th>
                     {% if task.required_skill %}<th>{% blocktranslate with skill=task.required_skill.name %}Level — {{ skill }}{% endblocktranslate %}</th>{% endif %}
+                    <th>{% translate "Status" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -123,6 +124,28 @@
                     <td>{% if technician.has_transport %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     <td>{% if technician.can_carry_large %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     {% if task.required_skill %}<td>{{ technician.skill_level|default:"—" }}</td>{% endif %}
+                    <td>
+                        {% if technician.is_available %}
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="mark_unavailable">
+                            <input type="hidden" name="technician_id" value="{{ technician.pk }}">
+                            <span class="badge badge--status-new">{% translate "Available" %}</span>
+                            {{ mark_unavailable_form.reason }}
+                            <button type="submit" class="button button--secondary">{% translate "Mark unavailable" %}</button>
+                        </form>
+                        {% else %}
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="mark_available">
+                            <input type="hidden" name="technician_id" value="{{ technician.pk }}">
+                            <span class="badge badge--status-blocked">
+                                {% translate "Unavailable" %} — {{ technician.get_unavailable_reason_display }}
+                            </span>
+                            <button type="submit" class="button">{% translate "Mark available" %}</button>
+                        </form>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

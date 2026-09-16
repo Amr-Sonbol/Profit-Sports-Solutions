@@ -180,6 +180,12 @@ class RemoveAssignmentForm(forms.Form):
     )
 
 
+class MarkUnavailableForm(forms.Form):
+    reason = forms.ChoiceField(
+        choices=[('', '---------')] + Technician.UnavailableReason.choices, label=_('Reason'),
+    )
+
+
 ALLOWED_MEDIA_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
 MAX_MEDIA_UPLOAD_BYTES = 25 * 1024 * 1024
 

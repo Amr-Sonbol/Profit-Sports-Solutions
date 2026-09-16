@@ -96,6 +96,9 @@ msgstr "التعيين"
 msgid "Attachments"
 msgstr "المرفقات"
 
+msgid "Available"
+msgstr "متاح"
+
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
 
@@ -234,6 +237,9 @@ msgstr "في الطريق"
 msgid "English"
 msgstr "الإنجليزية"
 
+msgid "Enter a 3-letter currency code, e.g. AED."
+msgstr "أدخل رمز عملة من 3 أحرف، مثال: AED."
+
 msgid "Enter at least a brand, model, and outcome for each new machine, or leave the row blank."
 msgstr "أدخل العلامة التجارية والموديل والنتيجة على الأقل لكل جهاز جديد، أو اترك الصف فارغًا."
 
@@ -248,6 +254,12 @@ msgstr "معطل"
 
 msgid "File"
 msgstr "ملف"
+
+msgid "File is too large — the limit is 25 MB."
+msgstr "الملف كبير جدًا — الحد الأقصى 25 ميغابايت."
+
+msgid "File is too large — the limit is 5 MB."
+msgstr "الملف كبير جدًا — الحد الأقصى 5 ميغابايت."
 
 msgid "File report"
 msgstr "تقديم التقرير"
@@ -290,6 +302,9 @@ msgstr "مرتفعة"
 
 msgid "History"
 msgstr "السجل الزمني"
+
+msgid "Holiday"
+msgstr "إجازة رسمية"
 
 msgid "Hotel"
 msgstr "فندق"
@@ -369,8 +384,20 @@ msgstr "إدارة التعيين"
 msgid "Manager"
 msgstr "مدير"
 
+msgid "Mark available"
+msgstr "وضع علامة متاح"
+
 msgid "Mark complete"
 msgstr "وضع علامة مكتمل"
+
+msgid "Mark unavailable"
+msgstr "وضع علامة غير متاح"
+
+msgid "Marked available."
+msgstr "تم وضع علامة متاح."
+
+msgid "Marked unavailable."
+msgstr "تم وضع علامة غير متاح."
 
 msgid "Model"
 msgstr "الموديل"
@@ -714,6 +741,9 @@ msgstr "النوع"
 msgid "URL"
 msgstr "الرابط"
 
+msgid "Unavailable"
+msgstr "غير متاح"
+
 msgid "Unit cost"
 msgstr "سعر الوحدة"
 
@@ -794,6 +824,9 @@ msgstr "عُيّن في"
 
 msgid "auto-generated per country, e.g. AE-0001"
 msgstr "يُنشأ تلقائيًا لكل دولة، مثال: AE-0001"
+
+msgid "available"
+msgstr "متاح"
 
 msgid "billing type"
 msgstr "نوع الفوترة"
@@ -1113,6 +1146,9 @@ msgstr "الحقل الوحيد المؤكد عند الإنشاء"
 msgid "timezone"
 msgstr "المنطقة الزمنية"
 
+msgid "unavailable reason"
+msgstr "سبب عدم التوفر"
+
 msgid "unit cost"
 msgstr "سعر الوحدة"
 
@@ -1139,6 +1175,9 @@ msgstr "ما وجده الفني"
 
 msgid "where the office requests spare parts"
 msgstr "أين يطلب المكتب قطع الغيار"
+
+msgid "whether this technician can currently be assigned work — separate from is_active"
+msgstr "ما إذا كان يمكن تكليف هذا الفني بعمل حاليًا — بشكل منفصل عن الحالة الوظيفية"
 
 msgid "which supervisor decided"
 msgstr "أي مشرف قرر ذلك"

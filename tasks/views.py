@@ -20,8 +20,8 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed
 
 from .forms import (
-    AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, NewAssetForm, RemoveAssignmentForm, SetLeadForm,
-    TaskAttachmentUploadForm, TaskCreateForm,
+    AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm,
+    RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
 )
 from .models import Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
@@ -352,15 +352,19 @@ def task_assign(request, pk):
 
     locked = task.status in ASSIGNMENT_LOCKED_STATUSES
     candidates_qs = _assignment_candidates(task, exclude_ids=assigned_ids)
+    # Shown in the candidates table regardless of availability, so a
+    # supervisor can see and flip someone back — but only available
+    # technicians can actually be picked as lead or helper.
+    selectable_qs = candidates_qs.filter(is_available=True)
 
-    set_lead_form = SetLeadForm(technicians=candidates_qs, requires_reason=bool(active_lead))
-    add_helper_form = AddHelperForm(technicians=candidates_qs) if active_lead else None
+    set_lead_form = SetLeadForm(technicians=selectable_qs, requires_reason=bool(active_lead))
+    add_helper_form = AddHelperForm(technicians=selectable_qs) if active_lead else None
 
-    if request.method == 'POST' and not locked:
+    if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'set_lead':
-            set_lead_form = SetLeadForm(request.POST, technicians=candidates_qs, requires_reason=bool(active_lead))
+        if action == 'set_lead' and not locked:
+            set_lead_form = SetLeadForm(request.POST, technicians=selectable_qs, requires_reason=bool(active_lead))
             if set_lead_form.is_valid():
                 _set_lead(
                     task, active_lead, set_lead_form.cleaned_data['technician'],
@@ -369,8 +373,8 @@ def task_assign(request, pk):
                 messages.success(request, _('Lead technician set.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
-        elif action == 'add_helper' and active_lead:
-            add_helper_form = AddHelperForm(request.POST, technicians=candidates_qs)
+        elif action == 'add_helper' and active_lead and not locked:
+            add_helper_form = AddHelperForm(request.POST, technicians=selectable_qs)
             if add_helper_form.is_valid():
                 TaskAssignment.objects.create(
                     task=task, technician=add_helper_form.cleaned_data['technician'],
@@ -379,7 +383,7 @@ def task_assign(request, pk):
                 messages.success(request, _('Helper added.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
-        elif action == 'remove_helper':
+        elif action == 'remove_helper' and not locked:
             helper = get_object_or_404(
                 TaskAssignment, pk=request.POST.get('assignment_id'), task=task,
                 role=TaskAssignment.Role.HELPER, is_active=True,
@@ -393,6 +397,30 @@ def task_assign(request, pk):
                 messages.success(request, _('Helper removed.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
+        elif action == 'mark_unavailable':
+            # A technician's availability isn't specific to this task, so
+            # this isn't gated by `locked` the way assignment changes are.
+            technician = get_object_or_404(
+                Technician, pk=request.POST.get('technician_id'), country=task.site.customer.country,
+            )
+            mark_unavailable_form = MarkUnavailableForm(request.POST)
+            if mark_unavailable_form.is_valid():
+                technician.is_available = False
+                technician.unavailable_reason = mark_unavailable_form.cleaned_data['reason']
+                technician.save(update_fields=['is_available', 'unavailable_reason'])
+                messages.success(request, _('Marked unavailable.'))
+                return redirect('tasks:task_assign', pk=task.pk)
+
+        elif action == 'mark_available':
+            technician = get_object_or_404(
+                Technician, pk=request.POST.get('technician_id'), country=task.site.customer.country,
+            )
+            technician.is_available = True
+            technician.unavailable_reason = ''
+            technician.save(update_fields=['is_available', 'unavailable_reason'])
+            messages.success(request, _('Marked available.'))
+            return redirect('tasks:task_assign', pk=task.pk)
+
     context = {
         'task': task,
         'active_lead': active_lead,
@@ -402,6 +430,7 @@ def task_assign(request, pk):
         'set_lead_form': set_lead_form,
         'add_helper_form': add_helper_form,
         'remove_form': RemoveAssignmentForm(),
+        'mark_unavailable_form': MarkUnavailableForm(),
     }
     return render(request, 'tasks/task_assign.html', context)
 

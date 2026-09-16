@@ -480,6 +480,72 @@ class TaskAssignTests(TaskTestCase):
         candidate_names = {t.full_name for t in response.context['candidates']}
         self.assertNotIn('Nour Cairo', candidate_names)
 
+    def test_mark_unavailable_requires_a_reason(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'mark_unavailable', 'technician_id': self.technician.pk,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.is_available)
+
+    def test_mark_unavailable_sets_reason(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'mark_unavailable', 'technician_id': self.technician.pk, 'reason': 'sick',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertFalse(self.technician.is_available)
+        self.assertEqual(self.technician.unavailable_reason, 'sick')
+
+    def test_mark_available_clears_reason(self):
+        self.technician.is_available = False
+        self.technician.unavailable_reason = Technician.UnavailableReason.HOLIDAY
+        self.technician.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'mark_available', 'technician_id': self.technician.pk,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.is_available)
+        self.assertEqual(self.technician.unavailable_reason, '')
+
+    def test_unavailable_technician_still_shown_but_not_selectable(self):
+        self.helper.is_available = False
+        self.helper.unavailable_reason = Technician.UnavailableReason.SICK
+        self.helper.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+
+        candidate_ids = {t.pk for t in response.context['candidates']}
+        self.assertIn(self.helper.pk, candidate_ids)
+
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.task.assignments.filter(technician=self.helper).exists())
+
+    def test_cannot_mark_unavailable_technician_from_another_country(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech2', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo 2',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'mark_unavailable', 'technician_id': other_technician.pk, 'reason': 'sick',
+        })
+        self.assertEqual(response.status_code, 404)
+
 
 class TaskWeekTests(TaskTestCase):
     # 2026-09-07 is a Monday.
