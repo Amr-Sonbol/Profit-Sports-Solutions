@@ -406,6 +406,103 @@ tbody tr:hover {
     padding: 1.5rem;
 }
 
+/* The public feedback page — same centered-card idea as .auth-card, just
+   wider, since it needs room for a row of five rating buttons. */
+.feedback-card {
+    max-width: 28rem;
+    margin-inline: auto;
+    margin-block-start: 2rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 1.75rem;
+}
+
+.feedback-card__intro {
+    color: var(--color-muted);
+    margin-block-end: 1.25rem;
+}
+
+/* Django's RadioSelect renders as nested <div>s (widget wrapper > one div
+   per option), not <ul>/<li> — target the structure generically rather
+   than by tag, since that's the part liable to change across versions. */
+.rating-choice > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.rating-choice > div > div {
+    flex: 1 1 3rem;
+}
+
+.rating-choice label {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    padding-block: 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+/* Visually hidden but still focusable/tabbable — unlike display:none, this
+   keeps the rating keyboard-accessible. */
+.rating-choice input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+}
+
+.rating-choice label:hover {
+    border-color: var(--color-accent);
+}
+
+.rating-choice label:has(input:checked) {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+}
+
+.rating-choice label:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.rating-scale-labels {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-block-start: 0.4rem;
+    margin-block-end: 1.25rem;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
+.feedback-thanks {
+    text-align: center;
+    padding-block: 1.5rem;
+}
+
+.feedback-thanks__icon {
+    font-size: 2.5rem;
+    line-height: 1;
+    margin-block-end: 0.75rem;
+}
+
+.feedback-thanks__rating {
+    color: var(--color-muted);
+    margin-block-start: 0.5rem;
+}
+
 .field {
     margin-block-end: 1rem;
 }

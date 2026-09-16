@@ -72,6 +72,9 @@ msgstr "بعد"
 msgid "All"
 msgstr "الكل"
 
+msgid "Anything you'd like to add?"
+msgstr "هل تود إضافة أي شيء؟"
+
 msgid "Approve"
 msgstr "اعتماد"
 
@@ -213,8 +216,8 @@ msgstr "نادٍ"
 msgid "Code"
 msgstr "الرمز"
 
-msgid "Comment"
-msgstr "تعليق"
+msgid "Comments (optional)"
+msgstr "تعليقات (اختياري)"
 
 msgid "Completed"
 msgstr "مكتملة"
@@ -312,6 +315,9 @@ msgstr "مهارات المعدات المعتمدة"
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
 
+msgid "Excellent"
+msgstr "ممتاز"
+
 msgid "Fault"
 msgstr "عطل"
 
@@ -380,6 +386,9 @@ msgstr "فندق"
 
 msgid "How did we do?"
 msgstr "كيف كان أداؤنا؟"
+
+msgid "How would you rate the visit?"
+msgstr "كيف تقيّم الزيارة؟"
 
 msgid "I've arrived"
 msgstr "لقد وصلت"
@@ -636,6 +645,9 @@ msgstr "الصور"
 msgid "Pick or add a brand first — a skill always belongs to one."
 msgstr "اختر أو أضف علامة تجارية أولاً — المهارة تنتمي دائمًا إلى علامة تجارية."
 
+msgid "Poor"
+msgstr "ضعيف"
+
 msgid "Portal URL"
 msgstr "رابط البوابة"
 
@@ -662,9 +674,6 @@ msgstr "قيّم نفسك في مهارة أو مجال سلوك"
 
 msgid "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it."
 msgstr "قيّم نفسك مرة واحدة لكل مهارة أو مجال سلوك — إنه تخمينك الأول فقط، وليس شهادة. يراجعه المشرف عليك مقابل أدلة حقيقية ويعتمده أو يصححه؛ وبمجرد حدوث ذلك، هو وحده من يمكنه تغييره."
-
-msgid "Rating"
-msgstr "التقييم"
 
 msgid "Rating: %(rating)s/5"
 msgstr "التقييم: %(rating)s/5"
@@ -852,8 +861,8 @@ msgstr "بدأت"
 msgid "Status"
 msgstr "الحالة"
 
-msgid "Submit"
-msgstr "إرسال"
+msgid "Submit feedback"
+msgstr "إرسال التقييم"
 
 msgid "Submit report"
 msgstr "إرسال التقرير"
@@ -888,8 +897,8 @@ msgstr "الفني"
 msgid "Technicians"
 msgstr "الفنيون"
 
-msgid "Thank you — your feedback has already been recorded."
-msgstr "شكرًا لك — تم تسجيل تقييمك بالفعل."
+msgid "Thank you!"
+msgstr "شكرًا لك!"
 
 msgid "This customer already has a site with that name."
 msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
@@ -965,6 +974,12 @@ msgstr "تقرير العمل"
 
 msgid "Yes"
 msgstr "نعم"
+
+msgid "You rated us %(rating)s/5"
+msgstr "قيّمتنا بـ %(rating)s/5"
+
+msgid "Your feedback has already been recorded — we appreciate you taking the time."
+msgstr "تم تسجيل تقييمك بالفعل — نقدّر وقتك."
 
 msgid "a self-rating is a starting guess — only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي مجرد تخمين أولي — لا يُحتسب سوى مراجعة المشرف ضمن الاعتماد"

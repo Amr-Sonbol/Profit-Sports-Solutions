@@ -47,10 +47,12 @@ class WorkReportForm(forms.ModelForm):
 
 class CustomerFeedbackForm(forms.Form):
     rating = forms.ChoiceField(
-        choices=CustomerFeedback.RATING_CHOICES, widget=forms.RadioSelect, label=_('Rating'),
+        choices=CustomerFeedback.RATING_CHOICES,
+        widget=forms.RadioSelect, label=_('How would you rate the visit?'),
     )
     comment = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={'rows': 3}), label=_('Comment'),
+        required=False, widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Anything you\'d like to add?')}),
+        label=_('Comments (optional)'),
     )
 
 

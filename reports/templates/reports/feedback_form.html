@@ -4,32 +4,43 @@
 {% block title %}{% translate "How did we do?" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="page__header">
+<div class="feedback-card">
+    {% if feedback.submitted_at %}
+    <div class="feedback-thanks">
+        <div class="feedback-thanks__icon">✓</div>
+        <h1>{% translate "Thank you!" %}</h1>
+        <p class="muted">{% translate "Your feedback has already been recorded — we appreciate you taking the time." %}</p>
+        {% if feedback.rating %}
+        <p class="feedback-thanks__rating">
+            {% blocktranslate with rating=feedback.rating %}You rated us {{ rating }}/5{% endblocktranslate %}
+        </p>
+        {% endif %}
+    </div>
+    {% else %}
     <h1>{% translate "How did we do?" %}</h1>
-</div>
-
-<div class="section">
-    <p class="muted">
+    <p class="feedback-card__intro">
         {% blocktranslate with number=task.task_number date=visit_date|date:"SHORT_DATE_FORMAT" %}About visit {{ number }} on {{ date }}{% endblocktranslate %}
     </p>
 
-    {% if feedback.submitted_at %}
-    <p class="empty-state">{% translate "Thank you — your feedback has already been recorded." %}</p>
-    {% else %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" novalidate>
         {% csrf_token %}
-        <div class="field {% if form.rating.errors %}field--error{% endif %}">
-            <label>{{ form.rating.label }}</label>
+
+        <p class="muted">{{ form.rating.label }}</p>
+        <div class="rating-choice">
             {{ form.rating }}
-            {% for error in form.rating.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
+        <div class="rating-scale-labels">
+            <span>{% translate "Poor" %}</span>
+            <span>{% translate "Excellent" %}</span>
+        </div>
+        {% for error in form.rating.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+
         <div class="field">
             <label for="{{ form.comment.id_for_label }}">{{ form.comment.label }}</label>
             {{ form.comment }}
         </div>
-        <div class="field field--submit">
-            <button type="submit" class="button">{% translate "Submit" %}</button>
-        </div>
+
+        <button type="submit" class="button">{% translate "Submit feedback" %}</button>
     </form>
     {% endif %}
 </div>
