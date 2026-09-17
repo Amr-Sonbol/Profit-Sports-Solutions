@@ -12,9 +12,7 @@
 </div>
 
 <div class="section">
-    {% if technician.photo %}
-    <img src="{{ technician.photo.url }}" alt="{{ technician.full_name }}" class="avatar avatar--lg">
-    {% endif %}
+    {% include "_avatar.html" with technician=technician size="lg" %}
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}

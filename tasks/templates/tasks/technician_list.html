@@ -26,7 +26,7 @@
                 {% for row in rows %}
                 <tr>
                     <td>
-                        {% if row.technician.photo %}<img src="{{ row.technician.photo.url }}" alt="" class="avatar">{% endif %}
+                        {% include "_avatar.html" with technician=row.technician %}
                         {{ row.technician.full_name }}
                     </td>
                     <td>{{ row.technician.get_role_display }}</td>

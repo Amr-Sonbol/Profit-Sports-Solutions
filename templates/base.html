@@ -36,7 +36,7 @@
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
                 <span class="site-header__user">
-                    {% if user.technician.photo %}<img src="{{ user.technician.photo.url }}" alt="" class="avatar">{% endif %}
+                    {% if user.technician %}{% include "_avatar.html" with technician=user.technician %}{% endif %}
                     {{ user.technician.full_name|default:user.get_username }}
                 </span>
                 <form method="post" action="{% url 'logout' %}">

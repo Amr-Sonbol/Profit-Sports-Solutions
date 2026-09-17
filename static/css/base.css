@@ -667,6 +667,21 @@ tbody tr:hover {
     height: 6rem;
 }
 
+.avatar--placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-accent);
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.avatar--lg.avatar--placeholder {
+    font-size: 2rem;
+}
+
 .table-wrap input,
 .table-wrap select {
     width: 100%;

@@ -8,7 +8,7 @@
     <div>
         <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
         <h1>
-            {% if technician.photo %}<img src="{{ technician.photo.url }}" alt="" class="avatar">{% endif %}
+            {% include "_avatar.html" with technician=technician %}
             {{ technician.full_name }}
         </h1>
     </div>

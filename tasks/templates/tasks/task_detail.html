@@ -84,7 +84,7 @@
         {% if active_lead %}
         <li>
             <span class="badge badge--role-lead">{% translate "Lead" %}</span>
-            {% if active_lead.technician.photo %}<img src="{{ active_lead.technician.photo.url }}" alt="" class="avatar">{% endif %}
+            {% include "_avatar.html" with technician=active_lead.technician %}
             {{ active_lead.technician.full_name }}
             <span class="muted">{% blocktranslate with time=active_lead.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
         </li>
@@ -92,7 +92,7 @@
         {% for helper in active_helpers %}
         <li>
             <span class="badge badge--role-helper">{% translate "Helper" %}</span>
-            {% if helper.technician.photo %}<img src="{{ helper.technician.photo.url }}" alt="" class="avatar">{% endif %}
+            {% include "_avatar.html" with technician=helper.technician %}
             {{ helper.technician.full_name }}
             <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
         </li>

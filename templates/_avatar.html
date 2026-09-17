@@ -1,0 +1,1 @@
+{% if technician.photo %}<img src="{{ technician.photo.url }}" alt="" class="avatar{% if size %} avatar--{{ size }}{% endif %}">{% else %}<span class="avatar avatar--placeholder{% if size %} avatar--{{ size }}{% endif %}">{{ technician.full_name|first|upper }}</span>{% endif %}
