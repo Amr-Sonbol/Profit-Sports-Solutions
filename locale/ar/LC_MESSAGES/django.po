@@ -222,6 +222,9 @@ msgstr "معتمد"
 msgid "Certified technician"
 msgstr "فني معتمد"
 
+msgid "Change password"
+msgstr "تغيير كلمة المرور"
+
 msgid "Chargeable"
 msgstr "مدفوعة"
 
@@ -302,6 +305,9 @@ msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
+
+msgid "Country"
+msgstr "الدولة"
 
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
@@ -609,6 +615,9 @@ msgstr "تم وضع علامة غير متاح."
 msgid "Model"
 msgstr "الموديل"
 
+msgid "My profile"
+msgstr "ملفي الشخصي"
+
 msgid "My progress"
 msgstr "تقدّمي"
 
@@ -765,6 +774,9 @@ msgstr "النتيجة"
 msgid "Overloaded"
 msgstr "محمّل بالعمل أكثر من اللازم"
 
+msgid "Overview"
+msgstr "نظرة عامة"
+
 msgid "Page %(number)s of %(total)s"
 msgstr "صفحة %(number)s من %(total)s"
 
@@ -780,6 +792,9 @@ msgstr "القطع المستخدمة"
 msgid "Password"
 msgstr "كلمة المرور"
 
+msgid "Password changed."
+msgstr "تم تغيير كلمة المرور."
+
 msgid "Pending"
 msgstr "قيد الانتظار"
 
@@ -794,6 +809,9 @@ msgstr "هاتف"
 
 msgid "Photo"
 msgstr "صورة"
+
+msgid "Photo & language"
+msgstr "الصورة واللغة"
 
 msgid "Photo added."
 msgstr "تمت إضافة الصورة."
@@ -827,6 +845,9 @@ msgstr "الأسبوع الماضي"
 
 msgid "Priority"
 msgstr "الأولوية"
+
+msgid "Profile updated."
+msgstr "تم تحديث الملف الشخصي."
 
 msgid "Promised"
 msgstr "الموعد الموعود"
@@ -986,6 +1007,9 @@ msgstr "بحث"
 
 msgid "Search by task number, site, or customer"
 msgstr "ابحث برقم المهمة أو الموقع أو العميل"
+
+msgid "See full progress"
+msgstr "عرض التقدم الكامل"
 
 msgid "Self-rated"
 msgstr "مقيّم ذاتيًا"

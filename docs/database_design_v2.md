@@ -191,6 +191,8 @@ Covers technicians, supervisors, and managers. One table, different roles.
 
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
 
+**`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo from the roster — the same field, two different doors into it.
+
 ### role_permission
 Which role can do what — configurable, not hardcoded. One row per (role, permission) pair.
 
@@ -585,10 +587,10 @@ Each is a real need eventually. None belongs in the first version.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
 
-**Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my tickets.
+**Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my tickets, my profile (own photo, language, password).
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and the ticket form — meant to be shared/discoverable, unlike the feedback link.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Eighteen screens plus two public pages. That is the whole application.
+Nineteen screens plus two public pages. That is the whole application.

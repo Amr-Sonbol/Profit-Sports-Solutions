@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My profile" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "My profile" %}</h1>
+</div>
+
+<div class="section">
+    <h2>{% translate "Overview" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Country" %}</dt>
+            <dd>{{ technician.country.name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Role" %}</dt>
+            <dd>{{ technician.get_role_display }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Certification" %}</dt>
+            <dd>
+                {% if certification.is_certified %}
+                <span class="badge badge--status-completed">{% translate "Certified technician" %}</span>
+                {% else %}
+                <span class="badge badge--status-blocked">
+                    {{ certification.non_cardio_certified|add:certification.conduct_certified }}
+                    /
+                    {{ certification.non_cardio_total|add:certification.conduct_total }}
+                </span>
+                {% endif %}
+                {% if certification.cardio_ready %}
+                <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                {% endif %}
+            </dd>
+        </div>
+        {% if ninety_day %}
+        <div>
+            <dt>{% translate "90-day track" %}</dt>
+            <dd>
+                {% if ninety_day.on_track %}
+                <span class="badge badge--status-completed">
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                </span>
+                {% else %}
+                <span class="badge badge--status-blocked">
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                </span>
+                {% endif %}
+            </dd>
+        </div>
+        {% endif %}
+        <div>
+            <dt>{% translate "Report approval rate" %}</dt>
+            <dd>{% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Standing in your country" %}</dt>
+            <dd>{% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}</dd>
+        </div>
+    </dl>
+    <p><a href="{% url 'tasks:my_progress' %}" class="back-link">{% translate "See full progress" %}</a></p>
+</div>
+
+<div class="section">
+    <h2>{% translate "Photo & language" %}</h2>
+    {% include "_avatar.html" with technician=technician size="lg" %}
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_profile">
+        {% if profile_form.non_field_errors %}
+            <p class="flash flash--error">{{ profile_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in profile_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Save changes" %}</button>
+    </form>
+</div>
+
+<div class="section">
+    <h2>{% translate "Change password" %}</h2>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="change_password">
+        {% if password_form.non_field_errors %}
+            <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in password_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Change password" %}</button>
+    </form>
+</div>
+{% endblock %}

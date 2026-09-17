@@ -286,17 +286,33 @@ class TaskAttachmentUploadForm(forms.Form):
         return file
 
 
-class TechnicianPhotoForm(forms.ModelForm):
-    class Meta:
-        model = Technician
-        fields = ['photo']
-        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
-
+class PhotoSizeMixin:
     def clean_photo(self):
         photo = self.cleaned_data['photo']
         if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
             raise forms.ValidationError(_('Photo is too large — the limit is 5 MB.'))
         return photo
+
+
+class TechnicianPhotoForm(PhotoSizeMixin, forms.ModelForm):
+    """A supervisor/manager setting someone else's photo, from the roster."""
+
+    class Meta:
+        model = Technician
+        fields = ['photo']
+        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+
+class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
+    """A technician editing their own photo and language — the only two
+    fields of their own record that were never anyone else's decision to
+    make. Role, country, and employment stay office-side changes.
+    """
+
+    class Meta:
+        model = Technician
+        fields = ['photo', 'language']
+        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
 
 
 class BlockTaskForm(forms.Form):

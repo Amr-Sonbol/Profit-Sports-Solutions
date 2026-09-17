@@ -16,6 +16,7 @@
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                     <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
                     <a href="{% url 'tasks:my_tickets' %}">{% translate "My tickets" %}</a>
+                    <a href="{% url 'tasks:my_profile' %}">{% translate "My profile" %}</a>
                 {% endif %}
                 {% if 'view_dashboard' in role_permissions %}
                     <a href="{% url 'tasks:dashboard' %}">{% translate "Dashboard" %}</a>

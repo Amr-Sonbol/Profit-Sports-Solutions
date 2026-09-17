@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
-    TechnicianSkill, TechnicianSkillAssessment,
+    RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
+    TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
@@ -1584,6 +1584,88 @@ class MySkillsTests(TaskTestCase):
         response = self.client.post('/tasks/my-skills/', {'action': 'rate_skill', 'skill_id': self.skill.pk})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(TechnicianSkill.objects.filter(technician=self.technician, skill=self.skill).exists())
+
+
+class MyProfileTests(TaskTestCase):
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_get_shows_the_profile_and_password_forms(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('profile_form', response.context)
+        self.assertIn('password_form', response.context)
+
+    def test_shows_country_and_certification_overview(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertContains(response, self.country.name)
+        self.assertFalse(response.context['certification']['is_certified'])
+        # The only technician-role fixture in this country, so always #1 of 1 —
+        # the leaderboard ranks every active technician, points or not.
+        self.assertEqual(response.context['rank'], 1)
+        self.assertEqual(response.context['leaderboard_size'], 1)
+
+    def test_confirmed_skill_shows_up_in_the_overview(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=RELIABLE_LEVEL,
+            source=TechnicianSkill.Source.SUPERVISOR, set_by=self.technician, set_on=date(2026, 1, 1),
+        )
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.context['certification']['non_cardio_certified'], 1)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_technician_updates_own_photo_and_language(self):
+        self.client.login(username='tech1', password='pass12345')
+        photo = SimpleUploadedFile('me.jpg', b'not a real image', content_type='image/jpeg')
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'save_profile', 'photo': photo, 'language': Technician.Language.EN,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.photo.name.endswith('.jpg'))
+        self.assertEqual(self.technician.language, Technician.Language.EN)
+
+    def test_rejects_a_disallowed_photo_extension(self):
+        self.client.login(username='tech1', password='pass12345')
+        photo = SimpleUploadedFile('me.svg', b'not a real image', content_type='image/svg+xml')
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'save_profile', 'photo': photo, 'language': Technician.Language.EN,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['profile_form'].errors.get('photo'))
+
+    def test_technician_changes_own_password(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'change_password', 'old_password': 'pass12345',
+            'new_password1': 'new-pass-98765', 'new_password2': 'new-pass-98765',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        # The session survives the password change (update_session_auth_hash) —
+        # a fresh request with the same client is still authenticated.
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.status_code, 200)
+
+        self.client.logout()
+        self.assertTrue(self.client.login(username='tech1', password='new-pass-98765'))
+
+    def test_wrong_old_password_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'change_password', 'old_password': 'wrong-password',
+            'new_password1': 'new-pass-98765', 'new_password2': 'new-pass-98765',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['password_form'].errors.get('old_password'))
+
+        self.client.logout()
+        self.assertTrue(self.client.login(username='tech1', password='pass12345'))
 
 
 class TechnicianListTests(TaskTestCase):

@@ -3,7 +3,9 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.mail import send_mail
@@ -28,9 +30,9 @@ from reports.models import PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
-    ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm,
-    SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
-    TechnicianPhotoForm,
+    ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
+    ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
+    TaskEditForm, TechnicianPhotoForm,
 )
 from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
@@ -1097,6 +1099,51 @@ def my_skills(request):
         'self_rate_form': SelfRateLevelForm(),
     }
     return render(request, 'tasks/my_skills.html', context)
+
+
+@login_required
+def my_profile(request):
+    """A technician's own account screen — the two fields of their own
+    record that are genuinely theirs to set (photo, language), a password
+    change, and a quick-glance snapshot of standing (certification,
+    90-day track, country) that My progress covers in full detail.
+    """
+    technician = require_technician(request)
+
+    if request.method == 'POST' and request.POST.get('action') == 'change_password':
+        profile_form = MyProfileForm(instance=technician)
+        password_form = PasswordChangeForm(request.user, request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            update_session_auth_hash(request, request.user)
+            messages.success(request, _('Password changed.'))
+            return redirect('tasks:my_profile')
+    elif request.method == 'POST':
+        password_form = PasswordChangeForm(request.user)
+        profile_form = MyProfileForm(request.POST, request.FILES, instance=technician)
+        if profile_form.is_valid():
+            profile_form.save()
+            messages.success(request, _('Profile updated.'))
+            return redirect('tasks:my_profile')
+    else:
+        profile_form = MyProfileForm(instance=technician)
+        password_form = PasswordChangeForm(request.user)
+
+    certification = _certification_status(technician)
+    leaderboard = _leaderboard(technician.country)
+    rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
+
+    context = {
+        'technician': technician,
+        'profile_form': profile_form,
+        'password_form': password_form,
+        'certification': certification,
+        'solve_rate': _solve_rate(technician),
+        'ninety_day': _ninety_day_progress(technician, certification),
+        'rank': rank,
+        'leaderboard_size': len(leaderboard),
+    }
+    return render(request, 'tasks/my_profile.html', context)
 
 
 @login_required
