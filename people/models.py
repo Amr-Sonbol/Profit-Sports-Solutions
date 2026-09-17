@@ -77,6 +77,41 @@ class Technician(models.Model):
         return self.full_name
 
 
+class RolePermission(models.Model):
+    """Which role can do what — configurable, not hardcoded. Each row is
+    one (role, permission) pair; `allowed` is the only thing an admin
+    changes. Deliberately narrow: it only covers the supervisor-side
+    actions that plausibly differ by role (dashboard, tasks, technicians,
+    reports). Self-service technician screens (My week, My skills, ...)
+    stay open to any signed-in technician regardless of role — there's no
+    real case yet for excluding a role from their own record.
+    """
+
+    class Permission(models.TextChoices):
+        VIEW_DASHBOARD = 'view_dashboard', _('View dashboard')
+        VIEW_TASKS = 'view_tasks', _('View task list, task detail, and week view')
+        CREATE_TASKS = 'create_tasks', _('Create new tasks')
+        ASSIGN_TASKS = 'assign_tasks', _('Assign technicians to tasks')
+        VIEW_TECHNICIANS = 'view_technicians', _('View technician roster and boards')
+        REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
+        REVIEW_REPORTS = 'review_reports', _('View and review work reports')
+
+    role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
+    permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)
+    allowed = models.BooleanField(_('allowed'), default=False)
+
+    class Meta:
+        verbose_name = _('role permission')
+        verbose_name_plural = _('role permissions')
+        ordering = ['permission', 'role']
+        constraints = [
+            models.UniqueConstraint(fields=['role', 'permission'], name='unique_role_permission'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
+
+
 class TechnicianSkill(models.Model):
     """The current level snapshot. `TechnicianSkillAssessment` holds the
     full history of self-ratings and supervisor reviews behind it.

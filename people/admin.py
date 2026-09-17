@@ -1,8 +1,19 @@
 from django.contrib import admin
 
 from .models import (
-    Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
+    RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
+    TechnicianSkillAssessment,
 )
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    """Also editable from the in-app Roles & permissions screen — this is
+    the same data, just reachable from /admin/ too.
+    """
+    list_display = ['permission', 'role', 'allowed']
+    list_filter = ['permission', 'role', 'allowed']
+    list_editable = ['allowed']
 
 
 @admin.register(Technician)

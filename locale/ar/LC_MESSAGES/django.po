@@ -111,6 +111,9 @@ msgstr "وصل"
 msgid "Assign"
 msgstr "التعيين"
 
+msgid "Assign technicians to tasks"
+msgstr "تعيين الفنيين للمهام"
+
 msgid "Assigned"
 msgstr "معيّنة"
 
@@ -243,6 +246,9 @@ msgstr "مجالات السلوك المعتمدة"
 msgid "Confirm"
 msgstr "اعتماد"
 
+msgid "Confirm technician skill levels"
+msgstr "اعتماد مستويات مهارات الفنيين"
+
 msgid "Confirmed"
 msgstr "معتمد"
 
@@ -257,6 +263,9 @@ msgstr "هاتف جهة الاتصال"
 
 msgid "Contract"
 msgstr "عقد"
+
+msgid "Create new tasks"
+msgstr "إنشاء مهام جديدة"
 
 msgid "Create task"
 msgstr "إنشاء مهمة"
@@ -654,6 +663,12 @@ msgstr "كلمة المرور"
 msgid "Pending"
 msgstr "قيد الانتظار"
 
+msgid "Permission"
+msgstr "الصلاحية"
+
+msgid "Permissions updated."
+msgstr "تم تحديث الصلاحيات."
+
 msgid "Phone"
 msgstr "هاتف"
 
@@ -803,6 +818,15 @@ msgstr "حالة المراجعة"
 
 msgid "Role"
 msgstr "الدور"
+
+msgid "Roles"
+msgstr "الأدوار"
+
+msgid "Roles & permissions"
+msgstr "الأدوار والصلاحيات"
+
+msgid "Save"
+msgstr "حفظ"
 
 msgid "Scheduled"
 msgstr "مجدولة"
@@ -987,8 +1011,20 @@ msgstr "فيديو"
 msgid "View"
 msgstr "عرض"
 
+msgid "View and review work reports"
+msgstr "عرض ومراجعة تقارير العمل"
+
 msgid "View board"
 msgstr "عرض اللوحة"
+
+msgid "View dashboard"
+msgstr "عرض لوحة التحكم"
+
+msgid "View task list, task detail, and week view"
+msgstr "عرض قائمة المهام وتفاصيلها وعرض الأسبوع"
+
+msgid "View technician roster and boards"
+msgstr "عرض قائمة الفنيين ولوحاتهم"
 
 msgid "Warranty"
 msgstr "ضمان"
@@ -1007,6 +1043,9 @@ msgstr "ما أبلغ به العميل"
 
 msgid "WhatsApp"
 msgstr "واتساب"
+
+msgid "Which role can do what. Self-service technician screens (My week, My skills, ...) aren't listed here — they stay open to any signed-in technician regardless of role."
+msgstr "أي دور يمكنه فعل ماذا. شاشات الفني الذاتية (أسبوعي، مهاراتي، ...) غير مدرجة هنا — تبقى متاحة لأي فني مسجل دخوله بغض النظر عن دوره."
 
 msgid "Work report"
 msgstr "تقرير العمل"
@@ -1037,6 +1076,9 @@ msgstr "الفاعل"
 
 msgid "address"
 msgstr "العنوان"
+
+msgid "allowed"
+msgstr "مسموح"
 
 msgid "approved at"
 msgstr "اعتُمد في"
@@ -1224,6 +1266,9 @@ msgstr "حدث في"
 msgid "outcome"
 msgstr "النتيجة"
 
+msgid "overrides the ISO code as the task-number prefix — e.g. KSA or UAE, since those are how people here actually refer to the country, not the ISO code. Leave blank to just use the ISO code."
+msgstr "يحل محل رمز ISO كبادئة لرقم المهمة — مثل KSA أو UAE، لأن هذه هي الطريقة التي يشير بها الناس هنا فعليًا إلى الدولة، وليس رمز ISO. اتركه فارغًا لاستخدام رمز ISO فقط."
+
 msgid "part code"
 msgstr "رمز القطعة"
 
@@ -1235,6 +1280,9 @@ msgstr "القطع المستخدمة"
 
 msgid "per person, not per country"
 msgstr "لكل شخص، وليس لكل دولة"
+
+msgid "permission"
+msgstr "الصلاحية"
 
 msgid "phone"
 msgstr "الهاتف"
@@ -1289,6 +1337,12 @@ msgstr "تم الحل"
 
 msgid "role"
 msgstr "الدور"
+
+msgid "role permission"
+msgstr "صلاحية الدور"
+
+msgid "role permissions"
+msgstr "صلاحيات الدور"
 
 msgid "roughly how long the job should take — shown as an estimated finish time"
 msgstr "تقريبًا كم من الوقت ستستغرقه المهمة — يُعرض كوقت انتهاء متوقع"
@@ -1376,6 +1430,9 @@ msgstr "أحداث المهمة"
 
 msgid "task number"
 msgstr "رقم المهمة"
+
+msgid "task number prefix"
+msgstr "بادئة رقم المهمة"
 
 msgid "task type"
 msgstr "نوع المهمة"

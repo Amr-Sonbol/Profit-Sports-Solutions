@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
+    RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
+    TechnicianSkillAssessment,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
@@ -242,6 +243,21 @@ class TaskCreateTests(TaskTestCase):
             })
         numbers = set(Task.objects.values_list('task_number', flat=True))
         self.assertEqual(numbers, {'AE-0001', 'AE-0002'})
+
+    def test_task_number_uses_country_task_prefix_override(self):
+        self.country.task_prefix = 'UAE'
+        self.country.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post('/tasks/new/', {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL,
+            'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE,
+            'reported_at': '2026-09-06T10:00',
+            'is_warranty': '',
+        })
+        self.assertEqual(Task.objects.get().task_number, 'UAE-0001')
 
     def _base_new_task_payload(self, **overrides):
         payload = {
@@ -1348,6 +1364,75 @@ class TechnicianSkillsTests(TaskTestCase):
         rating = TechnicianConduct.objects.get(technician=self.technician, conduct_area=area)
         self.assertEqual(rating.level, 3)
         self.assertEqual(rating.source, TechnicianConduct.Source.SUPERVISOR)
+
+
+class RolePermissionsTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        self.manager = Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/roles/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_gets_403(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/roles/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_view_the_matrix(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/roles/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_disabling_view_tasks_for_supervisor_takes_effect_immediately(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/').status_code, 200)
+
+        RolePermission.objects.filter(
+            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
+        ).update(allowed=False)
+
+        response = self.client.get('/tasks/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_granting_view_tasks_to_technician_takes_effect_immediately(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/').status_code, 403)
+
+        RolePermission.objects.filter(
+            role=Technician.Role.TECHNICIAN, permission=RolePermission.Permission.VIEW_TASKS,
+        ).update(allowed=True)
+
+        response = self.client.get('/tasks/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_manager_can_update_the_matrix(self):
+        self.client.login(username='manager1', password='pass12345')
+
+        post_data = {}
+        for permission in RolePermission.Permission:
+            for role in [Technician.Role.SUPERVISOR, Technician.Role.MANAGER]:
+                post_data[f'{role}__{permission}'] = 'on'
+
+        response = self.client.post('/tasks/roles/', post_data)
+        self.assertEqual(response.status_code, 302)
+
+        self.assertFalse(
+            RolePermission.objects.filter(
+                role=Technician.Role.TECHNICIAN, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
+            ).exists(),
+        )
+        self.assertTrue(
+            RolePermission.objects.filter(
+                role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
+            ).exists(),
+        )
 
 
 class HomeRedirectTests(TaskTestCase):

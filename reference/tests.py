@@ -13,10 +13,32 @@ class SeedReferenceDataTests(TestCase):
         self.assertEqual(Country.objects.count(), 9)
 
     def test_one_skill_per_brand(self):
-        self.assertEqual(Brand.objects.count(), 18)
-        self.assertEqual(Skill.objects.count(), 18)
+        # 18 seeded brands, each with one "other" skill, plus Skillcore
+        # (added by 0005_cardio_lines, since it — like Panatta — needs a
+        # separate cardio line) and the two brands' Cardio skills.
+        self.assertEqual(Brand.objects.count(), 19)
+        self.assertEqual(Skill.objects.count(), 21)
         panatta = Brand.objects.get(name='Panatta')
-        self.assertEqual(Skill.objects.get(brand=panatta).name, 'Panatta')
+        self.assertEqual(
+            Skill.objects.get(brand=panatta, category=Skill.Category.OTHER).name, 'Panatta',
+        )
+
+    def test_panatta_and_skillcore_have_a_cardio_line(self):
+        for brand_name in ['Panatta', 'Skillcore']:
+            brand = Brand.objects.get(name=brand_name)
+            cardio = Skill.objects.get(brand=brand, category=Skill.Category.CARDIO)
+            self.assertEqual(cardio.name, 'Cardio')
+
+    def test_every_seeded_country_has_its_own_task_prefix(self):
+        # The company doesn't use ISO codes at all — every country needs
+        # its own local abbreviation, not just the ones that differ from
+        # their ISO code.
+        expected = {
+            'EG': 'EGY', 'BH': 'BAH', 'QA': 'QAT', 'AE': 'UAE', 'SA': 'KSA',
+            'OM': 'OMN', 'US': 'USA', 'CA': 'CAN', 'KW': 'KWT',
+        }
+        actual = dict(Country.objects.values_list('iso_code', 'task_prefix'))
+        self.assertEqual(actual, expected)
 
     def test_task_types_have_bilingual_names_and_stable_codes(self):
         installation = TaskType.objects.get(code='new_installation')

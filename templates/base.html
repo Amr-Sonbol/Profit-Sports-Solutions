@@ -16,11 +16,20 @@
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                     <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
                 {% endif %}
-                {% if user.technician.role == 'supervisor' or user.technician.role == 'manager' %}
+                {% if 'view_dashboard' in role_permissions %}
                     <a href="{% url 'tasks:dashboard' %}">{% translate "Dashboard" %}</a>
+                {% endif %}
+                {% if 'view_tasks' in role_permissions %}
                     <a href="{% url 'tasks:task_list' %}">{% translate "Tasks" %}</a>
+                {% endif %}
+                {% if 'review_reports' in role_permissions %}
                     <a href="{% url 'reports:report_list' %}">{% translate "Reports" %}</a>
+                {% endif %}
+                {% if 'view_technicians' in role_permissions %}
                     <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
+                {% endif %}
+                {% if user.technician.role == 'manager' %}
+                    <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
                 <span class="site-header__user">{{ user.technician.full_name|default:user.get_username }}</span>
                 <form method="post" action="{% url 'logout' %}">

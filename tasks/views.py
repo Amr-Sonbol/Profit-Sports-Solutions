@@ -15,10 +15,10 @@ from django.utils.translation import gettext as _
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    RELIABLE_LEVEL, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
-    TechnicianSkillAssessment,
+    RELIABLE_LEVEL, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
+    TechnicianSkill, TechnicianSkillAssessment,
 )
-from people.permissions import require_supervisor, require_technician
+from people.permissions import require_manager, require_permission, require_technician
 from reference.models import Brand, ConductArea, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed, WorkReport
@@ -85,7 +85,7 @@ PRIORITY_RANK = Case(
 
 
 def _next_task_number(country):
-    prefix = f'{country.iso_code}-'
+    prefix = f'{country.task_prefix or country.iso_code}-'
     count = Task.objects.filter(task_number__startswith=prefix).count()
     return f'{prefix}{count + 1:04d}'
 
@@ -322,7 +322,7 @@ def dashboard(request):
     lead and schedule. The landing page stays task_list — this is an
     additional screen, not a replacement.
     """
-    supervisor = require_supervisor(request)
+    supervisor = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
 
     technicians = Technician.objects.filter(
         is_active=True, country=supervisor.country, role=Technician.Role.TECHNICIAN,
@@ -351,7 +351,7 @@ def dashboard(request):
 
 @login_required
 def task_list(request):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.VIEW_TASKS)
 
     status = request.GET.get('status', 'open')
     search = request.GET.get('q', '').strip()
@@ -422,7 +422,7 @@ def task_list(request):
 
 @login_required
 def task_detail(request, pk):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.VIEW_TASKS)
 
     task = get_object_or_404(
         Task.objects.select_related(
@@ -450,7 +450,7 @@ def task_detail(request, pk):
 
 @login_required
 def task_create(request):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
 
     if request.method == 'POST':
         form = TaskCreateForm(request.POST)
@@ -530,7 +530,7 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
 
 @login_required
 def task_assign(request, pk):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
 
     task = get_object_or_404(Task.objects.select_related('site__customer__country'), pk=pk)
     active_assignments = list(task.assignments.filter(is_active=True).select_related('technician'))
@@ -625,7 +625,7 @@ def task_assign(request, pk):
 
 @login_required
 def task_week(request):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.VIEW_TASKS)
 
     today, start, end = _week_window(request)
 
@@ -806,7 +806,7 @@ def technician_list(request):
     """The technician roster for a supervisor's own country — the "who can
     I rely on" view. Never existed as a screen before this feature.
     """
-    supervisor = require_supervisor(request)
+    supervisor = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
 
     technicians = Technician.objects.filter(is_active=True, country=supervisor.country).order_by('full_name')
     rows = [
@@ -827,7 +827,7 @@ def technician_board(request, pk):
     my_week, just for someone else, with the same country scoping used
     everywhere else a supervisor looks at a specific technician.
     """
-    supervisor = require_supervisor(request)
+    supervisor = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
 
     days, unscheduled, nav_context = _week_board(technician, request)
@@ -842,7 +842,7 @@ def technician_skills(request, pk):
     changes here, by a deliberate supervisor action; nothing computed
     writes to it automatically.
     """
-    supervisor = require_supervisor(request)
+    supervisor = require_permission(request, RolePermission.Permission.REVIEW_SKILLS)
     technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
 
     if request.method == 'POST':
@@ -900,6 +900,47 @@ def technician_skills(request, pk):
         'solve_rate': _solve_rate(technician),
     }
     return render(request, 'tasks/technician_skills.html', context)
+
+
+@login_required
+def role_permissions(request):
+    """Manager-only: which role can do what. Deliberately not gated by
+    the configurable system it manages (require_manager, not
+    require_permission) — otherwise a bad edit here could lock every role
+    out of ever fixing it again.
+    """
+    require_manager(request)
+
+    roles = [Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER]
+    permissions = list(RolePermission.Permission)
+
+    if request.method == 'POST':
+        for permission in permissions:
+            for role in roles:
+                RolePermission.objects.update_or_create(
+                    role=role, permission=permission,
+                    defaults={'allowed': f'{role}__{permission}' in request.POST},
+                )
+        messages.success(request, _('Permissions updated.'))
+        return redirect('tasks:role_permissions')
+
+    allowed_pairs = set(RolePermission.objects.filter(allowed=True).values_list('role', 'permission'))
+    matrix = [
+        {
+            'permission': permission,
+            'cells': [
+                {
+                    'field_name': f'{role}__{permission}',
+                    'allowed': (role, permission) in allowed_pairs,
+                }
+                for role in roles
+            ],
+        }
+        for permission in permissions
+    ]
+
+    context = {'roles': roles, 'matrix': matrix}
+    return render(request, 'tasks/role_permissions.html', context)
 
 
 @login_required

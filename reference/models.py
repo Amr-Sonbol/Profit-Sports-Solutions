@@ -7,6 +7,14 @@ class Country(models.Model):
     name = models.CharField(_('name'), max_length=100)
     name_ar = models.CharField(_('name (Arabic)'), max_length=100)
     iso_code = models.CharField(_('ISO code'), max_length=2)
+    task_prefix = models.CharField(
+        _('task number prefix'), max_length=5, blank=True,
+        help_text=_(
+            'overrides the ISO code as the task-number prefix — e.g. KSA or UAE, since those are '
+            "how people here actually refer to the country, not the ISO code. Leave blank to just "
+            'use the ISO code.',
+        ),
+    )
     timezone = models.CharField(
         _('timezone'), max_length=50,
         help_text=_('IANA name, e.g. Asia/Riyadh'),

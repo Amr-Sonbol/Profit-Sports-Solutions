@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Roles" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Roles & permissions" %}</h1>
+</div>
+
+<p class="muted">
+    {% translate "Which role can do what. Self-service technician screens (My week, My skills, ...) aren't listed here — they stay open to any signed-in technician regardless of role." %}
+</p>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Permission" %}</th>
+                    {% for role in roles %}
+                    <th>{{ role.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in matrix %}
+                <tr>
+                    <td>{{ row.permission.label }}</td>
+                    {% for cell in row.cells %}
+                    <td>
+                        <input type="checkbox" name="{{ cell.field_name }}" {% if cell.allowed %}checked{% endif %}>
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="section">
+        <button type="submit" class="button">{% translate "Save" %}</button>
+    </div>
+</form>
+{% endblock %}

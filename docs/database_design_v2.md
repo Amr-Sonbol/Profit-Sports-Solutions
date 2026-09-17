@@ -43,10 +43,15 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 | id | PK | |
 | name | varchar | |
 | name_ar | varchar | |
-| iso_code | char(2) | |
+| iso_code | char(2) | the real ISO 3166-1 code — never changed for this |
+| task_prefix | varchar | nullable — overrides `iso_code` as the task-number prefix |
 | timezone | varchar | IANA name, e.g. `Asia/Riyadh` |
 | currency_code | char(3) | |
 | is_active | bool | |
+
+**`task_prefix` exists because the company doesn't use ISO codes at all.** Every seeded country has its own locally-used abbreviation set here — EGY, BAH, QAT, UAE, KSA, OMN, USA, CAN, KWT — none of them the two-letter ISO code. `iso_code` itself is left alone regardless: it stays the real ISO code, in case something else ever needs it to actually be one, and new countries still need `task_prefix` filled in explicitly (it has no default) or their task numbers fall back to that ISO code.
+
+**Changing a country's `task_prefix` only affects tasks created afterward.** `_next_task_number` counts existing tasks that already start with the new prefix, which is always zero right after a change — task numbering restarts at 1 under the new prefix rather than continuing the old sequence, and every task number ever issued keeps the prefix it was created with.
 
 ### brand
 Panatta, Skillcore, Digilock, and any future principal. Available in all countries.
@@ -184,6 +189,24 @@ Covers technicians, supervisors, and managers. One table, different roles.
 **`is_active` is employment; `is_available` is today.** A technician stays `is_active` for as long as they work here — deactivating that is an office action for someone who's left. `is_available` is the day-to-day toggle a supervisor flips from the assign screen when someone calls in sick or is on leave, so they stop showing up as a candidate for new lead/helper assignments without touching their employment record. It says nothing about tasks they're already on.
 
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
+
+### role_permission
+Which role can do what — configurable, not hardcoded. One row per (role, permission) pair.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| role | varchar | technician, supervisor, manager |
+| permission | varchar | see below |
+| allowed | bool | |
+
+Unique on (role, permission).
+
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
+
+**Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
+
+**Seeded to change nothing on its own.** The migration that creates this table reproduces exactly what used to be hardcoded — supervisor and manager allowed, technician not — for every permission. Nothing about who can do what actually changes until a manager edits the matrix.
 
 ### technician_skill
 The capability matrix. Answers "can he do this job", separately from "will he do it well". Holds only the *current* level — `technician_skill_assessment`, below, keeps the full history behind it.
@@ -508,10 +531,12 @@ Each is a real need eventually. None belongs in the first version.
 
 **Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, a technician's board, review a technician's skills.
 
+**Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
+
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Twelve screens plus one public page. That is the whole application.
+Thirteen screens plus one public page. That is the whole application.

@@ -8,7 +8,8 @@ from django.urls import reverse
 from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
-from people.permissions import require_supervisor
+from people.models import RolePermission
+from people.permissions import require_permission
 from tasks.models import Task, TaskAssignment, TaskEvent
 
 from .forms import CustomerFeedbackForm, RejectReportForm
@@ -63,7 +64,7 @@ def _send_feedback_email(request, feedback):
 
 @login_required
 def report_list(request):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.REVIEW_REPORTS)
 
     status = request.GET.get('status', 'pending')
     reports = WorkReport.objects.select_related('task__site__customer')
@@ -87,7 +88,7 @@ def report_list(request):
 
 @login_required
 def report_review(request, pk):
-    require_supervisor(request)
+    require_permission(request, RolePermission.Permission.REVIEW_REPORTS)
 
     report = get_object_or_404(
         WorkReport.objects.select_related(
