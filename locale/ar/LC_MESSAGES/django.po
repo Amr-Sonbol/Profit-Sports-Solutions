@@ -384,6 +384,12 @@ msgstr "مستند"
 msgid "Edit"
 msgstr "تعديل"
 
+msgid "Edit photo"
+msgstr "تعديل الصورة"
+
+msgid "Edit technician profile photos"
+msgstr "تعديل صور ملفات الفنيين"
+
 msgid "Email"
 msgstr "البريد الإلكتروني"
 
@@ -792,8 +798,14 @@ msgstr "صورة"
 msgid "Photo added."
 msgstr "تمت إضافة الصورة."
 
+msgid "Photo is too large — the limit is 5 MB."
+msgstr "الصورة كبيرة جدًا — الحد الأقصى 5 ميجابايت."
+
 msgid "Photo or video"
 msgstr "صورة أو فيديو"
+
+msgid "Photo updated."
+msgstr "تم تحديث الصورة."
 
 msgid "Photos"
 msgstr "الصور"
@@ -953,6 +965,9 @@ msgstr "حفظ"
 
 msgid "Save changes"
 msgstr "حفظ التغييرات"
+
+msgid "Save photo"
+msgstr "حفظ الصورة"
 
 msgid "Scheduled"
 msgstr "مجدولة"
@@ -1479,6 +1494,9 @@ msgstr "الصلاحية"
 msgid "phone"
 msgstr "الهاتف"
 
+msgid "photo"
+msgstr "الصورة"
+
 msgid "portal URL"
 msgstr "رابط بوابة الشركة"
 
@@ -1565,6 +1583,9 @@ msgstr "حدده"
 
 msgid "set on"
 msgstr "تاريخ التحديد"
+
+msgid "shown on the roster, boards, and task detail"
+msgstr "تظهر في قائمة الفنيين ولوحاتهم وتفاصيل المهمة"
 
 msgid "signature URL"
 msgstr "رابط التوقيع"

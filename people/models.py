@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -11,6 +12,11 @@ SKILL_LEVEL_CHOICES = [(i, str(i)) for i in range(1, 5)]
 # skill or conduct area must clear to count toward the technician
 # certification (docs/database_design_v2.md, §3).
 RELIABLE_LEVEL = 3
+
+# A plain FileField, not ImageField, so a headshot upload doesn't need
+# Pillow — same reasoning as tasks.forms.TaskAttachmentUploadForm.
+ALLOWED_PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
+MAX_PHOTO_UPLOAD_BYTES = 5 * 1024 * 1024
 
 
 class Technician(models.Model):
@@ -67,6 +73,11 @@ class Technician(models.Model):
     unavailable_reason = models.CharField(
         _('unavailable reason'), max_length=20, choices=UnavailableReason.choices, blank=True,
     )
+    photo = models.FileField(
+        _('photo'), upload_to='technician_photos/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
+        help_text=_('shown on the roster, boards, and task detail'),
+    )
 
     class Meta:
         verbose_name = _('technician')
@@ -96,6 +107,7 @@ class RolePermission(models.Model):
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
         REVIEW_REPORTS = 'review_reports', _('View and review work reports')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
+        MANAGE_TECHNICIANS = 'manage_technicians', _('Edit technician profile photos')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)

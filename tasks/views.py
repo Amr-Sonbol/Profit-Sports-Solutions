@@ -30,6 +30,7 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm,
     SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
+    TechnicianPhotoForm,
 )
 from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
@@ -1198,6 +1199,26 @@ def technician_skills(request, pk):
         'solve_rate': _solve_rate(technician),
     }
     return render(request, 'tasks/technician_skills.html', context)
+
+
+@login_required
+def technician_edit(request, pk):
+    """Just the photo, for now — a supervisor/manager sets it from the
+    roster, same country scoping as every other per-technician screen.
+    """
+    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+
+    if request.method == 'POST':
+        form = TechnicianPhotoForm(request.POST, request.FILES, instance=technician)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _('Photo updated.'))
+            return redirect('tasks:technician_list')
+    else:
+        form = TechnicianPhotoForm(instance=technician)
+
+    return render(request, 'tasks/technician_edit.html', {'technician': technician, 'form': form})
 
 
 @login_required

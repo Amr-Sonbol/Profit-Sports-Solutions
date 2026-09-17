@@ -25,7 +25,10 @@
             <tbody>
                 {% for row in rows %}
                 <tr>
-                    <td>{{ row.technician.full_name }}</td>
+                    <td>
+                        {% if row.technician.photo %}<img src="{{ row.technician.photo.url }}" alt="" class="avatar">{% endif %}
+                        {{ row.technician.full_name }}
+                    </td>
                     <td>{{ row.technician.get_role_display }}</td>
                     <td>
                         {% if row.certification.is_certified %}
@@ -62,6 +65,9 @@
                     <td>
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
                         <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
+                        {% if 'manage_technicians' in role_permissions %}
+                        <a href="{% url 'tasks:technician_edit' row.technician.pk %}">{% translate "Edit photo" %}</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

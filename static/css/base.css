@@ -653,6 +653,20 @@ tbody tr:hover {
     flex-shrink: 0;
 }
 
+.avatar {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    object-fit: cover;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.avatar--lg {
+    width: 6rem;
+    height: 6rem;
+}
+
 .table-wrap input,
 .table-wrap select {
     width: 100%;

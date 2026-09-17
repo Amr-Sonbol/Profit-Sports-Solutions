@@ -1852,6 +1852,58 @@ class TechnicianSkillsTests(TaskTestCase):
         self.assertEqual(rating.source, TechnicianConduct.Source.SUPERVISOR)
 
 
+class TechnicianEditTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = f'/tasks/technicians/{self.technician.pk}/edit/'
+
+    def _photo(self, name='photo.jpg', content=b'not a real image', content_type='image/jpeg'):
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_other_country_technician_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        other_technician = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{other_technician.pk}/edit/')
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_supervisor_uploads_a_photo(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'photo': self._photo()})
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.photo.name.endswith('.jpg'))
+
+    def test_rejects_a_disallowed_extension(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'photo': self._photo(name='photo.svg', content_type='image/svg+xml'),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors.get('photo'))
+
+    def test_rejects_a_photo_over_the_size_limit(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        oversized = self._photo(content=b'x' * (5 * 1024 * 1024 + 1))
+        response = self.client.post(self.url, {'photo': oversized})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors.get('photo'))
+
+
 class RolePermissionsTests(TaskTestCase):
     def setUp(self):
         super().setUp()

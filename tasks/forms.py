@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
-from people.models import SKILL_LEVEL_CHOICES, Technician
+from people.models import MAX_PHOTO_UPLOAD_BYTES, SKILL_LEVEL_CHOICES, Technician
 from reference.models import Brand, Country, Skill, TaskType
 
 from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment
@@ -284,6 +284,19 @@ class TaskAttachmentUploadForm(forms.Form):
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
             raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
         return file
+
+
+class TechnicianPhotoForm(forms.ModelForm):
+    class Meta:
+        model = Technician
+        fields = ['photo']
+        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def clean_photo(self):
+        photo = self.cleaned_data['photo']
+        if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
+            raise forms.ValidationError(_('Photo is too large — the limit is 5 MB.'))
+        return photo
 
 
 class BlockTaskForm(forms.Form):

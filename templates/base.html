@@ -35,7 +35,10 @@
                 {% if user.technician.role == 'manager' %}
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
-                <span class="site-header__user">{{ user.technician.full_name|default:user.get_username }}</span>
+                <span class="site-header__user">
+                    {% if user.technician.photo %}<img src="{{ user.technician.photo.url }}" alt="" class="avatar">{% endif %}
+                    {{ user.technician.full_name|default:user.get_username }}
+                </span>
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="link-button">{% translate "Log out" %}</button>

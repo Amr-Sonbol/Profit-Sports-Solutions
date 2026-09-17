@@ -185,6 +185,7 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | is_active | bool | |
 | is_available | bool | can currently be assigned work — separate from `is_active` |
 | unavailable_reason | varchar | sick, leave, holiday, other — set when `is_available` is false |
+| photo | file | nullable — a headshot, shown on the roster, boards, and task detail |
 
 **`is_active` is employment; `is_available` is today.** A technician stays `is_active` for as long as they work here — deactivating that is an office action for someone who's left. `is_available` is the day-to-day toggle a supervisor flips from the assign screen when someone calls in sick or is on leave, so they stop showing up as a candidate for new lead/helper assignments without touching their employment record. It says nothing about tasks they're already on.
 
@@ -202,7 +203,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`, `manage_tickets`. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`, `manage_tickets`, `manage_technicians` (edit a technician's profile photo). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
 
 **Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
 
@@ -580,7 +581,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, review reports, technician roster, a technician's board, review a technician's skills, tickets list, review a ticket.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, review reports, technician roster, a technician's board, review a technician's skills, edit a technician's photo, tickets list, review a ticket.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
 
@@ -590,4 +591,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Seventeen screens plus two public pages. That is the whole application.
+Eighteen screens plus two public pages. That is the whole application.

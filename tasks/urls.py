@@ -22,6 +22,7 @@ urlpatterns = [
     path('technicians/', views.technician_list, name='technician_list'),
     path('technicians/<int:pk>/board/', views.technician_board, name='technician_board'),
     path('technicians/<int:pk>/skills/', views.technician_skills, name='technician_skills'),
+    path('technicians/<int:pk>/edit/', views.technician_edit, name='technician_edit'),
     path('roles/', views.role_permissions, name='role_permissions'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),

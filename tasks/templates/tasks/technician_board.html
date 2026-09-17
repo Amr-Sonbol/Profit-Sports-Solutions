@@ -7,7 +7,10 @@
 <div class="page__header">
     <div>
         <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
-        <h1>{{ technician.full_name }}</h1>
+        <h1>
+            {% if technician.photo %}<img src="{{ technician.photo.url }}" alt="" class="avatar">{% endif %}
+            {{ technician.full_name }}
+        </h1>
     </div>
 </div>
 
