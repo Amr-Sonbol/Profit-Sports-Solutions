@@ -903,20 +903,43 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.get(f'/tasks/new/?ticket={self.ticket.pk}')
         self.assertEqual(response.status_code, 404)
 
-    def test_supervisor_assigns_a_technician(self):
+    def test_supervisor_assigns_a_colleague(self):
+        other_user = User.objects.create_user('supervisor2', password='pass12345')
+        other_supervisor = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Layla Lead',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'assign', 'assigned_to': self.technician.pk})
+        response = self.client.post(self.url, {'action': 'assign', 'assigned_to': other_supervisor.pk})
         self.assertEqual(response.status_code, 302)
 
         self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.assigned_to, self.technician)
+        self.assertEqual(self.ticket.assigned_to, other_supervisor)
         self.assertIsNotNone(self.ticket.assigned_at)
 
+    def test_technicians_are_not_offered_as_assignees(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'assign', 'assigned_to': self.technician.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['assign_form'].errors.get('assigned_to'))
+
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.assigned_to)
+
     def test_assignee_can_view_but_not_dismiss_or_convert(self):
-        self.ticket.assigned_to = self.technician
+        other_user = User.objects.create_user('supervisor2', password='pass12345')
+        other_supervisor = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Layla Lead',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        RolePermission.objects.filter(
+            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.MANAGE_TICKETS,
+        ).update(allowed=False)
+        self.ticket.assigned_to = other_supervisor
         self.ticket.save()
 
-        self.client.login(username='tech1', password='pass12345')
+        self.client.login(username='supervisor2', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
 
@@ -946,30 +969,6 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='egypt_sup', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
-
-
-class MyTicketsTests(TaskTestCase):
-    def test_anonymous_is_redirected_to_login(self):
-        response = self.client.get('/tasks/my-tickets/')
-        self.assertEqual(response.status_code, 302)
-
-    def test_shows_only_tickets_assigned_to_me(self):
-        mine = CustomerTicket.objects.create(
-            country=self.country, company_name='Fitness First', site_description='Marina Branch',
-            contact_name='Ali', contact_phone='0501234567', description='Belt squeaking.',
-            submitted_at=timezone.now(), assigned_to=self.technician,
-        )
-        CustomerTicket.objects.create(
-            country=self.country, company_name='Gold Gym', site_description='JBR Branch',
-            contact_name='Sam', contact_phone='0509999999', description='AC not working.',
-            submitted_at=timezone.now(),
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-tickets/')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context['tickets']), [mine])
 
 
 class TaskAssignTests(TaskTestCase):
@@ -1764,6 +1763,27 @@ class MyProfileTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['profile_form'].errors.get('photo'))
+
+    def test_technician_updates_own_phone_and_email(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'save_profile', 'language': Technician.Language.EN,
+            'phone': '0501234567', 'email': 'tarek@example.com',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.technician.phone, '0501234567')
+        self.assertEqual(self.tech_user.email, 'tarek@example.com')
+
+    def test_get_prefills_email_from_the_linked_user(self):
+        self.tech_user.email = 'tarek@example.com'
+        self.tech_user.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.context['profile_form'].fields['email'].initial, 'tarek@example.com')
 
     def test_technician_changes_own_password(self):
         self.client.login(username='tech1', password='pass12345')

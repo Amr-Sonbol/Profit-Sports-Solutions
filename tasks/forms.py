@@ -306,15 +306,33 @@ class TechnicianPhotoForm(PhotoSizeMixin, forms.ModelForm):
 
 
 class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
-    """A technician editing their own photo and language — the only two
-    fields of their own record that were never anyone else's decision to
-    make. Role, country, and employment stay office-side changes.
+    """A technician editing their own photo, language, phone, and email —
+    their own contact details, never anyone else's decision to make. Role,
+    country, and employment stay office-side changes.
+
+    Email lives on the linked auth user, not Technician, so it's a plain
+    field here rather than a Meta field, kept in sync with request.user
+    manually in save().
     """
+
+    email = forms.EmailField(required=False, label=_('email'))
 
     class Meta:
         model = Technician
-        fields = ['photo', 'language']
+        fields = ['photo', 'language', 'phone']
         widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields['email'].initial = self.instance.user.email
+
+    def save(self, commit=True):
+        technician = super().save(commit=commit)
+        if commit:
+            technician.user.email = self.cleaned_data['email']
+            technician.user.save(update_fields=['email'])
+        return technician
 
 
 class BlockTaskForm(forms.Form):
@@ -408,9 +426,10 @@ class DismissTicketForm(forms.Form):
 
 
 class AssignTicketForm(forms.Form):
-    """Who's handling this ticket — any active technician or supervisor in
+    """Who's handling this ticket — any active supervisor or manager in
     its own country, not necessarily the person who'll ultimately convert
-    or dismiss it.
+    or dismiss it. Never a technician: tickets are supervisor-side triage,
+    not something that shows up on a technician's own work screens.
     """
     assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Assign to'))
 
@@ -418,4 +437,4 @@ class AssignTicketForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields['assigned_to'].queryset = Technician.objects.filter(
             is_active=True, country=country,
-        ).order_by('full_name')
+        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')

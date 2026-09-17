@@ -805,16 +805,6 @@ def ticket_review(request, pk):
     return render(request, 'tasks/ticket_review.html', context)
 
 
-@login_required
-def my_tickets(request):
-    """Every ticket currently assigned to me — any technician role, same
-    as the other self-service screens.
-    """
-    technician = require_technician(request)
-    tickets = CustomerTicket.objects.filter(assigned_to=technician).order_by('-submitted_at')
-    return render(request, 'tasks/my_tickets.html', {'tickets': tickets})
-
-
 def _set_lead(task, active_lead, technician, end_reason, actor):
     with transaction.atomic():
         if active_lead:

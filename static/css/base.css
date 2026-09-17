@@ -46,12 +46,16 @@ a {
     color: var(--color-accent);
 }
 
+/* Everything that used to live across the header (nav links, user info)
+   now lives in the off-canvas sidebar instead, so the header itself is
+   just the menu button, logo, and country badge, left-aligned in a row —
+   nothing left to push to the far end. */
 .site-header {
     position: relative;
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.75rem;
     padding-block: 0.75rem;
     padding-inline: 1rem;
     background: var(--color-surface);
@@ -89,29 +93,68 @@ a {
     border-radius: 1px;
 }
 
+/* A slide-in sidebar, not a dropdown — fixed to the block's full height,
+   off-screen (inline-start: -100%) until the checkbox is checked, then
+   slid into view. inset-inline-start (not left/right or transform) so it
+   slides in from the correct edge automatically in RTL. */
 .site-header__nav {
-    display: none;
+    display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: 0.25rem;
-    position: absolute;
-    inset-inline: 0;
-    top: 100%;
-    padding: 0.75rem 1rem;
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: -18rem;
+    width: 18rem;
+    max-width: 85vw;
+    padding: 1rem;
     background: var(--color-surface);
-    border-block-end: 1px solid var(--color-border);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+    border-inline-end: 1px solid var(--color-border);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
     color: var(--color-muted);
-    z-index: 20;
+    overflow-y: auto;
+    z-index: 30;
+    transition: inset-inline-start 0.2s ease;
 }
 
 .nav-toggle:checked ~ .site-header__nav {
-    display: flex;
+    inset-inline-start: 0;
+}
+
+/* Dims the rest of the page behind the open sidebar, and doubles as a
+   click-outside-to-close target since it's a <label> for the same
+   checkbox. */
+.nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 15, 20, 0.4);
+    z-index: 25;
+    cursor: pointer;
+}
+
+.nav-toggle:checked ~ .nav-overlay {
+    display: block;
 }
 
 .site-header__nav a,
 .site-header__nav .link-button {
     padding-block: 0.5rem;
+}
+
+/* The profile row pinned to the top of the dropdown — avatar, name, and
+   a link to My profile, ahead of every other page link. */
+.site-header__profile-link {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.6rem;
+    margin-block-end: 0.4rem;
+    border-block-end: 1px solid var(--color-border);
+    color: var(--color-text);
+    text-decoration: none;
+    font-weight: 600;
 }
 
 .country-switcher {
@@ -766,6 +809,18 @@ tbody tr:hover {
     margin: 0.3rem 0 0;
     color: var(--color-muted);
     font-size: 0.8rem;
+}
+
+/* Django's password-validator help text arrives as a real <ul> (not
+   plain text) — style it as a compact requirements list instead of the
+   browser's default full-size bulleted list. */
+.field__help ul {
+    margin: 0.2rem 0 0;
+    padding-inline-start: 1.1rem;
+}
+
+.field__help li {
+    margin-block: 0.15rem;
 }
 
 .field__error {

@@ -4,20 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Profit Sports Solutions{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v={{ css_version }}">
 </head>
 <body>
     <header class="site-header">
-        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
-        {% if active_country %}
-        <span class="badge badge--muted">{{ active_country.name }}</span>
-        {% endif %}
         {% if user.is_authenticated %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
             <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}">
                 <span></span><span></span><span></span>
             </label>
+        {% endif %}
+        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
+        {% if active_country %}
+        <span class="badge badge--muted">{{ active_country.name }}</span>
+        {% endif %}
+        {% if user.is_authenticated %}
+            <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
+                {% if user.technician %}
+                <a href="{% url 'tasks:my_profile' %}" class="site-header__profile-link">
+                    {% include "_avatar.html" with technician=user.technician %}
+                    {{ user.technician.full_name }}
+                </a>
+                {% endif %}
                 {% if switchable_countries %}
                 <form method="post" action="{% url 'tasks:set_active_country' %}" class="country-switcher">
                     {% csrf_token %}
@@ -35,8 +44,6 @@
                     <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                     <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
-                    <a href="{% url 'tasks:my_tickets' %}">{% translate "My tickets" %}</a>
-                    <a href="{% url 'tasks:my_profile' %}">{% translate "My profile" %}</a>
                 {% endif %}
                 {% if 'view_dashboard' in role_permissions %}
                     <a href="{% url 'tasks:dashboard' %}">{% translate "Dashboard" %}</a>
@@ -59,10 +66,9 @@
                 {% if user.technician.role == 'manager' %}
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
-                <span class="site-header__user">
-                    {% if user.technician %}{% include "_avatar.html" with technician=user.technician %}{% endif %}
-                    {{ user.technician.full_name|default:user.get_username }}
-                </span>
+                {% if not user.technician %}
+                <span class="site-header__user">{{ user.get_username }}</span>
+                {% endif %}
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="link-button">{% translate "Log out" %}</button>

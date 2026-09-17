@@ -888,6 +888,9 @@ msgstr "الأسبوع الماضي"
 msgid "Priority"
 msgstr "الأولوية"
 
+msgid "Professional skills"
+msgstr "المهارات المهنية"
+
 msgid "Profile updated."
 msgstr "تم تحديث الملف الشخصي."
 
@@ -1052,6 +1055,9 @@ msgstr "البحث بالاسم"
 
 msgid "Search by task number, site, or customer"
 msgstr "ابحث برقم المهمة أو الموقع أو العميل"
+
+msgid "Security"
+msgstr "الأمان"
 
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
@@ -1469,6 +1475,9 @@ msgstr "مثال: زحام مروري شديد على شارع الشيخ زاي
 
 msgid "e.g. gym closed, no key, customer absent"
 msgstr "مثال: الصالة الرياضية مغلقة، لا يوجد مفتاح، العميل غائب"
+
+msgid "email"
+msgstr "البريد الإلكتروني"
 
 msgid "employment type"
 msgstr "نوع التوظيف"

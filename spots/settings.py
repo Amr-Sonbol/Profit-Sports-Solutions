@@ -71,6 +71,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'people.context_processors.role_permissions',
                 'people.context_processors.active_country',
+                'spots.context_processors.static_version',
             ],
         },
     },
@@ -174,7 +175,16 @@ LOGOUT_REDIRECT_URL = 'login'
 # it to be script-readable — keep it HttpOnly to limit what a future XSS
 # could do with it.
 CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_HTTPONLY = True
 
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # Off by default even in production — only turn these on once the app
+    # is actually served over HTTPS (directly or via a proxy that sets
+    # X-Forwarded-Proto), since enabling SECURE_SSL_REDIRECT behind a proxy
+    # that doesn't forward that header causes an infinite redirect loop.
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
+    SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)

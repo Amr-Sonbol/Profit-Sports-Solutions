@@ -143,7 +143,7 @@ class CustomerTicket(models.Model):
     assigned_to = models.ForeignKey(
         Technician, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets_assigned', verbose_name=_('assigned to'),
-        help_text=_('who is handling this — a technician or a supervisor, not necessarily who converts it'),
+        help_text=_('who is handling this — a supervisor or manager, not necessarily who converts it'),
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
     task = models.OneToOneField(
