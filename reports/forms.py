@@ -22,6 +22,7 @@ class WorkReportForm(forms.ModelForm):
     )
     signature = forms.FileField(
         required=False, label=_('Customer signature'),
+        widget=forms.FileInput(attrs={'accept': 'image/*'}),
         validators=[FileExtensionValidator(allowed_extensions=SIGNATURE_EXTENSIONS)],
     )
 

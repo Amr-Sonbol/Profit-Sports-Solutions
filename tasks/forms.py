@@ -221,6 +221,10 @@ class TaskAttachmentUploadForm(forms.Form):
 
     file = forms.FileField(
         label=_('Photo or video'),
+        # Hints the phone's picker toward the camera/gallery and video apps
+        # instead of a generic file browser — doesn't force the camera, so
+        # attaching an existing photo (e.g. one a customer sent) still works.
+        widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
     )
     purpose = forms.ChoiceField(choices=TaskAttachment.Purpose.choices, label=_('What is this'))
