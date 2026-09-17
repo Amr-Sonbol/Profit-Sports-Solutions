@@ -202,7 +202,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`, `manage_tickets`. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
 
 **Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
 
@@ -279,7 +279,7 @@ This status, plus each technician's report approval rate (approved ÷ submitted 
 | min_level | int | nullable |
 | description | text | what the customer reported |
 | priority | varchar | low, normal, high, emergency |
-| source | varchar | phone, whatsapp, email, internal |
+| source | varchar | phone, whatsapp, email, internal, portal |
 | is_warranty | bool | nullable until known |
 | billing_type | varchar | warranty, contract, chargeable, goodwill |
 | reported_at | timestamptz | |
@@ -297,6 +297,30 @@ Plus `blocked` and `cancelled` as endings.
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
+
+### customer_ticket
+A complaint or request submitted directly by a customer, no login — public, self-identified, not yet linked to a real site. The piece of "customer portal" that turned out to be needed now; the rest of it stays deferred (§8).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| country_id | FK → country | |
+| company_name | varchar | as the customer typed it — not matched to `customer` yet |
+| site_description | varchar | branch name or address, as the customer describes it |
+| contact_name | varchar | |
+| contact_phone | varchar | |
+| contact_email | varchar | nullable |
+| description | text | what the customer reported |
+| submitted_at | timestamptz | |
+| status | varchar | new, converted, dismissed |
+| task_id | FK → task | nullable — set once converted |
+| reviewed_by_id | FK → user | nullable |
+| reviewed_at | timestamptz | nullable |
+| dismissal_reason | varchar | nullable |
+
+**Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers) or dismisses it with a reason.
+
+**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later.
 
 ### task_asset
 Which machines the task covers. Populated by the technician during the work, not at creation.
@@ -510,7 +534,6 @@ Each is a real need eventually. None belongs in the first version.
 - Invoicing — accounting handles it; `billing_type` gives them a clean export
 - Preventive maintenance schedules
 - Technician leave calendar
-- Customer portal — `task.source` and the `new` status are already in place for it
 - Route optimisation
 - Offline mode
 
@@ -529,14 +552,14 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, a technician's board, review a technician's skills.
+**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, a technician's board, review a technician's skills, tickets list, review a ticket.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
 
-**Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app.
+**Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and the ticket form — meant to be shared/discoverable, unlike the feedback link.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Thirteen screens plus one public page. That is the whole application.
+Fifteen screens plus two public pages. That is the whole application.

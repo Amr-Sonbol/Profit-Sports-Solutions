@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
+from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
 
 class TaskAssignmentInline(admin.TabularInline):
@@ -55,3 +55,10 @@ class TaskAssetAdmin(admin.ModelAdmin):
     list_display = ['task', 'asset', 'outcome']
     search_fields = ['task__task_number']
     list_filter = ['outcome']
+
+
+@admin.register(CustomerTicket)
+class CustomerTicketAdmin(admin.ModelAdmin):
+    list_display = ['company_name', 'site_description', 'country', 'status', 'submitted_at']
+    search_fields = ['company_name', 'site_description', 'contact_name', 'contact_phone']
+    list_filter = ['country', 'status']

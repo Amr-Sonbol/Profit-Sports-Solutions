@@ -7,6 +7,10 @@
     --color-muted: #667085;
     --color-accent: #2f6feb;
     --color-danger: #c0392b;
+    /* Same amber already used for high-priority/in-progress badges — named
+       here so the dashboard's stat tiles can reuse it as a real "needs
+       attention" status color instead of a second one-off hex value. */
+    --color-warning: #b5760a;
 }
 
 * {
@@ -23,6 +27,19 @@ body {
        and the single most common mobile form complaint. */
     font-size: 16px;
     line-height: 1.5;
+}
+
+/* One visible focus ring for every interactive element, instead of
+   relying on each browser's own default (inconsistent, and Chrome's is
+   easy to miss against this palette). Mouse/touch users never see it —
+   :focus-visible only fires for keyboard and similar non-pointer focus. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
 }
 
 a {
@@ -96,6 +113,11 @@ a {
 .flash--error {
     background: #fdecea;
     color: var(--color-danger);
+}
+
+.flash--info {
+    background: #eaf0fb;
+    color: var(--color-accent);
 }
 
 .filters {
@@ -185,8 +207,12 @@ tbody tr:last-child td {
     border-block-end: none;
 }
 
-tbody tr:hover {
+tbody tr:nth-child(even) {
     background: var(--color-bg);
+}
+
+tbody tr:hover {
+    background: #eaeef3;
 }
 
 .task-number {
@@ -316,6 +342,43 @@ tbody tr:hover {
 .section__header h2 {
     margin: 0;
 }
+
+/* A KPI row — a handful of headline numbers, not a chart. Color is
+   reserved for the ones that mean something needs attention (warning,
+   critical); a plain count stays in ordinary text color so the eye goes
+   to the numbers that actually need it. */
+.stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+}
+
+.stat-tile {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.stat-tile__value {
+    /* Proportional figures, not tabular-nums — this is a standalone
+       display number, not a column of numbers that must align. */
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--color-text);
+}
+
+.stat-tile__label {
+    margin-block-start: 0.3rem;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
+.stat-tile--warning .stat-tile__value { color: var(--color-warning); }
+.stat-tile--critical .stat-tile__value { color: var(--color-danger); }
 
 .detail-grid {
     display: grid;

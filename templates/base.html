@@ -28,6 +28,9 @@
                 {% if 'view_technicians' in role_permissions %}
                     <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
                 {% endif %}
+                {% if 'manage_tickets' in role_permissions %}
+                    <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>
+                {% endif %}
                 {% if user.technician.role == 'manager' %}
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}

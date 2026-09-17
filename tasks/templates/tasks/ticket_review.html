@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Ticket" %} — {{ ticket.company_name }}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:ticket_list' %}" class="back-link">{% translate "Back to tickets" %}</a>
+        <h1>{{ ticket.company_name }}</h1>
+    </div>
+    <div class="badge-row">
+        {% if ticket.status == 'new' %}
+        <span class="badge badge--status-new">{% translate "New" %}</span>
+        {% elif ticket.status == 'converted' %}
+        <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+        {% else %}
+        <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="section">
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Submitted" %}</dt>
+            <dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Site / location" %}</dt>
+            <dd>{{ ticket.site_description }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Contact name" %}</dt>
+            <dd>{{ ticket.contact_name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Contact phone" %}</dt>
+            <dd>{{ ticket.contact_phone }}</dd>
+        </div>
+        {% if ticket.contact_email %}
+        <div>
+            <dt>{% translate "Contact email" %}</dt>
+            <dd>{{ ticket.contact_email }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+    <div class="description">
+        <dt>{% translate "Description" %}</dt>
+        <p>{{ ticket.description }}</p>
+    </div>
+</div>
+
+{% if ticket.status == 'new' %}
+<div class="section">
+    <h2>{% translate "Decision" %}</h2>
+    <div class="form-grid">
+        <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
+    </div>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="dismiss">
+        <div class="field {% if dismiss_form.dismissal_reason.errors %}field--error{% endif %}">
+            <label for="{{ dismiss_form.dismissal_reason.id_for_label }}">{{ dismiss_form.dismissal_reason.label }}</label>
+            {{ dismiss_form.dismissal_reason }}
+            <p class="field__help">{{ dismiss_form.dismissal_reason.help_text }}</p>
+            {% for error in dismiss_form.dismissal_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Dismiss" %}</button>
+        </div>
+    </form>
+</div>
+{% elif ticket.status == 'converted' %}
+<div class="section">
+    <p class="empty-state">
+        <a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a>
+    </p>
+</div>
+{% else %}
+<div class="section">
+    <h2>{% translate "Dismissed" %}</h2>
+    <p>{{ ticket.dismissal_reason }}</p>
+</div>
+{% endif %}
+{% endblock %}

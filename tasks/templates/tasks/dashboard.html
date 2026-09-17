@@ -8,6 +8,29 @@
     <h1>{% translate "Dashboard" %}</h1>
 </div>
 
+<div class="stat-row">
+    <div class="stat-tile">
+        <div class="stat-tile__value">{{ stats.available_count }}</div>
+        <div class="stat-tile__label">{% translate "Available now" %}</div>
+    </div>
+    <div class="stat-tile {% if stats.unavailable_count %}stat-tile--warning{% endif %}">
+        <div class="stat-tile__value">{{ stats.unavailable_count }}</div>
+        <div class="stat-tile__label">{% translate "Unavailable" %}</div>
+    </div>
+    <div class="stat-tile">
+        <div class="stat-tile__value">{{ stats.open_task_count }}</div>
+        <div class="stat-tile__label">{% translate "Open tasks" %}</div>
+    </div>
+    <div class="stat-tile {% if stats.unassigned_count %}stat-tile--warning{% endif %}">
+        <div class="stat-tile__value">{{ stats.unassigned_count }}</div>
+        <div class="stat-tile__label">{% translate "Unassigned" %}</div>
+    </div>
+    <div class="stat-tile {% if stats.emergency_count %}stat-tile--critical{% endif %}">
+        <div class="stat-tile__value">{{ stats.emergency_count }}</div>
+        <div class="stat-tile__label">{% translate "Emergencies" %}</div>
+    </div>
+</div>
+
 <div class="section">
     <h2>{% translate "Technicians" %}</h2>
     {% if technicians %}

@@ -24,11 +24,11 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, BlockTaskForm, ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm,
-    RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm,
-    TaskCreateForm,
+    AddHelperForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm, ExistingAssetOutcomeForm,
+    MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SetLeadForm,
+    TaskAttachmentUploadForm, TaskCreateForm,
 )
-from .models import Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
+from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
@@ -324,9 +324,9 @@ def dashboard(request):
     """
     supervisor = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
 
-    technicians = Technician.objects.filter(
+    technicians = list(Technician.objects.filter(
         is_active=True, country=supervisor.country, role=Technician.Role.TECHNICIAN,
-    ).order_by('full_name')
+    ).order_by('full_name'))
     active_task_counts = dict(
         TaskAssignment.objects.filter(
             technician__in=technicians, is_active=True, task__status__in=OPEN_STATUSES,
@@ -335,16 +335,29 @@ def dashboard(request):
     for technician in technicians:
         technician.active_task_count = active_task_counts.get(technician.id, 0)
 
-    tasks = _with_lead_prefetch(
+    tasks = list(_with_lead_prefetch(
         Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=supervisor.country)
         .select_related('site__customer', 'task_type')
         .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
-    )
+    ))
     _attach_lead_technician(tasks)
+
+    # The numbers a supervisor actually opens this screen to see, before
+    # the two full lists below: who's deployable right now, and which
+    # open tasks need attention first.
+    available_count = sum(1 for t in technicians if t.is_available)
+    stats = {
+        'available_count': available_count,
+        'unavailable_count': len(technicians) - available_count,
+        'open_task_count': len(tasks),
+        'unassigned_count': sum(1 for t in tasks if t.lead_technician is None),
+        'emergency_count': sum(1 for t in tasks if t.priority == Task.Priority.EMERGENCY),
+    }
 
     context = {
         'technicians': technicians,
         'tasks': tasks,
+        'stats': stats,
     }
     return render(request, 'tasks/dashboard.html', context)
 
@@ -452,8 +465,13 @@ def task_detail(request, pk):
 def task_create(request):
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
 
+    ticket = None
+    ticket_id = request.GET.get('ticket')
+    if ticket_id:
+        ticket = get_object_or_404(CustomerTicket, pk=ticket_id, status=CustomerTicket.Status.NEW)
+
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST)
+        form = TaskCreateForm(request.POST, ticket=ticket)
         if form.is_valid():
             cleaned = form.cleaned_data
             with transaction.atomic():
@@ -498,12 +516,83 @@ def task_create(request):
                     task=task, event_type=TaskEvent.EventType.CREATED,
                     occurred_at=timezone.now(), actor=request.user,
                 )
+                if ticket is not None:
+                    ticket.task = task
+                    ticket.status = CustomerTicket.Status.CONVERTED
+                    ticket.reviewed_by = request.user
+                    ticket.reviewed_at = timezone.now()
+                    ticket.save(update_fields=['task', 'status', 'reviewed_by', 'reviewed_at'])
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm()
+        form = TaskCreateForm(ticket=ticket)
 
-    return render(request, 'tasks/task_create.html', {'form': form})
+    return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket})
+
+
+def ticket_form(request):
+    """Public — no login. A customer describing a complaint or request in
+    their own words, self-identified rather than matched to a real site.
+    """
+    if request.method == 'POST':
+        form = CustomerTicketForm(request.POST)
+        if form.is_valid():
+            ticket = form.save(commit=False)
+            ticket.submitted_at = timezone.now()
+            ticket.save()
+            return redirect('tasks:ticket_submitted')
+    else:
+        form = CustomerTicketForm()
+
+    return render(request, 'tasks/ticket_form.html', {'form': form})
+
+
+def ticket_submitted(request):
+    """Public — the thank-you page, split from ticket_form so refreshing
+    it doesn't risk resubmitting the form.
+    """
+    return render(request, 'tasks/ticket_submitted.html')
+
+
+@login_required
+def ticket_list(request):
+    """Every customer-submitted ticket still needing a decision, plus
+    what's already been resolved — country-scoped like everything else a
+    supervisor reviews.
+    """
+    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
+
+    status = request.GET.get('status', 'new')
+    tickets = CustomerTicket.objects.filter(country=supervisor.country)
+    if status != 'all':
+        tickets = tickets.filter(status=status)
+    tickets = tickets.order_by('-submitted_at')
+
+    context = {'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices}
+    return render(request, 'tasks/ticket_list.html', context)
+
+
+@login_required
+def ticket_review(request, pk):
+    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
+    ticket = get_object_or_404(CustomerTicket, pk=pk, country=supervisor.country)
+
+    dismiss_form = DismissTicketForm()
+
+    if request.method == 'POST' and ticket.status == CustomerTicket.Status.NEW:
+        if request.POST.get('action') == 'dismiss':
+            dismiss_form = DismissTicketForm(request.POST)
+            if dismiss_form.is_valid():
+                ticket.status = CustomerTicket.Status.DISMISSED
+                ticket.dismissal_reason = dismiss_form.cleaned_data['dismissal_reason']
+                ticket.reviewed_by = request.user
+                ticket.reviewed_at = timezone.now()
+                ticket.save(update_fields=['status', 'dismissal_reason', 'reviewed_by', 'reviewed_at'])
+                messages.success(request, _('Ticket dismissed.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+    context = {'ticket': ticket, 'dismiss_form': dismiss_form}
+    return render(request, 'tasks/ticket_review.html', context)
 
 
 def _set_lead(task, active_lead, technician, end_reason, actor):

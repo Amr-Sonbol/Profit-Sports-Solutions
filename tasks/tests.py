@@ -15,7 +15,7 @@ from people.models import (
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
 
-from .models import Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
+from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
 
 User = get_user_model()
 
@@ -426,6 +426,163 @@ class TaskCreateTests(TaskTestCase):
 
         task = Task.objects.get()
         self.assertEqual(task.estimated_finish, task.scheduled_for + timedelta(hours=2.5))
+
+
+class TicketFormTests(TaskTestCase):
+    def _payload(self, **overrides):
+        payload = {
+            'country': self.country.pk, 'company_name': 'Fitness First', 'site_description': 'Marina Branch',
+            'contact_name': 'Ali Manager', 'contact_phone': '0501234567', 'contact_email': '',
+            'description': 'The treadmill belt is squeaking loudly.',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_anonymous_can_view_the_form(self):
+        response = self.client.get('/tasks/tickets/new/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_submitting_creates_a_new_ticket_and_redirects_to_thank_you(self):
+        response = self.client.post('/tasks/tickets/new/', self._payload())
+        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
+
+        ticket = CustomerTicket.objects.get()
+        self.assertEqual(ticket.company_name, 'Fitness First')
+        self.assertEqual(ticket.country, self.country)
+        self.assertEqual(ticket.status, CustomerTicket.Status.NEW)
+        self.assertIsNotNone(ticket.submitted_at)
+
+    def test_missing_description_is_rejected(self):
+        response = self.client.post('/tasks/tickets/new/', self._payload(description=''))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CustomerTicket.objects.count(), 0)
+
+    def test_thank_you_page_is_public(self):
+        response = self.client.get('/tasks/tickets/new/thank-you/')
+        self.assertEqual(response.status_code, 200)
+
+
+class TicketListTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_sees_new_tickets_by_default(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Fitness First')
+
+    def test_other_country_ticket_not_shown(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        CustomerTicket.objects.create(
+            country=other_country, company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Nour', contact_phone='0100000000',
+            description='Something broke.', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/', {'status': 'all'})
+        self.assertNotContains(response, 'Cairo Gym')
+
+
+class TicketReviewTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/tickets/{self.ticket.pk}/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_other_country_ticket_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_ticket = CustomerTicket.objects.create(
+            country=other_country, company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Nour', contact_phone='0100000000',
+            description='Something broke.', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/tickets/{other_ticket.pk}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_dismiss_requires_a_reason(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': ''})
+        self.assertEqual(response.status_code, 200)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
+
+    def test_dismiss_sets_status_and_reason(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': 'Duplicate report.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.DISMISSED)
+        self.assertEqual(self.ticket.dismissal_reason, 'Duplicate report.')
+        self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+
+    def test_converting_to_task_links_the_ticket(self):
+        self.client.login(username='supervisor1', password='pass12345')
+
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        response = self.client.get(create_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Fitness First')
+
+        # The ticket's site_description happens to match an existing site
+        # (the fixture's self.site) — the realistic case where the
+        # supervisor recognizes it and picks the existing record rather
+        # than creating a duplicate.
+        response = self.client.post(create_url, {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Treadmill belt squeaking.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CONVERTED)
+        self.assertIsNotNone(self.ticket.task)
+        self.assertEqual(self.ticket.task.source, Task.Source.PORTAL)
+        self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+
+    def test_cannot_reconvert_an_already_converted_ticket(self):
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PORTAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        self.ticket.status = CustomerTicket.Status.CONVERTED
+        self.ticket.task = task
+        self.ticket.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/new/?ticket={self.ticket.pk}')
+        self.assertEqual(response.status_code, 404)
 
 
 class TaskAssignTests(TaskTestCase):

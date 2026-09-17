@@ -11,6 +11,12 @@
     </div>
 </div>
 
+{% if ticket %}
+<p class="flash flash--info">
+    {% blocktranslate with company=ticket.company_name %}Creating this task from a customer ticket — {{ company }}. The site fields below are hints from what they typed; pick or create the real site to match.{% endblocktranslate %}
+</p>
+{% endif %}
+
 <div class="section">
     <form method="post" novalidate>
         {% csrf_token %}

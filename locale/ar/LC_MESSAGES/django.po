@@ -129,6 +129,9 @@ msgstr "المرفقات"
 msgid "Available"
 msgstr "متاح"
 
+msgid "Available now"
+msgstr "متاح الآن"
+
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
 
@@ -152,6 +155,9 @@ msgstr "العودة إلى المهام"
 
 msgid "Back to technicians"
 msgstr "العودة إلى الفنيين"
+
+msgid "Back to tickets"
+msgstr "العودة إلى التذاكر"
 
 msgid "Be specific — missing serial photo, vague fault description, etc. The technician sees this."
 msgstr "كن محددًا — صورة الرقم التسلسلي مفقودة، وصف العطل غامض، إلخ. الفني يرى هذا."
@@ -234,6 +240,9 @@ msgstr "الرمز"
 msgid "Comments (optional)"
 msgstr "تعليقات (اختياري)"
 
+msgid "Company"
+msgstr "الشركة"
+
 msgid "Completed"
 msgstr "مكتملة"
 
@@ -255,6 +264,12 @@ msgstr "معتمد"
 msgid "Confirmed by %(name)s"
 msgstr "اعتمده %(name)s"
 
+msgid "Contact"
+msgstr "جهة الاتصال"
+
+msgid "Contact email"
+msgstr "البريد الإلكتروني لجهة الاتصال"
+
 msgid "Contact name"
 msgstr "اسم جهة الاتصال"
 
@@ -264,6 +279,12 @@ msgstr "هاتف جهة الاتصال"
 msgid "Contract"
 msgstr "عقد"
 
+msgid "Convert to task"
+msgstr "تحويل إلى مهمة"
+
+msgid "Converted to task"
+msgstr "تم تحويلها إلى مهمة"
+
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
 
@@ -272,6 +293,9 @@ msgstr "إنشاء مهمة"
 
 msgid "Created"
 msgstr "أُنشئت"
+
+msgid "Creating this task from a customer ticket — %(company)s. The site fields below are hints from what they typed; pick or create the real site to match."
+msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. حقول الموقع أدناه هي تلميحات مما كتبوه؛ اختر الموقع الفعلي أو أنشئه ليطابقه."
 
 msgid "Currency"
 msgstr "العملة"
@@ -300,6 +324,9 @@ msgstr "طلب العميل"
 msgid "Customer signature"
 msgstr "توقيع العميل"
 
+msgid "Customer ticket"
+msgstr "تذكرة عميل"
+
 msgid "Dashboard"
 msgstr "لوحة التحكم"
 
@@ -312,11 +339,20 @@ msgstr "الوصف"
 msgid "Details"
 msgstr "التفاصيل"
 
+msgid "Dismiss"
+msgstr "رفض"
+
+msgid "Dismissed"
+msgstr "مرفوضة"
+
 msgid "Document"
 msgstr "مستند"
 
 msgid "Email"
 msgstr "البريد الإلكتروني"
+
+msgid "Emergencies"
+msgstr "الحالات الطارئة"
 
 msgid "Emergency"
 msgstr "طارئ"
@@ -609,6 +645,9 @@ msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
 msgid "No tasks scheduled."
 msgstr "لا توجد مهام مجدولة."
 
+msgid "No tickets match this filter."
+msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
+
 msgid "Normal"
 msgstr "عادية"
 
@@ -753,6 +792,9 @@ msgstr "تم الاستبدال"
 msgid "Report"
 msgstr "التقرير"
 
+msgid "Report a problem"
+msgstr "الإبلاغ عن مشكلة"
+
 msgid "Report approval rate"
 msgstr "معدل اعتماد التقارير"
 
@@ -806,6 +848,9 @@ msgstr "تم الحل"
 
 msgid "Retired"
 msgstr "خارج الخدمة"
+
+msgid "Review customer-submitted tickets"
+msgstr "مراجعة التذاكر المرسلة من العملاء"
 
 msgid "Review report"
 msgstr "مراجعة التقرير"
@@ -957,6 +1002,9 @@ msgstr "الفني"
 msgid "Technicians"
 msgstr "الفنيون"
 
+msgid "Tell us what's going on and where — our office will get in touch to arrange a visit."
+msgstr "أخبرنا بما يحدث وأين — سيتواصل معك مكتبنا لترتيب زيارة."
+
 msgid "Thank you!"
 msgstr "شكرًا لك!"
 
@@ -969,6 +1017,15 @@ msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة �
 msgid "This week"
 msgstr "هذا الأسبوع"
 
+msgid "Ticket"
+msgstr "التذكرة"
+
+msgid "Ticket dismissed."
+msgstr "تم رفض التذكرة."
+
+msgid "Tickets"
+msgstr "التذاكر"
+
 msgid "Today"
 msgstr "اليوم"
 
@@ -980,6 +1037,9 @@ msgstr "النوع"
 
 msgid "URL"
 msgstr "الرابط"
+
+msgid "Unassigned"
+msgstr "غير مسندة"
 
 msgid "Unavailable"
 msgstr "غير متاح"
@@ -1029,6 +1089,9 @@ msgstr "عرض قائمة الفنيين ولوحاتهم"
 msgid "Warranty"
 msgstr "ضمان"
 
+msgid "We've received your report and will be in touch shortly to arrange a visit."
+msgstr "لقد استلمنا بلاغك وسنتواصل معك قريبًا لترتيب زيارة."
+
 msgid "Week view"
 msgstr "عرض الأسبوع"
 
@@ -1046,6 +1109,9 @@ msgstr "واتساب"
 
 msgid "Which role can do what. Self-service technician screens (My week, My skills, ...) aren't listed here — they stay open to any signed-in technician regardless of role."
 msgstr "أي دور يمكنه فعل ماذا. شاشات الفني الذاتية (أسبوعي، مهاراتي، ...) غير مدرجة هنا — تبقى متاحة لأي فني مسجل دخوله بغض النظر عن دوره."
+
+msgid "Why this ticket isn't becoming a task — spam, duplicate, not us, etc."
+msgstr "سبب عدم تحويل هذه التذكرة إلى مهمة — رسالة مزعجة، تكرار، ليست من اختصاصنا، إلخ."
 
 msgid "Work report"
 msgstr "تقرير العمل"
@@ -1128,6 +1194,9 @@ msgstr "الرمز"
 msgid "comment"
 msgstr "تعليق"
 
+msgid "company / customer name"
+msgstr "اسم الشركة / العميل"
+
 msgid "conduct area"
 msgstr "مجال سلوك"
 
@@ -1173,11 +1242,20 @@ msgstr "تقييم العميل"
 msgid "customer name"
 msgstr "اسم العميل"
 
+msgid "customer ticket"
+msgstr "تذكرة العميل"
+
+msgid "customer tickets"
+msgstr "تذاكر العملاء"
+
 msgid "customers"
 msgstr "العملاء"
 
 msgid "description"
 msgstr "الوصف"
+
+msgid "dismissal reason"
+msgstr "سبب الرفض"
 
 msgid "e.g. gym closed, no key, customer absent"
 msgstr "مثال: الصالة الرياضية مغلقة، لا يوجد مفتاح، العميل غائب"
@@ -1335,6 +1413,12 @@ msgstr "يتطلب توقيعًا"
 msgid "resolved"
 msgstr "تم الحل"
 
+msgid "reviewed at"
+msgstr "روجع في"
+
+msgid "reviewed by"
+msgstr "راجعه"
+
 msgid "role"
 msgstr "الدور"
 
@@ -1369,6 +1453,9 @@ msgid "since %(time)s"
 msgstr "منذ %(time)s"
 
 msgid "site"
+msgstr "الموقع"
+
+msgid "site / location"
 msgstr "الموقع"
 
 msgid "sites"

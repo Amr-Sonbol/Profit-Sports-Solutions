@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Thank you!" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="feedback-card">
+    <div class="feedback-thanks">
+        <div class="feedback-thanks__icon">✓</div>
+        <h1>{% translate "Thank you!" %}</h1>
+        <p class="muted">{% translate "We've received your report and will be in touch shortly to arrange a visit." %}</p>
+    </div>
+</div>
+{% endblock %}

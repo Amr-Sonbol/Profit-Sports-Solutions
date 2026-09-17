@@ -6,7 +6,7 @@ from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Site
 from people.models import Technician
-from reference.models import Brand, Skill, TaskType
+from reference.models import Brand, Country, Skill, TaskType
 
 
 class Task(models.Model):
@@ -21,6 +21,7 @@ class Task(models.Model):
         WHATSAPP = 'whatsapp', _('WhatsApp')
         EMAIL = 'email', _('Email')
         INTERNAL = 'internal', _('Internal')
+        PORTAL = 'portal', _('Customer ticket')
 
     class BillingType(models.TextChoices):
         WARRANTY = 'warranty', _('Warranty')
@@ -101,6 +102,54 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task_number
+
+
+class CustomerTicket(models.Model):
+    """A complaint or request submitted directly by a customer, no login
+    required. Self-identified, not yet linked to a real site — a
+    supervisor reviews it and either converts it into a task (picking an
+    existing site or creating a new one, same as task creation always
+    allows) or dismisses it.
+    """
+
+    class Status(models.TextChoices):
+        NEW = 'new', _('New')
+        CONVERTED = 'converted', _('Converted to task')
+        DISMISSED = 'dismissed', _('Dismissed')
+
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name='customer_tickets',
+        verbose_name=_('country'),
+    )
+    company_name = models.CharField(_('company / customer name'), max_length=150)
+    site_description = models.CharField(
+        _('site / location'), max_length=150,
+        help_text=_('branch name or address, as the customer describes it'),
+    )
+    contact_name = models.CharField(_('contact name'), max_length=150)
+    contact_phone = models.CharField(_('contact phone'), max_length=30)
+    contact_email = models.EmailField(_('contact email'), blank=True)
+    description = models.TextField(_('description'), help_text=_('what the customer reported'))
+    submitted_at = models.DateTimeField(_('submitted at'))
+    status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
+    task = models.OneToOneField(
+        Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket',
+        verbose_name=_('task'),
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='tickets_reviewed', verbose_name=_('reviewed by'),
+    )
+    reviewed_at = models.DateTimeField(_('reviewed at'), null=True, blank=True)
+    dismissal_reason = models.CharField(_('dismissal reason'), max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _('customer ticket')
+        verbose_name_plural = _('customer tickets')
+        ordering = ['-submitted_at']
+
+    def __str__(self):
+        return f'{self.company_name} — {self.site_description}'
 
 
 class TaskAssignment(models.Model):

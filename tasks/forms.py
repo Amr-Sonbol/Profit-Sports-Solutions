@@ -5,9 +5,9 @@ from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
 from people.models import SKILL_LEVEL_CHOICES, Technician
-from reference.models import Brand, Skill, TaskType
+from reference.models import Brand, Country, Skill, TaskType
 
-from .models import Task, TaskAssignment, TaskAsset, TaskAttachment
+from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
 
@@ -67,7 +67,7 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, ticket=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['site'].queryset = Site.objects.filter(customer__is_active=True).select_related('customer')
         self.fields['site'].required = False
@@ -93,6 +93,21 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['source'].initial = Task.Source.PHONE
         self.fields['billing_type'].initial = Task.BillingType.CHARGEABLE
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
+
+        # Coming from a customer ticket — hint the free-text fields with
+        # what the customer said, but the site/customer match itself stays
+        # a deliberate choice: the supervisor still picks or creates it,
+        # since a company name typed by a customer is never a guaranteed
+        # match for an existing record.
+        if ticket is not None:
+            self.fields['source'].initial = Task.Source.PORTAL
+            self.fields['description'].initial = ticket.description
+            self.fields['reported_at'].initial = timezone.localtime(ticket.submitted_at).strftime(
+                DATETIME_INPUT_FORMAT,
+            )
+            self.fields['new_site_name'].initial = ticket.site_description
+            self.fields['new_site_contact_name'].initial = ticket.contact_name
+            self.fields['new_site_contact_phone'].initial = ticket.contact_phone
 
     def plain_fields(self):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
@@ -296,3 +311,31 @@ class NewAssetForm(forms.Form):
                 _('Enter at least a brand, model, and outcome for each new machine, or leave the row blank.'),
             )
         return cleaned
+
+
+class CustomerTicketForm(forms.ModelForm):
+    """Public, no login — a customer describing a complaint or request in
+    their own words. Self-identified: the company/site names are exactly
+    what they typed, not yet matched against anything.
+    """
+
+    class Meta:
+        model = CustomerTicket
+        fields = [
+            'country', 'company_name', 'site_description',
+            'contact_name', 'contact_phone', 'contact_email', 'description',
+        ]
+        widgets = {
+            'description': forms.Textarea(attrs={'rows': 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['country'].queryset = Country.objects.filter(is_active=True)
+
+
+class DismissTicketForm(forms.Form):
+    dismissal_reason = forms.CharField(
+        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('Why this ticket isn\'t becoming a task — spam, duplicate, not us, etc.'),
+    )
