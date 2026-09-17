@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My tickets" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "My tickets" %}</h1>
+</div>
+
+<div class="section">
+    {% if tickets %}
+    <ul class="plain-list">
+        {% for ticket in tickets %}
+        <li>
+            <a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }} — {{ ticket.site_description }}</a>
+            <span class="muted">{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            {% if ticket.status == 'new' %}
+            <span class="badge badge--status-new">{% translate "New" %}</span>
+            {% elif ticket.status == 'converted' %}
+            <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+            {% else %}
+            <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "Nothing assigned to you right now." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

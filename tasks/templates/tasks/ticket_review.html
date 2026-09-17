@@ -51,7 +51,35 @@
     </div>
 </div>
 
-{% if ticket.status == 'new' %}
+<div class="section">
+    <h2>{% translate "Assigned to" %}</h2>
+    {% if ticket.assigned_to %}
+    <p>
+        {{ ticket.assigned_to.full_name }}
+        <span class="muted">({{ ticket.assigned_to.get_role_display }})</span>
+    </p>
+    {% else %}
+    <p class="empty-state">{% translate "Not assigned yet." %}</p>
+    {% endif %}
+    {% if can_manage %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign">
+        <div class="field {% if assign_form.assigned_to.errors %}field--error{% endif %}">
+            <label for="{{ assign_form.assigned_to.id_for_label }}">{{ assign_form.assigned_to.label }}</label>
+            {{ assign_form.assigned_to }}
+            {% for error in assign_form.assigned_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Assign" %}</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+{% if not can_manage %}
+<p class="empty-state">{% translate "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it." %}</p>
+{% elif ticket.status == 'new' %}
 <div class="section">
     <h2>{% translate "Decision" %}</h2>
     <div class="form-grid">

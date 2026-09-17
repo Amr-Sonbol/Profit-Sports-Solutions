@@ -120,6 +120,9 @@ msgstr "معيّنة"
 msgid "Assigned tasks"
 msgstr "المهام المسندة"
 
+msgid "Assigned to"
+msgstr "مُسندة إلى"
+
 msgid "Assignment"
 msgstr "التعيين"
 
@@ -564,6 +567,9 @@ msgstr "تقدّمي"
 msgid "My skills"
 msgstr "مهاراتي"
 
+msgid "My tickets"
+msgstr "تذاكري"
+
 msgid "My week"
 msgstr "أسبوعي"
 
@@ -651,6 +657,9 @@ msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
 msgid "Normal"
 msgstr "عادية"
 
+msgid "Not assigned yet."
+msgstr "لم تُسند بعد."
+
 msgid "Not rated"
 msgstr "غير مقيّم"
 
@@ -662,6 +671,9 @@ msgstr "غير معتمد بعد"
 
 msgid "Note"
 msgstr "ملاحظة"
+
+msgid "Nothing assigned to you right now."
+msgstr "لا يوجد شيء مُسند إليك حاليًا."
 
 msgid "Nothing waiting on a day."
 msgstr "لا يوجد شيء بانتظار هذا اليوم."
@@ -1020,6 +1032,9 @@ msgstr "هذا الأسبوع"
 msgid "Ticket"
 msgstr "التذكرة"
 
+msgid "Ticket assigned."
+msgstr "تم إسناد التذكرة."
+
 msgid "Ticket dismissed."
 msgstr "تم رفض التذكرة."
 
@@ -1122,6 +1137,9 @@ msgstr "نعم"
 msgid "You rated us %(rating)s/5"
 msgstr "قيّمتنا بـ %(rating)s/5"
 
+msgid "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it."
+msgstr "تم تكليفك بالنظر في هذه التذكرة — يمكن للمشرف فقط تحويلها إلى مهمة أو رفضها."
+
 msgid "Your feedback has already been recorded — we appreciate you taking the time."
 msgstr "تم تسجيل تقييمك بالفعل — نقدّر وقتك."
 
@@ -1157,6 +1175,9 @@ msgstr "الأجهزة"
 
 msgid "assigned at"
 msgstr "عُيّن في"
+
+msgid "assigned to"
+msgstr "مُسندة إلى"
 
 msgid "auto-generated per country, e.g. AE-0001"
 msgstr "يُنشأ تلقائيًا لكل دولة، مثال: AE-0001"
@@ -1616,6 +1637,9 @@ msgstr "أي مشرف قرر ذلك"
 
 msgid "which supervisor sent it"
 msgstr "أي مشرف أرسله"
+
+msgid "who is handling this — a technician or a supervisor, not necessarily who converts it"
+msgstr "من يتولى هذا الأمر — فني أو مشرف، وليس بالضرورة من يحوّله إلى مهمة"
 
 msgid "who signed"
 msgstr "من وقّع"

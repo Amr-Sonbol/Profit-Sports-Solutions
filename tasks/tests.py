@@ -584,6 +584,74 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.get(f'/tasks/new/?ticket={self.ticket.pk}')
         self.assertEqual(response.status_code, 404)
 
+    def test_supervisor_assigns_a_technician(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'assign', 'assigned_to': self.technician.pk})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.assigned_to, self.technician)
+        self.assertIsNotNone(self.ticket.assigned_at)
+
+    def test_assignee_can_view_but_not_dismiss_or_convert(self):
+        self.ticket.assigned_to = self.technician
+        self.ticket.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': 'Spam.'})
+        self.assertEqual(response.status_code, 200)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
+
+    def test_unrelated_technician_still_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_other_country_supervisor_gets_404(self):
+        # Country-scoped in the fetch itself, same as every other
+        # cross-country lookup in this app — not a 403, a 404.
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_sup', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=other_country, full_name='Sara Cairo',
+            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+
+        self.client.login(username='egypt_sup', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+
+
+class MyTicketsTests(TaskTestCase):
+    def test_anonymous_is_redirected_to_login(self):
+        response = self.client.get('/tasks/my-tickets/')
+        self.assertEqual(response.status_code, 302)
+
+    def test_shows_only_tickets_assigned_to_me(self):
+        mine = CustomerTicket.objects.create(
+            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali', contact_phone='0501234567', description='Belt squeaking.',
+            submitted_at=timezone.now(), assigned_to=self.technician,
+        )
+        CustomerTicket.objects.create(
+            country=self.country, company_name='Gold Gym', site_description='JBR Branch',
+            contact_name='Sam', contact_phone='0509999999', description='AC not working.',
+            submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-tickets/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['tickets']), [mine])
+
 
 class TaskAssignTests(TaskTestCase):
     def setUp(self):

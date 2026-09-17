@@ -339,3 +339,17 @@ class DismissTicketForm(forms.Form):
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
         help_text=_('Why this ticket isn\'t becoming a task — spam, duplicate, not us, etc.'),
     )
+
+
+class AssignTicketForm(forms.Form):
+    """Who's handling this ticket — any active technician or supervisor in
+    its own country, not necessarily the person who'll ultimately convert
+    or dismiss it.
+    """
+    assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Assign to'))
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assigned_to'].queryset = Technician.objects.filter(
+            is_active=True, country=country,
+        ).order_by('full_name')

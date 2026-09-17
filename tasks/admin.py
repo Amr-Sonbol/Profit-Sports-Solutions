@@ -59,6 +59,6 @@ class TaskAssetAdmin(admin.ModelAdmin):
 
 @admin.register(CustomerTicket)
 class CustomerTicketAdmin(admin.ModelAdmin):
-    list_display = ['company_name', 'site_description', 'country', 'status', 'submitted_at']
+    list_display = ['company_name', 'site_description', 'country', 'status', 'assigned_to', 'submitted_at']
     search_fields = ['company_name', 'site_description', 'contact_name', 'contact_phone']
     list_filter = ['country', 'status']

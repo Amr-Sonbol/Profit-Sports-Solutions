@@ -23,6 +23,7 @@
                 <th>{% translate "Company" %}</th>
                 <th>{% translate "Site / location" %}</th>
                 <th>{% translate "Contact" %}</th>
+                <th>{% translate "Assigned to" %}</th>
                 <th>{% translate "Status" %}</th>
             </tr>
         </thead>
@@ -33,6 +34,7 @@
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
+                <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>
                     {% if ticket.status == 'new' %}
                     <span class="badge badge--status-new">{% translate "New" %}</span>
@@ -45,7 +47,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="5">
+                <td colspan="6">
                     <p class="empty-state">{% translate "No tickets match this filter." %}</p>
                 </td>
             </tr>

@@ -313,10 +313,14 @@ A complaint or request submitted directly by a customer, no login — public, se
 | description | text | what the customer reported |
 | submitted_at | timestamptz | |
 | status | varchar | new, converted, dismissed |
+| assigned_to_id | FK → technician | nullable — who's handling it, a technician or a supervisor |
+| assigned_at | timestamptz | nullable |
 | task_id | FK → task | nullable — set once converted |
 | reviewed_by_id | FK → user | nullable |
 | reviewed_at | timestamptz | nullable |
 | dismissal_reason | varchar | nullable |
+
+**Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active technician or supervisor in the ticket's country, set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to.
 
 **Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers) or dismisses it with a reason.
 
@@ -556,10 +560,10 @@ Each is a real need eventually. None belongs in the first version.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
 
-**Technician (phone):** my week, task detail with photos, report form, my progress, my skills.
+**Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my tickets.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and the ticket form — meant to be shared/discoverable, unlike the feedback link.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Fifteen screens plus two public pages. That is the whole application.
+Sixteen screens plus two public pages. That is the whole application.

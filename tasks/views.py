@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -24,9 +25,9 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm, ExistingAssetOutcomeForm,
-    MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SetLeadForm,
-    TaskAttachmentUploadForm, TaskCreateForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
+    ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm,
+    SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
 )
 from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
@@ -563,7 +564,7 @@ def ticket_list(request):
     supervisor = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
 
     status = request.GET.get('status', 'new')
-    tickets = CustomerTicket.objects.filter(country=supervisor.country)
+    tickets = CustomerTicket.objects.filter(country=supervisor.country).select_related('assigned_to')
     if status != 'all':
         tickets = tickets.filter(status=status)
     tickets = tickets.order_by('-submitted_at')
@@ -574,13 +575,32 @@ def ticket_list(request):
 
 @login_required
 def ticket_review(request, pk):
-    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
-    ticket = get_object_or_404(CustomerTicket, pk=pk, country=supervisor.country)
+    """Dismiss, assign, or convert a ticket — restricted to manage_tickets
+    like the rest of ticket triage. Whoever it's currently assigned to can
+    also open it read-only, even without that permission, so they can see
+    what they've been asked to look into; they can't act on it themselves.
+    """
+    technician = require_technician(request)
+    # Country-scoped in the fetch itself, same as every other cross-country
+    # lookup in this app (technician_board, technician_skills, ...) — an
+    # assignee is always same-country by construction (AssignTicketForm
+    # only offers same-country technicians), so this costs it nothing.
+    ticket = get_object_or_404(CustomerTicket, pk=pk, country=technician.country)
+
+    can_manage = RolePermission.objects.filter(
+        role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
+    ).exists()
+    is_assignee = ticket.assigned_to_id == technician.id
+    if not (can_manage or is_assignee):
+        raise PermissionDenied
 
     dismiss_form = DismissTicketForm()
+    assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
 
-    if request.method == 'POST' and ticket.status == CustomerTicket.Status.NEW:
-        if request.POST.get('action') == 'dismiss':
+    if request.method == 'POST' and can_manage:
+        action = request.POST.get('action')
+
+        if action == 'dismiss' and ticket.status == CustomerTicket.Status.NEW:
             dismiss_form = DismissTicketForm(request.POST)
             if dismiss_form.is_valid():
                 ticket.status = CustomerTicket.Status.DISMISSED
@@ -591,8 +611,29 @@ def ticket_review(request, pk):
                 messages.success(request, _('Ticket dismissed.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
-    context = {'ticket': ticket, 'dismiss_form': dismiss_form}
+        elif action == 'assign':
+            assign_form = AssignTicketForm(request.POST, country=ticket.country)
+            if assign_form.is_valid():
+                ticket.assigned_to = assign_form.cleaned_data['assigned_to']
+                ticket.assigned_at = timezone.now()
+                ticket.save(update_fields=['assigned_to', 'assigned_at'])
+                messages.success(request, _('Ticket assigned.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+    context = {
+        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form, 'can_manage': can_manage,
+    }
     return render(request, 'tasks/ticket_review.html', context)
+
+
+@login_required
+def my_tickets(request):
+    """Every ticket currently assigned to me — any technician role, same
+    as the other self-service screens.
+    """
+    technician = require_technician(request)
+    tickets = CustomerTicket.objects.filter(assigned_to=technician).order_by('-submitted_at')
+    return render(request, 'tasks/my_tickets.html', {'tickets': tickets})
 
 
 def _set_lead(task, active_lead, technician, end_reason, actor):
