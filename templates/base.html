@@ -8,7 +8,7 @@
 </head>
 <body>
     <header class="site-header">
-        <span class="site-header__brand">Profit Sports Solutions</span>
+        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
         {% if user.is_authenticated %}
             <nav class="site-header__nav">
                 {% if user.technician %}
