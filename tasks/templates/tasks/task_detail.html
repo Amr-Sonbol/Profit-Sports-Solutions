@@ -118,6 +118,18 @@
             {% if task.schedule_notified_at %}{% translate "Notify again" %}{% else %}{% translate "Notify customer of scheduled visit" %}{% endif %}
         </button>
     </form>
+
+    <h3>{% translate "Running late?" %}</h3>
+    <p class="muted">{% translate "Send a short apology explaining why the team may arrive late — traffic, a longer previous job, and so on." %}</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="notify_delay">
+        <div class="field">
+            <label for="delay_reason">{% translate "Reason" %}</label>
+            <textarea id="delay_reason" name="delay_reason" rows="2" required placeholder="{% translate 'e.g. Heavy traffic on Sheikh Zayed Road, expect to arrive about 45 minutes late.' %}"></textarea>
+        </div>
+        <button type="submit" class="button button--secondary">{% translate "Send delay notice" %}</button>
+    </form>
     {% elif not task.scheduled_for %}
     <p class="field__help">{% translate "Set a scheduled time before notifying the customer." %}</p>
     {% else %}

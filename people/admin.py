@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from .models import (
-    RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
-    TechnicianSkillAssessment,
+    NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
+    TechnicianSkill, TechnicianSkillAssessment,
 )
 
 
@@ -14,6 +14,18 @@ class RolePermissionAdmin(admin.ModelAdmin):
     list_display = ['permission', 'role', 'allowed']
     list_filter = ['permission', 'role', 'allowed']
     list_editable = ['allowed']
+
+
+@admin.register(NotificationSettings)
+class NotificationSettingsAdmin(admin.ModelAdmin):
+    """One row. Also editable from the in-app Roles & permissions screen."""
+    list_display = ['auto_notify_on_reschedule']
+
+    def has_add_permission(self, request):
+        return not NotificationSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Technician)

@@ -339,6 +339,9 @@ msgstr "تقييم العميل"
 msgid "Customer notification"
 msgstr "إشعار العميل"
 
+msgid "Customer notified of the delay."
+msgstr "تم إخطار العميل بالتأخير."
+
 msgid "Customer notified of the scheduled visit."
 msgstr "تم إشعار العميل بالزيارة المجدولة."
 
@@ -360,6 +363,9 @@ msgstr "الأيام المتبقية"
 msgid "Decision"
 msgstr "القرار"
 
+msgid "Delay notice sent"
+msgstr "تم إرسال إشعار تأخير"
+
 msgid "Description"
 msgstr "الوصف"
 
@@ -380,6 +386,9 @@ msgstr "تعديل"
 
 msgid "Email"
 msgstr "البريد الإلكتروني"
+
+msgid "Email the customer automatically when a task is rescheduled"
+msgstr "إرسال بريد إلكتروني للعميل تلقائيًا عند تغيير موعد المهمة"
 
 msgid "Emergencies"
 msgstr "الحالات الطارئة"
@@ -413,6 +422,9 @@ msgstr "كل مهمة مفتوحة لها يوم."
 
 msgid "Excellent"
 msgstr "ممتاز"
+
+msgid "Explain the reason for the delay before notifying the customer."
+msgstr "اذكر سبب التأخير قبل إخطار العميل."
 
 msgid "Fault"
 msgstr "عطل"
@@ -482,6 +494,9 @@ msgstr "فندق"
 
 msgid "How did we do?"
 msgstr "كيف كان أداؤنا؟"
+
+msgid "How the customer hears about a rescheduled visit — a supervisor sending it deliberately from task detail, or the system sending it the moment the date or time changes."
+msgstr "كيف يعرف العميل بتغيير الموعد — إما بإرسال المشرف تنبيهًا يدويًا من تفاصيل المهمة، أو بإرسال النظام له تلقائيًا فور تغيير التاريخ أو الوقت."
 
 msgid "How would you rate the visit?"
 msgstr "كيف تقيّم الزيارة؟"
@@ -708,6 +723,12 @@ msgstr "لا يوجد شيء مُسند إليك حاليًا."
 msgid "Nothing waiting on a day."
 msgstr "لا يوجد شيء بانتظار هذا اليوم."
 
+msgid "Notification settings updated."
+msgstr "تم تحديث إعدادات الإشعارات."
+
+msgid "Notifications"
+msgstr "الإشعارات"
+
 msgid "Notified on %(time)s"
 msgstr "تم الإشعار في %(time)s"
 
@@ -924,6 +945,9 @@ msgstr "الأدوار"
 msgid "Roles & permissions"
 msgstr "الأدوار والصلاحيات"
 
+msgid "Running late?"
+msgstr "هل هناك تأخير؟"
+
 msgid "Save"
 msgstr "حفظ"
 
@@ -957,8 +981,14 @@ msgstr "مقيّم ذاتيًا، غير معتمد"
 msgid "Self-rating saved."
 msgstr "تم حفظ التقييم الذاتي."
 
+msgid "Send a short apology explaining why the team may arrive late — traffic, a longer previous job, and so on."
+msgstr "أرسل اعتذارًا مختصرًا يوضح سبب احتمال تأخر الفريق — الزحام المروري، أو تأخر مهمة سابقة، وما شابه."
+
 msgid "Send back"
 msgstr "إعادة"
+
+msgid "Send delay notice"
+msgstr "إرسال إشعار التأخير"
 
 msgid "Send feedback request"
 msgstr "إرسال طلب تقييم"
@@ -1055,6 +1085,9 @@ msgstr "تم وضع علامة معطّلة على المهمة."
 
 msgid "Task updated."
 msgstr "تم تحديث المهمة."
+
+msgid "Task updated. Customer notified automatically."
+msgstr "تم تحديث المهمة. تم إخطار العميل تلقائيًا."
 
 msgid "Tasks"
 msgstr "المهام"
@@ -1329,6 +1362,9 @@ msgstr "الوصف"
 msgid "dismissal reason"
 msgstr "سبب الرفض"
 
+msgid "e.g. Heavy traffic on Sheikh Zayed Road, expect to arrive about 45 minutes late."
+msgstr "مثال: زحام مروري شديد على شارع الشيخ زايد، من المتوقع التأخر حوالي 45 دقيقة."
+
 msgid "e.g. gym closed, no key, customer absent"
 msgstr "مثال: الصالة الرياضية مغلقة، لا يوجد مفتاح، العميل غائب"
 
@@ -1410,8 +1446,14 @@ msgstr "لا تُخزّن مبلغًا دون عملته أبدًا"
 msgid "note"
 msgstr "ملاحظة"
 
+msgid "notification settings"
+msgstr "إعدادات الإشعارات"
+
 msgid "occurred at"
 msgstr "حدث في"
+
+msgid "off by default — a supervisor sends it deliberately from task detail instead"
+msgstr "معطّل افتراضيًا — يقوم المشرف بإرساله يدويًا من تفاصيل المهمة بدلاً من ذلك"
 
 msgid "outcome"
 msgstr "النتيجة"

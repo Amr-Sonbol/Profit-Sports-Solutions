@@ -113,6 +113,33 @@ class RolePermission(models.Model):
         return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
 
 
+class NotificationSettings(models.Model):
+    """A single row, manager-controlled from the same Roles & permissions
+    screen — whether a schedule-change email to the customer happens
+    automatically or waits for a supervisor to send it deliberately.
+    Off by default: rescheduling never notified anyone by itself before
+    this setting existed, and that stays true until a manager turns it on.
+    """
+
+    auto_notify_on_reschedule = models.BooleanField(
+        _('email the customer automatically when a task is rescheduled'), default=False,
+        help_text=_('off by default — a supervisor sends it deliberately from task detail instead'),
+    )
+
+    class Meta:
+        verbose_name = _('notification settings')
+        verbose_name_plural = _('notification settings')
+
+    @classmethod
+    def load(cls):
+        """The one row this table ever has — created on first use."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return str(_('Notification settings'))
+
+
 class TechnicianSkill(models.Model):
     """The current level snapshot. `TechnicianSkillAssessment` holds the
     full history of self-ratings and supervisor reviews behind it.

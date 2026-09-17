@@ -296,7 +296,7 @@ This status, plus each technician's report approval rate (approved ÷ submitted 
 | estimated_hours | decimal | nullable — the supervisor's rough guess, not a computed average |
 | status | varchar | see below |
 | created_by_id | FK → user | |
-| schedule_notified_at | timestamptz | nullable — never set automatically |
+| schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
 **Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
@@ -310,7 +310,17 @@ Plus `blocked` and `cancelled` as endings.
 
 **Any task field can be edited after creation** (except `site` — moving a task to a different site is a different operation, not an edit) from a dedicated edit screen, separate from the assign screen that already handles reassigning the lead/helpers with its own history. Rescheduling — changing `scheduled_for` — logs a `rescheduled` task_event, same as any other status-relevant change.
 
-**Telling the customer about a schedule is a deliberate, separate action, never automatic.** A supervisor clicks "Notify customer" (from task detail, once `scheduled_for` and the site's `contact_email` are both set) and an email goes out immediately; `schedule_notified_at`/`_by` record that it happened and who did it, and the button becomes "Notify again" for a resend. Editing the schedule again does not re-notify by itself — silently emailing a customer as a side effect of an unrelated edit would be a surprise, not a service.
+**Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`.** Off (the default): a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On: the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
+
+**A delay notice is a different message, always manual.** When the team is running behind — traffic, a previous job overrunning — a supervisor sends a short apology from task detail with a required reason, logged as a `delay_notice` task_event (the reason lives in the event's own `note`, so no extra columns on `task` are needed; a task can have any number of these over time, unlike the single schedule-confirmation email).
+
+### notification_settings
+A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | always `1` |
+| auto_notify_on_reschedule | bool | default `false` |
 
 ### customer_ticket
 A complaint or request submitted directly by a customer, no login — public, self-identified, not yet linked to a real site. The piece of "customer portal" that turned out to be needed now; the rest of it stays deferred (§8).
@@ -407,7 +417,7 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — supervisors only |
 | note | text | |
 
-**Event types:** created, assigned, reassigned, rescheduled, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled.
+**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled.
 
 The technician taps buttons; he never types a time. If this table is skipped, you will have a year of operations and still no way to answer who you can depend on.
 

@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment, TechnicianSkill,
-    TechnicianSkillAssessment,
+    NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
+    TechnicianSkill, TechnicianSkillAssessment,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import PartUsed, WorkReport
@@ -156,6 +156,67 @@ class TaskDetailTests(TaskTestCase):
         self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
         self.assertIn('UAE-0001', mail.outbox[0].subject)
 
+    def test_delay_notice_requires_a_reason(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(
+            f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': '  '}, follow=True,
+        )
+
+        self.assertContains(response, 'Explain the reason for the delay')
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
+
+    def test_delay_notice_requires_a_contact_email(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(
+            f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': 'Traffic'}, follow=True,
+        )
+
+        self.assertContains(response, 'Add a contact email')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_delay_notice_sends_email_and_logs_an_event(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {
+            'action': 'notify_delay', 'delay_reason': 'Heavy traffic on Sheikh Zayed Road.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
+        self.assertIn('UAE-0001', mail.outbox[0].subject)
+        self.assertIn('Heavy traffic', mail.outbox[0].body)
+
+        event = self.task.events.get(event_type=TaskEvent.EventType.DELAY_NOTICE)
+        self.assertEqual(event.note, 'Heavy traffic on Sheikh Zayed Road.')
+        self.assertEqual(event.actor, self.supervisor_user)
+
+    def test_technician_cannot_send_a_delay_notice(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {
+            'action': 'notify_delay', 'delay_reason': 'Traffic',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(len(mail.outbox), 0)
+
 
 class TaskEditTests(TaskTestCase):
     def setUp(self):
@@ -223,6 +284,59 @@ class TaskEditTests(TaskTestCase):
         response = self.client.post(self.url, self._payload(min_level='5'))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('min_level'))
+
+    def test_rescheduling_does_not_auto_notify_when_setting_is_off(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
+
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.schedule_notified_at)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_rescheduling_auto_notifies_when_setting_is_on(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        settings = NotificationSettings.load()
+        settings.auto_notify_on_reschedule = True
+        settings.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.schedule_notified_at)
+        self.assertEqual(self.task.schedule_notified_by, self.supervisor_user)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
+
+    def test_auto_notify_does_not_fire_without_a_contact_email(self):
+        settings = NotificationSettings.load()
+        settings.auto_notify_on_reschedule = True
+        settings.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
+
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.schedule_notified_at)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_auto_notify_does_not_fire_for_an_unrelated_edit(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        settings = NotificationSettings.load()
+        settings.auto_notify_on_reschedule = True
+        settings.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(priority=Task.Priority.LOW))
+
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.schedule_notified_at)
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class TaskListTests(TaskTestCase):
@@ -1805,6 +1919,51 @@ class RolePermissionsTests(TaskTestCase):
                 role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
             ).exists(),
         )
+
+    def test_notification_setting_defaults_to_off(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/roles/')
+        self.assertFalse(response.context['notification_settings'].auto_notify_on_reschedule)
+
+    def test_manager_can_turn_on_auto_notify(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/roles/', {
+            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(NotificationSettings.load().auto_notify_on_reschedule)
+
+    def test_manager_can_turn_off_auto_notify(self):
+        settings = NotificationSettings.load()
+        settings.auto_notify_on_reschedule = True
+        settings.save()
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/roles/', {'action': 'save_notifications'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
+
+    def test_saving_notifications_does_not_touch_the_permission_matrix(self):
+        RolePermission.objects.filter(
+            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
+        ).update(allowed=True)
+
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/roles/', {'action': 'save_notifications', 'auto_notify_on_reschedule': 'on'})
+
+        self.assertTrue(
+            RolePermission.objects.filter(
+                role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
+            ).exists(),
+        )
+
+    def test_technician_cannot_change_notification_setting(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/roles/', {
+            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
 
 
 class HomeRedirectTests(TaskTestCase):

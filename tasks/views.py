@@ -18,8 +18,8 @@ from django.utils.translation import gettext as _
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    RELIABLE_LEVEL, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
-    TechnicianSkill, TechnicianSkillAssessment,
+    RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
+    TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
 from people.permissions import require_manager, require_permission, require_technician
 from reference.models import Brand, ConductArea, Skill, TaskType
@@ -379,6 +379,34 @@ def _send_schedule_notification(task):
     )
 
 
+def _send_delay_notice(task, reason):
+    """A different message from _send_schedule_notification: that one
+    confirms a plan, this one apologizes for one slipping — traffic, a
+    previous job running long, and so on. Always manual and always
+    needs a reason, since there's no automatic way to know the team is
+    running behind.
+    """
+    with translation.override('en'):
+        subject = _('A short delay for your Profit Sports Solutions visit — %(number)s') % {
+            'number': task.task_number,
+        }
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'Our technician for %(site)s is running behind schedule today: %(reason)s\n\n'
+            "We're sorry for the inconvenience and will be there as soon as we can.\n\n"
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {
+            'contact': task.site.contact_name or task.site.customer.name,
+            'site': task.site.name,
+            'reason': reason,
+        }
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[task.site.contact_email], fail_silently=True,
+    )
+
+
 @login_required
 def dashboard(request):
     """At a glance: who's available today, and every open task with its
@@ -521,6 +549,24 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the scheduled visit.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'notify_delay':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        reason = request.POST.get('delay_reason', '').strip()
+        if not task.scheduled_for:
+            messages.error(request, _('Set a scheduled time before notifying the customer.'))
+        elif not task.site.contact_email:
+            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+        elif not reason:
+            messages.error(request, _('Explain the reason for the delay before notifying the customer.'))
+        else:
+            _send_delay_notice(task, reason)
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.DELAY_NOTICE,
+                occurred_at=timezone.now(), actor=request.user, note=reason,
+            )
+            messages.success(request, _('Customer notified of the delay.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     assignments = task.assignments.select_related('technician')
     active_lead = next(
         (a for a in assignments if a.role == TaskAssignment.Role.LEAD and a.is_active), None,
@@ -544,7 +590,9 @@ def task_edit(request, pk):
     """Edit an existing task's own fields — not its site (a different
     operation) and not its lead/helpers (the assign screen already
     handles that with its own history). Rescheduling logs a
-    RESCHEDULED event so there's a record of what the date used to be.
+    RESCHEDULED event so there's a record of what the date used to be,
+    and — only when a manager has turned auto-notify on — also emails
+    the customer the same way the manual "Notify customer" button would.
     """
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
     task = get_object_or_404(Task, pk=pk)
@@ -555,12 +603,23 @@ def task_edit(request, pk):
         if form.is_valid():
             with transaction.atomic():
                 updated_task = form.save()
-                if updated_task.scheduled_for != previous_scheduled_for:
+                rescheduled = updated_task.scheduled_for != previous_scheduled_for
+                if rescheduled:
                     TaskEvent.objects.create(
                         task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
                         occurred_at=timezone.now(), actor=request.user,
                     )
-            messages.success(request, _('Task updated.'))
+            if (
+                rescheduled and updated_task.scheduled_for and updated_task.site.contact_email
+                and NotificationSettings.load().auto_notify_on_reschedule
+            ):
+                _send_schedule_notification(updated_task)
+                updated_task.schedule_notified_at = timezone.now()
+                updated_task.schedule_notified_by = request.user
+                updated_task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+                messages.success(request, _('Task updated. Customer notified automatically.'))
+            else:
+                messages.success(request, _('Task updated.'))
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task)
@@ -1143,17 +1202,24 @@ def technician_skills(request, pk):
 
 @login_required
 def role_permissions(request):
-    """Manager-only: which role can do what. Deliberately not gated by
-    the configurable system it manages (require_manager, not
-    require_permission) — otherwise a bad edit here could lock every role
-    out of ever fixing it again.
+    """Manager-only: which role can do what, plus global notification
+    behavior. Deliberately not gated by the configurable system it
+    manages (require_manager, not require_permission) — otherwise a bad
+    edit here could lock every role out of ever fixing it again.
     """
     require_manager(request)
 
     roles = [Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER]
     permissions = list(RolePermission.Permission)
+    notification_settings = NotificationSettings.load()
 
     if request.method == 'POST':
+        if request.POST.get('action') == 'save_notifications':
+            notification_settings.auto_notify_on_reschedule = 'auto_notify_on_reschedule' in request.POST
+            notification_settings.save(update_fields=['auto_notify_on_reschedule'])
+            messages.success(request, _('Notification settings updated.'))
+            return redirect('tasks:role_permissions')
+
         for permission in permissions:
             for role in roles:
                 RolePermission.objects.update_or_create(
@@ -1178,7 +1244,7 @@ def role_permissions(request):
         for permission in permissions
     ]
 
-    context = {'roles': roles, 'matrix': matrix}
+    context = {'roles': roles, 'matrix': matrix, 'notification_settings': notification_settings}
     return render(request, 'tasks/role_permissions.html', context)
 
 

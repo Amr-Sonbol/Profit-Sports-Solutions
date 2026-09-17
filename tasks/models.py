@@ -223,6 +223,7 @@ class TaskEvent(models.Model):
         ASSIGNED = 'assigned', _('Assigned')
         REASSIGNED = 'reassigned', _('Reassigned')
         RESCHEDULED = 'rescheduled', _('Rescheduled')
+        DELAY_NOTICE = 'delay_notice', _('Delay notice sent')
         ACCEPTED = 'accepted', _('Accepted')
         EN_ROUTE = 'en_route', _('En route')
         ARRIVED = 'arrived', _('Arrived')

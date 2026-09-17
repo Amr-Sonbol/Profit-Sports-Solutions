@@ -637,6 +637,22 @@ tbody tr:hover {
     height: 1.15rem;
 }
 
+.checkbox-label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.4rem;
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+}
+
 .table-wrap input,
 .table-wrap select {
     width: 100%;
