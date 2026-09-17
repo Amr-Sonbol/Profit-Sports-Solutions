@@ -82,6 +82,14 @@ class Task(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tasks_created',
         verbose_name=_('created by'),
     )
+    schedule_notified_at = models.DateTimeField(
+        _('schedule notified at'), null=True, blank=True,
+        help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
+    )
+    schedule_notified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='tasks_schedule_notified', verbose_name=_('schedule notified by'),
+    )
 
     class Meta:
         verbose_name = _('task')

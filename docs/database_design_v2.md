@@ -263,6 +263,14 @@ Write this on one page in Arabic and English. Without certificates, these four s
 
 This status, plus each technician's report approval rate (approved ÷ submitted — see §6), is shown to the technician themselves (My progress) and to supervisors reviewing their country's roster. It's a fact, not a gate: nothing in the app currently blocks a task assignment or pay decision on it.
 
+### The 90-day track
+
+**A new technician works as helper, alongside a supervisor as lead, until certified.** The target is to get there within 90 days of `hired_on` — computed, not stored, from real progress against that clock: days elapsed vs. days remaining, and confirmed count vs. total required, shown to the technician on My progress and to their supervisor on the roster.
+
+**`on_track` is one disclosed comparison, not a verdict.** Confirmed share of the bar vs. elapsed share of the 90 days — if a technician is 30 days in and already a third certified, that's on track; less than that, it's flagged. It never blocks anything and it's not itself a metric to optimize; a supervisor still decides what a "behind" flag means for that person.
+
+**No `hired_on` means no 90-day track shown at all** — silently, not as a warning. It's an existing nullable field with real historical gaps; this just gives it a second use once it's filled in.
+
 ---
 
 ## 4. Tasks
@@ -288,6 +296,8 @@ This status, plus each technician's report approval rate (approved ÷ submitted 
 | estimated_hours | decimal | nullable — the supervisor's rough guess, not a computed average |
 | status | varchar | see below |
 | created_by_id | FK → user | |
+| schedule_notified_at | timestamptz | nullable — never set automatically |
+| schedule_notified_by_id | FK → user | nullable |
 
 **Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
 Plus `blocked` and `cancelled` as endings.
@@ -297,6 +307,10 @@ Plus `blocked` and `cancelled` as endings.
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
+
+**Any task field can be edited after creation** (except `site` — moving a task to a different site is a different operation, not an edit) from a dedicated edit screen, separate from the assign screen that already handles reassigning the lead/helpers with its own history. Rescheduling — changing `scheduled_for` — logs a `rescheduled` task_event, same as any other status-relevant change.
+
+**Telling the customer about a schedule is a deliberate, separate action, never automatic.** A supervisor clicks "Notify customer" (from task detail, once `scheduled_for` and the site's `contact_email` are both set) and an email goes out immediately; `schedule_notified_at`/`_by` record that it happened and who did it, and the button becomes "Notify again" for a resend. Editing the schedule again does not re-notify by itself — silently emailing a customer as a side effect of an unrelated edit would be a surprise, not a service.
 
 ### customer_ticket
 A complaint or request submitted directly by a customer, no login — public, self-identified, not yet linked to a real site. The piece of "customer portal" that turned out to be needed now; the rest of it stays deferred (§8).
@@ -556,7 +570,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, assign, review reports, technician roster, a technician's board, review a technician's skills, tickets list, review a ticket.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, review reports, technician roster, a technician's board, review a technician's skills, tickets list, review a ticket.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
 
@@ -566,4 +580,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Sixteen screens plus two public pages. That is the whole application.
+Seventeen screens plus two public pages. That is the whole application.

@@ -17,6 +17,7 @@
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Role" %}</th>
                     <th>{% translate "Certification" %}</th>
+                    <th>{% translate "90-day track" %}</th>
                     <th>{% translate "Report approval rate" %}</th>
                     <th></th>
                 </tr>
@@ -38,6 +39,21 @@
                         {% endif %}
                         {% if row.certification.cardio_ready %}
                         <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.ninety_day %}
+                        {% if row.ninety_day.on_track %}
+                        <span class="badge badge--status-completed">
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                        </span>
+                        {% else %}
+                        <span class="badge badge--status-blocked">
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                        {% else %}
+                        <span class="muted">—</span>
                         {% endif %}
                     </td>
                     <td>

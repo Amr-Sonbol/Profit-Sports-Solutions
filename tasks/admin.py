@@ -22,7 +22,7 @@ class TaskAssetInline(admin.TabularInline):
 class TaskAdmin(admin.ModelAdmin):
     list_display = [
         'task_number', 'site', 'status', 'priority', 'billing_type',
-        'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
+        'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours', 'schedule_notified_at',
     ]
     search_fields = ['task_number', 'site__name', 'description']
     list_filter = ['status', 'priority', 'billing_type', 'source', 'is_warranty']

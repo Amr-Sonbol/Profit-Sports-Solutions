@@ -16,7 +16,10 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Details" %}</h2>
+    <div class="section__header">
+        <h2>{% translate "Details" %}</h2>
+        <a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+    </div>
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Customer / Site" %}</dt>
@@ -95,6 +98,30 @@
     </ul>
     {% else %}
     <p class="empty-state">{% translate "No one is assigned yet." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Customer notification" %}</h2>
+    {% if task.schedule_notified_at %}
+    <p class="muted">
+        {% blocktranslate with time=task.schedule_notified_at|date:"SHORT_DATETIME_FORMAT" %}Notified on {{ time }}{% endblocktranslate %}
+    </p>
+    {% else %}
+    <p class="empty-state">{% translate "Not notified yet." %}</p>
+    {% endif %}
+    {% if task.scheduled_for and task.site.contact_email %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="notify_schedule">
+        <button type="submit" class="button button--secondary">
+            {% if task.schedule_notified_at %}{% translate "Notify again" %}{% else %}{% translate "Notify customer of scheduled visit" %}{% endif %}
+        </button>
+    </form>
+    {% elif not task.scheduled_for %}
+    <p class="field__help">{% translate "Set a scheduled time before notifying the customer." %}</p>
+    {% else %}
+    <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
     {% endif %}
 </div>
 

@@ -8,6 +8,27 @@
     <h1>{% translate "My progress" %}</h1>
 </div>
 
+{% if ninety_day %}
+<div class="section">
+    <h2>{% translate "90-day track" %}</h2>
+    <div class="stat-row">
+        <div class="stat-tile {% if not ninety_day.on_track %}stat-tile--warning{% endif %}">
+            <div class="stat-tile__value">{{ ninety_day.days_remaining }}</div>
+            <div class="stat-tile__label">{% translate "Days left" %}</div>
+        </div>
+        <div class="stat-tile">
+            <div class="stat-tile__value">{{ ninety_day.total_certified }}/{{ ninety_day.total_required }}</div>
+            <div class="stat-tile__label">{% translate "Confirmed" %}</div>
+        </div>
+    </div>
+    {% if ninety_day.on_track %}
+    <p class="muted">{% translate "On track to be fully certified within 90 days." %}</p>
+    {% else %}
+    <p class="muted">{% translate "Behind pace for the 90-day target — talk to your supervisor about what's next." %}</p>
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="section">
     <h2>{% translate "Certification" %}</h2>
     {% if certification.is_certified %}

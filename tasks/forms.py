@@ -165,6 +165,41 @@ class TaskCreateForm(forms.ModelForm):
         return cleaned
 
 
+class TaskEditForm(forms.ModelForm):
+    """Editing an existing task — deliberately narrower than creation.
+    `site` isn't here: moving a task to a different site after the fact
+    is a different operation (effectively a new task), not an edit.
+    Reassigning the lead/helpers stays on the assign screen, which
+    already handles that with its own history and reason-tracking.
+    """
+
+    class Meta:
+        model = Task
+        fields = [
+            'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
+            'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
+        ]
+        widgets = {
+            'description': forms.Textarea(attrs={'rows': 3}),
+            'promised_at': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
+            'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
+        self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
+        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
+        self.fields['min_level'].validators.append(MaxValueValidator(4))
+        self.fields['estimated_hours'].validators.append(MinValueValidator(0))
+        self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
+
+        for name in ('promised_at', 'scheduled_for'):
+            self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
+            if self.initial.get(name):
+                self.initial[name] = timezone.localtime(self.initial[name]).strftime(DATETIME_INPUT_FORMAT)
+
+
 class SetLeadForm(forms.Form):
     technician = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Technician'))
     end_reason = forms.ChoiceField(

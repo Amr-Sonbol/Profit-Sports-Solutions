@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -114,6 +115,114 @@ class TaskDetailTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/')
         self.assertContains(response, f'/tasks/{self.task.pk}/')
+
+    def test_notify_requires_a_scheduled_time(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'}, follow=True)
+
+        self.assertIsNone(self.task.schedule_notified_at)
+        self.assertContains(response, 'Set a scheduled time')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_notify_requires_a_contact_email(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'}, follow=True)
+
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.schedule_notified_at)
+        self.assertContains(response, 'Add a contact email')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_notify_sends_email_and_records_who_and_when(self):
+        self.task.scheduled_for = dubai_time(2026, 9, 20, 9, 0)
+        self.task.save()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.schedule_notified_at)
+        self.assertEqual(self.task.schedule_notified_by, self.supervisor_user)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
+        self.assertIn('UAE-0001', mail.outbox[0].subject)
+
+
+class TaskEditTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='UAE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
+            required_skill=self.skill, min_level=2, description='Belt making noise',
+            priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
+            reported_at=timezone.now(), promised_at=timezone.now(),
+            created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+        )
+        self.url = f'/tasks/{self.task.pk}/edit/'
+
+    def _payload(self, **overrides):
+        payload = {
+            'priority': Task.Priority.HIGH, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CONTRACT, 'description': 'Belt making noise', 'is_warranty': '',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_get_shows_current_values(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Belt making noise')
+
+    def test_updating_priority_and_description(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(
+            priority=Task.Priority.EMERGENCY, description='Belt snapped completely.',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.priority, Task.Priority.EMERGENCY)
+        self.assertEqual(self.task.description, 'Belt snapped completely.')
+
+    def test_rescheduling_creates_a_rescheduled_event(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertTrue(
+            self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists(),
+        )
+
+    def test_unrelated_edit_does_not_create_a_rescheduled_event(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(priority=Task.Priority.LOW))
+
+        self.assertFalse(
+            self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists(),
+        )
+
+    def test_min_level_above_scale_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(min_level='5'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors.get('min_level'))
 
 
 class TaskListTests(TaskTestCase):
@@ -1262,6 +1371,44 @@ class MyProgressTests(TaskTestCase):
         response = self.client.get('/tasks/my-progress/')
 
         self.assertAlmostEqual(response.context['solve_rate'], 2 / 3)
+
+    def test_ninety_day_progress_is_none_without_a_hire_date(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        self.assertIsNone(response.context['ninety_day'])
+
+    def test_on_track_when_fully_certified_well_within_90_days(self):
+        Skill.objects.exclude(pk=self.skill.pk).filter(category=Skill.Category.OTHER).update(is_active=False)
+        self.technician.hired_on = timezone.localtime().date() - timedelta(days=10)
+        self.technician.save()
+
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=3, source=TechnicianSkill.Source.SUPERVISOR,
+            set_by=self.technician, set_on=date(2026, 9, 1),
+        )
+        for area in ConductArea.objects.filter(is_active=True):
+            TechnicianConduct.objects.create(
+                technician=self.technician, conduct_area=area, level=3,
+                source=TechnicianConduct.Source.SUPERVISOR, set_by=self.technician, set_on=date(2026, 9, 1),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        ninety_day = response.context['ninety_day']
+        self.assertTrue(ninety_day['on_track'])
+        self.assertEqual(ninety_day['day_count'], 10)
+
+    def test_behind_pace_when_far_along_with_nothing_confirmed(self):
+        self.technician.hired_on = timezone.localtime().date() - timedelta(days=60)
+        self.technician.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+
+        ninety_day = response.context['ninety_day']
+        self.assertFalse(ninety_day['on_track'])
+        self.assertEqual(ninety_day['days_remaining'], 30)
 
 
 class MySkillsTests(TaskTestCase):

@@ -12,6 +12,12 @@ msgstr ""
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
 
+msgid "%(days)sd left"
+msgstr "متبقٍ %(days)s يوم"
+
+msgid "%(days)sd left — behind"
+msgstr "متبقٍ %(days)s يوم — متأخر"
+
 msgid "%(source)s — %(time)s"
 msgstr "%(source)s — %(time)s"
 
@@ -29,6 +35,9 @@ msgstr "+ إضافة مهارة جديدة"
 
 msgid "+ Add new task type"
 msgstr "+ إضافة نوع مهمة جديد"
+
+msgid "90-day track"
+msgstr "مسار الـ٩٠ يومًا"
 
 msgid "A brand with that name already exists — pick it from the list instead."
 msgstr "توجد بالفعل علامة تجارية بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
@@ -56,6 +65,9 @@ msgstr "الإجراء المتخذ"
 
 msgid "Active"
 msgstr "نشط"
+
+msgid "Add a contact email for this site before notifying the customer."
+msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل إشعار العميل."
 
 msgid "Add a contact email for this site before requesting feedback."
 msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل طلب التقييم."
@@ -167,6 +179,9 @@ msgstr "كن محددًا — صورة الرقم التسلسلي مفقودة�
 
 msgid "Before"
 msgstr "قبل"
+
+msgid "Behind pace for the 90-day target — talk to your supervisor about what's next."
+msgstr "متأخر عن وتيرة هدف الـ٩٠ يومًا — تحدث مع مشرفك بشأن الخطوة التالية."
 
 msgid "Billing type"
 msgstr "نوع الفوترة"
@@ -321,6 +336,12 @@ msgstr "العميل / الموقع"
 msgid "Customer feedback"
 msgstr "تقييم العميل"
 
+msgid "Customer notification"
+msgstr "إشعار العميل"
+
+msgid "Customer notified of the scheduled visit."
+msgstr "تم إشعار العميل بالزيارة المجدولة."
+
 msgid "Customer request"
 msgstr "طلب العميل"
 
@@ -332,6 +353,9 @@ msgstr "تذكرة عميل"
 
 msgid "Dashboard"
 msgstr "لوحة التحكم"
+
+msgid "Days left"
+msgstr "الأيام المتبقية"
 
 msgid "Decision"
 msgstr "القرار"
@@ -350,6 +374,9 @@ msgstr "مرفوضة"
 
 msgid "Document"
 msgstr "مستند"
+
+msgid "Edit"
+msgstr "تعديل"
 
 msgid "Email"
 msgstr "البريد الإلكتروني"
@@ -660,6 +687,9 @@ msgstr "عادية"
 msgid "Not assigned yet."
 msgstr "لم تُسند بعد."
 
+msgid "Not notified yet."
+msgstr "لم يتم الإشعار بعد."
+
 msgid "Not rated"
 msgstr "غير مقيّم"
 
@@ -678,8 +708,20 @@ msgstr "لا يوجد شيء مُسند إليك حاليًا."
 msgid "Nothing waiting on a day."
 msgstr "لا يوجد شيء بانتظار هذا اليوم."
 
+msgid "Notified on %(time)s"
+msgstr "تم الإشعار في %(time)s"
+
+msgid "Notify again"
+msgstr "إشعار مرة أخرى"
+
+msgid "Notify customer of scheduled visit"
+msgstr "إشعار العميل بالزيارة المجدولة"
+
 msgid "On my way"
 msgstr "أنا في الطريق"
+
+msgid "On track to be fully certified within 90 days."
+msgstr "على المسار الصحيح لاعتماد كامل خلال ٩٠ يومًا."
 
 msgid "Open"
 msgstr "مفتوحة"
@@ -885,6 +927,9 @@ msgstr "الأدوار والصلاحيات"
 msgid "Save"
 msgstr "حفظ"
 
+msgid "Save changes"
+msgstr "حفظ التغييرات"
+
 msgid "Scheduled"
 msgstr "مجدولة"
 
@@ -926,6 +971,9 @@ msgstr "الرقم التسلسلي"
 
 msgid "Serial plate"
 msgstr "لوحة الرقم التسلسلي"
+
+msgid "Set a scheduled time before notifying the customer."
+msgstr "حدد موعدًا قبل إشعار العميل."
 
 msgid "Set as lead"
 msgstr "تعيين كفني رئيسي"
@@ -1004,6 +1052,9 @@ msgstr "تم إنشاء المهمة %(number)s."
 
 msgid "Task marked blocked."
 msgstr "تم وضع علامة معطّلة على المهمة."
+
+msgid "Task updated."
+msgstr "تم تحديث المهمة."
 
 msgid "Tasks"
 msgstr "المهام"
@@ -1452,6 +1503,12 @@ msgstr "صلاحيات الدور"
 msgid "roughly how long the job should take — shown as an estimated finish time"
 msgstr "تقريبًا كم من الوقت ستستغرقه المهمة — يُعرض كوقت انتهاء متوقع"
 
+msgid "schedule notified at"
+msgstr "تاريخ إشعار الموعد"
+
+msgid "schedule notified by"
+msgstr "من قام بإشعار الموعد"
+
 msgid "scheduled for"
 msgstr "مجدولة لتاريخ"
 
@@ -1622,6 +1679,9 @@ msgstr "ما أبلغ به العميل"
 
 msgid "what the technician found"
 msgstr "ما وجده الفني"
+
+msgid "when the customer was last emailed about the scheduled visit — never automatic"
+msgstr "آخر مرة أُرسل فيها بريد إلكتروني للعميل بشأن الزيارة المجدولة — ليس تلقائيًا أبدًا"
 
 msgid "where a feedback request goes after a report is approved"
 msgstr "أين يُرسل طلب التقييم بعد اعتماد التقرير"

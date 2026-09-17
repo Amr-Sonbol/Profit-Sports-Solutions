@@ -1,16 +1,18 @@
 from datetime import timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
+from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
+from django.utils import timezone, translation
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext as _
 
@@ -27,12 +29,16 @@ from reports.models import PartUsed, WorkReport
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, NewAssetForm, RemoveAssignmentForm, ReviewLevelForm,
-    SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
+    SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
 )
 from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
+
+# A new technician works as helper, alongside a supervisor, until
+# certified — the target is to get there within this many days.
+NINETY_DAY_TRACK_DAYS = 90
 
 OPEN_STATUSES = [
     Task.Status.NEW,
@@ -199,6 +205,32 @@ def _certification_status(technician):
     }
 
 
+def _ninety_day_progress(technician, certification):
+    """Where a technician stands against the 90-day certification target —
+    facts (day count, confirmed vs required), not a verdict. `on_track`
+    is one simple, disclosed comparison (confirmed share vs. elapsed
+    share of the 90 days) — a supervisor still judges what to do about
+    it; this never blocks or changes an assignment on its own.
+    """
+    if technician.hired_on is None:
+        return None
+
+    day_count = (timezone.localtime().date() - technician.hired_on).days
+    total_required = certification['non_cardio_total'] + certification['conduct_total']
+    total_certified = certification['non_cardio_certified'] + certification['conduct_certified']
+
+    expected_fraction = min(day_count / NINETY_DAY_TRACK_DAYS, 1)
+    actual_fraction = (total_certified / total_required) if total_required else 1
+
+    return {
+        'day_count': max(day_count, 0),
+        'days_remaining': max(NINETY_DAY_TRACK_DAYS - day_count, 0),
+        'total_certified': total_certified,
+        'total_required': total_required,
+        'on_track': actual_fraction >= expected_fraction,
+    }
+
+
 def _confirmed_points(technician):
     """Sum of supervisor-confirmed levels across every non-cardio skill and
     conduct area — the ranking number for the leaderboard. Self-ratings and
@@ -314,6 +346,36 @@ def _save_attachment(request, task, uploaded_file, purpose):
         url=request.build_absolute_uri(default_storage.url(path)),
         media_type=_attachment_media_type(uploaded_file), purpose=purpose,
         source=TaskAttachment.Source.TECHNICIAN, uploaded_by=request.user, uploaded_at=timezone.now(),
+    )
+
+
+def _send_schedule_notification(task):
+    """Best-effort, and forced to English — same reasoning as
+    reports._send_feedback_email: a failed send shouldn't block the
+    supervisor's flow, and there's nowhere to read a customer's language
+    preference from. Manual every time; nothing calls this on its own.
+    """
+    country_tz = ZoneInfo(task.site.customer.country.timezone)
+    local_time = timezone.localtime(task.scheduled_for, country_tz)
+    with translation.override('en'):
+        subject = _('Confirming your upcoming Profit Sports Solutions visit — %(number)s') % {
+            'number': task.task_number,
+        }
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'This confirms our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n\n'
+            "If this time doesn't work for you, please contact us to reschedule.\n\n"
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {
+            'contact': task.site.contact_name or task.site.customer.name,
+            'site': task.site.name,
+            'date': local_time.strftime('%B %d, %Y'),
+            'time': local_time.strftime('%I:%M %p').lstrip('0'),
+        }
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[task.site.contact_email], fail_silently=True,
     )
 
 
@@ -440,10 +502,25 @@ def task_detail(request, pk):
 
     task = get_object_or_404(
         Task.objects.select_related(
-            'site__customer', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
+            'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
         ).prefetch_related('report__parts_used'),
         pk=pk,
     )
+
+    if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        if not task.scheduled_for:
+            messages.error(request, _('Set a scheduled time before notifying the customer.'))
+        elif not task.site.contact_email:
+            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+        else:
+            _send_schedule_notification(task)
+            task.schedule_notified_at = timezone.now()
+            task.schedule_notified_by = request.user
+            task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+            messages.success(request, _('Customer notified of the scheduled visit.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     assignments = task.assignments.select_related('technician')
     active_lead = next(
         (a for a in assignments if a.role == TaskAssignment.Role.LEAD and a.is_active), None,
@@ -460,6 +537,35 @@ def task_detail(request, pk):
         'report': getattr(task, 'report', None),
     }
     return render(request, 'tasks/task_detail.html', context)
+
+
+@login_required
+def task_edit(request, pk):
+    """Edit an existing task's own fields — not its site (a different
+    operation) and not its lead/helpers (the assign screen already
+    handles that with its own history). Rescheduling logs a
+    RESCHEDULED event so there's a record of what the date used to be.
+    """
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    task = get_object_or_404(Task, pk=pk)
+    previous_scheduled_for = task.scheduled_for
+
+    if request.method == 'POST':
+        form = TaskEditForm(request.POST, instance=task)
+        if form.is_valid():
+            with transaction.atomic():
+                updated_task = form.save()
+                if updated_task.scheduled_for != previous_scheduled_for:
+                    TaskEvent.objects.create(
+                        task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
+                        occurred_at=timezone.now(), actor=request.user,
+                    )
+            messages.success(request, _('Task updated.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+    else:
+        form = TaskEditForm(instance=task)
+
+    return render(request, 'tasks/task_edit.html', {'task': task, 'form': form})
 
 
 @login_required
@@ -840,6 +946,7 @@ def my_progress(request):
     conduct_areas = _conduct_areas_with_current_rating(technician)
     certification = _certification_status(technician)
     solve_rate = _solve_rate(technician)
+    ninety_day = _ninety_day_progress(technician, certification)
 
     leaderboard = _leaderboard(technician.country)
     rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
@@ -867,6 +974,7 @@ def my_progress(request):
         'conduct_areas': conduct_areas,
         'certification': certification,
         'solve_rate': solve_rate,
+        'ninety_day': ninety_day,
         'rank': rank,
         'leaderboard_size': len(leaderboard),
         'assigned_count': assigned_count,
@@ -939,14 +1047,15 @@ def technician_list(request):
     supervisor = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
 
     technicians = Technician.objects.filter(is_active=True, country=supervisor.country).order_by('full_name')
-    rows = [
-        {
+    rows = []
+    for technician in technicians:
+        certification = _certification_status(technician)
+        rows.append({
             'technician': technician,
-            'certification': _certification_status(technician),
+            'certification': certification,
             'solve_rate': _solve_rate(technician),
-        }
-        for technician in technicians
-    ]
+            'ninety_day': _ninety_day_progress(technician, certification),
+        })
 
     return render(request, 'tasks/technician_list.html', {'rows': rows})
 
