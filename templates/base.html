@@ -9,8 +9,28 @@
 <body>
     <header class="site-header">
         <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
+        {% if active_country %}
+        <span class="badge badge--muted">{{ active_country.name }}</span>
+        {% endif %}
         {% if user.is_authenticated %}
+            <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
+            <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}">
+                <span></span><span></span><span></span>
+            </label>
             <nav class="site-header__nav">
+                {% if switchable_countries %}
+                <form method="post" action="{% url 'tasks:set_active_country' %}" class="country-switcher">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <label for="country-switch">{% translate "Viewing" %}</label>
+                    <select id="country-switch" name="country">
+                        {% for country in switchable_countries %}
+                        <option value="{{ country.pk }}" {% if active_country.pk == country.pk %}selected{% endif %}>{{ country.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="button button--secondary">{% translate "Switch" %}</button>
+                </form>
+                {% endif %}
                 {% if user.technician %}
                     <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
@@ -29,6 +49,9 @@
                 {% endif %}
                 {% if 'view_technicians' in role_permissions %}
                     <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
+                {% endif %}
+                {% if 'manage_customers' in role_permissions %}
+                    <a href="{% url 'customers:customer_list' %}">{% translate "Customers" %}</a>
                 {% endif %}
                 {% if 'manage_tickets' in role_permissions %}
                     <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>

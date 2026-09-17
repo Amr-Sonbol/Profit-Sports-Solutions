@@ -67,14 +67,16 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, ticket=None, **kwargs):
+    def __init__(self, *args, country, ticket=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['site'].queryset = Site.objects.filter(customer__is_active=True).select_related('customer')
+        self.fields['site'].queryset = Site.objects.filter(
+            customer__is_active=True, customer__country=country,
+        ).select_related('customer')
         self.fields['site'].required = False
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
-        self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True)
+        self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
         # The skill level scale tops out at 4 (see TechnicianSkill.level) —
         # PositiveSmallIntegerField has no upper bound of its own, so without
         # this a nonsense value here is a clean model concern, not just a

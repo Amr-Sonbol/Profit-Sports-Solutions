@@ -75,8 +75,20 @@ msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذ�
 msgid "Add a new skill for this brand"
 msgstr "إضافة مهارة جديدة لهذه العلامة التجارية"
 
+msgid "Add a site"
+msgstr "إضافة فرع"
+
+msgid "Add and view customers and sites"
+msgstr "إضافة العملاء والفروع وعرضهم"
+
+msgid "Add customer"
+msgstr "إضافة عميل"
+
 msgid "Add helper"
 msgstr "إضافة مساعد"
+
+msgid "Add site"
+msgstr "إضافة الفرع"
 
 msgid "Address"
 msgstr "العنوان"
@@ -149,6 +161,9 @@ msgstr "متاح الآن"
 
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
+
+msgid "Back to customers"
+msgstr "العودة إلى العملاء"
 
 msgid "Back to list"
 msgstr "العودة إلى القائمة"
@@ -339,6 +354,9 @@ msgstr "العميل"
 msgid "Customer / Site"
 msgstr "العميل / الموقع"
 
+msgid "Customer added."
+msgstr "تمت إضافة العميل."
+
 msgid "Customer feedback"
 msgstr "تقييم العميل"
 
@@ -359,6 +377,9 @@ msgstr "توقيع العميل"
 
 msgid "Customer ticket"
 msgstr "تذكرة عميل"
+
+msgid "Customers"
+msgstr "العملاء"
 
 msgid "Dashboard"
 msgstr "لوحة التحكم"
@@ -525,6 +546,9 @@ msgstr "رمز ISO"
 msgid "In progress"
 msgstr "قيد التنفيذ"
 
+msgid "Inactive"
+msgstr "غير نشط"
+
 msgid "Incorrect username or password."
 msgstr "اسم المستخدم أو كلمة المرور غير صحيحة."
 
@@ -612,6 +636,9 @@ msgstr "تم وضع علامة متاح."
 msgid "Marked unavailable."
 msgstr "تم وضع علامة غير متاح."
 
+msgid "Menu"
+msgstr "القائمة"
+
 msgid "Model"
 msgstr "الموديل"
 
@@ -684,6 +711,12 @@ msgstr "لم يتم إعداد أي علامات تجارية بعد."
 msgid "No conduct areas set up yet."
 msgstr "لم يتم إعداد أي مجالات سلوك بعد."
 
+msgid "No customers in your country yet."
+msgstr "لا يوجد عملاء في دولتك بعد."
+
+msgid "No customers match that search."
+msgstr "لا يوجد عملاء مطابقون لهذا البحث."
+
 msgid "No events yet."
 msgstr "لا توجد أحداث بعد."
 
@@ -702,11 +735,17 @@ msgstr "لا توجد صور بعد."
 msgid "No reports match this filter."
 msgstr "لا توجد تقارير مطابقة لهذا الفلتر."
 
+msgid "No sites yet."
+msgstr "لا توجد فروع بعد."
+
 msgid "No tasks match these filters."
 msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
 
 msgid "No tasks scheduled."
 msgstr "لا توجد مهام مجدولة."
+
+msgid "No technicians match that search."
+msgstr "لا يوجد فنيون مطابقون لهذا البحث."
 
 msgid "No tickets match this filter."
 msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
@@ -752,6 +791,9 @@ msgstr "إشعار مرة أخرى"
 
 msgid "Notify customer of scheduled visit"
 msgstr "إشعار العميل بالزيارة المجدولة"
+
+msgid "Now viewing %(country)s."
+msgstr "أنت الآن تعرض بيانات %(country)s."
 
 msgid "On my way"
 msgstr "أنا في الطريق"
@@ -1005,11 +1047,17 @@ msgstr "مجدولة إلى"
 msgid "Search"
 msgstr "بحث"
 
+msgid "Search by name"
+msgstr "البحث بالاسم"
+
 msgid "Search by task number, site, or customer"
 msgstr "ابحث برقم المهمة أو الموقع أو العميل"
 
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
+
+msgid "Segment"
+msgstr "الفئة"
 
 msgid "Self-rated"
 msgstr "مقيّم ذاتيًا"
@@ -1062,11 +1110,17 @@ msgstr "وقّعه"
 msgid "Site"
 msgstr "الموقع"
 
+msgid "Site added."
+msgstr "تمت إضافة الفرع."
+
 msgid "Site contact"
 msgstr "جهة الاتصال بالموقع"
 
 msgid "Site name"
 msgstr "اسم الموقع"
+
+msgid "Sites"
+msgstr "الفروع"
 
 msgid "Skill mismatch"
 msgstr "عدم تطابق المهارة"
@@ -1109,6 +1163,9 @@ msgstr "تم التقديم — بانتظار مراجعة المكتب."
 
 msgid "Supervisor"
 msgstr "مشرف"
+
+msgid "Switch"
+msgstr "تبديل"
 
 msgid "Task"
 msgstr "المهمة"
@@ -1218,11 +1275,17 @@ msgstr "عرض اللوحة"
 msgid "View dashboard"
 msgstr "عرض لوحة التحكم"
 
+msgid "View sites"
+msgstr "عرض الفروع"
+
 msgid "View task list, task detail, and week view"
 msgstr "عرض قائمة المهام وتفاصيلها وعرض الأسبوع"
 
 msgid "View technician roster and boards"
 msgstr "عرض قائمة الفنيين ولوحاتهم"
+
+msgid "Viewing"
+msgstr "تعرض بيانات"
 
 msgid "Warranty"
 msgstr "ضمان"

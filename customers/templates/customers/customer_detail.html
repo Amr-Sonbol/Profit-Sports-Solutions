@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ customer.name }} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
+        <h1>{{ customer.name }}</h1>
+    </div>
+</div>
+
+<div class="section">
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Segment" %}</dt>
+            <dd>{{ customer.get_segment_display }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Country" %}</dt>
+            <dd>{{ customer.country.name }}</dd>
+        </div>
+    </dl>
+</div>
+
+<div class="section">
+    <h2>{% translate "Sites" %}</h2>
+    {% if sites %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Address" %}</th>
+                    <th>{% translate "Contact" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for site in sites %}
+                <tr>
+                    <td>{{ site.name }}</td>
+                    <td>{{ site.address }}</td>
+                    <td>
+                        {{ site.contact_name }}
+                        {% if site.contact_phone %}<span class="muted">{{ site.contact_phone }}</span>{% endif %}
+                        {% if site.contact_email %}<span class="muted">{{ site.contact_email }}</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No sites yet." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Add a site" %}</h2>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Add site" %}</button>
+    </form>
+</div>
+{% endblock %}

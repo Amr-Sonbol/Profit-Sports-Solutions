@@ -9,7 +9,7 @@ from django.utils import timezone, translation
 from django.utils.translation import gettext as _
 
 from people.models import RolePermission
-from people.permissions import require_permission
+from people.permissions import get_active_country, require_permission
 from tasks.models import Task, TaskAssignment, TaskEvent
 
 from .forms import CustomerFeedbackForm, RejectReportForm
@@ -67,7 +67,9 @@ def report_list(request):
     require_permission(request, RolePermission.Permission.REVIEW_REPORTS)
 
     status = request.GET.get('status', 'pending')
-    reports = WorkReport.objects.select_related('task__site__customer')
+    reports = WorkReport.objects.filter(
+        task__site__customer__country=get_active_country(request),
+    ).select_related('task__site__customer')
 
     if status == 'pending':
         reports = reports.filter(approved_at__isnull=True, rejection_reason='')
@@ -94,7 +96,7 @@ def report_review(request, pk):
         WorkReport.objects.select_related(
             'task__site__customer', 'task__task_type',
         ).prefetch_related('parts_used'),
-        pk=pk,
+        pk=pk, task__site__customer__country=get_active_country(request),
     )
     task = report.task
     reviewed = report.approved_at is not None

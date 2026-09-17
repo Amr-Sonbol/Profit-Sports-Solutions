@@ -84,12 +84,52 @@ class ReportListTests(ReportReviewTestCase):
         response = self.client.get('/reports/', {'status': 'rejected'})
         self.assertContains(response, 'AE-0001')
 
+    def test_other_country_report_excluded(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_task = Task.objects.create(
+            task_number='EG-0001', site=other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+        )
+        WorkReport.objects.create(
+            task=other_task, findings='AC broken', action_taken='Fixed', resolved=True,
+            labour_hours='1.00', customer_name='Mona', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/reports/', {'status': 'all'})
+        self.assertNotContains(response, 'EG-0001')
+
 
 class ReportReviewTests(ReportReviewTestCase):
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
+
+    def test_other_country_report_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_task = Task.objects.create(
+            task_number='EG-0001', site=other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+        )
+        other_report = WorkReport.objects.create(
+            task=other_task, findings='AC broken', action_taken='Fixed', resolved=True,
+            labour_hours='1.00', customer_name='Mona', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/reports/{other_report.pk}/')
+        self.assertEqual(response.status_code, 404)
 
     def test_approve_closes_task_and_records_event(self):
         self.client.login(username='supervisor1', password='pass12345')

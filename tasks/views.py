@@ -14,8 +14,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone, translation
 from django.utils.dateparse import parse_date
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
 from customers.models import Asset, Customer, Site
@@ -23,8 +25,10 @@ from people.models import (
     RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
-from people.permissions import require_manager, require_permission, require_technician
-from reference.models import Brand, ConductArea, Skill, TaskType
+from people.permissions import (
+    ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_manager, require_permission, require_technician,
+)
+from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import PartUsed, WorkReport
 
@@ -416,10 +420,11 @@ def dashboard(request):
     lead and schedule. The landing page stays task_list — this is an
     additional screen, not a replacement.
     """
-    supervisor = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
+    require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
+    active_country = get_active_country(request)
 
     technicians = list(Technician.objects.filter(
-        is_active=True, country=supervisor.country, role=Technician.Role.TECHNICIAN,
+        is_active=True, country=active_country, role=Technician.Role.TECHNICIAN,
     ).order_by('full_name'))
     active_task_counts = dict(
         TaskAssignment.objects.filter(
@@ -430,7 +435,7 @@ def dashboard(request):
         technician.active_task_count = active_task_counts.get(technician.id, 0)
 
     tasks = list(_with_lead_prefetch(
-        Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=supervisor.country)
+        Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
         .select_related('site__customer', 'task_type')
         .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
     ))
@@ -459,6 +464,7 @@ def dashboard(request):
 @login_required
 def task_list(request):
     require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    active_country = get_active_country(request)
 
     status = request.GET.get('status', 'open')
     search = request.GET.get('q', '').strip()
@@ -467,7 +473,9 @@ def task_list(request):
     scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
     scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
 
-    tasks = _with_lead_prefetch(Task.objects.select_related('site__customer', 'task_type'))
+    tasks = _with_lead_prefetch(
+        Task.objects.filter(site__customer__country=active_country).select_related('site__customer', 'task_type'),
+    )
 
     if status == 'open':
         tasks = tasks.filter(status__in=OPEN_STATUSES)
@@ -516,8 +524,8 @@ def task_list(request):
         'status': status,
         'search': search,
         'status_choices': Task.Status.choices,
-        'customers': Customer.objects.filter(is_active=True).order_by('name'),
-        'technicians': Technician.objects.filter(is_active=True).order_by('full_name'),
+        'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
+        'technicians': Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'),
         'selected_customer': customer_id,
         'selected_technician': technician_id,
         'scheduled_from': request.GET.get('scheduled_from', ''),
@@ -535,7 +543,7 @@ def task_detail(request, pk):
         Task.objects.select_related(
             'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
         ).prefetch_related('report__parts_used'),
-        pk=pk,
+        pk=pk, site__customer__country=get_active_country(request),
     )
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
@@ -598,7 +606,7 @@ def task_edit(request, pk):
     the customer the same way the manual "Notify customer" button would.
     """
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(Task, pk=pk, site__customer__country=get_active_country(request))
     previous_scheduled_for = task.scheduled_for
 
     if request.method == 'POST':
@@ -633,14 +641,17 @@ def task_edit(request, pk):
 @login_required
 def task_create(request):
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    active_country = get_active_country(request)
 
     ticket = None
     ticket_id = request.GET.get('ticket')
     if ticket_id:
-        ticket = get_object_or_404(CustomerTicket, pk=ticket_id, status=CustomerTicket.Status.NEW)
+        ticket = get_object_or_404(
+            CustomerTicket, pk=ticket_id, status=CustomerTicket.Status.NEW, country=active_country,
+        )
 
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST, ticket=ticket)
+        form = TaskCreateForm(request.POST, country=active_country, ticket=ticket)
         if form.is_valid():
             cleaned = form.cleaned_data
             with transaction.atomic():
@@ -694,7 +705,7 @@ def task_create(request):
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm(ticket=ticket)
+        form = TaskCreateForm(country=active_country, ticket=ticket)
 
     return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket})
 
@@ -729,10 +740,10 @@ def ticket_list(request):
     what's already been resolved — country-scoped like everything else a
     supervisor reviews.
     """
-    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
+    require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
 
     status = request.GET.get('status', 'new')
-    tickets = CustomerTicket.objects.filter(country=supervisor.country).select_related('assigned_to')
+    tickets = CustomerTicket.objects.filter(country=get_active_country(request)).select_related('assigned_to')
     if status != 'all':
         tickets = tickets.filter(status=status)
     tickets = tickets.order_by('-submitted_at')
@@ -753,7 +764,7 @@ def ticket_review(request, pk):
     # lookup in this app (technician_board, technician_skills, ...) — an
     # assignee is always same-country by construction (AssignTicketForm
     # only offers same-country technicians), so this costs it nothing.
-    ticket = get_object_or_404(CustomerTicket, pk=pk, country=technician.country)
+    ticket = get_object_or_404(CustomerTicket, pk=pk, country=get_active_country(request))
 
     can_manage = RolePermission.objects.filter(
         role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
@@ -830,7 +841,10 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
 def task_assign(request, pk):
     require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
 
-    task = get_object_or_404(Task.objects.select_related('site__customer__country'), pk=pk)
+    task = get_object_or_404(
+        Task.objects.select_related('site__customer__country'),
+        pk=pk, site__customer__country=get_active_country(request),
+    )
     active_assignments = list(task.assignments.filter(is_active=True).select_related('technician'))
     active_lead = next((a for a in active_assignments if a.role == TaskAssignment.Role.LEAD), None)
     active_helpers = [a for a in active_assignments if a.role == TaskAssignment.Role.HELPER]
@@ -924,11 +938,14 @@ def task_assign(request, pk):
 @login_required
 def task_week(request):
     require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    active_country = get_active_country(request)
 
     today, start, end = _week_window(request)
 
     scheduled = _with_lead_prefetch(
-        Task.objects.filter(scheduled_for__date__range=(start, end))
+        Task.objects.filter(
+            scheduled_for__date__range=(start, end), site__customer__country=active_country,
+        )
         .select_related('site__customer', 'task_type').order_by('scheduled_for'),
     )
     _attach_lead_technician(scheduled)
@@ -939,7 +956,9 @@ def task_week(request):
         tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
 
     unscheduled = _with_lead_prefetch(
-        Task.objects.filter(scheduled_for__isnull=True, status__in=OPEN_STATUSES)
+        Task.objects.filter(
+            scheduled_for__isnull=True, status__in=OPEN_STATUSES, site__customer__country=active_country,
+        )
         .select_related('site__customer', 'task_type')
         .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'),
     )
@@ -1151,9 +1170,15 @@ def technician_list(request):
     """The technician roster for a supervisor's own country — the "who can
     I rely on" view. Never existed as a screen before this feature.
     """
-    supervisor = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
 
-    technicians = Technician.objects.filter(is_active=True, country=supervisor.country).order_by('full_name')
+    search = request.GET.get('q', '').strip()
+    technicians = Technician.objects.filter(
+        is_active=True, country=get_active_country(request),
+    ).order_by('full_name')
+    if search:
+        technicians = technicians.filter(full_name__icontains=search)
+
     rows = []
     for technician in technicians:
         certification = _certification_status(technician)
@@ -1164,7 +1189,7 @@ def technician_list(request):
             'ninety_day': _ninety_day_progress(technician, certification),
         })
 
-    return render(request, 'tasks/technician_list.html', {'rows': rows})
+    return render(request, 'tasks/technician_list.html', {'rows': rows, 'search': search})
 
 
 @login_required
@@ -1173,8 +1198,8 @@ def technician_board(request, pk):
     my_week, just for someone else, with the same country scoping used
     everywhere else a supervisor looks at a specific technician.
     """
-    supervisor = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
-    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
 
     days, unscheduled, nav_context = _week_board(technician, request)
     context = {'technician': technician, 'days': days, 'unscheduled': unscheduled, **nav_context}
@@ -1189,7 +1214,7 @@ def technician_skills(request, pk):
     writes to it automatically.
     """
     supervisor = require_permission(request, RolePermission.Permission.REVIEW_SKILLS)
-    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1253,8 +1278,8 @@ def technician_edit(request, pk):
     """Just the photo, for now — a supervisor/manager sets it from the
     roster, same country scoping as every other per-technician screen.
     """
-    supervisor = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
-    technician = get_object_or_404(Technician, pk=pk, country=supervisor.country)
+    require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
 
     if request.method == 'POST':
         form = TechnicianPhotoForm(request.POST, request.FILES, instance=technician)
@@ -1266,6 +1291,25 @@ def technician_edit(request, pk):
         form = TechnicianPhotoForm(instance=technician)
 
     return render(request, 'tasks/technician_edit.html', {'technician': technician, 'form': form})
+
+
+@login_required
+def set_active_country(request):
+    """Manager-only header switcher — session-only, never touches the
+    manager's own technician.country. POST only, since this changes what
+    every other screen shows for the rest of the session.
+    """
+    require_manager(request)
+
+    if request.method == 'POST':
+        country = get_object_or_404(Country, pk=request.POST.get('country'))
+        request.session[ACTIVE_COUNTRY_SESSION_KEY] = country.pk
+        messages.success(request, _('Now viewing %(country)s.') % {'country': country.name})
+
+    next_url = request.POST.get('next', '')
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = reverse('tasks:dashboard')
+    return redirect(next_url)
 
 
 @login_required

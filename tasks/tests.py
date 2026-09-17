@@ -101,6 +101,22 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.get('/tasks/999999/')
         self.assertEqual(response.status_code, 404)
 
+    def test_other_country_task_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_task = Task.objects.create(
+            task_number='EG-0001', site=other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{other_task.pk}/')
+        self.assertEqual(response.status_code, 404)
+
     def test_supervisor_sees_full_detail(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(f'/tasks/{self.task.pk}/')
@@ -249,6 +265,22 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Belt making noise')
 
+    def test_other_country_task_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_task = Task.objects.create(
+            task_number='EG-0001', site=other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{other_task.pk}/edit/')
+        self.assertEqual(response.status_code, 404)
+
     def test_updating_priority_and_description(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, self._payload(
@@ -395,12 +427,76 @@ class TaskListTests(TaskTestCase):
 
         self.assertContains(response, f'customer={self.customer.pk}')
 
+    def test_other_country_task_excluded(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        self._make_task('EG-0001', site=other_site, status=Task.Status.NEW)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [])
+
+    def test_customer_and_technician_dropdowns_are_country_scoped(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_user = User.objects.create_user('egypt_tech', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/')
+
+        self.assertNotIn('Cairo Gym', [c.name for c in response.context['customers']])
+        self.assertNotIn('Nour Cairo', [t.full_name for t in response.context['technicians']])
+
 
 class TaskCreateTests(TaskTestCase):
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/new/')
         self.assertEqual(response.status_code, 403)
+
+    def test_dropdowns_exclude_other_country_data(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/new/')
+
+        form = response.context['form']
+        self.assertNotIn(other_site, form.fields['site'].queryset)
+        self.assertNotIn(other_customer, form.fields['new_site_customer'].queryset)
+
+    def test_cannot_create_a_task_for_another_country_s_site(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', {
+            'site': other_site.pk,
+            'priority': Task.Priority.NORMAL,
+            'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE,
+            'reported_at': '2026-09-06T10:00',
+            'is_warranty': '',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors.get('site'))
 
     def test_minimal_task_is_created_with_only_site_required(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -901,6 +997,22 @@ class TaskAssignTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
+    def test_other_country_task_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_task = Task.objects.create(
+            task_number='EG-0001', site=other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{other_task.pk}/assign/')
+        self.assertEqual(response.status_code, 404)
+
     def test_set_lead_assigns_and_advances_status(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
@@ -1154,6 +1266,20 @@ class TaskWeekTests(TaskTestCase):
         response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
         self.assertEqual(response.context['prev_start'], date(2026, 8, 31))
         self.assertEqual(response.context['next_start'], date(2026, 9, 14))
+
+    def test_other_country_task_excluded(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        self._make_task('EG-0001', site=other_site, scheduled_for=dubai_time(2026, 9, 7, 9, 0))
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+
+        all_tasks = [task for day in response.context['days'] for task in day['tasks']]
+        self.assertEqual(all_tasks, [])
 
 
 class MyWeekTests(TaskTestCase):
@@ -1698,6 +1824,24 @@ class TechnicianListTests(TaskTestCase):
         technicians = [row['technician'] for row in response.context['rows']]
         self.assertNotIn(other_technician, technicians)
 
+    def test_search_by_name(self):
+        other_user = User.objects.create_user('other_tech', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=self.country, full_name='Omar Khaled',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/', {'q': 'tarek'})
+
+        technicians = [row['technician'] for row in response.context['rows']]
+        self.assertEqual(technicians, [self.technician])
+
+    def test_search_with_no_matches(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/', {'q': 'nonexistent'})
+        self.assertContains(response, 'No technicians match that search.')
+
 
 class DashboardTests(TaskTestCase):
     def _make_task(self, number, **overrides):
@@ -2098,6 +2242,76 @@ class RolePermissionsTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
+
+
+class ActiveCountryTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        self.manager = Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.egypt = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        self.egypt_customer = Customer.objects.create(country=self.egypt, name='Cairo Gym', segment='gym')
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_gets_403(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_defaults_to_own_country(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/customers/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Fitness First')
+        self.assertNotContains(response, 'Cairo Gym')
+
+    def test_manager_switches_and_sees_the_new_country(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(
+            '/tasks/active-country/', {'country': self.egypt.pk, 'next': '/customers/'},
+        )
+        self.assertRedirects(response, '/customers/')
+
+        response = self.client.get('/customers/')
+        self.assertContains(response, 'Cairo Gym')
+        self.assertNotContains(response, 'Fitness First')
+
+    def test_switch_persists_across_requests(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
+
+        response = self.client.get('/tasks/technicians/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['rows'], [])
+
+    def test_invalid_country_gives_404(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/active-country/', {'country': 999999})
+        self.assertEqual(response.status_code, 404)
+
+    def test_unsafe_next_falls_back_to_dashboard(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(
+            '/tasks/active-country/', {'country': self.egypt.pk, 'next': 'https://evil.example/'},
+        )
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_new_customer_is_created_in_the_active_country(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
+
+        response = self.client.post('/customers/new/', {'name': 'Nile Gym', 'segment': 'gym'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Customer.objects.get(name='Nile Gym').country, self.egypt)
 
 
 class HomeRedirectTests(TaskTestCase):

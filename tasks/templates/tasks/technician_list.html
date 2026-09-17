@@ -8,6 +8,13 @@
     <h1>{% translate "Technicians" %}</h1>
 </div>
 
+<form method="get" class="filters">
+    <div class="filters__search">
+        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name' %}">
+    </div>
+    <button type="submit" class="button">{% translate "Search" %}</button>
+</form>
+
 <div class="section">
     {% if rows %}
     <div class="table-wrap">
@@ -74,6 +81,8 @@
             </tbody>
         </table>
     </div>
+    {% elif search %}
+    <p class="empty-state">{% translate "No technicians match that search." %}</p>
     {% else %}
     <p class="empty-state">{% translate "No active technicians in your country." %}</p>
     {% endif %}
