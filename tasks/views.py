@@ -36,7 +36,7 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
     ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
-    TaskEditForm, TechnicianPhotoForm,
+    TaskEditForm, TechnicianPhotoForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -398,6 +398,25 @@ def _send_delay_notice(task, reason):
     )
 
 
+def _send_shipping_notice(contact_name, entity_name, reference, tracking_number, contact_email):
+    """Shared by task detail and ticket review — the only two places a
+    shipping_tracking_number can live. Only the tracking number goes to
+    the customer; pak_reference_number is internal and never sent.
+    """
+    with translation.override('en'):
+        subject = _('Your part(s) have shipped — %(reference)s') % {'reference': reference}
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'The part(s) for %(entity)s are on their way. Tracking number: %(tracking)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {'contact': contact_name, 'entity': entity_name, 'tracking': tracking_number}
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[contact_email], fail_silently=True,
+    )
+
+
 def _send_feedback_email(request, feedback):
     """Best-effort — a failed send shouldn't stop the supervisor's flow or
     leave them staring at a 500. EMAIL_BACKEND defaults to the console in
@@ -602,6 +621,21 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the delay.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'notify_shipping':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
+        if not task.shipping_tracking_number:
+            messages.error(request, _('Add a shipping tracking number before notifying the customer.'))
+        elif not task.site.contact_email:
+            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+        else:
+            _send_shipping_notice(
+                task.site.contact_name or task.site.customer.name, task.site.name,
+                task.task_number, task.shipping_tracking_number, task.site.contact_email,
+            )
+            messages.success(request, _('Customer notified of the tracking number.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
@@ -739,6 +773,9 @@ def task_create(request):
                 task.required_skill = required_skill
                 task.created_by = request.user
                 task.status = Task.Status.NEW
+                if ticket is not None:
+                    task.pak_reference_number = ticket.pak_reference_number
+                    task.shipping_tracking_number = ticket.shipping_tracking_number
                 _save_new_task(task)
                 TaskEvent.objects.create(
                     task=task, event_type=TaskEvent.EventType.CREATED,
@@ -828,11 +865,32 @@ def ticket_review(request, pk):
 
     dismiss_form = DismissTicketForm()
     assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
+    logistics_form = TicketLogisticsForm(instance=ticket)
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
 
-        if action == 'dismiss' and ticket.status == CustomerTicket.Status.NEW:
+        if action == 'update_logistics':
+            logistics_form = TicketLogisticsForm(request.POST, instance=ticket)
+            if logistics_form.is_valid():
+                logistics_form.save()
+                messages.success(request, _('Logistics updated.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+        elif action == 'notify_shipping':
+            if not ticket.shipping_tracking_number:
+                messages.error(request, _('Add a shipping tracking number before notifying the customer.'))
+            elif not ticket.contact_email:
+                messages.error(request, _('Add a contact email before notifying the customer.'))
+            else:
+                _send_shipping_notice(
+                    ticket.contact_name, ticket.site_description, f'ticket #{ticket.pk}',
+                    ticket.shipping_tracking_number, ticket.contact_email,
+                )
+                messages.success(request, _('Customer notified of the tracking number.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+
+        elif action == 'dismiss' and ticket.status == CustomerTicket.Status.NEW:
             dismiss_form = DismissTicketForm(request.POST)
             if dismiss_form.is_valid():
                 ticket.status = CustomerTicket.Status.DISMISSED
@@ -853,7 +911,8 @@ def ticket_review(request, pk):
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
     context = {
-        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form, 'can_manage': can_manage,
+        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
+        'logistics_form': logistics_form, 'can_manage': can_manage,
     }
     return render(request, 'tasks/ticket_review.html', context)
 

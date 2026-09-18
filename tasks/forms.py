@@ -195,7 +195,7 @@ class TaskEditForm(forms.ModelForm):
         fields = [
             'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
             'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
-            'responsible_supervisor',
+            'responsible_supervisor', 'pak_reference_number', 'shipping_tracking_number',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -489,6 +489,16 @@ class DismissTicketForm(forms.Form):
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
         help_text=_('Why this ticket isn\'t becoming a task — spam, duplicate, not us, etc.'),
     )
+
+
+class TicketLogisticsForm(forms.ModelForm):
+    """Both optional, filled in later once parts have actually shipped —
+    never known at submission time, so not part of CustomerTicketForm.
+    """
+
+    class Meta:
+        model = CustomerTicket
+        fields = ['pak_reference_number', 'shipping_tracking_number']
 
 
 class AssignTicketForm(forms.Form):

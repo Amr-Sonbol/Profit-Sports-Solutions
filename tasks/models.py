@@ -97,6 +97,8 @@ class Task(models.Model):
             'and not the same as the technician actually assigned to do the work'
         ),
     )
+    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
@@ -174,6 +176,8 @@ class CustomerTicket(models.Model):
         help_text=_('who is handling this — a supervisor or manager, not necessarily who converts it'),
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
+    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     task = models.OneToOneField(
         Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket',
         verbose_name=_('task'),

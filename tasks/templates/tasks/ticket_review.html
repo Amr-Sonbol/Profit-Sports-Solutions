@@ -101,6 +101,40 @@
     {% endif %}
 </div>
 
+{% if can_manage %}
+<div class="section">
+    <h2>{% translate "Shipping" %}</h2>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_logistics">
+        <div class="field {% if logistics_form.pak_reference_number.errors %}field--error{% endif %}">
+            <label for="{{ logistics_form.pak_reference_number.id_for_label }}">{{ logistics_form.pak_reference_number.label }}</label>
+            {{ logistics_form.pak_reference_number }}
+            {% for error in logistics_form.pak_reference_number.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if logistics_form.shipping_tracking_number.errors %}field--error{% endif %}">
+            <label for="{{ logistics_form.shipping_tracking_number.id_for_label }}">{{ logistics_form.shipping_tracking_number.label }}</label>
+            {{ logistics_form.shipping_tracking_number }}
+            {% for error in logistics_form.shipping_tracking_number.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Save" %}</button>
+        </div>
+    </form>
+    {% if ticket.shipping_tracking_number and ticket.contact_email %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="notify_shipping">
+        <button type="submit" class="button button--secondary">{% translate "Notify customer of tracking number" %}</button>
+    </form>
+    {% elif not ticket.shipping_tracking_number %}
+    <p class="field__help">{% translate "Add a shipping tracking number before notifying the customer." %}</p>
+    {% else %}
+    <p class="field__help">{% translate "Add a contact email before notifying the customer." %}</p>
+    {% endif %}
+</div>
+{% endif %}
+
 {% if not can_manage %}
 <p class="empty-state">{% translate "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it." %}</p>
 {% elif ticket.status == 'new' %}

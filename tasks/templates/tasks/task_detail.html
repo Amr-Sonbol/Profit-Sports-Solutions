@@ -141,6 +141,30 @@
     {% else %}
     <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
     {% endif %}
+
+    <h3>{% translate "Shipping" %}</h3>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "PAK reference number" %}</dt>
+            <dd>{{ task.pak_reference_number|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Shipping tracking number" %}</dt>
+            <dd>{{ task.shipping_tracking_number|default:"—" }}</dd>
+        </div>
+    </dl>
+    <p class="field__help">{% translate "Set these from the task's Edit screen." %}</p>
+    {% if task.shipping_tracking_number and task.site.contact_email %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="notify_shipping">
+        <button type="submit" class="button button--secondary">{% translate "Notify customer of tracking number" %}</button>
+    </form>
+    {% elif not task.shipping_tracking_number %}
+    <p class="field__help">{% translate "Add a shipping tracking number before notifying the customer." %}</p>
+    {% else %}
+    <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
+    {% endif %}
 </div>
 
 {% if task.status == 'closed' %}

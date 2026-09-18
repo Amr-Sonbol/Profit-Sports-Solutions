@@ -445,6 +445,64 @@ class TaskEditTests(TaskTestCase):
         self.assertIsNone(self.task.schedule_notified_at)
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_updating_pak_and_tracking_via_edit(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(
+            pak_reference_number='PAK-42', shipping_tracking_number='TRACK-99',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.pak_reference_number, 'PAK-42')
+        self.assertEqual(self.task.shipping_tracking_number, 'TRACK-99')
+
+
+class TaskShippingNoticeTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def test_requires_a_tracking_number(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertContains(response, 'Add a shipping tracking number')
+
+    def test_requires_a_contact_email(self):
+        self.task.shipping_tracking_number = 'TRACK-99'
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertContains(response, 'Add a contact email')
+
+    def test_sends_the_tracking_number_only(self):
+        self.task.shipping_tracking_number = 'TRACK-99'
+        self.task.pak_reference_number = 'PAK-SECRET'
+        self.task.save()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'notify_shipping'})
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
+        self.assertIn('TRACK-99', mail.outbox[0].body)
+        self.assertNotIn('PAK-SECRET', mail.outbox[0].body)
+
 
 class TaskListTests(TaskTestCase):
     def _make_task(self, number, **overrides):
@@ -1009,6 +1067,43 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.dismissal_reason, 'Duplicate report.')
         self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
 
+    def test_updating_logistics(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'update_logistics', 'pak_reference_number': 'PAK-42',
+            'shipping_tracking_number': 'TRACK-99',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.pak_reference_number, 'PAK-42')
+        self.assertEqual(self.ticket.shipping_tracking_number, 'TRACK-99')
+
+    def test_notify_shipping_requires_a_tracking_number(self):
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertContains(response, 'Add a shipping tracking number')
+
+    def test_notify_shipping_sends_the_tracking_number_only(self):
+        self.ticket.shipping_tracking_number = 'TRACK-99'
+        self.ticket.pak_reference_number = 'PAK-SECRET'
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'notify_shipping'})
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['ali@fitnessfirst.example'])
+        self.assertIn('TRACK-99', mail.outbox[0].body)
+        self.assertNotIn('PAK-SECRET', mail.outbox[0].body)
+
     def test_converting_to_task_links_the_ticket(self):
         self.client.login(username='supervisor1', password='pass12345')
 
@@ -1034,6 +1129,24 @@ class TicketReviewTests(TaskTestCase):
         self.assertIsNotNone(self.ticket.task)
         self.assertEqual(self.ticket.task.source, Task.Source.PORTAL)
         self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+
+    def test_converting_carries_over_pak_and_tracking(self):
+        self.ticket.pak_reference_number = 'PAK-42'
+        self.ticket.shipping_tracking_number = 'TRACK-99'
+        self.ticket.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        self.client.post(create_url, {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Treadmill belt squeaking.',
+        })
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.task.pak_reference_number, 'PAK-42')
+        self.assertEqual(self.ticket.task.shipping_tracking_number, 'TRACK-99')
 
     def test_cannot_reconvert_an_already_converted_ticket(self):
         task = Task.objects.create(
@@ -1401,6 +1514,16 @@ class TaskOwnershipTests(TaskTestCase):
 
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_owning_supervisor_gets_403_notifying_shipping(self):
+        self.task.shipping_tracking_number = 'TRACK-99'
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_shipping'})
         self.assertEqual(response.status_code, 403)
 
     def test_manager_can_reassign_the_responsible_supervisor(self):

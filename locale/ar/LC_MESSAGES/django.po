@@ -66,6 +66,9 @@ msgstr "الإجراء المتخذ"
 msgid "Active"
 msgstr "نشط"
 
+msgid "Add a contact email before notifying the customer."
+msgstr "أضف بريد التواصل الإلكتروني قبل إشعار العميل."
+
 msgid "Add a contact email for this site before notifying the customer."
 msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل إشعار العميل."
 
@@ -74,6 +77,9 @@ msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذ�
 
 msgid "Add a new skill for this brand"
 msgstr "إضافة مهارة جديدة لهذه العلامة التجارية"
+
+msgid "Add a shipping tracking number before notifying the customer."
+msgstr "أضف رقم تتبع الشحن قبل إشعار العميل."
 
 msgid "Add a site"
 msgstr "إضافة فرع"
@@ -375,6 +381,9 @@ msgstr "تم إخطار العميل بالتأخير."
 msgid "Customer notified of the scheduled visit."
 msgstr "تم إشعار العميل بالزيارة المجدولة."
 
+msgid "Customer notified of the tracking number."
+msgstr "تم إشعار العميل برقم التتبع."
+
 msgid "Customer request"
 msgstr "طلب العميل"
 
@@ -612,6 +621,9 @@ msgstr "تسجيل الدخول"
 msgid "Log out"
 msgstr "تسجيل الخروج"
 
+msgid "Logistics updated."
+msgstr "تم تحديث بيانات الشحن."
+
 msgid "Low"
 msgstr "منخفضة"
 
@@ -810,6 +822,9 @@ msgstr "إشعار مرة أخرى"
 msgid "Notify customer of scheduled visit"
 msgstr "إشعار العميل بالزيارة المجدولة"
 
+msgid "Notify customer of tracking number"
+msgstr "إشعار العميل برقم التتبع"
+
 msgid "Now viewing %(country)s."
 msgstr "أنت الآن تعرض بيانات %(country)s."
 
@@ -836,6 +851,9 @@ msgstr "محمّل بالعمل أكثر من اللازم"
 
 msgid "Overview"
 msgstr "نظرة عامة"
+
+msgid "PAK reference number"
+msgstr "رقم مرجعي PAK"
 
 msgid "Page %(number)s of %(total)s"
 msgstr "صفحة %(number)s من %(total)s"
@@ -1142,6 +1160,15 @@ msgstr "تعيين كفني رئيسي"
 
 msgid "Set level"
 msgstr "تحديد المستوى"
+
+msgid "Set these from the task's Edit screen."
+msgstr "حددهما من شاشة تعديل المهمة."
+
+msgid "Shipping"
+msgstr "الشحن"
+
+msgid "Shipping tracking number"
+msgstr "رقم تتبع الشحن"
 
 msgid "Sick"
 msgstr "مرض"
@@ -1763,6 +1790,9 @@ msgstr "حدده"
 
 msgid "set on"
 msgstr "تاريخ التحديد"
+
+msgid "shipping tracking number"
+msgstr "رقم تتبع الشحن"
 
 msgid "showing the issue and the serial number"
 msgstr "يوضح المشكلة والرقم التسلسلي"

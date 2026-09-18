@@ -304,6 +304,8 @@ This status is shown to the technician themselves (My progress) and to superviso
 | status | varchar | see below |
 | created_by_id | FK → user | |
 | responsible_supervisor_id | FK → technician | nullable — who's accountable for staffing it, not who created it |
+| pak_reference_number | varchar | blank — internal only, never emailed to the customer |
+| shipping_tracking_number | varchar | blank — set once parts have shipped |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -325,6 +327,8 @@ Plus `blocked` and `cancelled` as endings. `completed` still exists as a choice 
 **Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`.** Off (the default): a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On: the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
 
 **A delay notice is a different message, always manual.** When the team is running behind — traffic, a previous job overrunning — a supervisor sends a short apology from task detail with a required reason, logged as a `delay_notice` task_event (the reason lives in the event's own `note`, so no extra columns on `task` are needed; a task can have any number of these over time, unlike the single schedule-confirmation email).
+
+**`pak_reference_number`/`shipping_tracking_number` work the same way** — see `customer_ticket` above, where both columns also live and the notify button is explained in full.
 
 ### notification_settings
 A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
@@ -354,6 +358,8 @@ A complaint or request submitted directly by a customer, no login — public, se
 | status | varchar | new, converted, dismissed |
 | assigned_to_id | FK → technician | nullable — who's handling it, a supervisor or manager (never a technician) |
 | assigned_at | timestamptz | nullable |
+| pak_reference_number | varchar | blank — internal only, never emailed to the customer |
+| shipping_tracking_number | varchar | blank — set once parts have shipped |
 | task_id | FK → task | nullable — set once converted |
 | reviewed_by_id | FK → user | nullable |
 | reviewed_at | timestamptz | nullable |
@@ -363,7 +369,9 @@ A complaint or request submitted directly by a customer, no login — public, se
 
 **Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers) or dismisses it with a reason.
 
-**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later.
+**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; either can also just be set directly, since parts more often ship after the task exists.
+
+**`pak_reference_number` and `shipping_tracking_number` exist on both `customer_ticket` and `task`, always optional, filled in later once parts actually ship** — never known at submission time. Only the tracking number is ever emailed to a customer (a manual "Notify customer" button next to each, same fail-silent pattern as the schedule/delay notices); PAK is internal bookkeeping and never leaves the app.
 
 ### customer_ticket_attachment
 A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` (there's no logged-in user to record) and no link/URL option the way `task_attachment` has — a customer only ever uploads a real file.
