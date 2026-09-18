@@ -1414,23 +1414,26 @@ def technician_skills(request, pk):
 
 @login_required
 def technician_edit(request, pk):
-    """Photo and country, from the roster — country covers relocating
-    someone between countries; everything else about a technician stays
+    """Photo, from the roster — plus country, but only for a manager
+    doing a relocation. Everything else about a technician stays
     office-side but out of scope here. Fetched from the viewer's own
     active country, same as every other per-technician screen — once
     relocated, the technician drops off this country's roster.
     """
-    require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+    requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+    can_relocate = requesting_technician.role == Technician.Role.MANAGER
     technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
 
     if request.method == 'POST':
-        form = TechnicianEditForm(request.POST, request.FILES, instance=technician)
+        form = TechnicianEditForm(
+            request.POST, request.FILES, instance=technician, can_relocate=can_relocate,
+        )
         if form.is_valid():
             form.save()
             messages.success(request, _('Technician updated.'))
             return redirect('tasks:technician_list')
     else:
-        form = TechnicianEditForm(instance=technician)
+        form = TechnicianEditForm(instance=technician, can_relocate=can_relocate)
 
     return render(request, 'tasks/technician_edit.html', {'technician': technician, 'form': form})
 

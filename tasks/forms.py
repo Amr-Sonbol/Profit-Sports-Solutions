@@ -340,12 +340,22 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
     roster — photo, plus their country when they relocate. Every other
     field (role, employment type, ...) stays office-side but out of
     scope here for now, same as it always has been.
+
+    `country` is manager-only — the only other cross-country action in
+    the app (the active-country switcher) is `require_manager`-gated
+    too, so a supervisor relocating someone outside their own country
+    would be a real inconsistency, not just a missing nicety.
     """
 
     class Meta:
         model = Technician
         fields = ['photo', 'country']
         widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, can_relocate=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not can_relocate:
+            del self.fields['country']
 
 
 class MyProfileForm(PhotoSizeMixin, forms.ModelForm):

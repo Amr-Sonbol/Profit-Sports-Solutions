@@ -1960,7 +1960,12 @@ class MyProgressTests(TaskTestCase):
 
     def test_on_track_when_fully_certified_well_within_90_days(self):
         Skill.objects.exclude(pk=self.skill.pk).filter(category=Skill.Category.OTHER).update(is_active=False)
-        self.technician.hired_on = timezone.localtime().date() - timedelta(days=10)
+        # "Today" in the view is computed with the technician's own country
+        # timezone active (see spots/middleware.py) — using the process
+        # default (UTC) here instead is flaky for a few hours each day
+        # whenever Dubai's calendar date has already advanced past UTC's.
+        today_in_dubai = timezone.localtime(timezone.now(), ZoneInfo('Asia/Dubai')).date()
+        self.technician.hired_on = today_in_dubai - timedelta(days=10)
         self.technician.save()
 
         TechnicianSkill.objects.create(
@@ -1981,7 +1986,8 @@ class MyProgressTests(TaskTestCase):
         self.assertEqual(ninety_day['day_count'], 10)
 
     def test_behind_pace_when_far_along_with_nothing_confirmed(self):
-        self.technician.hired_on = timezone.localtime().date() - timedelta(days=60)
+        today_in_dubai = timezone.localtime(timezone.now(), ZoneInfo('Asia/Dubai')).date()
+        self.technician.hired_on = today_in_dubai - timedelta(days=60)
         self.technician.save()
 
         self.client.login(username='tech1', password='pass12345')
@@ -2508,6 +2514,11 @@ class TechnicianCreateTests(TaskTestCase):
 class TechnicianEditTests(TaskTestCase):
     def setUp(self):
         super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
         self.url = f'/tasks/technicians/{self.technician.pk}/edit/'
 
     def _photo(self, name='photo.jpg', content=b'not a real image', content_type='image/jpeg'):
@@ -2557,7 +2568,19 @@ class TechnicianEditTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('photo'))
 
-    def test_supervisor_relocates_a_technician(self):
+    def test_manager_relocates_a_technician(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'country': other_country.pk})
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.country, other_country)
+
+    def test_supervisor_cannot_relocate_a_technician(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
@@ -2567,13 +2590,13 @@ class TechnicianEditTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
 
         self.technician.refresh_from_db()
-        self.assertEqual(self.technician.country, other_country)
+        self.assertEqual(self.technician.country, self.country)
 
     def test_relocated_technician_drops_off_the_old_countrys_roster(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='manager1', password='pass12345')
         self.client.post(self.url, {'country': other_country.pk})
 
         response = self.client.get('/tasks/technicians/')
