@@ -504,6 +504,61 @@ class TaskShippingNoticeTests(TaskTestCase):
         self.assertNotIn('PAK-SECRET', mail.outbox[0].body)
 
 
+class TaskApprovalTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+        )
+        WorkReport.objects.create(
+            task=self.task, findings='Belt worn out', action_taken='Replaced belt', resolved=True,
+            labour_hours='1.50', customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_gets_403(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report'})
+        self.assertEqual(response.status_code, 403)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    def test_manager_approves_and_closes(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+
+        event = self.task.events.get(event_type=TaskEvent.EventType.REPORT_APPROVED)
+        self.assertEqual(event.actor, self.manager_user)
+
+    def test_cannot_approve_a_task_with_no_report_awaiting_approval(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report'}, follow=True)
+
+        self.assertContains(response, 'no report awaiting approval')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+
 class TaskListTests(TaskTestCase):
     def _make_task(self, number, **overrides):
         fields = dict(
@@ -1819,14 +1874,14 @@ class MyProgressTests(TaskTestCase):
 
         self.assertEqual(response.context['assigned_count'], 0)
 
-    def test_completed_count_counts_this_weeks_closed_events(self):
+    def test_completed_count_counts_this_weeks_completed_events(self):
         task = self._make_task('AE-0001')
         TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.CLOSED,
+            task=task, event_type=TaskEvent.EventType.COMPLETED,
             occurred_at=dubai_time(2026, 9, 9, 9, 0), actor=self.tech_user,
         )
         TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.CLOSED,
+            task=task, event_type=TaskEvent.EventType.COMPLETED,
             occurred_at=dubai_time(2026, 9, 20, 9, 0), actor=self.tech_user,
         )
 
@@ -2945,26 +3000,41 @@ class MyReportFormTests(TaskTestCase):
         self.assertTrue(report.resolved)
 
         event_types = set(self.task.events.values_list('event_type', flat=True))
-        self.assertEqual(event_types, {TaskEvent.EventType.REPORT_SUBMITTED, TaskEvent.EventType.CLOSED})
+        self.assertEqual(event_types, {TaskEvent.EventType.REPORT_SUBMITTED, TaskEvent.EventType.COMPLETED})
         submitted_event = self.task.events.get(event_type=TaskEvent.EventType.REPORT_SUBMITTED)
         self.assertEqual(submitted_event.actor, self.tech_user)
 
-    def test_submitting_the_report_closes_the_task(self):
+    def test_submitting_the_report_marks_it_completed_not_closed(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post(self.url, self._base_payload())
         self.assertEqual(response.status_code, 302)
 
         self.task.refresh_from_db()
-        self.assertEqual(self.task.status, Task.Status.CLOSED)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
-    def test_resubmitting_the_report_stays_closed_and_does_not_relog_closed_event(self):
+    def test_resubmitting_the_report_stays_completed_and_does_not_relog_completed_event(self):
         self.client.login(username='tech1', password='pass12345')
         self.client.post(self.url, self._base_payload())
         self.client.post(self.url, self._base_payload(findings='Belt worn out, fixed again'))
 
         self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
+
+    def test_resubmitting_after_approval_stays_closed(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post(self.url, self._base_payload())
+
+        self.task.refresh_from_db()
+        self.task.status = Task.Status.CLOSED
+        self.task.save(update_fields=['status'])
+
+        self.client.post(self.url, self._base_payload(findings='Belt worn out, fixed again'))
+
+        self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.CLOSED)
-        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.CLOSED).count(), 1)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
 
     def test_resolved_is_required(self):

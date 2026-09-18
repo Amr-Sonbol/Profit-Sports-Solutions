@@ -73,9 +73,10 @@ ASSIGNMENT_LOCKED_STATUSES = {
 STATUSES_RESET_BY_ASSIGNMENT = {Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED}
 
 # The lead's button taps, in order. "en_route" and "arrived" don't move
-# task.status — only "start" does; from there, filing the report is what
-# closes the task (see my_report_form) — there's no separate "complete" tap
-# or supervisor approval step anymore.
+# task.status — only "start" does; from there, filing the report (see
+# my_report_form) marks the task completed, and a manager approving it
+# from task detail is what actually closes it — there's no separate
+# "complete" tap of its own.
 TECHNICIAN_ACTIONS = {
     'accept': (TaskEvent.EventType.ACCEPTED, Task.Status.ACCEPTED),
     'en_route': (TaskEvent.EventType.EN_ROUTE, None),
@@ -84,9 +85,9 @@ TECHNICIAN_ACTIONS = {
 }
 BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 
-# A report can only be filed once work is underway, or re-edited after the
-# fact (closing again just re-saves it — see _report_can_edit).
-REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.CLOSED}
+# A report can only be filed once work is underway, or corrected any time
+# after — while awaiting the manager's approval, or even after it closed.
+REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task.Status.CLOSED}
 EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
@@ -636,6 +637,20 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'approve_report':
+        require_manager(request)
+        if task.status != Task.Status.COMPLETED:
+            messages.error(request, _('This task has no report awaiting approval.'))
+        else:
+            task.status = Task.Status.CLOSED
+            task.save(update_fields=['status'])
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.REPORT_APPROVED,
+                occurred_at=timezone.now(), actor=request.user,
+            )
+            messages.success(request, _('Report approved. Task closed.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
@@ -1158,7 +1173,7 @@ def my_progress(request):
     ).count()
 
     completed_count = TaskEvent.objects.filter(
-        actor=request.user, event_type=TaskEvent.EventType.CLOSED, occurred_at__date__range=(start, end),
+        actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
     ).count()
 
     context = {
@@ -1556,10 +1571,12 @@ def my_task_detail(request, pk):
 
 @login_required
 def my_report_form(request, pk):
-    """Filing this report is the terminal step of the whole task — there's
-    no separate "mark complete" tap and no supervisor approval gate.
-    Saving it (first time or a later correction) closes the task, or
-    re-confirms it as closed if it already was.
+    """Filing this report is the lead's own last step — there's no
+    separate "mark complete" tap. Saving it (first time or a later
+    correction) marks the task completed; only a manager approving it
+    from task detail actually closes it. Correcting an already-completed
+    or already-closed report just re-saves it, without moving status
+    backward or re-firing the completed event.
     """
     technician = require_technician(request)
 
@@ -1639,14 +1656,18 @@ def my_report_form(request, pk):
                     task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
                     occurred_at=now, actor=request.user,
                 )
-                if task.status != Task.Status.CLOSED:
-                    task.status = Task.Status.CLOSED
+                if task.status not in (Task.Status.COMPLETED, Task.Status.CLOSED):
+                    task.status = Task.Status.COMPLETED
                     task.save(update_fields=['status'])
                     TaskEvent.objects.create(
-                        task=task, event_type=TaskEvent.EventType.CLOSED,
+                        task=task, event_type=TaskEvent.EventType.COMPLETED,
                         occurred_at=now, actor=request.user,
                     )
-            messages.success(request, _('Report submitted. Task closed.'))
+                    messages.success(request, _('Report submitted — awaiting manager approval before the task closes.'))
+                elif task.status == Task.Status.COMPLETED:
+                    messages.success(request, _('Report updated — still awaiting manager approval.'))
+                else:
+                    messages.success(request, _('Report updated.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
     else:
         report_form = WorkReportForm(instance=report)

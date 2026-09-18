@@ -209,7 +209,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (add technicians, edit their profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own task to close, not a supervisor action.
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (add technicians, edit their profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
 
 **Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
 
@@ -309,10 +309,12 @@ This status is shown to the technician themselves (My progress) and to superviso
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
-**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `closed`.
-Plus `blocked` and `cancelled` as endings. `completed` still exists as a choice but nothing sets it anymore — see the note below.
+**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
+Plus `blocked` and `cancelled` as endings.
 
-**Filing the report is what closes the task — there's no separate "mark complete" step and no supervisor approval in between.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone. That submission moves `status` straight to `closed` and logs a `closed` task_event, in the same transaction as saving the report itself. Re-submitting the report later (a correction) is always allowed — there's no locked/approved state to unlock first — and doesn't re-fire anything else. This replaced an earlier version of the pipeline where a technician tapped "complete" (→ `completed`) and a supervisor separately approved or rejected the report on its own review screen before the task actually closed; that review step didn't fit how the business works, so it's gone. `completed` stays in the status choices only because removing it would ripple through old event history for no real benefit — it's unreachable now, not meaningful.
+**Filing the report marks the task completed; a manager approving it is what actually closes it.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone — that submission moves `status` to `completed` and logs a `completed` task_event, in the same transaction as saving the report itself. From there, only a manager can close it: an "Approve and close" button on the task's own detail page (no separate queue screen, no rejection reason — just that one button), which moves `status` to `closed` and logs a `report_approved` task_event. Re-submitting the report at any point afterward (a correction) is always allowed and doesn't move `status` backward or re-fire the completed event — there's nothing to unlock first, only the close itself is gated.
+
+This is deliberately lighter than an earlier version of the same idea, which had a full pending/approved/rejected workflow with a required rejection reason and its own review screen — that got removed for not fitting how the business runs, and this replacement is a narrower requirement (a manager's own sign-off before a task counts as done), not a return to that queue. It's also manager-only, not configurable per role the way most of `role_permission` is — the same fixed-floor pattern `role_permissions` itself uses, so a bad edit to the permission matrix can't accidentally hand this out or lock everyone out of it.
 
 **`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
@@ -450,11 +452,11 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — supervisors only |
 | note | text | |
 
-**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled. `completed`, `report_rejected` and `report_approved` are kept only for old rows already logged under the earlier review workflow (see §4/§5) — nothing logs them anymore.
+**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled. `completed` fires when the lead files the report, `report_approved` when a manager closes it (see §4/§5) — `report_rejected` is the one still unused: this round of approval has no reject step, just a single approve action.
 
 The technician taps buttons; he never types a time. If this table is skipped, you will have a year of operations and still no way to answer who you can depend on.
 
-**Task duration comes free from these taps.** `started` to `closed` is time on the machine; `en_route` to `arrived` is travel. Nothing extra to record.
+**Task duration comes free from these taps.** `started` to `completed` is time on the machine; `en_route` to `arrived` is travel. `completed` to `closed` is the manager's own approval lag, not technician time — keep those two apart in any duration reporting. Nothing extra to record.
 
 Use duration for **scheduling** — once you know a cable replacement takes about ninety minutes, the week view becomes real instead of optimistic — and for **spotting outliers**, where a four-hour task among one-hour ones usually means something went wrong that nobody reported.
 
@@ -493,7 +495,7 @@ Technicians forget to press complete and remember in the car. **Only a superviso
 
 **The lead submits one report for the whole task**, with helpers listed. The customer signs once.
 
-**No separate office review, and no locked/approved state.** An earlier version of this table had `approved_at`/`rejection_reason` and a supervisor review screen a report had to pass through before the task closed — removed because it didn't fit how the business actually runs. Submitting the report *is* the close (see task's status-flow note above), and it can always be corrected afterward by submitting again; there's nothing to unlock first.
+**No `approved_at`/`rejection_reason` columns here, and reports are never locked.** The task's own `status` carries the approval state now (`completed` → `closed`, see task's status-flow note above), not the report — a manager approving is a task action, logged as a `report_approved` task_event, not a field written on this row. The report itself can always be corrected by submitting again, whatever the task's status is; nothing about it needs unlocking first.
 
 ### part_used
 | Column | Type | Notes |

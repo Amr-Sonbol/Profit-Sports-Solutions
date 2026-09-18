@@ -233,6 +233,16 @@
 {% if report %}
 <div class="section">
     <h2>{% translate "Work report" %}</h2>
+    {% if task.status == 'completed' %}
+    <p class="flash flash--info">{% translate "Awaiting manager approval before this task closes." %}</p>
+        {% if user.technician.role == 'manager' %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="approve_report">
+            <button type="submit" class="button">{% translate "Approve and close" %}</button>
+        </form>
+        {% endif %}
+    {% endif %}
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Resolved" %}</dt>

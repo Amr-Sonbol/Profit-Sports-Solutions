@@ -126,6 +126,9 @@ msgstr "هل تود إضافة أي شيء؟"
 msgid "Approve"
 msgstr "اعتماد"
 
+msgid "Approve and close"
+msgstr "الموافقة والإغلاق"
+
 msgid "Approved"
 msgstr "معتمد"
 
@@ -176,6 +179,9 @@ msgstr "متاح الآن"
 
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
+
+msgid "Awaiting manager approval before this task closes."
+msgstr "بانتظار موافقة المدير قبل إغلاق هذه المهمة."
 
 msgid "Back to customers"
 msgstr "العودة إلى العملاء"
@@ -1005,6 +1011,9 @@ msgstr "تم اعتماد التقرير"
 msgid "Report approved."
 msgstr "تم اعتماد التقرير."
 
+msgid "Report approved. Task closed."
+msgstr "تمت الموافقة على التقرير. أغلقت المهمة."
+
 msgid "Report blocked"
 msgstr "الإبلاغ عن عائق"
 
@@ -1017,11 +1026,20 @@ msgstr "أُعيد التقرير إلى الفني."
 msgid "Report submitted"
 msgstr "تم تقديم التقرير"
 
+msgid "Report submitted — awaiting manager approval before the task closes."
+msgstr "تم إرسال التقرير — بانتظار موافقة المدير قبل إغلاق المهمة."
+
 msgid "Report submitted."
 msgstr "تم تقديم التقرير."
 
 msgid "Report submitted. Task closed."
 msgstr "تم إرسال التقرير. أغلقت المهمة."
+
+msgid "Report updated — still awaiting manager approval."
+msgstr "تم تحديث التقرير — لا يزال بانتظار موافقة المدير."
+
+msgid "Report updated."
+msgstr "تم تحديث التقرير."
 
 msgid "Reported"
 msgstr "تاريخ الإبلاغ"
@@ -1094,6 +1112,9 @@ msgstr "حفظ التغييرات"
 
 msgid "Save photo"
 msgstr "حفظ الصورة"
+
+msgid "Save report"
+msgstr "حفظ التقرير"
 
 msgid "Scheduled"
 msgstr "مجدولة"
@@ -1239,6 +1260,9 @@ msgstr "إرسال التقرير وإغلاق المهمة"
 msgid "Submitted"
 msgstr "تاريخ التقديم"
 
+msgid "Submitted — awaiting manager approval."
+msgstr "تم الإرسال — بانتظار موافقة المدير."
+
 msgid "Submitted — task closed."
 msgstr "تم الإرسال — أغلقت المهمة."
 
@@ -1292,6 +1316,9 @@ msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
 
 msgid "This task already has a report — saving below updates it."
 msgstr "هذه المهمة لديها تقرير بالفعل — الحفظ أدناه يحدّثه."
+
+msgid "This task has no report awaiting approval."
+msgstr "لا يوجد بهذه المهمة تقرير بانتظار الموافقة."
 
 msgid "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead."
 msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة — بدأ العمل بالفعل. أغلقها وأنشئ مهمة جديدة للتسليم بدلاً من ذلك."
