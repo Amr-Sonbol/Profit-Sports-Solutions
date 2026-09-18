@@ -36,7 +36,7 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
     ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
-    TaskEditForm, TechnicianCreateForm, TechnicianPhotoForm, TicketLogisticsForm,
+    TaskEditForm, TechnicianCreateForm, TechnicianEditForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -1414,20 +1414,23 @@ def technician_skills(request, pk):
 
 @login_required
 def technician_edit(request, pk):
-    """Just the photo, for now — a supervisor/manager sets it from the
-    roster, same country scoping as every other per-technician screen.
+    """Photo and country, from the roster — country covers relocating
+    someone between countries; everything else about a technician stays
+    office-side but out of scope here. Fetched from the viewer's own
+    active country, same as every other per-technician screen — once
+    relocated, the technician drops off this country's roster.
     """
     require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
     technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
 
     if request.method == 'POST':
-        form = TechnicianPhotoForm(request.POST, request.FILES, instance=technician)
+        form = TechnicianEditForm(request.POST, request.FILES, instance=technician)
         if form.is_valid():
             form.save()
-            messages.success(request, _('Photo updated.'))
+            messages.success(request, _('Technician updated.'))
             return redirect('tasks:technician_list')
     else:
-        form = TechnicianPhotoForm(instance=technician)
+        form = TechnicianEditForm(instance=technician)
 
     return render(request, 'tasks/technician_edit.html', {'technician': technician, 'form': form})
 

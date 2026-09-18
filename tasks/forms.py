@@ -335,12 +335,16 @@ class TechnicianCreateForm(forms.ModelForm):
         }
 
 
-class TechnicianPhotoForm(PhotoSizeMixin, forms.ModelForm):
-    """A supervisor/manager setting someone else's photo, from the roster."""
+class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
+    """A supervisor/manager editing someone else's record, from the
+    roster — photo, plus their country when they relocate. Every other
+    field (role, employment type, ...) stays office-side but out of
+    scope here for now, same as it always has been.
+    """
 
     class Meta:
         model = Technician
-        fields = ['photo']
+        fields = ['photo', 'country']
         widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
 
 

@@ -444,6 +444,9 @@ msgstr "تعديل"
 msgid "Edit photo"
 msgstr "تعديل الصورة"
 
+msgid "Edit technician"
+msgstr "تعديل بيانات الفني"
+
 msgid "Edit technician profile photos"
 msgstr "تعديل صور ملفات الفنيين"
 
@@ -1301,6 +1304,9 @@ msgstr "الفني"
 
 msgid "Technician added."
 msgstr "تمت إضافة الفني."
+
+msgid "Technician updated."
+msgstr "تم تحديث بيانات الفني."
 
 msgid "Technicians"
 msgstr "الفنيون"

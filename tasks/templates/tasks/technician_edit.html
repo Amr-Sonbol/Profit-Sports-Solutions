@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Edit photo" %} — {{ technician.full_name }}{% endblock %}
+{% block title %}{% translate "Edit technician" %} — {{ technician.full_name }}{% endblock %}
 
 {% block content %}
 <div class="page__header">
@@ -26,7 +26,7 @@
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button type="submit" class="button">{% translate "Save photo" %}</button>
+        <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>
 </div>
 {% endblock %}

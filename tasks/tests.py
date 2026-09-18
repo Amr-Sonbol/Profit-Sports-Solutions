@@ -2535,7 +2535,7 @@ class TechnicianEditTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_supervisor_uploads_a_photo(self):
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'photo': self._photo()})
+        response = self.client.post(self.url, {'photo': self._photo(), 'country': self.country.pk})
         self.assertEqual(response.status_code, 302)
 
         self.technician.refresh_from_db()
@@ -2545,6 +2545,7 @@ class TechnicianEditTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {
             'photo': self._photo(name='photo.svg', content_type='image/svg+xml'),
+            'country': self.country.pk,
         })
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('photo'))
@@ -2552,9 +2553,32 @@ class TechnicianEditTests(TaskTestCase):
     def test_rejects_a_photo_over_the_size_limit(self):
         self.client.login(username='supervisor1', password='pass12345')
         oversized = self._photo(content=b'x' * (5 * 1024 * 1024 + 1))
-        response = self.client.post(self.url, {'photo': oversized})
+        response = self.client.post(self.url, {'photo': oversized, 'country': self.country.pk})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('photo'))
+
+    def test_supervisor_relocates_a_technician(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'country': other_country.pk})
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.country, other_country)
+
+    def test_relocated_technician_drops_off_the_old_countrys_roster(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'country': other_country.pk})
+
+        response = self.client.get('/tasks/technicians/')
+        technicians = [row['technician'] for row in response.context['rows']]
+        self.assertNotIn(self.technician, technicians)
 
 
 class RolePermissionsTests(TaskTestCase):
