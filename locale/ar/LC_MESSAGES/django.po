@@ -96,6 +96,12 @@ msgstr "إضافة مساعد"
 msgid "Add site"
 msgstr "إضافة الفرع"
 
+msgid "Add technician"
+msgstr "إضافة فني"
+
+msgid "Add technicians and edit their profile photos"
+msgstr "إضافة الفنيين وتعديل صورهم الشخصية"
+
 msgid "Address"
 msgstr "العنوان"
 
@@ -1268,6 +1274,9 @@ msgstr "المهام"
 
 msgid "Technician"
 msgstr "الفني"
+
+msgid "Technician added."
+msgstr "تمت إضافة الفني."
 
 msgid "Technicians"
 msgstr "الفنيون"

@@ -2385,6 +2385,71 @@ class TechnicianSkillsTests(TaskTestCase):
         self.assertEqual(rating.source, TechnicianConduct.Source.SUPERVISOR)
 
 
+class TechnicianCreateTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = '/tasks/technicians/new/'
+
+    def _payload(self, **overrides):
+        payload = {
+            'full_name': 'Nour New', 'phone': '0501112222', 'language': Technician.Language.EN,
+            'role': Technician.Role.TECHNICIAN, 'employment_type': Technician.EmploymentType.STAFF,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_creates_a_technician(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload())
+        self.assertEqual(response.status_code, 302)
+
+        technician = Technician.objects.get(full_name='Nour New')
+        self.assertEqual(technician.country, self.country)
+        self.assertEqual(technician.role, Technician.Role.TECHNICIAN)
+        self.assertIsNone(technician.user)
+        self.assertTrue(technician.is_active)
+
+    def test_can_create_a_supervisor_too(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(role=Technician.Role.SUPERVISOR))
+        self.assertEqual(response.status_code, 302)
+
+        technician = Technician.objects.get(full_name='Nour New')
+        self.assertEqual(technician.role, Technician.Role.SUPERVISOR)
+
+    def test_missing_full_name_is_rejected(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        payload = self._payload()
+        del payload['full_name']
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Technician.objects.filter(full_name='').count(), 0)
+
+    def test_created_in_the_managers_active_country(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/active-country/', {'country': other_country.pk})
+
+        response = self.client.post(self.url, self._payload())
+        self.assertEqual(response.status_code, 302)
+
+        technician = Technician.objects.get(full_name='Nour New')
+        self.assertEqual(technician.country, other_country)
+
+
 class TechnicianEditTests(TaskTestCase):
     def setUp(self):
         super().setUp()

@@ -6,6 +6,9 @@
 {% block content %}
 <div class="page__header">
     <h1>{% translate "Technicians" %}</h1>
+    {% if 'manage_technicians' in role_permissions %}
+    <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add technician" %}</a>
+    {% endif %}
 </div>
 
 <form method="get" class="filters">

@@ -106,7 +106,7 @@ class RolePermission(models.Model):
         VIEW_TECHNICIANS = 'view_technicians', _('View technician roster and boards')
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
-        MANAGE_TECHNICIANS = 'manage_technicians', _('Edit technician profile photos')
+        MANAGE_TECHNICIANS = 'manage_technicians', _('Add technicians and edit their profile photos')
         MANAGE_CUSTOMERS = 'manage_customers', _('Add and view customers and sites')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)

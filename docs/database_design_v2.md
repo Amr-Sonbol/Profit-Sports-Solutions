@@ -193,7 +193,7 @@ Covers technicians, supervisors, and managers. One table, different roles.
 
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
 
-**`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo from the roster — the same field, two different doors into it.
+**`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo from the roster — the same field, two different doors into it, and the same permission gates adding a new record in the first place, from the roster's own "Add technician" screen — country comes from whoever's adding it (or their active country, if a manager), same as customer creation. No `user` is created or linked at that point; the record works standalone until SSO exists to attach one.
 
 **Every screen is country-scoped to the viewer's own `technician.country` — except a manager can switch it.** A "which country am I looking at" value in the session (default: their own), changed from a dropdown in the header, never a written field anywhere — `technician.country` itself never changes when a manager switches. Every country-filtered query in the app (tasks, technicians, customers, tickets, reports) uses this active country, not the manager's home country directly, so switching to Egypt and adding a customer creates it under Egypt, not wherever the manager happens to be based. Supervisors and technicians have no switcher — their active country is always just their own, same as before this existed.
 
@@ -209,7 +209,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own task to close, not a supervisor action.
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (add technicians, edit their profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own task to close, not a supervisor action.
 
 **Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
 
@@ -610,7 +610,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report and requesting customer feedback both happen right on that task's own detail page — there's no separate reports queue.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report and requesting customer feedback both happen right on that task's own detail page — there's no separate reports queue.
 
 **Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
@@ -620,4 +620,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Nineteen screens plus two public pages. That is the whole application.
+Twenty screens plus two public pages. That is the whole application.

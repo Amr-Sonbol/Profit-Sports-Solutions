@@ -316,6 +316,25 @@ class PhotoSizeMixin:
         return photo
 
 
+class TechnicianCreateForm(forms.ModelForm):
+    """Country comes from the supervisor creating it, set in the view —
+    never a field here, same scoping every other per-country screen uses.
+    No `user` field: a technician can exist with no linked login until
+    Microsoft SSO wires one up (see Technician.user's own help text) —
+    nothing here to fill in for that yet.
+    """
+
+    class Meta:
+        model = Technician
+        fields = [
+            'full_name', 'phone', 'language', 'role', 'employment_type',
+            'has_transport', 'can_carry_large', 'hired_on',
+        ]
+        widgets = {
+            'hired_on': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+
 class TechnicianPhotoForm(PhotoSizeMixin, forms.ModelForm):
     """A supervisor/manager setting someone else's photo, from the roster."""
 

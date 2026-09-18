@@ -36,7 +36,7 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
     ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
-    TaskEditForm, TechnicianPhotoForm, TicketLogisticsForm,
+    TaskEditForm, TechnicianCreateForm, TechnicianPhotoForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -1271,6 +1271,24 @@ def my_profile(request):
         'leaderboard_size': len(leaderboard),
     }
     return render(request, 'tasks/my_profile.html', context)
+
+
+@login_required
+def technician_create(request):
+    require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+
+    if request.method == 'POST':
+        form = TechnicianCreateForm(request.POST)
+        if form.is_valid():
+            technician = form.save(commit=False)
+            technician.country = get_active_country(request)
+            technician.save()
+            messages.success(request, _('Technician added.'))
+            return redirect('tasks:technician_list')
+    else:
+        form = TechnicianCreateForm()
+
+    return render(request, 'tasks/technician_create.html', {'form': form})
 
 
 @login_required
