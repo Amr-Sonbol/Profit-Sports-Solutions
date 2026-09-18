@@ -554,6 +554,42 @@ class TaskCreateTests(TaskTestCase):
         self.assertNotIn(other_site, form.fields['site'].queryset)
         self.assertNotIn(other_customer, form.fields['new_site_customer'].queryset)
 
+    def test_responsible_supervisor_dropdown_excludes_technicians_and_other_countries(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_user = User.objects.create_user('egypt_sup', password='pass12345')
+        other_supervisor = Technician.objects.create(
+            user=other_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/new/')
+
+        queryset = response.context['form'].fields['responsible_supervisor'].queryset
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.assertIn(supervisor, queryset)
+        self.assertNotIn(self.technician, queryset)
+        self.assertNotIn(other_supervisor, queryset)
+
+    def test_creating_a_task_with_a_responsible_supervisor(self):
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL,
+            'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE,
+            'reported_at': '2026-09-06T10:00',
+            'is_warranty': '',
+            'responsible_supervisor': supervisor.pk,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        self.assertEqual(task.responsible_supervisor, supervisor)
+
     def test_cannot_create_a_task_for_another_country_s_site(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
@@ -1308,6 +1344,98 @@ class TaskAssignTests(TaskTestCase):
             'action': 'mark_unavailable', 'technician_id': other_technician.pk, 'reason': 'sick',
         })
         self.assertEqual(response.status_code, 404)
+
+
+class TaskOwnershipTests(TaskTestCase):
+    """Once a task has a responsible supervisor, only they (or a manager)
+    can edit it, manage its assignment, or act on it from the detail page
+    — see _require_task_owner in views.py. An unowned task stays open to
+    any supervisor, which the rest of TaskEditTests/TaskAssignTests already
+    cover by never setting responsible_supervisor on their fixture tasks.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.owner_user = User.objects.create_user('supervisor2', password='pass12345')
+        self.owner = Technician.objects.create(
+            user=self.owner_user, country=self.country, full_name='Youssef Owner',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+            responsible_supervisor=self.owner,
+        )
+
+    def test_non_owning_supervisor_gets_403_editing(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/edit/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_owning_supervisor_can_edit(self):
+        self.client.login(username='supervisor2', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/edit/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_manager_can_edit_regardless_of_owner(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/edit/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_owning_supervisor_gets_403_on_assign_screen(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/assign/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_owning_supervisor_gets_403_notifying_customer(self):
+        self.task.scheduled_for = timezone.now()
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_reassign_the_responsible_supervisor(self):
+        other_owner_user = User.objects.create_user('supervisor3', password='pass12345')
+        other_owner = Technician.objects.create(
+            user=other_owner_user, country=self.country, full_name='Lina Other',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/edit/', {
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
+            'responsible_supervisor': other_owner.pk,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.responsible_supervisor, other_owner)
+
+    def test_any_supervisor_can_claim_an_unowned_task(self):
+        self.task.responsible_supervisor = None
+        self.task.save()
+
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/edit/', {
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
+            'responsible_supervisor': supervisor.pk,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.responsible_supervisor, supervisor)
 
 
 class TaskWeekTests(TaskTestCase):

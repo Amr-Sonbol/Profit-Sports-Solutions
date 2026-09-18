@@ -50,6 +50,10 @@
             <dd>{{ task.get_source_display }}</dd>
         </div>
         <div>
+            <dt>{% translate "Responsible supervisor" %}</dt>
+            <dd>{{ task.responsible_supervisor.full_name|default:"—" }}</dd>
+        </div>
+        <div>
             <dt>{% translate "Reported" %}</dt>
             <dd>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
         </div>

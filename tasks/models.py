@@ -89,6 +89,14 @@ class Task(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tasks_created',
         verbose_name=_('created by'),
     )
+    responsible_supervisor = models.ForeignKey(
+        Technician, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tasks_responsible_for', verbose_name=_('responsible supervisor'),
+        help_text=_(
+            'who is accountable for staffing this task — not necessarily who created it, '
+            'and not the same as the technician actually assigned to do the work'
+        ),
+    )
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),

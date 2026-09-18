@@ -570,6 +570,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
         if not task.scheduled_for:
             messages.error(request, _('Set a scheduled time before notifying the customer.'))
         elif not task.site.contact_email:
@@ -584,6 +585,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_delay':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
         reason = request.POST.get('delay_reason', '').strip()
         if not task.scheduled_for:
             messages.error(request, _('Set a scheduled time before notifying the customer.'))
@@ -602,6 +604,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
         feedback = getattr(task, 'feedback', None)
         if task.status != Task.Status.CLOSED:
             messages.error(request, _('Close the task (file its report) before requesting feedback.'))
@@ -649,11 +652,13 @@ def task_edit(request, pk):
     the customer the same way the manual "Notify customer" button would.
     """
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
-    task = get_object_or_404(Task, pk=pk, site__customer__country=get_active_country(request))
+    active_country = get_active_country(request)
+    task = get_object_or_404(Task, pk=pk, site__customer__country=active_country)
+    _require_task_owner(request, task)
     previous_scheduled_for = task.scheduled_for
 
     if request.method == 'POST':
-        form = TaskEditForm(request.POST, instance=task)
+        form = TaskEditForm(request.POST, instance=task, country=active_country)
         if form.is_valid():
             with transaction.atomic():
                 updated_task = form.save()
@@ -676,7 +681,7 @@ def task_edit(request, pk):
                 messages.success(request, _('Task updated.'))
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskEditForm(instance=task)
+        form = TaskEditForm(instance=task, country=active_country)
 
     return render(request, 'tasks/task_edit.html', {'task': task, 'form': form})
 
@@ -853,6 +858,20 @@ def ticket_review(request, pk):
     return render(request, 'tasks/ticket_review.html', context)
 
 
+def _require_task_owner(request, task):
+    """Once a task has a responsible supervisor, only they (or a manager)
+    can edit it, manage its assignment, or act on it from its detail page.
+    An unowned task (no responsible supervisor set yet) stays open to
+    anyone the usual permission already let in — same as before this
+    field existed, and how it gets claimed in the first place.
+    """
+    technician = request.user.technician
+    if technician.role == Technician.Role.MANAGER:
+        return
+    if task.responsible_supervisor_id and task.responsible_supervisor_id != technician.id:
+        raise PermissionDenied
+
+
 def _set_lead(task, active_lead, technician, end_reason, actor):
     with transaction.atomic():
         if active_lead:
@@ -883,6 +902,7 @@ def task_assign(request, pk):
         Task.objects.select_related('site__customer__country'),
         pk=pk, site__customer__country=get_active_country(request),
     )
+    _require_task_owner(request, task)
     active_assignments = list(task.assignments.filter(is_active=True).select_related('technician'))
     active_lead = next((a for a in active_assignments if a.role == TaskAssignment.Role.LEAD), None)
     active_helpers = [a for a in active_assignments if a.role == TaskAssignment.Role.HELPER]

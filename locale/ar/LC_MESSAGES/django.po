@@ -1032,6 +1032,9 @@ msgstr "إعادة إرسال الطلب"
 msgid "Resolved"
 msgstr "تم الحل"
 
+msgid "Responsible supervisor"
+msgstr "المشرف المسؤول"
+
 msgid "Retired"
 msgstr "خارج الخدمة"
 
@@ -1716,6 +1719,9 @@ msgstr "يتطلب توقيعًا"
 msgid "resolved"
 msgstr "تم الحل"
 
+msgid "responsible supervisor"
+msgstr "المشرف المسؤول"
+
 msgid "reviewed at"
 msgstr "روجع في"
 
@@ -1937,6 +1943,9 @@ msgstr "أي مشرف قرر ذلك"
 
 msgid "which supervisor sent it"
 msgstr "أي مشرف أرسله"
+
+msgid "who is accountable for staffing this task — not necessarily who created it, and not the same as the technician actually assigned to do the work"
+msgstr "من المسؤول عن توفير فريق عمل لهذه المهمة — ليس بالضرورة من أنشأها، وليس هو ذاته الفني الذي تم تعيينه فعليًا للقيام بالعمل"
 
 msgid "who is handling this — a technician or a supervisor, not necessarily who converts it"
 msgstr "من يتولى هذا الأمر — فني أو مشرف، وليس بالضرورة من يحوّله إلى مهمة"

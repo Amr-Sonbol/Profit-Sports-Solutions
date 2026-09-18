@@ -54,7 +54,7 @@ class TaskCreateForm(forms.ModelForm):
 
     PLAIN_FIELD_NAMES = [
         'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
-        'reported_at', 'scheduled_for', 'estimated_hours',
+        'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
     ]
 
     class Meta:
@@ -62,7 +62,7 @@ class TaskCreateForm(forms.ModelForm):
         fields = [
             'site', 'task_type', 'brand', 'required_skill', 'min_level',
             'description', 'priority', 'source', 'is_warranty', 'billing_type',
-            'reported_at', 'scheduled_for', 'estimated_hours',
+            'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -80,6 +80,13 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
         self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
+        # Any active supervisor or manager in the country, same pool as
+        # AssignTicketForm's assigned_to — never a technician, and picking
+        # one here is entirely optional (see Task.responsible_supervisor).
+        self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
+            is_active=True, country=country,
+        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+        self.fields['responsible_supervisor'].required = False
         # The skill level scale tops out at 4 (see TechnicianSkill.level) —
         # PositiveSmallIntegerField has no upper bound of its own, so without
         # this a nonsense value here is a clean model concern, not just a
@@ -177,6 +184,10 @@ class TaskEditForm(forms.ModelForm):
     is a different operation (effectively a new task), not an edit.
     Reassigning the lead/helpers stays on the assign screen, which
     already handles that with its own history and reason-tracking.
+
+    `responsible_supervisor` is here, though: unlike the lead, it has no
+    history to track, and this is also how an unowned task gets claimed
+    (or a manager reassigns one) — see _require_task_owner in views.py.
     """
 
     class Meta:
@@ -184,6 +195,7 @@ class TaskEditForm(forms.ModelForm):
         fields = [
             'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
             'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
+            'responsible_supervisor',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -191,7 +203,7 @@ class TaskEditForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
@@ -199,6 +211,10 @@ class TaskEditForm(forms.ModelForm):
         self.fields['min_level'].validators.append(MaxValueValidator(4))
         self.fields['estimated_hours'].validators.append(MinValueValidator(0))
         self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
+        self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
+            is_active=True, country=country,
+        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+        self.fields['responsible_supervisor'].required = False
 
         for name in ('promised_at', 'scheduled_for'):
             self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
