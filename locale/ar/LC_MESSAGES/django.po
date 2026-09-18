@@ -105,6 +105,9 @@ msgstr "كل العملاء"
 msgid "All technicians"
 msgstr "كل الفنيين"
 
+msgid "Anything else we should know"
+msgstr "أي شيء آخر تود إخبارنا به"
+
 msgid "Anything you'd like to add?"
 msgstr "هل تود إضافة أي شيء؟"
 
@@ -264,6 +267,9 @@ msgstr "اختر نوع مهمة موجودًا أو أضف نوعًا جديد�
 msgid "Choose the machine and an outcome, or leave this row blank."
 msgstr "اختر الجهاز والنتيجة، أو اترك هذا الصف فارغًا."
 
+msgid "Close the task (file its report) before requesting feedback."
+msgstr "أغلق المهمة (بتقديم تقريرها) قبل طلب التقييم."
+
 msgid "Closed"
 msgstr "مغلقة"
 
@@ -408,6 +414,9 @@ msgstr "مرفوضة"
 msgid "Document"
 msgstr "مستند"
 
+msgid "Each file must be under 25 MB — “%(name)s” is too large."
+msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميجابايت — "%(name)s" كبير جدًا."
+
 msgid "Edit"
 msgstr "تعديل"
 
@@ -500,6 +509,9 @@ msgstr "مجاملة"
 
 msgid "Gym"
 msgstr "صالة رياضية"
+
+msgid "Gym address"
+msgstr "عنوان النادي الرياضي"
 
 msgid "Helper"
 msgstr "مساعد"
@@ -753,6 +765,9 @@ msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
 msgid "Normal"
 msgstr "عادية"
 
+msgid "Not answered yet."
+msgstr "لم يتم الرد بعد."
+
 msgid "Not assigned yet."
 msgstr "لم تُسند بعد."
 
@@ -764,6 +779,9 @@ msgstr "غير مقيّم"
 
 msgid "Not repairable"
 msgstr "غير قابل للإصلاح"
+
+msgid "Not requested yet."
+msgstr "لم يتم الطلب بعد."
 
 msgid "Not yet certified"
 msgstr "غير معتمد بعد"
@@ -870,6 +888,9 @@ msgstr "تم تحديث الصورة."
 msgid "Photos"
 msgstr "الصور"
 
+msgid "Photos and/or short video"
+msgstr "صور و/أو مقطع فيديو قصير"
+
 msgid "Pick or add a brand first — a skill always belongs to one."
 msgstr "اختر أو أضف علامة تجارية أولاً — المهارة تنتمي دائمًا إلى علامة تجارية."
 
@@ -908,6 +929,9 @@ msgstr "قيّم نفسك في مهارة أو مجال سلوك"
 
 msgid "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it."
 msgstr "قيّم نفسك مرة واحدة لكل مهارة أو مجال سلوك — إنه تخمينك الأول فقط، وليس شهادة. يراجعه المشرف عليك مقابل أدلة حقيقية ويعتمده أو يصححه؛ وبمجرد حدوث ذلك، هو وحده من يمكنه تغييره."
+
+msgid "Rated %(rating)s/5"
+msgstr "التقييم %(rating)s/5"
 
 msgid "Rating: %(rating)s/5"
 msgstr "التقييم: %(rating)s/5"
@@ -972,6 +996,9 @@ msgstr "تم تقديم التقرير"
 msgid "Report submitted."
 msgstr "تم تقديم التقرير."
 
+msgid "Report submitted. Task closed."
+msgstr "تم إرسال التقرير. أغلقت المهمة."
+
 msgid "Reported"
 msgstr "تاريخ الإبلاغ"
 
@@ -983,6 +1010,12 @@ msgstr "تقارير بانتظار الاعتماد"
 
 msgid "Request again"
 msgstr "طلب مرة أخرى"
+
+msgid "Request feedback"
+msgstr "طلب تقييم"
+
+msgid "Requested on %(time)s"
+msgstr "طلب في %(time)s"
 
 msgid "Requested on %(time)s — no response yet."
 msgstr "طُلب في %(time)s — لا يوجد رد بعد."
@@ -1092,6 +1125,9 @@ msgstr "أُعيد لهذا السبب:"
 msgid "Serial number"
 msgstr "الرقم التسلسلي"
 
+msgid "Serial number(s)"
+msgstr "الرقم/الأرقام التسلسلية"
+
 msgid "Serial plate"
 msgstr "لوحة الرقم التسلسلي"
 
@@ -1161,8 +1197,14 @@ msgstr "إرسال التقييم"
 msgid "Submit report"
 msgstr "إرسال التقرير"
 
+msgid "Submit report and close task"
+msgstr "إرسال التقرير وإغلاق المهمة"
+
 msgid "Submitted"
 msgstr "تاريخ التقديم"
+
+msgid "Submitted — task closed."
+msgstr "تم الإرسال — أغلقت المهمة."
 
 msgid "Submitted — waiting on office review."
 msgstr "تم التقديم — بانتظار مراجعة المكتب."
@@ -1208,6 +1250,9 @@ msgstr "شكرًا لك!"
 
 msgid "This customer already has a site with that name."
 msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
+
+msgid "This task already has a report — saving below updates it."
+msgstr "هذه المهمة لديها تقرير بالفعل — الحفظ أدناه يحدّثه."
 
 msgid "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead."
 msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة — بدأ العمل بالفعل. أغلقها وأنشئ مهمة جديدة للتسليم بدلاً من ذلك."
@@ -1280,6 +1325,9 @@ msgstr "عرض اللوحة"
 
 msgid "View dashboard"
 msgstr "عرض لوحة التحكم"
+
+msgid "View or edit report"
+msgstr "عرض أو تعديل التقرير"
 
 msgid "View sites"
 msgstr "عرض الفروع"
@@ -1356,6 +1404,9 @@ msgstr "العنوان"
 msgid "allowed"
 msgstr "مسموح"
 
+msgid "anything else we should know"
+msgstr "أي شيء آخر تود إخبارنا به"
+
 msgid "approved at"
 msgstr "اعتُمد في"
 
@@ -1379,6 +1430,9 @@ msgstr "متاح"
 
 msgid "billing type"
 msgstr "نوع الفوترة"
+
+msgid "branch name, as the customer describes it"
+msgstr "اسم الفرع، كما يذكره العميل"
 
 msgid "brand"
 msgstr "العلامة التجارية"
@@ -1419,11 +1473,17 @@ msgstr "مجالات السلوك"
 msgid "contact email"
 msgstr "البريد الإلكتروني لجهة الاتصال"
 
+msgid "contact email address"
+msgstr "البريد الإلكتروني للتواصل"
+
 msgid "contact name"
 msgstr "اسم جهة الاتصال"
 
 msgid "contact phone"
 msgstr "هاتف جهة الاتصال"
+
+msgid "contact phone number"
+msgstr "رقم هاتف التواصل"
 
 msgid "corrected at"
 msgstr "صُحح في"
@@ -1509,11 +1569,20 @@ msgstr "لتسجيل الدخول الموحد من مايكروسوفت لاح�
 msgid "free text from the plate"
 msgstr "نص حر من اللوحة"
 
+msgid "full contact name"
+msgstr "الاسم الكامل لجهة الاتصال"
+
 msgid "full name"
 msgstr "الاسم الكامل"
 
 msgid "gate codes, best hours"
 msgstr "رموز البوابات، أفضل الأوقات"
+
+msgid "gym address"
+msgstr "عنوان النادي الرياضي"
+
+msgid "gym name"
+msgstr "اسم النادي الرياضي"
 
 msgid "has transport"
 msgstr "لديه وسيلة نقل"
@@ -1592,6 +1661,12 @@ msgstr "الهاتف"
 
 msgid "photo"
 msgstr "الصورة"
+
+msgid "please describe the issue for each machine separately (mention the serial number for each one)"
+msgstr "يرجى وصف المشكلة لكل جهاز على حدة (مع ذكر الرقم التسلسلي لكل جهاز)"
+
+msgid "please list each affected machine on a new line"
+msgstr "يرجى ذكر كل جهاز متأثر في سطر منفصل"
 
 msgid "portal URL"
 msgstr "رابط بوابة الشركة"
@@ -1674,11 +1749,17 @@ msgstr "القطاع"
 msgid "serial number"
 msgstr "الرقم التسلسلي"
 
+msgid "serial number(s)"
+msgstr "الرقم/الأرقام التسلسلية"
+
 msgid "set by"
 msgstr "حدده"
 
 msgid "set on"
 msgstr "تاريخ التحديد"
+
+msgid "showing the issue and the serial number"
+msgstr "يوضح المشكلة والرقم التسلسلي"
 
 msgid "shown on the roster, boards, and task detail"
 msgstr "تظهر في قائمة الفنيين ولوحاتهم وتفاصيل المهمة"

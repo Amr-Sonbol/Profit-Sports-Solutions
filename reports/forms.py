@@ -8,13 +8,6 @@ SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
 
 
-class RejectReportForm(forms.Form):
-    rejection_reason = forms.CharField(
-        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_('Be specific — missing serial photo, vague fault description, etc. The technician sees this.'),
-    )
-
-
 class WorkReportForm(forms.ModelForm):
     resolved = forms.TypedChoiceField(
         choices=[('True', _('Yes')), ('False', _('No'))], coerce=lambda value: value == 'True',

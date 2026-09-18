@@ -510,6 +510,12 @@ tbody tr:hover {
     margin-block: 0.3rem 0;
 }
 
+/* Keeps a customer's own line breaks (one serial number per line) without
+   turning the whole block into a <pre> — still wraps normally. */
+.pre-line {
+    white-space: pre-line;
+}
+
 .plain-list {
     list-style: none;
     margin: 0;

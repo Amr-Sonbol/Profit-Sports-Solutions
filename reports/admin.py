@@ -10,7 +10,7 @@ class PartUsedInline(admin.TabularInline):
 
 @admin.register(WorkReport)
 class WorkReportAdmin(admin.ModelAdmin):
-    list_display = ['task', 'resolved', 'customer_name', 'submitted_at', 'approved_at']
+    list_display = ['task', 'resolved', 'customer_name', 'submitted_at']
     search_fields = ['task__task_number', 'customer_name']
     list_filter = ['resolved']
     inlines = [PartUsedInline]

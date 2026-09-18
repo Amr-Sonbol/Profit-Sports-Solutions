@@ -1,12 +1,19 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
+
+# A customer's own phone photos/videos of the fault — kept separate from
+# TaskAttachment's own list (tasks/forms.py) since this one has no LINK
+# option and no logged-in uploader to record.
+ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
+MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
 
 class Task(models.Model):
@@ -129,15 +136,28 @@ class CustomerTicket(models.Model):
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
         verbose_name=_('country'),
     )
-    company_name = models.CharField(_('company / customer name'), max_length=150)
+    company_name = models.CharField(_('gym name'), max_length=150)
     site_description = models.CharField(
         _('site / location'), max_length=150,
-        help_text=_('branch name or address, as the customer describes it'),
+        help_text=_('branch name, as the customer describes it'),
     )
-    contact_name = models.CharField(_('contact name'), max_length=150)
-    contact_phone = models.CharField(_('contact phone'), max_length=30)
-    contact_email = models.EmailField(_('contact email'), blank=True)
-    description = models.TextField(_('description'), help_text=_('what the customer reported'))
+    # default='' only backfills existing rows cleanly — ModelForm validation
+    # still enforces this as required on new submissions (blank=False).
+    site_address = models.TextField(_('gym address'), default='')
+    contact_name = models.CharField(_('full contact name'), max_length=150)
+    contact_phone = models.CharField(_('contact phone number'), max_length=30)
+    contact_email = models.EmailField(_('contact email address'), blank=True)
+    serial_numbers = models.TextField(
+        _('serial number(s)'), default='',
+        help_text=_('please list each affected machine on a new line'),
+    )
+    description = models.TextField(
+        _('description'),
+        help_text=_('please describe the issue for each machine separately (mention the serial number for each one)'),
+    )
+    notes = models.TextField(
+        _('anything else we should know'), blank=True,
+    )
     submitted_at = models.DateTimeField(_('submitted at'))
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
     assigned_to = models.ForeignKey(
@@ -164,6 +184,31 @@ class CustomerTicket(models.Model):
 
     def __str__(self):
         return f'{self.company_name} — {self.site_description}'
+
+
+class CustomerTicketAttachment(models.Model):
+    """A customer's own phone photo or video of the fault, uploaded with
+    the ticket — no login, so no uploaded_by; a plain FileField, since
+    there's no external-link case to support the way TaskAttachment has.
+    """
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='attachments',
+        verbose_name=_('ticket'),
+    )
+    file = models.FileField(
+        _('file'), upload_to='ticket_attachments/',
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+    uploaded_at = models.DateTimeField(_('uploaded at'))
+
+    class Meta:
+        verbose_name = _('ticket attachment')
+        verbose_name_plural = _('ticket attachments')
+        ordering = ['ticket', 'uploaded_at']
+
+    def __str__(self):
+        return f'{self.ticket} — {self.file.name}'
 
 
 class TaskAssignment(models.Model):

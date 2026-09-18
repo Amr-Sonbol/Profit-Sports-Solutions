@@ -105,7 +105,6 @@ class RolePermission(models.Model):
         ASSIGN_TASKS = 'assign_tasks', _('Assign technicians to tasks')
         VIEW_TECHNICIANS = 'view_technicians', _('View technician roster and boards')
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
-        REVIEW_REPORTS = 'review_reports', _('View and review work reports')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
         MANAGE_TECHNICIANS = 'manage_technicians', _('Edit technician profile photos')
         MANAGE_CUSTOMERS = 'manage_customers', _('Add and view customers and sites')

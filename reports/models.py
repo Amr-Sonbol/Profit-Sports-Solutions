@@ -21,8 +21,6 @@ class WorkReport(models.Model):
     customer_name = models.CharField(_('customer name'), max_length=150, help_text=_('who signed'))
     signature_url = models.URLField(_('signature URL'), blank=True)
     submitted_at = models.DateTimeField(_('submitted at'))
-    approved_at = models.DateTimeField(_('approved at'), null=True, blank=True)
-    rejection_reason = models.TextField(_('rejection reason'), blank=True)
 
     class Meta:
         verbose_name = _('work report')
@@ -57,7 +55,7 @@ class PartUsed(models.Model):
 
 
 class CustomerFeedback(models.Model):
-    """A rating request sent to the customer once their report is approved.
+    """A rating request sent to the customer once their task is closed.
     Reached through `token`, not a login — the customer is never a user of
     this system, so the link is the only thing standing in for one.
     """

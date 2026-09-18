@@ -46,12 +46,6 @@
             <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
         <div>
-            <dt>{% translate "Report approval rate" %}</dt>
-            <dd>
-                {% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}
-            </dd>
-        </div>
-        <div>
             <dt>{% translate "Standing in your country" %}</dt>
             <dd>
                 {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
@@ -74,10 +68,6 @@
         <div>
             <dt>{% translate "Completed" %}</dt>
             <dd>{{ completed_count }}</dd>
-        </div>
-        <div>
-            <dt>{% translate "Reports awaiting approval" %}</dt>
-            <dd>{{ pending_reports_count }}</dd>
         </div>
     </dl>
 </div>

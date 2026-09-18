@@ -139,6 +139,38 @@
     {% endif %}
 </div>
 
+{% if task.status == 'closed' %}
+<div class="section">
+    <h2>{% translate "Customer feedback" %}</h2>
+    {% if feedback.requested_at %}
+    <p class="muted">
+        {% blocktranslate with time=feedback.requested_at|date:"SHORT_DATETIME_FORMAT" %}Requested on {{ time }}{% endblocktranslate %}
+    </p>
+    {% if feedback.submitted_at %}
+    <p>
+        {% blocktranslate with rating=feedback.rating %}Rated {{ rating }}/5{% endblocktranslate %}
+        {% if feedback.comment %}— {{ feedback.comment }}{% endif %}
+    </p>
+    {% else %}
+    <p class="empty-state">{% translate "Not answered yet." %}</p>
+    {% endif %}
+    {% else %}
+    <p class="empty-state">{% translate "Not requested yet." %}</p>
+    {% endif %}
+    {% if task.site.contact_email %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="send_feedback_request">
+        <button type="submit" class="button button--secondary">
+            {% if feedback.requested_at %}{% translate "Request again" %}{% else %}{% translate "Request feedback" %}{% endif %}
+        </button>
+    </form>
+    {% else %}
+    <p class="field__help">{% translate "Add a contact email for this site before requesting feedback." %}</p>
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="section">
     <h2>{% translate "Attachments" %}</h2>
     {% if attachments %}
@@ -172,10 +204,7 @@
 
 {% if report %}
 <div class="section">
-    <div class="section__header">
-        <h2>{% translate "Work report" %}</h2>
-        <a href="{% url 'reports:report_review' report.pk %}" class="button">{% translate "Review report" %}</a>
-    </div>
+    <h2>{% translate "Work report" %}</h2>
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Resolved" %}</dt>
@@ -193,10 +222,6 @@
             <dt>{% translate "Submitted" %}</dt>
             <dd>{{ report.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
         </div>
-        <div>
-            <dt>{% translate "Approved" %}</dt>
-            <dd>{{ report.approved_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
-        </div>
     </dl>
     <div class="description">
         <dt>{% translate "Findings" %}</dt>
@@ -206,12 +231,6 @@
     <div class="description">
         <dt>{% translate "Action taken" %}</dt>
         <p>{{ report.action_taken }}</p>
-    </div>
-    {% endif %}
-    {% if report.rejection_reason %}
-    <div class="description">
-        <dt>{% translate "Rejection reason" %}</dt>
-        <p>{{ report.rejection_reason }}</p>
     </div>
     {% endif %}
     {% if report.parts_used.all %}

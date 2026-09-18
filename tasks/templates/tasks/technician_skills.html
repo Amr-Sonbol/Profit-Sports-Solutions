@@ -31,10 +31,6 @@
             <dt>{% translate "Conduct areas confirmed" %}</dt>
             <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
-        <div>
-            <dt>{% translate "Report approval rate" %}</dt>
-            <dd>{% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}</dd>
-        </div>
     </dl>
 </div>
 

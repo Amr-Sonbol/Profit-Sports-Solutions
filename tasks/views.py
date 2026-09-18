@@ -30,7 +30,7 @@ from people.permissions import (
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
-from reports.models import PartUsed, WorkReport
+from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
@@ -38,7 +38,9 @@ from .forms import (
     ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
     TaskEditForm, TechnicianPhotoForm,
 )
-from .models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent
+from .models import (
+    CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
+)
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
@@ -71,19 +73,20 @@ ASSIGNMENT_LOCKED_STATUSES = {
 STATUSES_RESET_BY_ASSIGNMENT = {Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED}
 
 # The lead's button taps, in order. "en_route" and "arrived" don't move
-# task.status — only "start" and "complete" do; the step in between is read
-# from which events already exist (see _next_technician_action).
+# task.status — only "start" does; from there, filing the report is what
+# closes the task (see my_report_form) — there's no separate "complete" tap
+# or supervisor approval step anymore.
 TECHNICIAN_ACTIONS = {
     'accept': (TaskEvent.EventType.ACCEPTED, Task.Status.ACCEPTED),
     'en_route': (TaskEvent.EventType.EN_ROUTE, None),
     'arrive': (TaskEvent.EventType.ARRIVED, None),
     'start': (TaskEvent.EventType.STARTED, Task.Status.IN_PROGRESS),
-    'complete': (TaskEvent.EventType.COMPLETED, Task.Status.COMPLETED),
 }
 BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 
-# A report can only be filed once work is underway or done.
-REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task.Status.CLOSED}
+# A report can only be filed once work is underway, or re-edited after the
+# fact (closing again just re-saves it — see _report_can_edit).
+REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.CLOSED}
 EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
@@ -264,23 +267,6 @@ def _leaderboard(country):
     )
 
 
-def _solve_rate(technician):
-    """Reports approved ÷ reports submitted, as lead technician. None if
-    nothing has been submitted yet — there's no rate to show. Tracked for
-    visibility only; no pass/fail cutoff until there's real data to set one
-    against (docs/database_design_v2.md, §9).
-    """
-    lead_task_ids = TaskAssignment.objects.filter(
-        technician=technician, role=TaskAssignment.Role.LEAD,
-    ).values('task_id')
-    reports = WorkReport.objects.filter(task_id__in=lead_task_ids)
-    submitted = reports.count()
-    if not submitted:
-        return None
-    approved = reports.filter(approved_at__isnull=False).count()
-    return approved / submitted
-
-
 def _with_lead_prefetch(queryset):
     """Attach each task's active lead assignment as `.lead_assignments`, for _attach_lead_technician."""
     return queryset.prefetch_related(
@@ -332,8 +318,6 @@ def _next_technician_action(task):
         if TaskEvent.EventType.EN_ROUTE in seen:
             return 'arrive'
         return 'en_route'
-    if task.status == Task.Status.IN_PROGRESS:
-        return 'complete'
     return None
 
 
@@ -411,6 +395,44 @@ def _send_delay_notice(task, reason):
     send_mail(
         subject=subject, message=message, from_email=None,
         recipient_list=[task.site.contact_email], fail_silently=True,
+    )
+
+
+def _send_feedback_email(request, feedback):
+    """Best-effort — a failed send shouldn't stop the supervisor's flow or
+    leave them staring at a 500. EMAIL_BACKEND defaults to the console in
+    dev, so this always "succeeds" locally.
+
+    Forced to English regardless of who sends it: there's nowhere to read a
+    customer's language preference from, and without this the email would
+    silently follow whichever language the supervisor's own UI happens to
+    be in — not the customer's.
+    """
+    task = feedback.task
+    country_tz = ZoneInfo(task.site.customer.country.timezone)
+    link = request.build_absolute_uri(reverse('reports:feedback_form', args=[feedback.token]))
+    with translation.override('en'):
+        visit_date = timezone.localtime(task.report.submitted_at, country_tz).date().strftime('%B %d, %Y')
+        subject = _("We'd love your feedback on your recent Profit Sports Solutions visit")
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'Thank you for choosing Profit Sports Solutions. We completed a service visit at '
+            '%(site)s on %(date)s, and would greatly appreciate a moment of your time to share '
+            'your feedback.\n\n'
+            '%(link)s\n\n'
+            'Your feedback helps us maintain the standard of service you expect from us.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {
+            'contact': task.site.contact_name or task.site.customer.name,
+            'site': task.site.name,
+            'date': visit_date,
+            'link': link,
+        }
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[task.site.contact_email],
+        fail_silently=True,
     )
 
 
@@ -578,6 +600,26 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the delay.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        feedback = getattr(task, 'feedback', None)
+        if task.status != Task.Status.CLOSED:
+            messages.error(request, _('Close the task (file its report) before requesting feedback.'))
+        elif not task.site.contact_email:
+            messages.error(request, _('Add a contact email for this site before requesting feedback.'))
+        else:
+            if feedback is None:
+                feedback = CustomerFeedback.objects.create(
+                    task=task, requested_at=timezone.now(), requested_by=request.user,
+                )
+            else:
+                feedback.requested_at = timezone.now()
+                feedback.requested_by = request.user
+                feedback.save(update_fields=['requested_at', 'requested_by'])
+            _send_feedback_email(request, feedback)
+            messages.success(request, _('Feedback request sent.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     assignments = task.assignments.select_related('technician')
     active_lead = next(
         (a for a in assignments if a.role == TaskAssignment.Role.LEAD and a.is_active), None,
@@ -592,6 +634,7 @@ def task_detail(request, pk):
         'attachments': task.attachments.select_related('uploaded_by'),
         'task_assets': task.task_assets.select_related('asset'),
         'report': getattr(task, 'report', None),
+        'feedback': getattr(task, 'feedback', None),
     }
     return render(request, 'tasks/task_detail.html', context)
 
@@ -715,11 +758,16 @@ def ticket_form(request):
     their own words, self-identified rather than matched to a real site.
     """
     if request.method == 'POST':
-        form = CustomerTicketForm(request.POST)
+        form = CustomerTicketForm(request.POST, request.FILES)
         if form.is_valid():
-            ticket = form.save(commit=False)
-            ticket.submitted_at = timezone.now()
-            ticket.save()
+            with transaction.atomic():
+                ticket = form.save(commit=False)
+                ticket.submitted_at = timezone.now()
+                ticket.save()
+                for uploaded_file in form.cleaned_data['attachments']:
+                    CustomerTicketAttachment.objects.create(
+                        ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
+                    )
             return redirect('tasks:ticket_submitted')
     else:
         form = CustomerTicketForm()
@@ -1006,17 +1054,16 @@ def my_week(request):
 @login_required
 def my_progress(request):
     """Skills and conduct areas the technician is rated on, certification
-    status, solve rate, and standing among peers in the same country — plus
-    counts for the current week. No computed on-time %/first-time-fix rates
-    beyond the solve rate: per the doc's own build order, those need months
-    of real event data to mean anything.
+    status, and standing among peers in the same country — plus counts for
+    the current week. No computed on-time %/first-time-fix rates: per the
+    doc's own build order, those need months of real event data to mean
+    anything.
     """
     technician = require_technician(request)
 
     skills = _skills_with_current_rating(technician)
     conduct_areas = _conduct_areas_with_current_rating(technician)
     certification = _certification_status(technician)
-    solve_rate = _solve_rate(technician)
     ninety_day = _ninety_day_progress(technician, certification)
 
     leaderboard = _leaderboard(technician.country)
@@ -1032,25 +1079,18 @@ def my_progress(request):
     ).count()
 
     completed_count = TaskEvent.objects.filter(
-        actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
-    ).count()
-
-    lead_task_ids = my_assignments.filter(role=TaskAssignment.Role.LEAD).values('task_id')
-    pending_reports_count = WorkReport.objects.filter(
-        task_id__in=lead_task_ids, approved_at__isnull=True, rejection_reason='',
+        actor=request.user, event_type=TaskEvent.EventType.CLOSED, occurred_at__date__range=(start, end),
     ).count()
 
     context = {
         'skills': skills,
         'conduct_areas': conduct_areas,
         'certification': certification,
-        'solve_rate': solve_rate,
         'ninety_day': ninety_day,
         'rank': rank,
         'leaderboard_size': len(leaderboard),
         'assigned_count': assigned_count,
         'completed_count': completed_count,
-        'pending_reports_count': pending_reports_count,
     }
     return render(request, 'tasks/my_progress.html', context)
 
@@ -1147,7 +1187,6 @@ def my_profile(request):
         'profile_form': profile_form,
         'password_form': password_form,
         'certification': certification,
-        'solve_rate': _solve_rate(technician),
         'ninety_day': _ninety_day_progress(technician, certification),
         'rank': rank,
         'leaderboard_size': len(leaderboard),
@@ -1175,7 +1214,6 @@ def technician_list(request):
         rows.append({
             'technician': technician,
             'certification': certification,
-            'solve_rate': _solve_rate(technician),
             'ninety_day': _ninety_day_progress(technician, certification),
         })
 
@@ -1258,7 +1296,6 @@ def technician_skills(request, pk):
         'conduct_areas': _conduct_areas_with_current_rating(technician),
         'review_form': ReviewLevelForm(),
         'certification': _certification_status(technician),
-        'solve_rate': _solve_rate(technician),
     }
     return render(request, 'tasks/technician_skills.html', context)
 
@@ -1420,13 +1457,13 @@ def my_task_detail(request, pk):
     return render(request, 'tasks/my_task_detail.html', context)
 
 
-def _report_can_edit(report):
-    """No report yet, or one that was sent back and hasn't been resubmitted."""
-    return report is None or (report.approved_at is None and bool(report.rejection_reason))
-
-
 @login_required
 def my_report_form(request, pk):
+    """Filing this report is the terminal step of the whole task — there's
+    no separate "mark complete" tap and no supervisor approval gate.
+    Saving it (first time or a later correction) closes the task, or
+    re-confirms it as closed if it already was.
+    """
     technician = require_technician(request)
 
     assignment = get_object_or_404(
@@ -1440,16 +1477,8 @@ def my_report_form(request, pk):
         messages.error(request, _('Start work on this task before filing a report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
-    can_edit = _report_can_edit(report)
     task_assets = task.task_assets.select_related('asset__brand')
     parts = report.parts_used.all() if report else PartUsed.objects.none()
-
-    if not can_edit:
-        context = {
-            'task': task, 'report': report, 'can_edit': False,
-            'task_assets': task_assets, 'parts': parts,
-        }
-        return render(request, 'tasks/my_report_form.html', context)
 
     existing_assets = list(Asset.objects.filter(site=task.site))
     ExistingAssetFormSet = formset_factory(ExistingAssetOutcomeForm, extra=EXISTING_ASSET_ROWS)
@@ -1481,7 +1510,6 @@ def my_report_form(request, pk):
                 saved_report = report_form.save(commit=False)
                 saved_report.task = task
                 saved_report.submitted_at = timezone.now()
-                saved_report.rejection_reason = ''
                 signature = report_form.cleaned_data.get('signature')
                 if signature:
                     path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
@@ -1509,11 +1537,19 @@ def my_report_form(request, pk):
                             unit_cost=cleaned['unit_cost'], currency_code=cleaned['currency_code'],
                         )
 
+                now = timezone.now()
                 TaskEvent.objects.create(
                     task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
-                    occurred_at=timezone.now(), actor=request.user,
+                    occurred_at=now, actor=request.user,
                 )
-            messages.success(request, _('Report submitted.'))
+                if task.status != Task.Status.CLOSED:
+                    task.status = Task.Status.CLOSED
+                    task.save(update_fields=['status'])
+                    TaskEvent.objects.create(
+                        task=task, event_type=TaskEvent.EventType.CLOSED,
+                        occurred_at=now, actor=request.user,
+                    )
+            messages.success(request, _('Report submitted. Task closed.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
     else:
         report_form = WorkReportForm(instance=report)

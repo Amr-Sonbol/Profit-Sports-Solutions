@@ -209,7 +209,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `review_reports`, `manage_tickets`, `manage_technicians` (edit a technician's profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table.
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own task to close, not a supervisor action.
 
 **Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
 
@@ -268,7 +268,7 @@ Write this on one page in Arabic and English. Without certificates, these four s
 
 **"Certified technician" means level ≥ 3, supervisor-confirmed, on every `other`-category skill and every conduct area.** Cardio skills don't count toward this bar — clearing one instead marks readiness for the supervisor track. Self-ratings don't count either, no matter how high; only a supervisor's confirmation moves the bar.
 
-This status, plus each technician's report approval rate (approved ÷ submitted — see §6), is shown to the technician themselves (My progress) and to supervisors reviewing their country's roster. It's a fact, not a gate: nothing in the app currently blocks a task assignment or pay decision on it.
+This status is shown to the technician themselves (My progress) and to supervisors reviewing their country's roster. It's a fact, not a gate: nothing in the app currently blocks a task assignment or pay decision on it. (There used to be a report-approval-rate metric shown alongside it, tied to the old report-review workflow — removed along with that workflow; see §4's task status flow.)
 
 ### The 90-day track
 
@@ -306,8 +306,10 @@ This status, plus each technician's report approval rate (approved ÷ submitted 
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
-**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
-Plus `blocked` and `cancelled` as endings.
+**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `closed`.
+Plus `blocked` and `cancelled` as endings. `completed` still exists as a choice but nothing sets it anymore — see the note below.
+
+**Filing the report is what closes the task — there's no separate "mark complete" step and no supervisor approval in between.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone. That submission moves `status` straight to `closed` and logs a `closed` task_event, in the same transaction as saving the report itself. Re-submitting the report later (a correction) is always allowed — there's no locked/approved state to unlock first — and doesn't re-fire anything else. This replaced an earlier version of the pipeline where a technician tapped "complete" (→ `completed`) and a supervisor separately approved or rejected the report on its own review screen before the task actually closed; that review step didn't fit how the business works, so it's gone. `completed` stays in the status choices only because removing it would ripple through old event history for no real benefit — it's unreachable now, not meaningful.
 
 **`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
@@ -336,12 +338,15 @@ A complaint or request submitted directly by a customer, no login — public, se
 |---|---|---|
 | id | PK | |
 | country_id | FK → country | |
-| company_name | varchar | as the customer typed it — not matched to `customer` yet |
-| site_description | varchar | branch name or address, as the customer describes it |
+| company_name | varchar | gym name, as the customer typed it — not matched to `customer` yet |
+| site_description | varchar | branch name, as the customer describes it |
+| site_address | text | the gym's physical address |
 | contact_name | varchar | |
 | contact_phone | varchar | |
 | contact_email | varchar | nullable |
-| description | text | what the customer reported |
+| serial_numbers | text | one affected machine's serial per line |
+| description | text | what's wrong with each machine — asked to keep one paragraph per serial |
+| notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | status | varchar | new, converted, dismissed |
 | assigned_to_id | FK → technician | nullable — who's handling it, a supervisor or manager (never a technician) |
@@ -356,6 +361,16 @@ A complaint or request submitted directly by a customer, no login — public, se
 **Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers) or dismisses it with a reason.
 
 **Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later.
+
+### customer_ticket_attachment
+A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` (there's no logged-in user to record) and no link/URL option the way `task_attachment` has — a customer only ever uploads a real file.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| ticket_id | FK → customer_ticket | |
+| file | file | image or short video, 25 MB limit |
+| uploaded_at | timestamptz | |
 
 ### task_asset
 Which machines the task covers. Populated by the technician during the work, not at creation.
@@ -424,11 +439,11 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — supervisors only |
 | note | text | |
 
-**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled.
+**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled. `completed`, `report_rejected` and `report_approved` are kept only for old rows already logged under the earlier review workflow (see §4/§5) — nothing logs them anymore.
 
 The technician taps buttons; he never types a time. If this table is skipped, you will have a year of operations and still no way to answer who you can depend on.
 
-**Task duration comes free from these taps.** `started` to `completed` is time on the machine; `en_route` to `arrived` is travel. Nothing extra to record.
+**Task duration comes free from these taps.** `started` to `closed` is time on the machine; `en_route` to `arrived` is travel. Nothing extra to record.
 
 Use duration for **scheduling** — once you know a cable replacement takes about ninety minutes, the week view becomes real instead of optimistic — and for **spotting outliers**, where a four-hour task among one-hour ones usually means something went wrong that nobody reported.
 
@@ -464,12 +479,10 @@ Technicians forget to press complete and remember in the car. **Only a superviso
 | customer_name | varchar | who signed |
 | signature_url | varchar | |
 | submitted_at | timestamptz | |
-| approved_at | timestamptz | nullable |
-| rejection_reason | text | nullable |
 
 **The lead submits one report for the whole task**, with helpers listed. The customer signs once.
 
-**Office review is not bureaucracy.** It is where a warranty claim is saved or lost. If the serial photo is missing or the fault description is too vague for the factory, it goes back the same day while the technician still remembers the machine.
+**No separate office review, and no locked/approved state.** An earlier version of this table had `approved_at`/`rejection_reason` and a supervisor review screen a report had to pass through before the task closed — removed because it didn't fit how the business actually runs. Submitting the report *is* the close (see task's status-flow note above), and it can always be corrected afterward by submitting again; there's nothing to unlock first.
 
 ### part_used
 | Column | Type | Notes |
@@ -483,7 +496,7 @@ Technicians forget to press complete and remember in the car. **Only a superviso
 | currency_code | char(3) | never store an amount without its currency |
 
 ### customer_feedback
-A rating request sent to the customer once their report is approved. Not automatic — a supervisor sends it deliberately, from the same screen where they approved the report.
+A rating request sent to the customer once their task is closed (report filed). Not automatic — a supervisor sends it deliberately, from the task's own detail page.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -498,7 +511,7 @@ A rating request sent to the customer once their report is approved. Not automat
 
 **The customer is never a user of this system.** The link is the only thing standing in for a login — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
 
-**Sending is manual, every time.** No automatic email fires on approval — a supervisor decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered.
+**Sending is manual, every time.** No automatic email fires on close — a supervisor decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered.
 
 ---
 
@@ -512,7 +525,6 @@ Capability is the skill matrix — a supervisor's judgement about what a technic
 |---|---|---|
 | On-time arrival | `arrived` before `promised_at`, excluding `blocked` | Immediately |
 | Acceptance latency | Median minutes from `assigned` to `accepted` | Immediately |
-| Report rejection rate / approval rate | rejected ÷ submitted, or its inverse | Immediately |
 | Tasks led vs helped | Count by `role` | Immediately |
 | First-time fix rate | Completed tasks with no new task on the same asset within 30 days | Around month nine |
 
@@ -522,11 +534,11 @@ Capability is the skill matrix — a supervisor's judgement about what a technic
 
 **Months 1–3: measure nothing, show nothing.** Collect events only. Any figure computed on a few weeks of data is noise, and showing noise once destroys trust in the system permanently.
 
-**Months 4–8: show facts, not scores.** Tasks completed, on-time percentage, rejection rate. Plain numbers a technician can check and argue with. No ranking, no single combined score.
+**Months 4–8: show facts, not scores.** Tasks completed, on-time percentage. Plain numbers a technician can check and argue with. No ranking, no single combined score.
 
 **Month 9 onward: add first-time fix, broken down by brand.** This is when the original question — who can I depend on — becomes genuinely answerable.
 
-**Exception, made deliberately: the certification bar and country leaderboard (§3) are visible from day one.** Unlike first-time fix or on-time %, they aren't inferred rates that need a sample size to mean anything — they're a direct count of supervisor-confirmed levels, which exists the moment a supervisor confirms one. The report approval rate shown alongside them follows the same "Immediately" classification as rejection rate in the table above.
+**Exception, made deliberately: the certification bar and country leaderboard (§3) are visible from day one.** Unlike first-time fix or on-time %, they aren't inferred rates that need a sample size to mean anything — they're a direct count of supervisor-confirmed levels, which exists the moment a supervisor confirms one.
 
 ### Four rules
 
@@ -587,9 +599,9 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, review reports, technician roster, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report and requesting customer feedback both happen right on that task's own detail page — there's no separate reports queue.
 
-**Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above, plus review reports.
+**Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my profile (own photo, language, phone, email, password).
 
@@ -597,4 +609,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Twenty screens plus two public pages. That is the whole application.
+Nineteen screens plus two public pages. That is the whole application.

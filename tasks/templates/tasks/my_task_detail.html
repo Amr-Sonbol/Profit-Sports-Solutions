@@ -78,7 +78,6 @@
                 {% elif next_action == 'en_route' %}{% translate "On my way" %}
                 {% elif next_action == 'arrive' %}{% translate "I've arrived" %}
                 {% elif next_action == 'start' %}{% translate "Start work" %}
-                {% elif next_action == 'complete' %}{% translate "Mark complete" %}
                 {% endif %}
             </button>
         </form>
@@ -147,15 +146,8 @@
 <div class="section">
     <h2>{% translate "Report" %}</h2>
     {% if report %}
-        {% if report.approved_at %}
-            <p class="empty-state">{% translate "Approved." %}</p>
-        {% elif report.rejection_reason %}
-            <p class="muted">{% translate "Sent back:" %}</p>
-            <p>{{ report.rejection_reason }}</p>
-            <a href="{% url 'tasks:my_report_form' task.pk %}" class="button">{% translate "Fix and resubmit" %}</a>
-        {% else %}
-            <p class="empty-state">{% translate "Submitted — waiting on office review." %}</p>
-        {% endif %}
+        <p class="empty-state">{% translate "Submitted — task closed." %}</p>
+        <a href="{% url 'tasks:my_report_form' task.pk %}" class="button button--secondary">{% translate "View or edit report" %}</a>
     {% elif can_file_report %}
         <a href="{% url 'tasks:my_report_form' task.pk %}" class="button">{% translate "File report" %}</a>
     {% endif %}

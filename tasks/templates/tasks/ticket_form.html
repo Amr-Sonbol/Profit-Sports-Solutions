@@ -10,7 +10,7 @@
         {% translate "Tell us what's going on and where — our office will get in touch to arrange a visit." %}
     </p>
 
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
             <p class="flash flash--error">{{ form.non_field_errors }}</p>
@@ -31,6 +31,11 @@
             {{ form.site_description }}
             {% for error in form.site_description.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
+        <div class="field {% if form.site_address.errors %}field--error{% endif %}">
+            <label for="{{ form.site_address.id_for_label }}">{{ form.site_address.label }}</label>
+            {{ form.site_address }}
+            {% for error in form.site_address.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
         <div class="field {% if form.contact_name.errors %}field--error{% endif %}">
             <label for="{{ form.contact_name.id_for_label }}">{{ form.contact_name.label }}</label>
             {{ form.contact_name }}
@@ -46,10 +51,28 @@
             {{ form.contact_email }}
             {% for error in form.contact_email.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
+        <div class="field {% if form.serial_numbers.errors %}field--error{% endif %}">
+            <label for="{{ form.serial_numbers.id_for_label }}">{{ form.serial_numbers.label }}</label>
+            {{ form.serial_numbers }}
+            {% if form.serial_numbers.help_text %}<p class="field__help">{{ form.serial_numbers.help_text }}</p>{% endif %}
+            {% for error in form.serial_numbers.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
         <div class="field {% if form.description.errors %}field--error{% endif %}">
             <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
             {{ form.description }}
+            {% if form.description.help_text %}<p class="field__help">{{ form.description.help_text }}</p>{% endif %}
             {% for error in form.description.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if form.attachments.errors %}field--error{% endif %}">
+            <label for="{{ form.attachments.id_for_label }}">{{ form.attachments.label }}</label>
+            {{ form.attachments }}
+            {% if form.attachments.help_text %}<p class="field__help">{{ form.attachments.help_text }}</p>{% endif %}
+            {% for error in form.attachments.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if form.notes.errors %}field--error{% endif %}">
+            <label for="{{ form.notes.id_for_label }}">{{ form.notes.label }}</label>
+            {{ form.notes }}
+            {% for error in form.notes.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
 
         <button type="submit" class="button">{% translate "Submit" %}</button>

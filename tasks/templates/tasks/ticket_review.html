@@ -46,9 +46,33 @@
         {% endif %}
     </dl>
     <div class="description">
+        <dt>{% translate "Gym address" %}</dt>
+        <p>{{ ticket.site_address }}</p>
+    </div>
+    <div class="description">
+        <dt>{% translate "Serial number(s)" %}</dt>
+        <p class="pre-line">{{ ticket.serial_numbers }}</p>
+    </div>
+    <div class="description">
         <dt>{% translate "Description" %}</dt>
         <p>{{ ticket.description }}</p>
     </div>
+    {% if ticket.notes %}
+    <div class="description">
+        <dt>{% translate "Anything else we should know" %}</dt>
+        <p>{{ ticket.notes }}</p>
+    </div>
+    {% endif %}
+    {% if ticket.attachments.all %}
+    <div class="description">
+        <dt>{% translate "Photos and/or short video" %}</dt>
+        <ul class="plain-list">
+            {% for attachment in ticket.attachments.all %}
+            <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.file.name }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
 </div>
 
 <div class="section">

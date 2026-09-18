@@ -53,10 +53,6 @@
         </div>
         {% endif %}
         <div>
-            <dt>{% translate "Report approval rate" %}</dt>
-            <dd>{% if solve_rate is not None %}{{ solve_rate|floatformat:0 }}%{% else %}—{% endif %}</dd>
-        </div>
-        <div>
             <dt>{% translate "Standing in your country" %}</dt>
             <dd>{% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}</dd>
         </div>

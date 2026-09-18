@@ -25,7 +25,6 @@
                     <th>{% translate "Role" %}</th>
                     <th>{% translate "Professional skills" %}</th>
                     <th>{% translate "90-day track" %}</th>
-                    <th>{% translate "Report approval rate" %}</th>
                     <th></th>
                 </tr>
             </thead>
@@ -65,9 +64,6 @@
                         {% else %}
                         <span class="muted">—</span>
                         {% endif %}
-                    </td>
-                    <td>
-                        {% if row.solve_rate is not None %}{{ row.solve_rate|floatformat:0 }}%{% else %}—{% endif %}
                     </td>
                     <td>
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>

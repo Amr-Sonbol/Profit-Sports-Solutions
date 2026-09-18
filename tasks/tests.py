@@ -14,7 +14,7 @@ from people.models import (
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
-from reports.models import PartUsed, WorkReport
+from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
 
@@ -232,6 +232,81 @@ class TaskDetailTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(mail.outbox), 0)
+
+
+class TaskDetailFeedbackRequestTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.CLOSED,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=self.task, findings='Belt worn out', action_taken='Replaced belt', resolved=True,
+            labour_hours='1.50', customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def test_cannot_request_feedback_before_task_is_closed(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'send_feedback_request'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
+
+    def test_requesting_feedback_without_a_contact_email_shows_an_error(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'send_feedback_request'}, follow=True)
+
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
+        self.assertContains(response, 'Add a contact email')
+
+    def test_requesting_feedback_creates_it_and_sends_an_email(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'send_feedback_request'})
+        self.assertEqual(response.status_code, 302)
+
+        feedback = CustomerFeedback.objects.get(task=self.task)
+        self.assertEqual(feedback.requested_by, self.supervisor_user)
+        self.assertIsNone(feedback.submitted_at)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['manager@fitnessfirst.example'])
+        self.assertIn(feedback.token, mail.outbox[0].body)
+
+    def test_resending_updates_requested_at_without_duplicating(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        first_request_time = timezone.now() - timedelta(days=1)
+        feedback = CustomerFeedback.objects.create(
+            task=self.task, requested_at=first_request_time, requested_by=self.supervisor_user,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'send_feedback_request'})
+
+        self.assertEqual(CustomerFeedback.objects.filter(task=self.task).count(), 1)
+        feedback.refresh_from_db()
+        self.assertGreater(feedback.requested_at, first_request_time)
+
+    def test_technician_cannot_request_feedback(self):
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'send_feedback_request'})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
 
 
 class TaskEditTests(TaskTestCase):
@@ -751,8 +826,10 @@ class TicketFormTests(TaskTestCase):
     def _payload(self, **overrides):
         payload = {
             'country': self.country.pk, 'company_name': 'Fitness First', 'site_description': 'Marina Branch',
-            'contact_name': 'Ali Manager', 'contact_phone': '0501234567', 'contact_email': '',
-            'description': 'The treadmill belt is squeaking loudly.',
+            'site_address': 'Dubai Marina, near the mall', 'contact_name': 'Ali Manager',
+            'contact_phone': '0501234567', 'contact_email': '',
+            'serial_numbers': 'SN-11111\nSN-22222',
+            'description': 'The treadmill belt is squeaking loudly.', 'notes': '',
         }
         payload.update(overrides)
         return payload
@@ -768,11 +845,44 @@ class TicketFormTests(TaskTestCase):
         ticket = CustomerTicket.objects.get()
         self.assertEqual(ticket.company_name, 'Fitness First')
         self.assertEqual(ticket.country, self.country)
+        self.assertEqual(ticket.site_address, 'Dubai Marina, near the mall')
+        self.assertEqual(ticket.serial_numbers, 'SN-11111\nSN-22222')
         self.assertEqual(ticket.status, CustomerTicket.Status.NEW)
         self.assertIsNotNone(ticket.submitted_at)
 
     def test_missing_description_is_rejected(self):
         response = self.client.post('/tasks/tickets/new/', self._payload(description=''))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CustomerTicket.objects.count(), 0)
+
+    def test_missing_serial_numbers_is_rejected(self):
+        response = self.client.post('/tasks/tickets/new/', self._payload(serial_numbers=''))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CustomerTicket.objects.count(), 0)
+
+    def test_missing_site_address_is_rejected(self):
+        response = self.client.post('/tasks/tickets/new/', self._payload(site_address=''))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CustomerTicket.objects.count(), 0)
+
+    def test_notes_is_optional(self):
+        response = self.client.post('/tasks/tickets/new/', self._payload(notes='Gate code is 4321.'))
+        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
+        self.assertEqual(CustomerTicket.objects.get().notes, 'Gate code is 4321.')
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_submitting_with_photos_creates_attachments(self):
+        photo1 = SimpleUploadedFile('fault1.jpg', b'not a real image', content_type='image/jpeg')
+        photo2 = SimpleUploadedFile('fault2.png', b'not a real image', content_type='image/png')
+        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=[photo1, photo2]))
+        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
+
+        ticket = CustomerTicket.objects.get()
+        self.assertEqual(ticket.attachments.count(), 2)
+
+    def test_disallowed_attachment_extension_is_rejected(self):
+        bad = SimpleUploadedFile('malware.exe', b'not a real image', content_type='application/octet-stream')
+        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=[bad]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(CustomerTicket.objects.count(), 0)
 
@@ -1458,14 +1568,14 @@ class MyProgressTests(TaskTestCase):
 
         self.assertEqual(response.context['assigned_count'], 0)
 
-    def test_completed_count_counts_this_weeks_completed_events(self):
+    def test_completed_count_counts_this_weeks_closed_events(self):
         task = self._make_task('AE-0001')
         TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.COMPLETED,
+            task=task, event_type=TaskEvent.EventType.CLOSED,
             occurred_at=dubai_time(2026, 9, 9, 9, 0), actor=self.tech_user,
         )
         TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.COMPLETED,
+            task=task, event_type=TaskEvent.EventType.CLOSED,
             occurred_at=dubai_time(2026, 9, 20, 9, 0), actor=self.tech_user,
         )
 
@@ -1473,54 +1583,6 @@ class MyProgressTests(TaskTestCase):
         response = self.client.get('/tasks/my-progress/', {'start': '2026-09-07'})
 
         self.assertEqual(response.context['completed_count'], 1)
-
-    def test_pending_reports_count_counts_unreviewed_report_on_my_lead_task(self):
-        task = self._make_task('AE-0001', status=Task.Status.COMPLETED)
-        TaskAssignment.objects.create(
-            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-            assigned_at=timezone.now(), is_active=True,
-        )
-        WorkReport.objects.create(
-            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
-            customer_name='Ali', submitted_at=timezone.now(),
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-progress/')
-
-        self.assertEqual(response.context['pending_reports_count'], 1)
-
-    def test_pending_reports_count_excludes_approved_report(self):
-        task = self._make_task('AE-0001', status=Task.Status.CLOSED)
-        TaskAssignment.objects.create(
-            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-            assigned_at=timezone.now(), is_active=True,
-        )
-        WorkReport.objects.create(
-            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
-            customer_name='Ali', submitted_at=timezone.now(), approved_at=timezone.now(),
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-progress/')
-
-        self.assertEqual(response.context['pending_reports_count'], 0)
-
-    def test_pending_reports_count_excludes_rejected_report(self):
-        task = self._make_task('AE-0001', status=Task.Status.COMPLETED)
-        TaskAssignment.objects.create(
-            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-            assigned_at=timezone.now(), is_active=True,
-        )
-        WorkReport.objects.create(
-            task=task, findings='Belt worn', resolved=True, labour_hours='1.00',
-            customer_name='Ali', submitted_at=timezone.now(), rejection_reason='Missing signature',
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-progress/')
-
-        self.assertEqual(response.context['pending_reports_count'], 0)
 
     def test_supervisor_can_view_their_own_progress_too(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -1584,32 +1646,6 @@ class MyProgressTests(TaskTestCase):
 
         self.assertFalse(response.context['certification']['is_certified'])
         self.assertEqual(response.context['certification']['non_cardio_certified'], 0)
-
-    def test_solve_rate_is_none_without_any_submitted_report(self):
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-progress/')
-        self.assertIsNone(response.context['solve_rate'])
-
-    def test_solve_rate_counts_approved_over_submitted(self):
-        for i, approved in enumerate([True, True, False]):
-            task = Task.objects.create(
-                task_number=f'AE-000{i}', site=self.site, priority=Task.Priority.NORMAL,
-                source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
-                reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
-            )
-            TaskAssignment.objects.create(
-                task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-                assigned_at=timezone.now(), is_active=True,
-            )
-            WorkReport.objects.create(
-                task=task, findings='Belt worn', resolved=True, labour_hours='1.00', customer_name='Ali',
-                submitted_at=timezone.now(), approved_at=timezone.now() if approved else None,
-            )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-progress/')
-
-        self.assertAlmostEqual(response.context['solve_rate'], 2 / 3)
 
     def test_ninety_day_progress_is_none_without_a_hire_date(self):
         self.client.login(username='tech1', password='pass12345')
@@ -2434,18 +2470,6 @@ class MyTaskDetailTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
 
-    def test_complete_advances_status(self):
-        self.task.status = Task.Status.IN_PROGRESS
-        self.task.save()
-
-        self.client.login(username='tech1', password='pass12345')
-        self.client.post(self.url, {'action': 'complete'})
-
-        self.task.refresh_from_db()
-        self.assertEqual(self.task.status, Task.Status.COMPLETED)
-        event = self.task.events.get()
-        self.assertEqual(event.event_type, TaskEvent.EventType.COMPLETED)
-
     def test_block_requires_a_note(self):
         self.task.status = Task.Status.ACCEPTED
         self.task.save()
@@ -2603,12 +2627,29 @@ class MyReportFormTests(TaskTestCase):
         report = WorkReport.objects.get(task=self.task)
         self.assertEqual(report.findings, 'Belt worn out')
         self.assertTrue(report.resolved)
-        self.assertIsNone(report.approved_at)
-        self.assertEqual(report.rejection_reason, '')
 
-        event = self.task.events.get()
-        self.assertEqual(event.event_type, TaskEvent.EventType.REPORT_SUBMITTED)
-        self.assertEqual(event.actor, self.tech_user)
+        event_types = set(self.task.events.values_list('event_type', flat=True))
+        self.assertEqual(event_types, {TaskEvent.EventType.REPORT_SUBMITTED, TaskEvent.EventType.CLOSED})
+        submitted_event = self.task.events.get(event_type=TaskEvent.EventType.REPORT_SUBMITTED)
+        self.assertEqual(submitted_event.actor, self.tech_user)
+
+    def test_submitting_the_report_closes_the_task(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload())
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+
+    def test_resubmitting_the_report_stays_closed_and_does_not_relog_closed_event(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post(self.url, self._base_payload())
+        self.client.post(self.url, self._base_payload(findings='Belt worn out, fixed again'))
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.CLOSED).count(), 1)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
 
     def test_resolved_is_required(self):
         self.client.login(username='tech1', password='pass12345')
@@ -2760,28 +2801,17 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-    def test_pending_report_is_locked(self):
+    def test_already_submitted_report_can_be_corrected(self):
         WorkReport.objects.create(
             task=self.task, findings='x', resolved=True, labour_hours='1.00',
             customer_name='Ali', submitted_at=timezone.now(),
         )
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get(self.url)
-        self.assertFalse(response.context['can_edit'])
 
         response = self.client.post(self.url, self._base_payload(findings='changed'))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         report = WorkReport.objects.get(task=self.task)
-        self.assertEqual(report.findings, 'x')
-
-    def test_approved_report_is_locked(self):
-        WorkReport.objects.create(
-            task=self.task, findings='x', resolved=True, labour_hours='1.00',
-            customer_name='Ali', submitted_at=timezone.now(), approved_at=timezone.now(),
-        )
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get(self.url)
-        self.assertFalse(response.context['can_edit'])
+        self.assertEqual(report.findings, 'changed')
 
     def test_existing_asset_management_form_renders_even_with_zero_assets(self):
         # Regression: the management form must render unconditionally, or a
@@ -2816,19 +2846,16 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(WorkReport.objects.filter(task=task).exists())
 
-    def test_resubmission_after_rejection_clears_reason_and_replaces_parts(self):
+    def test_resubmission_replaces_parts(self):
         report = WorkReport.objects.create(
             task=self.task, findings='old findings', resolved=False, labour_hours='1.00',
-            customer_name='Ali', submitted_at=timezone.now(), rejection_reason='Missing serial photo.',
+            customer_name='Ali', submitted_at=timezone.now(),
         )
         PartUsed.objects.create(
             report=report, part_code='OLD-1', quantity=1, unit_cost='10.00', currency_code='AED',
         )
 
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get(self.url)
-        self.assertTrue(response.context['can_edit'])
-
         payload = self._base_payload(findings='fixed findings')
         payload['parts-0-part_code'] = 'NEW-1'
         payload['parts-0-quantity'] = '2'
@@ -2839,7 +2866,6 @@ class MyReportFormTests(TaskTestCase):
 
         report.refresh_from_db()
         self.assertEqual(report.findings, 'fixed findings')
-        self.assertEqual(report.rejection_reason, '')
         parts = list(report.parts_used.all())
         self.assertEqual(len(parts), 1)
         self.assertEqual(parts[0].part_code, 'NEW-1')

@@ -51,9 +51,6 @@
                 {% if 'view_tasks' in role_permissions %}
                     <a href="{% url 'tasks:task_list' %}">{% translate "Tasks" %}</a>
                 {% endif %}
-                {% if 'review_reports' in role_permissions %}
-                    <a href="{% url 'reports:report_list' %}">{% translate "Reports" %}</a>
-                {% endif %}
                 {% if 'view_technicians' in role_permissions %}
                     <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
                 {% endif %}

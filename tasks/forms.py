@@ -7,7 +7,10 @@ from customers.models import Asset, Customer, Site
 from people.models import MAX_PHOTO_UPLOAD_BYTES, SKILL_LEVEL_CHOICES, Technician
 from reference.models import Brand, Country, Skill, TaskType
 
-from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment
+from .models import (
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TICKET_ATTACHMENT_BYTES, CustomerTicket, Task, TaskAssignment,
+    TaskAsset, TaskAttachment,
+)
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
 
@@ -108,6 +111,7 @@ class TaskCreateForm(forms.ModelForm):
                 DATETIME_INPUT_FORMAT,
             )
             self.fields['new_site_name'].initial = ticket.site_description
+            self.fields['new_site_address'].initial = ticket.site_address
             self.fields['new_site_contact_name'].initial = ticket.contact_name
             self.fields['new_site_contact_phone'].initial = ticket.contact_phone
 
@@ -397,21 +401,67 @@ class NewAssetForm(forms.Form):
         return cleaned
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """Django's own documented pattern for a multi-file field — a plain
+    FileField validates one UploadedFile at a time, so this feeds each
+    selected file through that same validation individually and collects
+    the results as a list.
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('widget', MultipleFileInput(attrs={'multiple': True}))
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            return [single_file_clean(d, initial) for d in data]
+        return single_file_clean(data, initial)
+
+
 class CustomerTicketForm(forms.ModelForm):
     """Public, no login — a customer describing a complaint or request in
     their own words. Self-identified: the company/site names are exactly
     what they typed, not yet matched against anything.
+
+    attachments isn't a CustomerTicket field — it's a list of files
+    resolved into individual CustomerTicketAttachment rows by the view,
+    once the ticket itself exists to attach them to.
     """
+
+    attachments = MultipleFileField(
+        required=False, label=_('Photos and/or short video'),
+        help_text=_('showing the issue and the serial number'),
+        widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
 
     class Meta:
         model = CustomerTicket
         fields = [
-            'country', 'company_name', 'site_description',
-            'contact_name', 'contact_phone', 'contact_email', 'description',
+            'country', 'company_name', 'site_description', 'site_address',
+            'contact_name', 'contact_phone', 'contact_email',
+            'serial_numbers', 'description', 'notes',
         ]
         widgets = {
-            'description': forms.Textarea(attrs={'rows': 4}),
+            'site_address': forms.Textarea(attrs={'rows': 2}),
+            'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
+            'description': forms.Textarea(attrs={'rows': 5}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
         }
+
+    def clean_attachments(self):
+        files = self.cleaned_data['attachments']
+        for file in files:
+            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
+                    'name': file.name,
+                })
+        return files
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
