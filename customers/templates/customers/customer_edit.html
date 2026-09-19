@@ -28,4 +28,50 @@
         <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>
 </div>
+
+{% if is_manager %}
+<div class="section">
+    <h2>{% translate "Portal login" %}</h2>
+    {% if customer.user_id %}
+    <p class="field__help">
+        {% blocktranslate with username=customer.user.username %}This customer can sign in as “{{ username }}” to see their tickets and service history.{% endblocktranslate %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_password">
+        {% if password_form.non_field_errors %}
+            <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in password_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button button--secondary">{% translate "Reset password" %}</button>
+    </form>
+    {% else %}
+    <p class="field__help">
+        {% translate "No portal login yet — create one so this customer can track their own tickets and service history." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_login">
+        {% if login_form.non_field_errors %}
+            <p class="flash flash--error">{{ login_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in login_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button button--secondary">{% translate "Create login" %}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

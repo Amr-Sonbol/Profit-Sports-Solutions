@@ -51,7 +51,7 @@ admin.site.unregister(User)
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    list_display = DjangoUserAdmin.list_display + ('is_active', 'linked_technician')
+    list_display = DjangoUserAdmin.list_display + ('is_active', 'linked_technician', 'linked_customer')
     list_editable = ('is_active',)
     actions = [suspend_users, reactivate_users]
 
@@ -59,6 +59,11 @@ class UserAdmin(DjangoUserAdmin):
         technician = getattr(obj, 'technician', None)
         return technician.full_name if technician else '—'
     linked_technician.short_description = 'Technician'
+
+    def linked_customer(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return customer.name if customer else '—'
+    linked_customer.short_description = 'Customer'
 
 
 @admin.register(RolePermission)

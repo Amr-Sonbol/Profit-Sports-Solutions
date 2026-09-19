@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -25,6 +26,11 @@ class Customer(models.Model):
             'used for a site that has no contact of its own — the single-branch case, or a '
             'chain where every site shares the same one'
         ),
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='customer', verbose_name=_('login account'),
+        help_text=_('one account covers every site under this customer — created by staff, never self-signup'),
     )
     is_active = models.BooleanField(_('active'), default=True)
 

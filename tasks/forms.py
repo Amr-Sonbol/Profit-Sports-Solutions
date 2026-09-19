@@ -588,6 +588,43 @@ class CustomerTicketForm(forms.ModelForm):
         self.fields['country'].queryset = Country.objects.filter(is_active=True)
 
 
+class CustomerPortalTicketForm(forms.ModelForm):
+    """A logged-in customer reporting an issue at one of their own
+    sites — skips retyping the company name, site, and address a
+    stranger has to on the public CustomerTicketForm, since a portal
+    login already knows who they are and where their sites are.
+    """
+
+    attachments = MultipleFileField(
+        required=False, label=_('Photos and/or short video'),
+        help_text=_('showing the issue and the serial number'),
+        widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    class Meta:
+        model = CustomerTicket
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'serial_numbers', 'description', 'notes']
+        widgets = {
+            'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
+            'description': forms.Textarea(attrs={'rows': 5}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+    def __init__(self, *args, customer, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields = {'site': forms.ModelChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+
+    def clean_attachments(self):
+        files = self.cleaned_data['attachments']
+        for file in files:
+            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
+                    'name': file.name,
+                })
+        return files
+
+
 class DismissTicketForm(forms.Form):
     dismissal_reason = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),

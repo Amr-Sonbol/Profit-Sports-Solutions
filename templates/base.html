@@ -69,6 +69,9 @@
                     <a href="{% url 'tasks:country_list' %}">{% translate "Countries" %}</a>
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
+                {% if user.customer %}
+                    <a href="{% url 'customers:portal_home' %}">{% translate "My account" %}</a>
+                {% endif %}
                 {% if not user.technician %}
                 <span class="site-header__user">{{ user.get_username }}</span>
                 {% endif %}

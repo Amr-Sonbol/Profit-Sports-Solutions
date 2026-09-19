@@ -879,10 +879,11 @@ def task_create(request):
                 )
                 if ticket is not None:
                     ticket.task = task
+                    ticket.customer = site.customer
                     ticket.status = CustomerTicket.Status.CONVERTED
                     ticket.reviewed_by = request.user
                     ticket.reviewed_at = timezone.now()
-                    ticket.save(update_fields=['task', 'status', 'reviewed_by', 'reviewed_at'])
+                    ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:

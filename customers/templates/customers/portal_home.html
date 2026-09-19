@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My account" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{{ customer.name }}</h1>
+    <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "Report a problem" %}</a>
+</div>
+
+<div class="section">
+    <h2>{% translate "Your reports" %}</h2>
+    {% if tickets %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Submitted" %}</th>
+                    <th>{% translate "Site" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr>
+                    <td><a href="{% url 'tasks:ticket_status' ticket.token %}">{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</a></td>
+                    <td>{{ ticket.site_description }}</td>
+                    <td>
+                        {% if ticket.status == 'new' %}
+                        <span class="badge badge--status-new">{% translate "Received" %}</span>
+                        {% elif ticket.status == 'converted' %}
+                        <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+                        {% else %}
+                        <span class="badge badge--muted">{% translate "Closed" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "You haven't reported anything yet." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Service history" %}</h2>
+    {% if visits %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Date" %}</th>
+                    <th>{% translate "Site" %}</th>
+                    <th>{% translate "Type" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for visit in visits %}
+                <tr>
+                    <td>{{ visit.scheduled_for|date:"SHORT_DATE_FORMAT"|default:visit.reported_at|date:"SHORT_DATE_FORMAT" }}</td>
+                    <td>{{ visit.site.name }}</td>
+                    <td>{{ visit.task_type.display_name|default:"—" }}</td>
+                    <td><span class="badge badge--status-{{ visit.status }}">{{ visit.get_status_display }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No visits on record yet." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

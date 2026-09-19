@@ -6,7 +6,7 @@ from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from customers.models import Asset, Site
+from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
 
@@ -146,6 +146,14 @@ class CustomerTicket(models.Model):
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
         verbose_name=_('country'),
+    )
+    customer = models.ForeignKey(
+        Customer, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets', verbose_name=_('customer'),
+        help_text=_(
+            'set automatically — at submission if the customer was logged in, '
+            'otherwise once the ticket is converted to a task'
+        ),
     )
     company_name = models.CharField(_('gym name'), max_length=150)
     site_description = models.CharField(

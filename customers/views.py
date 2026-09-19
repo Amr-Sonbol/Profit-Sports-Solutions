@@ -3,14 +3,18 @@ import io
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from people.models import RolePermission
+from people.models import RolePermission, Technician
 from people.permissions import get_active_country, require_manager, require_permission
+from tasks.forms import CustomerPortalTicketForm
+from tasks.models import CustomerTicketAttachment, Task
 
 from .forms import CustomerCreateForm, CustomerEditForm, CustomerImportForm, SiteCreateForm, SiteEditForm
 from .models import Customer, Site
@@ -80,19 +84,41 @@ def customer_detail(request, pk):
 
 @login_required
 def customer_edit(request, pk):
-    require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    is_manager = requesting_technician.role == Technician.Role.MANAGER
     customer = get_object_or_404(Customer, pk=pk, country=get_active_country(request))
 
-    if request.method == 'POST':
+    form = CustomerEditForm(instance=customer)
+    login_form = UserCreationForm() if is_manager and customer.user_id is None else None
+    password_form = SetPasswordForm(user=customer.user) if is_manager and customer.user_id else None
+
+    if request.method == 'POST' and request.POST.get('action') == 'create_login' and login_form is not None:
+        login_form = UserCreationForm(request.POST)
+        if login_form.is_valid():
+            customer.user = login_form.save()
+            customer.save(update_fields=['user'])
+            messages.success(request, _('Login created.'))
+            return redirect('customers:customer_edit', pk=customer.pk)
+
+    elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
+        password_form = SetPasswordForm(user=customer.user, data=request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            messages.success(request, _('Password reset.'))
+            return redirect('customers:customer_edit', pk=customer.pk)
+
+    elif request.method == 'POST':
         form = CustomerEditForm(request.POST, instance=customer)
         if form.is_valid():
             form.save()
             messages.success(request, _('Customer updated.'))
             return redirect('customers:customer_detail', pk=customer.pk)
-    else:
-        form = CustomerEditForm(instance=customer)
 
-    return render(request, 'customers/customer_edit.html', {'customer': customer, 'form': form})
+    context = {
+        'customer': customer, 'form': form, 'login_form': login_form,
+        'password_form': password_form, 'is_manager': is_manager,
+    }
+    return render(request, 'customers/customer_edit.html', context)
 
 
 @login_required
@@ -239,3 +265,62 @@ def customer_import_template(request):
         'JBR Branch', 'JBR, near the beach', '', '', '', '',
     ])
     return response
+
+
+def require_customer(request):
+    """Restrict a view to a customer's own portal login — the customer-
+    side counterpart to people.permissions.require_technician."""
+    customer = getattr(request.user, 'customer', None)
+    if customer is None:
+        raise PermissionDenied
+    return customer
+
+
+@login_required
+def portal_home(request):
+    """A logged-in customer's own tickets and service history — summary
+    only (date, site, type, status). Never the internal report detail,
+    technician names, or parts used that staff sees on the same task.
+    """
+    customer = require_customer(request)
+    tickets = customer.tickets.order_by('-submitted_at')
+    visits = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
+        '-scheduled_for', '-reported_at',
+    )
+    return render(request, 'customers/portal_home.html', {'customer': customer, 'tickets': tickets, 'visits': visits})
+
+
+@login_required
+def portal_ticket_new(request):
+    """A logged-in customer reporting an issue — the customer and site
+    are already known, so this skips straight to the issue itself and
+    links the ticket to this customer immediately, no matching needed.
+    """
+    customer = require_customer(request)
+
+    if request.method == 'POST':
+        form = CustomerPortalTicketForm(request.POST, request.FILES, customer=customer)
+        if form.is_valid():
+            site = form.cleaned_data['site']
+            with transaction.atomic():
+                ticket = form.save(commit=False)
+                ticket.customer = customer
+                ticket.country = customer.country
+                ticket.company_name = customer.name
+                ticket.site_description = site.name
+                ticket.site_address = site.address
+                ticket.submitted_at = timezone.now()
+                ticket.save()
+                for uploaded_file in form.cleaned_data['attachments']:
+                    CustomerTicketAttachment.objects.create(
+                        ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
+                    )
+            messages.success(request, _('Report submitted.'))
+            return redirect('customers:portal_home')
+    else:
+        form = CustomerPortalTicketForm(customer=customer, initial={
+            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            'contact_email': customer.contact_email,
+        })
+
+    return render(request, 'customers/portal_ticket_new.html', {'form': form})

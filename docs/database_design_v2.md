@@ -127,7 +127,10 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | contact_name | varchar | optional — the single-branch case, or a chain sharing one contact |
 | contact_phone | varchar | |
 | contact_email | varchar | |
+| user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
+
+**`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there, the same way it routes a technician to their own week; nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
 
 ### site
 A hotel group is one customer with many sites.
@@ -349,13 +352,14 @@ A single row (`pk=1`, created on first use), manager-controlled from the same Ro
 | auto_notify_on_reschedule | bool | default `false` |
 
 ### customer_ticket
-A complaint or request submitted directly by a customer, no login — public, self-identified, not yet linked to a real site. The piece of "customer portal" that turned out to be needed now; the rest of it stays deferred (§8).
+A complaint or request — submitted either through the public no-login form (self-identified, not yet matched to a real site) or, now that a portal login exists, directly by a signed-in customer picking one of their own sites.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | country_id | FK → country | |
-| company_name | varchar | gym name, as the customer typed it — not matched to `customer` yet |
+| customer_id | FK → customer | nullable — set immediately if submitted through the portal, otherwise once converted (see below) |
+| company_name | varchar | gym name, as the customer typed it — not matched to `customer` yet on the public form |
 | site_description | varchar | branch name, as the customer describes it |
 | site_address | text | the gym's physical address |
 | contact_name | varchar | |
@@ -376,7 +380,9 @@ A complaint or request submitted directly by a customer, no login — public, se
 | dismissal_reason | varchar | nullable |
 | token | varchar(43) | unique, auto-generated — see below |
 
-**`token` lets the customer check their own ticket without an account** — the same no-login, unguessable-link pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). Shown on the thank-you page after submission and, if a contact email was given, also emailed there; either is the only way back in, since a ticket is never tied to a login.
+**`token` lets a ticket be checked without a login** — the same unguessable-link pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). Shown on the thank-you page after submission and, if a contact email was given, also emailed there — still useful even for a portal customer, since it's what the portal's own ticket list links to.
+
+**`customer_id` is set two ways.** Submitted through the portal: immediately, since the ticket already belongs to whoever's logged in — no matching needed. Submitted through the public form: still `null` until a supervisor converts it, at which point it's set to the resulting task's site's customer (`task_create`, `tasks/views.py`) — the same moment the ticket first gets tied to a real site, so nothing new to reconcile. A dismissed public-form ticket stays unmatched forever, which is fine: it was never real work.
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
 
@@ -629,7 +635,9 @@ Each is a real need eventually. None belongs in the first version.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my profile (own photo, language, phone, email, password).
 
-**Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and the ticket form — meant to be shared/discoverable, unlike the feedback link.
+**Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; the ticket form — meant to be shared/discoverable, unlike the feedback link; and a ticket's own status page, reached by its token.
+
+**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page listing every ticket they've submitted and a summary-only service history, and a form to report a new problem at one of their own sites (skips the public form's company/site/address fields, since a login already knows all of that).
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 

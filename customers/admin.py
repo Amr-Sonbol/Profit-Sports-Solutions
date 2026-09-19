@@ -5,8 +5,8 @@ from .models import Asset, Customer, Site
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'country', 'segment', 'contact_name', 'contact_phone', 'contact_email', 'is_active']
-    search_fields = ['name', 'contact_name', 'contact_email']
+    list_display = ['name', 'country', 'segment', 'contact_name', 'contact_phone', 'contact_email', 'user', 'is_active']
+    search_fields = ['name', 'contact_name', 'contact_email', 'user__username']
     list_filter = ['country', 'segment', 'is_active']
 
 
