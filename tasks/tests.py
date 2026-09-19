@@ -957,9 +957,9 @@ class TicketFormTests(TaskTestCase):
 
     def test_submitting_creates_a_new_ticket_and_redirects_to_thank_you(self):
         response = self.client.post('/tasks/tickets/new/', self._payload())
-        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
-
         ticket = CustomerTicket.objects.get()
+        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
+
         self.assertEqual(ticket.company_name, 'Fitness First')
         self.assertEqual(ticket.country, self.country)
         self.assertEqual(ticket.site_address, 'Dubai Marina, near the mall')
@@ -984,17 +984,18 @@ class TicketFormTests(TaskTestCase):
 
     def test_notes_is_optional(self):
         response = self.client.post('/tasks/tickets/new/', self._payload(notes='Gate code is 4321.'))
-        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
-        self.assertEqual(CustomerTicket.objects.get().notes, 'Gate code is 4321.')
+        ticket = CustomerTicket.objects.get()
+        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
+        self.assertEqual(ticket.notes, 'Gate code is 4321.')
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_submitting_with_photos_creates_attachments(self):
         photo1 = SimpleUploadedFile('fault1.jpg', b'not a real image', content_type='image/jpeg')
         photo2 = SimpleUploadedFile('fault2.png', b'not a real image', content_type='image/png')
         response = self.client.post('/tasks/tickets/new/', self._payload(attachments=[photo1, photo2]))
-        self.assertRedirects(response, '/tasks/tickets/new/thank-you/')
-
         ticket = CustomerTicket.objects.get()
+        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
+
         self.assertEqual(ticket.attachments.count(), 2)
 
     def test_disallowed_attachment_extension_is_rejected(self):
@@ -1004,7 +1005,9 @@ class TicketFormTests(TaskTestCase):
         self.assertEqual(CustomerTicket.objects.count(), 0)
 
     def test_thank_you_page_is_public(self):
-        response = self.client.get('/tasks/tickets/new/thank-you/')
+        self.client.post('/tasks/tickets/new/', self._payload())
+        ticket = CustomerTicket.objects.get()
+        response = self.client.get(f'/tasks/tickets/new/thank-you/{ticket.token}/')
         self.assertEqual(response.status_code, 200)
 
 

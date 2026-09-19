@@ -374,6 +374,9 @@ A complaint or request submitted directly by a customer, no login — public, se
 | reviewed_by_id | FK → user | nullable |
 | reviewed_at | timestamptz | nullable |
 | dismissal_reason | varchar | nullable |
+| token | varchar(43) | unique, auto-generated — see below |
+
+**`token` lets the customer check their own ticket without an account** — the same no-login, unguessable-link pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). Shown on the thank-you page after submission and, if a contact email was given, also emailed there; either is the only way back in, since a ticket is never tied to a login.
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
 

@@ -6,7 +6,12 @@
 {% block content %}
 <div class="page__header">
     <h1>{% translate "Customers" %}</h1>
-    <a href="{% url 'customers:customer_create' %}" class="button">{% translate "Add customer" %}</a>
+    <div class="button-row">
+        {% if user.technician.role == 'manager' %}
+        <a href="{% url 'customers:customer_import' %}" class="button button--secondary">{% translate "Import customers" %}</a>
+        {% endif %}
+        <a href="{% url 'customers:customer_create' %}" class="button">{% translate "Add customer" %}</a>
+    </div>
 </div>
 
 <form method="get" class="filters">

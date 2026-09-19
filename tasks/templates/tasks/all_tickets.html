@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "All tickets" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "All tickets" %}</h1>
+    <nav class="tabs">
+        <a href="?status=new" class="{% if status == 'new' %}is-active{% endif %}">{% translate "New" %}</a>
+        {% for value, label in status_choices %}
+        <a href="?status={{ value }}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
+        {% endfor %}
+        <a href="?status=all" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
+    </nav>
+</div>
+<p class="field__help">{% translate "Every country's tickets at once. Doesn't follow the country switcher above." %}</p>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>{% translate "Submitted" %}</th>
+                <th>{% translate "Country" %}</th>
+                <th>{% translate "Company" %}</th>
+                <th>{% translate "Site / location" %}</th>
+                <th>{% translate "Contact" %}</th>
+                <th>{% translate "Assigned to" %}</th>
+                <th>{% translate "Status" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticket in tickets %}
+            <tr>
+                <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</a></td>
+                <td>{{ ticket.country.name }}</td>
+                <td>{{ ticket.company_name }}</td>
+                <td>{{ ticket.site_description }}</td>
+                <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
+                <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
+                <td>
+                    {% if ticket.status == 'new' %}
+                    <span class="badge badge--status-new">{% translate "New" %}</span>
+                    {% elif ticket.status == 'converted' %}
+                    <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+                    {% else %}
+                    <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">
+                    <p class="empty-state">{% translate "No tickets match this filter." %}</p>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

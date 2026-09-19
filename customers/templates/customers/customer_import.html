@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Import customers" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
+        <h1>{% translate "Import customers" %}</h1>
+    </div>
+</div>
+
+<div class="section">
+    <p>
+        {% translate "One row per site — a chain with several branches is several rows sharing the same customer name. Re-uploading the same file is safe: an existing customer or site is matched by name and left alone, not duplicated." %}
+    </p>
+    <p><a href="{% url 'customers:customer_import_template' %}">{% translate "Download a template CSV" %}</a></p>
+
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Import" %}</button>
+    </form>
+</div>
+
+{% if results %}
+<div class="section">
+    <h2>{% translate "Results" %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Row" %}</th>
+                    <th>{% translate "Customer" %}</th>
+                    <th>{% translate "Site" %}</th>
+                    <th>{% translate "Outcome" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr>
+                    <td>{{ result.row }}</td>
+                    <td>{{ result.customer_name }}</td>
+                    <td>{{ result.site_name }}</td>
+                    <td>
+                        {% if result.outcome == 'created' %}
+                        <span class="badge badge--status-completed">{% translate "Created" %}</span>
+                        {% elif result.outcome == 'skipped' %}
+                        <span class="badge badge--muted">{% translate "Skipped" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-blocked">{% translate "Error" %}</span>
+                        {% endif %}
+                        {{ result.detail }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

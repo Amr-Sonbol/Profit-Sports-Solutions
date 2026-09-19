@@ -73,3 +73,17 @@ class SiteEditForm(forms.ModelForm):
         ).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError(_('This customer already has a site with that name.'))
         return name
+
+
+class CustomerImportForm(forms.Form):
+    """One row per site — see the downloadable template for columns.
+    Rows sharing the same customer_name become one Customer with
+    several Sites, covering a chain in one file instead of one row.
+    """
+    csv_file = forms.FileField(label=_('CSV file'))
+
+    def clean_csv_file(self):
+        csv_file = self.cleaned_data['csv_file']
+        if not csv_file.name.lower().endswith('.csv'):
+            raise forms.ValidationError(_('Upload a .csv file.'))
+        return csv_file

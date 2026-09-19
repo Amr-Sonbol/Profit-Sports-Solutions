@@ -37,7 +37,7 @@ from .forms import (
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TechnicianCreateForm,
-    TechnicianEditForm, TicketLogisticsForm,
+    TechnicianEditForm, TicketEditForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -906,18 +906,55 @@ def ticket_form(request):
                     CustomerTicketAttachment.objects.create(
                         ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
                     )
-            return redirect('tasks:ticket_submitted')
+            _send_ticket_confirmation(request, ticket)
+            return redirect('tasks:ticket_submitted', token=ticket.token)
     else:
         form = CustomerTicketForm()
 
     return render(request, 'tasks/ticket_form.html', {'form': form})
 
 
-def ticket_submitted(request):
-    """Public — the thank-you page, split from ticket_form so refreshing
-    it doesn't risk resubmitting the form.
+def _send_ticket_confirmation(request, ticket):
+    """Best-effort, and only when the customer gave an email — the
+    tracking link is still shown on the thank-you page either way, since
+    that's the one guaranteed way they see it.
     """
-    return render(request, 'tasks/ticket_submitted.html')
+    if not ticket.contact_email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    with translation.override('en'):
+        subject = _('We received your report — track it here')
+        message = _(
+            'Dear %(contact)s,\n\n'
+            "We've received your report for %(site)s and will be in touch shortly to arrange a visit.\n\n"
+            'You can check its status anytime at this link:\n%(link)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {'contact': ticket.contact_name, 'site': ticket.site_description, 'link': link}
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[ticket.contact_email], fail_silently=True,
+    )
+
+
+def ticket_submitted(request, token):
+    """Public — the thank-you page, split from ticket_form so refreshing
+    it doesn't risk resubmitting the form. Takes the token so it can
+    show the same follow-up link ticket_status lives at — the one place
+    a customer who gave no email will ever see it.
+    """
+    ticket = get_object_or_404(CustomerTicket, token=token)
+    status_url = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    return render(request, 'tasks/ticket_submitted.html', {'ticket': ticket, 'status_url': status_url})
+
+
+def ticket_status(request, token):
+    """Public — no login. Lets a customer check on a report they
+    submitted, anytime — the same token-based, no-account pattern as
+    reports.CustomerFeedback's link.
+    """
+    ticket = get_object_or_404(CustomerTicket, token=token)
+    return render(request, 'tasks/ticket_status.html', {'ticket': ticket})
 
 
 @login_required
@@ -939,6 +976,26 @@ def ticket_list(request):
 
 
 @login_required
+def all_tickets(request):
+    """Every customer-submitted ticket in every country — manager-only,
+    same fixed floor as the other "all ..." boards. Converting one into a
+    task still requires switching to its own country first (task_create's
+    site/brand/technician choices are all built around the active
+    country); dismissing or assigning it works from here regardless.
+    """
+    require_manager(request)
+
+    status = request.GET.get('status', 'new')
+    tickets = CustomerTicket.objects.select_related('assigned_to', 'country')
+    if status != 'all':
+        tickets = tickets.filter(status=status)
+    tickets = tickets.order_by('-submitted_at')
+
+    context = {'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices}
+    return render(request, 'tasks/all_tickets.html', context)
+
+
+@login_required
 def ticket_review(request, pk):
     """Dismiss, assign, or convert a ticket — restricted to manage_tickets
     like the rest of ticket triage. Whoever it's currently assigned to can
@@ -949,8 +1006,10 @@ def ticket_review(request, pk):
     # Country-scoped in the fetch itself, same as every other cross-country
     # lookup in this app (technician_board, technician_skills, ...) — an
     # assignee is always same-country by construction (AssignTicketForm
-    # only offers same-country technicians), so this costs it nothing.
-    ticket = get_object_or_404(CustomerTicket, pk=pk, country=get_active_country(request))
+    # only offers same-country technicians), so this costs it nothing. A
+    # manager reaches any ticket regardless, same as _scoped_or_404 gives
+    # them everywhere else — the point of the all_tickets board.
+    ticket = _scoped_or_404(CustomerTicket.objects, pk, technician, get_active_country(request), 'country')
 
     can_manage = RolePermission.objects.filter(
         role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
@@ -962,6 +1021,7 @@ def ticket_review(request, pk):
     dismiss_form = DismissTicketForm()
     assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
     logistics_form = TicketLogisticsForm(instance=ticket)
+    edit_form = TicketEditForm(instance=ticket)
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
@@ -971,6 +1031,13 @@ def ticket_review(request, pk):
             if logistics_form.is_valid():
                 logistics_form.save()
                 messages.success(request, _('Logistics updated.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+        elif action == 'edit_details':
+            edit_form = TicketEditForm(request.POST, instance=ticket)
+            if edit_form.is_valid():
+                edit_form.save()
+                messages.success(request, _('Ticket details updated.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
         elif action == 'notify_shipping':
@@ -1008,7 +1075,7 @@ def ticket_review(request, pk):
 
     context = {
         'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
-        'logistics_form': logistics_form, 'can_manage': can_manage,
+        'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
     }
     return render(request, 'tasks/ticket_review.html', context)
 

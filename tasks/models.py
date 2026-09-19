@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -188,11 +189,20 @@ class CustomerTicket(models.Model):
     )
     reviewed_at = models.DateTimeField(_('reviewed at'), null=True, blank=True)
     dismissal_reason = models.CharField(_('dismissal reason'), max_length=255, blank=True)
+    token = models.CharField(
+        _('token'), max_length=43, unique=True, editable=False,
+        help_text=_('lets the customer check this ticket’s status without an account — see reports.CustomerFeedback'),
+    )
 
     class Meta:
         verbose_name = _('customer ticket')
         verbose_name_plural = _('customer tickets')
         ordering = ['-submitted_at']
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.company_name} — {self.site_description}'

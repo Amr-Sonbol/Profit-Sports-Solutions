@@ -605,6 +605,28 @@ class TicketLogisticsForm(forms.ModelForm):
         fields = ['pak_reference_number', 'shipping_tracking_number']
 
 
+class TicketEditForm(forms.ModelForm):
+    """Correcting what the customer typed — a mis-heard phone number, a
+    typo in the site description, and so on. Country isn't here: moving
+    a ticket to a different country is a relocation, not a correction,
+    same reasoning Technician/Customer country changes already use.
+    """
+
+    class Meta:
+        model = CustomerTicket
+        fields = [
+            'company_name', 'site_description', 'site_address',
+            'contact_name', 'contact_phone', 'contact_email',
+            'serial_numbers', 'description', 'notes',
+        ]
+        widgets = {
+            'site_address': forms.Textarea(attrs={'rows': 2}),
+            'serial_numbers': forms.Textarea(attrs={'rows': 3}),
+            'description': forms.Textarea(attrs={'rows': 5}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+
 class AssignTicketForm(forms.Form):
     """Who's handling this ticket — any active supervisor or manager in
     its own country, not necessarily the person who'll ultimately convert

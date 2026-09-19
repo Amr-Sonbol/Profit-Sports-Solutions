@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Report status" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="feedback-card">
+    <h1>{% translate "Report status" %}</h1>
+    <p class="muted">{{ ticket.company_name }} — {{ ticket.site_description }}</p>
+    <p class="muted">{% blocktranslate with date=ticket.submitted_at|date:"SHORT_DATE_FORMAT" %}Submitted {{ date }}{% endblocktranslate %}</p>
+
+    {% if ticket.status == 'new' %}
+    <span class="badge badge--status-new">{% translate "Received" %}</span>
+    <p>{% translate "We're reviewing your report and will be in touch shortly to arrange a visit." %}</p>
+    {% elif ticket.status == 'converted' %}
+    <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+    {% if ticket.task.scheduled_for %}
+    <p>
+        {% blocktranslate with date=ticket.task.scheduled_for|date:"SHORT_DATETIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}
+    </p>
+    {% else %}
+    <p>{% translate "Your report has become a service task. We'll be in touch to schedule a visit." %}</p>
+    {% endif %}
+    {% elif ticket.status == 'dismissed' %}
+    <span class="badge badge--muted">{% translate "Closed" %}</span>
+    <p>{% translate "This report has been reviewed and closed. Contact us if you still need help." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

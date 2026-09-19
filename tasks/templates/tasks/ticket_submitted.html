@@ -9,6 +9,11 @@
         <div class="feedback-thanks__icon">✓</div>
         <h1>{% translate "Thank you!" %}</h1>
         <p class="muted">{% translate "We've received your report and will be in touch shortly to arrange a visit." %}</p>
+        <p>{% translate "Save this link to check its status anytime:" %}</p>
+        <p><a href="{{ status_url }}">{{ status_url }}</a></p>
+        {% if ticket.contact_email %}
+        <p class="muted">{% translate "We've also emailed it to you." %}</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
