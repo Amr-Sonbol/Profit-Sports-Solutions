@@ -30,5 +30,5 @@ def active_country(request):
         return {}
     context = {'active_country': get_active_country(request)}
     if technician.role == technician.Role.MANAGER:
-        context['switchable_countries'] = Country.objects.order_by('name')
+        context['switchable_countries'] = Country.objects.filter(is_active=True).order_by('name')
     return context

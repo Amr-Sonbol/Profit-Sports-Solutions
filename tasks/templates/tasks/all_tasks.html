@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "All tasks" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "All tasks" %}</h1>
+    <nav class="tabs">
+        <a href="?status=open{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == 'open' %}is-active{% endif %}">{% translate "Open" %}</a>
+        <a href="?status=all{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
+        {% for value, label in status_choices %}
+            <a href="?status={{ value }}{% if filter_qs %}&{{ filter_qs }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
+        {% endfor %}
+    </nav>
+</div>
+<p class="field__help">{% translate "Every task in every country — for tracking, inspection, and audit. Doesn't follow the country switcher above." %}</p>
+
+<form method="get" class="filters">
+    <input type="hidden" name="status" value="{{ status }}">
+    <div class="filters__search">
+        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by task number, site, or customer' %}">
+    </div>
+    <select name="country">
+        <option value="">{% translate "All countries" %}</option>
+        {% for country in countries %}
+        <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="button">{% translate "Search" %}</button>
+</form>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>{% translate "Task #" %}</th>
+                <th>{% translate "Country" %}</th>
+                <th>{% translate "Customer / Site" %}</th>
+                <th>{% translate "Type" %}</th>
+                <th>{% translate "Priority" %}</th>
+                <th>{% translate "Status" %}</th>
+                <th>{% translate "Promised" %}</th>
+                <th>{% translate "Scheduled" %}</th>
+                <th>{% translate "Lead" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in page_obj %}
+            <tr>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
+                <td>{{ task.site.customer.country.name }}</td>
+                <td>
+                    {{ task.site.customer.name }}
+                    <div class="muted">{{ task.site.name }}</div>
+                </td>
+                <td>{{ task.task_type.display_name|default:"—" }}</td>
+                <td><span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span></td>
+                <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+                <td>{{ task.promised_at|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</td>
+                <td>{{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</td>
+                <td>{{ task.lead_technician.full_name|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="9">
+                    <p class="empty-state">{% translate "No tasks match these filters." %}</p>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+    {% endif %}
+    <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+    {% if page_obj.has_next %}
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

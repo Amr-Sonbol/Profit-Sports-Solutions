@@ -72,6 +72,10 @@ class Technician(models.Model):
     )
     hired_on = models.DateField(_('hired on'), null=True, blank=True)
     is_active = models.BooleanField(_('active'), default=True)
+    deactivation_reason = models.CharField(
+        _('deactivation reason'), max_length=255, blank=True,
+        help_text=_('why this technician was deactivated — resigned, terminated, etc.'),
+    )
     is_available = models.BooleanField(
         _('available'), default=True,
         help_text=_('whether this technician can currently be assigned work — separate from is_active'),
@@ -92,6 +96,19 @@ class Technician(models.Model):
 
     def __str__(self):
         return self.full_name
+
+    def set_active(self, is_active, reason=''):
+        """The one place is_active ever changes — keeps the linked login
+        account (if any) in lockstep, so a deactivated technician can't
+        just log back in. Clears the reason on reactivation; it only ever
+        describes the most recent deactivation.
+        """
+        self.is_active = is_active
+        self.deactivation_reason = reason if not is_active else ''
+        self.save(update_fields=['is_active', 'deactivation_reason'])
+        if self.user_id is not None and self.user.is_active != is_active:
+            self.user.is_active = is_active
+            self.user.save(update_fields=['is_active'])
 
 
 class RolePermission(models.Model):

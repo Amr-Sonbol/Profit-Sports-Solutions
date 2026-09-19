@@ -15,8 +15,19 @@
     <div class="filters__search">
         <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name' %}">
     </div>
+    {% if show_inactive %}
+    <input type="hidden" name="status" value="active">
+    <button type="submit" class="button button--secondary">{% translate "Search" %}</button>
+    {% else %}
     <button type="submit" class="button">{% translate "Search" %}</button>
+    {% endif %}
 </form>
+
+{% if show_inactive %}
+<a href="?{% if search %}q={{ search }}{% endif %}">{% translate "← Back to active technicians" %}</a>
+{% else %}
+<a href="?status=inactive{% if search %}&q={{ search }}{% endif %}">{% translate "Show deactivated technicians" %}</a>
+{% endif %}
 
 <div class="section">
     {% if rows %}
@@ -26,8 +37,12 @@
                 <tr>
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Role" %}</th>
+                    {% if show_inactive %}
+                    <th>{% translate "Reason" %}</th>
+                    {% else %}
                     <th>{% translate "Professional skills" %}</th>
                     <th>{% translate "90-day track" %}</th>
+                    {% endif %}
                     <th></th>
                 </tr>
             </thead>
@@ -39,6 +54,9 @@
                         {{ row.technician.full_name }}
                     </td>
                     <td>{{ row.technician.get_role_display }}</td>
+                    {% if show_inactive %}
+                    <td>{{ row.technician.deactivation_reason|default:"—" }}</td>
+                    {% else %}
                     <td>
                         {% if row.certification.is_certified %}
                         <span class="badge badge--status-completed">{% translate "Certified" %}</span>
@@ -68,11 +86,23 @@
                         <span class="muted">—</span>
                         {% endif %}
                     </td>
+                    {% endif %}
                     <td>
+                        {% if show_inactive %}
+                        {% if 'manage_technicians' in role_permissions %}
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="reactivate">
+                            <input type="hidden" name="technician_id" value="{{ row.technician.pk }}">
+                            <button type="submit" class="button button--secondary">{% translate "Reactivate" %}</button>
+                        </form>
+                        {% endif %}
+                        {% else %}
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
                         <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
                         {% if 'manage_technicians' in role_permissions %}
                         <a href="{% url 'tasks:technician_edit' row.technician.pk %}">{% translate "Edit photo" %}</a>
+                        {% endif %}
                         {% endif %}
                     </td>
                 </tr>
@@ -82,6 +112,8 @@
     </div>
     {% elif search %}
     <p class="empty-state">{% translate "No technicians match that search." %}</p>
+    {% elif show_inactive %}
+    <p class="empty-state">{% translate "No deactivated technicians in your country." %}</p>
     {% else %}
     <p class="empty-state">{% translate "No active technicians in your country." %}</p>
     {% endif %}

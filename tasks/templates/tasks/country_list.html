@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Countries" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Countries" %}</h1>
+    <a href="{% url 'tasks:country_create' %}" class="button">{% translate "Add country" %}</a>
+</div>
+
+<div class="section">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Name (Arabic)" %}</th>
+                    <th>{% translate "ISO code" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for country in countries %}
+                <tr>
+                    <td>{{ country.name }}</td>
+                    <td dir="rtl">{{ country.name_ar }}</td>
+                    <td>{{ country.iso_code }}</td>
+                    <td>
+                        {% if country.is_active %}
+                        <span class="badge badge--status-completed">{% translate "Active" %}</span>
+                        {% else %}
+                        <span class="badge badge--muted">{% translate "Inactive" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="toggle_active">
+                            <input type="hidden" name="country_id" value="{{ country.pk }}">
+                            {% if country.is_active %}
+                            <button type="submit" class="button button--secondary">{% translate "Deactivate" %}</button>
+                            {% else %}
+                            <button type="submit" class="button button--secondary">{% translate "Activate" %}</button>
+                            {% endif %}
+                        </form>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="country_id" value="{{ country.pk }}">
+                            <button type="submit" class="button button--danger">{% translate "Delete" %}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

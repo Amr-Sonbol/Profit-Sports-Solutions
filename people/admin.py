@@ -11,10 +11,9 @@ User = get_user_model()
 
 
 def _cascade_active(queryset, is_active, related_attr):
-    """Suspending or reactivating a Technician must do the same to its
-    linked login account, and vice versa — otherwise a technician marked
-    inactive on the roster could still log in, or a suspended user would
-    still show up as available on the roster.
+    """For User querysets — Technician has its own set_active() (used by
+    the actions below and the in-app roster deactivate screen) since it
+    also has a reason to track; a User has no such reason to carry over.
     """
     for obj in queryset:
         obj.is_active = is_active
@@ -27,12 +26,14 @@ def _cascade_active(queryset, is_active, related_attr):
 
 @admin.action(description='Suspend selected technicians (also blocks their login)')
 def suspend_technicians(modeladmin, request, queryset):
-    _cascade_active(queryset, False, 'user')
+    for technician in queryset:
+        technician.set_active(False)
 
 
 @admin.action(description='Reactivate selected technicians (also restores their login)')
 def reactivate_technicians(modeladmin, request, queryset):
-    _cascade_active(queryset, True, 'user')
+    for technician in queryset:
+        technician.set_active(True)
 
 
 @admin.action(description="Suspend selected users (also marks their technician profile inactive)")
@@ -92,6 +93,12 @@ class TechnicianAdmin(admin.ModelAdmin):
     list_filter = ['country', 'role', 'employment_type', 'language', 'is_active', 'is_available']
     list_editable = ['is_active', 'is_available']
     actions = [suspend_technicians, reactivate_technicians]
+
+    def save_model(self, request, obj, form, change):
+        if change and 'is_active' in form.changed_data:
+            obj.set_active(obj.is_active, reason=obj.deactivation_reason)
+        else:
+            super().save_model(request, obj, form, change)
 
 
 @admin.register(TechnicianSkill)

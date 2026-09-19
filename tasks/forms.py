@@ -257,6 +257,14 @@ class MarkUnavailableForm(forms.Form):
     )
 
 
+class DeactivateTechnicianForm(forms.Form):
+    """Permanent, unlike MarkUnavailableForm above — resigned, terminated,
+    etc. Free text rather than fixed choices: the reasons here vary too
+    much to usefully bucket, and this is a one-off note, not reported on.
+    """
+    reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
+
+
 class SelfRateLevelForm(forms.Form):
     """A technician's own first guess at a conduct-area level — for a
     skill, see SelfRateSkillForm below, which also requires evidence.
@@ -343,6 +351,17 @@ class SkillCreateForm(forms.ModelForm):
         fields = ['name', 'name_ar', 'category']
 
 
+class CountryCreateForm(forms.ModelForm):
+    """A manager adding a country the roster and every other per-country
+    screen can scope to. Starts active; toggling that afterward, and
+    deleting one no longer in use, happen from the Countries list itself.
+    """
+
+    class Meta:
+        model = Country
+        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code']
+
+
 class TechnicianCreateForm(forms.ModelForm):
     """Country comes from the supervisor creating it, set in the view —
     never a field here, same scoping every other per-country screen uses.
@@ -363,26 +382,51 @@ class TechnicianCreateForm(forms.ModelForm):
 
 
 class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
-    """A supervisor/manager editing someone else's record, from the
-    roster — photo, plus their country when they relocate. Every other
-    field (role, employment type, ...) stays office-side but out of
-    scope here for now, same as it always has been.
+    """A supervisor or manager editing someone else's record, from the
+    roster. Photo/name/phone/language/email are open to anyone with
+    manage_technicians; country/role/employment details are manager-only
+    HR decisions — same reasoning this already applied to country alone
+    (the only other cross-country action, the active-country switcher,
+    is manager-only too), now extended to promotions/demotions and the
+    rest of the office-side fields.
 
-    `country` is manager-only — the only other cross-country action in
-    the app (the active-country switcher) is `require_manager`-gated
-    too, so a supervisor relocating someone outside their own country
-    would be a real inconsistency, not just a missing nicety.
+    Email lives on the linked auth user, not Technician, same pattern as
+    MyProfileForm — but unlike a technician editing their own profile,
+    the target here might have no login account yet, so the field is
+    only shown/saved when one exists.
     """
+
+    email = forms.EmailField(required=False, label=_('email'))
 
     class Meta:
         model = Technician
-        fields = ['photo', 'country']
-        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+        fields = [
+            'photo', 'full_name', 'phone', 'language', 'country', 'role',
+            'employment_type', 'has_transport', 'can_carry_large', 'hired_on',
+        ]
+        widgets = {
+            'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+            'hired_on': forms.DateInput(attrs={'type': 'date'}),
+        }
 
-    def __init__(self, *args, can_relocate=True, **kwargs):
+    def __init__(self, *args, is_manager=True, **kwargs):
         super().__init__(*args, **kwargs)
-        if not can_relocate:
-            del self.fields['country']
+        if self.instance.pk and self.instance.user_id:
+            self.fields['email'].initial = self.instance.user.email
+        else:
+            del self.fields['email']
+        if not is_manager:
+            for field_name in ['country', 'role', 'employment_type', 'has_transport', 'can_carry_large', 'hired_on']:
+                del self.fields[field_name]
+        elif 'country' in self.fields:
+            self.fields['country'].queryset = Country.objects.filter(is_active=True)
+
+    def save(self, commit=True):
+        technician = super().save(commit=commit)
+        if commit and technician.user_id and 'email' in self.cleaned_data:
+            technician.user.email = self.cleaned_data['email']
+            technician.user.save(update_fields=['email'])
+        return technician
 
 
 class MyProfileForm(PhotoSizeMixin, forms.ModelForm):

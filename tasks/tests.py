@@ -2521,6 +2521,23 @@ class TechnicianEditTests(TaskTestCase):
     def _photo(self, name='photo.jpg', content=b'not a real image', content_type='image/jpeg'):
         return SimpleUploadedFile(name, content, content_type=content_type)
 
+    def _base_payload(self, **overrides):
+        """The full set of fields TechnicianEditForm now covers, at the
+        technician's current values — a manager-only field posted by a
+        supervisor is simply ignored (not present in that form), so this
+        same payload works for either role.
+        """
+        payload = {
+            'full_name': self.technician.full_name,
+            'phone': self.technician.phone,
+            'language': self.technician.language,
+            'role': self.technician.role,
+            'employment_type': self.technician.employment_type,
+            'country': self.technician.country_id,
+        }
+        payload.update(overrides)
+        return payload
+
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get(self.url)
@@ -2543,7 +2560,7 @@ class TechnicianEditTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_supervisor_uploads_a_photo(self):
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'photo': self._photo(), 'country': self.country.pk})
+        response = self.client.post(self.url, self._base_payload(photo=self._photo()))
         self.assertEqual(response.status_code, 302)
 
         self.technician.refresh_from_db()
@@ -2551,17 +2568,16 @@ class TechnicianEditTests(TaskTestCase):
 
     def test_rejects_a_disallowed_extension(self):
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {
-            'photo': self._photo(name='photo.svg', content_type='image/svg+xml'),
-            'country': self.country.pk,
-        })
+        response = self.client.post(self.url, self._base_payload(
+            photo=self._photo(name='photo.svg', content_type='image/svg+xml'),
+        ))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('photo'))
 
     def test_rejects_a_photo_over_the_size_limit(self):
         self.client.login(username='supervisor1', password='pass12345')
         oversized = self._photo(content=b'x' * (5 * 1024 * 1024 + 1))
-        response = self.client.post(self.url, {'photo': oversized, 'country': self.country.pk})
+        response = self.client.post(self.url, self._base_payload(photo=oversized))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['form'].errors.get('photo'))
 
@@ -2571,7 +2587,7 @@ class TechnicianEditTests(TaskTestCase):
         )
 
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(self.url, {'country': other_country.pk})
+        response = self.client.post(self.url, self._base_payload(country=other_country.pk))
         self.assertEqual(response.status_code, 302)
 
         self.technician.refresh_from_db()
@@ -2583,7 +2599,7 @@ class TechnicianEditTests(TaskTestCase):
         )
 
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'country': other_country.pk})
+        response = self.client.post(self.url, self._base_payload(country=other_country.pk))
         self.assertEqual(response.status_code, 302)
 
         self.technician.refresh_from_db()
@@ -2594,7 +2610,7 @@ class TechnicianEditTests(TaskTestCase):
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         self.client.login(username='manager1', password='pass12345')
-        self.client.post(self.url, {'country': other_country.pk})
+        self.client.post(self.url, self._base_payload(country=other_country.pk))
 
         response = self.client.get('/tasks/technicians/')
         technicians = [row['technician'] for row in response.context['rows']]

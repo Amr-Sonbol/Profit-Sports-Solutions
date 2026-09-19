@@ -29,4 +29,49 @@
         <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>
 </div>
+
+{% if password_form %}
+<div class="section">
+    <h2>{% translate "Reset password" %}</h2>
+    <p class="field__help">
+        {% translate "Sets a new password for their login directly — they don't need to know the old one." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_password">
+        {% if password_form.non_field_errors %}
+            <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in password_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Reset password" %}</button>
+    </form>
+</div>
+{% endif %}
+
+{% if is_manager %}
+<div class="section">
+    <h2>{% translate "Deactivate" %}</h2>
+    <p class="field__help">
+        {% translate "Removes them from the roster, blocks assignment, and blocks their login (if they have one) — for someone who's resigned, been let go, or otherwise left the company." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="deactivate">
+        {% for field in deactivate_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button button--danger">{% translate "Deactivate technician" %}</button>
+    </form>
+</div>
+{% endif %}
 {% endblock %}

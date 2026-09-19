@@ -5,13 +5,13 @@ from zoneinfo import ZoneInfo
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, Value, When
+from django.db.models import Case, Count, IntegerField, Prefetch, ProtectedError, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,10 +33,11 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
-    ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
-    ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, SkillCreateForm, TaskAttachmentUploadForm,
-    TaskCreateForm, TaskEditForm, TechnicianCreateForm, TechnicianEditForm, TicketLogisticsForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, CountryCreateForm, CustomerTicketForm,
+    DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
+    SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TechnicianCreateForm,
+    TechnicianEditForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -586,6 +587,61 @@ def task_list(request):
         'filter_qs': urlencode(filter_params),
     }
     return render(request, 'tasks/task_list.html', context)
+
+
+@login_required
+def all_tasks(request):
+    """Every task in every country, for a manager auditing or tracking
+    something that isn't scoped to whichever country they last switched
+    to — the same search/status/date filters as the regular task list,
+    minus the country boundary, plus a country filter and column since
+    nothing else on the page tells you which country a row belongs to.
+    Manager-only: this is a global, cross-country view, the same fixed
+    floor as skill_list and role_permissions.
+    """
+    require_manager(request)
+
+    status = request.GET.get('status', 'open')
+    search = request.GET.get('q', '').strip()
+    country_id = request.GET.get('country', '')
+
+    tasks = _with_lead_prefetch(
+        Task.objects.select_related('site__customer__country', 'task_type'),
+    )
+
+    if status == 'open':
+        tasks = tasks.filter(status__in=OPEN_STATUSES)
+    elif status != 'all':
+        tasks = tasks.filter(status=status)
+
+    if search:
+        tasks = tasks.filter(
+            Q(task_number__icontains=search)
+            | Q(site__name__icontains=search)
+            | Q(site__customer__name__icontains=search)
+        )
+
+    if country_id:
+        tasks = tasks.filter(site__customer__country_id=country_id)
+
+    tasks = tasks.annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
+
+    paginator = Paginator(tasks, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    _attach_lead_technician(page_obj)
+
+    filter_params = {key: value for key, value in {'q': search, 'country': country_id}.items() if value}
+
+    context = {
+        'page_obj': page_obj,
+        'status': status,
+        'search': search,
+        'status_choices': Task.Status.choices,
+        'countries': Country.objects.order_by('name'),
+        'selected_country': country_id,
+        'filter_qs': urlencode(filter_params),
+    }
+    return render(request, 'tasks/all_tasks.html', context)
 
 
 @login_required
@@ -1326,12 +1382,27 @@ def technician_create(request):
 def technician_list(request):
     """The technician roster for a supervisor's own country — the "who can
     I rely on" view. Never existed as a screen before this feature.
+
+    Shows active technicians by default; ?status=inactive switches to the
+    deactivated ones instead (never both — an inactive technician doesn't
+    belong on the "who can I rely on" list), so a manager can find someone
+    to reactivate without them cluttering the roster everyone else uses.
     """
     require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
 
+    if request.method == 'POST' and request.POST.get('action') == 'reactivate':
+        require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
+        technician = get_object_or_404(
+            Technician, pk=request.POST.get('technician_id'), country=get_active_country(request),
+        )
+        technician.set_active(True)
+        messages.success(request, _('Technician reactivated.'))
+        return redirect(f"{reverse('tasks:technician_list')}?status=inactive")
+
+    show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
     technicians = Technician.objects.filter(
-        is_active=True, country=get_active_country(request),
+        is_active=not show_inactive, country=get_active_country(request),
     ).order_by('full_name')
     if search:
         technicians = technicians.filter(full_name__icontains=search)
@@ -1345,7 +1416,8 @@ def technician_list(request):
             'ninety_day': _ninety_day_progress(technician, certification),
         })
 
-    return render(request, 'tasks/technician_list.html', {'rows': rows, 'search': search})
+    context = {'rows': rows, 'search': search, 'show_inactive': show_inactive}
+    return render(request, 'tasks/technician_list.html', context)
 
 
 @login_required
@@ -1432,28 +1504,51 @@ def technician_skills(request, pk):
 
 @login_required
 def technician_edit(request, pk):
-    """Photo, from the roster — plus country, but only for a manager
-    doing a relocation. Everything else about a technician stays
-    office-side but out of scope here. Fetched from the viewer's own
+    """A supervisor or manager managing someone else's record, from the
+    roster. Manager-only fields (role, employment details, country, ...),
+    plus deactivation and a password reset, are gated by is_manager;
+    MANAGE_TECHNICIANS itself still covers everyone else's edit
+    (name/phone/language/email/photo). Fetched from the viewer's own
     active country, same as every other per-technician screen — once
     relocated, the technician drops off this country's roster.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
-    can_relocate = requesting_technician.role == Technician.Role.MANAGER
+    is_manager = requesting_technician.role == Technician.Role.MANAGER
     technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
+    can_reset_password = is_manager and technician.user_id is not None
 
-    if request.method == 'POST':
+    form = TechnicianEditForm(instance=technician, is_manager=is_manager)
+    deactivate_form = DeactivateTechnicianForm()
+    password_form = SetPasswordForm(user=technician.user) if can_reset_password else None
+
+    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
+        deactivate_form = DeactivateTechnicianForm(request.POST)
+        if deactivate_form.is_valid():
+            technician.set_active(False, reason=deactivate_form.cleaned_data['reason'])
+            messages.success(request, _('Technician deactivated.'))
+            return redirect('tasks:technician_list')
+
+    elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and can_reset_password:
+        password_form = SetPasswordForm(user=technician.user, data=request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            messages.success(request, _('Password reset.'))
+            return redirect('tasks:technician_edit', pk=technician.pk)
+
+    elif request.method == 'POST':
         form = TechnicianEditForm(
-            request.POST, request.FILES, instance=technician, can_relocate=can_relocate,
+            request.POST, request.FILES, instance=technician, is_manager=is_manager,
         )
         if form.is_valid():
             form.save()
             messages.success(request, _('Technician updated.'))
             return redirect('tasks:technician_list')
-    else:
-        form = TechnicianEditForm(instance=technician, can_relocate=can_relocate)
 
-    return render(request, 'tasks/technician_edit.html', {'technician': technician, 'form': form})
+    context = {
+        'technician': technician, 'form': form, 'deactivate_form': deactivate_form,
+        'password_form': password_form, 'is_manager': is_manager,
+    }
+    return render(request, 'tasks/technician_edit.html', context)
 
 
 @login_required
@@ -1550,6 +1645,56 @@ def skill_create(request):
         form = SkillCreateForm()
 
     return render(request, 'tasks/skill_create.html', {'form': form})
+
+
+@login_required
+def country_list(request):
+    """Every country the roster and every other per-country screen can
+    scope to — manager-only, same fixed-floor reasoning as skill_list.
+    Shows both active and inactive, since toggling and deleting both
+    happen from here.
+    """
+    require_manager(request)
+
+    if request.method == 'POST':
+        country = get_object_or_404(Country, pk=request.POST.get('country_id'))
+        action = request.POST.get('action')
+        if action == 'toggle_active':
+            country.is_active = not country.is_active
+            country.save(update_fields=['is_active'])
+            messages.success(request, _('Country updated.'))
+        elif action == 'delete':
+            try:
+                country.delete()
+                messages.success(request, _('Country deleted.'))
+            except ProtectedError:
+                messages.error(
+                    request,
+                    _(
+                        '“%(name)s” still has technicians, customers, or tickets attached to it — '
+                        'deactivate it instead of deleting.'
+                    ) % {'name': country.name},
+                )
+        return redirect('tasks:country_list')
+
+    countries = Country.objects.order_by('name')
+    return render(request, 'tasks/country_list.html', {'countries': countries})
+
+
+@login_required
+def country_create(request):
+    require_manager(request)
+
+    if request.method == 'POST':
+        form = CountryCreateForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _('Country added.'))
+            return redirect('tasks:country_list')
+    else:
+        form = CountryCreateForm()
+
+    return render(request, 'tasks/country_create.html', {'form': form})
 
 
 @login_required

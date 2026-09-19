@@ -6,6 +6,7 @@ app_name = 'tasks'
 
 urlpatterns = [
     path('', views.task_list, name='task_list'),
+    path('all/', views.all_tasks, name='all_tasks'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('week/', views.task_week, name='task_week'),
     path('my-week/', views.my_week, name='my_week'),
@@ -27,6 +28,8 @@ urlpatterns = [
     path('roles/', views.role_permissions, name='role_permissions'),
     path('skills/', views.skill_list, name='skill_list'),
     path('skills/new/', views.skill_create, name='skill_create'),
+    path('countries/', views.country_list, name='country_list'),
+    path('countries/new/', views.country_create, name='country_create'),
     path('active-country/', views.set_active_country, name='set_active_country'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),
