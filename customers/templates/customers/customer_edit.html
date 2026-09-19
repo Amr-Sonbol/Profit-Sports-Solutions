@@ -35,6 +35,8 @@
     {% if customer.user_id %}
     <p class="field__help">
         {% blocktranslate with username=customer.user.username %}This customer can sign in as “{{ username }}” to see their tickets and service history.{% endblocktranslate %}
+        {% blocktranslate %}Share their own login page: {% endblocktranslate %}
+        <a href="{% url 'customers:portal_login' %}">{% url 'customers:portal_login' %}</a>
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Customer portal" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <div class="lang-switch">
+        <form method="post" action="{% url 'set_language' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" name="language" value="en" class="link-button">English</button>
+        </form>
+        <form method="post" action="{% url 'set_language' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button type="submit" name="language" value="ar" class="link-button">العربية</button>
+        </form>
+    </div>
+
+    <h1>{% translate "Customer portal" %}</h1>
+    <p class="muted">{% translate "Track your reports and service history." %}</p>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field">
+            <label for="{{ form.username.id_for_label }}">{% translate "Username" %}</label>
+            {{ form.username }}
+        </div>
+        <div class="field">
+            <label for="{{ form.password.id_for_label }}">{% translate "Password" %}</label>
+            {{ form.password }}
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="button">{% translate "Log in" %}</button>
+    </form>
+    <p><a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a></p>
+</div>
+{% endblock %}

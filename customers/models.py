@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from people.models import Technician
 from reference.models import Brand, Country
 
 
@@ -18,6 +19,10 @@ class Customer(models.Model):
     )
     name = models.CharField(_('name'), max_length=150)
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
+    language = models.CharField(
+        _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
+        help_text=_('for the portal login, if this customer has one'),
+    )
     contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
     contact_email = models.EmailField(

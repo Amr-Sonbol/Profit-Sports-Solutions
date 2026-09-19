@@ -594,6 +594,17 @@ tbody tr:hover {
     padding: 1.5rem;
 }
 
+.lang-switch {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-block-end: 0.5rem;
+}
+
+.lang-switch form {
+    display: inline;
+}
+
 /* The public feedback page — same centered-card idea as .auth-card, just
    wider, since it needs room for a row of five rating buttons. */
 .feedback-card {

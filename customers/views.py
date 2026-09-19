@@ -2,13 +2,15 @@ import csv
 import io
 
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import SetPasswordForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
@@ -95,7 +97,11 @@ def customer_edit(request, pk):
     if request.method == 'POST' and request.POST.get('action') == 'create_login' and login_form is not None:
         login_form = UserCreationForm(request.POST)
         if login_form.is_valid():
-            customer.user = login_form.save()
+            user = login_form.save()
+            if customer.contact_email:
+                user.email = customer.contact_email
+                user.save(update_fields=['email'])
+            customer.user = user
             customer.save(update_fields=['user'])
             messages.success(request, _('Login created.'))
             return redirect('customers:customer_edit', pk=customer.pk)
@@ -276,7 +282,31 @@ def require_customer(request):
     return customer
 
 
-@login_required
+def portal_login(request):
+    """A customer's own login page — same underlying auth as the staff
+    one (django.contrib.auth), just branded for them and rejecting
+    anything that isn't a customer account, like a staff login typed in
+    here by mistake.
+    """
+    if request.user.is_authenticated:
+        return redirect('customers:portal_home' if hasattr(request.user, 'customer') else 'home')
+
+    next_url = request.POST.get('next') or request.GET.get('next') or ''
+
+    form = AuthenticationForm(request, data=request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.get_user()
+        if hasattr(user, 'customer'):
+            login(request, user)
+            if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                return redirect(next_url)
+            return redirect('customers:portal_home')
+        form.add_error(None, _("This isn't a customer account."))
+
+    return render(request, 'customers/portal_login.html', {'form': form, 'next': next_url})
+
+
+@login_required(login_url='customers:portal_login')
 def portal_home(request):
     """A logged-in customer's own tickets and service history — summary
     only (date, site, type, status). Never the internal report detail,
@@ -290,7 +320,7 @@ def portal_home(request):
     return render(request, 'customers/portal_home.html', {'customer': customer, 'tickets': tickets, 'visits': visits})
 
 
-@login_required
+@login_required(login_url='customers:portal_login')
 def portal_ticket_new(request):
     """A logged-in customer reporting an issue — the customer and site
     are already known, so this skips straight to the issue itself and

@@ -127,10 +127,13 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | contact_name | varchar | optional — the single-branch case, or a chain sharing one contact |
 | contact_phone | varchar | |
 | contact_email | varchar | |
+| language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
 | user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
 
 **`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there, the same way it routes a technician to their own week; nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
+
+**The portal has its own login page** (`/customers/portal/login/`, branded "Customer portal" rather than the plain staff one) with a language switcher for the not-yet-authenticated case (Django's built-in `set_language`) — once logged in, `language` above takes over via `TechnicianLocaleMiddleware`, the same middleware that already drives a technician's. It rejects a staff login typed in there by mistake ("This isn't a customer account"), and the shared `/accounts/login/` still works for a customer too — `home`'s routing doesn't care which page authenticated them. Self-service password reset (Django's built-in `PasswordResetView` et al., emailing `user.email` — backfilled from `contact_email` when the login is created) is available from both login pages, for any account with an email on file, not just customers.
 
 ### site
 A hotel group is one customer with many sites.

@@ -22,7 +22,7 @@ class CustomerEditForm(forms.ModelForm):
 
     class Meta:
         model = Customer
-        fields = ['name', 'segment', 'contact_name', 'contact_phone', 'contact_email']
+        fields = ['name', 'segment', 'language', 'contact_name', 'contact_phone', 'contact_email']
 
 
 class SiteCreateForm(forms.ModelForm):
