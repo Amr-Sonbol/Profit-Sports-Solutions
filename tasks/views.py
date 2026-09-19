@@ -300,6 +300,18 @@ def _attach_lead_technician(tasks):
         task.lead_technician = leads[0].technician if leads else None
 
 
+def _scoped_or_404(queryset, pk, requesting_technician, active_country, country_lookup):
+    """A manager can open any task or technician regardless of their own
+    active country — the point of the all_tasks/all_technicians/all_week
+    boards is reaching across every country, so the detail/edit screens
+    those link into can't stay locked to whichever country happens to be
+    active. Every other role stays scoped to it, same as before.
+    """
+    if requesting_technician.role != Technician.Role.MANAGER:
+        queryset = queryset.filter(**{country_lookup: active_country})
+    return get_object_or_404(queryset, pk=pk)
+
+
 def _week_window(request):
     """The (today, start, end) of the 7-day window from ?start=, default this week's Monday."""
     today = timezone.localtime().date()
@@ -646,13 +658,13 @@ def all_tasks(request):
 
 @login_required
 def task_detail(request, pk):
-    require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
 
-    task = get_object_or_404(
+    task = _scoped_or_404(
         Task.objects.select_related(
             'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
         ).prefetch_related('report__parts_used'),
-        pk=pk, site__customer__country=get_active_country(request),
+        pk, requesting_technician, get_active_country(request), 'site__customer__country',
     )
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
@@ -767,14 +779,21 @@ def task_edit(request, pk):
     and — only when a manager has turned auto-notify on — also emails
     the customer the same way the manual "Notify customer" button would.
     """
-    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    requesting_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
     active_country = get_active_country(request)
-    task = get_object_or_404(Task, pk=pk, site__customer__country=active_country)
+    task = _scoped_or_404(
+        Task.objects.select_related('site__customer__country'),
+        pk, requesting_technician, active_country, 'site__customer__country',
+    )
     _require_task_owner(request, task)
+    # The task's own country, not necessarily the manager's active one —
+    # a cross-country edit (from the all_tasks board) must still scope
+    # responsible_supervisor to who's actually eligible there.
+    task_country = task.site.customer.country
     previous_scheduled_for = task.scheduled_for
 
     if request.method == 'POST':
-        form = TaskEditForm(request.POST, instance=task, country=active_country)
+        form = TaskEditForm(request.POST, instance=task, country=task_country)
         if form.is_valid():
             with transaction.atomic():
                 updated_task = form.save()
@@ -797,7 +816,7 @@ def task_edit(request, pk):
                 messages.success(request, _('Task updated.'))
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskEditForm(instance=task, country=active_country)
+        form = TaskEditForm(instance=task, country=task_country)
 
     return render(request, 'tasks/task_edit.html', {'task': task, 'form': form})
 
@@ -1032,11 +1051,11 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
 
 @login_required
 def task_assign(request, pk):
-    require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
+    requesting_technician = require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
 
-    task = get_object_or_404(
+    task = _scoped_or_404(
         Task.objects.select_related('site__customer__country'),
-        pk=pk, site__customer__country=get_active_country(request),
+        pk, requesting_technician, get_active_country(request), 'site__customer__country',
     )
     _require_task_owner(request, task)
     active_assignments = list(task.assignments.filter(is_active=True).select_related('technician'))
@@ -1164,6 +1183,43 @@ def task_week(request):
         **_week_nav_context(today, start),
     }
     return render(request, 'tasks/task_week.html', context)
+
+
+@login_required
+def all_week(request):
+    """Every country's week board at once — the same day/unscheduled
+    shape as task_week, minus the country boundary, with a country label
+    per task since a day's list can now mix countries. Manager-only,
+    same fixed floor as the other "all ..." boards.
+    """
+    require_manager(request)
+
+    today, start, end = _week_window(request)
+
+    scheduled = _with_lead_prefetch(
+        Task.objects.filter(scheduled_for__date__range=(start, end))
+        .select_related('site__customer__country', 'task_type').order_by('scheduled_for'),
+    )
+    _attach_lead_technician(scheduled)
+
+    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
+    tasks_by_date = {day['date']: day['tasks'] for day in days}
+    for task in scheduled:
+        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+
+    unscheduled = _with_lead_prefetch(
+        Task.objects.filter(scheduled_for__isnull=True, status__in=OPEN_STATUSES)
+        .select_related('site__customer__country', 'task_type')
+        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'),
+    )
+    _attach_lead_technician(unscheduled)
+
+    context = {
+        'days': days,
+        'unscheduled': unscheduled,
+        **_week_nav_context(today, start),
+    }
+    return render(request, 'tasks/all_week.html', context)
 
 
 def _week_board(technician, request):
@@ -1421,13 +1477,42 @@ def technician_list(request):
 
 
 @login_required
+def all_technicians(request):
+    """Every active technician in every country, with the same
+    certification/90-day columns as the regular roster — a manager's
+    combined "everyone, everywhere" roster and certification-progress
+    overview, so auditing someone doesn't mean switching active country
+    first. Manager-only, same fixed floor as the other "all ..." boards.
+    """
+    require_manager(request)
+
+    search = request.GET.get('q', '').strip()
+    technicians = Technician.objects.filter(is_active=True).select_related('country').order_by('full_name')
+    if search:
+        technicians = technicians.filter(full_name__icontains=search)
+
+    rows = []
+    for technician in technicians:
+        certification = _certification_status(technician)
+        rows.append({
+            'technician': technician,
+            'certification': certification,
+            'ninety_day': _ninety_day_progress(technician, certification),
+        })
+
+    return render(request, 'tasks/all_technicians.html', {'rows': rows, 'search': search})
+
+
+@login_required
 def technician_board(request, pk):
     """A supervisor's view of one technician's week — same shape as
     my_week, just for someone else, with the same country scoping used
     everywhere else a supervisor looks at a specific technician.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
-    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    technician = _scoped_or_404(
+        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+    )
 
     days, unscheduled, nav_context = _week_board(technician, request)
     context = {'technician': technician, 'days': days, 'unscheduled': unscheduled, **nav_context}
@@ -1442,7 +1527,7 @@ def technician_skills(request, pk):
     writes to it automatically.
     """
     supervisor = require_permission(request, RolePermission.Permission.REVIEW_SKILLS)
-    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
+    technician = _scoped_or_404(Technician.objects, pk, supervisor, get_active_country(request), 'country')
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1508,13 +1593,15 @@ def technician_edit(request, pk):
     roster. Manager-only fields (role, employment details, country, ...),
     plus deactivation and a password reset, are gated by is_manager;
     MANAGE_TECHNICIANS itself still covers everyone else's edit
-    (name/phone/language/email/photo). Fetched from the viewer's own
-    active country, same as every other per-technician screen — once
-    relocated, the technician drops off this country's roster.
+    (name/phone/language/email/photo). A supervisor stays scoped to their
+    own active country; a manager can reach any technician, since that's
+    the point of the all_technicians board this now also links from.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
     is_manager = requesting_technician.role == Technician.Role.MANAGER
-    technician = get_object_or_404(Technician, pk=pk, country=get_active_country(request))
+    technician = _scoped_or_404(
+        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+    )
     can_reset_password = is_manager and technician.user_id is not None
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager)

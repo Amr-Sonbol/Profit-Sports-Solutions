@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "All countries — week view" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:all_tasks' %}" class="back-link">{% translate "Back to all tasks" %}</a>
+        <h1>{% translate "All countries — week view" %}</h1>
+    </div>
+</div>
+<p class="field__help">{% translate "Every country's schedule at once. Doesn't follow the country switcher above." %}</p>
+
+<div class="week-nav">
+    <a href="?start={{ prev_start|date:'Y-m-d' }}" class="back-link">{% translate "Previous week" %}</a>
+    <a href="?start={{ this_week_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "This week" %}</a>
+    <a href="?start={{ next_start|date:'Y-m-d' }}" class="forward-link">{% translate "Next week" %}</a>
+</div>
+
+{% for day in days %}
+<div class="section">
+    <div class="section__header">
+        <h2>
+            {{ day.date|date:"l, j F" }}
+            {% if day.date == today %}<span class="badge badge--muted">{% translate "Today" %}</span>{% endif %}
+        </h2>
+    </div>
+    {% if day.tasks %}
+    <ul class="plain-list">
+        {% for task in day.tasks %}
+        <li>
+            <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
+            <span class="muted">{{ task.scheduled_for|date:"TIME_FORMAT" }}</span>
+            <span class="badge badge--muted">{{ task.site.customer.country.name }}</span>
+            {{ task.site.customer.name }} — {{ task.site.name }}
+            <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+            <span class="muted">{{ task.lead_technician.full_name|default:"—" }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No tasks scheduled." %}</p>
+    {% endif %}
+</div>
+{% endfor %}
+
+<div class="section">
+    <h2>{% translate "Unscheduled" %}</h2>
+    {% if unscheduled %}
+    <ul class="plain-list">
+        {% for task in unscheduled %}
+        <li>
+            <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
+            <span class="badge badge--muted">{{ task.site.customer.country.name }}</span>
+            {{ task.site.customer.name }} — {{ task.site.name }}
+            <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+            <span class="muted">{{ task.lead_technician.full_name|default:"—" }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "Every open task has a day." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

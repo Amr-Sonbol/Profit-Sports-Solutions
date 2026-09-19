@@ -40,7 +40,7 @@
                     <button type="submit" class="button button--secondary">{% translate "Switch" %}</button>
                 </form>
                 {% endif %}
-                {% if user.technician %}
+                {% if user.technician and user.technician.role != 'manager' %}
                     <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                     <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
@@ -62,6 +62,8 @@
                 {% endif %}
                 {% if user.technician.role == 'manager' %}
                     <a href="{% url 'tasks:all_tasks' %}">{% translate "All tasks" %}</a>
+                    <a href="{% url 'tasks:all_week' %}">{% translate "All week" %}</a>
+                    <a href="{% url 'tasks:all_technicians' %}">{% translate "All technicians" %}</a>
                     <a href="{% url 'tasks:skill_list' %}">{% translate "Skills" %}</a>
                     <a href="{% url 'tasks:country_list' %}">{% translate "Countries" %}</a>
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
