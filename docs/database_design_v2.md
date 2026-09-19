@@ -320,6 +320,9 @@ This status is shown to the technician themselves (My progress) and to superviso
 | responsible_supervisor_id | FK → technician | nullable — who's accountable for staffing it, not who created it |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
+| quotation | file | nullable — pdf/image, edit screen only, never on create |
+| factory_offer | file | nullable — pdf/image, edit screen only |
+| invoice | file | nullable — pdf/image, edit screen only |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -333,6 +336,8 @@ This is deliberately lighter than an earlier version of the same idea, which had
 **`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
+
+**`quotation`/`factory_offer`/`invoice` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All three optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
 

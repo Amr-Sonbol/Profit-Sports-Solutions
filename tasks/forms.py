@@ -11,8 +11,8 @@ from people.models import (
 from reference.models import Brand, Country, Skill, TaskType
 
 from .models import (
-    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TICKET_ATTACHMENT_BYTES, CustomerTicket, Task, TaskAssignment,
-    TaskAsset, TaskAttachment,
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES, CustomerTicket,
+    Task, TaskAssignment, TaskAsset, TaskAttachment,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -190,11 +190,15 @@ class TaskEditForm(forms.ModelForm):
             'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
             'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
             'responsible_supervisor', 'pak_reference_number', 'shipping_tracking_number',
+            'quotation', 'factory_offer', 'invoice',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
             'promised_at': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
+            'quotation': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
+            'factory_offer': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
+            'invoice': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
         }
 
     def __init__(self, *args, country, **kwargs):
@@ -214,6 +218,21 @@ class TaskEditForm(forms.ModelForm):
             self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
             if self.initial.get(name):
                 self.initial[name] = timezone.localtime(self.initial[name]).strftime(DATETIME_INPUT_FORMAT)
+
+    def _clean_document(self, field_name):
+        document = self.cleaned_data[field_name]
+        if document and document.size > MAX_TASK_DOCUMENT_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 10 MB.'))
+        return document
+
+    def clean_quotation(self):
+        return self._clean_document('quotation')
+
+    def clean_factory_offer(self):
+        return self._clean_document('factory_offer')
+
+    def clean_invoice(self):
+        return self._clean_document('invoice')
 
 
 class SetLeadForm(forms.Form):

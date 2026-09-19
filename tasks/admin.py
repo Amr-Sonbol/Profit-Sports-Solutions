@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -29,6 +30,54 @@ class TaskAdmin(admin.ModelAdmin):
     search_fields = ['task_number', 'site__name', 'description']
     list_filter = ['status', 'priority', 'billing_type', 'source', 'is_warranty']
     inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline]
+
+
+class TaskDocument(Task):
+    """A proxy for Task — same table, same rows — so the paperwork trail
+    (quotation/factory offer/invoice) gets its own browsable tab in the
+    admin instead of being three easy-to-miss fields on every task's
+    change form. Never a separate model to keep in sync.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = 'task document'
+        verbose_name_plural = 'task documents'
+
+
+@admin.register(TaskDocument)
+class TaskDocumentAdmin(admin.ModelAdmin):
+    list_display = ['task_number', 'site', 'quotation_link', 'factory_offer_link', 'invoice_link']
+    search_fields = ['task_number', 'site__name']
+    list_filter = ['site__customer__country']
+    readonly_fields = ['task_number', 'site']
+    fields = ['task_number', 'site', 'quotation', 'factory_offer', 'invoice']
+
+    def get_queryset(self, request):
+        # Only tasks with at least one document on file — a first upload
+        # still happens from the task's own edit screen (in-app or the
+        # main Task admin page), not created here.
+        return super().get_queryset(request).exclude(quotation='', factory_offer='', invoice='')
+
+    def has_add_permission(self, request):
+        return False
+
+    def _file_link(self, file_field):
+        if not file_field:
+            return '—'
+        return format_html('<a href="{}" target="_blank" rel="noopener">View</a>', file_field.url)
+
+    def quotation_link(self, obj):
+        return self._file_link(obj.quotation)
+    quotation_link.short_description = 'Quotation'
+
+    def factory_offer_link(self, obj):
+        return self._file_link(obj.factory_offer)
+    factory_offer_link.short_description = 'Factory offer'
+
+    def invoice_link(self, obj):
+        return self._file_link(obj.invoice)
+    invoice_link.short_description = 'Invoice'
 
 
 @admin.register(TaskAssignment)

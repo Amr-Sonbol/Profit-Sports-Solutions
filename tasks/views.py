@@ -793,7 +793,7 @@ def task_edit(request, pk):
     previous_scheduled_for = task.scheduled_for
 
     if request.method == 'POST':
-        form = TaskEditForm(request.POST, instance=task, country=task_country)
+        form = TaskEditForm(request.POST, request.FILES, instance=task, country=task_country)
         if form.is_valid():
             with transaction.atomic():
                 updated_task = form.save()

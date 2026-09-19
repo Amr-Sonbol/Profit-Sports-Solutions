@@ -16,6 +16,11 @@ from reference.models import Brand, Country, Skill, TaskType
 ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
 MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
+# The paperwork trail for a task — quotation, factory offer, invoice.
+# Almost always a PDF export; jpg/png covers a photo of a paper one.
+ALLOWED_TASK_DOCUMENT_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
+MAX_TASK_DOCUMENT_BYTES = 10 * 1024 * 1024
+
 
 class Task(models.Model):
     class Priority(models.TextChoices):
@@ -100,6 +105,18 @@ class Task(models.Model):
     )
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
+    quotation = models.FileField(
+        _('quotation'), upload_to='task_documents/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+    )
+    factory_offer = models.FileField(
+        _('factory offer'), upload_to='task_documents/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+    )
+    invoice = models.FileField(
+        _('invoice'), upload_to='task_documents/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+    )
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),

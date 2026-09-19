@@ -12,7 +12,7 @@
 </div>
 
 <div class="section">
-    <form method="post" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
             <p class="flash flash--error">{{ form.non_field_errors }}</p>

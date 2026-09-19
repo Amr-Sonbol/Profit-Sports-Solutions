@@ -142,6 +142,23 @@
     <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
     {% endif %}
 
+    <h3>{% translate "Documents" %}</h3>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Quotation" %}</dt>
+            <dd>{% if task.quotation %}<a href="{{ task.quotation.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Factory offer" %}</dt>
+            <dd>{% if task.factory_offer %}<a href="{{ task.factory_offer.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Invoice" %}</dt>
+            <dd>{% if task.invoice %}<a href="{{ task.invoice.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+        </div>
+    </dl>
+    <p class="field__help">{% translate "Upload these from the task's Edit screen." %}</p>
+
     <h3>{% translate "Shipping" %}</h3>
     <dl class="detail-grid">
         <div>
