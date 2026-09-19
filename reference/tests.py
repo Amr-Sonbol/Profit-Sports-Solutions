@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.utils import translation
 
-from .models import Brand, Country, Skill, TaskType
+from .models import Country, Skill, TaskType
 
 
 class SeedReferenceDataTests(TestCase):
@@ -12,22 +12,28 @@ class SeedReferenceDataTests(TestCase):
         self.assertEqual(egypt.name_ar, 'مصر')
         self.assertEqual(Country.objects.count(), 9)
 
-    def test_one_skill_per_brand(self):
-        # 18 seeded brands, each with one "other" skill, plus Skillcore
-        # (added by 0005_cardio_lines, since it — like Panatta — needs a
-        # separate cardio line) and the two brands' Cardio skills.
-        self.assertEqual(Brand.objects.count(), 19)
-        self.assertEqual(Skill.objects.count(), 21)
-        panatta = Brand.objects.get(name='Panatta')
-        self.assertEqual(
-            Skill.objects.get(brand=panatta, category=Skill.Category.OTHER).name, 'Panatta',
-        )
+    def test_skills_are_brand_agnostic_repair_tasks(self):
+        # 0003/0005 originally seeded 21 brand-based skills (18 brands +
+        # Panatta/Skillcore cardio lines) — 0011 deactivates all of those
+        # and reseeds 18 basic + 16 cardio repair-task skills in their
+        # place; 0012 adds 4 more cardio skills for elliptical machines.
+        # The old, now-inactive rows are kept, never deleted (see
+        # docs/database_design_v2.md rule 4), so the table holds both.
+        self.assertEqual(Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).count(), 18)
+        self.assertEqual(Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).count(), 20)
+        self.assertEqual(Skill.objects.filter(is_active=False).count(), 21)
+        self.assertTrue(Skill.objects.get(is_active=True, name='Replace pins'))
+        self.assertTrue(Skill.objects.get(is_active=True, name='Treadmill — running belt'))
+        self.assertTrue(Skill.objects.get(is_active=True, name='Elliptical — check transmission belt'))
 
-    def test_panatta_and_skillcore_have_a_cardio_line(self):
-        for brand_name in ['Panatta', 'Skillcore']:
-            brand = Brand.objects.get(name=brand_name)
-            cardio = Skill.objects.get(brand=brand, category=Skill.Category.CARDIO)
-            self.assertEqual(cardio.name, 'Cardio')
+    def test_skill_display_name_follows_active_language(self):
+        pins = Skill.objects.get(is_active=True, name='Replace pins')
+        with translation.override('en'):
+            self.assertEqual(pins.display_name, 'Replace pins')
+            self.assertEqual(str(pins), 'Replace pins')
+        with translation.override('ar'):
+            self.assertEqual(pins.display_name, 'استبدال البنّات (Pins)')
+            self.assertEqual(str(pins), 'استبدال البنّات (Pins)')
 
     def test_every_seeded_country_has_its_own_task_prefix(self):
         # The company doesn't use ISO codes at all — every country needs

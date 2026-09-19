@@ -130,26 +130,6 @@
             </fieldset>
         </div>
 
-        <div class="creatable-field__row">
-            <div class="field {% if form.required_skill.errors %}field--error{% endif %}">
-                <label for="{{ form.required_skill.id_for_label }}">{{ form.required_skill.label }}</label>
-                {{ form.required_skill }}
-                {% for error in form.required_skill.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
-            <input type="checkbox" id="toggle-new-skill" class="toggle-checkbox" hidden>
-            <label for="toggle-new-skill" class="add-new-toggle">{% translate "+ Add new skill" %}</label>
-            <fieldset class="new-item-fieldset">
-                <legend>{% translate "New skill" %}</legend>
-                <div class="field {% if form.new_skill_wanted.errors %}field--error{% endif %}">
-                    <label for="{{ form.new_skill_wanted.id_for_label }}">
-                        {{ form.new_skill_wanted }} {{ form.new_skill_wanted.label }}
-                    </label>
-                    {% for error in form.new_skill_wanted.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                    <p class="field__help">{% translate "Uses whichever brand is picked or added above." %}</p>
-                </div>
-            </fieldset>
-        </div>
-
         <div class="form-grid">
             {% for field in form.plain_fields %}
             <div class="field {% if field.errors %}field--error{% endif %}">

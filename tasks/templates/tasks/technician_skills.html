@@ -35,25 +35,21 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Skills" %}</h2>
+    <h2>{% translate "Basic level" %}</h2>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>{% translate "Brand" %}</th>
-                    <th>{% translate "Line" %}</th>
+                    <th>{% translate "Skill" %}</th>
                     <th>{% translate "Current" %}</th>
+                    <th>{% translate "Evidence" %}</th>
                     <th>{% translate "Set level" %}</th>
                 </tr>
             </thead>
             <tbody>
-                {% for skill in skills %}
+                {% for skill in basic_skills %}
                 <tr>
-                    <td>{{ skill.brand.name }}</td>
-                    <td>
-                        {{ skill.name }}
-                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
-                    </td>
+                    <td>{{ skill.display_name }}</td>
                     <td>
                         {% if skill.current %}
                         {{ skill.current.level }} —
@@ -64,6 +60,65 @@
                         {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if skill.current.evidence %}
+                        <a href="{{ skill.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>
+                        {% else %}
+                        <span class="muted">{% translate "None submitted" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="review_skill">
+                            <input type="hidden" name="skill_id" value="{{ skill.pk }}">
+                            {{ review_form.level }}
+                            {{ review_form.note }}
+                            <button type="submit" class="button">{% translate "Confirm" %}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Cardio — supervisor track" %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Skill" %}</th>
+                    <th>{% translate "Current" %}</th>
+                    <th>{% translate "Evidence" %}</th>
+                    <th>{% translate "Set level" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for skill in cardio_skills %}
+                <tr>
+                    <td>{{ skill.display_name }}</td>
+                    <td>
+                        {% if skill.current %}
+                        {{ skill.current.level }} —
+                        {% if skill.current.source == 'self' %}
+                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="muted">{% translate "Not rated" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if skill.current.evidence %}
+                        <a href="{{ skill.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>
+                        {% else %}
+                        <span class="muted">{% translate "None submitted" %}</span>
                         {% endif %}
                     </td>
                     <td>

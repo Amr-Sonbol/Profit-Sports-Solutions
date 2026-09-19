@@ -12,29 +12,24 @@
 </div>
 
 <p class="muted">
-    {% translate "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it." %}
+    {% translate "Rate yourself once per skill by uploading a photo or short video of you performing the repair — smoothly and efficiently. Your supervisor reviews the evidence and confirms or adjusts the level; after that, only a supervisor can update it." %}
 </p>
 
 <div class="section">
-    <h2>{% translate "Skills" %}</h2>
+    <h2>{% translate "Basic level" %}</h2>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>{% translate "Brand" %}</th>
-                    <th>{% translate "Line" %}</th>
+                    <th>{% translate "Skill" %}</th>
                     <th>{% translate "Level" %}</th>
                     <th>{% translate "Status" %}</th>
                 </tr>
             </thead>
             <tbody>
-                {% for skill in skills %}
+                {% for skill in basic_skills %}
                 <tr>
-                    <td>{{ skill.brand.name }}</td>
-                    <td>
-                        {{ skill.name }}
-                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
-                    </td>
+                    <td>{{ skill.display_name }}</td>
                     {% if skill.current %}
                     <td>{{ skill.current.level }}</td>
                     <td>
@@ -45,15 +40,92 @@
                             {% blocktranslate with name=skill.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
                         </span>
                         {% endif %}
+                        {% if skill.current.evidence %}
+                        <a href="{{ skill.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>
+                        {% endif %}
                     </td>
                     {% else %}
                     <td colspan="2">
-                        <form method="post" class="inline-form" novalidate>
+                        <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
                             {% csrf_token %}
                             <input type="hidden" name="action" value="rate_skill">
                             <input type="hidden" name="skill_id" value="{{ skill.pk }}">
-                            {{ self_rate_form.level }}
-                            <button type="submit" class="button button--secondary">{% translate "Rate yourself" %}</button>
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.level.label }}</label>
+                                {{ self_rate_skill_form.level }}
+                            </div>
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.evidence.label }}</label>
+                                {{ self_rate_skill_form.evidence }}
+                            </div>
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.note.label }}</label>
+                                {{ self_rate_skill_form.note }}
+                            </div>
+                            <div class="field field--submit">
+                                <button type="submit" class="button button--secondary">{% translate "Rate yourself" %}</button>
+                            </div>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% translate "Cardio — supervisor track" %}</h2>
+    <p class="muted">{% translate "Not required for certification — clearing one marks readiness for the supervisor track." %}</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Skill" %}</th>
+                    <th>{% translate "Level" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for skill in cardio_skills %}
+                <tr>
+                    <td>{{ skill.display_name }}</td>
+                    {% if skill.current %}
+                    <td>{{ skill.current.level }}</td>
+                    <td>
+                        {% if skill.current.source == 'self' %}
+                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        {% else %}
+                        <span class="badge badge--status-completed">
+                            {% blocktranslate with name=skill.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                        {% if skill.current.evidence %}
+                        <a href="{{ skill.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>
+                        {% endif %}
+                    </td>
+                    {% else %}
+                    <td colspan="2">
+                        <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="rate_skill">
+                            <input type="hidden" name="skill_id" value="{{ skill.pk }}">
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.level.label }}</label>
+                                {{ self_rate_skill_form.level }}
+                            </div>
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.evidence.label }}</label>
+                                {{ self_rate_skill_form.evidence }}
+                            </div>
+                            <div class="field">
+                                <label>{{ self_rate_skill_form.note.label }}</label>
+                                {{ self_rate_skill_form.note }}
+                            </div>
+                            <div class="field field--submit">
+                                <button type="submit" class="button button--secondary">{% translate "Rate yourself" %}</button>
+                            </div>
                         </form>
                     </td>
                     {% endif %}

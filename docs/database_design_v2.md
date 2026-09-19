@@ -66,25 +66,23 @@ Panatta, Skillcore, Digilock, and any future principal. Available in all countri
 No brand name is ever hardcoded in the application. Adding a principal is an office action.
 
 ### skill
-**One skill per brand, unless the brand itself sells more than one line.**
+**One skill per repair task — brand-agnostic.** Replacing a pin is the same skill whatever brand it's on; what a technician is actually rated on is whether they can do that specific job, not "how good are they at Panatta in general." This replaced an earlier version of the table where each brand carried its own single skill row (plus a second `Cardio` row for the two brands that needed one) — that framing didn't match how the business evaluates competence, so it's gone.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| brand_id | FK → brand | |
 | name | varchar | |
-| category | varchar | `other` or `cardio` — see below |
+| name_ar | varchar | |
+| category | varchar | `other` (shown as "Basic") or `cardio` — see below |
 | is_active | bool | |
 
-A finer split — mechanical versus electronic, strength versus cardio — is tempting but wrong at the start, and stays wrong until someone can name one technician who is good at a category and another who is not. Most brands never clear that bar and stay a single row.
+Bilingual like `task_type`/`conduct_area` — a `display_name` property picks `name_ar` when Arabic is active, same pattern, same reasoning.
 
-**Panatta and Skillcore did clear it.** Both sell a cardio line alongside their other equipment, and the business needs to tell them apart: being a certified technician requires competence on every *non-cardio* line, while cardio competence is reserved as the marker of readiness for the supervisor track (see "How a supervisor sets a level," below). So each gets two skill rows — its original line (`category = other`) and a second `Cardio` row (`category = cardio`) — instead of the one row every other brand keeps.
+**Seeded with 18 basic-level skills** (daily visual inspection, replacing pins/rubbers/covers/springs/cables/the platform, tightening bolts, ...) that every technician needs regardless of brand, **plus 20 cardio skills** split across treadmill internals (belt, deck, motor, MCB, incline motor, rollers, drive belt, console, safety key, wiring), bike internals (pedals, crank arms, resistance unit, flywheel bearing, drive belt/chain, recumbent seat rail), and elliptical internals (transmission belt, ventilation fan and manual pulse sensors, footplates and handgrips, rear flywheel and its bearing). Being a certified technician requires confirmed competence on every *basic* skill; cardio competence is excluded from that bar and instead marks readiness for the supervisor track (see "How a level gets set," below) — same `other`/`cardio` split as before, just populated with tasks instead of brands.
 
-**Splitting later is easy; merging later is not.** Only split a brand when there's a real reason two lines need different ratings, the way cardio does here. Start with skills nobody can tell apart and you have columns of bad data with no way to tell which parts were right.
+**A manager can add more from the Skills screen** (`/tasks/skills/`, manager-only — same fixed-floor reasoning as `role_permissions`: this is global reference data, not scoped to any country, and letting the screen that manages it be gated by its own permission row risks a bad edit locking every role out of fixing it). Deactivating an existing skill is still a Django admin action, same as brands and task types.
 
-**Maintenance burden decides whether this survives.** A handful of rows per technician get updated regularly. Dozens do not, and a stale matrix is worse than none because people trust it.
-
-**Let the data find further splits.** After a year, look at callback rates per technician broken down by machine category. If someone's record on a brand is clean for one line and poor for another, that is evidence for splitting that brand too — and it tells you exactly where the line goes, instead of guessing now.
+**The old brand-based rows aren't deleted, just deactivated.** `technician_skill`/`technician_skill_assessment` rows still reference them with `on_delete=PROTECT`, and the project's own rule is never delete a record with history — they simply drop off every screen (`is_active=False`) and stop counting toward anything.
 
 ### conduct_area
 The non-technical half of the certification bar — cleanliness, procedure adherence, and the other things that make the difference between a technician and a professional. Not tied to any brand.
@@ -222,7 +220,7 @@ Unique on (role, permission).
 ### technician_skill
 The capability matrix. Answers "can he do this job", separately from "will he do it well". Holds only the *current* level — `technician_skill_assessment`, below, keeps the full history behind it.
 
-**There are no certificates, but there is a starting guess.** A technician may self-rate a skill he's never been rated on; that self-rating is honest, but it never counts toward certification on its own. Only a supervisor's confirmation does — `source` records which kind this row is.
+**There are no certificates, but there is a starting guess — and now it has to be shown, not just claimed.** A technician may self-rate a skill he's never been rated on, but only by uploading a photo or short video of himself actually doing that repair, smoothly and fast; that self-rating is honest evidence, but it never counts toward certification on its own. Only a supervisor's confirmation does — `source` records which kind this row is.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -234,27 +232,28 @@ The capability matrix. Answers "can he do this job", separately from "will he do
 | set_by_id | FK → technician | the technician himself for a self-rating, the supervisor for a review |
 | set_on | date | |
 | note | varchar | nullable |
+| evidence | file | nullable — photo/video, required when a technician self-rates, untouched by a supervisor's confirmation |
 
-Unique on (technician_id, skill_id) — a fresh rating overwrites this row; the old value survives in the history table.
+Unique on (technician_id, skill_id) — a fresh rating overwrites this row; the old value survives in the history table. `evidence` is the one column that doesn't get overwritten by a supervisor's confirmation (`update_or_create`'s `defaults` never mentions it) — the technician's proof stays attached to the row even after it's been reviewed, so it can always be looked at again.
 
 ### technician_skill_assessment
-Append-only. Every self-rating and every supervisor review that has ever touched a (technician, skill) pair, never edited or deleted. Same columns as `technician_skill` minus the uniqueness constraint. This is what makes a self-rating auditable: nothing is lost when a supervisor overwrites it.
+Append-only. Every self-rating and every supervisor review that has ever touched a (technician, skill) pair, never edited or deleted. Same columns as `technician_skill` (evidence included) minus the uniqueness constraint. This is what makes a self-rating auditable: nothing is lost when a supervisor overwrites it.
 
 ### technician_conduct / technician_conduct_assessment
-The same two tables, same columns, same self-then-supervisor flow — except `skill_id` becomes `conduct_area_id`, pointing at `conduct_area` instead. Kept as separate tables rather than folding conduct areas into `skill`, because a conduct area isn't tied to a brand and isn't something a task ever requires — merging them would blur what `skill` means everywhere else it's used (`task.required_skill`, the assign screen's candidate levels).
+The same two tables, minus `evidence` — a conduct area (cleanliness, punctuality, ...) isn't a specific repair task, so there's nothing to film — except `skill_id` becomes `conduct_area_id`, pointing at `conduct_area` instead. Kept as separate tables rather than folding conduct areas into `skill`, because merging them would blur what `skill` means everywhere else it's used (`task.required_skill`, the assign screen's candidate levels).
 
 ### How a level gets set
 
-**Step one: the technician guesses.** The first time a skill or conduct area has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later. This is a starting point for the conversation, not a claim.
+**Step one: the technician does the repair and shows it.** The first time a skill has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later — but only alongside a photo or short video of himself actually performing that repair. This is proof to review, not a claim to take on trust. Conduct areas skip the evidence — there's nothing to film for punctuality or cleanliness — and use the same four sentences on their own.
 
-**Step two: the supervisor confirms it against evidence, not opinion.** For a skill, the question is factual: *how many times has this man led this brand's work alone, and did it come back?* For a conduct area, it's whatever's observable for that area — cleanliness of the last few jobs, whether procedure was followed, and so on.
+**Step two: the supervisor confirms it against the evidence, not opinion.** For a skill, they watch or view what was uploaded and judge it against the same rubric below. For a conduct area, it's whatever's observable for that area — cleanliness of the last few jobs, whether procedure was followed, and so on.
 
-**1 — Has never led this brand alone / not yet observed.** Helper only.
+**1 — Has never done this repair alone / not yet observed.** Helper only.
 **2 — Has done it under supervision and it went fine.** Leads simple jobs, calls for help on faults.
 **3 — Has led this work alone, repeatedly, with no callbacks.** Send him and do not worry.
 **4 — Others call him when they are stuck.** Can train.
 
-Each of these is checkable. "Has he led a Panatta job alone?" has a yes or no answer two supervisors would agree on. "Is he skilled?" does not.
+Each of these is checkable against what's in the video. "Did he replace that pin cleanly, and did it hold?" has a yes or no answer two supervisors would agree on. "Is he skilled?" does not.
 
 Write this on one page in Arabic and English. Without certificates, these four sentences are the only thing holding the levels together across countries.
 
@@ -618,7 +617,7 @@ Each is a real need eventually. None belongs in the first version.
 
 **Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report and requesting customer feedback both happen right on that task's own detail page — there's no separate reports queue.
 
-**Manager (web):** roles & permissions — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
+**Manager (web):** roles & permissions, skills list, add a skill — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my profile (own photo, language, phone, email, password).
 
@@ -626,4 +625,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Twenty screens plus two public pages. That is the whole application.
+Twenty-two screens plus two public pages. That is the whole application.

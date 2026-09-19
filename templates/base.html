@@ -61,6 +61,7 @@
                     <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>
                 {% endif %}
                 {% if user.technician.role == 'manager' %}
+                    <a href="{% url 'tasks:skill_list' %}">{% translate "Skills" %}</a>
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
                 {% endif %}
                 {% if not user.technician %}

@@ -33,7 +33,7 @@ class TaskTestCase(TestCase):
             name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
         )
         self.brand = Brand.objects.create(name='Technogym')
-        self.skill = Skill.objects.create(brand=self.brand, name='Treadmill repair')
+        self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
         self.task_type = TaskType.objects.create(
             code='pm', name='Preventive maintenance', name_ar='صيانة وقائية', category='maintenance',
         )
@@ -879,38 +879,6 @@ class TaskCreateTests(TaskTestCase):
         ))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Task.objects.count(), 0)
-
-    def test_new_skill_wanted_creates_skill_for_the_chosen_brand(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        other_brand = Brand.objects.create(name='Life Fitness')
-        response = self.client.post('/tasks/new/', self._base_new_task_payload(
-            site=self.site.pk, brand=other_brand.pk, new_skill_wanted='on',
-        ))
-        self.assertEqual(response.status_code, 302)
-
-        task = Task.objects.get()
-        self.assertEqual(task.required_skill.brand, other_brand)
-        self.assertEqual(task.required_skill.name, other_brand.name)
-
-    def test_new_skill_wanted_with_new_brand_uses_the_newly_created_brand(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post('/tasks/new/', self._base_new_task_payload(
-            site=self.site.pk, new_brand_name='Life Fitness', new_skill_wanted='on',
-        ))
-        self.assertEqual(response.status_code, 302)
-
-        task = Task.objects.get()
-        self.assertEqual(task.required_skill.brand, task.brand)
-        self.assertEqual(task.brand.name, 'Life Fitness')
-
-    def test_new_skill_wanted_without_a_brand_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post('/tasks/new/', self._base_new_task_payload(
-            site=self.site.pk, new_skill_wanted='on',
-        ))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Task.objects.count(), 0)
-        self.assertTrue(response.context['form'].errors.get('new_skill_wanted'))
 
     def test_oversized_new_site_name_is_rejected_cleanly(self):
         # Site.name is max_length=150 — this must fail as a normal form
@@ -2003,10 +1971,14 @@ class MySkillsTests(TaskTestCase):
         response = self.client.get('/tasks/my-skills/')
         self.assertEqual(response.status_code, 302)
 
+    def _evidence(self, name='proof.jpg', content=b'not a real image', content_type='image/jpeg'):
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
     def test_self_rate_skill_creates_self_sourced_rating(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post('/tasks/my-skills/', {
             'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 2,
+            'evidence': self._evidence(), 'note': 'Done in 8 minutes.',
         })
         self.assertEqual(response.status_code, 302)
 
@@ -2014,11 +1986,20 @@ class MySkillsTests(TaskTestCase):
         self.assertEqual(rating.level, 2)
         self.assertEqual(rating.source, TechnicianSkill.Source.SELF)
         self.assertEqual(rating.set_by, self.technician)
-        self.assertTrue(
-            TechnicianSkillAssessment.objects.filter(
-                technician=self.technician, skill=self.skill, source=TechnicianSkill.Source.SELF,
-            ).exists(),
+        self.assertTrue(rating.evidence)
+        self.assertEqual(rating.note, 'Done in 8 minutes.')
+        assessment = TechnicianSkillAssessment.objects.get(
+            technician=self.technician, skill=self.skill, source=TechnicianSkill.Source.SELF,
         )
+        self.assertTrue(assessment.evidence)
+
+    def test_self_rating_a_skill_without_evidence_is_rejected(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 2,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TechnicianSkill.objects.filter(technician=self.technician, skill=self.skill).exists())
 
     def test_cannot_self_rate_a_skill_twice(self):
         TechnicianSkill.objects.create(
@@ -2432,6 +2413,22 @@ class TechnicianSkillsTests(TaskTestCase):
             TechnicianSkillAssessment.objects.filter(technician=self.technician, skill=self.skill).count(), 2,
         )
 
+    def test_confirming_a_self_rating_keeps_its_evidence(self):
+        evidence = SimpleUploadedFile('proof.jpg', b'not a real image', content_type='image/jpeg')
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
+            set_by=self.technician, set_on=timezone.now().date(), evidence=evidence,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {
+            'action': 'review_skill', 'skill_id': self.skill.pk, 'level': 3, 'note': '',
+        })
+
+        rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
+        self.assertEqual(rating.source, TechnicianSkill.Source.SUPERVISOR)
+        self.assertTrue(rating.evidence)
+
     def test_supervisor_confirms_a_conduct_area(self):
         area = ConductArea.objects.filter(is_active=True).first()
 
@@ -2602,6 +2599,52 @@ class TechnicianEditTests(TaskTestCase):
         response = self.client.get('/tasks/technicians/')
         technicians = [row['technician'] for row in response.context['rows']]
         self.assertNotIn(self.technician, technicians)
+
+
+class SkillListTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def test_supervisor_gets_403(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/skills/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/skills/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_sees_skills_split_by_category(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/skills/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.skill, response.context['basic_skills'])
+
+    def test_manager_adds_a_skill(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/skills/new/', {
+            'name': 'Replace seat cushion', 'name_ar': 'استبدال وسادة المقعد', 'category': 'other',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        skill = Skill.objects.get(name='Replace seat cushion')
+        self.assertEqual(skill.name_ar, 'استبدال وسادة المقعد')
+        self.assertEqual(skill.category, 'other')
+        self.assertTrue(skill.is_active)
+
+    def test_supervisor_cannot_add_a_skill(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/skills/new/', {
+            'name': 'Replace seat cushion', 'name_ar': 'استبدال وسادة المقعد', 'category': 'other',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Skill.objects.filter(name='Replace seat cushion').exists())
 
 
 class RolePermissionsTests(TaskTestCase):

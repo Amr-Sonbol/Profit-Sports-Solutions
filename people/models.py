@@ -18,6 +18,12 @@ RELIABLE_LEVEL = 3
 ALLOWED_PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
 MAX_PHOTO_UPLOAD_BYTES = 5 * 1024 * 1024
 
+# Proof of a skill actually being performed — photo or short video, same
+# allowlist and ceiling as every other photo/video upload in the app
+# (tasks.forms.ALLOWED_MEDIA_EXTENSIONS).
+ALLOWED_SKILL_EVIDENCE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
+MAX_SKILL_EVIDENCE_UPLOAD_BYTES = 25 * 1024 * 1024
+
 
 class Technician(models.Model):
     class Role(models.TextChoices):
@@ -183,11 +189,16 @@ class TechnicianSkill(models.Model):
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
+    evidence = models.FileField(
+        _('evidence'), upload_to='skill_evidence/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        help_text=_('photo or video of the technician actually performing this repair'),
+    )
 
     class Meta:
         verbose_name = _('technician skill')
         verbose_name_plural = _('technician skills')
-        ordering = ['technician__full_name', 'skill__brand__name']
+        ordering = ['technician__full_name', 'skill__name']
         constraints = [
             models.UniqueConstraint(
                 fields=['technician', 'skill'], name='unique_technician_skill',
@@ -221,6 +232,11 @@ class TechnicianSkillAssessment(models.Model):
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
+    evidence = models.FileField(
+        _('evidence'), upload_to='skill_evidence/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        help_text=_('photo or video of the technician actually performing this repair'),
+    )
 
     class Meta:
         verbose_name = _('technician skill assessment')

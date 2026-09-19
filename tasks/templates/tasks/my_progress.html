@@ -79,8 +79,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>{% translate "Brand" %}</th>
-                    <th>{% translate "Line" %}</th>
+                    <th>{% translate "Skill" %}</th>
                     <th>{% translate "Level" %}</th>
                     <th>{% translate "Status" %}</th>
                 </tr>
@@ -88,9 +87,8 @@
             <tbody>
                 {% for skill in skills %}
                 <tr>
-                    <td>{{ skill.brand.name }}</td>
                     <td>
-                        {{ skill.name }}
+                        {{ skill.display_name }}
                         {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
                     </td>
                     <td>{{ skill.current.level|default:"—" }}</td>
@@ -109,7 +107,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No brands set up yet." %}</p>
+    <p class="empty-state">{% translate "No skills set up yet." %}</p>
     {% endif %}
 </div>
 

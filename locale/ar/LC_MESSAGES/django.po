@@ -96,6 +96,9 @@ msgstr "إضافة مساعد"
 msgid "Add site"
 msgstr "إضافة الفرع"
 
+msgid "Add skill"
+msgstr "إضافة مهارة"
+
 msgid "Add technician"
 msgstr "إضافة فني"
 
@@ -198,6 +201,9 @@ msgstr "العودة إلى أسبوعي"
 msgid "Back to reports"
 msgstr "العودة إلى التقارير"
 
+msgid "Back to skills"
+msgstr "العودة إلى المهارات"
+
 msgid "Back to task"
 msgstr "العودة إلى المهمة"
 
@@ -209,6 +215,12 @@ msgstr "العودة إلى الفنيين"
 
 msgid "Back to tickets"
 msgstr "العودة إلى التذاكر"
+
+msgid "Basic"
+msgstr "أساسي"
+
+msgid "Basic level"
+msgstr "المستوى الأساسي"
 
 msgid "Be specific — missing serial photo, vague fault description, etc. The technician sees this."
 msgstr "كن محددًا — صورة الرقم التسلسلي مفقودة، وصف العطل غامض، إلخ. الفني يرى هذا."
@@ -239,6 +251,9 @@ msgstr "ملغاة"
 
 msgid "Cardio"
 msgstr "كارديو"
+
+msgid "Cardio — supervisor track"
+msgstr "كارديو — مسار المشرف"
 
 msgid "Cardio-certified — ready for the supervisor track."
 msgstr "معتمد في الكارديو — جاهز لمسار الإشراف."
@@ -485,6 +500,9 @@ msgstr "الانتهاء المتوقع"
 
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
+
+msgid "Evidence"
+msgstr "الدليل"
 
 msgid "Excellent"
 msgstr "ممتاز"
@@ -777,6 +795,9 @@ msgstr "لا توجد تقارير مطابقة لهذا الفلتر."
 msgid "No sites yet."
 msgstr "لا توجد فروع بعد."
 
+msgid "No skills set up yet."
+msgstr "لم يتم إعداد أي مهارات بعد."
+
 msgid "No tasks match these filters."
 msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
 
@@ -788,6 +809,9 @@ msgstr "لا يوجد فنيون مطابقون لهذا البحث."
 
 msgid "No tickets match this filter."
 msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
+
+msgid "None submitted"
+msgstr "لم يتم إرسال أي شيء"
 
 msgid "Normal"
 msgstr "عادية"
@@ -809,6 +833,9 @@ msgstr "غير قابل للإصلاح"
 
 msgid "Not requested yet."
 msgstr "لم يتم الطلب بعد."
+
+msgid "Not required for certification — clearing one marks readiness for the supervisor track."
+msgstr "غير مطلوب للاعتماد — اجتياز واحدة يحدد الجاهزية لمسار المشرف."
 
 msgid "Not yet certified"
 msgstr "غير معتمد بعد"
@@ -915,6 +942,9 @@ msgstr "الصورة كبيرة جدًا — الحد الأقصى 5 ميجاب�
 msgid "Photo or video"
 msgstr "صورة أو فيديو"
 
+msgid "Photo or video of you doing this"
+msgstr "صورة أو فيديو لك وأنت تقوم بذلك"
+
 msgid "Photo updated."
 msgstr "تم تحديث الصورة."
 
@@ -959,6 +989,9 @@ msgstr "قيّم نفسك"
 
 msgid "Rate yourself on a skill or conduct area"
 msgstr "قيّم نفسك في مهارة أو مجال سلوك"
+
+msgid "Rate yourself once per skill by uploading a photo or short video of you performing the repair — smoothly and efficiently. Your supervisor reviews the evidence and confirms or adjusts the level; after that, only a supervisor can update it."
+msgstr "قيّم نفسك مرة واحدة لكل مهارة برفع صورة أو فيديو قصير لك وأنت تنفذ الإصلاح — بسلاسة وكفاءة. يراجع مشرفك الدليل ويؤكد المستوى أو يعدّله؛ وبعد ذلك، لا يمكن تحديثه إلا من قبل مشرف."
 
 msgid "Rate yourself once per skill or conduct area — it's your own first guess, not a certificate. Your supervisor reviews it against real evidence and confirms or corrects it; once that happens, only they can change it."
 msgstr "قيّم نفسك مرة واحدة لكل مهارة أو مجال سلوك — إنه تخمينك الأول فقط، وليس شهادة. يراجعه المشرف عليك مقابل أدلة حقيقية ويعتمده أو يصححه؛ وبمجرد حدوث ذلك، هو وحده من يمكنه تغييره."
@@ -1224,6 +1257,9 @@ msgstr "اسم الموقع"
 msgid "Sites"
 msgstr "الفروع"
 
+msgid "Skill"
+msgstr "المهارة"
+
 msgid "Skill mismatch"
 msgstr "عدم تطابق المهارة"
 
@@ -1398,6 +1434,9 @@ msgstr "عرض اللوحة"
 msgid "View dashboard"
 msgstr "عرض لوحة التحكم"
 
+msgid "View evidence"
+msgstr "عرض الدليل"
+
 msgid "View or edit report"
 msgstr "عرض أو تعديل التقرير"
 
@@ -1521,6 +1560,9 @@ msgstr "يستطيع نقل محرك جهاز مشي أو خزانة أقفال"
 msgid "cardio lines don't count toward the technician certification bar"
 msgstr "خطوط الكارديو لا تُحتسب ضمن معيار اعتماد الفني"
 
+msgid "cardio skills don't count toward the technician certification bar"
+msgstr "مهارات الكارديو لا تحتسب ضمن معيار اعتماد الفني"
+
 msgid "category"
 msgstr "الفئة"
 
@@ -1625,6 +1667,9 @@ msgstr "الساعات المقدرة"
 
 msgid "event type"
 msgstr "نوع الحدث"
+
+msgid "evidence"
+msgstr "الدليل"
 
 msgid "false once replaced"
 msgstr "يصبح خطأ بعد الاستبدال"
@@ -1733,6 +1778,9 @@ msgstr "الهاتف"
 
 msgid "photo"
 msgstr "الصورة"
+
+msgid "photo or video of the technician actually performing this repair"
+msgstr "صورة أو فيديو للفني وهو ينفذ هذا الإصلاح فعليًا"
 
 msgid "please describe the issue for each machine separately (mention the serial number for each one)"
 msgstr "يرجى وصف المشكلة لكل جهاز على حدة (مع ذكر الرقم التسلسلي لكل جهاز)"

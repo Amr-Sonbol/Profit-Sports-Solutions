@@ -4,7 +4,10 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
-from people.models import MAX_PHOTO_UPLOAD_BYTES, SKILL_LEVEL_CHOICES, Technician
+from people.models import (
+    ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
+    SKILL_LEVEL_CHOICES, Technician,
+)
 from reference.models import Brand, Country, Skill, TaskType
 
 from .models import (
@@ -50,10 +53,8 @@ class TaskCreateForm(forms.ModelForm):
         choices=[('', '---------')] + TaskType.Category.choices, required=False, label=_('Category'),
     )
 
-    new_skill_wanted = forms.BooleanField(required=False, label=_('Add a new skill for this brand'))
-
     PLAIN_FIELD_NAMES = [
-        'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
+        'required_skill', 'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
         'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
     ]
 
@@ -78,7 +79,7 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['site'].required = False
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
+        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
         self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
         # Any active supervisor or manager in the country, same pool as
         # AssignTicketForm's assigned_to — never a technician, and picking
@@ -168,13 +169,6 @@ class TaskCreateForm(forms.ModelForm):
                     _('A task type with that name already exists — pick it from the list instead.'),
                 )
 
-        required_skill = cleaned.get('required_skill')
-        new_skill_wanted = cleaned.get('new_skill_wanted')
-        if required_skill and new_skill_wanted:
-            self.add_error(None, _('Choose an existing required skill or add a new one, not both.'))
-        elif new_skill_wanted and not (brand or new_brand_name):
-            self.add_error('new_skill_wanted', _('Pick or add a brand first — a skill always belongs to one.'))
-
         return cleaned
 
 
@@ -207,7 +201,7 @@ class TaskEditForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True).select_related('brand')
+        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
         self.fields['min_level'].validators.append(MaxValueValidator(4))
         self.fields['estimated_hours'].validators.append(MinValueValidator(0))
         self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
@@ -264,10 +258,31 @@ class MarkUnavailableForm(forms.Form):
 
 
 class SelfRateLevelForm(forms.Form):
-    """A technician's own first guess at a skill or conduct-area level —
-    shared shape for both, since it's the same 1-4 scale either way.
+    """A technician's own first guess at a conduct-area level — for a
+    skill, see SelfRateSkillForm below, which also requires evidence.
     """
     level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+
+
+class SelfRateSkillForm(SelfRateLevelForm):
+    """Same 1-4 scale as SelfRateLevelForm, plus proof: a skill self-rating
+    only means something once a supervisor can see the technician actually
+    doing the repair — smoothly and fast — not just take their word for it.
+    Conduct areas (cleanliness, punctuality, ...) have no such evidence to
+    show, so they stay on the plain form above.
+    """
+    evidence = forms.FileField(
+        label=_('Photo or video of you doing this'),
+        widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+    )
+    note = forms.CharField(required=False, max_length=255, label=_('Note'))
+
+    def clean_evidence(self):
+        evidence = self.cleaned_data['evidence']
+        if evidence.size > MAX_SKILL_EVIDENCE_UPLOAD_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+        return evidence
 
 
 class ReviewLevelForm(forms.Form):
@@ -314,6 +329,18 @@ class PhotoSizeMixin:
         if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
             raise forms.ValidationError(_('Photo is too large — the limit is 5 MB.'))
         return photo
+
+
+class SkillCreateForm(forms.ModelForm):
+    """A manager adding a repair task to the certification list — global,
+    not scoped to any country or brand. Every other field of Skill
+    (is_active) is left alone here; deactivating an existing one is a
+    Django admin action for now, same as brands and task types.
+    """
+
+    class Meta:
+        model = Skill
+        fields = ['name', 'name_ar', 'category']
 
 
 class TechnicianCreateForm(forms.ModelForm):

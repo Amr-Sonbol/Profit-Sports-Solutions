@@ -35,8 +35,8 @@ from reports.models import CustomerFeedback, PartUsed
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CustomerTicketForm, DismissTicketForm,
     ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm, NewAssetForm, RemoveAssignmentForm,
-    ReviewLevelForm, SelfRateLevelForm, SetLeadForm, TaskAttachmentUploadForm, TaskCreateForm,
-    TaskEditForm, TechnicianCreateForm, TechnicianEditForm, TicketLogisticsForm,
+    ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, SkillCreateForm, TaskAttachmentUploadForm,
+    TaskCreateForm, TaskEditForm, TechnicianCreateForm, TechnicianEditForm, TicketLogisticsForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
@@ -148,7 +148,7 @@ def _skills_with_current_rating(technician):
     """Every active skill, each annotated with `.current` — the
     technician's TechnicianSkill row for it, or None if never rated.
     """
-    skills = list(Skill.objects.filter(is_active=True).select_related('brand').order_by('brand__name', 'name'))
+    skills = list(Skill.objects.filter(is_active=True))
     current_by_skill_id = {
         rating.skill_id: rating
         for rating in TechnicianSkill.objects.filter(
@@ -158,6 +158,17 @@ def _skills_with_current_rating(technician):
     for skill in skills:
         skill.current = current_by_skill_id.get(skill.id)
     return skills
+
+
+def _split_by_category(skills):
+    """Basic-level skills first, then cardio — the two groups the
+    certification bar itself already treats differently (see
+    _certification_status), shown as separate sections everywhere a
+    technician's skill list renders.
+    """
+    basic = [skill for skill in skills if skill.category == Skill.Category.OTHER]
+    cardio = [skill for skill in skills if skill.category == Skill.Category.CARDIO]
+    return basic, cardio
 
 
 def _conduct_areas_with_current_rating(technician):
@@ -777,15 +788,10 @@ def task_create(request):
                         category=cleaned['new_task_type_category'],
                     )
 
-                required_skill = cleaned.get('required_skill')
-                if not required_skill and cleaned.get('new_skill_wanted') and brand:
-                    required_skill, _created = Skill.objects.get_or_create(brand=brand, name=brand.name)
-
                 task = form.save(commit=False)
                 task.site = site
                 task.brand = brand
                 task.task_type = task_type
-                task.required_skill = required_skill
                 task.created_by = request.user
                 task.status = Task.Status.NEW
                 if ticket is not None:
@@ -1204,17 +1210,24 @@ def my_skills(request):
 
         if action == 'rate_skill':
             skill = get_object_or_404(Skill, pk=request.POST.get('skill_id'), is_active=True)
-            form = SelfRateLevelForm(request.POST)
+            form = SelfRateSkillForm(request.POST, request.FILES)
             if not TechnicianSkill.objects.filter(technician=technician, skill=skill).exists() and form.is_valid():
                 level = int(form.cleaned_data['level'])
+                evidence = form.cleaned_data['evidence']
+                note = form.cleaned_data['note']
                 with transaction.atomic():
                     TechnicianSkill.objects.create(
-                        technician=technician, skill=skill, level=level,
-                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today,
+                        technician=technician, skill=skill, level=level, evidence=evidence,
+                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
                     )
+                    # The same uploaded file gets saved twice (current
+                    # snapshot + history log) — its read pointer is at EOF
+                    # after the first save, so it must be rewound first or
+                    # the assessment row would get an empty file.
+                    evidence.seek(0)
                     TechnicianSkillAssessment.objects.create(
-                        technician=technician, skill=skill, level=level,
-                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today,
+                        technician=technician, skill=skill, level=level, evidence=evidence,
+                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
                     )
                 messages.success(request, _('Self-rating saved.'))
                 return redirect('tasks:my_skills')
@@ -1236,9 +1249,12 @@ def my_skills(request):
                 messages.success(request, _('Self-rating saved.'))
                 return redirect('tasks:my_skills')
 
+    basic_skills, cardio_skills = _split_by_category(_skills_with_current_rating(technician))
     context = {
-        'skills': _skills_with_current_rating(technician),
+        'basic_skills': basic_skills,
+        'cardio_skills': cardio_skills,
         'conduct_areas': _conduct_areas_with_current_rating(technician),
+        'self_rate_skill_form': SelfRateSkillForm(),
         'self_rate_form': SelfRateLevelForm(),
     }
     return render(request, 'tasks/my_skills.html', context)
@@ -1402,9 +1418,11 @@ def technician_skills(request, pk):
                 messages.success(request, _('Level confirmed.'))
                 return redirect('tasks:technician_skills', pk=technician.pk)
 
+    basic_skills, cardio_skills = _split_by_category(_skills_with_current_rating(technician))
     context = {
         'technician': technician,
-        'skills': _skills_with_current_rating(technician),
+        'basic_skills': basic_skills,
+        'cardio_skills': cardio_skills,
         'conduct_areas': _conduct_areas_with_current_rating(technician),
         'review_form': ReviewLevelForm(),
         'certification': _certification_status(technician),
@@ -1503,6 +1521,35 @@ def role_permissions(request):
 
     context = {'roles': roles, 'matrix': matrix, 'notification_settings': notification_settings}
     return render(request, 'tasks/role_permissions.html', context)
+
+
+@login_required
+def skill_list(request):
+    """Every active repair-task skill a technician can be rated on —
+    manager-only, same fixed-floor reasoning as role_permissions: skills
+    are global reference data, not scoped to any country, and letting
+    the screen that manages them be subject to its own permission row
+    would risk a bad edit locking every role out of fixing it.
+    """
+    require_manager(request)
+    basic_skills, cardio_skills = _split_by_category(Skill.objects.filter(is_active=True))
+    return render(request, 'tasks/skill_list.html', {'basic_skills': basic_skills, 'cardio_skills': cardio_skills})
+
+
+@login_required
+def skill_create(request):
+    require_manager(request)
+
+    if request.method == 'POST':
+        form = SkillCreateForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _('Skill added.'))
+            return redirect('tasks:skill_list')
+    else:
+        form = SkillCreateForm()
+
+    return render(request, 'tasks/skill_create.html', {'form': form})
 
 
 @login_required

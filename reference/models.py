@@ -49,28 +49,37 @@ class Brand(models.Model):
 
 
 class Skill(models.Model):
+    """A specific repair task a technician is rated on — brand-agnostic
+    (replacing a pin is the same skill whatever brand it's on). A manager
+    can add more from the Skills screen; this isn't tied to Brand at all.
+    """
+
     class Category(models.TextChoices):
-        OTHER = 'other', _('Other')
+        OTHER = 'other', _('Basic')
         CARDIO = 'cardio', _('Cardio')
 
-    brand = models.ForeignKey(
-        Brand, on_delete=models.PROTECT, related_name='skills',
-        verbose_name=_('brand'),
-    )
     name = models.CharField(_('name'), max_length=100)
+    # default='' only backfills existing rows cleanly (see the migration
+    # that deactivates the old brand-based skills) — the add-skill form
+    # still enforces this as required for anything created from here on.
+    name_ar = models.CharField(_('name (Arabic)'), max_length=100, default='')
     category = models.CharField(
         _('category'), max_length=10, choices=Category.choices, default=Category.OTHER,
-        help_text=_("cardio lines don't count toward the technician certification bar"),
+        help_text=_("cardio skills don't count toward the technician certification bar"),
     )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
         verbose_name = _('skill')
         verbose_name_plural = _('skills')
-        ordering = ['brand__name', 'name']
+        ordering = ['name']
+
+    @property
+    def display_name(self):
+        return self.name_ar if get_language() == 'ar' else self.name
 
     def __str__(self):
-        return f'{self.brand.name} — {self.name}'
+        return self.display_name
 
 
 class ConductArea(models.Model):

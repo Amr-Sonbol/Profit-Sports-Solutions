@@ -41,15 +41,15 @@ class TechnicianAdmin(admin.ModelAdmin):
 @admin.register(TechnicianSkill)
 class TechnicianSkillAdmin(admin.ModelAdmin):
     list_display = ['technician', 'skill', 'level', 'source', 'set_by', 'set_on']
-    search_fields = ['technician__full_name', 'skill__name', 'skill__brand__name']
-    list_filter = ['skill__brand', 'level', 'source']
+    search_fields = ['technician__full_name', 'skill__name']
+    list_filter = ['skill__category', 'level', 'source']
 
 
 @admin.register(TechnicianSkillAssessment)
 class TechnicianSkillAssessmentAdmin(admin.ModelAdmin):
     list_display = ['technician', 'skill', 'level', 'source', 'set_by', 'set_on']
-    search_fields = ['technician__full_name', 'skill__name', 'skill__brand__name']
-    list_filter = ['skill__brand', 'level', 'source']
+    search_fields = ['technician__full_name', 'skill__name']
+    list_filter = ['skill__category', 'level', 'source']
 
 
 @admin.register(TechnicianConduct)
