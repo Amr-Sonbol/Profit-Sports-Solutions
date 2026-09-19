@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Edit site" %} — {{ site.name }}{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'customers:customer_detail' site.customer_id %}" class="back-link">{% translate "Back to customer" %}</a>
+        <h1>{{ site.name }}</h1>
+    </div>
+</div>
+
+<div class="section">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <p class="field__help">
+            {% translate "Leave contact fields blank to use the customer's own contact instead." %}
+        </p>
+        <button type="submit" class="button">{% translate "Save changes" %}</button>
+    </form>
+</div>
+{% endblock %}

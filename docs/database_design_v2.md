@@ -124,6 +124,9 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | country_id | FK → country | |
 | name | varchar | |
 | segment | varchar | gym, hotel, club, other |
+| contact_name | varchar | optional — the single-branch case, or a chain sharing one contact |
+| contact_phone | varchar | |
+| contact_email | varchar | |
 | is_active | bool | |
 
 ### site
@@ -139,6 +142,8 @@ A hotel group is one customer with many sites.
 | contact_phone | varchar | |
 | contact_email | varchar | nullable — where a feedback request goes; not always known |
 | access_notes | text | gate codes, best hours |
+
+**A blank site contact falls back to the customer's own** (`Site.effective_contact_name`/`_phone`/`_email`) — every notification send (schedule confirmation, delay notice, shipping notice, feedback request) reads through these, not the raw columns, so a single-branch customer or a chain sharing one contact only has to enter it once, at the customer level.
 
 **A new customer or site can be added two ways.** From the Customers screen directly (add a customer, then a site under it) — the way to register a whole list of gyms/hotels before any of them have a task yet — or inline while creating a task ("+ Add new site"), which only offers a new site under an *existing* customer. Both paths write the same rows; there's no separate "customer request" concept.
 

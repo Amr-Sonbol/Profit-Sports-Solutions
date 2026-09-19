@@ -9,6 +9,7 @@
         <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
         <h1>{{ customer.name }}</h1>
     </div>
+    <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
 </div>
 
 <div class="section">
@@ -20,6 +21,18 @@
         <div>
             <dt>{% translate "Country" %}</dt>
             <dd>{{ customer.country.name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Contact" %}</dt>
+            <dd>
+                {% if customer.contact_name or customer.contact_phone or customer.contact_email %}
+                {{ customer.contact_name|default:"—" }}
+                {% if customer.contact_phone %}<span class="muted">{{ customer.contact_phone }}</span>{% endif %}
+                {% if customer.contact_email %}<span class="muted">{{ customer.contact_email }}</span>{% endif %}
+                {% else %}
+                <span class="muted">{% translate "None — each site needs its own" %}</span>
+                {% endif %}
+            </dd>
         </div>
     </dl>
 </div>
@@ -33,7 +46,10 @@
                 <tr>
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Address" %}</th>
-                    <th>{% translate "Contact" %}</th>
+                    <th>{% translate "Contact name" %}</th>
+                    <th>{% translate "Phone" %}</th>
+                    <th>{% translate "Email" %}</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -42,10 +58,14 @@
                     <td>{{ site.name }}</td>
                     <td>{{ site.address }}</td>
                     <td>
-                        {{ site.contact_name }}
-                        {% if site.contact_phone %}<span class="muted">{{ site.contact_phone }}</span>{% endif %}
-                        {% if site.contact_email %}<span class="muted">{{ site.contact_email }}</span>{% endif %}
+                        {{ site.effective_contact_name|default:"—" }}
+                        {% if not site.has_own_contact and site.effective_contact_name %}
+                        <span class="badge badge--muted">{% translate "From customer" %}</span>
+                        {% endif %}
                     </td>
+                    <td>{{ site.effective_contact_phone|default:"—" }}</td>
+                    <td>{{ site.effective_contact_email|default:"—" }}</td>
+                    <td><a href="{% url 'customers:site_edit' site.pk %}">{% translate "Edit" %}</a></td>
                 </tr>
                 {% endfor %}
             </tbody>

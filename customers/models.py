@@ -17,6 +17,15 @@ class Customer(models.Model):
     )
     name = models.CharField(_('name'), max_length=150)
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
+    contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
+    contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
+    contact_email = models.EmailField(
+        _('contact email'), blank=True,
+        help_text=_(
+            'used for a site that has no contact of its own — the single-branch case, or a '
+            'chain where every site shares the same one'
+        ),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
@@ -53,6 +62,29 @@ class Site(models.Model):
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
+
+    @property
+    def effective_contact_name(self):
+        """This site's own contact if it has one, else the customer's —
+        covers a single-branch customer, or a chain where every site
+        shares one contact and nobody wants to re-enter it per site.
+        """
+        return self.contact_name or self.customer.contact_name
+
+    @property
+    def effective_contact_phone(self):
+        return self.contact_phone or self.customer.contact_phone
+
+    @property
+    def effective_contact_email(self):
+        return self.contact_email or self.customer.contact_email
+
+    @property
+    def has_own_contact(self):
+        """False when this row's contact is inherited from the customer
+        rather than set on the site itself — for a "from customer" badge.
+        """
+        return bool(self.contact_name or self.contact_phone or self.contact_email)
 
 
 class Asset(models.Model):

@@ -384,14 +384,14 @@ def _send_schedule_notification(task):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {
-            'contact': task.site.contact_name or task.site.customer.name,
+            'contact': task.site.effective_contact_name or task.site.customer.name,
             'site': task.site.name,
             'date': local_time.strftime('%B %d, %Y'),
             'time': local_time.strftime('%I:%M %p').lstrip('0'),
         }
     send_mail(
         subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.contact_email], fail_silently=True,
+        recipient_list=[task.site.effective_contact_email], fail_silently=True,
     )
 
 
@@ -413,13 +413,13 @@ def _send_delay_notice(task, reason):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {
-            'contact': task.site.contact_name or task.site.customer.name,
+            'contact': task.site.effective_contact_name or task.site.customer.name,
             'site': task.site.name,
             'reason': reason,
         }
     send_mail(
         subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.contact_email], fail_silently=True,
+        recipient_list=[task.site.effective_contact_email], fail_silently=True,
     )
 
 
@@ -468,14 +468,14 @@ def _send_feedback_email(request, feedback):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {
-            'contact': task.site.contact_name or task.site.customer.name,
+            'contact': task.site.effective_contact_name or task.site.customer.name,
             'site': task.site.name,
             'date': visit_date,
             'link': link,
         }
     send_mail(
         subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.contact_email],
+        recipient_list=[task.site.effective_contact_email],
         fail_silently=True,
     )
 
@@ -672,7 +672,7 @@ def task_detail(request, pk):
         _require_task_owner(request, task)
         if not task.scheduled_for:
             messages.error(request, _('Set a scheduled time before notifying the customer.'))
-        elif not task.site.contact_email:
+        elif not task.site.effective_contact_email:
             messages.error(request, _('Add a contact email for this site before notifying the customer.'))
         else:
             _send_schedule_notification(task)
@@ -688,7 +688,7 @@ def task_detail(request, pk):
         reason = request.POST.get('delay_reason', '').strip()
         if not task.scheduled_for:
             messages.error(request, _('Set a scheduled time before notifying the customer.'))
-        elif not task.site.contact_email:
+        elif not task.site.effective_contact_email:
             messages.error(request, _('Add a contact email for this site before notifying the customer.'))
         elif not reason:
             messages.error(request, _('Explain the reason for the delay before notifying the customer.'))
@@ -706,12 +706,12 @@ def task_detail(request, pk):
         _require_task_owner(request, task)
         if not task.shipping_tracking_number:
             messages.error(request, _('Add a shipping tracking number before notifying the customer.'))
-        elif not task.site.contact_email:
+        elif not task.site.effective_contact_email:
             messages.error(request, _('Add a contact email for this site before notifying the customer.'))
         else:
             _send_shipping_notice(
-                task.site.contact_name or task.site.customer.name, task.site.name,
-                task.task_number, task.shipping_tracking_number, task.site.contact_email,
+                task.site.effective_contact_name or task.site.customer.name, task.site.name,
+                task.task_number, task.shipping_tracking_number, task.site.effective_contact_email,
             )
             messages.success(request, _('Customer notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
@@ -736,7 +736,7 @@ def task_detail(request, pk):
         feedback = getattr(task, 'feedback', None)
         if task.status != Task.Status.CLOSED:
             messages.error(request, _('Close the task (file its report) before requesting feedback.'))
-        elif not task.site.contact_email:
+        elif not task.site.effective_contact_email:
             messages.error(request, _('Add a contact email for this site before requesting feedback.'))
         else:
             if feedback is None:
@@ -804,7 +804,7 @@ def task_edit(request, pk):
                         occurred_at=timezone.now(), actor=request.user,
                     )
             if (
-                rescheduled and updated_task.scheduled_for and updated_task.site.contact_email
+                rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
                 and NotificationSettings.load().auto_notify_on_reschedule
             ):
                 _send_schedule_notification(updated_task)
