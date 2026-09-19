@@ -1,9 +1,63 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
     NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
     TechnicianSkill, TechnicianSkillAssessment,
 )
+
+User = get_user_model()
+
+
+def _cascade_active(queryset, is_active, related_attr):
+    """Suspending or reactivating a Technician must do the same to its
+    linked login account, and vice versa — otherwise a technician marked
+    inactive on the roster could still log in, or a suspended user would
+    still show up as available on the roster.
+    """
+    for obj in queryset:
+        obj.is_active = is_active
+        obj.save(update_fields=['is_active'])
+        related = getattr(obj, related_attr, None)
+        if related is not None:
+            related.is_active = is_active
+            related.save(update_fields=['is_active'])
+
+
+@admin.action(description='Suspend selected technicians (also blocks their login)')
+def suspend_technicians(modeladmin, request, queryset):
+    _cascade_active(queryset, False, 'user')
+
+
+@admin.action(description='Reactivate selected technicians (also restores their login)')
+def reactivate_technicians(modeladmin, request, queryset):
+    _cascade_active(queryset, True, 'user')
+
+
+@admin.action(description="Suspend selected users (also marks their technician profile inactive)")
+def suspend_users(modeladmin, request, queryset):
+    _cascade_active(queryset, False, 'technician')
+
+
+@admin.action(description="Reactivate selected users (also marks their technician profile active)")
+def reactivate_users(modeladmin, request, queryset):
+    _cascade_active(queryset, True, 'technician')
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin):
+    list_display = DjangoUserAdmin.list_display + ('is_active', 'linked_technician')
+    list_editable = ('is_active',)
+    actions = [suspend_users, reactivate_users]
+
+    def linked_technician(self, obj):
+        technician = getattr(obj, 'technician', None)
+        return technician.full_name if technician else '—'
+    linked_technician.short_description = 'Technician'
 
 
 @admin.register(RolePermission)
@@ -36,6 +90,8 @@ class TechnicianAdmin(admin.ModelAdmin):
     ]
     search_fields = ['full_name', 'phone']
     list_filter = ['country', 'role', 'employment_type', 'language', 'is_active', 'is_available']
+    list_editable = ['is_active', 'is_available']
+    actions = [suspend_technicians, reactivate_technicians]
 
 
 @admin.register(TechnicianSkill)

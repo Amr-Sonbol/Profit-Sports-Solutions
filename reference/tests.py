@@ -19,7 +19,10 @@ class SeedReferenceDataTests(TestCase):
         # place; 0012 adds 4 more cardio skills for elliptical machines.
         # The old, now-inactive rows are kept, never deleted (see
         # docs/database_design_v2.md rule 4), so the table holds both.
-        self.assertEqual(Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).count(), 18)
+        # 0014/0015 later hard-delete 3 of the reseeded basic skills
+        # (backup safety cable, cable kit, crimped-end cable) — they had
+        # no rating/assessment/task history, so nothing to preserve.
+        self.assertEqual(Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).count(), 15)
         self.assertEqual(Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).count(), 20)
         self.assertEqual(Skill.objects.filter(is_active=False).count(), 21)
         self.assertTrue(Skill.objects.get(is_active=True, name='Replace pins'))
