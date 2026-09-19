@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import models
 from django.utils.html import format_html
 
 from .models import (
@@ -32,51 +33,100 @@ class TaskAdmin(admin.ModelAdmin):
     inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline]
 
 
-class TaskDocument(Task):
-    """A proxy for Task — same table, same rows — so the paperwork trail
-    (quotation/factory offer/invoice) gets its own browsable tab in the
-    admin instead of being three easy-to-miss fields on every task's
-    change form. Never a separate model to keep in sync.
+def _has_file(field_name):
+    """A task where this field is genuinely set — not '' and not NULL.
+    Some rows predate these columns and hold NULL, and NULL never equals
+    '' in SQL, so a plain exclude(field='') silently lets those through.
+    """
+    return ~models.Q(**{field_name: ''}) & models.Q(**{f'{field_name}__isnull': False})
+
+
+def _file_link(file_field):
+    if not file_field:
+        return '—'
+    return format_html('<a href="{}" target="_blank" rel="noopener">View</a>', file_field.url)
+
+
+class TaskQuotation(Task):
+    """A proxy for Task — same table, same rows — so quotations get
+    their own browsable tab instead of being one easy-to-miss field on
+    every task's change form. Never a separate model to keep in sync.
     """
 
     class Meta:
         proxy = True
-        verbose_name = 'task document'
-        verbose_name_plural = 'task documents'
+        verbose_name = 'quotation'
+        verbose_name_plural = 'quotations'
 
 
-@admin.register(TaskDocument)
-class TaskDocumentAdmin(admin.ModelAdmin):
-    list_display = ['task_number', 'site', 'quotation_link', 'factory_offer_link', 'invoice_link']
+@admin.register(TaskQuotation)
+class TaskQuotationAdmin(admin.ModelAdmin):
+    list_display = ['task_number', 'site', 'quotation_link']
     search_fields = ['task_number', 'site__name']
     list_filter = ['site__customer__country']
     readonly_fields = ['task_number', 'site']
-    fields = ['task_number', 'site', 'quotation', 'factory_offer', 'invoice']
+    fields = ['task_number', 'site', 'quotation']
 
     def get_queryset(self, request):
-        # Only tasks with at least one document on file — a first upload
-        # still happens from the task's own edit screen (in-app or the
-        # main Task admin page), not created here.
-        return super().get_queryset(request).exclude(quotation='', factory_offer='', invoice='')
+        return super().get_queryset(request).filter(_has_file('quotation'))
 
     def has_add_permission(self, request):
         return False
 
-    def _file_link(self, file_field):
-        if not file_field:
-            return '—'
-        return format_html('<a href="{}" target="_blank" rel="noopener">View</a>', file_field.url)
-
     def quotation_link(self, obj):
-        return self._file_link(obj.quotation)
+        return _file_link(obj.quotation)
     quotation_link.short_description = 'Quotation'
 
+
+class TaskFactoryOffer(Task):
+    class Meta:
+        proxy = True
+        verbose_name = 'factory offer'
+        verbose_name_plural = 'factory offers'
+
+
+@admin.register(TaskFactoryOffer)
+class TaskFactoryOfferAdmin(admin.ModelAdmin):
+    list_display = ['task_number', 'site', 'factory_offer_link']
+    search_fields = ['task_number', 'site__name']
+    list_filter = ['site__customer__country']
+    readonly_fields = ['task_number', 'site']
+    fields = ['task_number', 'site', 'factory_offer']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(_has_file('factory_offer'))
+
+    def has_add_permission(self, request):
+        return False
+
     def factory_offer_link(self, obj):
-        return self._file_link(obj.factory_offer)
+        return _file_link(obj.factory_offer)
     factory_offer_link.short_description = 'Factory offer'
 
+
+class TaskInvoice(Task):
+    class Meta:
+        proxy = True
+        verbose_name = 'invoice'
+        verbose_name_plural = 'invoices'
+
+
+@admin.register(TaskInvoice)
+class TaskInvoiceAdmin(admin.ModelAdmin):
+    list_display = ['task_number', 'site', 'invoice_link']
+    search_fields = ['task_number', 'site__name']
+    list_filter = ['site__customer__country']
+    readonly_fields = ['task_number', 'site']
+    fields = ['task_number', 'site', 'invoice']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(_has_file('invoice'))
+
+    def has_add_permission(self, request):
+        return False
+
     def invoice_link(self, obj):
-        return self._file_link(obj.invoice)
+        return _file_link(obj.invoice)
     invoice_link.short_description = 'Invoice'
 
 
