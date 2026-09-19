@@ -1,0 +1,39 @@
+# Postgres credentials below must match DB_NAME/DB_USER/DB_PASSWORD in .env.
+# They're hardcoded rather than pulled from .env via ${...} because Compose
+# resolves $-sequences when it parses .env for its own interpolation, which
+# silently mangles values like SECRET_KEY that contain "$" (e.g. $v7i, $fx
+# get read as unset variable references and dropped). django-web reads .env
+# directly (bind-mounted into the container) via python-decouple instead,
+# which does no such interpolation.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: spots
+      POSTGRES_USER: spots
+      POSTGRES_PASSWORD: spots
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spots"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
