@@ -94,7 +94,7 @@ The non-technical half of the certification bar — cleanliness, procedure adher
 | name_ar | varchar | |
 | is_active | bool | |
 
-Seeded with five areas: cleanliness & site care, professional appearance & conduct, rule & procedure adherence, punctuality & communication, tool & vehicle care. Rated the same way, on the same 1–4 scale, as a skill — see `technician_conduct` below.
+Seeded with six areas: cleanliness & site care, professional appearance & conduct, rule & procedure adherence, punctuality & communication, tool & vehicle care, adherence to official uniform. Rated the same way, on the same 1–4 scale, as a skill — see `technician_conduct` below.
 
 ### task_type
 A managed list the office maintains. Never free text — free text becomes "repair", "Repair", "fixing" within a year.
