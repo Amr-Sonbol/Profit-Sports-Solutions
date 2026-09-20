@@ -333,7 +333,8 @@
 </div>
 {% endif %}
 
-{% if user.technician.role == 'manager' and task.status != 'closed' %}
+{% if user.technician.role == 'manager' %}
+{% if task.status != 'closed' %}
 <div class="section">
     <h2>{% translate "Close task" %}</h2>
     <p class="field__help">{% translate "For exceptional cases only — customer cancelled, turned out not to need a visit, etc. Bypasses the normal report and approval." %}</p>
@@ -354,6 +355,28 @@
         </div>
     </form>
 </div>
+{% elif task.status == 'closed' %}
+<div class="section">
+    <h2>{% translate "Flag negligence" %}</h2>
+    <p class="field__help">{% translate "Only if the customer later complained about this specific visit and it was the technician's own fault — not every complaint is negligence. Feeds their reliability record; they won't see this flag themselves." %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="flag_negligence">
+        {% if negligence_form.non_field_errors %}
+            <p class="flash flash--error">{{ negligence_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if negligence_form.note.errors %}field--error{% endif %}">
+            <label for="{{ negligence_form.note.id_for_label }}">{{ negligence_form.note.label }}</label>
+            {{ negligence_form.note }}
+            <p class="field__help">{{ negligence_form.note.help_text }}</p>
+            {% for error in negligence_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Flag negligence" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="section">
@@ -363,7 +386,11 @@
         {% for event in events %}
         <li>
             <span class="timeline__time">{{ event.occurred_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            {% if event.event_type == 'negligence' %}
+            <span class="badge badge--status-blocked">{{ event.get_event_type_display }}</span>
+            {% else %}
             <span class="timeline__type">{{ event.get_event_type_display }}</span>
+            {% endif %}
             <span class="muted">{{ event.actor.technician.full_name|default:event.actor.get_username }}</span>
             {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
             {% if event.corrected_at %}

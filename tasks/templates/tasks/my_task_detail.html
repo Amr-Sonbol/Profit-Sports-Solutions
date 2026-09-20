@@ -65,7 +65,7 @@
     {% endif %}
 </div>
 
-{% if is_lead and next_action %}
+{% if is_lead and show_status_section %}
 <div class="section">
     <h2>{% translate "Status" %}</h2>
     <div class="button-row">
@@ -82,7 +82,30 @@
             </button>
         </form>
         {% endif %}
+        {% if can_resume %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="resume">
+            <button type="submit" class="button">{% translate "Started again" %}</button>
+        </form>
+        {% endif %}
     </div>
+
+    {% if can_pause %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="pause">
+        <div class="field {% if pause_form.note.errors %}field--error{% endif %}">
+            <label for="{{ pause_form.note.id_for_label }}">{{ pause_form.note.label }}</label>
+            {{ pause_form.note }}
+            <p class="field__help">{{ pause_form.note.help_text }}</p>
+            {% for error in pause_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Stopped for today" %}</button>
+        </div>
+    </form>
+    {% endif %}
 
     {% if can_block %}
     <form method="post" class="form-grid" novalidate>

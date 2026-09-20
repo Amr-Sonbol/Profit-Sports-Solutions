@@ -495,6 +495,17 @@ class BlockTaskForm(forms.Form):
     )
 
 
+class PauseTaskForm(forms.Form):
+    """Stopping for the day on a multi-day task — not blocked, just
+    picking back up tomorrow. The note is optional; resuming needs
+    nothing typed at all.
+    """
+    note = forms.CharField(
+        label=_('Note'), required=False, widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('Optional — anything the next session should know.'),
+    )
+
+
 class CloseTaskForm(forms.Form):
     """Manager-only bypass of the normal report-approve pipeline, for a
     task that turns out not to need one — customer cancelled, issue
@@ -503,6 +514,17 @@ class CloseTaskForm(forms.Form):
     note = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
         help_text=_('Why this is closing without a report — customer cancelled, resolved another way, etc.'),
+    )
+
+
+class NegligenceFlagForm(forms.Form):
+    """Manager-only — marks a completed task as one the customer later
+    complained about due to the lead's own negligence, not bad luck.
+    Feeds the lead's reliability record; never shown to the technician.
+    """
+    note = forms.CharField(
+        label=_('What went wrong'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('What the customer complained about, and why this counts as negligence rather than bad luck.'),
     )
 
 

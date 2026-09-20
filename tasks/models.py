@@ -369,6 +369,8 @@ class TaskEvent(models.Model):
         ARRIVED = 'arrived', _('Arrived')
         BLOCKED = 'blocked', _('Blocked')
         STARTED = 'started', _('Started')
+        PAUSED = 'paused', _('Paused for the day')
+        RESUMED = 'resumed', _('Resumed')
         COMPLETED = 'completed', _('Completed')
         REPORT_SUBMITTED = 'report_submitted', _('Report submitted')
         REPORT_REJECTED = 'report_rejected', _('Report rejected')
@@ -376,6 +378,7 @@ class TaskEvent(models.Model):
         CLOSED = 'closed', _('Closed')
         REOPENED = 'reopened', _('Reopened')
         CANCELLED = 'cancelled', _('Cancelled')
+        NEGLIGENCE = 'negligence', _('Negligence reported')
 
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='events',

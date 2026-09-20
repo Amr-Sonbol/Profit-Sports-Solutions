@@ -35,7 +35,7 @@ from reports.models import CustomerFeedback, PartUsed
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, CountryCreateForm, CustomerTicketForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
+    NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TechnicianCreateForm,
     TechnicianEditForm, TicketEditForm, TicketLogisticsForm, TicketReplyForm,
 )
@@ -345,6 +345,17 @@ def _next_technician_action(task):
             return 'arrive'
         return 'en_route'
     return None
+
+
+def _task_is_paused(task):
+    """Stopped for the day and not yet resumed — the most recent of
+    started/paused/resumed decides, since a multi-day task cycles
+    through paused/resumed any number of times before it's completed.
+    """
+    last = task.events.filter(
+        event_type__in=[TaskEvent.EventType.STARTED, TaskEvent.EventType.PAUSED, TaskEvent.EventType.RESUMED],
+    ).order_by('-occurred_at').values_list('event_type', flat=True).first()
+    return last == TaskEvent.EventType.PAUSED
 
 
 def _attachment_media_type(uploaded_file):
@@ -761,6 +772,22 @@ def task_detail(request, pk):
             messages.success(request, _('Task closed.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
+    negligence_form = NegligenceFlagForm()
+    if request.method == 'POST' and request.POST.get('action') == 'flag_negligence':
+        require_manager(request)
+        if task.status != Task.Status.CLOSED:
+            messages.error(request, _('Only a closed task can be flagged.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        negligence_form = NegligenceFlagForm(request.POST)
+        if negligence_form.is_valid():
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.NEGLIGENCE,
+                occurred_at=timezone.now(), actor=request.user,
+                note=negligence_form.cleaned_data['note'],
+            )
+            messages.success(request, _('Task flagged.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
@@ -788,16 +815,24 @@ def task_detail(request, pk):
     )
     active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
 
+    events = task.events.select_related('actor', 'corrected_by')
+    if requesting_technician.role != Technician.Role.MANAGER:
+        # Negligence flags are a manager-only reliability signal — never
+        # shown to the technician being flagged, or to a supervisor
+        # viewing the same task.
+        events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
+
     context = {
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'events': task.events.select_related('actor', 'corrected_by'),
+        'events': events,
         'attachments': task.attachments.select_related('uploaded_by'),
         'task_assets': task.task_assets.select_related('asset'),
         'report': getattr(task, 'report', None),
         'feedback': getattr(task, 'feedback', None),
         'close_task_form': close_task_form,
+        'negligence_form': negligence_form,
     }
     return render(request, 'tasks/task_detail.html', context)
 
@@ -1843,6 +1878,16 @@ def technician_skills(request, pk):
                 messages.success(request, _('Level confirmed.'))
                 return redirect('tasks:technician_skills', pk=technician.pk)
 
+    negligence_events = None
+    if supervisor.role == Technician.Role.MANAGER:
+        # Manager-only reliability signal — a supervisor reviewing the
+        # same technician's skills never sees it, same as on the task
+        # itself (see task_detail).
+        negligence_events = TaskEvent.objects.filter(
+            event_type=TaskEvent.EventType.NEGLIGENCE, task__assignments__technician=technician,
+            task__assignments__role=TaskAssignment.Role.LEAD, task__assignments__is_active=True,
+        ).select_related('task').order_by('-occurred_at')
+
     basic_skills, cardio_skills = _split_by_category(_skills_with_current_rating(technician))
     context = {
         'technician': technician,
@@ -1851,6 +1896,7 @@ def technician_skills(request, pk):
         'conduct_areas': _conduct_areas_with_current_rating(technician),
         'review_form': ReviewLevelForm(),
         'certification': _certification_status(technician),
+        'negligence_events': negligence_events,
     }
     return render(request, 'tasks/technician_skills.html', context)
 
@@ -2065,10 +2111,14 @@ def my_task_detail(request, pk):
     task = assignment.task
     is_lead = assignment.role == TaskAssignment.Role.LEAD
     next_action = _next_technician_action(task) if is_lead else None
-    can_block = is_lead and task.status in BLOCKABLE_STATUSES
+    is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
+    can_block = is_lead and task.status in BLOCKABLE_STATUSES and not is_paused
+    can_pause = is_lead and task.status == Task.Status.IN_PROGRESS and not is_paused
+    can_resume = is_paused
 
     upload_form = TaskAttachmentUploadForm()
     block_form = BlockTaskForm()
+    pause_form = PauseTaskForm()
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -2098,6 +2148,23 @@ def my_task_detail(request, pk):
                 messages.success(request, _('Task marked blocked.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
+        elif action == 'pause' and can_pause:
+            pause_form = PauseTaskForm(request.POST)
+            if pause_form.is_valid():
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.PAUSED, occurred_at=timezone.now(),
+                    actor=request.user, note=pause_form.cleaned_data['note'],
+                )
+                messages.success(request, _('Marked stopped for today.'))
+                return redirect('tasks:my_task_detail', pk=task.pk)
+
+        elif action == 'resume' and can_resume:
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.RESUMED, occurred_at=timezone.now(), actor=request.user,
+            )
+            messages.success(request, _('Marked started again.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
         elif action == 'upload':
             upload_form = TaskAttachmentUploadForm(request.POST, request.FILES)
             if upload_form.is_valid():
@@ -2112,12 +2179,21 @@ def my_task_detail(request, pk):
         'is_lead': is_lead,
         'next_action': next_action,
         'can_block': can_block,
-        'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES,
+        'can_pause': can_pause,
+        'can_resume': can_resume,
+        # Block/pause/resume all matter most exactly when there's no
+        # next_action — the task is IN_PROGRESS and just being worked —
+        # so the section can't be gated on next_action alone.
+        'show_status_section': bool(next_action) or can_block or can_pause or can_resume,
+        'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
         'report': getattr(task, 'report', None),
         'attachments': task.attachments.select_related('uploaded_by'),
-        'events': task.events.order_by('occurred_at'),
+        # Negligence flags are a manager-only reliability signal — never
+        # shown to the technician being flagged.
+        'events': task.events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE).order_by('occurred_at'),
         'upload_form': upload_form,
         'block_form': block_form,
+        'pause_form': pause_form,
     }
     return render(request, 'tasks/my_task_detail.html', context)
 
@@ -2142,6 +2218,10 @@ def my_report_form(request, pk):
 
     if task.status not in REPORT_EDITABLE_STATUSES:
         messages.error(request, _('Start work on this task before filing a report.'))
+        return redirect('tasks:my_task_detail', pk=task.pk)
+
+    if task.status == Task.Status.IN_PROGRESS and _task_is_paused(task):
+        messages.error(request, _('Mark yourself started again before filing the report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
     task_assets = task.task_assets.select_related('asset__brand')
