@@ -6,15 +6,46 @@
 {% block content %}
 <div class="page__header">
     <h1>{% translate "All tickets" %}</h1>
-    <nav class="tabs">
-        <a href="?status=new" class="{% if status == 'new' %}is-active{% endif %}">{% translate "New" %}</a>
-        {% for value, label in status_choices %}
-        <a href="?status={{ value }}" class="{% if status == value %}is-active{% endif %}">{{ label }}</a>
-        {% endfor %}
-        <a href="?status=all" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
-    </nav>
 </div>
 <p class="field__help">{% translate "Every country's tickets at once. Doesn't follow the country switcher above." %}</p>
+
+<form method="get" class="filters">
+    <div class="field">
+        <label for="filter-status">{% translate "Status" %}</label>
+        <select id="filter-status" name="status">
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+            <option value="all" {% if status == 'all' %}selected{% endif %}>{% translate "All" %}</option>
+        </select>
+    </div>
+    <div class="field">
+        <label for="filter-ticket-id">{% translate "Ticket ID" %}</label>
+        <input type="text" id="filter-ticket-id" name="ticket_id" value="{{ ticket_id }}">
+    </div>
+    <div class="field">
+        <label for="filter-company">{% translate "Company" %}</label>
+        <input type="text" id="filter-company" name="company" value="{{ company }}">
+    </div>
+    <div class="field">
+        <label for="filter-site">{% translate "Site" %}</label>
+        <input type="text" id="filter-site" name="site" value="{{ site }}">
+    </div>
+    <div class="field">
+        <label for="filter-date">{% translate "Date submitted" %}</label>
+        <input type="date" id="filter-date" name="date" value="{{ date }}">
+    </div>
+    <div class="field">
+        <label for="filter-country">{% translate "Country" %}</label>
+        <select id="filter-country" name="country">
+            <option value="">{% translate "All countries" %}</option>
+            {% for country in countries %}
+            <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit" class="button">{% translate "Search" %}</button>
+</form>
 
 <div class="table-wrap">
     <table>
@@ -43,6 +74,8 @@
                     <span class="badge badge--status-new">{% translate "New" %}</span>
                     {% elif ticket.status == 'converted' %}
                     <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+                    {% elif ticket.status == 'closed' %}
+                    <span class="badge badge--status-completed">{% translate "Closed" %}</span>
                     {% else %}
                     <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
                     {% endif %}

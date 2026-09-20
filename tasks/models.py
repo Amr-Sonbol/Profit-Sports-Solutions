@@ -109,14 +109,17 @@ class Task(models.Model):
         _('quotation'), upload_to='task_documents/', null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
+    quotation_uploaded_at = models.DateTimeField(_('quotation uploaded at'), null=True, blank=True)
     factory_offer = models.FileField(
         _('factory offer'), upload_to='task_documents/', null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
+    factory_offer_uploaded_at = models.DateTimeField(_('factory offer uploaded at'), null=True, blank=True)
     invoice = models.FileField(
         _('invoice'), upload_to='task_documents/', null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
+    invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
@@ -159,6 +162,7 @@ class CustomerTicket(models.Model):
         NEW = 'new', _('New')
         CONVERTED = 'converted', _('Converted to task')
         DISMISSED = 'dismissed', _('Dismissed')
+        CLOSED = 'closed', _('Closed')
 
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
@@ -214,6 +218,10 @@ class CustomerTicket(models.Model):
     )
     reviewed_at = models.DateTimeField(_('reviewed at'), null=True, blank=True)
     dismissal_reason = models.CharField(_('dismissal reason'), max_length=255, blank=True)
+    close_reason = models.CharField(
+        _('close reason'), max_length=255, blank=True,
+        help_text=_('resolved without needing a task — advice given, handled by phone, etc.'),
+    )
     token = models.CharField(
         _('token'), max_length=43, unique=True, editable=False,
         help_text=_('lets the customer check this ticket’s status without an account — see reports.CustomerFeedback'),
@@ -231,6 +239,46 @@ class CustomerTicket(models.Model):
 
     def __str__(self):
         return f'{self.company_name} — {self.site_description}'
+
+
+class TicketReply(models.Model):
+    """One message in the back-and-forth on a ticket — either side, in
+    order. Open while the ticket is still new, or converted but the
+    resulting task isn't finished yet — read-only once dismissed,
+    closed directly, or once that task itself is closed (a cancelled
+    task does not close it — see _ticket_is_open, tasks/views.py).
+    `sent_by` is a real login either way: staff always
+    has one, and a customer does too when they replied through their
+    portal login rather than the anonymous token page.
+    """
+
+    class Sender(models.TextChoices):
+        STAFF = 'staff', _('Staff')
+        CUSTOMER = 'customer', _('Customer')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='replies',
+        verbose_name=_('ticket'),
+    )
+    sender = models.CharField(_('sender'), max_length=10, choices=Sender.choices)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ticket_replies_sent', verbose_name=_('sent by'),
+    )
+    message = models.TextField(_('message'))
+    attachment = models.FileField(
+        _('attachment'), upload_to='ticket_reply_attachments/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+    sent_at = models.DateTimeField(_('sent at'))
+
+    class Meta:
+        verbose_name = _('ticket reply')
+        verbose_name_plural = _('ticket replies')
+        ordering = ['sent_at']
+
+    def __str__(self):
+        return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
 
 
 class CustomerTicketAttachment(models.Model):

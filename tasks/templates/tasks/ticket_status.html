@@ -21,9 +21,57 @@
     {% else %}
     <p>{% translate "Your report has become a service task. We'll be in touch to schedule a visit." %}</p>
     {% endif %}
+    {% elif ticket.status == 'closed' %}
+    <span class="badge badge--status-completed">{% translate "Resolved" %}</span>
+    <p>{% translate "This report has been resolved. Contact us if you still need help." %}</p>
     {% elif ticket.status == 'dismissed' %}
     <span class="badge badge--muted">{% translate "Closed" %}</span>
     <p>{% translate "This report has been reviewed and closed. Contact us if you still need help." %}</p>
+    {% endif %}
+
+    <h2>{% translate "Messages" %}</h2>
+    {% if replies %}
+    <ul class="plain-list">
+        {% for reply in replies %}
+        <li>
+            <span class="badge {% if reply.sender == 'staff' %}badge--muted{% else %}badge--status-new{% endif %}">
+                {% if reply.sender == 'staff' %}{% translate "Profit Sports Solutions" %}{% else %}{% translate "You" %}{% endif %}
+            </span>
+            <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            <p>{{ reply.message }}</p>
+            {% if reply.attachment %}
+            <p>
+                <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
+            </p>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No messages yet." %}</p>
+    {% endif %}
+
+    {% if can_reply %}
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% if reply_form.non_field_errors %}
+            <p class="flash flash--error">{{ reply_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if reply_form.message.errors %}field--error{% endif %}">
+            <label for="{{ reply_form.message.id_for_label }}">{{ reply_form.message.label }}</label>
+            {{ reply_form.message }}
+            {% for error in reply_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if reply_form.attachment.errors %}field--error{% endif %}">
+            <label for="{{ reply_form.attachment.id_for_label }}">{{ reply_form.attachment.label }}</label>
+            {{ reply_form.attachment }}
+            {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <button type="submit" class="button">{% translate "Send" %}</button>
+    </form>
+    {% else %}
+    <p class="field__help">{% translate "This report is resolved — the conversation is closed." %}</p>
     {% endif %}
 </div>
 {% endblock %}

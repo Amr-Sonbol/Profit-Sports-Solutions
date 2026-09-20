@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.db import models
+from django.urls import reverse
 from django.utils.html import format_html
 
 from .models import (
@@ -41,10 +42,23 @@ def _has_file(field_name):
     return ~models.Q(**{field_name: ''}) & models.Q(**{f'{field_name}__isnull': False})
 
 
-def _file_link(file_field):
+def _file_actions(file_field):
+    """View (opens in a new tab) and Download (forces save-as) — the
+    same file, two ways to open it.
+    """
     if not file_field:
         return '—'
-    return format_html('<a href="{}" target="_blank" rel="noopener">View</a>', file_field.url)
+    return format_html(
+        '<a href="{0}" target="_blank" rel="noopener">View</a> | <a href="{0}" download>Download</a>',
+        file_field.url,
+    )
+
+
+def _task_link(obj):
+    """The task itself, one click away — every document belongs to a
+    task, and browsing documents is exactly when you want to jump to it.
+    """
+    return format_html('<a href="{}">{}</a>', reverse('tasks:task_detail', args=[obj.pk]), obj.task_number)
 
 
 class TaskQuotation(Task):
@@ -61,11 +75,12 @@ class TaskQuotation(Task):
 
 @admin.register(TaskQuotation)
 class TaskQuotationAdmin(admin.ModelAdmin):
-    list_display = ['task_number', 'site', 'quotation_link']
+    list_display = ['task_link', 'site', 'quotation_uploaded_at', 'quotation_actions']
     search_fields = ['task_number', 'site__name']
     list_filter = ['site__customer__country']
-    readonly_fields = ['task_number', 'site']
-    fields = ['task_number', 'site', 'quotation']
+    date_hierarchy = 'quotation_uploaded_at'
+    readonly_fields = ['task_number', 'site', 'quotation_uploaded_at']
+    fields = ['task_number', 'site', 'quotation', 'quotation_uploaded_at']
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(_has_file('quotation'))
@@ -73,9 +88,14 @@ class TaskQuotationAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    def quotation_link(self, obj):
-        return _file_link(obj.quotation)
-    quotation_link.short_description = 'Quotation'
+    def task_link(self, obj):
+        return _task_link(obj)
+    task_link.short_description = 'Task'
+    task_link.admin_order_field = 'task_number'
+
+    def quotation_actions(self, obj):
+        return _file_actions(obj.quotation)
+    quotation_actions.short_description = 'Quotation'
 
 
 class TaskFactoryOffer(Task):
@@ -87,11 +107,12 @@ class TaskFactoryOffer(Task):
 
 @admin.register(TaskFactoryOffer)
 class TaskFactoryOfferAdmin(admin.ModelAdmin):
-    list_display = ['task_number', 'site', 'factory_offer_link']
+    list_display = ['task_link', 'site', 'factory_offer_uploaded_at', 'factory_offer_actions']
     search_fields = ['task_number', 'site__name']
     list_filter = ['site__customer__country']
-    readonly_fields = ['task_number', 'site']
-    fields = ['task_number', 'site', 'factory_offer']
+    date_hierarchy = 'factory_offer_uploaded_at'
+    readonly_fields = ['task_number', 'site', 'factory_offer_uploaded_at']
+    fields = ['task_number', 'site', 'factory_offer', 'factory_offer_uploaded_at']
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(_has_file('factory_offer'))
@@ -99,9 +120,14 @@ class TaskFactoryOfferAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    def factory_offer_link(self, obj):
-        return _file_link(obj.factory_offer)
-    factory_offer_link.short_description = 'Factory offer'
+    def task_link(self, obj):
+        return _task_link(obj)
+    task_link.short_description = 'Task'
+    task_link.admin_order_field = 'task_number'
+
+    def factory_offer_actions(self, obj):
+        return _file_actions(obj.factory_offer)
+    factory_offer_actions.short_description = 'Factory offer'
 
 
 class TaskInvoice(Task):
@@ -113,11 +139,12 @@ class TaskInvoice(Task):
 
 @admin.register(TaskInvoice)
 class TaskInvoiceAdmin(admin.ModelAdmin):
-    list_display = ['task_number', 'site', 'invoice_link']
+    list_display = ['task_link', 'site', 'invoice_uploaded_at', 'invoice_actions']
     search_fields = ['task_number', 'site__name']
     list_filter = ['site__customer__country']
-    readonly_fields = ['task_number', 'site']
-    fields = ['task_number', 'site', 'invoice']
+    date_hierarchy = 'invoice_uploaded_at'
+    readonly_fields = ['task_number', 'site', 'invoice_uploaded_at']
+    fields = ['task_number', 'site', 'invoice', 'invoice_uploaded_at']
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(_has_file('invoice'))
@@ -125,9 +152,14 @@ class TaskInvoiceAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    def invoice_link(self, obj):
-        return _file_link(obj.invoice)
-    invoice_link.short_description = 'Invoice'
+    def task_link(self, obj):
+        return _task_link(obj)
+    task_link.short_description = 'Task'
+    task_link.admin_order_field = 'task_number'
+
+    def invoice_actions(self, obj):
+        return _file_actions(obj.invoice)
+    invoice_actions.short_description = 'Invoice'
 
 
 @admin.register(TaskAssignment)

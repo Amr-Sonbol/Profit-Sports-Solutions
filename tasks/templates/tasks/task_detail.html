@@ -146,15 +146,33 @@
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Quotation" %}</dt>
-            <dd>{% if task.quotation %}<a href="{{ task.quotation.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+            <dd>
+                {% if task.quotation %}
+                <a href="{{ task.quotation.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ task.quotation.url }}" download>{% translate "Download" %}</a>
+                {% if task.quotation_uploaded_at %}<span class="muted">{{ task.quotation_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
+                {% else %}—{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Factory offer" %}</dt>
-            <dd>{% if task.factory_offer %}<a href="{{ task.factory_offer.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+            <dd>
+                {% if task.factory_offer %}
+                <a href="{{ task.factory_offer.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ task.factory_offer.url }}" download>{% translate "Download" %}</a>
+                {% if task.factory_offer_uploaded_at %}<span class="muted">{{ task.factory_offer_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
+                {% else %}—{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Invoice" %}</dt>
-            <dd>{% if task.invoice %}<a href="{{ task.invoice.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</dd>
+            <dd>
+                {% if task.invoice %}
+                <a href="{{ task.invoice.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ task.invoice.url }}" download>{% translate "Download" %}</a>
+                {% if task.invoice_uploaded_at %}<span class="muted">{{ task.invoice_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
+                {% else %}—{% endif %}
+            </dd>
         </div>
     </dl>
     <p class="field__help">{% translate "Upload these from the task's Edit screen." %}</p>
@@ -312,6 +330,29 @@
         </table>
     </div>
     {% endif %}
+</div>
+{% endif %}
+
+{% if user.technician.role == 'manager' and task.status != 'closed' %}
+<div class="section">
+    <h2>{% translate "Close task" %}</h2>
+    <p class="field__help">{% translate "For exceptional cases only — customer cancelled, turned out not to need a visit, etc. Bypasses the normal report and approval." %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="close_directly">
+        {% if close_task_form.non_field_errors %}
+            <p class="flash flash--error">{{ close_task_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if close_task_form.note.errors %}field--error{% endif %}">
+            <label for="{{ close_task_form.note.id_for_label }}">{{ close_task_form.note.label }}</label>
+            {{ close_task_form.note }}
+            <p class="field__help">{{ close_task_form.note.help_text }}</p>
+            {% for error in close_task_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Close task" %}</button>
+        </div>
+    </form>
 </div>
 {% endif %}
 

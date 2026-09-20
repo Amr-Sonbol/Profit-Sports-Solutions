@@ -234,6 +234,16 @@ class TaskEditForm(forms.ModelForm):
     def clean_invoice(self):
         return self._clean_document('invoice')
 
+    def save(self, commit=True):
+        task = super().save(commit=False)
+        now = timezone.now()
+        for field_name in ('quotation', 'factory_offer', 'invoice'):
+            if field_name in self.changed_data:
+                setattr(task, f'{field_name}_uploaded_at', now if getattr(task, field_name) else None)
+        if commit:
+            task.save()
+        return task
+
 
 class SetLeadForm(forms.Form):
     technician = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Technician'))
@@ -485,6 +495,17 @@ class BlockTaskForm(forms.Form):
     )
 
 
+class CloseTaskForm(forms.Form):
+    """Manager-only bypass of the normal report-approve pipeline, for a
+    task that turns out not to need one — customer cancelled, issue
+    resolved some other way, etc.
+    """
+    note = forms.CharField(
+        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('Why this is closing without a report — customer cancelled, resolved another way, etc.'),
+    )
+
+
 class ExistingAssetOutcomeForm(forms.Form):
     """A machine already at this site that this visit actually covered.
 
@@ -649,6 +670,34 @@ class DismissTicketForm(forms.Form):
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
         help_text=_('Why this ticket isn\'t becoming a task — spam, duplicate, not us, etc.'),
     )
+
+
+class CloseTicketForm(forms.Form):
+    """Separate from DismissTicketForm — a legitimately resolved issue
+    that just never needed a task, not an invalid one.
+    """
+    close_reason = forms.CharField(
+        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('How it was resolved without a task — advice given, handled by phone, etc.'),
+    )
+
+
+class TicketReplyForm(forms.Form):
+    """One message — same shape for staff replying and a customer
+    replying back, on either the staff review screen or the public
+    token page. Which side sent it is recorded by the view, not here.
+    """
+    message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
+    attachment = forms.FileField(
+        required=False, label=_('Photo or video'),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    def clean_attachment(self):
+        attachment = self.cleaned_data['attachment']
+        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+        return attachment
 
 
 class TicketLogisticsForm(forms.ModelForm):

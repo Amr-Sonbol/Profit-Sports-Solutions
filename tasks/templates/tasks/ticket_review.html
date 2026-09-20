@@ -14,6 +14,8 @@
         <span class="badge badge--status-new">{% translate "New" %}</span>
         {% elif ticket.status == 'converted' %}
         <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+        {% elif ticket.status == 'closed' %}
+        <span class="badge badge--status-completed">{% translate "Closed" %}</span>
         {% else %}
         <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
         {% endif %}
@@ -68,10 +70,63 @@
         <dt>{% translate "Photos and/or short video" %}</dt>
         <ul class="plain-list">
             {% for attachment in ticket.attachments.all %}
-            <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.file.name }}</a></li>
+            <li>
+                {{ attachment.file.name }}
+                <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ attachment.file.url }}" download>{% translate "Download" %}</a>
+            </li>
             {% endfor %}
         </ul>
     </div>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Conversation" %}</h2>
+    {% if replies %}
+    <ul class="plain-list">
+        {% for reply in replies %}
+        <li>
+            <span class="badge {% if reply.sender == 'staff' %}badge--muted{% else %}badge--status-new{% endif %}">
+                {% if reply.sender == 'staff' %}{% translate "Staff" %}{% else %}{% translate "Customer" %}{% endif %}
+            </span>
+            <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            <p>{{ reply.message }}</p>
+            {% if reply.attachment %}
+            <p>
+                <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
+            </p>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No messages yet." %}</p>
+    {% endif %}
+    {% if can_manage and can_reply %}
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_reply">
+        {% if reply_form.non_field_errors %}
+            <p class="flash flash--error">{{ reply_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if reply_form.message.errors %}field--error{% endif %}">
+            <label for="{{ reply_form.message.id_for_label }}">{{ reply_form.message.label }}</label>
+            {{ reply_form.message }}
+            {% for error in reply_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if reply_form.attachment.errors %}field--error{% endif %}">
+            <label for="{{ reply_form.attachment.id_for_label }}">{{ reply_form.attachment.label }}</label>
+            {{ reply_form.attachment }}
+            {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Send reply" %}</button>
+        </div>
+    </form>
+    {% elif can_manage %}
+    <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
     {% endif %}
 </div>
 
@@ -179,12 +234,30 @@
             <button type="submit" class="button button--danger">{% translate "Dismiss" %}</button>
         </div>
     </form>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="close">
+        <div class="field {% if close_form.close_reason.errors %}field--error{% endif %}">
+            <label for="{{ close_form.close_reason.id_for_label }}">{{ close_form.close_reason.label }}</label>
+            {{ close_form.close_reason }}
+            <p class="field__help">{{ close_form.close_reason.help_text }}</p>
+            {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Close ticket" %}</button>
+        </div>
+    </form>
 </div>
 {% elif ticket.status == 'converted' %}
 <div class="section">
     <p class="empty-state">
         <a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a>
     </p>
+</div>
+{% elif ticket.status == 'closed' %}
+<div class="section">
+    <h2>{% translate "Closed" %}</h2>
+    <p>{{ ticket.close_reason }}</p>
 </div>
 {% else %}
 <div class="section">

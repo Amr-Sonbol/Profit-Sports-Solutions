@@ -321,8 +321,11 @@ This status is shown to the technician themselves (My progress) and to superviso
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
 | quotation | file | nullable — pdf/image, edit screen only, never on create |
+| quotation_uploaded_at | timestamptz | nullable — set when the file is uploaded, cleared when it's removed |
 | factory_offer | file | nullable — pdf/image, edit screen only |
+| factory_offer_uploaded_at | timestamptz | nullable |
 | invoice | file | nullable — pdf/image, edit screen only |
+| invoice_uploaded_at | timestamptz | nullable |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -337,7 +340,7 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
-**`quotation`/`factory_offer`/`invoice` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All three optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive.
+**`quotation`/`factory_offer`/`invoice` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All three optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive. Each has its own `_uploaded_at`, stamped by `TaskEditForm.save()` when that file actually changes (cleared back to null if the file is removed) — not a general "last edited" timestamp, just that one field. Each also gets its own browsable tab in Django admin (Quotations / Factory offers / Invoices, proxies over `task` — no separate table), filtered to tasks that actually have that file, with a link back to the task, a date-hierarchy calendar on `_uploaded_at` to browse by when it arrived, and View/Download actions.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
 
@@ -377,7 +380,7 @@ A complaint or request — submitted either through the public no-login form (se
 | description | text | what's wrong with each machine — asked to keep one paragraph per serial |
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
-| status | varchar | new, converted, dismissed |
+| status | varchar | new, converted, dismissed, closed |
 | assigned_to_id | FK → technician | nullable — who's handling it, a supervisor or manager (never a technician) |
 | assigned_at | timestamptz | nullable |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
@@ -386,6 +389,7 @@ A complaint or request — submitted either through the public no-login form (se
 | reviewed_by_id | FK → user | nullable |
 | reviewed_at | timestamptz | nullable |
 | dismissal_reason | varchar | nullable |
+| close_reason | varchar | nullable |
 | token | varchar(43) | unique, auto-generated — see below |
 
 **`token` lets a ticket be checked without a login** — the same unguessable-link pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). Shown on the thank-you page after submission and, if a contact email was given, also emailed there — still useful even for a portal customer, since it's what the portal's own ticket list links to.
@@ -394,11 +398,30 @@ A complaint or request — submitted either through the public no-login form (se
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
 
-**Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers) or dismisses it with a reason.
+**Matching is manual, on purpose.** `company_name` and `site_description` are exactly what the customer typed — never auto-matched against `customer`/`site`, because a fuzzy match that's wrong silently attaches a real complaint to the wrong company's history. A supervisor reviews each ticket and either converts it (picking an existing site or creating a new one, the same choice task creation always offers), dismisses it with a reason, or closes it with a reason.
+
+**Closed is separate from dismissed.** Dismissed means invalid or spam — never real work. Closed means the issue was genuinely resolved without ever needing a task — advice given over the phone, handled some other way. Both are terminal and end the reply conversation (see `ticket_reply` below); the distinction is only which reason field explains why no task exists.
 
 **Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; either can also just be set directly, since parts more often ship after the task exists.
 
 **`pak_reference_number` and `shipping_tracking_number` exist on both `customer_ticket` and `task`, always optional, filled in later once parts actually ship** — never known at submission time. Only the tracking number is ever emailed to a customer (a manual "Notify customer" button next to each, same fail-silent pattern as the schedule/delay notices); PAK is internal bookkeeping and never leaves the app.
+
+### ticket_reply
+The back-and-forth on a ticket, either side, in order.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| ticket_id | FK → customer_ticket | |
+| sender | varchar | staff, customer |
+| sent_by_id | FK → user | nullable — always set for staff; set for a customer only if they replied through their portal login rather than the anonymous token page |
+| message | text | |
+| attachment | file | nullable — photo or short video, same allowlist/25 MB limit as `customer_ticket_attachment` |
+| sent_at | timestamptz | |
+
+**Open while the ticket is still new, or converted but the resulting task isn't finished yet** (`_ticket_is_open`, `tasks/views.py`) — closed once dismissed, once the ticket itself is closed directly, or once that task itself reaches `closed`. Not tied to `customer_ticket.status` alone: "converted" can mean the work just started, and the customer should still be able to ask about it. A **cancelled** task does *not* close the conversation — cancellation isn't a resolution, so the issue is still open and staff still needs to be able to talk to the customer about it. Once actually closed, the thread becomes read-only on both the staff review screen and the customer's own token page. A customer can reply from either place they can already reach a ticket: the public `ticket_status` page (token-based, no login) or, if they're logged in, the same page linked from their portal — there's no separate reply screen to keep in sync.
+
+**Each reply sends a best-effort email the other way**, same fail-silent pattern as every other notification here. A staff reply emails `customer_ticket.contact_email`, if one was given. A customer reply emails `assigned_to`'s login email, if the ticket is assigned to someone with one on file — there's no fixed office address to fall back to, so an unassigned ticket's customer replies simply don't email anyone until someone picks it up.
 
 ### customer_ticket_attachment
 A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` (there's no logged-in user to record) and no link/URL option the way `task_attachment` has — a customer only ever uploads a real file.
@@ -477,7 +500,7 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — supervisors only |
 | note | text | |
 
-**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled. `completed` fires when the lead files the report, `report_approved` when a manager closes it (see §4/§5) — `report_rejected` is the one still unused: this round of approval has no reject step, just a single approve action.
+**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled. `completed` fires when the lead files the report, `report_approved` when a manager approves it through the normal pipeline (see §4/§5). `closed` is the separate manager-only direct-close bypass — for a task that turns out not to need a report at all (customer cancelled, resolved another way) — usable from any status except already-`closed`; the reason lives in the event's own `note`. Both `report_approved` and `closed` land the task on `Task.Status.CLOSED`, just by different paths. `report_rejected` and `reopened` are the ones still unused: this round of approval has no reject step, just a single approve action, and nothing yet reopens a closed task.
 
 The technician taps buttons; he never types a time. If this table is skipped, you will have a year of operations and still no way to answer who you can depend on.
 

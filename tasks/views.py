@@ -33,14 +33,15 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, CountryCreateForm, CustomerTicketForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, CountryCreateForm, CustomerTicketForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TechnicianCreateForm,
-    TechnicianEditForm, TicketEditForm, TicketLogisticsForm,
+    TechnicianEditForm, TicketEditForm, TicketLogisticsForm, TicketReplyForm,
 )
 from .models import (
     CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
+    TicketReply,
 )
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
@@ -605,16 +606,19 @@ def task_list(request):
 def all_tasks(request):
     """Every task in every country, for a manager auditing or tracking
     something that isn't scoped to whichever country they last switched
-    to — the same search/status/date filters as the regular task list,
-    minus the country boundary, plus a country filter and column since
-    nothing else on the page tells you which country a row belongs to.
-    Manager-only: this is a global, cross-country view, the same fixed
-    floor as skill_list and role_permissions.
+    to — a separate, independent field for each thing you'd actually
+    search a task by (task ID, customer, site, date, country), instead
+    of one combined box guessing which of those you meant. Manager-only:
+    this is a global, cross-country view, the same fixed floor as
+    skill_list and role_permissions.
     """
     require_manager(request)
 
     status = request.GET.get('status', 'open')
-    search = request.GET.get('q', '').strip()
+    task_id = request.GET.get('task_id', '').strip()
+    customer = request.GET.get('customer', '').strip()
+    site = request.GET.get('site', '').strip()
+    date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
     tasks = _with_lead_prefetch(
@@ -626,13 +630,14 @@ def all_tasks(request):
     elif status != 'all':
         tasks = tasks.filter(status=status)
 
-    if search:
-        tasks = tasks.filter(
-            Q(task_number__icontains=search)
-            | Q(site__name__icontains=search)
-            | Q(site__customer__name__icontains=search)
-        )
-
+    if task_id:
+        tasks = tasks.filter(task_number__icontains=task_id)
+    if customer:
+        tasks = tasks.filter(site__customer__name__icontains=customer)
+    if site:
+        tasks = tasks.filter(site__name__icontains=site)
+    if date:
+        tasks = tasks.filter(scheduled_for__date=date)
     if country_id:
         tasks = tasks.filter(site__customer__country_id=country_id)
 
@@ -642,12 +647,20 @@ def all_tasks(request):
     page_obj = paginator.get_page(request.GET.get('page'))
     _attach_lead_technician(page_obj)
 
-    filter_params = {key: value for key, value in {'q': search, 'country': country_id}.items() if value}
+    filter_params = {
+        key: value for key, value in {
+            'task_id': task_id, 'customer': customer, 'site': site,
+            'date': request.GET.get('date', ''), 'country': country_id,
+        }.items() if value
+    }
 
     context = {
         'page_obj': page_obj,
         'status': status,
-        'search': search,
+        'task_id': task_id,
+        'customer': customer,
+        'site': site,
+        'date': request.GET.get('date', ''),
         'status_choices': Task.Status.choices,
         'countries': Country.objects.order_by('name'),
         'selected_country': country_id,
@@ -730,6 +743,24 @@ def task_detail(request, pk):
             messages.success(request, _('Report approved. Task closed.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    close_task_form = CloseTaskForm()
+    if request.method == 'POST' and request.POST.get('action') == 'close_directly':
+        require_manager(request)
+        if task.status == Task.Status.CLOSED:
+            messages.error(request, _('This task is already closed.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        close_task_form = CloseTaskForm(request.POST)
+        if close_task_form.is_valid():
+            task.status = Task.Status.CLOSED
+            task.save(update_fields=['status'])
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.CLOSED,
+                occurred_at=timezone.now(), actor=request.user,
+                note=close_task_form.cleaned_data['note'],
+            )
+            messages.success(request, _('Task closed.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
@@ -766,6 +797,7 @@ def task_detail(request, pk):
         'task_assets': task.task_assets.select_related('asset'),
         'report': getattr(task, 'report', None),
         'feedback': getattr(task, 'feedback', None),
+        'close_task_form': close_task_form,
     }
     return render(request, 'tasks/task_detail.html', context)
 
@@ -949,50 +981,190 @@ def ticket_submitted(request, token):
     return render(request, 'tasks/ticket_submitted.html', {'ticket': ticket, 'status_url': status_url})
 
 
+def _ticket_is_open(ticket):
+    """Open for replies while it's still new, or converted but the
+    resulting task isn't finished yet — closed once dismissed, or once
+    that task is actually closed. Not tied to the ticket's own `status`
+    alone: "converted" can mean the work just started. A cancelled task
+    does NOT close it — cancellation isn't a resolution, the customer's
+    issue is still unresolved, so the conversation has to stay open.
+    """
+    if ticket.status in (CustomerTicket.Status.DISMISSED, CustomerTicket.Status.CLOSED):
+        return False
+    if ticket.status == CustomerTicket.Status.CONVERTED:
+        return ticket.task is not None and ticket.task.status != Task.Status.CLOSED
+    return True
+
+
+def _send_reply_to_customer(request, reply):
+    """Best-effort, and only when the customer gave an email — same
+    fail-silent pattern as every other customer-facing notification.
+    """
+    ticket = reply.ticket
+    if not ticket.contact_email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    with translation.override('en'):
+        subject = _('New reply on your report — %(site)s') % {'site': ticket.site_description}
+        message = _(
+            'Dear %(contact)s,\n\n'
+            '%(reply_message)s\n\n'
+            'You can reply or check the full conversation here:\n%(link)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {'contact': ticket.contact_name, 'reply_message': reply.message, 'link': link}
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[ticket.contact_email], fail_silently=True,
+    )
+
+
+def _send_reply_to_staff(request, reply):
+    """Best-effort, and only when the ticket is assigned to someone with
+    a login and an email on file — there's no fixed office address to
+    fall back to.
+    """
+    ticket = reply.ticket
+    assignee = ticket.assigned_to
+    if not assignee or not assignee.user_id or not assignee.user.email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    with translation.override('en'):
+        subject = _('New customer reply — %(company)s') % {'company': ticket.company_name}
+        message = _(
+            'The customer replied on ticket #%(pk)s (%(company)s — %(site)s):\n\n'
+            '%(reply_message)s\n\n'
+            'View and reply here:\n%(link)s\n',
+        ) % {
+            'pk': ticket.pk, 'company': ticket.company_name, 'site': ticket.site_description,
+            'reply_message': reply.message, 'link': link,
+        }
+    send_mail(
+        subject=subject, message=message, from_email=None,
+        recipient_list=[assignee.user.email], fail_silently=True,
+    )
+
+
 def ticket_status(request, token):
     """Public — no login. Lets a customer check on a report they
     submitted, anytime — the same token-based, no-account pattern as
-    reports.CustomerFeedback's link.
+    reports.CustomerFeedback's link. While the ticket is still new, they
+    can also reply here — the token is their identity, the same way it
+    already is for viewing.
     """
     ticket = get_object_or_404(CustomerTicket, token=token)
-    return render(request, 'tasks/ticket_status.html', {'ticket': ticket})
+    can_reply = _ticket_is_open(ticket)
+    reply_form = TicketReplyForm()
+
+    if request.method == 'POST' and can_reply:
+        reply_form = TicketReplyForm(request.POST, request.FILES)
+        if reply_form.is_valid():
+            reply = TicketReply.objects.create(
+                ticket=ticket, sender=TicketReply.Sender.CUSTOMER,
+                sent_by=request.user if request.user.is_authenticated else None,
+                message=reply_form.cleaned_data['message'],
+                attachment=reply_form.cleaned_data['attachment'], sent_at=timezone.now(),
+            )
+            _send_reply_to_staff(request, reply)
+            messages.success(request, _('Reply sent.'))
+            return redirect('tasks:ticket_status', token=token)
+
+    context = {
+        'ticket': ticket, 'can_reply': can_reply, 'reply_form': reply_form,
+        'replies': ticket.replies.select_related('sent_by'),
+    }
+    return render(request, 'tasks/ticket_status.html', context)
 
 
 @login_required
 def ticket_list(request):
     """Every customer-submitted ticket still needing a decision, plus
     what's already been resolved — country-scoped like everything else a
-    supervisor reviews.
+    supervisor reviews. A separate, independent field for each thing
+    you'd actually search a ticket by, instead of one combined box.
     """
     require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
 
     status = request.GET.get('status', 'new')
+    ticket_id = request.GET.get('ticket_id', '').strip()
+    company = request.GET.get('company', '').strip()
+    site = request.GET.get('site', '').strip()
+    date = parse_date(request.GET.get('date', '') or '')
+
     tickets = CustomerTicket.objects.filter(country=get_active_country(request)).select_related('assigned_to')
     if status != 'all':
         tickets = tickets.filter(status=status)
+    if ticket_id:
+        tickets = tickets.filter(pk__icontains=ticket_id)
+    if company:
+        tickets = tickets.filter(company_name__icontains=company)
+    if site:
+        tickets = tickets.filter(site_description__icontains=site)
+    if date:
+        tickets = tickets.filter(submitted_at__date=date)
     tickets = tickets.order_by('-submitted_at')
 
-    context = {'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices}
+    filter_params = {
+        key: value for key, value in {
+            'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+        }.items() if value
+    }
+
+    context = {
+        'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
+        'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+        'filter_qs': urlencode(filter_params),
+    }
     return render(request, 'tasks/ticket_list.html', context)
 
 
 @login_required
 def all_tickets(request):
     """Every customer-submitted ticket in every country — manager-only,
-    same fixed floor as the other "all ..." boards. Converting one into a
-    task still requires switching to its own country first (task_create's
-    site/brand/technician choices are all built around the active
-    country); dismissing or assigning it works from here regardless.
+    same fixed floor as the other "all ..." boards. A separate,
+    independent field for each thing you'd actually search a ticket by,
+    same as all_tasks. Converting one into a task still requires
+    switching to its own country first (task_create's site/brand/
+    technician choices are all built around the active country);
+    dismissing or assigning it works from here regardless.
     """
     require_manager(request)
 
     status = request.GET.get('status', 'new')
+    ticket_id = request.GET.get('ticket_id', '').strip()
+    company = request.GET.get('company', '').strip()
+    site = request.GET.get('site', '').strip()
+    date = parse_date(request.GET.get('date', '') or '')
+    country_id = request.GET.get('country', '')
+
     tickets = CustomerTicket.objects.select_related('assigned_to', 'country')
     if status != 'all':
         tickets = tickets.filter(status=status)
+    if ticket_id:
+        tickets = tickets.filter(pk__icontains=ticket_id)
+    if company:
+        tickets = tickets.filter(company_name__icontains=company)
+    if site:
+        tickets = tickets.filter(site_description__icontains=site)
+    if date:
+        tickets = tickets.filter(submitted_at__date=date)
+    if country_id:
+        tickets = tickets.filter(country_id=country_id)
     tickets = tickets.order_by('-submitted_at')
 
-    context = {'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices}
+    filter_params = {
+        key: value for key, value in {
+            'ticket_id': ticket_id, 'company': company, 'site': site,
+            'date': request.GET.get('date', ''), 'country': country_id,
+        }.items() if value
+    }
+
+    context = {
+        'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
+        'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+        'countries': Country.objects.order_by('name'), 'selected_country': country_id,
+        'filter_qs': urlencode(filter_params),
+    }
     return render(request, 'tasks/all_tickets.html', context)
 
 
@@ -1020,14 +1192,29 @@ def ticket_review(request, pk):
         raise PermissionDenied
 
     dismiss_form = DismissTicketForm()
+    close_form = CloseTicketForm()
     assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
     logistics_form = TicketLogisticsForm(instance=ticket)
     edit_form = TicketEditForm(instance=ticket)
+    reply_form = TicketReplyForm()
+    can_reply = _ticket_is_open(ticket)
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
 
-        if action == 'update_logistics':
+        if action == 'add_reply' and can_reply:
+            reply_form = TicketReplyForm(request.POST, request.FILES)
+            if reply_form.is_valid():
+                reply = TicketReply.objects.create(
+                    ticket=ticket, sender=TicketReply.Sender.STAFF, sent_by=request.user,
+                    message=reply_form.cleaned_data['message'],
+                    attachment=reply_form.cleaned_data['attachment'], sent_at=timezone.now(),
+                )
+                _send_reply_to_customer(request, reply)
+                messages.success(request, _('Reply sent.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+        elif action == 'update_logistics':
             logistics_form = TicketLogisticsForm(request.POST, instance=ticket)
             if logistics_form.is_valid():
                 logistics_form.save()
@@ -1065,6 +1252,17 @@ def ticket_review(request, pk):
                 messages.success(request, _('Ticket dismissed.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
+        elif action == 'close' and ticket.status == CustomerTicket.Status.NEW:
+            close_form = CloseTicketForm(request.POST)
+            if close_form.is_valid():
+                ticket.status = CustomerTicket.Status.CLOSED
+                ticket.close_reason = close_form.cleaned_data['close_reason']
+                ticket.reviewed_by = request.user
+                ticket.reviewed_at = timezone.now()
+                ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+                messages.success(request, _('Ticket closed.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
         elif action == 'assign':
             assign_form = AssignTicketForm(request.POST, country=ticket.country)
             if assign_form.is_valid():
@@ -1075,8 +1273,10 @@ def ticket_review(request, pk):
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
     context = {
-        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
+        'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
+        'reply_form': reply_form, 'can_reply': can_reply,
+        'replies': ticket.replies.select_related('sent_by'),
     }
     return render(request, 'tasks/ticket_review.html', context)
 
