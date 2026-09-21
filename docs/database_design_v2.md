@@ -326,6 +326,8 @@ This status is shown to the technician themselves (My progress) and to superviso
 | factory_offer_uploaded_at | timestamptz | nullable |
 | invoice | file | nullable — pdf/image, edit screen only |
 | invoice_uploaded_at | timestamptz | nullable |
+| delivery_note | file | nullable — pdf/image, edit screen only — the shipment paperwork, uploaded once the parts arrive |
+| delivery_note_uploaded_at | timestamptz | nullable |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -340,7 +342,7 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
-**`quotation`/`factory_offer`/`invoice` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All three optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive. Each has its own `_uploaded_at`, stamped by `TaskEditForm.save()` when that file actually changes (cleared back to null if the file is removed) — not a general "last edited" timestamp, just that one field. Each also gets its own browsable tab in Django admin (Quotations / Factory offers / Invoices, proxies over `task` — no separate table), filtered to tasks that actually have that file, with a link back to the task, a date-hierarchy calendar on `_uploaded_at` to browse by when it arrived, and View/Download actions.
+**`quotation`/`factory_offer`/`invoice`/`delivery_note` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All four optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive. Each has its own `_uploaded_at`, stamped by `TaskEditForm.save()` when that file actually changes (cleared back to null if the file is removed) — not a general "last edited" timestamp, just that one field. Each also gets its own browsable tab in Django admin (Quotations / Factory offers / Invoices / Delivery notes, proxies over `task` — no separate table), filtered to tasks that actually have that file, with a link back to the task, a date-hierarchy calendar on `_uploaded_at` to browse by when it arrived, and View/Download actions.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
 
@@ -432,6 +434,8 @@ A customer's own phone photo or short video of the fault, uploaded with the tick
 | ticket_id | FK → customer_ticket | |
 | file | file | image or short video, 25 MB limit |
 | uploaded_at | timestamptz | |
+
+**Still shown once the ticket becomes a task.** Converting a ticket doesn't copy these rows into `task_attachment` — the file stays owned by the ticket, exactly where it was uploaded — but the task's own detail page reads them straight off `task.ticket.attachments` (the OneToOne back to `customer_ticket`) and shows them in their own "Attachments from the customer's ticket" section, so a supervisor sees the original evidence without anyone re-uploading it.
 
 ### task_asset
 Which machines the task covers. Populated by the technician during the work, not at creation.

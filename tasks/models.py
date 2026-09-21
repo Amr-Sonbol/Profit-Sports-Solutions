@@ -16,8 +16,9 @@ from reference.models import Brand, Country, Skill, TaskType
 ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
 MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
-# The paperwork trail for a task — quotation, factory offer, invoice.
-# Almost always a PDF export; jpg/png covers a photo of a paper one.
+# The paperwork trail for a task — quotation, factory offer, invoice,
+# delivery note. Almost always a PDF export; jpg/png covers a photo of
+# a paper one.
 ALLOWED_TASK_DOCUMENT_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 MAX_TASK_DOCUMENT_BYTES = 10 * 1024 * 1024
 
@@ -120,6 +121,12 @@ class Task(models.Model):
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
+    delivery_note = models.FileField(
+        _('delivery note'), upload_to='task_documents/', null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        help_text=_('the shipment paperwork — uploaded once the parts arrive'),
+    )
+    delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),

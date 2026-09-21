@@ -190,7 +190,7 @@ class TaskEditForm(forms.ModelForm):
             'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
             'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
             'responsible_supervisor', 'pak_reference_number', 'shipping_tracking_number',
-            'quotation', 'factory_offer', 'invoice',
+            'quotation', 'factory_offer', 'invoice', 'delivery_note',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -199,6 +199,7 @@ class TaskEditForm(forms.ModelForm):
             'quotation': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
             'factory_offer': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
             'invoice': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
+            'delivery_note': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
         }
 
     def __init__(self, *args, country, **kwargs):
@@ -234,10 +235,13 @@ class TaskEditForm(forms.ModelForm):
     def clean_invoice(self):
         return self._clean_document('invoice')
 
+    def clean_delivery_note(self):
+        return self._clean_document('delivery_note')
+
     def save(self, commit=True):
         task = super().save(commit=False)
         now = timezone.now()
-        for field_name in ('quotation', 'factory_offer', 'invoice'):
+        for field_name in ('quotation', 'factory_offer', 'invoice', 'delivery_note'):
             if field_name in self.changed_data:
                 setattr(task, f'{field_name}_uploaded_at', now if getattr(task, field_name) else None)
         if commit:

@@ -162,6 +162,38 @@ class TaskInvoiceAdmin(admin.ModelAdmin):
     invoice_actions.short_description = 'Invoice'
 
 
+class TaskDeliveryNote(Task):
+    class Meta:
+        proxy = True
+        verbose_name = 'delivery note'
+        verbose_name_plural = 'delivery notes'
+
+
+@admin.register(TaskDeliveryNote)
+class TaskDeliveryNoteAdmin(admin.ModelAdmin):
+    list_display = ['task_link', 'site', 'delivery_note_uploaded_at', 'delivery_note_actions']
+    search_fields = ['task_number', 'site__name']
+    list_filter = ['site__customer__country']
+    date_hierarchy = 'delivery_note_uploaded_at'
+    readonly_fields = ['task_number', 'site', 'delivery_note_uploaded_at']
+    fields = ['task_number', 'site', 'delivery_note', 'delivery_note_uploaded_at']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(_has_file('delivery_note'))
+
+    def has_add_permission(self, request):
+        return False
+
+    def task_link(self, obj):
+        return _task_link(obj)
+    task_link.short_description = 'Task'
+    task_link.admin_order_field = 'task_number'
+
+    def delivery_note_actions(self, obj):
+        return _file_actions(obj.delivery_note)
+    delivery_note_actions.short_description = 'Delivery note'
+
+
 @admin.register(TaskAssignment)
 class TaskAssignmentAdmin(admin.ModelAdmin):
     list_display = ['task', 'technician', 'role', 'assigned_at', 'is_active']

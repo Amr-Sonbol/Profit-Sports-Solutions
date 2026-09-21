@@ -829,12 +829,15 @@ def task_detail(request, pk):
         # viewing the same task.
         events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
 
+    source_ticket = getattr(task, 'ticket', None)
+
     context = {
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
         'events': events,
         'attachments': task.attachments.select_related('uploaded_by'),
+        'ticket_attachments': source_ticket.attachments.all() if source_ticket else [],
         'task_assets': task.task_assets.select_related('asset'),
         'report': getattr(task, 'report', None),
         'feedback': getattr(task, 'feedback', None),
