@@ -565,6 +565,7 @@ def task_list(request):
             Q(task_number__icontains=search)
             | Q(site__name__icontains=search)
             | Q(site__customer__name__icontains=search)
+            | Q(pak_reference_number__icontains=search)
         )
 
     if customer_id:
@@ -618,8 +619,9 @@ def all_tasks(request):
     """Every task in every country, for a manager auditing or tracking
     something that isn't scoped to whichever country they last switched
     to — a separate, independent field for each thing you'd actually
-    search a task by (task ID, customer, site, date, country), instead
-    of one combined box guessing which of those you meant. Manager-only:
+    search a task by (task ID, customer, site, PAK reference, date,
+    country), instead of one combined box guessing which of those you
+    meant. Manager-only:
     this is a global, cross-country view, the same fixed floor as
     skill_list and role_permissions.
     """
@@ -629,6 +631,7 @@ def all_tasks(request):
     task_id = request.GET.get('task_id', '').strip()
     customer = request.GET.get('customer', '').strip()
     site = request.GET.get('site', '').strip()
+    pak_reference = request.GET.get('pak_reference', '').strip()
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
@@ -647,6 +650,8 @@ def all_tasks(request):
         tasks = tasks.filter(site__customer__name__icontains=customer)
     if site:
         tasks = tasks.filter(site__name__icontains=site)
+    if pak_reference:
+        tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
     if date:
         tasks = tasks.filter(scheduled_for__date=date)
     if country_id:
@@ -661,6 +666,7 @@ def all_tasks(request):
     filter_params = {
         key: value for key, value in {
             'task_id': task_id, 'customer': customer, 'site': site,
+            'pak_reference': pak_reference,
             'date': request.GET.get('date', ''), 'country': country_id,
         }.items() if value
     }
@@ -671,6 +677,7 @@ def all_tasks(request):
         'task_id': task_id,
         'customer': customer,
         'site': site,
+        'pak_reference': pak_reference,
         'date': request.GET.get('date', ''),
         'status_choices': Task.Status.choices,
         'countries': Country.objects.order_by('name'),
