@@ -1,0 +1,8 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ contact }},</p>
+<p style="margin:0 0 16px;">Thank you for choosing Profit Sports Solutions. We completed a service visit at <strong>{{ site }}</strong> on {{ date }}, and would greatly appreciate a moment of your time to share your feedback.</p>
+{% include "tasks/email/_button.html" with url=link label="Leave feedback" %}
+<p style="margin:0 0 16px;">Your feedback helps us maintain the standard of service you expect from us.</p>
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}

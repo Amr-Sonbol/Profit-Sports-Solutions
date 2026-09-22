@@ -4,7 +4,8 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from .models import (
-    CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
+    CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, Task, TaskAsset, TaskAssignment,
+    TaskAttachment, TaskEvent, TaskProduct,
 )
 
 
@@ -23,6 +24,11 @@ class TaskAssetInline(admin.TabularInline):
     extra = 0
 
 
+class TaskProductInline(admin.TabularInline):
+    model = TaskProduct
+    extra = 0
+
+
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
     list_display = [
@@ -31,7 +37,7 @@ class TaskAdmin(admin.ModelAdmin):
     ]
     search_fields = ['task_number', 'site__name', 'description']
     list_filter = ['status', 'priority', 'billing_type', 'source', 'is_warranty']
-    inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline]
+    inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline, TaskProductInline]
 
 
 def _has_file(field_name):
@@ -208,6 +214,13 @@ class TaskEventAdmin(admin.ModelAdmin):
     list_filter = ['event_type']
 
 
+@admin.register(ScheduleChangeRequest)
+class ScheduleChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ['task', 'requested_by', 'requested_scheduled_for', 'status', 'created_at']
+    search_fields = ['task__task_number']
+    list_filter = ['status']
+
+
 @admin.register(TaskAttachment)
 class TaskAttachmentAdmin(admin.ModelAdmin):
     list_display = ['task', 'purpose', 'media_type', 'source', 'uploaded_at']
@@ -220,6 +233,12 @@ class TaskAssetAdmin(admin.ModelAdmin):
     list_display = ['task', 'asset', 'outcome']
     search_fields = ['task__task_number']
     list_filter = ['outcome']
+
+
+@admin.register(TaskProduct)
+class TaskProductAdmin(admin.ModelAdmin):
+    list_display = ['task', 'product_code', 'serial_number', 'quantity']
+    search_fields = ['task__task_number', 'product_code', 'serial_number']
 
 
 class CustomerTicketAttachmentInline(admin.TabularInline):

@@ -1,5 +1,6 @@
 from django import forms
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -182,14 +183,36 @@ class TaskEditForm(forms.ModelForm):
     `responsible_supervisor` is here, though: unlike the lead, it has no
     history to track, and this is also how an unowned task gets claimed
     (or a manager reassigns one) — see _require_task_owner in views.py.
+
+    Scheduling carries two extra manager-only controls on top of the
+    plain `scheduled_for` datetime — `schedule_mode` and
+    `scheduled_date_only` — see Task.schedule_time_locked for what
+    day-only vs. locked scheduling means. A supervisor never sees
+    either, and loses `scheduled_for` itself too once the task is
+    locked or has a manager's day pinned with no time yet — from that
+    point the schedule only moves through set_schedule_time /
+    request_schedule_change (tasks/views.py), not a plain edit.
     """
+
+    class ScheduleMode(models.TextChoices):
+        FULL = 'full', _('Day and exact time')
+        DAY_ONLY = 'day_only', _("Day only — let the supervisor pick the exact time")
+
+    schedule_mode = forms.ChoiceField(
+        choices=ScheduleMode.choices, required=False, widget=forms.RadioSelect,
+        label=_('Scheduling'),
+    )
+    scheduled_date_only = forms.DateField(
+        required=False, widget=forms.DateInput(attrs={'type': 'date'}), label=_('Scheduled date'),
+        help_text=_('used instead of the time below when scheduling day-only'),
+    )
 
     class Meta:
         model = Task
         fields = [
             'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
             'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
-            'responsible_supervisor', 'pak_reference_number', 'shipping_tracking_number',
+            'responsible_supervisor', 'pak_reference_number', 'shipping_company', 'shipping_tracking_number',
             'quotation', 'factory_offer', 'invoice', 'delivery_note',
         ]
         widgets = {
@@ -202,8 +225,9 @@ class TaskEditForm(forms.ModelForm):
             'delivery_note': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
         }
 
-    def __init__(self, *args, country, **kwargs):
+    def __init__(self, *args, country, is_manager, **kwargs):
         super().__init__(*args, **kwargs)
+        self.is_manager = is_manager
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
@@ -215,10 +239,59 @@ class TaskEditForm(forms.ModelForm):
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
         self.fields['responsible_supervisor'].required = False
 
-        for name in ('promised_at', 'scheduled_for'):
-            self.fields[name].input_formats = [DATETIME_INPUT_FORMAT]
-            if self.initial.get(name):
-                self.initial[name] = timezone.localtime(self.initial[name]).strftime(DATETIME_INPUT_FORMAT)
+        self.fields['promised_at'].input_formats = [DATETIME_INPUT_FORMAT]
+        if self.initial.get('promised_at'):
+            self.initial['promised_at'] = timezone.localtime(self.initial['promised_at']).strftime(
+                DATETIME_INPUT_FORMAT,
+            )
+
+        instance = self.instance
+        locked = bool(instance.pk and instance.schedule_time_locked)
+        day_only_pending = bool(instance.pk and instance.scheduled_date and not instance.scheduled_for)
+
+        if is_manager:
+            self.fields['scheduled_for'].required = False
+            self.initial['schedule_mode'] = (
+                self.ScheduleMode.DAY_ONLY if day_only_pending
+                else self.ScheduleMode.FULL if instance.scheduled_for else ''
+            )
+            if instance.scheduled_date:
+                self.initial['scheduled_date_only'] = instance.scheduled_date
+            self.fields['scheduled_for'].input_formats = [DATETIME_INPUT_FORMAT]
+            if self.initial.get('scheduled_for'):
+                self.initial['scheduled_for'] = timezone.localtime(self.initial['scheduled_for']).strftime(
+                    DATETIME_INPUT_FORMAT,
+                )
+        else:
+            # A supervisor only ever sees the plain scheduled_for field
+            # in the one case they can still freely edit it — no lock in
+            # effect and no manager day-only date pinned yet. Otherwise
+            # it's dropped entirely; task_detail's own small actions
+            # (set_schedule_time / request_schedule_change) take over.
+            del self.fields['schedule_mode']
+            del self.fields['scheduled_date_only']
+            if locked or day_only_pending:
+                del self.fields['scheduled_for']
+            else:
+                self.fields['scheduled_for'].input_formats = [DATETIME_INPUT_FORMAT]
+                if self.initial.get('scheduled_for'):
+                    self.initial['scheduled_for'] = timezone.localtime(self.initial['scheduled_for']).strftime(
+                        DATETIME_INPUT_FORMAT,
+                    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.is_manager:
+            mode = cleaned.get('schedule_mode')
+            date_only = cleaned.get('scheduled_date_only')
+            full_datetime = cleaned.get('scheduled_for')
+            if mode == self.ScheduleMode.DAY_ONLY and not date_only:
+                self.add_error('scheduled_date_only', _('Enter a date.'))
+            elif mode == self.ScheduleMode.FULL and not full_datetime:
+                self.add_error('scheduled_for', _('Enter the exact date and time.'))
+            elif not mode and (date_only or full_datetime):
+                self.add_error('schedule_mode', _('Choose day-only or a full date and time.'))
+        return cleaned
 
     def _clean_document(self, field_name):
         document = self.cleaned_data[field_name]
@@ -244,6 +317,26 @@ class TaskEditForm(forms.ModelForm):
         for field_name in ('quotation', 'factory_offer', 'invoice', 'delivery_note'):
             if field_name in self.changed_data:
                 setattr(task, f'{field_name}_uploaded_at', now if getattr(task, field_name) else None)
+
+        if self.is_manager:
+            mode = self.cleaned_data.get('schedule_mode')
+            if mode == self.ScheduleMode.DAY_ONLY:
+                task.scheduled_date = self.cleaned_data['scheduled_date_only']
+                task.scheduled_for = None
+                task.schedule_time_locked = False
+            elif mode == self.ScheduleMode.FULL:
+                task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+                task.schedule_time_locked = True
+            else:
+                task.scheduled_date = None
+                task.scheduled_for = None
+                task.schedule_time_locked = False
+        elif 'scheduled_for' in self.fields:
+            # The one case a supervisor can still freely edit it —
+            # keep scheduled_date in sync so day-only logic elsewhere
+            # always has a consistent picture of what's pinned.
+            task.scheduled_date = timezone.localtime(task.scheduled_for).date() if task.scheduled_for else None
+
         if commit:
             task.save()
         return task
@@ -587,6 +680,28 @@ class NewAssetForm(forms.Form):
         return cleaned
 
 
+class TaskProductForm(forms.Form):
+    """One line of a delivery note's contents, structured — product
+    code mandatory, serial optional (the delivery note itself is
+    usually just model codes and quantities, per Asset's own
+    docstring; a serial is a bonus when it's actually on the paperwork).
+    """
+
+    product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
+    serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any(cleaned.get(f) for f in ('product_code', 'serial_number', 'quantity')):
+            return cleaned
+        if not cleaned.get('product_code'):
+            raise forms.ValidationError(_('Enter a product code, or leave this row blank.'))
+        if not cleaned.get('quantity'):
+            cleaned['quantity'] = 1
+        return cleaned
+
+
 class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
 
@@ -733,7 +848,7 @@ class TicketLogisticsForm(forms.ModelForm):
 
     class Meta:
         model = CustomerTicket
-        fields = ['pak_reference_number', 'shipping_tracking_number']
+        fields = ['pak_reference_number', 'shipping_company', 'shipping_tracking_number']
 
 
 class TicketEditForm(forms.ModelForm):

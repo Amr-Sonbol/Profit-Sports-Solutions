@@ -23,6 +23,21 @@ ALLOWED_TASK_DOCUMENT_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png']
 MAX_TASK_DOCUMENT_BYTES = 10 * 1024 * 1024
 
 
+class ShippingCompany(models.TextChoices):
+    """Who's carrying the parts — shared by Task and CustomerTicket, same
+    as pak_reference_number/shipping_tracking_number, which this sits
+    alongside on both. A fixed list, not free text, for the same reason
+    task_type is one: 'FedEx' vs 'Fedex' vs 'fedex' drifts within a year.
+    """
+    DHL = 'dhl', _('DHL')
+    FEDEX = 'fedex', _('FedEx')
+    UPS = 'ups', _('UPS')
+    ARAMEX = 'aramex', _('Aramex')
+    TNT = 'tnt', _('TNT')
+    LOCAL_COURIER = 'local_courier', _('Local courier')
+    OTHER = 'other', _('Other')
+
+
 class Task(models.Model):
     class Priority(models.TextChoices):
         LOW = 'low', _('Low')
@@ -87,6 +102,20 @@ class Task(models.Model):
         _('scheduled for'), null=True, blank=True,
         help_text=_('the day the supervisor planned'),
     )
+    scheduled_date = models.DateField(
+        _('scheduled date'), null=True, blank=True,
+        help_text=_(
+            'set by a manager scheduling day-only — the day is fixed while '
+            'scheduled_for stays empty until a supervisor fills in the time'
+        ),
+    )
+    schedule_time_locked = models.BooleanField(
+        _('schedule time locked'), default=False,
+        help_text=_(
+            'true once a manager sets both the day and the exact time together — a '
+            'supervisor can no longer change scheduled_for directly and must request a change'
+        ),
+    )
     estimated_hours = models.DecimalField(
         _('estimated hours'), max_digits=4, decimal_places=2, null=True, blank=True,
         help_text=_('roughly how long the job should take — shown as an estimated finish time'),
@@ -105,6 +134,9 @@ class Task(models.Model):
         ),
     )
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    shipping_company = models.CharField(
+        _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
+    )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     quotation = models.FileField(
         _('quotation'), upload_to='task_documents/', null=True, blank=True,
@@ -214,6 +246,9 @@ class CustomerTicket(models.Model):
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    shipping_company = models.CharField(
+        _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
+    )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     task = models.OneToOneField(
         Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket',
@@ -371,6 +406,9 @@ class TaskEvent(models.Model):
         REASSIGNED = 'reassigned', _('Reassigned')
         RESCHEDULED = 'rescheduled', _('Rescheduled')
         DELAY_NOTICE = 'delay_notice', _('Delay notice sent')
+        SCHEDULE_CHANGE_REQUESTED = 'schedule_change_requested', _('Schedule change requested')
+        SCHEDULE_CHANGE_APPROVED = 'schedule_change_approved', _('Schedule change approved')
+        SCHEDULE_CHANGE_DENIED = 'schedule_change_denied', _('Schedule change denied')
         ACCEPTED = 'accepted', _('Accepted')
         EN_ROUTE = 'en_route', _('En route')
         ARRIVED = 'arrived', _('Arrived')
@@ -419,6 +457,46 @@ class TaskEvent(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.event_type}'
+
+
+class ScheduleChangeRequest(models.Model):
+    """A supervisor asking to move a task's schedule once a manager has
+    locked it (Task.schedule_time_locked) — the only case a supervisor
+    can't just edit scheduled_for themselves. A manager reviews it
+    directly from the task's own detail page, same as approving a
+    report or closing a task — no separate queue screen.
+    """
+    class Status(models.TextChoices):
+        PENDING = 'pending', _('Pending')
+        APPROVED = 'approved', _('Approved')
+        DENIED = 'denied', _('Denied')
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='schedule_change_requests',
+        verbose_name=_('task'),
+    )
+    requested_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='schedule_change_requests',
+        verbose_name=_('requested by'),
+    )
+    requested_scheduled_for = models.DateTimeField(_('requested scheduled for'))
+    reason = models.CharField(_('reason'), max_length=255, blank=True)
+    status = models.CharField(_('status'), max_length=10, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='schedule_change_requests_reviewed', verbose_name=_('reviewed by'),
+    )
+    reviewed_at = models.DateTimeField(_('reviewed at'), null=True, blank=True)
+    review_note = models.CharField(_('review note'), max_length=255, blank=True)
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('schedule change request')
+        verbose_name_plural = _('schedule change requests')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.get_status_display()}'
 
 
 class TaskAttachment(models.Model):
@@ -495,3 +573,31 @@ class TaskAsset(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.asset}'
+
+
+class TaskProduct(models.Model):
+    """One line of the delivery note's contents — for installation and
+    loading tasks, where stock is delivered ahead of or alongside the
+    visit rather than consumed during it (that's PartUsed, on the
+    work report). The delivery note PDF (Task.delivery_note) already
+    holds the same information as a scanned/exported document; this
+    is the same data kept structured, so it can be searched and
+    listed rather than only read off the file. Entered from the
+    task's Edit screen, replaced wholesale on every save — not an
+    append-only log the way task_event is.
+    """
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='products',
+        verbose_name=_('task'),
+    )
+    product_code = models.CharField(_('product code'), max_length=100)
+    serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
+    quantity = models.PositiveIntegerField(_('quantity'), default=1)
+
+    class Meta:
+        verbose_name = _('task product')
+        verbose_name_plural = _('task products')
+        ordering = ['task', 'product_code']
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.product_code}'

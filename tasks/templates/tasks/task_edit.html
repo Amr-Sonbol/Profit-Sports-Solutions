@@ -27,6 +27,37 @@
             </div>
             {% endfor %}
         </div>
+
+        <h2>{% translate "Products" %}</h2>
+        <p class="field__help">{% translate "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved; serial number is optional." %}</p>
+        {{ product_formset.management_form }}
+        {% if product_formset.non_form_errors %}
+            <p class="flash flash--error">{{ product_formset.non_form_errors }}</p>
+        {% endif %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{% translate "Product code" %}</th>
+                        <th>{% translate "Serial number" %}</th>
+                        <th>{% translate "Quantity" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product_form in product_formset %}
+                    <tr>
+                        <td>{{ product_form.product_code }}</td>
+                        <td>{{ product_form.serial_number }}</td>
+                        <td>{{ product_form.quantity }}</td>
+                    </tr>
+                    {% if product_form.errors %}
+                    <tr><td colspan="3"><p class="field__error">{{ product_form.non_field_errors }}</p></td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
         <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>
 </div>

@@ -190,6 +190,11 @@
             {{ logistics_form.pak_reference_number }}
             {% for error in logistics_form.pak_reference_number.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
+        <div class="field {% if logistics_form.shipping_company.errors %}field--error{% endif %}">
+            <label for="{{ logistics_form.shipping_company.id_for_label }}">{{ logistics_form.shipping_company.label }}</label>
+            {{ logistics_form.shipping_company }}
+            {% for error in logistics_form.shipping_company.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
         <div class="field {% if logistics_form.shipping_tracking_number.errors %}field--error{% endif %}">
             <label for="{{ logistics_form.shipping_tracking_number.id_for_label }}">{{ logistics_form.shipping_tracking_number.label }}</label>
             {{ logistics_form.shipping_tracking_number }}

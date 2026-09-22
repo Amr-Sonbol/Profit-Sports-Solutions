@@ -63,7 +63,23 @@
         </div>
         <div>
             <dt>{% translate "Scheduled" %}</dt>
-            <dd>{{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd>
+            <dd>
+                {% if task.scheduled_for %}
+                    {{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
+                    {% if task.schedule_time_locked %}<span class="badge badge--muted">{% translate "Locked" %}</span>{% endif %}
+                    {% if user.technician.role == 'manager' %}
+                    <form method="post" novalidate class="inline-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_schedule_lock">
+                        <button type="submit" class="link-button">
+                            {% if task.schedule_time_locked %}{% translate "Open to supervisor" %}{% else %}{% translate "Lock" %}{% endif %}
+                        </button>
+                    </form>
+                    {% endif %}
+                {% elif task.scheduled_date %}
+                    {{ task.scheduled_date|date:"SHORT_DATE_FORMAT" }} — <span class="muted">{% translate "time not set yet" %}</span>
+                {% else %}—{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Estimated finish" %}</dt>
@@ -77,6 +93,86 @@
     </div>
     {% endif %}
 </div>
+
+{% if task.scheduled_date and not task.scheduled_for %}
+<div class="section">
+    <h2>{% translate "Scheduling" %}</h2>
+    <p class="field__help">{% blocktranslate with date=task.scheduled_date|date:"SHORT_DATE_FORMAT" %}The day is set for {{ date }} — pick the exact time.{% endblocktranslate %}</p>
+    <form method="post" novalidate class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="set_schedule_time">
+        <div class="field">
+            <label for="scheduled_time">{% translate "Time" %}</label>
+            <input type="time" id="scheduled_time" name="scheduled_time" required>
+        </div>
+        <button type="submit" class="button">{% translate "Set time" %}</button>
+    </form>
+</div>
+{% endif %}
+
+{% if task.schedule_time_locked and user.technician.role != 'manager' %}
+<div class="section">
+    <h2>{% translate "Scheduling" %}</h2>
+    {% if pending_schedule_request %}
+    <p class="muted">{% blocktranslate with time=pending_schedule_request.requested_scheduled_for|date:"SHORT_DATETIME_FORMAT" %}Change requested to {{ time }} — awaiting manager review.{% endblocktranslate %}</p>
+    {% else %}
+    <p class="field__help">{% translate "This schedule is locked. Request a change and a manager will review it." %}</p>
+    <form method="post" novalidate class="form-grid">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="request_schedule_change">
+        <div class="field">
+            <label for="requested_scheduled_for">{% translate "Requested date and time" %}</label>
+            <input type="datetime-local" id="requested_scheduled_for" name="requested_scheduled_for" required>
+        </div>
+        <div class="field">
+            <label for="reason">{% translate "Reason" %}</label>
+            <textarea id="reason" name="reason" rows="2"></textarea>
+        </div>
+        <button type="submit" class="button button--secondary">{% translate "Request schedule change" %}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if pending_schedule_request and user.technician.role == 'manager' %}
+<div class="section">
+    <h2>{% translate "Pending schedule change request" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Requested by" %}</dt>
+            <dd>{{ pending_schedule_request.requested_by.full_name }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Requested for" %}</dt>
+            <dd>{{ pending_schedule_request.requested_scheduled_for|date:"SHORT_DATETIME_FORMAT" }}</dd>
+        </div>
+        {% if pending_schedule_request.reason %}
+        <div>
+            <dt>{% translate "Reason" %}</dt>
+            <dd>{{ pending_schedule_request.reason }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+    <div class="button-row">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="approve_schedule_change">
+            <input type="hidden" name="request_id" value="{{ pending_schedule_request.pk }}">
+            <button type="submit" class="button">{% translate "Approve" %}</button>
+        </form>
+        <form method="post" novalidate class="form-grid">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="deny_schedule_change">
+            <input type="hidden" name="request_id" value="{{ pending_schedule_request.pk }}">
+            <div class="field">
+                <label for="review_note">{% translate "Note (optional)" %}</label>
+                <input type="text" id="review_note" name="review_note">
+            </div>
+            <button type="submit" class="button button--secondary">{% translate "Deny" %}</button>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <div class="section">
     <div class="section__header">
@@ -194,6 +290,10 @@
             <dd>{{ task.pak_reference_number|default:"—" }}</dd>
         </div>
         <div>
+            <dt>{% translate "Shipping company" %}</dt>
+            <dd>{{ task.get_shipping_company_display|default:"—" }}</dd>
+        </div>
+        <div>
             <dt>{% translate "Shipping tracking number" %}</dt>
             <dd>{{ task.shipping_tracking_number|default:"—" }}</dd>
         </div>
@@ -230,6 +330,7 @@
     {% else %}
     <p class="empty-state">{% translate "Not requested yet." %}</p>
     {% endif %}
+    {% if user.technician.role == 'manager' %}
     {% if task.site.contact_email %}
     <form method="post" novalidate>
         {% csrf_token %}
@@ -240,6 +341,7 @@
     </form>
     {% else %}
     <p class="field__help">{% translate "Add a contact email for this site before requesting feedback." %}</p>
+    {% endif %}
     {% endif %}
 </div>
 {% endif %}
@@ -286,6 +388,33 @@
         </li>
         {% endfor %}
     </ul>
+</div>
+{% endif %}
+
+{% if products %}
+<div class="section">
+    <h2>{% translate "Products" %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Product code" %}</th>
+                    <th>{% translate "Serial number" %}</th>
+                    <th>{% translate "Quantity" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>{{ product.product_code }}</td>
+                    <td>{{ product.serial_number|default:"—" }}</td>
+                    <td>{{ product.quantity }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="field__help">{% translate "Edit these from the task's Edit screen." %}</p>
 </div>
 {% endif %}
 

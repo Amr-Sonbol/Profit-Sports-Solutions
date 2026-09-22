@@ -313,12 +313,15 @@ This status is shown to the technician themselves (My progress) and to superviso
 | billing_type | varchar | warranty, contract, chargeable, goodwill |
 | reported_at | timestamptz | |
 | promised_at | timestamptz | what the customer is owed |
-| scheduled_for | timestamptz | nullable — the day the supervisor planned |
+| scheduled_for | timestamptz | nullable — the finalized day and time, only ever set once both are known |
+| scheduled_date | date | nullable — a manager's day-only commitment, while `scheduled_for` waits for a supervisor to add the time |
+| schedule_time_locked | bool | true once a manager sets day + time together — a supervisor can no longer edit `scheduled_for` directly |
 | estimated_hours | decimal | nullable — the supervisor's rough guess, not a computed average |
 | status | varchar | see below |
 | created_by_id | FK → user | |
 | responsible_supervisor_id | FK → technician | nullable — who's accountable for staffing it, not who created it |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
+| shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
 | quotation | file | nullable — pdf/image, edit screen only, never on create |
 | quotation_uploaded_at | timestamptz | nullable — set when the file is uploaded, cleared when it's removed |
@@ -342,19 +345,27 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
+**A manager scheduling a task picks one of two modes, every time.** Day and exact time — `scheduled_for` is set directly, `schedule_time_locked` becomes true, and from then on only a manager can change it. Or day only — `scheduled_date` is set, `scheduled_for` stays empty, and any supervisor who can already edit the task can add the exact time themselves (`set_schedule_time`, `tasks/views.py`) without needing anyone's approval; that fills in `scheduled_for` and leaves the task unlocked. A supervisor scheduling their own task from scratch is never affected by any of this — no manager has locked anything yet, so they set `scheduled_for` directly, exactly as before this existed.
+
+**Once locked, a supervisor can't edit `scheduled_for` at all — they file a `schedule_change_request` instead**, proposing a new date and time with an optional reason. A manager reviews it right on the task's own detail page (approve or deny, no separate queue, same pattern as approving a report) — approving applies the requested time and re-locks it, denying leaves the existing schedule untouched. Only one pending request per task at a time. A manager, unlike a supervisor, can always just edit the schedule directly regardless of lock state — the request flow exists only because a supervisor has no other way in once it's locked.
+
+**A manager can also flip `schedule_time_locked` on its own, without touching the date or time at all** — a plain "Lock" / "Open to supervisor" toggle right next to the schedule on task detail (`toggle_schedule_lock`, manager-only), for when the day and time are already right and a manager just wants to hand editing rights back to (or take them away from) whoever's staffing the task. Only meaningful once `scheduled_for` is set — there's nothing to lock before then.
+
 **`quotation`/`factory_offer`/`invoice`/`delivery_note` are the paperwork trail** — a pdf (or a photo of a paper one), uploaded from the task's Edit screen, never at creation. All four optional and independent: a task can have any subset of them at any time, in whatever order the actual paperwork happens to arrive. Each has its own `_uploaded_at`, stamped by `TaskEditForm.save()` when that file actually changes (cleared back to null if the file is removed) — not a general "last edited" timestamp, just that one field. Each also gets its own browsable tab in Django admin (Quotations / Factory offers / Invoices / Delivery notes, proxies over `task` — no separate table), filtered to tasks that actually have that file, with a link back to the task, a date-hierarchy calendar on `_uploaded_at` to browse by when it arrived, and View/Download actions.
 
 **`blocked` is a legitimate outcome** — gym closed, no key, customer absent. It must not count against the technician.
 
 **Any task field can be edited after creation** (except `site` — moving a task to a different site is a different operation, not an edit) from a dedicated edit screen, separate from the assign screen that already handles reassigning the lead/helpers with its own history. Rescheduling — changing `scheduled_for` — logs a `rescheduled` task_event, same as any other status-relevant change.
 
-**`responsible_supervisor` is who owns getting the task staffed — separate from, and set independently of, who's actually assigned to do the work.** Optional at creation, and picked from the same pool `customer_ticket.assigned_to` draws from (any active supervisor or manager in the country, never a technician). It has real teeth: once set, only that supervisor or a manager can edit the task, open its assign screen, or act on it from task detail (notify the customer, request feedback) — see `role_permission` above for the rest of the access model this sits alongside. An unowned task (still the default for anything created before this existed) stays open to whoever the usual permission already let in, and any supervisor can claim it from the edit screen — the same screen a manager uses to reassign an owned one. No history is kept on it, unlike the lead, which the `task_event` log already tracks.
+**`responsible_supervisor` is who owns getting the task staffed — separate from, and set independently of, who's actually assigned to do the work.** Optional at creation, and picked from the same pool `customer_ticket.assigned_to` draws from (any active supervisor or manager in the country, never a technician). It has real teeth: once set, only that supervisor or a manager can edit the task, open its assign screen, or act on it from task detail (notify the customer) — see `role_permission` above for the rest of the access model this sits alongside. Requesting feedback is a separate, narrower restriction on top of this one: manager-only regardless of ownership, see `customer_feedback` below. An unowned task (still the default for anything created before this existed) stays open to whoever the usual permission already let in, and any supervisor can claim it from the edit screen — the same screen a manager uses to reassign an owned one. No history is kept on it, unlike the lead, which the `task_event` log already tracks.
 
 **Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`.** Off (the default): a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On: the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
 
 **A delay notice is a different message, always manual.** When the team is running behind — traffic, a previous job overrunning — a supervisor sends a short apology from task detail with a required reason, logged as a `delay_notice` task_event (the reason lives in the event's own `note`, so no extra columns on `task` are needed; a task can have any number of these over time, unlike the single schedule-confirmation email).
 
-**`pak_reference_number`/`shipping_tracking_number` work the same way** — see `customer_ticket` above, where both columns also live and the notify button is explained in full.
+**`pak_reference_number`/`shipping_company`/`shipping_tracking_number` work the same way** — see `customer_ticket` above, where all three columns also live and the notify button is explained in full.
+
+**Most shipments come from the factory, not the customer** — so alongside the customer-facing "Notify customer" button, setting or changing `shipping_tracking_number` from the task's Edit screen also always emails the task's own `responsible_supervisor`, automatically, no button to click. This is a different email to a different audience (internal, in English, with a link back to the task) from the customer-facing one, and it only fires when there's a `responsible_supervisor` with a login and an email on file — an unowned task notifies no one.
 
 ### notification_settings
 A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
@@ -386,6 +397,7 @@ A complaint or request — submitted either through the public no-login form (se
 | assigned_to_id | FK → technician | nullable — who's handling it, a supervisor or manager (never a technician) |
 | assigned_at | timestamptz | nullable |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
+| shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
 | task_id | FK → task | nullable — set once converted |
 | reviewed_by_id | FK → user | nullable |
@@ -404,9 +416,9 @@ A complaint or request — submitted either through the public no-login form (se
 
 **Closed is separate from dismissed.** Dismissed means invalid or spam — never real work. Closed means the issue was genuinely resolved without ever needing a task — advice given over the phone, handled some other way. Both are terminal and end the reply conversation (see `ticket_reply` below); the distinction is only which reason field explains why no task exists.
 
-**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; either can also just be set directly, since parts more often ship after the task exists.
+**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_company`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; any of the three can also just be set directly, since parts more often ship after the task exists.
 
-**`pak_reference_number` and `shipping_tracking_number` exist on both `customer_ticket` and `task`, always optional, filled in later once parts actually ship** — never known at submission time. Only the tracking number is ever emailed to a customer (a manual "Notify customer" button next to each, same fail-silent pattern as the schedule/delay notices); PAK is internal bookkeeping and never leaves the app.
+**`pak_reference_number`, `shipping_company`, and `shipping_tracking_number` exist on both `customer_ticket` and `task`, always optional, filled in later once parts actually ship** — never known at submission time. `shipping_company` is a fixed choice (DHL, FedEx, UPS, Aramex, TNT, local courier, other) — free text drifts the same way an unmanaged `task_type` would. The carrier and tracking number are the only two ever emailed to a customer (a manual "Notify customer" button next to each, same fail-silent pattern as the schedule/delay notices) — the carrier is dropped from the email when it's blank, and just the tracking number goes out on its own; PAK is internal bookkeeping and never leaves the app.
 
 ### ticket_reply
 The back-and-forth on a ticket, either side, in order.
@@ -448,6 +460,19 @@ Which machines the task covers. Populated by the technician during the work, not
 | outcome | varchar | repaired, replaced, not_repairable, inspected_ok |
 
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
+
+### task_product
+The delivery note's contents, structured — for installation and loading tasks, where stock is delivered ahead of or alongside the visit rather than consumed during it (that's `part_used`, on the work report instead, see §5).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | |
+| product_code | varchar | required |
+| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one |
+| quantity | int | default 1 |
+
+**Entered from the task's Edit screen, replaced wholesale on every save** — not an append-only log the way `task_event` is. The same information already exists as a document (`task.delivery_note`); this is the same content kept structured, so it can be searched and listed rather than only read off a scanned PDF. A row needs at least a `product_code` to save; a blank row is silently dropped, and quantity defaults to 1 when left empty.
 
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.
@@ -504,7 +529,7 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — supervisors only |
 | note | text | |
 
-**Event types:** created, assigned, reassigned, rescheduled, delay_notice, accepted, en_route, arrived, blocked, started, paused, resumed, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled, negligence. `completed` fires when the lead files the report, `report_approved` when a manager approves it through the normal pipeline (see §4/§5). `closed` is the separate manager-only direct-close bypass — for a task that turns out not to need a report at all (customer cancelled, resolved another way) — usable from any status except already-`closed`; the reason lives in the event's own `note`. Both `report_approved` and `closed` land the task on `Task.Status.CLOSED`, just by different paths. `report_rejected` and `reopened` are the ones still unused: this round of approval has no reject step, just a single approve action, and nothing yet reopens a closed task.
+**Event types:** created, assigned, reassigned, rescheduled, delay_notice, schedule_change_requested, schedule_change_approved, schedule_change_denied, accepted, en_route, arrived, blocked, started, paused, resumed, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled, negligence. `completed` fires when the lead files the report, `report_approved` when a manager approves it through the normal pipeline (see §4/§5). `closed` is the separate manager-only direct-close bypass — for a task that turns out not to need a report at all (customer cancelled, resolved another way) — usable from any status except already-`closed`; the reason lives in the event's own `note`. Both `report_approved` and `closed` land the task on `Task.Status.CLOSED`, just by different paths. `report_rejected` and `reopened` are the ones still unused: this round of approval has no reject step, just a single approve action, and nothing yet reopens a closed task.
 
 **`paused`/`resumed` cover a multi-day task** — the lead marks themselves stopped for the day (`note` optional — any handoff context) and started again the next morning, any number of times, without moving `task.status` off `in_progress` at all; a task's paused/resumed history is just more taps on the same table, not a status of its own. While paused, blocking and filing the report are both refused (`_task_is_paused`, `tasks/views.py`) — filing while paused would prematurely mark it finished, and blocking doesn't make sense on work that's already stopped. Worked time is meant to come free from this later, the same way travel and on-the-tools time already do below: `started` → first `paused`, each `resumed` → next `paused`, and the last `resumed` → `completed`, summed.
 
@@ -517,6 +542,24 @@ The technician taps buttons; he never types a time. If this table is skipped, yo
 Use duration for **scheduling** — once you know a cable replacement takes about ninety minutes, the week view becomes real instead of optimistic — and for **spotting outliers**, where a four-hour task among one-hour ones usually means something went wrong that nobody reported.
 
 **Never judge a technician on speed.** Forty minutes with the machine back in two weeks is worse than two hours that holds. If technicians work out that speed is measured, they will rush, and the first-time fix rate will quietly fall.
+
+### schedule_change_request
+A supervisor's ask to move a locked schedule — see `task.schedule_time_locked` above for when this is the only path in.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | |
+| requested_by_id | FK → technician | |
+| requested_scheduled_for | timestamptz | the proposed replacement for `task.scheduled_for` |
+| reason | varchar | blank |
+| status | varchar | pending, approved, denied |
+| reviewed_by_id | FK → user | nullable |
+| reviewed_at | timestamptz | nullable |
+| review_note | varchar | blank — a manager's note either way |
+| created_at | timestamptz | |
+
+At most one `pending` row per task at a time — a second request can't be filed until the first is resolved. Approving copies `requested_scheduled_for` onto the task (re-locking it, same as a manager setting it directly) and logs both a `rescheduled` and a `schedule_change_approved` task_event; denying touches nothing on the task itself, just the request row, and logs `schedule_change_denied`.
 
 ### Correcting a forgotten tap
 
@@ -580,7 +623,7 @@ A rating request sent to the customer once their task is closed (report filed). 
 
 **The customer is never a user of this system.** The link is the only thing standing in for a login — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
 
-**Sending is manual, every time.** No automatic email fires on close — a supervisor decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered.
+**Sending is manual, every time, and manager-only.** No automatic email fires on close — a manager decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered. A fixed floor like `approve_report`/`close_directly`, not a `role_permission` row — a supervisor, even one who owns the task, can't send it.
 
 ---
 
@@ -668,9 +711,9 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report and requesting customer feedback both happen right on that task's own detail page — there's no separate reports queue.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report happens right on that task's own detail page — there's no separate reports queue.
 
-**Manager (web):** roles & permissions, skills list, add a skill — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
+**Manager (web):** roles & permissions, skills list, add a skill, requesting customer feedback — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
 **Technician (phone):** my week, task detail with photos, report form, my progress, my skills, my profile (own photo, language, phone, email, password).
 

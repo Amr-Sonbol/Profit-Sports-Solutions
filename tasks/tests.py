@@ -16,7 +16,9 @@ from people.models import (
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
-from .models import CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent
+from .models import (
+    CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
+)
 
 User = get_user_model()
 
@@ -237,6 +239,11 @@ class TaskDetailTests(TaskTestCase):
 class TaskDetailFeedbackRequestTests(TaskTestCase):
     def setUp(self):
         super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
         self.task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
@@ -256,13 +263,13 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         self.task.status = Task.Status.IN_PROGRESS
         self.task.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {'action': 'send_feedback_request'})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
 
     def test_requesting_feedback_without_a_contact_email_shows_an_error(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {'action': 'send_feedback_request'}, follow=True)
 
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
@@ -272,12 +279,12 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         self.site.contact_email = 'manager@fitnessfirst.example'
         self.site.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {'action': 'send_feedback_request'})
         self.assertEqual(response.status_code, 302)
 
         feedback = CustomerFeedback.objects.get(task=self.task)
-        self.assertEqual(feedback.requested_by, self.supervisor_user)
+        self.assertEqual(feedback.requested_by, self.manager_user)
         self.assertIsNone(feedback.submitted_at)
 
         self.assertEqual(len(mail.outbox), 1)
@@ -289,10 +296,10 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         self.site.save()
         first_request_time = timezone.now() - timedelta(days=1)
         feedback = CustomerFeedback.objects.create(
-            task=self.task, requested_at=first_request_time, requested_by=self.supervisor_user,
+            task=self.task, requested_at=first_request_time, requested_by=self.manager_user,
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='manager1', password='pass12345')
         self.client.post(self.url, {'action': 'send_feedback_request'})
 
         self.assertEqual(CustomerFeedback.objects.filter(task=self.task).count(), 1)
@@ -304,6 +311,18 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         self.site.save()
 
         self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'send_feedback_request'})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
+
+    def test_supervisor_cannot_request_feedback(self):
+        """Manager-only, a fixed floor like approve_report/close_directly
+        — not configurable via role_permission.
+        """
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {'action': 'send_feedback_request'})
         self.assertEqual(response.status_code, 403)
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
@@ -321,10 +340,19 @@ class TaskEditTests(TaskTestCase):
         )
         self.url = f'/tasks/{self.task.pk}/edit/'
 
+    def _management_form(self, prefix, total, initial=0):
+        return {
+            f'{prefix}-TOTAL_FORMS': str(total),
+            f'{prefix}-INITIAL_FORMS': str(initial),
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '1000',
+        }
+
     def _payload(self, **overrides):
         payload = {
             'priority': Task.Priority.HIGH, 'source': Task.Source.PHONE,
             'billing_type': Task.BillingType.CONTRACT, 'description': 'Belt making noise', 'is_warranty': '',
+            **self._management_form('products', 0),
         }
         payload.update(overrides)
         return payload
@@ -455,6 +483,313 @@ class TaskEditTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.pak_reference_number, 'PAK-42')
         self.assertEqual(self.task.shipping_tracking_number, 'TRACK-99')
+
+    def test_adding_products_via_edit(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 2),
+            'products-0-product_code': 'PNL-100', 'products-0-serial_number': 'SN-1', 'products-0-quantity': '2',
+            'products-1-product_code': 'PNL-200', 'products-1-serial_number': '', 'products-1-quantity': '1',
+        }))
+        self.assertEqual(response.status_code, 302)
+
+        products = list(self.task.products.order_by('product_code'))
+        self.assertEqual(len(products), 2)
+        self.assertEqual(products[0].product_code, 'PNL-100')
+        self.assertEqual(products[0].serial_number, 'SN-1')
+        self.assertEqual(products[0].quantity, 2)
+        self.assertEqual(products[1].product_code, 'PNL-200')
+        self.assertEqual(products[1].serial_number, '')
+
+    def test_product_row_requires_a_code(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': '', 'products-0-serial_number': 'SN-1', 'products-0-quantity': '1',
+        }))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.task.products.exists())
+
+    def test_product_row_defaults_quantity_to_one(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'PNL-100', 'products-0-serial_number': '', 'products-0-quantity': '',
+        }))
+        self.assertEqual(response.status_code, 302)
+
+        product = self.task.products.get()
+        self.assertEqual(product.quantity, 1)
+
+    def test_resubmitting_products_replaces_the_previous_set(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'PNL-OLD', 'products-0-serial_number': '', 'products-0-quantity': '1',
+        }))
+        self.assertEqual(self.task.products.count(), 1)
+
+        self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'PNL-NEW', 'products-0-serial_number': '', 'products-0-quantity': '3',
+        }))
+
+        products = list(self.task.products.all())
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products[0].product_code, 'PNL-NEW')
+        self.assertEqual(products[0].quantity, 3)
+
+
+class TaskScheduleLockingTests(TaskTestCase):
+    """Two-mode scheduling: a manager can lock a task to a day+time (only
+    a manager can then move it, a supervisor must request a change) or
+    leave it day-only (any supervisor who can edit the task can add the
+    time themselves, no approval needed). A supervisor scheduling their
+    own task from scratch, with no manager involved, is unaffected.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='UAE-0002', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        self.edit_url = f'/tasks/{self.task.pk}/edit/'
+        self.detail_url = f'/tasks/{self.task.pk}/'
+
+    def _management_form(self, prefix, total, initial=0):
+        return {
+            f'{prefix}-TOTAL_FORMS': str(total),
+            f'{prefix}-INITIAL_FORMS': str(initial),
+            f'{prefix}-MIN_NUM_FORMS': '0',
+            f'{prefix}-MAX_NUM_FORMS': '1000',
+        }
+
+    def _edit_payload(self, **overrides):
+        payload = {
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'description': '', 'is_warranty': '',
+            **self._management_form('products', 0),
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_manager_day_only_mode_leaves_scheduled_for_empty(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.edit_url, self._edit_payload(
+            schedule_mode='day_only', scheduled_date_only='2026-10-01',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.scheduled_date.isoformat(), '2026-10-01')
+        self.assertIsNone(self.task.scheduled_for)
+        self.assertFalse(self.task.schedule_time_locked)
+
+    def test_manager_full_mode_locks_the_schedule(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.edit_url, self._edit_payload(
+            schedule_mode='full', scheduled_for='2026-10-01T09:00',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertEqual(self.task.scheduled_date.isoformat(), '2026-10-01')
+        self.assertTrue(self.task.schedule_time_locked)
+
+    def test_supervisor_can_still_schedule_their_own_task_freely(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.edit_url, self._edit_payload(scheduled_for='2026-10-01T09:00'))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertFalse(self.task.schedule_time_locked)
+
+    def test_supervisor_can_set_time_for_a_day_only_pending_task(self):
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.save(update_fields=['scheduled_date'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'set_schedule_time', 'scheduled_time': '14:30',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertTrue(
+            self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists(),
+        )
+
+    def test_supervisor_cannot_change_scheduled_for_directly_once_locked(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+        original = self.task.scheduled_for
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.edit_url)
+        self.assertNotContains(response, 'name="scheduled_for"')
+
+        self.client.post(self.edit_url, self._edit_payload(scheduled_for='2026-11-11T11:00'))
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.scheduled_for, original)
+
+    def test_supervisor_can_request_a_change_when_locked(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'request_schedule_change',
+            'requested_scheduled_for': '2026-10-02T10:00',
+            'reason': 'Customer asked to move it a day later.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        request_obj = ScheduleChangeRequest.objects.get(task=self.task)
+        self.assertEqual(request_obj.status, ScheduleChangeRequest.Status.PENDING)
+        self.assertEqual(request_obj.requested_by, self._supervisor_technician())
+        self.assertTrue(
+            self.task.events.filter(
+                event_type=TaskEvent.EventType.SCHEDULE_CHANGE_REQUESTED,
+            ).exists(),
+        )
+
+    def test_cannot_request_a_change_when_not_locked(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'request_schedule_change', 'requested_scheduled_for': '2026-10-02T10:00',
+        }, follow=True)
+        self.assertFalse(ScheduleChangeRequest.objects.exists())
+        self.assertContains(response, 'not locked')
+
+    def test_cannot_file_a_second_pending_request(self):
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['schedule_time_locked'])
+        ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self._supervisor_technician(),
+            requested_scheduled_for=timezone.now(), created_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'request_schedule_change', 'requested_scheduled_for': '2026-10-02T10:00',
+        }, follow=True)
+        self.assertEqual(ScheduleChangeRequest.objects.count(), 1)
+        self.assertContains(response, 'already a pending request')
+
+    def _supervisor_technician(self):
+        return Technician.objects.get(user=self.supervisor_user)
+
+    def test_manager_can_approve_a_schedule_change(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+        change_request = ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self._supervisor_technician(),
+            requested_scheduled_for=timezone.make_aware(datetime(2026, 10, 2, 10, 0)),
+            created_at=timezone.now(),
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'approve_schedule_change', 'request_id': change_request.pk,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        change_request.refresh_from_db()
+        self.assertEqual(self.task.scheduled_for, change_request.requested_scheduled_for)
+        self.assertTrue(self.task.schedule_time_locked)
+        self.assertEqual(change_request.status, ScheduleChangeRequest.Status.APPROVED)
+
+    def test_manager_can_deny_a_schedule_change(self):
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['schedule_time_locked'])
+        change_request = ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self._supervisor_technician(),
+            requested_scheduled_for=timezone.now(), created_at=timezone.now(),
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'deny_schedule_change', 'request_id': change_request.pk,
+            'review_note': 'Technician already en route for the original time.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        change_request.refresh_from_db()
+        self.assertEqual(change_request.status, ScheduleChangeRequest.Status.DENIED)
+
+    def test_supervisor_cannot_approve_a_schedule_change(self):
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['schedule_time_locked'])
+        change_request = ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self._supervisor_technician(),
+            requested_scheduled_for=timezone.now(), created_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'approve_schedule_change', 'request_id': change_request.pk,
+        })
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_toggle_the_lock_directly(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
+        self.assertEqual(response.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertFalse(self.task.schedule_time_locked)
+
+        self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
+        self.task.refresh_from_db()
+        self.assertTrue(self.task.schedule_time_locked)
+
+    def test_supervisor_cannot_toggle_the_lock(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'schedule_time_locked'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_edit_a_locked_schedule_directly(self):
+        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.schedule_time_locked = True
+        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.edit_url, self._edit_payload(
+            schedule_mode='full', scheduled_for='2026-11-05T13:00',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(
+            timezone.localtime(self.task.scheduled_for, ZoneInfo('Asia/Dubai')).isoformat()[:16],
+            '2026-11-05T13:00',
+        )
 
 
 class TaskShippingNoticeTests(TaskTestCase):
@@ -1564,6 +1899,8 @@ class TaskOwnershipTests(TaskTestCase):
             'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
             'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
             'responsible_supervisor': other_owner.pk,
+            'products-TOTAL_FORMS': '0', 'products-INITIAL_FORMS': '0',
+            'products-MIN_NUM_FORMS': '0', 'products-MAX_NUM_FORMS': '1000',
         })
         self.assertEqual(response.status_code, 302)
 
@@ -1580,6 +1917,8 @@ class TaskOwnershipTests(TaskTestCase):
             'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
             'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
             'responsible_supervisor': supervisor.pk,
+            'products-TOTAL_FORMS': '0', 'products-INITIAL_FORMS': '0',
+            'products-MIN_NUM_FORMS': '0', 'products-MAX_NUM_FORMS': '1000',
         })
         self.assertEqual(response.status_code, 302)
 

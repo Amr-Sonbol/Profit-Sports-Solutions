@@ -1,5 +1,5 @@
-from datetime import timedelta
-from urllib.parse import urlencode
+from datetime import datetime, timedelta
+from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
@@ -8,15 +8,16 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, ProtectedError, Q, Sum, Value, When
 from django.forms import formset_factory
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone, translation
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
@@ -36,12 +37,12 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, CountryCreateForm, CustomerTicketForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
-    SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TechnicianCreateForm,
+    SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TaskProductForm, TechnicianCreateForm,
     TechnicianEditForm, TicketEditForm, TicketLogisticsForm, TicketReplyForm,
 )
 from .models import (
-    CustomerTicket, CustomerTicketAttachment, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent,
-    TicketReply,
+    CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
+    TaskAssignment, TaskAttachment, TaskEvent, TaskProduct, TicketReply,
 )
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
@@ -93,6 +94,7 @@ REPORT_EDITABLE_STATUSES = {Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task
 EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
+TASK_PRODUCT_ROWS = 5
 
 PRIORITY_RANK = Case(
     When(priority=Task.Priority.EMERGENCY, then=Value(0)),
@@ -108,6 +110,17 @@ def _next_task_number(country):
     prefix = f'{country.task_prefix or country.iso_code}-'
     count = Task.objects.filter(task_number__startswith=prefix).count()
     return f'{prefix}{count + 1:04d}'
+
+
+def _parse_datetime_local(value):
+    """A plain POST value from an <input type="datetime-local">, naive
+    (no timezone) — used where there's no ModelForm already handling
+    it, e.g. a proposed schedule_change_request time.
+    """
+    try:
+        return datetime.strptime(value, '%Y-%m-%dT%H:%M')
+    except (TypeError, ValueError):
+        return None
 
 
 def _save_new_task(task):
@@ -377,6 +390,22 @@ def _save_attachment(request, task, uploaded_file, purpose):
     )
 
 
+def _send_notification_email(subject, text_body, template_name, context, recipient_list):
+    """Every outbound notification email in this app goes through here
+    — a plain-text body for clients that don't render HTML, and a
+    matching styled HTML alternative (tasks/templates/tasks/email/)
+    for everyone else. Always fail-silent, same as every caller
+    already was: a failed send must never block the action that
+    triggered it.
+    """
+    html_body = render_to_string(template_name, context)
+    email = EmailMultiAlternatives(
+        subject=subject, body=text_body, from_email=None, to=recipient_list,
+    )
+    email.attach_alternative(html_body, 'text/html')
+    email.send(fail_silently=True)
+
+
 def _send_schedule_notification(task):
     """Best-effort, and forced to English — same reasoning as
     reports._send_feedback_email: a failed send shouldn't block the
@@ -385,6 +414,10 @@ def _send_schedule_notification(task):
     """
     country_tz = ZoneInfo(task.site.customer.country.timezone)
     local_time = timezone.localtime(task.scheduled_for, country_tz)
+    contact = task.site.effective_contact_name or task.site.customer.name
+    site = task.site.name
+    date = local_time.strftime('%B %d, %Y')
+    time = local_time.strftime('%I:%M %p').lstrip('0')
     with translation.override('en'):
         subject = _('Confirming your upcoming Profit Sports Solutions visit — %(number)s') % {
             'number': task.task_number,
@@ -395,15 +428,11 @@ def _send_schedule_notification(task):
             "If this time doesn't work for you, please contact us to reschedule.\n\n"
             'Best regards,\n'
             'Profit Sports Solutions\n',
-        ) % {
-            'contact': task.site.effective_contact_name or task.site.customer.name,
-            'site': task.site.name,
-            'date': local_time.strftime('%B %d, %Y'),
-            'time': local_time.strftime('%I:%M %p').lstrip('0'),
-        }
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.effective_contact_email], fail_silently=True,
+        ) % {'contact': contact, 'site': site, 'date': date, 'time': time}
+    _send_notification_email(
+        subject, message, 'tasks/email/schedule_notification.html',
+        {'contact': contact, 'site': site, 'date': date, 'time': time},
+        [task.site.effective_contact_email],
     )
 
 
@@ -414,6 +443,8 @@ def _send_delay_notice(task, reason):
     needs a reason, since there's no automatic way to know the team is
     running behind.
     """
+    contact = task.site.effective_contact_name or task.site.customer.name
+    site = task.site.name
     with translation.override('en'):
         subject = _('A short delay for your Profit Sports Solutions visit — %(number)s') % {
             'number': task.task_number,
@@ -424,33 +455,111 @@ def _send_delay_notice(task, reason):
             "We're sorry for the inconvenience and will be there as soon as we can.\n\n"
             'Best regards,\n'
             'Profit Sports Solutions\n',
-        ) % {
-            'contact': task.site.effective_contact_name or task.site.customer.name,
-            'site': task.site.name,
-            'reason': reason,
-        }
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.effective_contact_email], fail_silently=True,
+        ) % {'contact': contact, 'site': site, 'reason': reason}
+    _send_notification_email(
+        subject, message, 'tasks/email/delay_notice.html',
+        {'contact': contact, 'site': site, 'reason': reason},
+        [task.site.effective_contact_email],
     )
 
 
-def _send_shipping_notice(contact_name, entity_name, reference, tracking_number, contact_email):
+# Public tracking-lookup URLs, one per carrier that has a stable one —
+# {tracking} is the only placeholder, filled in URL-encoded. Local
+# courier and Other have no universal page, so they're left out on
+# purpose; the email still names the carrier either way, just without
+# a link.
+CARRIER_TRACKING_URLS = {
+    ShippingCompany.DHL: 'https://www.dhl.com/en/express/tracking.html?AWB={tracking}',
+    ShippingCompany.FEDEX: 'https://www.fedex.com/fedextrack/?trknbr={tracking}',
+    ShippingCompany.UPS: 'https://www.ups.com/track?tracknum={tracking}',
+    ShippingCompany.ARAMEX: 'https://www.aramex.com/track/results?ShipmentNumber={tracking}',
+    ShippingCompany.TNT: 'https://www.tnt.com/express/en_us/site/shipping-tools/tracking.html?cons={tracking}',
+}
+
+
+def _send_shipping_notice(contact_name, entity_name, reference, company, tracking_number, contact_email):
     """Shared by task detail and ticket review — the only two places a
-    shipping_tracking_number can live. Only the tracking number goes to
-    the customer; pak_reference_number is internal and never sent.
+    shipping_tracking_number can live. Only the carrier and tracking
+    number go to the customer; pak_reference_number is internal and
+    never sent. `company` is the raw ShippingCompany code (or ''), not
+    its display label — needed as-is to look up a tracking URL.
     """
+    carrier_label = ShippingCompany(company).label if company else ''
+    tracking_url = None
+    if company:
+        url_template = CARRIER_TRACKING_URLS.get(company)
+        if url_template:
+            tracking_url = url_template.format(tracking=quote(tracking_number))
     with translation.override('en'):
-        subject = _('Your part(s) have shipped — %(reference)s') % {'reference': reference}
+        subject = _('Your shipment is on its way — %(reference)s') % {'reference': reference}
+        lines = [_('Tracking number: %(tracking)s') % {'tracking': tracking_number}]
+        if company:
+            lines.insert(0, _('Carrier: %(company)s') % {'company': carrier_label})
+            if tracking_url:
+                lines.append(_('Track it here: %(url)s') % {'url': tracking_url})
+        tracking_lines = '\n'.join(lines)
         message = _(
             'Dear %(contact)s,\n\n'
-            'The part(s) for %(entity)s are on their way. Tracking number: %(tracking)s\n\n'
+            'Good news — your shipment for %(entity)s is on its way. '
+            'You can track it using the details below.\n\n'
+            '%(tracking_lines)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
-        ) % {'contact': contact_name, 'entity': entity_name, 'tracking': tracking_number}
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[contact_email], fail_silently=True,
+        ) % {'contact': contact_name, 'entity': entity_name, 'tracking_lines': tracking_lines}
+    _send_notification_email(
+        subject, message, 'tasks/email/shipping_notice.html',
+        {
+            'contact': contact_name, 'entity': entity_name, 'carrier_label': carrier_label,
+            'tracking_number': tracking_number, 'tracking_url': tracking_url,
+        },
+        [contact_email],
+    )
+
+
+def _send_shipment_notice_to_supervisor(request, task):
+    """Most shipments arrive against a factory tracking number, not a
+    customer request — the responsible_supervisor is the one staffing
+    the task and the one who actually needs to know parts are on the
+    way, so this fires whenever shipping_tracking_number changes,
+    separately from _send_shipping_notice above (which is the
+    customer-facing one, manual, and about a different audience
+    entirely). Best-effort, and only when there's a responsible
+    supervisor with a login and an email on file — same guard
+    _send_reply_to_staff uses for the same reason.
+    """
+    supervisor = task.responsible_supervisor
+    if not supervisor or not supervisor.user_id or not supervisor.user.email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:task_detail', args=[task.pk]))
+    carrier_label = task.get_shipping_company_display() if task.shipping_company else ''
+    tracking_url = None
+    if task.shipping_company:
+        url_template = CARRIER_TRACKING_URLS.get(task.shipping_company)
+        if url_template:
+            tracking_url = url_template.format(tracking=quote(task.shipping_tracking_number))
+    with translation.override('en'):
+        subject = _('Shipment on the way — %(task_number)s') % {'task_number': task.task_number}
+        if task.shipping_company:
+            tracking_line = _('Carrier: %(company)s — tracking number %(tracking)s') % {
+                'company': carrier_label, 'tracking': task.shipping_tracking_number,
+            }
+        else:
+            tracking_line = _('Tracking number: %(tracking)s') % {'tracking': task.shipping_tracking_number}
+        message = _(
+            'A shipment for %(task_number)s (%(site)s) now has a tracking number.\n\n'
+            '%(tracking_line)s\n\n'
+            'View the task here:\n%(link)s\n',
+        ) % {
+            'task_number': task.task_number, 'site': task.site.name,
+            'tracking_line': tracking_line, 'link': link,
+        }
+    _send_notification_email(
+        subject, message, 'tasks/email/shipment_notice_supervisor.html',
+        {
+            'task_number': task.task_number, 'site': task.site.name, 'carrier_label': carrier_label,
+            'tracking_number': task.shipping_tracking_number, 'tracking_url': tracking_url, 'link': link,
+        },
+        [supervisor.user.email],
     )
 
 
@@ -467,6 +576,8 @@ def _send_feedback_email(request, feedback):
     task = feedback.task
     country_tz = ZoneInfo(task.site.customer.country.timezone)
     link = request.build_absolute_uri(reverse('reports:feedback_form', args=[feedback.token]))
+    contact = task.site.effective_contact_name or task.site.customer.name
+    site = task.site.name
     with translation.override('en'):
         visit_date = timezone.localtime(task.report.submitted_at, country_tz).date().strftime('%B %d, %Y')
         subject = _("We'd love your feedback on your recent Profit Sports Solutions visit")
@@ -479,16 +590,11 @@ def _send_feedback_email(request, feedback):
             'Your feedback helps us maintain the standard of service you expect from us.\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
-        ) % {
-            'contact': task.site.effective_contact_name or task.site.customer.name,
-            'site': task.site.name,
-            'date': visit_date,
-            'link': link,
-        }
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[task.site.effective_contact_email],
-        fail_silently=True,
+        ) % {'contact': contact, 'site': site, 'date': visit_date, 'link': link}
+    _send_notification_email(
+        subject, message, 'tasks/email/feedback_request.html',
+        {'contact': contact, 'site': site, 'date': visit_date, 'link': link},
+        [task.site.effective_contact_email],
     )
 
 
@@ -548,6 +654,7 @@ def task_list(request):
     search = request.GET.get('q', '').strip()
     customer_id = request.GET.get('customer', '')
     technician_id = request.GET.get('technician', '')
+    shipping_company = request.GET.get('shipping_company', '')
     scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
     scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
 
@@ -576,6 +683,9 @@ def task_list(request):
             assignments__technician_id=technician_id, assignments__is_active=True,
         ).distinct()
 
+    if shipping_company:
+        tasks = tasks.filter(shipping_company=shipping_company)
+
     if scheduled_from:
         tasks = tasks.filter(scheduled_for__date__gte=scheduled_from)
     if scheduled_to:
@@ -593,6 +703,7 @@ def task_list(request):
     filter_params = {
         key: value for key, value in {
             'q': search, 'customer': customer_id, 'technician': technician_id,
+            'shipping_company': shipping_company,
             'scheduled_from': request.GET.get('scheduled_from', ''),
             'scheduled_to': request.GET.get('scheduled_to', ''),
         }.items() if value
@@ -605,8 +716,10 @@ def task_list(request):
         'status_choices': Task.Status.choices,
         'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
         'technicians': Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'),
+        'shipping_company_choices': ShippingCompany.choices,
         'selected_customer': customer_id,
         'selected_technician': technician_id,
+        'selected_shipping_company': shipping_company,
         'scheduled_from': request.GET.get('scheduled_from', ''),
         'scheduled_to': request.GET.get('scheduled_to', ''),
         'filter_qs': urlencode(filter_params),
@@ -713,6 +826,105 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the scheduled visit.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'toggle_schedule_lock':
+        require_manager(request)
+        if not task.scheduled_for:
+            messages.error(request, _('Set a full date and time before locking or opening it.'))
+        else:
+            task.schedule_time_locked = not task.schedule_time_locked
+            task.save(update_fields=['schedule_time_locked'])
+            if task.schedule_time_locked:
+                messages.success(request, _('Schedule locked — a supervisor must now request a change.'))
+            else:
+                messages.success(request, _('Schedule opened — a supervisor can edit it directly again.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
+    if request.method == 'POST' and request.POST.get('action') == 'set_schedule_time':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
+        if not task.scheduled_date or task.scheduled_for:
+            messages.error(request, _('There is no day-only schedule waiting for a time.'))
+        else:
+            time_value = parse_time(request.POST.get('scheduled_time', ''))
+            if not time_value:
+                messages.error(request, _('Enter a time.'))
+            else:
+                task.scheduled_for = timezone.make_aware(datetime.combine(task.scheduled_date, time_value))
+                task.save(update_fields=['scheduled_for'])
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.RESCHEDULED,
+                    occurred_at=timezone.now(), actor=request.user,
+                )
+                messages.success(request, _('Time set.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
+    if request.method == 'POST' and request.POST.get('action') == 'request_schedule_change':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        _require_task_owner(request, task)
+        if not task.schedule_time_locked:
+            messages.error(request, _('This schedule is not locked — edit it directly instead.'))
+        elif task.schedule_change_requests.filter(status=ScheduleChangeRequest.Status.PENDING).exists():
+            messages.error(request, _('There is already a pending request for this task.'))
+        else:
+            requested_for = _parse_datetime_local(request.POST.get('requested_scheduled_for', ''))
+            if not requested_for:
+                messages.error(request, _('Enter the date and time you are requesting.'))
+            else:
+                change_request = ScheduleChangeRequest.objects.create(
+                    task=task, requested_by=requesting_technician,
+                    requested_scheduled_for=timezone.make_aware(requested_for),
+                    reason=request.POST.get('reason', '').strip(), created_at=timezone.now(),
+                )
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_REQUESTED,
+                    occurred_at=timezone.now(), actor=request.user, note=change_request.reason,
+                )
+                messages.success(request, _('Change requested — a manager will review it.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
+    if request.method == 'POST' and request.POST.get('action') == 'approve_schedule_change':
+        require_manager(request)
+        change_request = get_object_or_404(
+            ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
+            status=ScheduleChangeRequest.Status.PENDING,
+        )
+        task.scheduled_for = change_request.requested_scheduled_for
+        task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+        task.schedule_time_locked = True
+        task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+        change_request.status = ScheduleChangeRequest.Status.APPROVED
+        change_request.reviewed_by = request.user
+        change_request.reviewed_at = timezone.now()
+        change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.RESCHEDULED,
+            occurred_at=timezone.now(), actor=request.user,
+        )
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_APPROVED,
+            occurred_at=timezone.now(), actor=request.user,
+        )
+        messages.success(request, _('Schedule change approved.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
+    if request.method == 'POST' and request.POST.get('action') == 'deny_schedule_change':
+        require_manager(request)
+        change_request = get_object_or_404(
+            ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
+            status=ScheduleChangeRequest.Status.PENDING,
+        )
+        change_request.status = ScheduleChangeRequest.Status.DENIED
+        change_request.reviewed_by = request.user
+        change_request.reviewed_at = timezone.now()
+        change_request.review_note = request.POST.get('review_note', '').strip()
+        change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_note'])
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_DENIED,
+            occurred_at=timezone.now(), actor=request.user, note=change_request.review_note,
+        )
+        messages.success(request, _('Schedule change denied.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'notify_delay':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
@@ -742,7 +954,8 @@ def task_detail(request, pk):
         else:
             _send_shipping_notice(
                 task.site.effective_contact_name or task.site.customer.name, task.site.name,
-                task.task_number, task.shipping_tracking_number, task.site.effective_contact_email,
+                task.task_number, task.shipping_company,
+                task.shipping_tracking_number, task.site.effective_contact_email,
             )
             messages.success(request, _('Customer notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
@@ -796,8 +1009,7 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
+        require_manager(request)
         feedback = getattr(task, 'feedback', None)
         if task.status != Task.Status.CLOSED:
             messages.error(request, _('Close the task (file its report) before requesting feedback.'))
@@ -830,6 +1042,9 @@ def task_detail(request, pk):
         events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
 
     source_ticket = getattr(task, 'ticket', None)
+    pending_schedule_request = task.schedule_change_requests.filter(
+        status=ScheduleChangeRequest.Status.PENDING,
+    ).select_related('requested_by').first()
 
     context = {
         'task': task,
@@ -839,10 +1054,12 @@ def task_detail(request, pk):
         'attachments': task.attachments.select_related('uploaded_by'),
         'ticket_attachments': source_ticket.attachments.all() if source_ticket else [],
         'task_assets': task.task_assets.select_related('asset'),
+        'products': task.products.all(),
         'report': getattr(task, 'report', None),
         'feedback': getattr(task, 'feedback', None),
         'close_task_form': close_task_form,
         'negligence_form': negligence_form,
+        'pending_schedule_request': pending_schedule_request,
     }
     return render(request, 'tasks/task_detail.html', context)
 
@@ -863,23 +1080,45 @@ def task_edit(request, pk):
         pk, requesting_technician, active_country, 'site__customer__country',
     )
     _require_task_owner(request, task)
+    is_manager = requesting_technician.role == Technician.Role.MANAGER
     # The task's own country, not necessarily the manager's active one —
     # a cross-country edit (from the all_tasks board) must still scope
     # responsible_supervisor to who's actually eligible there.
     task_country = task.site.customer.country
     previous_scheduled_for = task.scheduled_for
+    previous_scheduled_date = task.scheduled_date
+
+    TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS)
+    product_initial = [
+        {'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity}
+        for p in task.products.all()
+    ]
 
     if request.method == 'POST':
-        form = TaskEditForm(request.POST, request.FILES, instance=task, country=task_country)
-        if form.is_valid():
+        form = TaskEditForm(
+            request.POST, request.FILES, instance=task, country=task_country, is_manager=is_manager,
+        )
+        product_formset = TaskProductFormSet(request.POST, prefix='products')
+        if form.is_valid() and product_formset.is_valid():
             with transaction.atomic():
                 updated_task = form.save()
-                rescheduled = updated_task.scheduled_for != previous_scheduled_for
+                rescheduled = (
+                    updated_task.scheduled_for != previous_scheduled_for
+                    or updated_task.scheduled_date != previous_scheduled_date
+                )
                 if rescheduled:
                     TaskEvent.objects.create(
                         task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
                         occurred_at=timezone.now(), actor=request.user,
                     )
+                updated_task.products.all().delete()
+                for cleaned in product_formset.cleaned_data:
+                    if cleaned.get('product_code'):
+                        TaskProduct.objects.create(
+                            task=updated_task, product_code=cleaned['product_code'],
+                            serial_number=cleaned.get('serial_number', ''), quantity=cleaned['quantity'],
+                        )
+            notices = []
             if (
                 rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
                 and NotificationSettings.load().auto_notify_on_reschedule
@@ -888,14 +1127,22 @@ def task_edit(request, pk):
                 updated_task.schedule_notified_at = timezone.now()
                 updated_task.schedule_notified_by = request.user
                 updated_task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
-                messages.success(request, _('Task updated. Customer notified automatically.'))
-            else:
-                messages.success(request, _('Task updated.'))
+                notices.append(_('Customer notified automatically.'))
+            if (
+                'shipping_tracking_number' in form.changed_data and updated_task.shipping_tracking_number
+                and updated_task.responsible_supervisor_id
+            ):
+                _send_shipment_notice_to_supervisor(request, updated_task)
+                notices.append(_('Supervisor notified of the shipment.'))
+            messages.success(request, ' '.join([_('Task updated.')] + notices))
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskEditForm(instance=task, country=task_country)
+        form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
+        product_formset = TaskProductFormSet(initial=product_initial, prefix='products')
 
-    return render(request, 'tasks/task_edit.html', {'task': task, 'form': form})
+    return render(
+        request, 'tasks/task_edit.html', {'task': task, 'form': form, 'product_formset': product_formset},
+    )
 
 
 @login_required
@@ -948,6 +1195,7 @@ def task_create(request):
                 task.status = Task.Status.NEW
                 if ticket is not None:
                     task.pak_reference_number = ticket.pak_reference_number
+                    task.shipping_company = ticket.shipping_company
                     task.shipping_tracking_number = ticket.shipping_tracking_number
                 _save_new_task(task)
                 TaskEvent.objects.create(
@@ -1009,9 +1257,10 @@ def _send_ticket_confirmation(request, ticket):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': ticket.contact_name, 'site': ticket.site_description, 'link': link}
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[ticket.contact_email], fail_silently=True,
+    _send_notification_email(
+        subject, message, 'tasks/email/ticket_confirmation.html',
+        {'contact': ticket.contact_name, 'site': ticket.site_description, 'link': link},
+        [ticket.contact_email],
     )
 
 
@@ -1058,9 +1307,10 @@ def _send_reply_to_customer(request, reply):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': ticket.contact_name, 'reply_message': reply.message, 'link': link}
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[ticket.contact_email], fail_silently=True,
+    _send_notification_email(
+        subject, message, 'tasks/email/reply_to_customer.html',
+        {'contact': ticket.contact_name, 'reply_message': reply.message, 'link': link},
+        [ticket.contact_email],
     )
 
 
@@ -1084,9 +1334,13 @@ def _send_reply_to_staff(request, reply):
             'pk': ticket.pk, 'company': ticket.company_name, 'site': ticket.site_description,
             'reply_message': reply.message, 'link': link,
         }
-    send_mail(
-        subject=subject, message=message, from_email=None,
-        recipient_list=[assignee.user.email], fail_silently=True,
+    _send_notification_email(
+        subject, message, 'tasks/email/reply_to_staff.html',
+        {
+            'ticket_pk': ticket.pk, 'company': ticket.company_name, 'site': ticket.site_description,
+            'reply_message': reply.message, 'link': link,
+        },
+        [assignee.user.email],
     )
 
 
@@ -1281,6 +1535,7 @@ def ticket_review(request, pk):
             else:
                 _send_shipping_notice(
                     ticket.contact_name, ticket.site_description, f'ticket #{ticket.pk}',
+                    ticket.shipping_company,
                     ticket.shipping_tracking_number, ticket.contact_email,
                 )
                 messages.success(request, _('Customer notified of the tracking number.'))

@@ -1,0 +1,12 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">A shipment for <strong>{{ task_number }}</strong> ({{ site }}) now has a tracking number.</p>
+{% if carrier_label %}
+{% include "tasks/email/_carrier_chip.html" %}
+{% endif %}
+<p style="margin:0 0 4px;">Tracking number: <strong>{{ tracking_number }}</strong></p>
+{% if tracking_url %}
+{% include "tasks/email/_button.html" with url=tracking_url label="Track it here" %}
+{% endif %}
+{% include "tasks/email/_button.html" with url=link label="View the task" %}
+{% endblock %}

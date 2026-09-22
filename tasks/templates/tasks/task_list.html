@@ -36,6 +36,12 @@
         <option value="{{ technician.pk }}" {% if selected_technician == technician.pk|stringformat:"s" %}selected{% endif %}>{{ technician.full_name }}</option>
         {% endfor %}
     </select>
+    <select name="shipping_company">
+        <option value="">{% translate "All shipping companies" %}</option>
+        {% for value, label in shipping_company_choices %}
+        <option value="{{ value }}" {% if selected_shipping_company == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
     <input type="date" name="scheduled_from" value="{{ scheduled_from }}" title="{% translate 'Scheduled from' %}">
     <input type="date" name="scheduled_to" value="{{ scheduled_to }}" title="{% translate 'Scheduled to' %}">
     <button type="submit" class="button">{% translate "Search" %}</button>
