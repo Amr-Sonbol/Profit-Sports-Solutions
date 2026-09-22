@@ -73,6 +73,68 @@
 </div>
 
 <div class="section">
+    <h2>{% translate "Reliability" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Tasks completed as lead" %}</dt>
+            <dd>{{ reliability.total_completed }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Tasks helped on" %}</dt>
+            <dd>{{ reliability.total_helped }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "On-time arrival" %}</dt>
+            <dd>
+                {% if reliability.on_time_percent is not None %}
+                    {{ reliability.on_time_percent }}%
+                {% else %}
+                    <span class="muted">{% blocktranslate with have=reliability.on_time_sample_size need=reliability.min_sample %}not enough completed tasks yet ({{ have }} of {{ need }} needed){% endblocktranslate %}</span>
+                {% endif %}
+            </dd>
+        </div>
+        <div>
+            <dt>{% translate "Median time to accept a task" %}</dt>
+            <dd>
+                {% if reliability.acceptance_latency_minutes is not None %}
+                    {% blocktranslate with minutes=reliability.acceptance_latency_minutes %}{{ minutes }} minutes{% endblocktranslate %}
+                {% else %}
+                    <span class="muted">{% translate "not enough completed tasks yet" %}</span>
+                {% endif %}
+            </dd>
+        </div>
+    </dl>
+    {% if reliability.by_brand %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Brand" %}</th>
+                    <th>{% translate "Completed" %}</th>
+                    <th>{% translate "On-time" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in reliability.by_brand %}
+                <tr>
+                    <td>{{ row.brand.name|default:_("No brand") }}</td>
+                    <td>{{ row.completed }}</td>
+                    <td>
+                        {% if row.on_time_percent is not None %}
+                            {{ row.on_time_percent }}%
+                        {% else %}
+                            <span class="muted">{% translate "not enough data" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<div class="section">
     <h2>{% translate "Skills" %}</h2>
     {% if skills %}
     <div class="table-wrap">

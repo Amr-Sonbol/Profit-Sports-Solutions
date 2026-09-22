@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
@@ -51,6 +52,11 @@ WEEK_LENGTH = 7
 # A new technician works as helper, alongside a supervisor, until
 # certified — the target is to get there within this many days.
 NINETY_DAY_TRACK_DAYS = 90
+
+# A rate (on-time %, acceptance latency) built on fewer completed tasks
+# than this is noise dressed up as a score — hide it, not show a
+# misleading number. Plain counts are shown regardless of volume.
+RELIABILITY_MIN_SAMPLE = 20
 
 OPEN_STATUSES = [
     Task.Status.NEW,
@@ -292,6 +298,106 @@ def _leaderboard(country):
         ((t, _confirmed_points(t)) for t in technicians),
         key=lambda pair: pair[1], reverse=True,
     )
+
+
+def _median_minutes(deltas):
+    if not deltas:
+        return None
+    ordered = sorted(deltas)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return round(ordered[mid])
+    return round((ordered[mid - 1] + ordered[mid]) / 2)
+
+
+def _reliability_stats(technician):
+    """Facts only, never a combined score — docs/database_design_v2.md
+    §6's "months 4-8" stage: plain tasks-completed and on-time-arrival
+    numbers, nothing inferred yet needing more volume (first-time fix
+    rate stays out entirely; it needs the asset register maturing over
+    real time, not just a query). Only the lead's record is affected by
+    an outcome — helpers get a participation count, nothing else.
+    Broken down by brand, since one combined number hides exactly what
+    matters; a brand's own on-time % is hidden below
+    RELIABILITY_MIN_SAMPLE completed tasks for that brand specifically,
+    same reasoning as the overall figures below.
+    """
+    timing_events = TaskEvent.objects.filter(
+        event_type__in=[
+            TaskEvent.EventType.ARRIVED, TaskEvent.EventType.ASSIGNED, TaskEvent.EventType.ACCEPTED,
+        ],
+    ).order_by('occurred_at')
+
+    led_tasks = list(
+        Task.objects.filter(
+            assignments__technician=technician, assignments__role=TaskAssignment.Role.LEAD,
+            assignments__is_active=True, status__in=[Task.Status.COMPLETED, Task.Status.CLOSED],
+        )
+        .select_related('brand')
+        .prefetch_related(Prefetch('events', queryset=timing_events, to_attr='timing_events'))
+        .distinct(),
+    )
+    helped_count = Task.objects.filter(
+        assignments__technician=technician, assignments__role=TaskAssignment.Role.HELPER,
+        assignments__is_active=True, status__in=[Task.Status.COMPLETED, Task.Status.CLOSED],
+    ).distinct().count()
+
+    def _on_time_stats(tasks):
+        counted = 0
+        on_time = 0
+        for task in tasks:
+            if task.status == Task.Status.BLOCKED or not task.promised_at:
+                continue
+            arrived = next(
+                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ARRIVED), None,
+            )
+            if not arrived:
+                continue
+            counted += 1
+            if arrived.occurred_at <= task.promised_at:
+                on_time += 1
+        if counted < RELIABILITY_MIN_SAMPLE:
+            return None, counted
+        return round(on_time / counted * 100), counted
+
+    def _acceptance_latency(tasks):
+        deltas = []
+        for task in tasks:
+            assigned = next(
+                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ASSIGNED), None,
+            )
+            accepted = next(
+                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ACCEPTED), None,
+            )
+            if assigned and accepted and accepted.occurred_at > assigned.occurred_at:
+                deltas.append((accepted.occurred_at - assigned.occurred_at).total_seconds() / 60)
+        return _median_minutes(deltas) if len(deltas) >= RELIABILITY_MIN_SAMPLE else None
+
+    overall_on_time_percent, overall_sample = _on_time_stats(led_tasks)
+
+    by_brand = defaultdict(list)
+    for task in led_tasks:
+        by_brand[task.brand].append(task)
+
+    brand_breakdown = []
+    for brand, tasks in sorted(by_brand.items(), key=lambda pair: pair[0].name if pair[0] else '￿'):
+        on_time_percent, sample = _on_time_stats(tasks)
+        brand_breakdown.append({
+            'brand': brand,
+            'completed': len(tasks),
+            'on_time_percent': on_time_percent,
+            'sample_size': sample,
+        })
+
+    return {
+        'total_completed': len(led_tasks),
+        'total_helped': helped_count,
+        'on_time_percent': overall_on_time_percent,
+        'on_time_sample_size': overall_sample,
+        'acceptance_latency_minutes': _acceptance_latency(led_tasks),
+        'by_brand': brand_breakdown,
+        'min_sample': RELIABILITY_MIN_SAMPLE,
+    }
 
 
 def _with_lead_prefetch(queryset):
@@ -1835,9 +1941,10 @@ def my_week(request):
 def my_progress(request):
     """Skills and conduct areas the technician is rated on, certification
     status, and standing among peers in the same country — plus counts for
-    the current week. No computed on-time %/first-time-fix rates: per the
-    doc's own build order, those need months of real event data to mean
-    anything.
+    the current week and the plain reliability facts (tasks completed,
+    on-time %) once there's enough volume to mean anything. No
+    first-time-fix rate yet: per the doc's own build order, that needs
+    months of real event data, not just a query.
     """
     technician = require_technician(request)
 
@@ -1845,6 +1952,7 @@ def my_progress(request):
     conduct_areas = _conduct_areas_with_current_rating(technician)
     certification = _certification_status(technician)
     ninety_day = _ninety_day_progress(technician, certification)
+    reliability = _reliability_stats(technician)
 
     leaderboard = _leaderboard(technician.country)
     rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
@@ -1871,6 +1979,7 @@ def my_progress(request):
         'leaderboard_size': len(leaderboard),
         'assigned_count': assigned_count,
         'completed_count': completed_count,
+        'reliability': reliability,
     }
     return render(request, 'tasks/my_progress.html', context)
 
@@ -2162,6 +2271,7 @@ def technician_skills(request, pk):
         'review_form': ReviewLevelForm(),
         'certification': _certification_status(technician),
         'negligence_events': negligence_events,
+        'reliability': _reliability_stats(technician),
     }
     return render(request, 'tasks/technician_skills.html', context)
 

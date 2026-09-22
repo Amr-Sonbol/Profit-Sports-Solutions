@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Too many attempts" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Too many attempts" %}</h1>
+</div>
+<p class="empty-state">
+    {% translate "Too many failed login attempts from this connection. Please wait a while before trying again, or reset your password if you've forgotten it." %}
+</p>
+<p><a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a></p>
+{% endblock %}

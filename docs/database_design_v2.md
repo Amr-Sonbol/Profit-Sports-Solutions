@@ -646,9 +646,9 @@ Capability is the skill matrix — a supervisor's judgement about what a technic
 
 **Months 1–3: measure nothing, show nothing.** Collect events only. Any figure computed on a few weeks of data is noise, and showing noise once destroys trust in the system permanently.
 
-**Months 4–8: show facts, not scores.** Tasks completed, on-time percentage. Plain numbers a technician can check and argue with. No ranking, no single combined score.
+**Months 4–8: show facts, not scores.** Tasks completed, tasks helped on, on-time percentage, median acceptance latency — each hidden individually until its own sample clears the 20-task floor below, broken down by brand. Plain numbers a technician can check and argue with, no ranking, no single combined score. **Built** — `_reliability_stats` (`tasks/views.py`), shown on My progress and the supervisor's technician-skills review screen.
 
-**Month 9 onward: add first-time fix, broken down by brand.** This is when the original question — who can I depend on — becomes genuinely answerable.
+**Month 9 onward: add first-time fix, broken down by brand.** This is when the original question — who can I depend on — becomes genuinely answerable. **Not yet built** — still needs the asset register to mature with real volume, not just a query; nothing here promises it early.
 
 **Exception, made deliberately: the certification bar and country leaderboard (§3) are visible from day one.** Unlike first-time fix or on-time %, they aren't inferred rates that need a sample size to mean anything — they're a direct count of supervisor-confirmed levels, which exists the moment a supervisor confirms one.
 

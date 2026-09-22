@@ -2317,6 +2317,122 @@ class MyProgressTests(TaskTestCase):
         self.assertEqual(ninety_day['days_remaining'], 30)
 
 
+class ReliabilityStatsTests(TaskTestCase):
+    """Plain facts, never a combined score — see _reliability_stats.
+    RELIABILITY_MIN_SAMPLE (20) gates every rate, not the plain counts.
+    """
+
+    def _led_task(self, number, *, promised_at, arrived_at=None, status=Task.Status.CLOSED, brand=None):
+        task = Task.objects.create(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), promised_at=promised_at, created_by=self.supervisor_user,
+            status=status, brand=brand,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        if arrived_at:
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.ARRIVED, occurred_at=arrived_at, actor=self.tech_user,
+            )
+        return task
+
+    def test_plain_counts_shown_below_the_sample_threshold(self):
+        for i in range(3):
+            self._led_task(
+                f'AE-000{i}', promised_at=dubai_time(2026, 9, 10, 12, 0),
+                arrived_at=dubai_time(2026, 9, 10, 11, 0),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        reliability = response.context['reliability']
+
+        self.assertEqual(reliability['total_completed'], 3)
+        self.assertIsNone(reliability['on_time_percent'])
+        self.assertEqual(reliability['on_time_sample_size'], 3)
+
+    def test_helped_count_only_counts_helper_role(self):
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.CLOSED,
+        )
+        other_user = User.objects.create_user('other_tech', password='pass12345')
+        other_tech = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Other Tech',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=other_tech, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        reliability = response.context['reliability']
+
+        self.assertEqual(reliability['total_completed'], 0)
+        self.assertEqual(reliability['total_helped'], 1)
+
+    def test_on_time_percent_shown_once_sample_threshold_is_met(self):
+        for i in range(15):
+            self._led_task(
+                f'AE-{1000 + i}', promised_at=dubai_time(2026, 9, 10, 12, 0),
+                arrived_at=dubai_time(2026, 9, 10, 11, 0),
+            )
+        for i in range(5):
+            self._led_task(
+                f'AE-{2000 + i}', promised_at=dubai_time(2026, 9, 10, 12, 0),
+                arrived_at=dubai_time(2026, 9, 10, 13, 0),
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        reliability = response.context['reliability']
+
+        self.assertEqual(reliability['total_completed'], 20)
+        self.assertEqual(reliability['on_time_percent'], 75)
+
+    def test_blocked_tasks_excluded_from_on_time_stats(self):
+        for i in range(20):
+            self._led_task(
+                f'AE-{1000 + i}', promised_at=dubai_time(2026, 9, 10, 12, 0),
+                arrived_at=dubai_time(2026, 9, 10, 11, 0), status=Task.Status.BLOCKED,
+            )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        reliability = response.context['reliability']
+
+        self.assertEqual(reliability['on_time_sample_size'], 0)
+        self.assertIsNone(reliability['on_time_percent'])
+
+    def test_brand_breakdown_groups_completed_tasks_by_brand(self):
+        for i in range(3):
+            self._led_task(
+                f'AE-{1000 + i}', promised_at=dubai_time(2026, 9, 10, 12, 0),
+                arrived_at=dubai_time(2026, 9, 10, 11, 0), brand=self.brand,
+            )
+        self._led_task(
+            'AE-9999', promised_at=dubai_time(2026, 9, 10, 12, 0),
+            arrived_at=dubai_time(2026, 9, 10, 11, 0), brand=None,
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        by_brand = {row['brand']: row['completed'] for row in response.context['reliability']['by_brand']}
+
+        self.assertEqual(by_brand[self.brand], 3)
+        self.assertEqual(by_brand[None], 1)
+
+
 class MySkillsTests(TaskTestCase):
     def test_anonymous_is_redirected_to_login(self):
         response = self.client.get('/tasks/my-skills/')

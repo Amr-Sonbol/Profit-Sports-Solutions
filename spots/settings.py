@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import sys
 from pathlib import Path
 
 from decouple import Csv, config
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'axes',
     'reference',
     'customers',
     'people',
@@ -73,7 +75,38 @@ MIDDLEWARE = [
     'spots.middleware.TechnicianLocaleMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Must be last — axes needs to see what every other middleware
+    # already did to the request/response before it decides whether
+    # this attempt counts toward a lockout.
+    'axes.middleware.AxesMiddleware',
 ]
+
+# django-axes: locks an IP address out after repeated failed logins
+# (the library's own default key, left as-is deliberately) — since
+# every username in this app is predictable (supervisor1, manager1,
+# ...) an attacker isn't limited to guessing one account's password,
+# they can just as easily spray one guess across many usernames, which
+# a per-username-only limit wouldn't catch. Nothing else in the
+# codebase throttles login attempts. AxesStandaloneBackend must come
+# first, ahead of Django's own ModelBackend, so a locked-out attempt
+# is rejected before password checking even runs.
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1  # hour
+AXES_LOCKOUT_TEMPLATE = 'axes_lockout.html'
+AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
+# `manage.py test` runs every existing test through Client.login(),
+# which calls authenticate() with no request object at all —
+# AxesStandaloneBackend requires one and raises rather than silently
+# allowing the login through, so every test using that shortcut would
+# otherwise error out. Off by default under the test runner; the one
+# test class that actually exercises lockout behaviour
+# (people.tests.LoginLockoutTests) turns it back on for itself via
+# @override_settings.
+AXES_ENABLED = 'test' not in sys.argv
 
 ROOT_URLCONF = 'spots.urls'
 
