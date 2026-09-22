@@ -1339,6 +1339,15 @@ class TicketFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(CustomerTicket.objects.count(), 0)
 
+    def test_too_many_attachments_is_rejected(self):
+        photos = [
+            SimpleUploadedFile(f'fault{i}.jpg', b'not a real image', content_type='image/jpeg')
+            for i in range(11)
+        ]
+        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=photos))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CustomerTicket.objects.count(), 0)
+
     def test_thank_you_page_is_public(self):
         self.client.post('/tasks/tickets/new/', self._payload())
         ticket = CustomerTicket.objects.get()

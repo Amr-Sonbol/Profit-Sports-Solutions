@@ -15,6 +15,10 @@ from reference.models import Brand, Country, Skill, TaskType
 # option and no logged-in uploader to record.
 ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
 MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
+# A cap on file count, not just size — the public ticket form takes no
+# login, so without this a script could attach an unbounded number of
+# files to one submission and exhaust storage or spam the office.
+MAX_TICKET_ATTACHMENT_COUNT = 10
 
 # The paperwork trail for a task — quotation, factory offer, invoice,
 # delivery note. Almost always a PDF export; jpg/png covers a photo of

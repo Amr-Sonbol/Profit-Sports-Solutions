@@ -438,7 +438,7 @@ The back-and-forth on a ticket, either side, in order.
 **Each reply sends a best-effort email the other way**, same fail-silent pattern as every other notification here. A staff reply emails `customer_ticket.contact_email`, if one was given. A customer reply emails `assigned_to`'s login email, if the ticket is assigned to someone with one on file — there's no fixed office address to fall back to, so an unassigned ticket's customer replies simply don't email anyone until someone picks it up.
 
 ### customer_ticket_attachment
-A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` (there's no logged-in user to record) and no link/URL option the way `task_attachment` has — a customer only ever uploads a real file.
+A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` (there's no logged-in user to record) and no link/URL option the way `task_attachment` has — a customer only ever uploads a real file. Capped at 10 files per ticket, on top of the 25 MB-per-file limit — the public form takes no login, so without a count cap a script could attach an unbounded number of files to one submission and exhaust storage.
 
 | Column | Type | Notes |
 |---|---|---|

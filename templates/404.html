@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Page not found" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Page not found" %}</h1>
+</div>
+<p class="empty-state">
+    {% translate "This page doesn't exist, or you don't have access to it. Double-check the link, or go back to where you were." %}
+</p>
+<p><a href="{% url 'home' %}" class="button">{% translate "Go to home" %}</a></p>
+{% endblock %}

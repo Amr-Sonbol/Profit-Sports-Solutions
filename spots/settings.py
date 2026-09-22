@@ -27,6 +27,25 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
 
+# Error monitoring — off unless SENTRY_DSN is set in .env, so local dev
+# and CI (which never set it) are completely unaffected. This is what
+# actually surfaces the errors behind the friendly 404/403/500 pages;
+# without it a production crash is silent until a user happens to
+# report it. send_default_pii is left off since tasks/tickets carry
+# real customer names, phone numbers and emails in request data.
+SENTRY_DSN = config('SENTRY_DSN', default='')
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        environment=config('SENTRY_ENVIRONMENT', default='production' if not DEBUG else 'development'),
+        traces_sample_rate=config('SENTRY_TRACES_SAMPLE_RATE', default=0.0, cast=float),
+        send_default_pii=False,
+    )
+
 
 # Application definition
 

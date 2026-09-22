@@ -12,8 +12,8 @@ from people.models import (
 from reference.models import Brand, Country, Skill, TaskType
 
 from .models import (
-    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES, CustomerTicket,
-    Task, TaskAssignment, TaskAsset, TaskAttachment,
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
+    MAX_TICKET_ATTACHMENT_COUNT, CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -736,7 +736,9 @@ class CustomerTicketForm(forms.ModelForm):
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number'),
+        help_text=_('showing the issue and the serial number — up to %(count)d files, %(size)d MB each') % {
+            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
+        },
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
@@ -757,6 +759,10 @@ class CustomerTicketForm(forms.ModelForm):
 
     def clean_attachments(self):
         files = self.cleaned_data['attachments']
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
                 raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
@@ -778,7 +784,9 @@ class CustomerPortalTicketForm(forms.ModelForm):
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number'),
+        help_text=_('showing the issue and the serial number — up to %(count)d files, %(size)d MB each') % {
+            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
+        },
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
@@ -798,6 +806,10 @@ class CustomerPortalTicketForm(forms.ModelForm):
 
     def clean_attachments(self):
         files = self.cleaned_data['attachments']
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
                 raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
@@ -831,6 +843,7 @@ class TicketReplyForm(forms.Form):
     message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
     attachment = forms.FileField(
         required=False, label=_('Photo or video'),
+        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 

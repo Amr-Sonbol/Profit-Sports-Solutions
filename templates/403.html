@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Not allowed" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Not allowed" %}</h1>
+</div>
+<p class="empty-state">
+    {% translate "You don't have permission to do that. If you think this is wrong, check with a manager." %}
+</p>
+<p><a href="{% url 'home' %}" class="button">{% translate "Go to home" %}</a></p>
+{% endblock %}
