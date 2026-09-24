@@ -32,6 +32,7 @@ urlpatterns = [
     path('roles/', views.role_permissions, name='role_permissions'),
     path('skills/', views.skill_list, name='skill_list'),
     path('skills/new/', views.skill_create, name='skill_create'),
+    path('skills/conduct/new/', views.conduct_area_create, name='conduct_area_create'),
     path('countries/', views.country_list, name='country_list'),
     path('countries/new/', views.country_create, name='country_create'),
     path('active-country/', views.set_active_country, name='set_active_country'),

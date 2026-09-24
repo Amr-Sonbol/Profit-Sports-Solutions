@@ -52,4 +52,29 @@
         </table>
     </div>
 </div>
+
+<div class="section">
+    <div class="page__header">
+        <h2>{% translate "Conduct" %}</h2>
+        <a href="{% url 'tasks:conduct_area_create' %}" class="button">{% translate "Add conduct area" %}</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Name (Arabic)" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for area in conduct_areas %}
+                <tr>
+                    <td>{{ area.name }}</td>
+                    <td dir="rtl">{{ area.name_ar }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}

@@ -9,7 +9,7 @@ from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
     SKILL_LEVEL_CHOICES, Technician,
 )
-from reference.models import Brand, Country, Skill, TaskType
+from reference.models import Brand, ConductArea, Country, Skill, TaskType
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
@@ -475,6 +475,18 @@ class SkillCreateForm(forms.ModelForm):
     class Meta:
         model = Skill
         fields = ['name', 'name_ar', 'category']
+
+
+class ConductAreaCreateForm(forms.ModelForm):
+    """A manager adding a non-technical professionalism area to the
+    certification list — global, not scoped to any country. Same shape
+    as SkillCreateForm: deactivating an existing one is a Django admin
+    action for now.
+    """
+
+    class Meta:
+        model = ConductArea
+        fields = ['name', 'name_ar']
 
 
 class CountryCreateForm(forms.ModelForm):

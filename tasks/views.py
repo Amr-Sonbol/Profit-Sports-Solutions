@@ -35,7 +35,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, CountryCreateForm, CustomerTicketForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm, CustomerTicketForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TaskProductForm, TechnicianCreateForm,
@@ -2404,7 +2404,10 @@ def skill_list(request):
     """
     require_manager(request)
     basic_skills, cardio_skills = _split_by_category(Skill.objects.filter(is_active=True))
-    return render(request, 'tasks/skill_list.html', {'basic_skills': basic_skills, 'cardio_skills': cardio_skills})
+    conduct_areas = ConductArea.objects.filter(is_active=True)
+    return render(request, 'tasks/skill_list.html', {
+        'basic_skills': basic_skills, 'cardio_skills': cardio_skills, 'conduct_areas': conduct_areas,
+    })
 
 
 @login_required
@@ -2421,6 +2424,22 @@ def skill_create(request):
         form = SkillCreateForm()
 
     return render(request, 'tasks/skill_create.html', {'form': form})
+
+
+@login_required
+def conduct_area_create(request):
+    require_manager(request)
+
+    if request.method == 'POST':
+        form = ConductAreaCreateForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _('Conduct area added.'))
+            return redirect('tasks:skill_list')
+    else:
+        form = ConductAreaCreateForm()
+
+    return render(request, 'tasks/conduct_area_create.html', {'form': form})
 
 
 @login_required
