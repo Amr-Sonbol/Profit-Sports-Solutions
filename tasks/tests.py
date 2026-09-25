@@ -134,6 +134,30 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.get('/tasks/')
         self.assertContains(response, f'/tasks/{self.task.pk}/')
 
+    def test_supervisor_does_not_see_documents(self):
+        """Quotation/factory offer/invoice/delivery note are manager-tier
+        — a supervisor sees the customer's own photos/videos, not these.
+        """
+        self.task.quotation = SimpleUploadedFile('quote.pdf', b'%PDF-1.4', content_type='application/pdf')
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertNotContains(response, 'Quotation')
+
+    def test_manager_sees_documents(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task.quotation = SimpleUploadedFile('quote.pdf', b'%PDF-1.4', content_type='application/pdf')
+        self.task.save()
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertContains(response, 'Quotation')
+
     def test_notify_requires_a_scheduled_time(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
         self.site.save()
@@ -367,6 +391,12 @@ class TaskEditTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Belt making noise')
+
+    def test_supervisor_form_has_no_document_fields(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        for field_name in ['quotation', 'factory_offer', 'invoice', 'delivery_note']:
+            self.assertNotIn(field_name, response.context['form'].fields)
 
     def test_other_country_task_gives_404(self):
         other_country = Country.objects.create(
@@ -3138,6 +3168,11 @@ class RolePermissionsTests(TaskTestCase):
             user=self.manager_user, country=self.country, full_name='Mona Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        self.admin = Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
 
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
@@ -3149,8 +3184,15 @@ class RolePermissionsTests(TaskTestCase):
         response = self.client.get('/tasks/roles/')
         self.assertEqual(response.status_code, 403)
 
-    def test_manager_can_view_the_matrix(self):
+    def test_manager_gets_403(self):
+        """Roles & permissions is the one manager-tier screen admin
+        doesn't share with manager — see require_admin."""
         self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/roles/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_view_the_matrix(self):
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.get('/tasks/roles/')
         self.assertEqual(response.status_code, 200)
 
@@ -3176,12 +3218,12 @@ class RolePermissionsTests(TaskTestCase):
         response = self.client.get('/tasks/')
         self.assertEqual(response.status_code, 200)
 
-    def test_manager_can_update_the_matrix(self):
-        self.client.login(username='manager1', password='pass12345')
+    def test_admin_can_update_the_matrix(self):
+        self.client.login(username='admin1', password='pass12345')
 
         post_data = {}
         for permission in RolePermission.Permission:
-            for role in [Technician.Role.SUPERVISOR, Technician.Role.MANAGER]:
+            for role in [Technician.Role.SUPERVISOR, Technician.Role.MANAGER, Technician.Role.ADMIN]:
                 post_data[f'{role}__{permission}'] = 'on'
 
         response = self.client.post('/tasks/roles/', post_data)
@@ -3199,24 +3241,24 @@ class RolePermissionsTests(TaskTestCase):
         )
 
     def test_notification_setting_defaults_to_off(self):
-        self.client.login(username='manager1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.get('/tasks/roles/')
         self.assertFalse(response.context['notification_settings'].auto_notify_on_reschedule)
 
-    def test_manager_can_turn_on_auto_notify(self):
-        self.client.login(username='manager1', password='pass12345')
+    def test_admin_can_turn_on_auto_notify(self):
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/roles/', {
             'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
         })
         self.assertEqual(response.status_code, 302)
         self.assertTrue(NotificationSettings.load().auto_notify_on_reschedule)
 
-    def test_manager_can_turn_off_auto_notify(self):
+    def test_admin_can_turn_off_auto_notify(self):
         settings = NotificationSettings.load()
         settings.auto_notify_on_reschedule = True
         settings.save()
 
-        self.client.login(username='manager1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/roles/', {'action': 'save_notifications'})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
@@ -3226,7 +3268,7 @@ class RolePermissionsTests(TaskTestCase):
             role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
         ).update(allowed=True)
 
-        self.client.login(username='manager1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         self.client.post('/tasks/roles/', {'action': 'save_notifications', 'auto_notify_on_reschedule': 'on'})
 
         self.assertTrue(
@@ -3242,6 +3284,85 @@ class RolePermissionsTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
+
+
+class MonthlyReportTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.this_month = timezone.now().replace(day=15)
+        self.last_month = (self.this_month.replace(day=1) - timedelta(days=1)).replace(day=15)
+
+        self.other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        self.other_customer = Customer.objects.create(country=self.other_country, name='Cairo Gym', segment='gym')
+        self.other_site = Site.objects.create(customer=self.other_customer, name='Zamalek Branch', address='Cairo')
+
+        CustomerTicket.objects.create(
+            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali', contact_phone='0501234567', description='Broken belt',
+            submitted_at=self.this_month, status=CustomerTicket.Status.NEW,
+        )
+        CustomerTicket.objects.create(
+            country=self.other_country, company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Sara', contact_phone='0501234568', description='Squeaky wheel',
+            submitted_at=self.this_month, status=CustomerTicket.Status.CONVERTED,
+        )
+        CustomerTicket.objects.create(
+            country=self.country, company_name='Old Ticket', site_description='Marina Branch',
+            contact_name='Ali', contact_phone='0501234567', description='Old issue',
+            submitted_at=self.last_month, status=CustomerTicket.Status.CLOSED,
+        )
+
+        Task.objects.create(
+            task_number='UAE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=self.this_month, created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        Task.objects.create(
+            task_number='EG-0001', site=self.other_site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=self.this_month, created_by=self.supervisor_user, status=Task.Status.CLOSED,
+        )
+        Task.objects.create(
+            task_number='UAE-0002', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=self.last_month, created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+
+    def test_supervisor_gets_403(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/reports/monthly/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/reports/monthly/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_sees_every_country_combined_for_the_month(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/reports/monthly/?month={self.this_month:%Y-%m}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['ticket_total'], 2)
+        self.assertEqual(response.context['task_total'], 2)
+        self.assertContains(response, 'Cairo Gym')
+        self.assertNotContains(response, 'Old Ticket')
+
+    def test_export_is_a_csv_download(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/reports/monthly/export/?month={self.this_month:%Y-%m}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        content = response.content.decode()
+        self.assertIn('Fitness First', content)
+        self.assertIn('EG-0001', content)
+        self.assertNotIn('UAE-0002', content)
 
 
 class ActiveCountryTests(TaskTestCase):

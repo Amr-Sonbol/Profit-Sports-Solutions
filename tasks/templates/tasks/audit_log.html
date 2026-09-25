@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Audit log" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Audit log" %}</h1>
+</div>
+
+<p class="muted">
+    {% translate "Every add, change, and delete made from Django admin, newest first. Actions taken from the app's own screens aren't recorded here — a task's own history is on its detail page." %}
+</p>
+
+<div class="section">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "When" %}</th>
+                    <th>{% translate "Who" %}</th>
+                    <th>{% translate "Action" %}</th>
+                    <th>{% translate "Model" %}</th>
+                    <th>{% translate "Object" %}</th>
+                    <th>{% translate "Details" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in page_obj %}
+                <tr>
+                    <td>{{ entry.action_time|date:"SHORT_DATETIME_FORMAT" }}</td>
+                    <td>{{ entry.user }}</td>
+                    <td>
+                        {% if entry.is_addition %}
+                        <span class="badge badge--status-new">{% translate "Added" %}</span>
+                        {% elif entry.is_change %}
+                        <span class="badge badge--muted">{% translate "Changed" %}</span>
+                        {% elif entry.is_deletion %}
+                        <span class="badge badge--status-closed">{% translate "Deleted" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.content_type }}</td>
+                    <td>{{ entry.object_repr }}</td>
+                    <td>{{ entry.get_change_message }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="empty-state">{% translate "Nothing logged yet." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+    {% endif %}
+    <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

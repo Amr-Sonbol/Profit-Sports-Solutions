@@ -30,6 +30,7 @@ class Technician(models.Model):
         TECHNICIAN = 'technician', _('Technician')
         SUPERVISOR = 'supervisor', _('Supervisor')
         MANAGER = 'manager', _('Manager')
+        ADMIN = 'admin', _('Admin')
 
     class EmploymentType(models.TextChoices):
         STAFF = 'staff', _('Staff')
@@ -96,6 +97,31 @@ class Technician(models.Model):
 
     def __str__(self):
         return self.full_name
+
+    def save(self, *args, **kwargs):
+        """An admin's linked login always gets full Django-admin access —
+        the in-app "do everything" role should also mean everything at
+        /admin/ (every model, every action, plus Django's own built-in
+        add/change/delete audit trail there). One-way: giving admin the
+        role grants it; it's never silently revoked by a later save, so
+        changing someone's role back down doesn't unexpectedly lock out
+        a login that was also made a Django superuser some other way.
+        """
+        super().save(*args, **kwargs)
+        if self.role == self.Role.ADMIN and self.user_id and not (self.user.is_staff and self.user.is_superuser):
+            self.user.is_staff = True
+            self.user.is_superuser = True
+            self.user.save(update_fields=['is_staff', 'is_superuser'])
+
+    @property
+    def is_manager_tier(self):
+        """Manager and admin share every manager-only screen and action —
+        cross-country reach, approvals, the fixed-floor reference-data
+        screens (skills, brands, countries, ...). Admin is the one thing
+        on top: only admin can reach Roles & permissions itself (see
+        require_admin) — checked separately with role == Role.ADMIN.
+        """
+        return self.role in (self.Role.MANAGER, self.Role.ADMIN)
 
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login

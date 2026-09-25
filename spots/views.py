@@ -14,6 +14,6 @@ def home(request):
     if hasattr(request.user, 'customer'):
         return redirect('customers:portal_home')
     technician = getattr(request.user, 'technician', None)
-    if technician and technician.role in (Technician.Role.SUPERVISOR, Technician.Role.MANAGER):
+    if technician and (technician.role == Technician.Role.SUPERVISOR or technician.is_manager_tier):
         return redirect('tasks:task_list')
     return redirect('tasks:my_week')

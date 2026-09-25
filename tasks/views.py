@@ -1,9 +1,11 @@
+import csv
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
+from django.contrib.admin.models import LogEntry
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
@@ -14,6 +16,7 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, ProtectedError, Q, Sum, Value, When
 from django.forms import formset_factory
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -28,14 +31,15 @@ from people.models import (
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_manager, require_permission, require_technician,
+    ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
+    require_technician,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm, CustomerTicketForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm, CustomerTicketForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TaskProductForm, TechnicianCreateForm,
@@ -427,7 +431,7 @@ def _scoped_or_404(queryset, pk, requesting_technician, active_country, country_
     those link into can't stay locked to whichever country happens to be
     active. Every other role stays scoped to it, same as before.
     """
-    if requesting_technician.role != Technician.Role.MANAGER:
+    if not requesting_technician.is_manager_tier:
         queryset = queryset.filter(**{country_lookup: active_country})
     return get_object_or_404(queryset, pk=pk)
 
@@ -1141,8 +1145,8 @@ def task_detail(request, pk):
     active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
 
     events = task.events.select_related('actor', 'corrected_by')
-    if requesting_technician.role != Technician.Role.MANAGER:
-        # Negligence flags are a manager-only reliability signal — never
+    if not requesting_technician.is_manager_tier:
+        # Negligence flags are a manager-tier reliability signal — never
         # shown to the technician being flagged, or to a supervisor
         # viewing the same task.
         events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
@@ -1186,7 +1190,7 @@ def task_edit(request, pk):
         pk, requesting_technician, active_country, 'site__customer__country',
     )
     _require_task_owner(request, task)
-    is_manager = requesting_technician.role == Technician.Role.MANAGER
+    is_manager = requesting_technician.is_manager_tier
     # The task's own country, not necessarily the manager's active one —
     # a cross-country edit (from the all_tasks board) must still scope
     # responsible_supervisor to who's actually eligible there.
@@ -1695,7 +1699,7 @@ def _require_task_owner(request, task):
     field existed, and how it gets claimed in the first place.
     """
     technician = request.user.technician
-    if technician.role == Technician.Role.MANAGER:
+    if technician.is_manager_tier:
         return
     if task.responsible_supervisor_id and task.responsible_supervisor_id != technician.id:
         raise PermissionDenied
@@ -2253,8 +2257,8 @@ def technician_skills(request, pk):
                 return redirect('tasks:technician_skills', pk=technician.pk)
 
     negligence_events = None
-    if supervisor.role == Technician.Role.MANAGER:
-        # Manager-only reliability signal — a supervisor reviewing the
+    if supervisor.is_manager_tier:
+        # Manager-tier reliability signal — a supervisor reviewing the
         # same technician's skills never sees it, same as on the task
         # itself (see task_detail).
         negligence_events = TaskEvent.objects.filter(
@@ -2287,7 +2291,7 @@ def technician_edit(request, pk):
     the point of the all_technicians board this now also links from.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
-    is_manager = requesting_technician.role == Technician.Role.MANAGER
+    is_manager = requesting_technician.is_manager_tier
     technician = _scoped_or_404(
         Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
     )
@@ -2348,14 +2352,16 @@ def set_active_country(request):
 
 @login_required
 def role_permissions(request):
-    """Manager-only: which role can do what, plus global notification
+    """Admin-only: which role can do what, plus global notification
     behavior. Deliberately not gated by the configurable system it
-    manages (require_manager, not require_permission) — otherwise a bad
-    edit here could lock every role out of ever fixing it again.
+    manages (require_admin, not require_permission) — otherwise a bad
+    edit here could lock every role out of ever fixing it again. Also
+    the one screen a manager doesn't get, unlike every other manager-tier
+    screen (see require_admin).
     """
-    require_manager(request)
+    require_admin(request)
 
-    roles = [Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER]
+    roles = [Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER, Technician.Role.ADMIN]
     permissions = list(RolePermission.Permission)
     notification_settings = NotificationSettings.load()
 
@@ -2392,6 +2398,131 @@ def role_permissions(request):
 
     context = {'roles': roles, 'matrix': matrix, 'notification_settings': notification_settings}
     return render(request, 'tasks/role_permissions.html', context)
+
+
+@login_required
+def audit_log(request):
+    """Who did what, anywhere in Django admin — add/change/delete, with
+    the actor and a timestamp, for free from Django's own LogEntry.
+    Admin-only, same reasoning as Roles & permissions: this is oversight
+    of everyone, including other admins, so it stays off the manager-tier
+    floor. Covers /admin/ actions only — the in-app screens' own actions
+    already have their own trail on each task (see TaskEvent).
+    """
+    require_admin(request)
+
+    entries = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
+    paginator = Paginator(entries, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    return render(request, 'tasks/audit_log.html', {'page_obj': page_obj})
+
+
+def _shift_month(first_of_month, delta):
+    month_index = first_of_month.month - 1 + delta
+    year = first_of_month.year + month_index // 12
+    month = month_index % 12 + 1
+    return date(year, month, 1)
+
+
+def _resolve_report_month(request):
+    """The first-of-month date this report covers, from ?month=YYYY-MM,
+    defaulting to the current month. Always a clean first-of-month date —
+    never trusts the query string past that, so a malformed value just
+    falls back instead of erroring.
+    """
+    today = timezone.localtime().date()
+    try:
+        year, month = (int(part) for part in request.GET.get('month', '').split('-'))
+        return date(year, month, 1)
+    except (TypeError, ValueError):
+        return today.replace(day=1)
+
+
+def _month_report_querysets(period_start_date):
+    """Every ticket and task received in this month, company-wide — not
+    scoped to any active country, since this report is for leadership,
+    not one country's board.
+    """
+    period_start = timezone.make_aware(datetime.combine(period_start_date, datetime.min.time()))
+    period_end = timezone.make_aware(
+        datetime.combine(_shift_month(period_start_date, 1), datetime.min.time()),
+    )
+    tickets = CustomerTicket.objects.filter(
+        submitted_at__gte=period_start, submitted_at__lt=period_end,
+    ).select_related('country').order_by('submitted_at')
+    tasks = Task.objects.filter(
+        reported_at__gte=period_start, reported_at__lt=period_end,
+    ).select_related('site__customer', 'site__customer__country').order_by('reported_at')
+    return tickets, tasks
+
+
+@login_required
+def monthly_report(request):
+    """Every ticket and task received in a given month, company-wide,
+    with status — the report a manager pulls together each month for
+    leadership. Manager-tier, not gated by view_tasks/manage_tickets:
+    it's a cross-country summary, same fixed-floor reasoning as the
+    all_* boards.
+    """
+    require_manager(request)
+
+    period_start_date = _resolve_report_month(request)
+    tickets, tasks = _month_report_querysets(period_start_date)
+
+    ticket_status_labels = dict(CustomerTicket.Status.choices)
+    task_status_labels = dict(Task.Status.choices)
+
+    context = {
+        'period_start': period_start_date,
+        'prev_month': _shift_month(period_start_date, -1),
+        'next_month': _shift_month(period_start_date, 1),
+        'this_month': timezone.localtime().date().replace(day=1),
+        'tickets': tickets,
+        'tasks': tasks,
+        'ticket_status_counts': [
+            {'label': ticket_status_labels.get(row['status'], row['status']), 'count': row['count']}
+            for row in tickets.values('status').annotate(count=Count('id')).order_by('status')
+        ],
+        'task_status_counts': [
+            {'label': task_status_labels.get(row['status'], row['status']), 'count': row['count']}
+            for row in tasks.values('status').annotate(count=Count('id')).order_by('status')
+        ],
+        'ticket_total': tickets.count(),
+        'task_total': tasks.count(),
+    }
+    return render(request, 'tasks/monthly_report.html', context)
+
+
+@login_required
+def monthly_report_export(request):
+    require_manager(request)
+
+    period_start_date = _resolve_report_month(request)
+    tickets, tasks = _month_report_querysets(period_start_date)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="monthly-report-{period_start_date:%Y-%m}.csv"'
+    writer = csv.writer(response)
+
+    writer.writerow([f'Tickets received — {period_start_date:%B %Y}'])
+    writer.writerow(['Country', 'Company', 'Site description', 'Status', 'Submitted at'])
+    for ticket in tickets:
+        writer.writerow([
+            ticket.country.name, ticket.company_name, ticket.site_description,
+            ticket.get_status_display(), timezone.localtime(ticket.submitted_at),
+        ])
+
+    writer.writerow([])
+    writer.writerow([f'Tasks received — {period_start_date:%B %Y}'])
+    writer.writerow(['Task number', 'Country', 'Customer', 'Site', 'Status', 'Reported at'])
+    for task in tasks:
+        writer.writerow([
+            task.task_number, task.site.customer.country.name, task.site.customer.name, task.site.name,
+            task.get_status_display(), timezone.localtime(task.reported_at),
+        ])
+
+    return response
 
 
 @login_required
@@ -2440,6 +2571,33 @@ def conduct_area_create(request):
         form = ConductAreaCreateForm()
 
     return render(request, 'tasks/conduct_area_create.html', {'form': form})
+
+
+@login_required
+def brand_list(request):
+    """Every active equipment brand/vendor — manager-only, same fixed-floor
+    reasoning as skill_list: brands are global reference data, not scoped
+    to any country.
+    """
+    require_manager(request)
+    brands = Brand.objects.filter(is_active=True)
+    return render(request, 'tasks/brand_list.html', {'brands': brands})
+
+
+@login_required
+def brand_create(request):
+    require_manager(request)
+
+    if request.method == 'POST':
+        form = BrandCreateForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, _('Brand added.'))
+            return redirect('tasks:brand_list')
+    else:
+        form = BrandCreateForm()
+
+    return render(request, 'tasks/brand_create.html', {'form': form})
 
 
 @login_required

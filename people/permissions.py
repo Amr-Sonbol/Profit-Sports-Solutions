@@ -39,7 +39,7 @@ def get_active_country(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return None
-    if technician.role == Technician.Role.MANAGER:
+    if technician.is_manager_tier:
         active_id = request.session.get(ACTIVE_COUNTRY_SESSION_KEY)
         if active_id:
             country = Country.objects.filter(pk=active_id).first()
@@ -49,12 +49,25 @@ def get_active_country(request):
 
 
 def require_manager(request):
-    """Restrict a view to managers only — a fixed floor, not part of the
-    configurable permission system it manages (the Roles & permissions
-    screen itself). If that screen were subject to its own toggles, a bad
-    edit could lock every role out of fixing it.
+    """Restrict a view to the manager tier (manager or admin) — a fixed
+    floor, not part of the configurable permission system it manages.
+    Admin is a superset of manager, so this stays the shared gate for
+    every manager-only screen except Roles & permissions itself (see
+    require_admin).
     """
     technician = getattr(request.user, 'technician', None)
-    if technician is None or technician.role != Technician.Role.MANAGER:
+    if technician is None or not technician.is_manager_tier:
+        raise PermissionDenied
+    return technician
+
+
+def require_admin(request):
+    """Restrict a view to admins only — used solely for Roles &
+    permissions. Deliberately not satisfied by a plain manager: if that
+    screen were reachable by the same tier it configures, a bad edit
+    there could lock every role out of ever fixing it again.
+    """
+    technician = getattr(request.user, 'technician', None)
+    if technician is None or technician.role != Technician.Role.ADMIN:
         raise PermissionDenied
     return technician

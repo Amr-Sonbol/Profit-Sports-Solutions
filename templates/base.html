@@ -40,7 +40,7 @@
                     <button type="submit" class="button button--secondary">{% translate "Switch" %}</button>
                 </form>
                 {% endif %}
-                {% if user.technician and user.technician.role != 'manager' %}
+                {% if user.technician and not user.technician.is_manager_tier %}
                     <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
                     <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
                     <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
@@ -60,14 +60,19 @@
                 {% if 'manage_tickets' in role_permissions %}
                     <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>
                 {% endif %}
-                {% if user.technician.role == 'manager' %}
+                {% if user.technician.is_manager_tier %}
                     <a href="{% url 'tasks:all_tasks' %}">{% translate "All tasks" %}</a>
                     <a href="{% url 'tasks:all_week' %}">{% translate "All week" %}</a>
                     <a href="{% url 'tasks:all_technicians' %}">{% translate "All technicians" %}</a>
                     <a href="{% url 'tasks:all_tickets' %}">{% translate "All tickets" %}</a>
+                    <a href="{% url 'tasks:monthly_report' %}">{% translate "Monthly report" %}</a>
                     <a href="{% url 'tasks:skill_list' %}">{% translate "Skills" %}</a>
+                    <a href="{% url 'tasks:brand_list' %}">{% translate "Brands" %}</a>
                     <a href="{% url 'tasks:country_list' %}">{% translate "Countries" %}</a>
+                {% endif %}
+                {% if user.technician.role == 'admin' %}
                     <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
+                    <a href="{% url 'tasks:audit_log' %}">{% translate "Audit log" %}</a>
                 {% endif %}
                 {% if user.customer %}
                     <a href="{% url 'customers:portal_home' %}">{% translate "My account" %}</a>

@@ -278,6 +278,11 @@ class TaskEditForm(forms.ModelForm):
                     self.initial['scheduled_for'] = timezone.localtime(self.initial['scheduled_for']).strftime(
                         DATETIME_INPUT_FORMAT,
                     )
+            # Quotation/factory offer/invoice/delivery note are manager-tier
+            # documents — a supervisor never sees or uploads them, same as
+            # task_detail's own Documents section.
+            for field_name in ['quotation', 'factory_offer', 'invoice', 'delivery_note']:
+                del self.fields[field_name]
 
     def clean(self):
         cleaned = super().clean()
@@ -475,6 +480,17 @@ class SkillCreateForm(forms.ModelForm):
     class Meta:
         model = Skill
         fields = ['name', 'name_ar', 'category']
+
+
+class BrandCreateForm(forms.ModelForm):
+    """A manager adding an equipment brand/vendor — global, not scoped to
+    any country. Same shape as SkillCreateForm: deactivating an existing
+    one is a Django admin action for now.
+    """
+
+    class Meta:
+        model = Brand
+        fields = ['name', 'portal_url']
 
 
 class ConductAreaCreateForm(forms.ModelForm):

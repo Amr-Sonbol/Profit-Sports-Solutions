@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
-from people.models import RolePermission, Technician
+from people.models import RolePermission
 from people.permissions import get_active_country, require_manager, require_permission
 from tasks.forms import CustomerPortalTicketForm
 from tasks.models import CustomerTicketAttachment, Task
@@ -87,7 +87,7 @@ def customer_detail(request, pk):
 @login_required
 def customer_edit(request, pk):
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
-    is_manager = requesting_technician.role == Technician.Role.MANAGER
+    is_manager = requesting_technician.is_manager_tier
     customer = get_object_or_404(Customer, pk=pk, country=get_active_country(request))
 
     form = CustomerEditForm(instance=customer)

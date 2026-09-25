@@ -67,7 +67,7 @@
                 {% if task.scheduled_for %}
                     {{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
                     {% if task.schedule_time_locked %}<span class="badge badge--muted">{% translate "Locked" %}</span>{% endif %}
-                    {% if user.technician.role == 'manager' %}
+                    {% if user.technician.is_manager_tier %}
                     <form method="post" novalidate class="inline-form">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="toggle_schedule_lock">
@@ -110,7 +110,7 @@
 </div>
 {% endif %}
 
-{% if task.schedule_time_locked and user.technician.role != 'manager' %}
+{% if task.schedule_time_locked and not user.technician.is_manager_tier %}
 <div class="section">
     <h2>{% translate "Scheduling" %}</h2>
     {% if pending_schedule_request %}
@@ -134,7 +134,7 @@
 </div>
 {% endif %}
 
-{% if pending_schedule_request and user.technician.role == 'manager' %}
+{% if pending_schedule_request and user.technician.is_manager_tier %}
 <div class="section">
     <h2>{% translate "Pending schedule change request" %}</h2>
     <dl class="detail-grid">
@@ -238,6 +238,7 @@
     <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
     {% endif %}
 
+    {% if user.technician.is_manager_tier %}
     <h3>{% translate "Documents" %}</h3>
     <dl class="detail-grid">
         <div>
@@ -282,6 +283,7 @@
         </div>
     </dl>
     <p class="field__help">{% translate "Upload these from the task's Edit screen." %}</p>
+    {% endif %}
 
     <h3>{% translate "Shipping" %}</h3>
     <dl class="detail-grid">
@@ -330,7 +332,7 @@
     {% else %}
     <p class="empty-state">{% translate "Not requested yet." %}</p>
     {% endif %}
-    {% if user.technician.role == 'manager' %}
+    {% if user.technician.is_manager_tier %}
     {% if task.site.contact_email %}
     <form method="post" novalidate>
         {% csrf_token %}
@@ -423,7 +425,7 @@
     <h2>{% translate "Work report" %}</h2>
     {% if task.status == 'completed' %}
     <p class="flash flash--info">{% translate "Awaiting manager approval before this task closes." %}</p>
-        {% if user.technician.role == 'manager' %}
+        {% if user.technician.is_manager_tier %}
         <form method="post" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="approve_report">
@@ -486,7 +488,7 @@
 </div>
 {% endif %}
 
-{% if user.technician.role == 'manager' %}
+{% if user.technician.is_manager_tier %}
 {% if task.status != 'closed' %}
 <div class="section">
     <h2>{% translate "Close task" %}</h2>

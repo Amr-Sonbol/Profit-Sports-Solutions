@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Brands" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Brands" %}</h1>
+    <a href="{% url 'tasks:brand_create' %}" class="button">{% translate "Add brand" %}</a>
+</div>
+
+<div class="section">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Portal URL" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for brand in brands %}
+                <tr>
+                    <td>{{ brand.name }}</td>
+                    <td>
+                        {% if brand.portal_url %}
+                        <a href="{{ brand.portal_url }}" target="_blank" rel="noopener">{{ brand.portal_url }}</a>
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

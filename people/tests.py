@@ -14,7 +14,7 @@ class SeedRolePermissionsTests(TestCase):
     """
 
     def test_matches_old_hardcoded_supervisor_check(self):
-        expected_allowed_roles = {'supervisor', 'manager'}
+        expected_allowed_roles = {'supervisor', 'manager', 'admin'}
         for permission in RolePermission.Permission:
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
@@ -24,7 +24,7 @@ class SeedRolePermissionsTests(TestCase):
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(
             RolePermission.objects.count(),
-            len(RolePermission.Permission) * 3,
+            len(RolePermission.Permission) * 4,
         )
 
 

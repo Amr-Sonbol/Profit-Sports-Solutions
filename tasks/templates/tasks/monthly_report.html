@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Monthly report" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Monthly report" %}</h1>
+    <a href="{% url 'tasks:monthly_report_export' %}?month={{ period_start|date:'Y-m' }}" class="button">{% translate "Download CSV" %}</a>
+</div>
+
+<nav class="week-nav">
+    <a href="?month={{ prev_month|date:'Y-m' }}" class="back-link">{% translate "Previous month" %}</a>
+    <a href="?month={{ this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
+    <a href="?month={{ next_month|date:'Y-m' }}" class="forward-link">{% translate "Next month" %}</a>
+</nav>
+
+<h2>{{ period_start|date:"F Y" }}</h2>
+<p class="muted">{% translate "Every country combined — this is the number leadership sees, not a per-country board." %}</p>
+
+<div class="section">
+    <h2>{% blocktranslate with total=ticket_total %}Tickets received ({{ total }}){% endblocktranslate %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>{% translate "Status" %}</th><th>{% translate "Count" %}</th></tr>
+            </thead>
+            <tbody>
+                {% for row in ticket_status_counts %}
+                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                {% empty %}
+                <tr><td colspan="2" class="empty-state">{% translate "No tickets this month." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h2>{% blocktranslate with total=task_total %}Tasks received ({{ total }}){% endblocktranslate %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>{% translate "Status" %}</th><th>{% translate "Count" %}</th></tr>
+            </thead>
+            <tbody>
+                {% for row in task_status_counts %}
+                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                {% empty %}
+                <tr><td colspan="2" class="empty-state">{% translate "No tasks this month." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h3>{% translate "Tickets" %}</h3>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Country" %}</th>
+                    <th>{% translate "Company" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Submitted" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                <tr>
+                    <td>{{ ticket.country.name }}</td>
+                    <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }}</a></td>
+                    <td>{{ ticket.get_status_display }}</td>
+                    <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty-state">{% translate "Nothing to show." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="section">
+    <h3>{% translate "Tasks" %}</h3>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Task" %}</th>
+                    <th>{% translate "Country" %}</th>
+                    <th>{% translate "Customer" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Reported" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td><a href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
+                    <td>{{ task.site.customer.country.name }}</td>
+                    <td>{{ task.site.customer.name }}</td>
+                    <td>{{ task.get_status_display }}</td>
+                    <td>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="empty-state">{% translate "Nothing to show." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -5,7 +5,7 @@ from django.utils.html import format_html
 
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, Task, TaskAsset, TaskAssignment,
-    TaskAttachment, TaskEvent, TaskProduct,
+    TaskAttachment, TaskEvent, TaskProduct, TicketReply,
 )
 
 
@@ -246,9 +246,21 @@ class CustomerTicketAttachmentInline(admin.TabularInline):
     extra = 0
 
 
+class TicketReplyInline(admin.TabularInline):
+    model = TicketReply
+    extra = 0
+
+
 @admin.register(CustomerTicket)
 class CustomerTicketAdmin(admin.ModelAdmin):
     list_display = ['company_name', 'site_description', 'country', 'status', 'assigned_to', 'submitted_at']
     search_fields = ['company_name', 'site_description', 'contact_name', 'contact_phone']
     list_filter = ['country', 'status']
-    inlines = [CustomerTicketAttachmentInline]
+    inlines = [CustomerTicketAttachmentInline, TicketReplyInline]
+
+
+@admin.register(TicketReply)
+class TicketReplyAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'sender', 'sent_by', 'sent_at']
+    search_fields = ['ticket__company_name', 'message']
+    list_filter = ['sender']
