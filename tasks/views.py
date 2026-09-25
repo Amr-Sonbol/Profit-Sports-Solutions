@@ -169,6 +169,42 @@ def _candidates_with_skill_level(candidates_qs, task):
     return candidates
 
 
+def _technicians_with_next_scheduled_task(technicians):
+    """Annotate each technician with `.next_scheduled_task` — their
+    soonest upcoming open, scheduled assignment, or None — so whoever is
+    assigning a lead/helper can see a conflict right here instead of
+    checking the week board separately.
+    """
+    technicians = list(technicians)
+    upcoming = TaskAssignment.objects.filter(
+        technician__in=technicians, is_active=True, task__status__in=OPEN_STATUSES,
+        task__scheduled_for__gte=timezone.now(),
+    ).select_related('task__site__customer').order_by('task__scheduled_for')
+    next_by_technician = {}
+    for assignment in upcoming:
+        next_by_technician.setdefault(assignment.technician_id, assignment.task)
+    for technician in technicians:
+        technician.next_scheduled_task = next_by_technician.get(technician.pk)
+    return technicians
+
+
+def _supervisors_with_next_scheduled_task(supervisors):
+    """Same as _technicians_with_next_scheduled_task, but for whoever is
+    picked as a task's responsible_supervisor — that's a direct FK on
+    Task, not a TaskAssignment row, so the lookup is simpler.
+    """
+    supervisors = list(supervisors)
+    upcoming = Task.objects.filter(
+        responsible_supervisor__in=supervisors, status__in=OPEN_STATUSES, scheduled_for__gte=timezone.now(),
+    ).select_related('site__customer').order_by('scheduled_for')
+    next_by_supervisor = {}
+    for task in upcoming:
+        next_by_supervisor.setdefault(task.responsible_supervisor_id, task)
+    for supervisor in supervisors:
+        supervisor.next_scheduled_task = next_by_supervisor.get(supervisor.pk)
+    return supervisors
+
+
 def _skills_with_current_rating(technician):
     """Every active skill, each annotated with `.current` — the
     technician's TechnicianSkill row for it, or None if never rated.
@@ -783,7 +819,8 @@ def task_list(request):
             | Q(site__name__icontains=search)
             | Q(site__customer__name__icontains=search)
             | Q(pak_reference_number__icontains=search)
-        )
+            | Q(task_assets__asset__serial_no__icontains=search)
+        ).distinct()
 
     if customer_id:
         tasks = tasks.filter(site__customer_id=customer_id)
@@ -855,6 +892,7 @@ def all_tasks(request):
     customer = request.GET.get('customer', '').strip()
     site = request.GET.get('site', '').strip()
     pak_reference = request.GET.get('pak_reference', '').strip()
+    serial_number = request.GET.get('serial_number', '').strip()
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
@@ -875,6 +913,8 @@ def all_tasks(request):
         tasks = tasks.filter(site__name__icontains=site)
     if pak_reference:
         tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
+    if serial_number:
+        tasks = tasks.filter(task_assets__asset__serial_no__icontains=serial_number).distinct()
     if date:
         tasks = tasks.filter(scheduled_for__date=date)
     if country_id:
@@ -889,7 +929,7 @@ def all_tasks(request):
     filter_params = {
         key: value for key, value in {
             'task_id': task_id, 'customer': customer, 'site': site,
-            'pak_reference': pak_reference,
+            'pak_reference': pak_reference, 'serial_number': serial_number,
             'date': request.GET.get('date', ''), 'country': country_id,
         }.items() if value
     }
@@ -901,6 +941,7 @@ def all_tasks(request):
         'customer': customer,
         'site': site,
         'pak_reference': pak_reference,
+        'serial_number': serial_number,
         'date': request.GET.get('date', ''),
         'status_choices': Task.Status.choices,
         'countries': Country.objects.order_by('name'),
@@ -936,21 +977,8 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the scheduled visit.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
-    if request.method == 'POST' and request.POST.get('action') == 'toggle_schedule_lock':
-        require_manager(request)
-        if not task.scheduled_for:
-            messages.error(request, _('Set a full date and time before locking or opening it.'))
-        else:
-            task.schedule_time_locked = not task.schedule_time_locked
-            task.save(update_fields=['schedule_time_locked'])
-            if task.schedule_time_locked:
-                messages.success(request, _('Schedule locked — a supervisor must now request a change.'))
-            else:
-                messages.success(request, _('Schedule opened — a supervisor can edit it directly again.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
     if request.method == 'POST' and request.POST.get('action') == 'set_schedule_time':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        set_time_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
         if not task.scheduled_date or task.scheduled_for:
             messages.error(request, _('There is no day-only schedule waiting for a time.'))
@@ -960,7 +988,11 @@ def task_detail(request, pk):
                 messages.error(request, _('Enter a time.'))
             else:
                 task.scheduled_for = timezone.make_aware(datetime.combine(task.scheduled_date, time_value))
-                task.save(update_fields=['scheduled_for'])
+                # A supervisor completing a manager's day-only date is the
+                # normal path and stays open; a manager doing it themselves
+                # locks it, same rule as everywhere else.
+                task.schedule_time_locked = set_time_technician.is_manager_tier
+                task.save(update_fields=['scheduled_for', 'schedule_time_locked'])
                 TaskEvent.objects.create(
                     task=task, event_type=TaskEvent.EventType.RESCHEDULED,
                     occurred_at=timezone.now(), actor=request.user,
@@ -1257,7 +1289,7 @@ def task_edit(request, pk):
 
 @login_required
 def task_create(request):
-    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    requesting_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
     active_country = get_active_country(request)
 
     ticket = None
@@ -1307,6 +1339,10 @@ def task_create(request):
                     task.pak_reference_number = ticket.pak_reference_number
                     task.shipping_company = ticket.shipping_company
                     task.shipping_tracking_number = ticket.shipping_tracking_number
+                # A manager's own schedule is locked from the moment it's
+                # set — a supervisor's stays open. See task_edit for the
+                # same rule applied to a reschedule.
+                task.schedule_time_locked = requesting_technician.is_manager_tier and bool(task.scheduled_for)
                 _save_new_task(task)
                 TaskEvent.objects.create(
                     task=task, event_type=TaskEvent.EventType.CREATED,
@@ -1324,7 +1360,16 @@ def task_create(request):
     else:
         form = TaskCreateForm(country=active_country, ticket=ticket)
 
-    return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket})
+    # So whoever's creating this can see everyone's upcoming schedule
+    # right here and pick a date that doesn't collide — no separate trip
+    # to the week board just to check.
+    team_schedule = _supervisors_with_next_scheduled_task(
+        Technician.objects.filter(is_active=True, country=active_country).exclude(role=Technician.Role.TECHNICIAN),
+    ) + _technicians_with_next_scheduled_task(
+        Technician.objects.filter(is_active=True, country=active_country, role=Technician.Role.TECHNICIAN),
+    )
+
+    return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket, 'team_schedule': team_schedule})
 
 
 def ticket_form(request):
@@ -1498,6 +1543,7 @@ def ticket_list(request):
     ticket_id = request.GET.get('ticket_id', '').strip()
     company = request.GET.get('company', '').strip()
     site = request.GET.get('site', '').strip()
+    pak = request.GET.get('pak', '').strip()
     date = parse_date(request.GET.get('date', '') or '')
 
     tickets = CustomerTicket.objects.filter(country=get_active_country(request)).select_related('assigned_to')
@@ -1509,19 +1555,23 @@ def ticket_list(request):
         tickets = tickets.filter(company_name__icontains=company)
     if site:
         tickets = tickets.filter(site_description__icontains=site)
+    if pak:
+        tickets = tickets.filter(pak_reference_number__icontains=pak)
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     tickets = tickets.order_by('-submitted_at')
 
     filter_params = {
         key: value for key, value in {
-            'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
+            'date': request.GET.get('date', ''),
         }.items() if value
     }
 
     context = {
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
-        'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+        'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
+        'date': request.GET.get('date', ''),
         'filter_qs': urlencode(filter_params),
     }
     return render(request, 'tasks/ticket_list.html', context)
@@ -1543,6 +1593,7 @@ def all_tickets(request):
     ticket_id = request.GET.get('ticket_id', '').strip()
     company = request.GET.get('company', '').strip()
     site = request.GET.get('site', '').strip()
+    pak = request.GET.get('pak', '').strip()
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
@@ -1555,6 +1606,8 @@ def all_tickets(request):
         tickets = tickets.filter(company_name__icontains=company)
     if site:
         tickets = tickets.filter(site_description__icontains=site)
+    if pak:
+        tickets = tickets.filter(pak_reference_number__icontains=pak)
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     if country_id:
@@ -1563,14 +1616,15 @@ def all_tickets(request):
 
     filter_params = {
         key: value for key, value in {
-            'ticket_id': ticket_id, 'company': company, 'site': site,
+            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
             'date': request.GET.get('date', ''), 'country': country_id,
         }.items() if value
     }
 
     context = {
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
-        'ticket_id': ticket_id, 'company': company, 'site': site, 'date': request.GET.get('date', ''),
+        'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
+        'date': request.GET.get('date', ''),
         'countries': Country.objects.order_by('name'), 'selected_country': country_id,
         'filter_qs': urlencode(filter_params),
     }
@@ -1816,7 +1870,7 @@ def task_assign(request, pk):
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'candidates': _candidates_with_skill_level(candidates_qs, task),
+        'candidates': _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)),
         'locked': locked,
         'set_lead_form': set_lead_form,
         'add_helper_form': add_helper_form,
@@ -2085,6 +2139,14 @@ def my_profile(request):
     leaderboard = _leaderboard(technician.country)
     rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
 
+    # No single assigned supervisor is tracked — just everyone in this
+    # country a technician can actually go to, same country-scoping as
+    # every other roster in the app.
+    supervisors = Technician.objects.filter(
+        country=technician.country, is_active=True,
+        role__in=[Technician.Role.SUPERVISOR, Technician.Role.MANAGER, Technician.Role.ADMIN],
+    ).order_by('role', 'full_name')
+
     context = {
         'technician': technician,
         'profile_form': profile_form,
@@ -2093,6 +2155,7 @@ def my_profile(request):
         'ninety_day': _ninety_day_progress(technician, certification),
         'rank': rank,
         'leaderboard_size': len(leaderboard),
+        'supervisors': supervisors,
     }
     return render(request, 'tasks/my_profile.html', context)
 
@@ -2726,6 +2789,9 @@ def my_task_detail(request, pk):
                 messages.success(request, _('Photo added.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
+    teammates = task.assignments.filter(is_active=True).exclude(technician=technician).select_related('technician')
+    created_by_technician = getattr(task.created_by, 'technician', None)
+
     context = {
         'task': task,
         'is_lead': is_lead,
@@ -2746,6 +2812,11 @@ def my_task_detail(request, pk):
         'upload_form': upload_form,
         'block_form': block_form,
         'pause_form': pause_form,
+        # Who else is on this task, and who created it — a technician
+        # never saw either before, even when the creator is the manager.
+        'teammates': teammates,
+        'created_by_name': created_by_technician.full_name if created_by_technician else task.created_by.get_username(),
+        'created_by_role_display': created_by_technician.get_role_display() if created_by_technician else '',
     }
     return render(request, 'tasks/my_task_detail.html', context)
 

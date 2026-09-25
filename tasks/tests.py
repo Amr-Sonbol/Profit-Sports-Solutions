@@ -655,9 +655,24 @@ class TaskScheduleLockingTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertIsNotNone(self.task.scheduled_for)
+        self.assertFalse(self.task.schedule_time_locked)
         self.assertTrue(
             self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists(),
         )
+
+    def test_manager_setting_time_for_a_day_only_pending_task_locks_it(self):
+        self.task.scheduled_date = date(2026, 10, 1)
+        self.task.save(update_fields=['scheduled_date'])
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.detail_url, {
+            'action': 'set_schedule_time', 'scheduled_time': '14:30',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertTrue(self.task.schedule_time_locked)
 
     def test_supervisor_cannot_change_scheduled_for_directly_once_locked(self):
         self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
@@ -776,31 +791,6 @@ class TaskScheduleLockingTests(TaskTestCase):
         response = self.client.post(self.detail_url, {
             'action': 'approve_schedule_change', 'request_id': change_request.pk,
         })
-        self.assertEqual(response.status_code, 403)
-
-    def test_manager_can_toggle_the_lock_directly(self):
-        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
-        self.task.scheduled_date = date(2026, 10, 1)
-        self.task.schedule_time_locked = True
-        self.task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
-
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
-        self.assertEqual(response.status_code, 302)
-        self.task.refresh_from_db()
-        self.assertFalse(self.task.schedule_time_locked)
-
-        self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
-        self.task.refresh_from_db()
-        self.assertTrue(self.task.schedule_time_locked)
-
-    def test_supervisor_cannot_toggle_the_lock(self):
-        self.task.scheduled_for = timezone.make_aware(datetime(2026, 10, 1, 9, 0))
-        self.task.schedule_time_locked = True
-        self.task.save(update_fields=['scheduled_for', 'schedule_time_locked'])
-
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.detail_url, {'action': 'toggle_schedule_lock'})
         self.assertEqual(response.status_code, 403)
 
     def test_manager_can_edit_a_locked_schedule_directly(self):
@@ -974,6 +964,33 @@ class TaskListTests(TaskTestCase):
         tasks = [task.task_number for task in response.context['page_obj']]
         self.assertEqual(tasks, [in_range.task_number])
 
+    def test_search_by_machine_serial_number(self):
+        matching = self._make_task('AE-0001')
+        matching_asset = Asset.objects.create(site=self.site, brand=self.brand, serial_no='SN-99001')
+        TaskAsset.objects.create(task=matching, asset=matching_asset, outcome=TaskAsset.Outcome.REPAIRED)
+
+        other = self._make_task('AE-0002')
+        other_asset = Asset.objects.create(site=self.site, brand=self.brand, serial_no='SN-11111')
+        TaskAsset.objects.create(task=other, asset=other_asset, outcome=TaskAsset.Outcome.REPAIRED)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'q': '99001'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
+    def test_search_by_serial_number_does_not_duplicate_rows(self):
+        task = self._make_task('AE-0001')
+        for serial in ('SN-A', 'SN-B'):
+            asset = Asset.objects.create(site=self.site, brand=self.brand, serial_no=serial)
+            TaskAsset.objects.create(task=task, asset=asset, outcome=TaskAsset.Outcome.REPAIRED)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'q': 'SN-'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [task.task_number])
+
     def test_filters_carry_across_status_tabs(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/', {'status': 'all', 'customer': self.customer.pk})
@@ -1067,6 +1084,51 @@ class TaskCreateTests(TaskTestCase):
 
         task = Task.objects.get()
         self.assertEqual(task.responsible_supervisor, supervisor)
+
+    def test_team_schedule_shows_who_is_already_booked(self):
+        busy_task = Task.objects.create(
+            task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            scheduled_for=timezone.now() + timedelta(days=1),
+        )
+        TaskAssignment.objects.create(
+            task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/new/')
+
+        team = {p.pk: p for p in response.context['team_schedule']}
+        self.assertEqual(team[self.technician.pk].next_scheduled_task, busy_task)
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.assertIsNone(team[supervisor.pk].next_scheduled_task)
+
+    def test_manager_creating_a_task_with_a_schedule_locks_it(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/new/', {
+            'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'scheduled_for': '2026-10-01T09:00',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Task.objects.get().schedule_time_locked)
+
+    def test_supervisor_creating_a_task_with_a_schedule_leaves_it_open(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', {
+            'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'scheduled_for': '2026-10-01T09:00',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Task.objects.get().schedule_time_locked)
 
     def test_cannot_create_a_task_for_another_country_s_site(self):
         other_country = Country.objects.create(
@@ -1419,6 +1481,20 @@ class TicketListTests(TaskTestCase):
         response = self.client.get('/tasks/tickets/', {'status': 'all'})
         self.assertNotContains(response, 'Cairo Gym')
 
+    def test_search_by_pak_reference_number(self):
+        self.ticket.pak_reference_number = 'PAK-99001'
+        self.ticket.save(update_fields=['pak_reference_number'])
+        other = CustomerTicket.objects.create(
+            country=self.country, company_name='One Fit Gym', site_description='JBR Branch',
+            contact_name='Sara', contact_phone='0509999999', pak_reference_number='PAK-11111',
+            description='Bike display broken.', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/', {'status': 'all', 'pak': '99001'})
+        self.assertContains(response, 'Fitness First')
+        self.assertNotContains(response, 'One Fit Gym')
+
 
 class TicketReviewTests(TaskTestCase):
     def setUp(self):
@@ -1683,6 +1759,25 @@ class TaskAssignTests(TaskTestCase):
         self.assertEqual(assignment.role, TaskAssignment.Role.LEAD)
         event = self.task.events.get()
         self.assertEqual(event.event_type, TaskEvent.EventType.ASSIGNED)
+
+    def test_candidates_show_their_next_scheduled_task(self):
+        busy_task = Task.objects.create(
+            task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            scheduled_for=timezone.now() + timedelta(days=1),
+        )
+        TaskAssignment.objects.create(
+            task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+
+        candidates = {c.pk: c for c in response.context['candidates']}
+        self.assertEqual(candidates[self.technician.pk].next_scheduled_task, busy_task)
+        self.assertIsNone(candidates[self.helper.pk].next_scheduled_task)
 
     def test_replace_lead_without_reason_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -2558,6 +2653,27 @@ class MyProfileTests(TaskTestCase):
         # the leaderboard ranks every active technician, points or not.
         self.assertEqual(response.context['rank'], 1)
         self.assertEqual(response.context['leaderboard_size'], 1)
+
+    def test_shows_supervisors_and_managers_in_the_country(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_supervisor_user = User.objects.create_user('egypt_sup', password='pass12345')
+        Technician.objects.create(
+            user=other_supervisor_user, country=other_country, full_name='Nour Cairo',
+            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+
+        names = {s.full_name for s in response.context['supervisors']}
+        self.assertEqual(names, {'Sara Super', 'Mona Manager'})
 
     def test_confirmed_skill_shows_up_in_the_overview(self):
         TechnicianSkill.objects.create(
@@ -3493,6 +3609,34 @@ class MyTaskDetailTests(TaskTestCase):
         self.client.login(username='helper1', password='pass12345')
         response = self.client.get(self.url)
         self.assertIsNone(response.context['next_action'])
+
+    def test_lead_sees_their_teammate_and_who_created_it(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['created_by_name'], 'Sara Super')
+        teammates = list(response.context['teammates'])
+        self.assertEqual(len(teammates), 1)
+        self.assertEqual(teammates[0].technician, self.helper)
+
+    def test_helper_sees_the_lead_as_their_teammate(self):
+        self.client.login(username='helper1', password='pass12345')
+        response = self.client.get(self.url)
+        teammates = list(response.context['teammates'])
+        self.assertEqual(len(teammates), 1)
+        self.assertEqual(teammates[0].technician, self.technician)
+
+    def test_created_by_shows_the_manager_when_a_manager_made_it(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task.created_by = manager_user
+        self.task.save(update_fields=['created_by'])
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['created_by_name'], 'Mona Manager')
 
     def test_accept_advances_status_and_logs_event(self):
         self.client.login(username='tech1', password='pass12345')

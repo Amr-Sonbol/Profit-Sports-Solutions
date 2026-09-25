@@ -145,4 +145,39 @@
         <button type="submit" class="button">{% translate "Create task" %}</button>
     </form>
 </div>
+
+<div class="section">
+    <h2>{% translate "Team schedule" %}</h2>
+    <p class="field__help">{% translate "Who's already booked, so you can pick a time that doesn't collide — no need to check the week board separately." %}</p>
+    {% if team_schedule %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Role" %}</th>
+                    <th>{% translate "Next scheduled" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for person in team_schedule %}
+                <tr>
+                    <td>{{ person.full_name }}</td>
+                    <td>{{ person.get_role_display }}</td>
+                    <td>
+                        {% if person.next_scheduled_task %}
+                        <a href="{% url 'tasks:task_detail' person.next_scheduled_task.pk %}">
+                            {{ person.next_scheduled_task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
+                        </a>
+                        {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active supervisors or technicians in this country yet." %}</p>
+    {% endif %}
+</div>
 {% endblock %}

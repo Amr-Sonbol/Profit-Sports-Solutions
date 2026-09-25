@@ -116,7 +116,8 @@ class Task(models.Model):
     schedule_time_locked = models.BooleanField(
         _('schedule time locked'), default=False,
         help_text=_(
-            'true once a manager sets both the day and the exact time together — a '
+            'set automatically — true whenever a manager is the one who last set '
+            'scheduled_for; a supervisor doing so leaves it false. Locked means a '
             'supervisor can no longer change scheduled_for directly and must request a change'
         ),
     )

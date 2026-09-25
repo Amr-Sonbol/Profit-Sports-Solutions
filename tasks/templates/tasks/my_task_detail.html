@@ -65,6 +65,27 @@
     {% endif %}
 </div>
 
+<div class="section">
+    <h2>{% translate "Team" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Created by" %}</dt>
+            <dd>{{ created_by_name }}{% if created_by_role_display %} <span class="muted">({{ created_by_role_display }})</span>{% endif %}</dd>
+        </div>
+    </dl>
+    {% if teammates %}
+    <p class="field__help">{% translate "Also on this task" %}</p>
+    <ul class="plain-list">
+        {% for assignment in teammates %}
+        <li>
+            {{ assignment.technician.full_name }}
+            <span class="badge badge--role-{{ assignment.role }}">{{ assignment.get_role_display }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+
 {% if is_lead and show_status_section %}
 <div class="section">
     <h2>{% translate "Status" %}</h2>

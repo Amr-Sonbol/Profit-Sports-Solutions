@@ -61,6 +61,19 @@
 </div>
 
 <div class="section">
+    <h2>{% translate "Supervisors" %}</h2>
+    {% if supervisors %}
+    <ul class="plain-list">
+        {% for person in supervisors %}
+        <li>{{ person.full_name }} <span class="badge badge--muted">{{ person.get_role_display }}</span></li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No supervisor or manager set up in your country yet." %}</p>
+    {% endif %}
+</div>
+
+<div class="section">
     <h2>{% translate "Photo & language" %}</h2>
     {% include "_avatar.html" with technician=technician size="lg" %}
     <form method="post" enctype="multipart/form-data" novalidate>

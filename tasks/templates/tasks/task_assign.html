@@ -113,6 +113,7 @@
                     <th>{% translate "Transport" %}</th>
                     <th>{% translate "Large equipment" %}</th>
                     {% if task.required_skill %}<th>{% blocktranslate with skill=task.required_skill.name %}Level — {{ skill }}{% endblocktranslate %}</th>{% endif %}
+                    <th>{% translate "Next scheduled" %}</th>
                     <th>{% translate "Status" %}</th>
                 </tr>
             </thead>
@@ -124,6 +125,13 @@
                     <td>{% if technician.has_transport %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     <td>{% if technician.can_carry_large %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     {% if task.required_skill %}<td>{{ technician.skill_level|default:"—" }}</td>{% endif %}
+                    <td>
+                        {% if technician.next_scheduled_task %}
+                        <a href="{% url 'tasks:task_detail' technician.next_scheduled_task.pk %}">
+                            {{ technician.next_scheduled_task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
+                        </a>
+                        {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
+                    </td>
                     <td>
                         {% if technician.is_available %}
                         <form method="post" class="inline-form" novalidate>
