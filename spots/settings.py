@@ -58,11 +58,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'axes',
+    'rest_framework',
+    'rest_framework.authtoken',
     'reference',
     'customers',
     'people',
     'tasks',
     'reports',
+    'api',
 ]
 
 MIDDLEWARE = [
@@ -240,3 +243,17 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
     SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+
+
+# API (for the technician/staff mobile app)
+# Token auth only — the app has no cookies to carry, and every request
+# already needs to say who it's acting as. Same RolePermission checks as
+# the web views underneath (see api/permissions.py), not a separate model.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}

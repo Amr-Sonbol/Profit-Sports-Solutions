@@ -37,6 +37,7 @@ urlpatterns = [
     path('tasks/', include('tasks.urls')),
     path('reports/', include('reports.urls')),
     path('customers/', include('customers.urls')),
+    path('api/', include('api.urls')),
     path('', views.home, name='home'),
 ]
 
