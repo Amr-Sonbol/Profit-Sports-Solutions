@@ -148,7 +148,7 @@
 
 <div class="section">
     <h2>{% translate "Team schedule" %}</h2>
-    <p class="field__help">{% translate "Who's already booked, so you can pick a time that doesn't collide — no need to check the week board separately." %}</p>
+    <p class="field__help">{% translate "Who's already booked, so you can pick a time that doesn't collide. Open someone's week for the full day-by-day picture — how crowded each day is, not just what's next." %}</p>
     {% if team_schedule %}
     <div class="table-wrap">
         <table>
@@ -157,6 +157,7 @@
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Role" %}</th>
                     <th>{% translate "Next scheduled" %}</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -171,6 +172,7 @@
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
                     </td>
+                    <td><a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a></td>
                 </tr>
                 {% endfor %}
             </tbody>

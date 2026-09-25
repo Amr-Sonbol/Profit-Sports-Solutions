@@ -1959,6 +1959,14 @@ def _week_board(technician, request):
     start time and estimated finish (Task.estimated_finish) travel with
     each task automatically, since that's a model property. Shared by
     my_week (self) and technician_board (a supervisor viewing someone else).
+
+    Covers both ways a task can belong to someone: assigned as lead/helper
+    (TaskAssignment — how a technician gets work), and set as
+    responsible_supervisor (how a supervisor/manager is on the hook for
+    one) — a task where both are true only appears once, under whichever
+    role. Without the second half, this board was blank for anyone whose
+    only stake in a task was being its responsible_supervisor, which is
+    exactly the case someone scheduling a new task most needs to see.
     """
     today, start, end = _week_window(request)
 
@@ -1968,21 +1976,42 @@ def _week_board(technician, request):
 
     days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
     tasks_by_date = {day['date']: day['tasks'] for day in days}
+    assigned_task_ids = set()
     for assignment in scheduled_assignments:
         task = assignment.task
         task.my_role = assignment.role
         tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+        assigned_task_ids.add(task.pk)
+
+    responsible_scheduled = Task.objects.filter(
+        responsible_supervisor=technician, scheduled_for__date__range=(start, end),
+    ).exclude(pk__in=assigned_task_ids).select_related('site__customer', 'task_type')
+    for task in responsible_scheduled:
+        task.my_role = 'responsible'
+        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+
+    for day in days:
+        day['tasks'].sort(key=lambda t: t.scheduled_for)
 
     unscheduled_assignments = TaskAssignment.objects.filter(
         technician=technician, is_active=True, task__scheduled_for__isnull=True,
         task__status__in=OPEN_STATUSES,
     )
     role_by_task_id = {a.task_id: a.role for a in unscheduled_assignments}
-    unscheduled = Task.objects.filter(pk__in=role_by_task_id).select_related(
+    unscheduled = list(Task.objects.filter(pk__in=role_by_task_id).select_related(
         'site__customer', 'task_type',
-    ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
+    ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'))
     for task in unscheduled:
         task.my_role = role_by_task_id[task.pk]
+
+    unscheduled_responsible = list(Task.objects.filter(
+        responsible_supervisor=technician, scheduled_for__isnull=True, status__in=OPEN_STATUSES,
+    ).exclude(pk__in=role_by_task_id).select_related('site__customer', 'task_type').annotate(
+        priority_rank=PRIORITY_RANK,
+    ).order_by('priority_rank', 'promised_at'))
+    for task in unscheduled_responsible:
+        task.my_role = 'responsible'
+    unscheduled += unscheduled_responsible
 
     return days, unscheduled, _week_nav_context(today, start)
 

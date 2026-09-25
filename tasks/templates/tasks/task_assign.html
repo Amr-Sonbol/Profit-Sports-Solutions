@@ -131,6 +131,7 @@
                             {{ technician.next_scheduled_task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
+                        <a href="{% url 'tasks:technician_board' technician.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a>
                     </td>
                     <td>
                         {% if technician.is_available %}

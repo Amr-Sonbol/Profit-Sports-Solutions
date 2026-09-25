@@ -43,8 +43,10 @@
             {{ task.site.customer.name }} — {{ task.site.name }}
             {% if task.my_role == 'lead' %}
                 <span class="badge badge--role-lead">{% translate "Lead" %}</span>
-            {% else %}
+            {% elif task.my_role == 'helper' %}
                 <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {% else %}
+                <span class="badge badge--muted">{% translate "Responsible" %}</span>
             {% endif %}
             <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
             <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
@@ -67,8 +69,10 @@
             {{ task.site.customer.name }} — {{ task.site.name }}
             {% if task.my_role == 'lead' %}
                 <span class="badge badge--role-lead">{% translate "Lead" %}</span>
-            {% else %}
+            {% elif task.my_role == 'helper' %}
                 <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+            {% else %}
+                <span class="badge badge--muted">{% translate "Responsible" %}</span>
             {% endif %}
             <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
             <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>

@@ -2209,6 +2209,48 @@ class MyWeekTests(TaskTestCase):
         all_tasks = [t for day in response.context['days'] for t in day['tasks']]
         self.assertEqual(all_tasks, [])
 
+    def test_shows_task_where_i_am_responsible_supervisor(self):
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        task = self._make_task(
+            'AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0), responsible_supervisor=supervisor,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(list(days[date(2026, 9, 7)]), [task])
+        self.assertEqual(days[date(2026, 9, 7)][0].my_role, 'responsible')
+
+    def test_responsible_supervisor_task_not_duplicated_when_also_assigned(self):
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        task = self._make_task(
+            'AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0), responsible_supervisor=supervisor,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=supervisor, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(len(days[date(2026, 9, 7)]), 1)
+        self.assertEqual(days[date(2026, 9, 7)][0].my_role, TaskAssignment.Role.LEAD)
+
+    def test_unscheduled_responsible_task_appears(self):
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        task = self._make_task(
+            'AE-0001', scheduled_for=None, status=Task.Status.NEW, responsible_supervisor=supervisor,
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+
+        self.assertEqual(list(response.context['unscheduled']), [task])
+        self.assertEqual(response.context['unscheduled'][0].my_role, 'responsible')
+
     def test_unscheduled_open_task_of_mine_appears(self):
         task = self._make_task('AE-0001', scheduled_for=None, status=Task.Status.NEW)
         TaskAssignment.objects.create(
@@ -2932,6 +2974,24 @@ class TechnicianBoardTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(f'/tasks/technicians/{other_technician.pk}/board/')
         self.assertEqual(response.status_code, 404)
+
+    def test_shows_a_supervisors_responsible_tasks(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        manager = Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        supervisor = Technician.objects.get(user=self.supervisor_user)
+        task = self._make_task(
+            'AE-0001', scheduled_for=dubai_time(2026, 9, 7, 9, 0), responsible_supervisor=supervisor,
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{supervisor.pk}/board/', {'start': '2026-09-07'})
+
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(list(days[date(2026, 9, 7)]), [task])
+        self.assertEqual(days[date(2026, 9, 7)][0].my_role, 'responsible')
 
     def test_shows_scheduled_task_with_role_and_estimated_finish(self):
         task = self._make_task(
