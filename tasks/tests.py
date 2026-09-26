@@ -653,7 +653,7 @@ class TaskEditTests(TaskTestCase):
             'products-0-quantity': '1',
         }))
 
-        response = self.client.get('/tasks/', {'status': 'all', 'q': 'SN-TRACE-1'})
+        response = self.client.get('/tasks/', {'status': 'all', 'serial_number': 'SN-TRACE-1'})
         self.assertContains(response, self.task.task_number)
 
 
@@ -1023,6 +1023,51 @@ class TaskListTests(TaskTestCase):
         tasks = [task.task_number for task in response.context['page_obj']]
         self.assertEqual(tasks, [matching.task_number])
 
+    def test_filter_by_task_number(self):
+        matching = self._make_task('AE-0001')
+        self._make_task('AE-0002')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'task_id': '0001'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
+    def test_filter_by_site(self):
+        other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        matching = self._make_task('AE-0001')
+        self._make_task('AE-0002', site=other_site)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'site': 'Marina'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
+    def test_filter_by_site_also_matches_the_address_not_just_the_name(self):
+        # self.site.address is 'Dubai Marina' (TaskTestCase.setUp) — a
+        # city search shouldn't require it to be part of the site's own
+        # name, just somewhere in the address.
+        other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR, Abu Dhabi')
+        matching = self._make_task('AE-0001')
+        self._make_task('AE-0002', site=other_site)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'site': 'Dubai'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
+    def test_filter_by_pak_reference(self):
+        matching = self._make_task('AE-0001', pak_reference_number='PAK-99001')
+        self._make_task('AE-0002', pak_reference_number='PAK-11111')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'pak_reference': '99001'})
+
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [matching.task_number])
+
     def test_filter_by_technician_matches_lead_or_helper(self):
         lead_task = self._make_task('AE-0001')
         TaskAssignment.objects.create(
@@ -1061,7 +1106,7 @@ class TaskListTests(TaskTestCase):
         TaskAsset.objects.create(task=other, asset=other_asset, outcome=TaskAsset.Outcome.REPAIRED)
 
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/', {'status': 'all', 'q': '99001'})
+        response = self.client.get('/tasks/', {'status': 'all', 'serial_number': '99001'})
 
         tasks = [task.task_number for task in response.context['page_obj']]
         self.assertEqual(tasks, [matching.task_number])
@@ -1073,7 +1118,7 @@ class TaskListTests(TaskTestCase):
             TaskAsset.objects.create(task=task, asset=asset, outcome=TaskAsset.Outcome.REPAIRED)
 
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/', {'status': 'all', 'q': 'SN-'})
+        response = self.client.get('/tasks/', {'status': 'all', 'serial_number': 'SN-'})
 
         tasks = [task.task_number for task in response.context['page_obj']]
         self.assertEqual(tasks, [task.task_number])
@@ -1522,6 +1567,20 @@ class TicketListTests(TaskTestCase):
 
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/tickets/', {'status': 'all', 'pak': '99001'})
+        self.assertContains(response, 'Fitness First')
+        self.assertNotContains(response, 'One Fit Gym')
+
+    def test_search_by_site_also_matches_the_address_not_just_the_description(self):
+        self.ticket.site_address = 'Dubai Marina'
+        self.ticket.save(update_fields=['site_address'])
+        other = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
+            site_address='JBR, Abu Dhabi', contact_name='Sara', contact_phone='0509999999',
+            description='Bike display broken.', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/', {'status': 'all', 'site': 'Dubai'})
         self.assertContains(response, 'Fitness First')
         self.assertNotContains(response, 'One Fit Gym')
 

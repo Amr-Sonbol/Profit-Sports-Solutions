@@ -846,7 +846,10 @@ def task_list(request):
     active_country = get_active_country(request)
 
     status = request.GET.get('status', 'open')
-    search = request.GET.get('q', '').strip()
+    task_id = request.GET.get('task_id', '').strip()
+    site = request.GET.get('site', '').strip()
+    pak_reference = request.GET.get('pak_reference', '').strip()
+    serial_number = request.GET.get('serial_number', '').strip()
     customer_id = request.GET.get('customer', '')
     technician_id = request.GET.get('technician', '')
     shipping_company = request.GET.get('shipping_company', '')
@@ -862,14 +865,16 @@ def task_list(request):
     elif status != 'all':
         tasks = tasks.filter(status=status)
 
-    if search:
+    if task_id:
+        tasks = tasks.filter(task_number__icontains=task_id)
+    if site:
+        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
+    if pak_reference:
+        tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
+    if serial_number:
         tasks = tasks.filter(
-            Q(task_number__icontains=search)
-            | Q(site__name__icontains=search)
-            | Q(site__customer__name__icontains=search)
-            | Q(pak_reference_number__icontains=search)
-            | Q(task_assets__asset__serial_no__icontains=search)
-            | Q(products__serial_number__icontains=search)
+            Q(task_assets__asset__serial_no__icontains=serial_number)
+            | Q(products__serial_number__icontains=serial_number)
         ).distinct()
 
     if customer_id:
@@ -899,7 +904,8 @@ def task_list(request):
     # silently dropping them.
     filter_params = {
         key: value for key, value in {
-            'q': search, 'customer': customer_id, 'technician': technician_id,
+            'task_id': task_id, 'site': site, 'pak_reference': pak_reference,
+            'serial_number': serial_number, 'customer': customer_id, 'technician': technician_id,
             'shipping_company': shipping_company,
             'scheduled_from': request.GET.get('scheduled_from', ''),
             'scheduled_to': request.GET.get('scheduled_to', ''),
@@ -909,7 +915,10 @@ def task_list(request):
     context = {
         'page_obj': page_obj,
         'status': status,
-        'search': search,
+        'task_id': task_id,
+        'site': site,
+        'pak_reference': pak_reference,
+        'serial_number': serial_number,
         'status_choices': Task.Status.choices,
         'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
         'technicians': Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'),
@@ -960,7 +969,7 @@ def all_tasks(request):
     if customer:
         tasks = tasks.filter(site__customer__name__icontains=customer)
     if site:
-        tasks = tasks.filter(site__name__icontains=site)
+        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
     if pak_reference:
         tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
     if serial_number:
@@ -1629,7 +1638,7 @@ def ticket_list(request):
     if company:
         tickets = tickets.filter(company_name__icontains=company)
     if site:
-        tickets = tickets.filter(site_description__icontains=site)
+        tickets = tickets.filter(Q(site_description__icontains=site) | Q(site_address__icontains=site))
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
     if customer_id:
@@ -1691,7 +1700,7 @@ def all_tickets(request):
     if company:
         tickets = tickets.filter(company_name__icontains=company)
     if site:
-        tickets = tickets.filter(site_description__icontains=site)
+        tickets = tickets.filter(Q(site_description__icontains=site) | Q(site_address__icontains=site))
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
     if customer_id:

@@ -21,8 +21,21 @@
 
 <form method="get" class="filters">
     <input type="hidden" name="status" value="{{ status }}">
-    <div class="filters__search">
-        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by task number, site, customer, PAK reference, or machine serial number' %}">
+    <div class="field">
+        <label for="filter-task-id">{% translate "Task number" %}</label>
+        <input type="text" id="filter-task-id" name="task_id" value="{{ task_id }}">
+    </div>
+    <div class="field">
+        <label for="filter-site">{% translate "Site" %}</label>
+        <input type="text" id="filter-site" name="site" value="{{ site }}" placeholder="{% translate 'Branch name or city' %}">
+    </div>
+    <div class="field">
+        <label for="filter-pak-reference">{% translate "PAK reference" %}</label>
+        <input type="text" id="filter-pak-reference" name="pak_reference" value="{{ pak_reference }}">
+    </div>
+    <div class="field">
+        <label for="filter-serial-number">{% translate "Machine serial number" %}</label>
+        <input type="text" id="filter-serial-number" name="serial_number" value="{{ serial_number }}">
     </div>
     <select name="customer">
         <option value="">{% translate "All customers" %}</option>
