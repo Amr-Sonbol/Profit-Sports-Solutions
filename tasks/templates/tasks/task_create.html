@@ -13,7 +13,15 @@
 
 {% if ticket %}
 <p class="flash flash--info">
-    {% blocktranslate with company=ticket.company_name %}Creating this task from a customer ticket — {{ company }}. The site fields below are hints from what they typed; pick or create the real site to match.{% endblocktranslate %}
+    {% if ticket.site %}
+        {% if user.technician.role == 'admin' %}
+            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}Creating this task from a customer ticket — {{ company }}. The customer picked {{ site }} from their own registered sites — as admin, you can still change it below.{% endblocktranslate %}
+        {% else %}
+            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}Creating this task from a customer ticket — {{ company }}. The customer picked {{ site }} from their own registered sites, so it's locked in below — only an admin can change it.{% endblocktranslate %}
+        {% endif %}
+    {% else %}
+        {% blocktranslate with company=ticket.company_name %}Creating this task from a customer ticket — {{ company }}. The site fields below are hints from what they typed; pick or create the real site to match.{% endblocktranslate %}
+    {% endif %}
 </p>
 {% endif %}
 

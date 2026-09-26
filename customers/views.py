@@ -17,6 +17,7 @@ from people.models import RolePermission
 from people.permissions import get_active_country, require_manager, require_permission
 from tasks.forms import CustomerPortalTicketForm
 from tasks.models import CustomerTicketAttachment, Task
+from tasks.views import save_new_ticket
 
 from .forms import CustomerCreateForm, CustomerEditForm, CustomerImportForm, SiteCreateForm, SiteEditForm
 from .models import Customer, Site
@@ -335,22 +336,24 @@ def portal_ticket_new(request):
             with transaction.atomic():
                 ticket = form.save(commit=False)
                 ticket.customer = customer
+                ticket.site = site
                 ticket.country = customer.country
                 ticket.company_name = customer.name
+                ticket.customer_code = customer.code
                 ticket.site_description = site.name
                 ticket.site_address = site.address
                 ticket.submitted_at = timezone.now()
-                ticket.save()
+                save_new_ticket(ticket)
                 for uploaded_file in form.cleaned_data['attachments']:
                     CustomerTicketAttachment.objects.create(
                         ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
                     )
-            messages.success(request, _('Report submitted.'))
+            messages.success(request, _('Ticket %(number)s submitted.') % {'number': ticket.ticket_number})
             return redirect('customers:portal_home')
     else:
         form = CustomerPortalTicketForm(customer=customer, initial={
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
-            'contact_email': customer.contact_email,
+            'contact_email': customer.contact_email, 'shipping_address': customer.shipping_address,
         })
 
     return render(request, 'customers/portal_ticket_new.html', {'form': form})

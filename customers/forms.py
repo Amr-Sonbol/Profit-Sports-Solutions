@@ -22,7 +22,13 @@ class CustomerEditForm(forms.ModelForm):
 
     class Meta:
         model = Customer
-        fields = ['name', 'segment', 'language', 'contact_name', 'contact_phone', 'contact_email']
+        fields = [
+            'name', 'code', 'segment', 'language',
+            'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
+        ]
+        widgets = {
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
+        }
 
 
 class SiteCreateForm(forms.ModelForm):

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Ticket" %} — {{ ticket.company_name }}{% endblock %}
+{% block title %}{{ ticket.ticket_number }} — {{ ticket.company_name }}{% endblock %}
 
 {% block content %}
 <div class="page__header">
     <div>
         <a href="{% url 'tasks:ticket_list' %}" class="back-link">{% translate "Back to tickets" %}</a>
-        <h1>{{ ticket.company_name }}</h1>
+        <h1>{{ ticket.ticket_number }} — {{ ticket.company_name }}</h1>
     </div>
     <div class="badge-row">
         {% if ticket.status == 'new' %}
@@ -32,6 +32,12 @@
             <dt>{% translate "Site / location" %}</dt>
             <dd>{{ ticket.site_description }}</dd>
         </div>
+        {% if ticket.customer_code %}
+        <div>
+            <dt>{% translate "Customer code" %}</dt>
+            <dd>{{ ticket.customer_code }}</dd>
+        </div>
+        {% endif %}
         <div>
             <dt>{% translate "Contact name" %}</dt>
             <dd>{{ ticket.contact_name }}</dd>
@@ -51,6 +57,12 @@
         <dt>{% translate "Gym address" %}</dt>
         <p>{{ ticket.site_address }}</p>
     </div>
+    {% if ticket.shipping_address %}
+    <div class="description">
+        <dt>{% translate "Shipping address" %}</dt>
+        <p>{{ ticket.shipping_address }}</p>
+    </div>
+    {% endif %}
     <div class="description">
         <dt>{% translate "Serial number(s)" %}</dt>
         <p class="pre-line">{{ ticket.serial_numbers }}</p>
@@ -90,6 +102,9 @@
             <span class="badge {% if reply.sender == 'staff' %}badge--muted{% else %}badge--status-new{% endif %}">
                 {% if reply.sender == 'staff' %}{% translate "Staff" %}{% else %}{% translate "Customer" %}{% endif %}
             </span>
+            {% if reply.is_quotation %}
+            <span class="badge badge--status-completed">{% translate "Quotation" %}</span>
+            {% endif %}
             <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             <p>{{ reply.message }}</p>
             {% if reply.attachment %}
@@ -121,6 +136,14 @@
             {{ reply_form.attachment }}
             {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
+        <div class="field {% if reply_form.is_quotation.errors %}field--error{% endif %}">
+            <label class="checkbox-label">
+                {{ reply_form.is_quotation }}
+                {{ reply_form.is_quotation.label }}
+            </label>
+            {% if reply_form.is_quotation.help_text %}<p class="field__help">{{ reply_form.is_quotation.help_text }}</p>{% endif %}
+            {% for error in reply_form.is_quotation.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
         <div class="field field--submit">
             <button type="submit" class="button button--secondary">{% translate "Send reply" %}</button>
         </div>
@@ -129,6 +152,40 @@
     <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
     {% endif %}
 </div>
+
+{% if internal_note_form %}
+<div class="section">
+    <h2>{% translate "Internal notes" %}</h2>
+    <p class="field__help">{% translate "Visible to managers and admins only — never shown to the customer or on the ticket's conversation." %}</p>
+    {% if internal_notes %}
+    <ul class="plain-list">
+        {% for note in internal_notes %}
+        <li>
+            <span class="muted">{{ note.created_at|date:"SHORT_DATETIME_FORMAT" }}{% if note.author %} — {{ note.author.technician.full_name|default:note.author.get_username }}{% endif %}</span>
+            <p>{{ note.message }}</p>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No internal notes yet." %}</p>
+    {% endif %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_internal_note">
+        {% if internal_note_form.non_field_errors %}
+            <p class="flash flash--error">{{ internal_note_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if internal_note_form.message.errors %}field--error{% endif %}">
+            <label for="{{ internal_note_form.message.id_for_label }}">{{ internal_note_form.message.label }}</label>
+            {{ internal_note_form.message }}
+            {% for error in internal_note_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Add note" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 
 {% if can_manage %}
 <div class="section">

@@ -1,6 +1,6 @@
 {% extends "tasks/email/base.html" %}
 {% block content %}
-<p style="margin:0 0 16px;">The customer replied on ticket #{{ ticket_pk }} ({{ company }} — {{ site }}):</p>
+<p style="margin:0 0 16px;">The customer replied on ticket {{ ticket_number }} ({{ company }} — {{ site }}):</p>
 <p style="margin:0 0 16px;white-space:pre-line;">{{ reply_message }}</p>
 {% include "tasks/email/_button.html" with url=link label="View and reply" %}
 {% endblock %}

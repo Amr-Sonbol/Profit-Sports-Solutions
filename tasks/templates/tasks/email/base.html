@@ -3,26 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>Profit Sports Solutions</title>
+<!--[if mso]>
+<style type="text/css">table, td { border-collapse: collapse; }</style>
+<![endif]-->
+<style type="text/css">
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  /* The header stays pinned white in both modes — the logo file itself
+     has an opaque white background baked in (not transparent), so it
+     can't sit on a dark surface without looking broken. Everything else
+     follows the viewer's own light/dark setting. */
+  .email-header { background-color: #ffffff !important; }
+  .email-muted { background-color: #f5f6f7; color: #1c2126; }
+  .email-footer { background-color: #f5f6f7; color: #8a94a3; border-top: 1px solid #e3e6ea; }
+  .email-card { border-color: #e3e6ea; }
+  @media (prefers-color-scheme: dark) {
+    .email-muted { background-color: #202124 !important; color: #e8eaed !important; }
+    .email-footer { background-color: #202124 !important; color: #9aa0a6 !important; border-top-color: #3c4043 !important; }
+    .email-card { border-color: #3c4043 !important; }
+  }
+  /* Gmail's mobile app tags elements with [data-ogsc]/[data-ogsb] when
+     it applies its own automatic dark-mode recoloring — this can
+     override even an explicit background-color:#fff!important above.
+     Re-asserting it under those attribute selectors is the documented
+     workaround: it wins because it's more specific than Gmail's own
+     injected rule, not because of !important alone. */
+  [data-ogsc] .email-header, [data-ogsb] .email-header {
+    background-color: #ffffff !important;
+  }
+  [data-ogsc] .email-header img, [data-ogsb] .email-header img {
+    background-color: #ffffff !important;
+  }
+</style>
 </head>
-<body style="margin:0;padding:0;background-color:#f5f6f7;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f6f7;padding:24px 0;">
+<body class="email-muted" style="margin:0;padding:0;background-color:#f5f6f7;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-muted" style="background-color:#f5f6f7;padding:32px 0;">
 <tr>
-<td align="center">
-<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:1px solid #dde1e4;border-radius:8px;max-width:480px;width:100%;">
+<td align="center" class="email-muted">
+<table role="presentation" width="480" cellpadding="0" cellspacing="0" class="email-muted email-card" style="background-color:#f5f6f7;max-width:480px;width:100%;border:1px solid #e3e6ea;border-radius:10px;overflow:hidden;">
 <tr>
-<td style="background-color:#2f6feb;padding:20px 28px;border-radius:8px 8px 0 0;font-family:Arial,Helvetica,sans-serif;">
-<span style="color:#ffffff;font-size:18px;font-weight:bold;">Profit Sports Solutions</span>
+<td bgcolor="#ffffff" class="email-header" style="background-color:#ffffff;padding:0;line-height:0;font-size:0;">
+<img src="{{ logo_url }}" alt="Profit Sports Solutions" width="960" border="0" style="display:block;width:100%;max-width:480px;height:auto;border:0;">
 </td>
 </tr>
 <tr>
-<td style="padding:28px;font-size:14px;line-height:1.6;color:#1c2126;font-family:Arial,Helvetica,sans-serif;">
+<td class="email-muted" style="background-color:#f5f6f7;padding:28px 32px;font-size:15px;line-height:1.65;color:#1c2126;font-family:Arial,Helvetica,sans-serif;">
 {% block content %}{% endblock %}
 </td>
 </tr>
 <tr>
-<td style="padding:16px 28px;border-top:1px solid #dde1e4;color:#667085;font-size:12px;font-family:Arial,Helvetica,sans-serif;">
-This is an automated message from Profit Sports Solutions.
+<td class="email-footer" style="background-color:#f5f6f7;padding:16px 32px;border-top:1px solid #e3e6ea;color:#8a94a3;font-size:12px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
+This is an automated message from Profit Sports Solutions — please don't reply directly to this address.
 </td>
 </tr>
 </table>

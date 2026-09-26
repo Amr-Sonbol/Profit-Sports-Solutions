@@ -4,11 +4,14 @@ from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
+from email.mime.image import MIMEImage
+
 from django.contrib import messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
+from django.contrib.staticfiles.finders import find as find_static_file
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
@@ -39,15 +42,15 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm, CustomerTicketForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm,
     DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
-    SkillCreateForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TaskProductForm, TechnicianCreateForm,
-    TechnicianEditForm, TicketEditForm, TicketLogisticsForm, TicketReplyForm,
+    SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm, TaskProductForm, TechnicianCreateForm,
+    TechnicianEditForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm, TicketReplyForm,
 )
 from .models import (
-    CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
-    TaskAssignment, TaskAttachment, TaskEvent, TaskProduct, TicketReply,
+    CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
+    TaskAssignment, TaskAttachment, TaskEvent, TaskProduct, TicketInternalNote, TicketReply,
 )
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
@@ -145,6 +148,29 @@ def _save_new_task(task):
         except IntegrityError:
             continue
     raise IntegrityError('Could not generate a unique task number')
+
+
+def _next_ticket_number(country):
+    prefix = f'{country.task_prefix or country.iso_code}-T'
+    count = CustomerTicket.objects.filter(ticket_number__startswith=prefix).count()
+    return f'{prefix}{count + 1:04d}'
+
+
+def save_new_ticket(ticket):
+    """Assign a ticket_number and save, retrying on a rare numbering
+    collision — same pattern as _save_new_task. Public (no leading
+    underscore): customers.views.portal_ticket_new, a different app,
+    calls this directly rather than duplicating the retry logic.
+    """
+    for _attempt in range(TASK_NUMBER_CREATE_ATTEMPTS):
+        ticket.ticket_number = _next_ticket_number(ticket.country)
+        try:
+            with transaction.atomic():
+                ticket.save()
+            return
+        except IntegrityError:
+            continue
+    raise IntegrityError('Could not generate a unique ticket number')
 
 
 def _assignment_candidates(task, exclude_ids):
@@ -526,29 +552,52 @@ def _attachment_media_type(uploaded_file):
     return TaskAttachment.MediaType.DOCUMENT
 
 
-def _save_attachment(request, task, uploaded_file, purpose):
+def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachment.Source.TECHNICIAN):
     path = default_storage.save(f'attachments/{task.pk}/{uploaded_file.name}', uploaded_file)
     TaskAttachment.objects.create(
         task=task, storage_kind=TaskAttachment.StorageKind.FILE,
         url=request.build_absolute_uri(default_storage.url(path)),
         media_type=_attachment_media_type(uploaded_file), purpose=purpose,
-        source=TaskAttachment.Source.TECHNICIAN, uploaded_by=request.user, uploaded_at=timezone.now(),
+        source=source, uploaded_by=request.user, uploaded_at=timezone.now(),
     )
 
 
-def _send_notification_email(subject, text_body, template_name, context, recipient_list):
+def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None):
     """Every outbound notification email in this app goes through here
     — a plain-text body for clients that don't render HTML, and a
     matching styled HTML alternative (tasks/templates/tasks/email/)
     for everyone else. Always fail-silent, same as every caller
     already was: a failed send must never block the action that
     triggered it.
+
+    attachment, when given, is a real file on the ticket/task itself
+    (e.g. a quotation) — attached as-is, not just linked.
+
+    The logo is embedded inline (a cid: reference, not a plain URL) —
+    this renders outside any request, and an email client fetches remote
+    images itself, from wherever it's reading the mail, which may have
+    no route at all to a local dev server. Embedding the actual bytes in
+    the message is the only way it reliably shows up everywhere.
     """
-    html_body = render_to_string(template_name, context)
+    html_body = render_to_string(template_name, {**context, 'logo_url': 'cid:logo'})
     email = EmailMultiAlternatives(
         subject=subject, body=text_body, from_email=None, to=recipient_list,
     )
     email.attach_alternative(html_body, 'text/html')
+    email.mixed_subtype = 'related'
+    logo_path = find_static_file('images/email_header.png')
+    if logo_path:
+        with open(logo_path, 'rb') as logo_file:
+            logo_image = MIMEImage(logo_file.read())
+        logo_image.add_header('Content-ID', '<logo>')
+        logo_image.add_header('Content-Disposition', 'inline', filename='email_header.png')
+        email.attach(logo_image)
+    if attachment:
+        attachment.open('rb')
+        try:
+            email.attach(attachment.name.rsplit('/', 1)[-1], attachment.read())
+        finally:
+            attachment.close()
     email.send(fail_silently=True)
 
 
@@ -1102,6 +1151,18 @@ def task_detail(request, pk):
             messages.success(request, _('Customer notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    can_upload_staff_document = requesting_technician.role != Technician.Role.TECHNICIAN
+    staff_upload_form = StaffAttachmentUploadForm()
+    if request.method == 'POST' and request.POST.get('action') == 'upload_document' and can_upload_staff_document:
+        staff_upload_form = StaffAttachmentUploadForm(request.POST, request.FILES)
+        if staff_upload_form.is_valid():
+            _save_attachment(
+                request, task, staff_upload_form.cleaned_data['file'], staff_upload_form.cleaned_data['purpose'],
+                source=TaskAttachment.Source.SUPERVISOR,
+            )
+            messages.success(request, _('Document added.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'approve_report':
         require_manager(request)
         if task.status != Task.Status.COMPLETED:
@@ -1202,6 +1263,8 @@ def task_detail(request, pk):
         'close_task_form': close_task_form,
         'negligence_form': negligence_form,
         'pending_schedule_request': pending_schedule_request,
+        'can_upload_staff_document': can_upload_staff_document,
+        'staff_upload_form': staff_upload_form,
     }
     return render(request, 'tasks/task_detail.html', context)
 
@@ -1299,8 +1362,10 @@ def task_create(request):
             CustomerTicket, pk=ticket_id, status=CustomerTicket.Status.NEW, country=active_country,
         )
 
+    is_admin = requesting_technician.role == Technician.Role.ADMIN
+
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST, country=active_country, ticket=ticket)
+        form = TaskCreateForm(request.POST, country=active_country, ticket=ticket, is_admin=is_admin)
         if form.is_valid():
             cleaned = form.cleaned_data
             with transaction.atomic():
@@ -1358,7 +1423,7 @@ def task_create(request):
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm(country=active_country, ticket=ticket)
+        form = TaskCreateForm(country=active_country, ticket=ticket, is_admin=is_admin)
 
     # So whoever's creating this can see everyone's upcoming schedule
     # right here and pick a date that doesn't collide — no separate trip
@@ -1373,61 +1438,14 @@ def task_create(request):
 
 
 def ticket_form(request):
-    """Public — no login. A customer describing a complaint or request in
-    their own words, self-identified rather than matched to a real site.
+    """Retired — a ticket now always requires a customer login. A brand
+    new customer reaches the company outside the app (phone, WhatsApp,
+    email); staff registers them, and every ticket after that goes
+    through the portal (customers.views.portal_ticket_new). This URL is
+    kept only so an old bookmark or shared link lands somewhere useful
+    instead of a dead page.
     """
-    if request.method == 'POST':
-        form = CustomerTicketForm(request.POST, request.FILES)
-        if form.is_valid():
-            with transaction.atomic():
-                ticket = form.save(commit=False)
-                ticket.submitted_at = timezone.now()
-                ticket.save()
-                for uploaded_file in form.cleaned_data['attachments']:
-                    CustomerTicketAttachment.objects.create(
-                        ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
-                    )
-            _send_ticket_confirmation(request, ticket)
-            return redirect('tasks:ticket_submitted', token=ticket.token)
-    else:
-        form = CustomerTicketForm()
-
-    return render(request, 'tasks/ticket_form.html', {'form': form})
-
-
-def _send_ticket_confirmation(request, ticket):
-    """Best-effort, and only when the customer gave an email — the
-    tracking link is still shown on the thank-you page either way, since
-    that's the one guaranteed way they see it.
-    """
-    if not ticket.contact_email:
-        return
-    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('We received your report — track it here')
-        message = _(
-            'Dear %(contact)s,\n\n'
-            "We've received your report for %(site)s and will be in touch shortly to arrange a visit.\n\n"
-            'You can check its status anytime at this link:\n%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': ticket.contact_name, 'site': ticket.site_description, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/ticket_confirmation.html',
-        {'contact': ticket.contact_name, 'site': ticket.site_description, 'link': link},
-        [ticket.contact_email],
-    )
-
-
-def ticket_submitted(request, token):
-    """Public — the thank-you page, split from ticket_form so refreshing
-    it doesn't risk resubmitting the form. Takes the token so it can
-    show the same follow-up link ticket_status lives at — the one place
-    a customer who gave no email will ever see it.
-    """
-    ticket = get_object_or_404(CustomerTicket, token=token)
-    status_url = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
-    return render(request, 'tasks/ticket_submitted.html', {'ticket': ticket, 'status_url': status_url})
+    return redirect('customers:portal_login')
 
 
 def _ticket_is_open(ticket):
@@ -1454,18 +1472,61 @@ def _send_reply_to_customer(request, reply):
         return
     link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
     with translation.override('en'):
-        subject = _('New reply on your report — %(site)s') % {'site': ticket.site_description}
+        subject = _('New reply on your ticket %(number)s — %(site)s') % {
+            'number': ticket.ticket_number, 'site': ticket.site_description,
+        }
         message = _(
             'Dear %(contact)s,\n\n'
+            'Regarding ticket %(number)s:\n\n'
             '%(reply_message)s\n\n'
             'You can reply or check the full conversation here:\n%(link)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
-        ) % {'contact': ticket.contact_name, 'reply_message': reply.message, 'link': link}
+        ) % {
+            'contact': ticket.contact_name, 'number': ticket.ticket_number,
+            'reply_message': reply.message, 'link': link,
+        }
     _send_notification_email(
         subject, message, 'tasks/email/reply_to_customer.html',
-        {'contact': ticket.contact_name, 'reply_message': reply.message, 'link': link},
+        {
+            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
+            'reply_message': reply.message, 'link': link,
+        },
         [ticket.contact_email],
+    )
+
+
+def _send_quotation_to_customer(request, reply):
+    """Sent instead of _send_reply_to_customer when the reply is marked
+    as the quotation — same best-effort/fail-silent pattern, but with a
+    dedicated subject/body and the quotation file itself attached, not
+    just linked. reply.attachment is guaranteed set — TicketReplyForm
+    requires it whenever is_quotation is checked.
+    """
+    ticket = reply.ticket
+    if not ticket.contact_email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    with translation.override('en'):
+        subject = _('Your quotation is ready — ticket %(number)s') % {'number': ticket.ticket_number}
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'Please find attached the quotation for ticket %(number)s.\n\n'
+            '%(reply_message)s\n\n'
+            'You can reply or check the full conversation here:\n%(link)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {
+            'contact': ticket.contact_name, 'number': ticket.ticket_number,
+            'reply_message': reply.message, 'link': link,
+        }
+    _send_notification_email(
+        subject, message, 'tasks/email/quotation_to_customer.html',
+        {
+            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
+            'reply_message': reply.message, 'link': link,
+        },
+        [ticket.contact_email], attachment=reply.attachment,
     )
 
 
@@ -1480,27 +1541,27 @@ def _send_reply_to_staff(request, reply):
         return
     link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
     with translation.override('en'):
-        subject = _('New customer reply — %(company)s') % {'company': ticket.company_name}
+        subject = _('New customer reply — ticket %(number)s') % {'number': ticket.ticket_number}
         message = _(
-            'The customer replied on ticket #%(pk)s (%(company)s — %(site)s):\n\n'
+            'The customer replied on ticket %(number)s (%(company)s — %(site)s):\n\n'
             '%(reply_message)s\n\n'
             'View and reply here:\n%(link)s\n',
         ) % {
-            'pk': ticket.pk, 'company': ticket.company_name, 'site': ticket.site_description,
+            'number': ticket.ticket_number, 'company': ticket.company_name, 'site': ticket.site_description,
             'reply_message': reply.message, 'link': link,
         }
     _send_notification_email(
         subject, message, 'tasks/email/reply_to_staff.html',
         {
-            'ticket_pk': ticket.pk, 'company': ticket.company_name, 'site': ticket.site_description,
-            'reply_message': reply.message, 'link': link,
+            'ticket_number': ticket.ticket_number, 'company': ticket.company_name,
+            'site': ticket.site_description, 'reply_message': reply.message, 'link': link,
         },
         [assignee.user.email],
     )
 
 
 def ticket_status(request, token):
-    """Public — no login. Lets a customer check on a report they
+    """Public — no login. Lets a customer check on a ticket they
     submitted, anytime — the same token-based, no-account pattern as
     reports.CustomerFeedback's link. While the ticket is still new, they
     can also reply here — the token is their identity, the same way it
@@ -1544,26 +1605,36 @@ def ticket_list(request):
     company = request.GET.get('company', '').strip()
     site = request.GET.get('site', '').strip()
     pak = request.GET.get('pak', '').strip()
+    customer_id = request.GET.get('customer', '')
     date = parse_date(request.GET.get('date', '') or '')
+    active_country = get_active_country(request)
 
-    tickets = CustomerTicket.objects.filter(country=get_active_country(request)).select_related('assigned_to')
+    tickets = CustomerTicket.objects.filter(country=active_country).select_related('assigned_to', 'customer')
     if status != 'all':
         tickets = tickets.filter(status=status)
     if ticket_id:
-        tickets = tickets.filter(pk__icontains=ticket_id)
+        tickets = tickets.filter(ticket_number__icontains=ticket_id)
     if company:
         tickets = tickets.filter(company_name__icontains=company)
     if site:
         tickets = tickets.filter(site_description__icontains=site)
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
+    if customer_id:
+        # Matches the linked customer where one's been set (portal
+        # submission or an earlier conversion) — and, since a brand new
+        # ticket has no link yet, also whatever name the customer typed
+        # that matches one you already have, same case-insensitive match
+        # task_create uses to find it.
+        customer = get_object_or_404(Customer, pk=customer_id, country=active_country)
+        tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     tickets = tickets.order_by('-submitted_at')
 
     filter_params = {
         key: value for key, value in {
-            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
+            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
             'date': request.GET.get('date', ''),
         }.items() if value
     }
@@ -1572,6 +1643,8 @@ def ticket_list(request):
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
+        'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
+        'selected_customer': customer_id,
         'filter_qs': urlencode(filter_params),
     }
     return render(request, 'tasks/ticket_list.html', context)
@@ -1594,20 +1667,27 @@ def all_tickets(request):
     company = request.GET.get('company', '').strip()
     site = request.GET.get('site', '').strip()
     pak = request.GET.get('pak', '').strip()
+    customer_id = request.GET.get('customer', '')
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
-    tickets = CustomerTicket.objects.select_related('assigned_to', 'country')
+    tickets = CustomerTicket.objects.select_related('assigned_to', 'country', 'customer')
     if status != 'all':
         tickets = tickets.filter(status=status)
     if ticket_id:
-        tickets = tickets.filter(pk__icontains=ticket_id)
+        tickets = tickets.filter(ticket_number__icontains=ticket_id)
     if company:
         tickets = tickets.filter(company_name__icontains=company)
     if site:
         tickets = tickets.filter(site_description__icontains=site)
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
+    if customer_id:
+        # Same case-insensitive name match task_create uses, so a ticket
+        # not yet linked to a customer (nothing converted or logged in)
+        # still shows up under the one it's actually about.
+        customer = get_object_or_404(Customer, pk=customer_id)
+        tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     if country_id:
@@ -1616,7 +1696,7 @@ def all_tickets(request):
 
     filter_params = {
         key: value for key, value in {
-            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
+            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
             'date': request.GET.get('date', ''), 'country': country_id,
         }.items() if value
     }
@@ -1626,6 +1706,8 @@ def all_tickets(request):
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
         'countries': Country.objects.order_by('name'), 'selected_country': country_id,
+        'customers': Customer.objects.filter(is_active=True).order_by('name'),
+        'selected_customer': customer_id,
         'filter_qs': urlencode(filter_params),
     }
     return render(request, 'tasks/all_tickets.html', context)
@@ -1661,20 +1743,37 @@ def ticket_review(request, pk):
     edit_form = TicketEditForm(instance=ticket)
     reply_form = TicketReplyForm()
     can_reply = _ticket_is_open(ticket)
+    internal_note_form = TicketInternalNoteForm()
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
 
-        if action == 'add_reply' and can_reply:
+        if action == 'add_internal_note' and technician.is_manager_tier:
+            internal_note_form = TicketInternalNoteForm(request.POST)
+            if internal_note_form.is_valid():
+                TicketInternalNote.objects.create(
+                    ticket=ticket, author=request.user,
+                    message=internal_note_form.cleaned_data['message'], created_at=timezone.now(),
+                )
+                messages.success(request, _('Note added.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+
+        elif action == 'add_reply' and can_reply:
             reply_form = TicketReplyForm(request.POST, request.FILES)
             if reply_form.is_valid():
+                is_quotation = reply_form.cleaned_data['is_quotation']
                 reply = TicketReply.objects.create(
                     ticket=ticket, sender=TicketReply.Sender.STAFF, sent_by=request.user,
                     message=reply_form.cleaned_data['message'],
-                    attachment=reply_form.cleaned_data['attachment'], sent_at=timezone.now(),
+                    attachment=reply_form.cleaned_data['attachment'], is_quotation=is_quotation,
+                    sent_at=timezone.now(),
                 )
-                _send_reply_to_customer(request, reply)
-                messages.success(request, _('Reply sent.'))
+                if is_quotation:
+                    _send_quotation_to_customer(request, reply)
+                    messages.success(request, _('Quotation sent.'))
+                else:
+                    _send_reply_to_customer(request, reply)
+                    messages.success(request, _('Reply sent.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
         elif action == 'update_logistics':
@@ -1742,6 +1841,9 @@ def ticket_review(request, pk):
         'reply_form': reply_form, 'can_reply': can_reply,
         'replies': ticket.replies.select_related('sent_by'),
     }
+    if technician.is_manager_tier:
+        context['internal_note_form'] = internal_note_form
+        context['internal_notes'] = ticket.internal_notes.select_related('author')
     return render(request, 'tasks/ticket_review.html', context)
 
 

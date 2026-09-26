@@ -5,7 +5,7 @@ from django.utils.html import format_html
 
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, Task, TaskAsset, TaskAssignment,
-    TaskAttachment, TaskEvent, TaskProduct, TicketReply,
+    TaskAttachment, TaskEvent, TaskProduct, TicketInternalNote, TicketReply,
 )
 
 
@@ -251,12 +251,17 @@ class TicketReplyInline(admin.TabularInline):
     extra = 0
 
 
+class TicketInternalNoteInline(admin.TabularInline):
+    model = TicketInternalNote
+    extra = 0
+
+
 @admin.register(CustomerTicket)
 class CustomerTicketAdmin(admin.ModelAdmin):
     list_display = ['company_name', 'site_description', 'country', 'status', 'assigned_to', 'submitted_at']
-    search_fields = ['company_name', 'site_description', 'contact_name', 'contact_phone']
+    search_fields = ['company_name', 'customer_code', 'site_description', 'contact_name', 'contact_phone']
     list_filter = ['country', 'status']
-    inlines = [CustomerTicketAttachmentInline, TicketReplyInline]
+    inlines = [CustomerTicketAttachmentInline, TicketReplyInline, TicketInternalNoteInline]
 
 
 @admin.register(TicketReply)
@@ -264,3 +269,9 @@ class TicketReplyAdmin(admin.ModelAdmin):
     list_display = ['ticket', 'sender', 'sent_by', 'sent_at']
     search_fields = ['ticket__company_name', 'message']
     list_filter = ['sender']
+
+
+@admin.register(TicketInternalNote)
+class TicketInternalNoteAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'author', 'created_at']
+    search_fields = ['ticket__company_name', 'message']

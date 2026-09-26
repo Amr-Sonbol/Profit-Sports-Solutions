@@ -354,6 +354,28 @@
     {% else %}
     <p class="empty-state">{% translate "No attachments yet." %}</p>
     {% endif %}
+    {% if can_upload_staff_document %}
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload_document">
+        {% if staff_upload_form.non_field_errors %}
+            <p class="flash flash--error">{{ staff_upload_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if staff_upload_form.file.errors %}field--error{% endif %}">
+            <label for="{{ staff_upload_form.file.id_for_label }}">{{ staff_upload_form.file.label }}</label>
+            {{ staff_upload_form.file }}
+            {% for error in staff_upload_form.file.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if staff_upload_form.purpose.errors %}field--error{% endif %}">
+            <label for="{{ staff_upload_form.purpose.id_for_label }}">{{ staff_upload_form.purpose.label }}</label>
+            {{ staff_upload_form.purpose }}
+            {% for error in staff_upload_form.purpose.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Add document" %}</button>
+        </div>
+    </form>
+    {% endif %}
 </div>
 
 {% if ticket_attachments %}

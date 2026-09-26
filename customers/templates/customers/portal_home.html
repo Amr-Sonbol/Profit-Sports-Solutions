@@ -6,16 +6,17 @@
 {% block content %}
 <div class="page__header">
     <h1>{{ customer.name }}</h1>
-    <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "Report a problem" %}</a>
+    <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "New ticket" %}</a>
 </div>
 
 <div class="section">
-    <h2>{% translate "Your reports" %}</h2>
+    <h2>{% translate "Your tickets" %}</h2>
     {% if tickets %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
+                    <th>{% translate "Ticket" %}</th>
                     <th>{% translate "Submitted" %}</th>
                     <th>{% translate "Site" %}</th>
                     <th>{% translate "Status" %}</th>
@@ -24,7 +25,8 @@
             <tbody>
                 {% for ticket in tickets %}
                 <tr>
-                    <td><a href="{% url 'tasks:ticket_status' ticket.token %}">{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</a></td>
+                    <td><a href="{% url 'tasks:ticket_status' ticket.token %}">{{ ticket.ticket_number }}</a></td>
+                    <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                     <td>{{ ticket.site_description }}</td>
                     <td>
                         {% if ticket.status == 'new' %}
@@ -41,7 +43,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "You haven't reported anything yet." %}</p>
+    <p class="empty-state">{% translate "You haven't submitted any tickets yet." %}</p>
     {% endif %}
 </div>
 

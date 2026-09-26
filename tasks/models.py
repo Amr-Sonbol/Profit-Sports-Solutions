@@ -12,12 +12,12 @@ from reference.models import Brand, Country, Skill, TaskType
 
 # A customer's own phone photos/videos of the fault — kept separate from
 # TaskAttachment's own list (tasks/forms.py) since this one has no LINK
-# option and no logged-in uploader to record.
-ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm']
+# option, and no uploaded_by of its own — the ticket itself already
+# records who submitted it (ticket.customer).
+ALLOWED_TICKET_ATTACHMENT_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'webm', 'pdf']
 MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
-# A cap on file count, not just size — the public ticket form takes no
-# login, so without this a script could attach an unbounded number of
-# files to one submission and exhaust storage or spam the office.
+# A cap on file count, not just size — without this a single submission
+# could attach an unbounded number of files and exhaust storage.
 MAX_TICKET_ATTACHMENT_COUNT = 10
 
 # The paperwork trail for a task — quotation, factory offer, invoice,
@@ -195,11 +195,11 @@ class Task(models.Model):
 
 
 class CustomerTicket(models.Model):
-    """A complaint or request submitted directly by a customer, no login
-    required. Self-identified, not yet linked to a real site — a
-    supervisor reviews it and either converts it into a task (picking an
-    existing site or creating a new one, same as task creation always
-    allows) or dismisses it.
+    """A complaint or request submitted by a logged-in customer, picking
+    one of their own registered sites — a supervisor reviews it and
+    either converts it into a task or dismisses it. Checking on it
+    afterwards (and replying) doesn't require staying logged in — see
+    the token field below.
     """
 
     class Status(models.TextChoices):
@@ -208,6 +208,10 @@ class CustomerTicket(models.Model):
         DISMISSED = 'dismissed', _('Dismissed')
         CLOSED = 'closed', _('Closed')
 
+    ticket_number = models.CharField(
+        _('ticket number'), max_length=30, unique=True,
+        help_text=_('auto-generated per country, e.g. AE-T0001 — the same prefix a task number uses, marked with a T so the two are never confused'),
+    )
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
         verbose_name=_('country'),
@@ -220,7 +224,20 @@ class CustomerTicket(models.Model):
             'otherwise once the ticket is converted to a task'
         ),
     )
+    site = models.ForeignKey(
+        Site, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets', verbose_name=_('site'),
+        help_text=_(
+            'set when a logged-in customer picked one of their own registered sites — '
+            'carries straight through to the resulting task with no re-matching, '
+            'and only an admin can change it once set'
+        ),
+    )
     company_name = models.CharField(_('gym name'), max_length=150)
+    customer_code = models.CharField(
+        _('customer code'), max_length=50, blank=True,
+        help_text=_('set automatically for a logged-in customer, from their own account'),
+    )
     site_description = models.CharField(
         _('site / location'), max_length=150,
         help_text=_('branch name, as the customer describes it'),
@@ -231,6 +248,10 @@ class CustomerTicket(models.Model):
     contact_name = models.CharField(_('full contact name'), max_length=150)
     contact_phone = models.CharField(_('contact phone number'), max_length=30)
     contact_email = models.EmailField(_('contact email address'), blank=True)
+    shipping_address = models.TextField(
+        _('shipping address'), blank=True,
+        help_text=_('where replacement parts should be delivered, if different from the site itself'),
+    )
     serial_numbers = models.TextField(
         _('serial number(s)'), default='',
         help_text=_('please list each affected machine on a new line'),
@@ -285,7 +306,7 @@ class CustomerTicket(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.company_name} — {self.site_description}'
+        return f'{self.ticket_number} — {self.company_name}'
 
 
 class TicketReply(models.Model):
@@ -317,6 +338,10 @@ class TicketReply(models.Model):
         _('attachment'), upload_to='ticket_reply_attachments/', null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
+    is_quotation = models.BooleanField(
+        _('is quotation'), default=False,
+        help_text=_('sends the dedicated quotation email (with the attachment) instead of a plain reply notice — staff only'),
+    )
     sent_at = models.DateTimeField(_('sent at'))
 
     class Meta:
@@ -326,6 +351,33 @@ class TicketReply(models.Model):
 
     def __str__(self):
         return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
+
+
+class TicketInternalNote(models.Model):
+    """A manager-tier-only progress note on a ticket — tracking what state
+    things are in behind the scenes. Never shown to the customer, and
+    unlike TicketReply, never shown to a supervisor or technician either —
+    only Manager and Admin.
+    """
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='internal_notes',
+        verbose_name=_('ticket'),
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ticket_internal_notes', verbose_name=_('author'),
+    )
+    message = models.TextField(_('note'))
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('ticket internal note')
+        verbose_name_plural = _('ticket internal notes')
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.ticket} — {self.created_at}'
 
 
 class CustomerTicketAttachment(models.Model):
@@ -519,6 +571,9 @@ class TaskAttachment(models.Model):
         SERIAL_PLATE = 'serial_plate', _('Serial plate')
         BEFORE = 'before', _('Before')
         AFTER = 'after', _('After')
+        DELIVERY_NOTE = 'delivery_note', _('Delivery note')
+        WRITTEN_REPORT = 'written_report', _('Written report')
+        OTHER = 'other', _('Other')
 
     class Source(models.TextChoices):
         CUSTOMER = 'customer', _('Customer')

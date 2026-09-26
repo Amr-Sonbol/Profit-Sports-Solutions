@@ -23,6 +23,10 @@
             <dd>{{ customer.country.name }}</dd>
         </div>
         <div>
+            <dt>{% translate "Customer code" %}</dt>
+            <dd>{{ customer.code|default:"—" }}</dd>
+        </div>
+        <div>
             <dt>{% translate "Contact" %}</dt>
             <dd>
                 {% if customer.contact_name or customer.contact_phone or customer.contact_email %}
@@ -35,6 +39,12 @@
             </dd>
         </div>
     </dl>
+    {% if customer.shipping_address %}
+    <div class="description">
+        <dt>{% translate "Shipping address" %}</dt>
+        <p>{{ customer.shipping_address }}</p>
+    </div>
+    {% endif %}
 </div>
 
 <div class="section">

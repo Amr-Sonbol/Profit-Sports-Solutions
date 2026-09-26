@@ -72,7 +72,7 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, country, ticket=None, **kwargs):
+    def __init__(self, *args, country, ticket=None, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['site'].queryset = Site.objects.filter(
             customer__is_active=True, customer__country=country,
@@ -109,20 +109,48 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
 
         # Coming from a customer ticket — hint the free-text fields with
-        # what the customer said, but the site/customer match itself stays
-        # a deliberate choice: the supervisor still picks or creates it,
-        # since a company name typed by a customer is never a guaranteed
-        # match for an existing record.
+        # what the customer said.
         if ticket is not None:
             self.fields['source'].initial = Task.Source.PORTAL
             self.fields['description'].initial = ticket.description
             self.fields['reported_at'].initial = timezone.localtime(ticket.submitted_at).strftime(
                 DATETIME_INPUT_FORMAT,
             )
-            self.fields['new_site_name'].initial = ticket.site_description
-            self.fields['new_site_address'].initial = ticket.site_address
-            self.fields['new_site_contact_name'].initial = ticket.contact_name
-            self.fields['new_site_contact_phone'].initial = ticket.contact_phone
+
+            if ticket.site_id:
+                # A logged-in customer picked one of their own registered
+                # sites at submission — that's authoritative, not a guess,
+                # so it carries straight through with no re-matching and
+                # no chance to pick something else in between. Only an
+                # admin can override it.
+                self.fields['site'].initial = ticket.site_id
+                if not is_admin:
+                    self.fields['site'].disabled = True
+            else:
+                # No registered site to go on (an anonymous public
+                # submission) — best-effort match by name, same
+                # case-insensitive match the CSV import uses, so the task
+                # still lands on a real record instead of a look-alike
+                # duplicate where possible. Always just a guess here, so
+                # always editable.
+                matched_customer = Customer.objects.filter(
+                    country=country, is_active=True, name__iexact=ticket.company_name.strip(),
+                ).first()
+                matched_site = None
+                if matched_customer:
+                    matched_site = Site.objects.filter(
+                        customer=matched_customer, name__iexact=ticket.site_description.strip(),
+                    ).first()
+
+                if matched_site:
+                    self.fields['site'].initial = matched_site.pk
+                else:
+                    self.fields['new_site_name'].initial = ticket.site_description
+                    self.fields['new_site_address'].initial = ticket.site_address
+                    self.fields['new_site_contact_name'].initial = ticket.contact_name
+                    self.fields['new_site_contact_phone'].initial = ticket.contact_phone
+                    if matched_customer:
+                        self.fields['new_site_customer'].initial = matched_customer.pk
 
     def plain_fields(self):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
@@ -453,7 +481,48 @@ class TaskAttachmentUploadForm(forms.Form):
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
     )
-    purpose = forms.ChoiceField(choices=TaskAttachment.Purpose.choices, label=_('What is this'))
+    # Explicit choices, not TaskAttachment.Purpose.choices wholesale — the
+    # delivery-note/written-report/other values further down belong to
+    # StaffAttachmentUploadForm, not the technician's own fault-evidence
+    # upload.
+    purpose = forms.ChoiceField(
+        choices=[
+            (TaskAttachment.Purpose.FAULT, _('Fault')),
+            (TaskAttachment.Purpose.SERIAL_PLATE, _('Serial plate')),
+            (TaskAttachment.Purpose.BEFORE, _('Before')),
+            (TaskAttachment.Purpose.AFTER, _('After')),
+        ],
+        label=_('What is this'),
+    )
+
+    def clean_file(self):
+        file = self.cleaned_data['file']
+        if file.size > MAX_MEDIA_UPLOAD_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+        return file
+
+
+class StaffAttachmentUploadForm(forms.Form):
+    """A document a supervisor, manager, or admin adds to a task as the
+    need comes up — a delivery note, a written report, anything else —
+    separate from the technician's own fault-evidence photos above, and
+    separate from the fixed one-per-task quotation/factory offer/invoice/
+    delivery note fields on the task itself. This is a repeatable list,
+    for whenever there's more than one, or nothing dedicated already fits.
+    """
+
+    file = forms.FileField(
+        label=_('Document'),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS + ['pdf'])],
+    )
+    purpose = forms.ChoiceField(
+        choices=[
+            (TaskAttachment.Purpose.DELIVERY_NOTE, _('Delivery note')),
+            (TaskAttachment.Purpose.WRITTEN_REPORT, _('Written report')),
+            (TaskAttachment.Purpose.OTHER, _('Other')),
+        ],
+        label=_('What is this'),
+    )
 
     def clean_file(self):
         file = self.cleaned_data['file']
@@ -752,14 +821,11 @@ class MultipleFileField(forms.FileField):
         return single_file_clean(data, initial)
 
 
-class CustomerTicketForm(forms.ModelForm):
-    """Public, no login — a customer describing a complaint or request in
-    their own words. Self-identified: the company/site names are exactly
-    what they typed, not yet matched against anything.
-
-    attachments isn't a CustomerTicket field — it's a list of files
-    resolved into individual CustomerTicketAttachment rows by the view,
-    once the ticket itself exists to attach them to.
+class CustomerPortalTicketForm(forms.ModelForm):
+    """A logged-in customer reporting an issue at one of their own
+    sites — the only way to submit a ticket. The company name, site, and
+    address are never typed here at all; a portal login already knows
+    who they are and where their sites are (set directly in the view).
     """
 
     attachments = MultipleFileField(
@@ -774,55 +840,11 @@ class CustomerTicketForm(forms.ModelForm):
     class Meta:
         model = CustomerTicket
         fields = [
-            'country', 'company_name', 'site_description', 'site_address',
-            'contact_name', 'contact_phone', 'contact_email',
+            'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
             'serial_numbers', 'description', 'notes',
         ]
         widgets = {
-            'site_address': forms.Textarea(attrs={'rows': 2}),
-            'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
-            'description': forms.Textarea(attrs={'rows': 5}),
-            'notes': forms.Textarea(attrs={'rows': 2}),
-        }
-
-    def clean_attachments(self):
-        files = self.cleaned_data['attachments']
-        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
-            raise forms.ValidationError(
-                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
-            )
-        for file in files:
-            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
-                    'name': file.name,
-                })
-        return files
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['country'].queryset = Country.objects.filter(is_active=True)
-
-
-class CustomerPortalTicketForm(forms.ModelForm):
-    """A logged-in customer reporting an issue at one of their own
-    sites — skips retyping the company name, site, and address a
-    stranger has to on the public CustomerTicketForm, since a portal
-    login already knows who they are and where their sites are.
-    """
-
-    attachments = MultipleFileField(
-        required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number — up to %(count)d files, %(size)d MB each') % {
-            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
-        },
-        widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
-    )
-
-    class Meta:
-        model = CustomerTicket
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'serial_numbers', 'description', 'notes']
-        widgets = {
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
             'description': forms.Textarea(attrs={'rows': 5}),
             'notes': forms.Textarea(attrs={'rows': 2}),
@@ -867,12 +889,19 @@ class TicketReplyForm(forms.Form):
     """One message — same shape for staff replying and a customer
     replying back, on either the staff review screen or the public
     token page. Which side sent it is recorded by the view, not here.
+
+    is_quotation is meaningless for a customer's own reply — the view
+    never reads it off that path, only off the staff one (ticket_review).
     """
     message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
     attachment = forms.FileField(
-        required=False, label=_('Photo or video'),
+        required=False, label=_('Photo, video, or PDF'),
         help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+    is_quotation = forms.BooleanField(
+        required=False, label=_('This is the quotation'),
+        help_text=_('sends the customer the dedicated quotation email instead of a plain reply notice, with this attachment included'),
     )
 
     def clean_attachment(self):
@@ -881,10 +910,23 @@ class TicketReplyForm(forms.Form):
             raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
         return attachment
 
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get('is_quotation') and not cleaned_data.get('attachment'):
+            raise forms.ValidationError(_('Attach the quotation file to send it as the quotation.'))
+        return cleaned_data
+
+
+class TicketInternalNoteForm(forms.Form):
+    """A manager-tier-only progress note — never seen by the customer or
+    by a supervisor/technician, unlike TicketReplyForm.
+    """
+    message = forms.CharField(label=_('Note'), widget=forms.Textarea(attrs={'rows': 3}))
+
 
 class TicketLogisticsForm(forms.ModelForm):
     """Both optional, filled in later once parts have actually shipped —
-    never known at submission time, so not part of CustomerTicketForm.
+    never known at submission time, so not part of CustomerPortalTicketForm.
     """
 
     class Meta:
@@ -902,12 +944,13 @@ class TicketEditForm(forms.ModelForm):
     class Meta:
         model = CustomerTicket
         fields = [
-            'company_name', 'site_description', 'site_address',
-            'contact_name', 'contact_phone', 'contact_email',
+            'company_name', 'customer_code', 'site_description', 'site_address',
+            'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
             'serial_numbers', 'description', 'notes',
         ]
         widgets = {
             'site_address': forms.Textarea(attrs={'rows': 2}),
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'serial_numbers': forms.Textarea(attrs={'rows': 3}),
             'description': forms.Textarea(attrs={'rows': 5}),
             'notes': forms.Textarea(attrs={'rows': 2}),

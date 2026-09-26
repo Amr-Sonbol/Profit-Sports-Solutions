@@ -18,6 +18,7 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
+    TicketInternalNote, TicketReply,
 )
 
 User = get_user_model()
@@ -258,6 +259,40 @@ class TaskDetailTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_supervisor_can_upload_a_staff_document(self):
+        pdf = SimpleUploadedFile('delivery-note.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {
+            'action': 'upload_document', 'file': pdf, 'purpose': TaskAttachment.Purpose.DELIVERY_NOTE,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        attachment = self.task.attachments.get(purpose=TaskAttachment.Purpose.DELIVERY_NOTE)
+        self.assertEqual(attachment.source, TaskAttachment.Source.SUPERVISOR)
+        self.assertEqual(attachment.uploaded_by, self.supervisor_user)
+        self.assertEqual(attachment.media_type, TaskAttachment.MediaType.DOCUMENT)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_technician_with_view_tasks_still_cannot_upload_a_staff_document(self):
+        # can_upload_staff_document is a fixed role check, independent of
+        # the configurable view_tasks permission — granting a technician
+        # view_tasks (so they can reach this page at all) must not also
+        # open the door to this staff-only action.
+        RolePermission.objects.update_or_create(
+            role=Technician.Role.TECHNICIAN, permission=RolePermission.Permission.VIEW_TASKS,
+            defaults={'allowed': True},
+        )
+        pdf = SimpleUploadedFile('report.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {
+            'action': 'upload_document', 'file': pdf, 'purpose': TaskAttachment.Purpose.WRITTEN_REPORT,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.task.attachments.filter(purpose=TaskAttachment.Purpose.WRITTEN_REPORT).exists())
 
 
 class TaskDetailFeedbackRequestTests(TaskTestCase):
@@ -1367,91 +1402,34 @@ class TaskCreateTests(TaskTestCase):
 
 
 class TicketFormTests(TaskTestCase):
-    def _payload(self, **overrides):
-        payload = {
-            'country': self.country.pk, 'company_name': 'Fitness First', 'site_description': 'Marina Branch',
-            'site_address': 'Dubai Marina, near the mall', 'contact_name': 'Ali Manager',
-            'contact_phone': '0501234567', 'contact_email': '',
-            'serial_numbers': 'SN-11111\nSN-22222',
-            'description': 'The treadmill belt is squeaking loudly.', 'notes': '',
-        }
-        payload.update(overrides)
-        return payload
+    """The old public no-login ticket form is retired — every path now
+    redirects to the customer portal login, whether anonymous or already
+    signed in as staff/a customer, and whether GET or POST.
+    """
 
-    def test_anonymous_can_view_the_form(self):
+    def test_anonymous_get_redirects_to_portal_login(self):
         response = self.client.get('/tasks/tickets/new/')
-        self.assertEqual(response.status_code, 200)
+        self.assertRedirects(response, '/customers/portal/login/')
 
-    def test_submitting_creates_a_new_ticket_and_redirects_to_thank_you(self):
-        response = self.client.post('/tasks/tickets/new/', self._payload())
-        ticket = CustomerTicket.objects.get()
-        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
-
-        self.assertEqual(ticket.company_name, 'Fitness First')
-        self.assertEqual(ticket.country, self.country)
-        self.assertEqual(ticket.site_address, 'Dubai Marina, near the mall')
-        self.assertEqual(ticket.serial_numbers, 'SN-11111\nSN-22222')
-        self.assertEqual(ticket.status, CustomerTicket.Status.NEW)
-        self.assertIsNotNone(ticket.submitted_at)
-
-    def test_missing_description_is_rejected(self):
-        response = self.client.post('/tasks/tickets/new/', self._payload(description=''))
-        self.assertEqual(response.status_code, 200)
+    def test_anonymous_post_redirects_without_creating_a_ticket(self):
+        response = self.client.post('/tasks/tickets/new/', {'company_name': 'Fitness First'})
+        self.assertRedirects(response, '/customers/portal/login/')
         self.assertEqual(CustomerTicket.objects.count(), 0)
 
-    def test_missing_serial_numbers_is_rejected(self):
-        response = self.client.post('/tasks/tickets/new/', self._payload(serial_numbers=''))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(CustomerTicket.objects.count(), 0)
-
-    def test_missing_site_address_is_rejected(self):
-        response = self.client.post('/tasks/tickets/new/', self._payload(site_address=''))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(CustomerTicket.objects.count(), 0)
-
-    def test_notes_is_optional(self):
-        response = self.client.post('/tasks/tickets/new/', self._payload(notes='Gate code is 4321.'))
-        ticket = CustomerTicket.objects.get()
-        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
-        self.assertEqual(ticket.notes, 'Gate code is 4321.')
-
-    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-    def test_submitting_with_photos_creates_attachments(self):
-        photo1 = SimpleUploadedFile('fault1.jpg', b'not a real image', content_type='image/jpeg')
-        photo2 = SimpleUploadedFile('fault2.png', b'not a real image', content_type='image/png')
-        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=[photo1, photo2]))
-        ticket = CustomerTicket.objects.get()
-        self.assertRedirects(response, f'/tasks/tickets/new/thank-you/{ticket.token}/')
-
-        self.assertEqual(ticket.attachments.count(), 2)
-
-    def test_disallowed_attachment_extension_is_rejected(self):
-        bad = SimpleUploadedFile('malware.exe', b'not a real image', content_type='application/octet-stream')
-        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=[bad]))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(CustomerTicket.objects.count(), 0)
-
-    def test_too_many_attachments_is_rejected(self):
-        photos = [
-            SimpleUploadedFile(f'fault{i}.jpg', b'not a real image', content_type='image/jpeg')
-            for i in range(11)
-        ]
-        response = self.client.post('/tasks/tickets/new/', self._payload(attachments=photos))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(CustomerTicket.objects.count(), 0)
-
-    def test_thank_you_page_is_public(self):
-        self.client.post('/tasks/tickets/new/', self._payload())
-        ticket = CustomerTicket.objects.get()
-        response = self.client.get(f'/tasks/tickets/new/thank-you/{ticket.token}/')
-        self.assertEqual(response.status_code, 200)
+    def test_logged_in_staff_also_redirects(self):
+        # portal_login itself then bounces an already-authenticated staff
+        # user onward to 'home' — a separate, pre-existing concern; this
+        # only checks that ticket_form's own redirect target is right.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/new/')
+        self.assertRedirects(response, '/customers/portal/login/', fetch_redirect_response=False)
 
 
 class TicketListTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.ticket = CustomerTicket.objects.create(
-            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
             contact_name='Ali Manager', contact_phone='0501234567',
             description='Treadmill belt squeaking.', submitted_at=timezone.now(),
         )
@@ -1472,7 +1450,7 @@ class TicketListTests(TaskTestCase):
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         CustomerTicket.objects.create(
-            country=other_country, company_name='Cairo Gym', site_description='Zamalek',
+            country=other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
             contact_name='Nour', contact_phone='0100000000',
             description='Something broke.', submitted_at=timezone.now(),
         )
@@ -1485,7 +1463,7 @@ class TicketListTests(TaskTestCase):
         self.ticket.pak_reference_number = 'PAK-99001'
         self.ticket.save(update_fields=['pak_reference_number'])
         other = CustomerTicket.objects.create(
-            country=self.country, company_name='One Fit Gym', site_description='JBR Branch',
+            country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
             contact_name='Sara', contact_phone='0509999999', pak_reference_number='PAK-11111',
             description='Bike display broken.', submitted_at=timezone.now(),
         )
@@ -1500,7 +1478,7 @@ class TicketReviewTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.ticket = CustomerTicket.objects.create(
-            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
             contact_name='Ali Manager', contact_phone='0501234567',
             description='Treadmill belt squeaking.', submitted_at=timezone.now(),
         )
@@ -1516,7 +1494,7 @@ class TicketReviewTests(TaskTestCase):
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         other_ticket = CustomerTicket.objects.create(
-            country=other_country, company_name='Cairo Gym', site_description='Zamalek',
+            country=other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
             contact_name='Nour', contact_phone='0100000000',
             description='Something broke.', submitted_at=timezone.now(),
         )
@@ -1542,6 +1520,22 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.status, CustomerTicket.Status.DISMISSED)
         self.assertEqual(self.ticket.dismissal_reason, 'Duplicate report.')
         self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+
+    def test_editing_details_includes_customer_code_and_shipping_address(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'edit_details', 'company_name': self.ticket.company_name,
+            'customer_code': 'ACC-42', 'site_description': self.ticket.site_description,
+            'site_address': 'Dubai Marina', 'contact_name': self.ticket.contact_name,
+            'contact_phone': self.ticket.contact_phone, 'contact_email': '',
+            'shipping_address': 'Warehouse 3, Al Quoz', 'serial_numbers': 'SN-1',
+            'description': self.ticket.description, 'notes': '',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.customer_code, 'ACC-42')
+        self.assertEqual(self.ticket.shipping_address, 'Warehouse 3, Al Quoz')
 
     def test_updating_logistics(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -1605,6 +1599,56 @@ class TicketReviewTests(TaskTestCase):
         self.assertIsNotNone(self.ticket.task)
         self.assertEqual(self.ticket.task.source, Task.Source.PORTAL)
         self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+
+    def test_registered_site_locks_the_task_and_ignores_tampering(self):
+        other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        self.ticket.site = self.site
+        self.ticket.save(update_fields=['site'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        response = self.client.get(create_url)
+        self.assertContains(response, 'only an admin can change it')
+
+        # A supervisor's edit form has the field disabled, so even a
+        # crafted POST naming a different site is ignored server-side —
+        # not just hidden in the UI.
+        response = self.client.post(create_url, {
+            'site': other_site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Treadmill belt squeaking.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.task.site, self.site)
+
+    def test_admin_can_override_the_registered_site(self):
+        other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        self.ticket.site = self.site
+        self.ticket.save(update_fields=['site'])
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+
+        self.client.login(username='admin1', password='pass12345')
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        response = self.client.get(create_url)
+        self.assertContains(response, 'as admin, you can still change it')
+
+        response = self.client.post(create_url, {
+            'site': other_site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Treadmill belt squeaking.',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.task.site, other_site)
 
     def test_converting_carries_over_pak_and_tracking(self):
         self.ticket.pak_reference_number = 'PAK-42'
@@ -1704,6 +1748,126 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='egypt_sup', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
+
+    def test_manager_can_add_and_see_internal_notes(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_internal_note', 'message': 'Waiting on the part.'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 1)
+
+        note = TicketInternalNote.objects.get(ticket=self.ticket)
+        self.assertEqual(note.message, 'Waiting on the part.')
+        self.assertEqual(note.author, manager_user)
+
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Internal notes')
+        self.assertContains(response, 'Waiting on the part.')
+
+    def test_admin_can_add_internal_note(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_internal_note', 'message': 'Escalated to the vendor.'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 1)
+
+    def test_supervisor_does_not_see_internal_notes_section(self):
+        # supervisor1 has manage_tickets (the fixture default), but internal
+        # notes are gated on is_manager_tier, not that permission — a
+        # supervisor triaging tickets day to day should never see them.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertNotContains(response, 'Internal notes')
+        self.assertNotIn('internal_note_form', response.context)
+        self.assertNotIn('internal_notes', response.context)
+
+    def test_supervisor_cannot_add_internal_note_via_crafted_post(self):
+        # Not just hidden in the UI — a crafted POST from a supervisor is
+        # ignored server-side too, same pattern as the ticket-site lock.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_internal_note', 'message': 'Sneaking this in.'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 0)
+
+    def test_marking_a_reply_as_the_quotation_requires_an_attachment(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Here it is.', 'is_quotation': 'on'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TicketReply.objects.count(), 0)
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_sending_a_reply_marked_as_the_quotation_emails_the_dedicated_template_with_the_file_attached(self):
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save(update_fields=['contact_email'])
+        quote_file = SimpleUploadedFile('quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'add_reply', 'message': 'Please see the attached quotation.',
+            'is_quotation': 'on', 'attachment': quote_file,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        reply = TicketReply.objects.get()
+        self.assertTrue(reply.is_quotation)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Your quotation is ready', mail.outbox[0].subject)
+        # Two attachments now: the inline logo (every email gets one) plus
+        # the quotation file itself — pick out the actual quotation by
+        # filename rather than assuming a position or a plain tuple, since
+        # the logo attaches as a raw MIMEImage, not a (name, content, type)
+        # tuple the way the quotation file does.
+        pdf_names = [
+            a[0] for a in mail.outbox[0].attachments
+            if isinstance(a, tuple) and a[0].endswith('.pdf')
+        ]
+        self.assertEqual(len(pdf_names), 1)
+        self.assertTrue(pdf_names[0].startswith('quote'))
+
+    def test_plain_reply_is_unaffected_and_uses_the_ordinary_subject(self):
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save(update_fields=['contact_email'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Just checking in.'})
+        self.assertEqual(response.status_code, 302)
+
+        reply = TicketReply.objects.get()
+        self.assertFalse(reply.is_quotation)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        # Every email carries the inline logo now — no real (downloadable)
+        # attachment for a plain reply, though.
+        self.assertFalse(any(isinstance(a, tuple) for a in mail.outbox[0].attachments))
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_customer_reply_ignores_is_quotation_even_if_posted(self):
+        # The customer-facing token page never renders this field, and a
+        # crafted POST there still can't set it — ticket_status only ever
+        # creates the reply with an explicit field list, is_quotation is
+        # not among them.
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save(update_fields=['contact_email'])
+        attachment = SimpleUploadedFile('photo.jpg', b'not a real image', content_type='image/jpeg')
+
+        response = self.client.post(f'/tasks/tickets/status/{self.ticket.token}/', {
+            'message': 'Trying to sneak this in.', 'is_quotation': 'on', 'attachment': attachment,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        reply = TicketReply.objects.get()
+        self.assertFalse(reply.is_quotation)
 
 
 class TaskAssignTests(TaskTestCase):
@@ -3480,17 +3644,17 @@ class MonthlyReportTests(TaskTestCase):
         self.other_site = Site.objects.create(customer=self.other_customer, name='Zamalek Branch', address='Cairo')
 
         CustomerTicket.objects.create(
-            country=self.country, company_name='Fitness First', site_description='Marina Branch',
+            country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
             contact_name='Ali', contact_phone='0501234567', description='Broken belt',
             submitted_at=self.this_month, status=CustomerTicket.Status.NEW,
         )
         CustomerTicket.objects.create(
-            country=self.other_country, company_name='Cairo Gym', site_description='Zamalek',
+            country=self.other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
             contact_name='Sara', contact_phone='0501234568', description='Squeaky wheel',
             submitted_at=self.this_month, status=CustomerTicket.Status.CONVERTED,
         )
         CustomerTicket.objects.create(
-            country=self.country, company_name='Old Ticket', site_description='Marina Branch',
+            country=self.country, ticket_number='AE-T0002', company_name='Old Ticket', site_description='Marina Branch',
             contact_name='Ali', contact_phone='0501234567', description='Old issue',
             submitted_at=self.last_month, status=CustomerTicket.Status.CLOSED,
         )

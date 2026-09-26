@@ -20,11 +20,20 @@
         </select>
     </div>
     <div class="field">
-        <label for="filter-ticket-id">{% translate "Ticket ID" %}</label>
+        <label for="filter-ticket-id">{% translate "Ticket number" %}</label>
         <input type="text" id="filter-ticket-id" name="ticket_id" value="{{ ticket_id }}">
     </div>
     <div class="field">
-        <label for="filter-company">{% translate "Company" %}</label>
+        <label for="filter-customer">{% translate "Customer" %}</label>
+        <select id="filter-customer" name="customer">
+            <option value="">{% translate "All customers" %}</option>
+            {% for customer in customers %}
+            <option value="{{ customer.pk }}" {% if selected_customer == customer.pk|stringformat:"s" %}selected{% endif %}>{{ customer.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label for="filter-company">{% translate "Company (as typed)" %}</label>
         <input type="text" id="filter-company" name="company" value="{{ company }}">
     </div>
     <div class="field">
@@ -55,6 +64,7 @@
     <table>
         <thead>
             <tr>
+                <th>{% translate "Ticket" %}</th>
                 <th>{% translate "Submitted" %}</th>
                 <th>{% translate "Country" %}</th>
                 <th>{% translate "Company" %}</th>
@@ -67,7 +77,8 @@
         <tbody>
             {% for ticket in tickets %}
             <tr>
-                <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</a></td>
+                <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
+                <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 <td>{{ ticket.country.name }}</td>
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>

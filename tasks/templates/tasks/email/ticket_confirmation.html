@@ -1,8 +1,0 @@
-{% extends "tasks/email/base.html" %}
-{% block content %}
-<p style="margin:0 0 16px;">Dear {{ contact }},</p>
-<p style="margin:0 0 16px;">We've received your report for <strong>{{ site }}</strong> and will be in touch shortly to arrange a visit.</p>
-<p style="margin:0 0 16px;">You can check its status anytime using the link below.</p>
-{% include "tasks/email/_button.html" with url=link label="Track your report" %}
-<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
-{% endblock %}

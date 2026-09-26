@@ -18,6 +18,10 @@ class Customer(models.Model):
         verbose_name=_('country'),
     )
     name = models.CharField(_('name'), max_length=150)
+    code = models.CharField(
+        _('customer code'), max_length=50, blank=True,
+        help_text=_('this company’s account/reference code, if it has one'),
+    )
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
@@ -31,6 +35,10 @@ class Customer(models.Model):
             'used for a site that has no contact of its own — the single-branch case, or a '
             'chain where every site shares the same one'
         ),
+    )
+    shipping_address = models.TextField(
+        _('shipping address'), blank=True,
+        help_text=_('where replacement parts should be delivered, if different from the site itself — a warehouse or head office'),
     )
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,

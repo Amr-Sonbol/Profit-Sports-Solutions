@@ -1,7 +1,7 @@
 {% extends "tasks/email/base.html" %}
 {% block content %}
 <p style="margin:0 0 16px;">Dear {{ contact }},</p>
-<p style="margin:0 0 16px;">Regarding ticket {{ ticket_number }}:</p>
+<p style="margin:0 0 16px;">Please find attached the quotation for ticket {{ ticket_number }}.</p>
 <p style="margin:0 0 16px;white-space:pre-line;">{{ reply_message }}</p>
 {% include "tasks/email/_button.html" with url=link label="View conversation" %}
 <p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
