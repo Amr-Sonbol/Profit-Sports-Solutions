@@ -29,7 +29,7 @@
         </div>
 
         <h2>{% translate "Products" %}</h2>
-        <p class="field__help">{% translate "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved; serial number is optional." %}</p>
+        <p class="field__help">{% translate "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved. For an actual machine, fill in its own checklist: custom color per component, and what it got swapped for if the one ordered wasn't available." %}</p>
         {{ product_formset.management_form }}
         {% if product_formset.non_form_errors %}
             <p class="flash flash--error">{{ product_formset.non_form_errors }}</p>
@@ -41,6 +41,14 @@
                         <th>{% translate "Product code" %}</th>
                         <th>{% translate "Serial number" %}</th>
                         <th>{% translate "Quantity" %}</th>
+                        <th>{% translate "Replacement" %}</th>
+                        <th>{% translate "Frame color" %}</th>
+                        <th>{% translate "Arm color" %}</th>
+                        <th>{% translate "Padding color" %}</th>
+                        <th>{% translate "Trim color" %}</th>
+                        <th>{% translate "Comment" %}</th>
+                        <th>{% translate "Note" %}</th>
+                        <th>{% translate "Delete" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -49,9 +57,17 @@
                         <td>{{ product_form.product_code }}</td>
                         <td>{{ product_form.serial_number }}</td>
                         <td>{{ product_form.quantity }}</td>
+                        <td>{{ product_form.replacement }}</td>
+                        <td>{{ product_form.frame }}</td>
+                        <td>{{ product_form.arm }}</td>
+                        <td>{{ product_form.padding }}</td>
+                        <td>{{ product_form.trim }}</td>
+                        <td>{{ product_form.comment }}</td>
+                        <td>{{ product_form.note }}</td>
+                        <td>{{ product_form.DELETE }}</td>
                     </tr>
                     {% if product_form.errors %}
-                    <tr><td colspan="3"><p class="field__error">{{ product_form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="11"><p class="field__error">{{ product_form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>

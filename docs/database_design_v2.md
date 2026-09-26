@@ -482,17 +482,24 @@ Which machines the task covers. Populated by the technician during the work, not
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
 
 ### task_product
-The delivery note's contents, structured — for installation and loading tasks, where stock is delivered ahead of or alongside the visit rather than consumed during it (that's `part_used`, on the work report instead, see §5).
+The delivery note's contents, structured — for installation and loading tasks, where stock is delivered ahead of or alongside the visit rather than consumed during it (that's `part_used`, on the work report instead, see §5). Doubles as the per-machine checklist a supervisor fills in for an actual unit being installed, not just a parts line.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
-| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one |
+| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one. Searchable from `task_list`/`all_tasks`, same box as `asset.serial_no` — so a machine can be traced to the task (and its customer/site) it was installed or loaded under, not just its repair history |
 | quantity | int | default 1 |
+| replacement | varchar | blank — which machine this one was swapped in for, if the one ordered wasn't available |
+| frame | varchar | blank — custom frame color |
+| arm | varchar | blank — custom arm color |
+| padding | varchar | blank — custom padding color |
+| trim | varchar | blank — custom trim color |
+| comment | text | blank |
+| note | text | blank |
 
-**Entered from the task's Edit screen, replaced wholesale on every save** — not an append-only log the way `task_event` is. The same information already exists as a document (`task.delivery_note`); this is the same content kept structured, so it can be searched and listed rather than only read off a scanned PDF. A row needs at least a `product_code` to save; a blank row is silently dropped, and quantity defaults to 1 when left empty.
+**Entered from the task's Edit screen, replaced wholesale on every save** — not an append-only log the way `task_event` is. The same product-code/quantity information already exists as a document (`task.delivery_note`); this is the same content kept structured, so it can be searched and listed rather than only read off a scanned PDF. A row needs at least a `product_code` to save; a blank row is silently dropped, and quantity defaults to 1 when left empty. Ticking a row's own **Delete** checkbox (the formset's `can_delete`) drops it outright instead — for when a machine turns out faulty and the customer returns it — without needing to blank out every one of its fields by hand.
 
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.

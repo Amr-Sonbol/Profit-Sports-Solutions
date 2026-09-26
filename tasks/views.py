@@ -869,6 +869,7 @@ def task_list(request):
             | Q(site__customer__name__icontains=search)
             | Q(pak_reference_number__icontains=search)
             | Q(task_assets__asset__serial_no__icontains=search)
+            | Q(products__serial_number__icontains=search)
         ).distinct()
 
     if customer_id:
@@ -963,7 +964,10 @@ def all_tasks(request):
     if pak_reference:
         tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
     if serial_number:
-        tasks = tasks.filter(task_assets__asset__serial_no__icontains=serial_number).distinct()
+        tasks = tasks.filter(
+            Q(task_assets__asset__serial_no__icontains=serial_number)
+            | Q(products__serial_number__icontains=serial_number)
+        ).distinct()
     if date:
         tasks = tasks.filter(scheduled_for__date=date)
     if country_id:
@@ -1293,9 +1297,13 @@ def task_edit(request, pk):
     previous_scheduled_for = task.scheduled_for
     previous_scheduled_date = task.scheduled_date
 
-    TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS)
+    TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS, can_delete=True)
     product_initial = [
-        {'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity}
+        {
+            'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
+            'replacement': p.replacement, 'frame': p.frame, 'arm': p.arm, 'padding': p.padding,
+            'trim': p.trim, 'comment': p.comment, 'note': p.note,
+        }
         for p in task.products.all()
     ]
 
@@ -1318,10 +1326,14 @@ def task_edit(request, pk):
                     )
                 updated_task.products.all().delete()
                 for cleaned in product_formset.cleaned_data:
-                    if cleaned.get('product_code'):
+                    if cleaned.get('product_code') and not cleaned.get('DELETE'):
                         TaskProduct.objects.create(
                             task=updated_task, product_code=cleaned['product_code'],
                             serial_number=cleaned.get('serial_number', ''), quantity=cleaned['quantity'],
+                            replacement=cleaned.get('replacement', ''), frame=cleaned.get('frame', ''),
+                            arm=cleaned.get('arm', ''), padding=cleaned.get('padding', ''),
+                            trim=cleaned.get('trim', ''), comment=cleaned.get('comment', ''),
+                            note=cleaned.get('note', ''),
                         )
             notices = []
             if (

@@ -636,14 +636,16 @@ class TaskAsset(models.Model):
 
 
 class TaskProduct(models.Model):
-    """One line of the delivery note's contents — for installation and
-    loading tasks, where stock is delivered ahead of or alongside the
-    visit rather than consumed during it (that's PartUsed, on the
-    work report). The delivery note PDF (Task.delivery_note) already
-    holds the same information as a scanned/exported document; this
-    is the same data kept structured, so it can be searched and
-    listed rather than only read off the file. Entered from the
-    task's Edit screen, replaced wholesale on every save — not an
+    """One machine's line on an installation or loading task — the same
+    items as on the delivery note (that part still just needs a product
+    code; the rest is blank for a simple parts line), plus the per-unit
+    checklist a supervisor fills in for an actual machine being installed:
+    custom color per component, and what it got swapped for if the
+    ordered one wasn't available. The delivery note PDF (Task.delivery_note)
+    already holds the same product-code/quantity information as a scanned/
+    exported document; this is the same data kept structured, so it can be
+    searched and listed rather than only read off the file. Entered from
+    the task's Edit screen, replaced wholesale on every save — not an
     append-only log the way task_event is.
     """
     task = models.ForeignKey(
@@ -653,6 +655,16 @@ class TaskProduct(models.Model):
     product_code = models.CharField(_('product code'), max_length=100)
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
+    replacement = models.CharField(
+        _('replacement'), max_length=150, blank=True,
+        help_text=_('which machine this was swapped in for, if the one ordered wasn’t available'),
+    )
+    frame = models.CharField(_('frame color'), max_length=100, blank=True)
+    arm = models.CharField(_('arm color'), max_length=100, blank=True)
+    padding = models.CharField(_('padding color'), max_length=100, blank=True)
+    trim = models.CharField(_('trim color'), max_length=100, blank=True)
+    comment = models.TextField(_('comment'), blank=True)
+    note = models.TextField(_('note'), blank=True)
 
     class Meta:
         verbose_name = _('task product')

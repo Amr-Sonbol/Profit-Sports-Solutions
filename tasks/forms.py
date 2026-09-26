@@ -778,19 +778,41 @@ class NewAssetForm(forms.Form):
 
 
 class TaskProductForm(forms.Form):
-    """One line of a delivery note's contents, structured — product
-    code mandatory, serial optional (the delivery note itself is
-    usually just model codes and quantities, per Asset's own
-    docstring; a serial is a bonus when it's actually on the paperwork).
+    """One machine's line on an installation/loading task — product code
+    mandatory, everything else optional. serial_number/quantity are the
+    plain delivery-note fields; replacement/frame/arm/padding/trim/
+    comment/note are the per-unit checklist a supervisor fills in for an
+    actual machine (custom color per component, and what it got swapped
+    for if the ordered one wasn't available) — left blank for a simple
+    parts line that's just a code and a quantity.
     """
 
     product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
     serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
+    replacement = forms.CharField(
+        required=False, max_length=150, label=_('Replacement'),
+        help_text=_('which machine this was swapped in for, if the one ordered wasn’t available'),
+    )
+    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'))
+    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'))
+    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'))
+    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'))
+    comment = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Comment'))
+    note = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Note'))
 
     def clean(self):
         cleaned = super().clean()
-        if not any(cleaned.get(f) for f in ('product_code', 'serial_number', 'quantity')):
+        # Marked for deletion (can_delete=True on the formset) — skip the
+        # product_code requirement entirely, so removing a returned/faulty
+        # machine never demands re-filling the row just to clear it.
+        if cleaned.get('DELETE'):
+            return cleaned
+        row_fields = (
+            'product_code', 'serial_number', 'quantity', 'replacement',
+            'frame', 'arm', 'padding', 'trim', 'comment', 'note',
+        )
+        if not any(cleaned.get(f) for f in row_fields):
             return cleaned
         if not cleaned.get('product_code'):
             raise forms.ValidationError(_('Enter a product code, or leave this row blank.'))

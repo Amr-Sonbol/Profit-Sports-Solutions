@@ -604,6 +604,58 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual(products[0].product_code, 'PNL-NEW')
         self.assertEqual(products[0].quantity, 3)
 
+    def test_product_row_saves_the_installation_checklist_fields(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
+            'products-0-quantity': '1', 'products-0-replacement': 'Swapped for BENCH-02 (out of stock)',
+            'products-0-frame': 'Matte black', 'products-0-arm': 'Red',
+            'products-0-padding': 'Charcoal', 'products-0-trim': 'Silver',
+            'products-0-comment': 'Customer requested custom colors.', 'products-0-note': 'Fragile — handle with care.',
+        }))
+        self.assertEqual(response.status_code, 302)
+
+        product = self.task.products.get()
+        self.assertEqual(product.replacement, 'Swapped for BENCH-02 (out of stock)')
+        self.assertEqual(product.frame, 'Matte black')
+        self.assertEqual(product.arm, 'Red')
+        self.assertEqual(product.padding, 'Charcoal')
+        self.assertEqual(product.trim, 'Silver')
+        self.assertEqual(product.comment, 'Customer requested custom colors.')
+        self.assertEqual(product.note, 'Fragile — handle with care.')
+
+    def test_deleting_a_product_row_via_checkbox(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
+            'products-0-quantity': '1', 'products-0-frame': 'Matte black',
+        }))
+        self.assertEqual(self.task.products.count(), 1)
+
+        # Ticking Delete removes the row outright — no need to also blank
+        # out product_code or any of its other fields by hand.
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1, initial=1),
+            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
+            'products-0-quantity': '1', 'products-0-frame': 'Matte black',
+            'products-0-DELETE': 'on',
+        }))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.task.products.count(), 0)
+
+    def test_searching_tasks_by_product_serial_number(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-TRACE-1',
+            'products-0-quantity': '1',
+        }))
+
+        response = self.client.get('/tasks/', {'status': 'all', 'q': 'SN-TRACE-1'})
+        self.assertContains(response, self.task.task_number)
+
 
 class TaskScheduleLockingTests(TaskTestCase):
     """Two-mode scheduling: a manager can lock a task to a day+time (only

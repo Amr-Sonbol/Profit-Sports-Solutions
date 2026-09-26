@@ -416,6 +416,13 @@
                     <th>{% translate "Product code" %}</th>
                     <th>{% translate "Serial number" %}</th>
                     <th>{% translate "Quantity" %}</th>
+                    <th>{% translate "Replacement" %}</th>
+                    <th>{% translate "Frame color" %}</th>
+                    <th>{% translate "Arm color" %}</th>
+                    <th>{% translate "Padding color" %}</th>
+                    <th>{% translate "Trim color" %}</th>
+                    <th>{% translate "Comment" %}</th>
+                    <th>{% translate "Note" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -424,6 +431,13 @@
                     <td>{{ product.product_code }}</td>
                     <td>{{ product.serial_number|default:"—" }}</td>
                     <td>{{ product.quantity }}</td>
+                    <td>{{ product.replacement|default:"—" }}</td>
+                    <td>{{ product.frame|default:"—" }}</td>
+                    <td>{{ product.arm|default:"—" }}</td>
+                    <td>{{ product.padding|default:"—" }}</td>
+                    <td>{{ product.trim|default:"—" }}</td>
+                    <td>{{ product.comment|default:"—" }}</td>
+                    <td>{{ product.note|default:"—" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
