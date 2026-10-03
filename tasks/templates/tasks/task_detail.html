@@ -489,7 +489,11 @@
         </div>
         <div>
             <dt>{% translate "Labour hours" %}</dt>
-            <dd>{{ report.labour_hours }}</dd>
+            <dd>
+                {{ report.labour_hours }}
+                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
+                {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Signed by" %}</dt>

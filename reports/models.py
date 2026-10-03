@@ -1,10 +1,16 @@
 import secrets
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from tasks.models import Task
+
+
+# Labour hours this far past the task's estimate get flagged to
+# supervisors — 1.5 means more than 50% over.
+OVERRUN_RATIO = Decimal('1.5')
 
 
 class WorkReport(models.Model):
@@ -29,6 +35,15 @@ class WorkReport(models.Model):
 
     def __str__(self):
         return f'Report — {self.task.task_number}'
+
+    @property
+    def is_overrun(self):
+        """True when the hours worked ran well past the task's estimate —
+        either the job was harder than expected or the estimate was off;
+        both are worth a supervisor's look. False with no estimate set.
+        """
+        estimated = self.task.estimated_hours
+        return bool(estimated) and self.labour_hours > estimated * OVERRUN_RATIO
 
 
 class PartUsed(models.Model):

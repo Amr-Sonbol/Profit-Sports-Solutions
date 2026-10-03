@@ -5712,3 +5712,27 @@ class TechnicianHoursTests(TaskTestCase):
     def test_technician_is_forbidden(self):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_overrun_is_more_than_half_again_the_estimate(self):
+        exactly_half_over = self._task_with_report('AE-0010', hours='3.00', estimated='2.00')
+        well_over = self._task_with_report('AE-0011', hours='3.01', estimated='2.00')
+        no_estimate = self._task_with_report('AE-0012', hours='40.00')
+        def report_for(task):
+            return WorkReport.objects.select_related('task').get(task=task)
+
+        self.assertFalse(report_for(exactly_half_over).is_overrun)
+        self.assertTrue(report_for(well_over).is_overrun)
+        self.assertFalse(report_for(no_estimate).is_overrun)
+
+    def test_hours_page_counts_and_flags_overruns(self):
+        self._task_with_report('AE-0011', hours='5.00', estimated='2.00')
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(self._row(response, self.technician)['overrun_count'], 1)
+        self.assertContains(response, 'Well over estimate')
+
+    def test_task_detail_flags_an_overrun_report(self):
+        task = self._task_with_report('AE-0011', hours='5.00', estimated='2.00')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertContains(self.client.get(f'/tasks/{task.pk}/'), 'Well over estimate')
+        self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Well over estimate')

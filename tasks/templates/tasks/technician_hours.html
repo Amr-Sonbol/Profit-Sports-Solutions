@@ -19,6 +19,7 @@
 <p class="muted">
     {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} filed report.{% plural %}{{ hours }} labour hours across {{ reports }} filed reports.{% endblocktranslate %}
     {% translate "A report’s hours count toward the lead technician who filed it." %}
+    {% translate "“Well over estimate” means more than 50% past the task’s estimated hours." %}
 </p>
 
 <div class="section">
@@ -44,7 +45,14 @@
                     </td>
                     <td>{{ row.reports|length }}</td>
                     <td>{% if row.reports %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}</td>
-                    <td>{% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>
+                        {% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}
+                        {% if row.overrun_count %}
+                        <span class="badge badge--status-blocked">
+                            {% blocktranslate count count=row.overrun_count %}{{ count }} task well over estimate{% plural %}{{ count }} tasks well over estimate{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
                     <td>{{ row.helped_on }}</td>
                     <td>
                         {% if row.reports %}
@@ -59,6 +67,7 @@
                                     {% if report.task.estimated_hours %}
                                     <span class="muted">({% blocktranslate with hours=report.task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>
                                     {% endif %}
+                                    {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
                                 </li>
                                 {% endfor %}
                             </ul>

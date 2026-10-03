@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 16:33+0000\n"
+"POT-Creation-Date: 2026-10-03 16:45+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,6 +13,16 @@ msgstr ""
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
+
+#, python-format
+msgid "%(count)s task well over estimate"
+msgid_plural "%(count)s tasks well over estimate"
+msgstr[0] "لا توجد مهام تجاوزت التقدير بكثير"
+msgstr[1] "مهمة واحدة تجاوزت التقدير بكثير"
+msgstr[2] "مهمتان تجاوزتا التقدير بكثير"
+msgstr[3] "%(count)s مهام تجاوزت التقدير بكثير"
+msgstr[4] "%(count)s مهمة تجاوزت التقدير بكثير"
+msgstr[5] "%(count)s مهمة تجاوزت التقدير بكثير"
 
 #, python-format
 msgid "%(days)sd left"
@@ -2710,6 +2720,9 @@ msgstr "أهلاً بك — لنكمل إعداد حسابك"
 msgid "Welcome — set your password"
 msgstr "أهلاً بك — عيّن كلمة المرور"
 
+msgid "Well over estimate"
+msgstr "تجاوز التقدير بكثير"
+
 msgid "What happened"
 msgstr "ماذا حدث"
 
@@ -3651,6 +3664,10 @@ msgstr "— التقرير"
 #, python-format
 msgid "“%(name)s” still has technicians, customers, or tickets attached to it — deactivate it instead of deleting."
 msgstr "\"%(name)s\" لا يزال مرتبطًا بفنيين أو عملاء أو طلبات — عطّله بدلاً من حذفه."
+
+#, python-format
+msgid "“Well over estimate” means more than 50%% past the task’s estimated hours."
+msgstr "«تجاوز التقدير بكثير» يعني أكثر من 50%% فوق الساعات المقدرة للمهمة."
 
 msgid "← Back to active customers"
 msgstr "← العودة إلى العملاء النشطين"

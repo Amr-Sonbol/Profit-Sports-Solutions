@@ -2745,6 +2745,7 @@ def technician_hours(request):
             'hours': hours,
             'estimated': estimated,
             'helped_on': helped_on[technician.pk],
+            'overrun_count': sum(1 for report in own_reports if report.is_overrun),
         })
 
     context = {
