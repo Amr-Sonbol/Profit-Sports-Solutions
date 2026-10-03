@@ -208,7 +208,7 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | full_name | varchar | |
 | phone | varchar | |
 | language | varchar | `ar` or `en` — per person, not per country |
-| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), warehouse_manager (Warehouse Manager), admin |
+| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), admin |
 | employment_type | varchar | staff, freelance |
 | has_transport | bool | |
 | can_carry_large | bool | can move a treadmill motor or locker bank |
@@ -239,13 +239,15 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| role | varchar | technician, supervisor, manager, support_manager, admin |
+| role | varchar | technician, supervisor, manager, support_manager, warehouse_manager, operations_manager, admin |
 | permission | varchar | see below |
 | allowed | bool | |
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — operations_manager and admin by default).
+
+**`operations_manager` is who the support desk escalates to.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines` and `decide_escalated_tickets` — not `manage_tickets`: it isn't a second ticket desk, it only opens the tickets escalated to it (read-only, plus the decision itself), the same way a ticket's assignee can open just that ticket.
 
 **`warehouse_manager` exists for exactly one job: receiving shipments.** It gets `view_dashboard` and `view_tasks` and nothing else — `view_tasks` alone is enough to search the task list by PAK reference number (already a filter there, for anyone who can reach it), open a task to read its shipping details (PAK, carrier, tracking number — never gated beyond `view_tasks` itself), and post a task message confirming a part arrived. No ticket, technician, or customer access, same narrow-by-design shape as `support_manager` before it. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
 
@@ -501,11 +503,31 @@ A new ticket, or a new customer reply on an existing one — feeds the ticket ha
 |---|---|---|
 | id | PK | |
 | ticket_id | FK → customer_ticket | |
-| kind | varchar | `new_ticket` or `new_reply` |
+| kind | varchar | `new_ticket`, `new_reply`, or `escalation_decided` (the Operations Manager has decided an escalation — back to the desk) |
 | created_at | timestamptz | |
 | seen_at | timestamptz | nullable — set the moment any manager/admin opens the ticket (`ticket_review`) |
 
 **A shared team inbox, not per-user.** There's one row per event, not one per (event, viewer) pair — opening a ticket clears its notifications for every manager/admin at once, the same way any one of them acting on a ticket already handles it for the whole team. Created in `portal_ticket_new` (a new ticket) and `ticket_status` (a customer's own reply) — never for a staff reply, since staff already know they just sent one. Also fires a best-effort email to every manager/admin in the ticket's country (`send_new_ticket_email_to_staff`), separate from the bell.
+
+### ticket_escalation
+The support desk handing a ticket up to the Operations Manager for a decision, and that decision. A separate record rather than a ticket status: escalation is a step *within* an open ticket, not a replacement for `new`, and this keeps who escalated, why, and what was decided.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| ticket_id | FK → customer_ticket | |
+| escalated_by_id | FK → technician | someone with `manage_tickets` |
+| escalated_to_id | FK → technician | someone in the ticket's country with `decide_escalated_tickets`; never the same person |
+| reason | text | internal — never shown to the customer |
+| customer_message | text | optional — shown to the customer on their ticket page |
+| decision | varchar | `pending`, `approved`, `rejected`, `instructions` |
+| decision_note | text | internal — never shown to the customer |
+| escalated_at | timestamptz | |
+| decided_at | timestamptz | nullable |
+
+**Rules:** only an open ticket (`_ticket_is_open`) can be escalated, and only one escalation can be pending at a time. Once decided, the desk carries on as usual (reply, convert, dismiss) — the decision itself doesn't change the ticket's status. The response clock keeps running while it's escalated.
+
+**Who sees what.** The Operations Manager sees a pending escalation in their bell (worked out live, not a stored notification — it clears once decided) and gets an email. The decision comes back to the desk as a `ticket_notification` (`escalation_decided`) plus an email to whoever escalated. The customer sees only that their request was escalated to "our Operations Manager" — the role, never the person's name — with the date and the optional `customer_message`, then that a decision was made. `reason` and `decision_note` are internal.
 
 ### task_notification
 A newly created task, for the same header bell as `ticket_notification` — a separate model since a task and a ticket are different things to point a FK at, and there's only one kind of task notification so far (no `kind` column needed).

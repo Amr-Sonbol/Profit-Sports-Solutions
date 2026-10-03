@@ -15,6 +15,7 @@ from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
+    TicketEscalation,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -1156,3 +1157,47 @@ class CorrectEventTimeForm(forms.Form):
         if self.latest and value > self.latest:
             raise forms.ValidationError(_('That’s after the next step on this task.'))
         return value
+
+
+def escalation_deciders(country, exclude=None):
+    """Who a ticket can be escalated to: active staff in its country whose
+    role has decide_escalated_tickets — driven by Roles & permissions, not
+    a hardcoded role, same as AssignTicketForm.
+    """
+    roles = RolePermission.objects.filter(
+        permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
+    ).values_list('role', flat=True)
+    deciders = Technician.objects.filter(is_active=True, country=country, role__in=list(roles))
+    if exclude is not None:
+        deciders = deciders.exclude(pk=exclude.pk)
+    return deciders.order_by('full_name')
+
+
+class EscalateTicketForm(forms.Form):
+    escalated_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Escalate to'))
+    reason = forms.CharField(
+        label=_('Reason (internal)'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('Never shown to the customer.'),
+    )
+    customer_message = forms.CharField(
+        required=False, label=_('Message to the customer (optional)'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('Shown on the customer’s ticket page, under “escalated to our Operations Manager”.'),
+    )
+
+    def __init__(self, *args, country=None, escalated_by=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['escalated_to'].queryset = escalation_deciders(country, exclude=escalated_by)
+
+
+class DecideEscalationForm(forms.Form):
+    decision = forms.ChoiceField(
+        choices=[
+            (value, label) for value, label in TicketEscalation.Decision.choices
+            if value != TicketEscalation.Decision.PENDING
+        ],
+        widget=forms.RadioSelect, label=_('Decision'),
+    )
+    decision_note = forms.CharField(
+        label=_('Note for the support desk (internal)'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('Never shown to the customer.'),
+    )

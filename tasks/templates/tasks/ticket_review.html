@@ -220,6 +220,71 @@
 </div>
 {% endif %}
 
+{% if escalations or can_escalate %}
+<div class="section">
+    <h2>{% translate "Escalation" %}</h2>
+    {% for escalation in escalations %}
+    <div class="escalation">
+        <p>
+            {% if escalation.decision == 'pending' %}
+            <span class="badge badge--status-blocked">{{ escalation.get_decision_display }}</span>
+            {% else %}
+            <span class="badge badge--status-completed">{{ escalation.get_decision_display }}</span>
+            {% endif %}
+            {% blocktranslate with by=escalation.escalated_by.full_name to=escalation.escalated_to.full_name when=escalation.escalated_at|date:"SHORT_DATETIME_FORMAT" %}{{ by }} escalated to {{ to }} on {{ when }}{% endblocktranslate %}
+        </p>
+        <p class="timeline__note"><strong>{% translate "Reason:" %}</strong> {{ escalation.reason }}</p>
+        {% if escalation.customer_message %}
+        <p class="timeline__note"><strong>{% translate "Told the customer:" %}</strong> {{ escalation.customer_message }}</p>
+        {% endif %}
+        {% if escalation.decided_at %}
+        <p class="timeline__note"><strong>{% blocktranslate with when=escalation.decided_at|date:"SHORT_DATETIME_FORMAT" %}Decision ({{ when }}):{% endblocktranslate %}</strong> {{ escalation.decision_note }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if can_decide %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="decide_escalation">
+        {% for field in decide_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label>{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Send decision" %}</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if can_escalate %}
+    {% if escalate_form.fields.escalated_to.queryset.exists %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="escalate">
+        {% for field in escalate_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Escalate to Operations Manager" %}</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="empty-state">{% translate "No Operations Manager in this country yet — add one from Technicians to escalate tickets." %}</p>
+    {% endif %}
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="section">
     <h2>{% translate "Assigned to" %}</h2>
     {% if ticket.assigned_to %}

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 18:06+0000\n"
+"POT-Creation-Date: 2026-10-03 18:28+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,6 +13,42 @@ msgstr ""
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
+
+#, python-format
+msgid ""
+"%(by)s decided the escalation on ticket %(number)s: %(decision)s.\n"
+"\n"
+"%(note)s\n"
+"\n"
+"Carry on here:\n"
+"%(link)s\n"
+msgstr ""
+"قرر %(by)s بشأن تصعيد التذكرة %(number)s: %(decision)s.\n"
+"\n"
+"%(note)s\n"
+"\n"
+"تابع من هنا:\n"
+"%(link)s\n"
+
+#, python-format
+msgid ""
+"%(by)s escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n"
+"\n"
+"%(reason)s\n"
+"\n"
+"Decide here:\n"
+"%(link)s\n"
+msgstr ""
+"صعّد %(by)s التذكرة %(number)s (%(company)s — %(site)s) إليك لاتخاذ قرار:\n"
+"\n"
+"%(reason)s\n"
+"\n"
+"اتخذ القرار من هنا:\n"
+"%(link)s\n"
+
+#, python-format
+msgid "%(by)s escalated to %(to)s on %(when)s"
+msgstr "صعّدها %(by)s إلى %(to)s في %(when)s"
 
 #, python-format
 msgid "%(count)s task well over estimate"
@@ -374,6 +410,9 @@ msgstr "متاح الآن"
 
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
+
+msgid "Awaiting decision"
+msgstr "بانتظار القرار"
 
 msgid "Awaiting manager approval before this task closes."
 msgstr "بانتظار موافقة المدير قبل إغلاق هذه المهمة."
@@ -892,8 +931,18 @@ msgstr ""
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
 
+msgid "Decide tickets escalated to them"
+msgstr "اتخاذ القرار في التذاكر المصعّدة إليه"
+
 msgid "Decision"
 msgstr "القرار"
+
+#, python-format
+msgid "Decision (%(when)s):"
+msgstr "القرار (%(when)s):"
+
+msgid "Decision sent back to the support desk."
+msgstr "أُرسل القرار إلى فريق الدعم."
 
 msgid "Delay notice sent"
 msgstr "تم إرسال إشعار تأخير"
@@ -1021,6 +1070,31 @@ msgstr "مهارات المعدات المعتمدة"
 
 msgid "Error"
 msgstr "خطأ"
+
+msgid "Escalate to"
+msgstr "التصعيد إلى"
+
+msgid "Escalate to Operations Manager"
+msgstr "التصعيد إلى مدير العمليات"
+
+msgid "Escalated"
+msgstr "مُصعّدة"
+
+msgid "Escalated to the Operations Manager."
+msgstr "تم التصعيد إلى مدير العمليات."
+
+msgid "Escalated to you — decision needed"
+msgstr "مُصعّدة إليك — مطلوب قرار"
+
+msgid "Escalation"
+msgstr "التصعيد"
+
+msgid "Escalation decided"
+msgstr "تم البت في التصعيد"
+
+#, python-format
+msgid "Escalation decided — %(number)s"
+msgstr "تم البت في التصعيد — %(number)s"
 
 msgid "Estimated finish"
 msgstr "الانتهاء المتوقع"
@@ -1311,6 +1385,9 @@ msgstr "تركيب"
 msgid "Installed on"
 msgstr "تاريخ التركيب"
 
+msgid "Instructions given"
+msgstr "تم إعطاء تعليمات"
+
 msgid "Internal"
 msgstr "داخلي"
 
@@ -1448,6 +1525,9 @@ msgstr "الرسالة"
 msgid "Message sent."
 msgstr "تم إرسال الرسالة."
 
+msgid "Message to the customer (optional)"
+msgstr "رسالة إلى العميل (اختياري)"
+
 msgid "Messages"
 msgstr "الرسائل"
 
@@ -1490,6 +1570,9 @@ msgstr "بلاغات الإهمال"
 
 msgid "Negligence reported"
 msgstr "تم الإبلاغ عن إهمال"
+
+msgid "Never shown to the customer."
+msgstr "لا تظهر للعميل أبدًا."
 
 msgid "New"
 msgstr "جديدة"
@@ -1554,6 +1637,9 @@ msgstr "الأسبوع القادم"
 
 msgid "No"
 msgstr "لا"
+
+msgid "No Operations Manager in this country yet — add one from Technicians to escalate tickets."
+msgstr "لا يوجد مدير عمليات في هذه الدولة بعد — أضف واحدًا من صفحة الفنيين لتتمكن من تصعيد التذاكر."
 
 msgid "No active customers."
 msgstr "لا يوجد عملاء نشطون."
@@ -1714,6 +1800,9 @@ msgstr "ملاحظة (اختياري)"
 msgid "Note added."
 msgstr "تمت إضافة الملاحظة."
 
+msgid "Note for the support desk (internal)"
+msgstr "ملاحظة لفريق الدعم (داخلية)"
+
 msgid "Nothing logged yet."
 msgstr "لا يوجد شيء مسجّل بعد."
 
@@ -1788,6 +1877,9 @@ msgstr "مفتوحة"
 msgid "Open tasks"
 msgstr "المهام المفتوحة"
 
+msgid "Operations Manager"
+msgstr "مدير العمليات"
+
 msgid "Optional — any notes needed before work resumes."
 msgstr "اختياري — أي ملاحظات لازمة قبل استئناف العمل."
 
@@ -1796,6 +1888,10 @@ msgstr "أو ارفع صورة لتوقيع ورقي:"
 
 msgid "Other"
 msgstr "أخرى"
+
+#, python-format
+msgid "Our Operations Manager reviewed your request on %(when)s. Our team will follow up with you here."
+msgstr "راجع مدير العمليات لدينا طلبك في %(when)s. سيتابع فريقنا معك هنا."
 
 msgid "Outcome"
 msgstr "النتيجة"
@@ -1973,14 +2069,23 @@ msgstr "إعادة تفعيل العميل"
 msgid "Reason"
 msgstr "السبب"
 
+msgid "Reason (internal)"
+msgstr "السبب (داخلي)"
+
 msgid "Reason for replacing the current lead"
 msgstr "سبب استبدال الفني الرئيسي الحالي"
+
+msgid "Reason:"
+msgstr "السبب:"
 
 msgid "Reassigned"
 msgstr "أُعيد تعيينه"
 
 msgid "Received"
 msgstr "تم الاستلام"
+
+msgid "Rejected"
+msgstr "مرفوض"
 
 msgid "Reliability"
 msgstr "الموثوقية"
@@ -2214,6 +2319,9 @@ msgstr "إرسال"
 msgid "Send a short apology explaining why the team may arrive late — traffic, a longer previous job, and so on."
 msgstr "أرسل اعتذارًا مختصرًا يوضح سبب احتمال تأخر الفريق — الزحام المروري، أو تأخر مهمة سابقة، وما شابه."
 
+msgid "Send decision"
+msgstr "إرسال القرار"
+
 msgid "Send delay notice"
 msgstr "إرسال إشعار التأخير"
 
@@ -2289,6 +2397,9 @@ msgstr "عرض الفنيين الموقوفين"
 
 msgid "Show tasks"
 msgstr "عرض المهام"
+
+msgid "Shown on the customer’s ticket page, under “escalated to our Operations Manager”."
+msgstr "تظهر في صفحة تذكرة العميل، تحت «تم التصعيد إلى مدير العمليات»."
 
 msgid "Sick"
 msgstr "مرض"
@@ -2625,6 +2736,10 @@ msgstr "تم تحديث تفاصيل الطلب."
 msgid "Ticket dismissed."
 msgstr "تم رفض التذكرة."
 
+#, python-format
+msgid "Ticket escalated to you — %(number)s"
+msgstr "تذكرة مُصعّدة إليك — %(number)s"
+
 msgid "Ticket number"
 msgstr "رقم الطلب"
 
@@ -2656,6 +2771,9 @@ msgstr "لتحديد شخص كغير متاح، استخدم <a href=\"%(availab
 
 msgid "Today"
 msgstr "اليوم"
+
+msgid "Told the customer:"
+msgstr "ما قيل للعميل:"
 
 msgid "Too many attempts"
 msgstr "محاولات كثيرة جدًا"
@@ -2903,6 +3021,10 @@ msgid "Your password has been set. You can log in now."
 msgstr "تم تعيين كلمة المرور. يمكنك تسجيل الدخول الآن."
 
 #, python-format
+msgid "Your request was escalated to our Operations Manager for review on %(when)s."
+msgstr "تم تصعيد طلبك إلى مدير العمليات لدينا للمراجعة في %(when)s."
+
+#, python-format
 msgid "Your shipment is on its way — %(reference)s"
 msgstr "شحنتك في الطريق إليك — %(reference)s"
 
@@ -3093,6 +3215,15 @@ msgstr "العملاء"
 msgid "deactivation reason"
 msgstr "سبب الإيقاف"
 
+msgid "decided at"
+msgstr "تاريخ القرار"
+
+msgid "decision"
+msgstr "القرار"
+
+msgid "decision note"
+msgstr "ملاحظة القرار"
+
 msgid "delivery note"
 msgstr "إشعار التسليم"
 
@@ -3128,6 +3259,15 @@ msgstr "سبب الإنهاء"
 
 msgid "ended at"
 msgstr "انتهى في"
+
+msgid "escalated at"
+msgstr "تاريخ التصعيد"
+
+msgid "escalated by"
+msgstr "صعّدها"
+
+msgid "escalated to"
+msgstr "مُصعّدة إلى"
 
 #, python-format
 msgid "est. %(hours)s h"
@@ -3193,6 +3333,9 @@ msgstr "تاريخ التعيين"
 msgid "installed on"
 msgstr "تاريخ التركيب"
 
+msgid "internal — never shown to the customer"
+msgstr "داخلي — لا يظهر للعميل أبدًا"
+
 msgid "invoice"
 msgstr "الفاتورة"
 
@@ -3228,6 +3371,9 @@ msgstr "نوع الوسائط"
 
 msgid "message"
 msgstr "الرسالة"
+
+msgid "message to the customer"
+msgstr "رسالة إلى العميل"
 
 msgid "minimum level"
 msgstr "الحد الأدنى للمستوى"
@@ -3271,6 +3417,9 @@ msgstr "معطّل افتراضيًا — يقوم المشرف بإرساله �
 
 msgid "one account covers every site under this customer — created by staff, never self-signup"
 msgstr "حساب واحد يغطي كل مواقع هذا العميل — ينشئه الموظفون، ولا يمكن للعميل التسجيل بنفسه"
+
+msgid "optional — shown on the customer’s ticket page"
+msgstr "اختياري — يظهر في صفحة تذكرة العميل"
 
 msgid "outcome"
 msgstr "النتيجة"
@@ -3648,6 +3797,12 @@ msgstr "مرفق الطلب"
 
 msgid "ticket attachments"
 msgstr "مرفقات الطلب"
+
+msgid "ticket escalation"
+msgstr "تصعيد تذكرة"
+
+msgid "ticket escalations"
+msgstr "تصعيدات التذاكر"
 
 msgid "ticket internal note"
 msgstr "ملاحظة داخلية على الطلب"

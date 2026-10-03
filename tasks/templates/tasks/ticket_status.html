@@ -48,6 +48,16 @@
         <p>{% translate "This ticket has been reviewed and closed. Contact us if you still need help." %}</p>
         {% endif %}
     </div>
+    {% for escalation in escalations %}
+    <div class="flash flash--info">
+        {% if escalation.decided_at %}
+        <p>{% blocktranslate with when=escalation.decided_at|date:"SHORT_DATE_FORMAT" %}Our Operations Manager reviewed your request on {{ when }}. Our team will follow up with you here.{% endblocktranslate %}</p>
+        {% else %}
+        <p>{% blocktranslate with when=escalation.escalated_at|date:"SHORT_DATE_FORMAT" %}Your request was escalated to our Operations Manager for review on {{ when }}.{% endblocktranslate %}</p>
+        {% endif %}
+        {% if escalation.customer_message %}<p>{{ escalation.customer_message }}</p>{% endif %}
+    </div>
+    {% endfor %}
 </div>
 
 <div class="section">

@@ -20,8 +20,8 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
-    TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketInternalNote, TicketNotification,
-    TicketReply,
+    TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
+    TicketNotification, TicketReply,
 )
 
 User = get_user_model()
@@ -6133,3 +6133,115 @@ class SupervisorFieldLockTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(str(self.task.estimated_hours), '9.00')
         self.assertEqual(self.task.billing_type, Task.BillingType.CONTRACT)
+
+
+class TicketEscalationTests(TaskTestCase):
+    """The support desk escalating a ticket to the Operations Manager."""
+
+    def setUp(self):
+        super().setUp()
+        self.support_user = User.objects.create_user('support1', password='pass12345')
+        self.support = Technician.objects.create(
+            user=self.support_user, country=self.country, full_name='Dana Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.ops_user = User.objects.create_user('ops1', password='pass12345', email='ops@example.com')
+        self.ops = Technician.objects.create(
+            user=self.ops_user, country=self.country, full_name='Mohamed Fahmy',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
+        self.customer.user = self.portal_user
+        self.customer.save(update_fields=['user'])
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, customer=self.customer, ticket_number='AE-T0001', company_name='Fitness First',
+            site_description='Marina Branch', contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/tickets/{self.ticket.pk}/'
+
+    def _escalate(self, **overrides):
+        self.client.login(username='support1', password='pass12345')
+        return self.client.post(self.url, {
+            'action': 'escalate', 'escalated_to': self.ops.pk,
+            'reason': 'Customer wants a free replacement outside warranty',
+            'customer_message': 'We are reviewing a replacement for you.', **overrides,
+        })
+
+    def test_support_escalates_and_the_ops_manager_is_alerted(self):
+        self._escalate()
+        escalation = TicketEscalation.objects.get(ticket=self.ticket)
+        self.assertEqual(escalation.decision, TicketEscalation.Decision.PENDING)
+        self.assertEqual(mail.outbox[-1].to, ['ops@example.com'])
+
+        self.client.login(username='ops1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['can_decide'])
+        self.assertEqual(response.context['unseen_notifications'][0]['kind'], 'escalation_pending')
+
+    def test_only_one_pending_escalation_at_a_time(self):
+        self._escalate()
+        self._escalate()
+        self.assertEqual(TicketEscalation.objects.filter(ticket=self.ticket).count(), 1)
+
+    def test_ops_manager_decides_and_it_goes_back_to_the_desk(self):
+        self._escalate()
+        self.client.login(username='ops1', password='pass12345')
+        self.client.post(self.url, {
+            'action': 'decide_escalation', 'decision': 'approved', 'decision_note': 'Approve, goodwill.',
+        })
+        escalation = TicketEscalation.objects.get(ticket=self.ticket)
+        self.assertEqual(escalation.decision, TicketEscalation.Decision.APPROVED)
+        self.assertIsNotNone(escalation.decided_at)
+        self.assertTrue(self.ticket.notifications.filter(kind=TicketNotification.Kind.ESCALATION_DECIDED).exists())
+        # Decided — no longer in the ops manager's bell.
+        response = self.client.get(self.url)
+        self.assertFalse(response.context['can_decide'])
+
+    def test_ops_manager_cannot_open_tickets_not_escalated_to_them(self):
+        self.client.login(username='ops1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_ops_manager_cannot_use_the_desk_actions(self):
+        self._escalate()
+        self.client.login(username='ops1', password='pass12345')
+        self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': 'x'})
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
+
+    def test_cannot_escalate_to_someone_in_another_country_or_yourself(self):
+        from reference.models import Country
+
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        cairo_ops_user = User.objects.create_user('ops2', password='pass12345')
+        cairo_ops = Technician.objects.create(
+            user=cairo_ops_user, country=other_country, full_name='Cairo Ops',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        self._escalate(escalated_to=cairo_ops.pk)
+        self._escalate(escalated_to=self.support.pk)
+        self.assertFalse(TicketEscalation.objects.exists())
+
+    def test_customer_sees_the_role_and_message_but_nothing_internal(self):
+        self._escalate()
+        self.client.login(username='fitnessfirst_portal', password='pass12345')
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertContains(response, 'Operations Manager')
+        self.assertContains(response, 'We are reviewing a replacement for you.')
+        self.assertNotContains(response, 'Mohamed Fahmy')
+        self.assertNotContains(response, 'free replacement outside warranty')
+
+        TicketEscalation.objects.update(
+            decision=TicketEscalation.Decision.REJECTED, decision_note='Not covered.', decided_at=timezone.now(),
+        )
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertNotContains(response, 'Not covered.')
+        self.assertNotContains(response, 'Rejected')
+
+    def test_ticket_list_flags_pending_escalations(self):
+        self._escalate()
+        response = self.client.get('/tasks/tickets/')
+        self.assertTrue(response.context['tickets'][0].is_escalated)

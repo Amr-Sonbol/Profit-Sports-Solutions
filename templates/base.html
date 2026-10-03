@@ -48,6 +48,12 @@
                             — {{ notification.task.site.name }}
                             <span class="muted">({{ notification.task.task_number }})</span>
                         </a>
+                        {% elif notification.kind == 'escalation_pending' %}
+                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
+                            {% translate "Escalated to you — decision needed" %}
+                            — {{ notification.ticket.company_name }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
                         {% elif notification.kind == 'task_message' %}
                         <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
                             {% translate "New message" %}
@@ -56,7 +62,7 @@
                         </a>
                         {% else %}
                         <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}">
-                            {% if notification.kind == 'new_ticket' %}{% translate "New ticket" %}{% else %}{% translate "New reply" %}{% endif %}
+                            {% if notification.kind == 'new_ticket' %}{% translate "New ticket" %}{% elif notification.kind == 'escalation_decided' %}{% translate "Escalation decided" %}{% else %}{% translate "New reply" %}{% endif %}
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>

@@ -15,13 +15,15 @@ class SeedRolePermissionsTests(TestCase):
     """
 
     def test_most_permissions_match_old_hardcoded_supervisor_check(self):
-        # manage_tickets, view_dashboard, view_machines, and view_tasks
-        # are the permissions that have since moved away from this
-        # default — each checked separately below.
+        # manage_tickets, view_dashboard, view_machines, view_tasks,
+        # view_technicians and decide_escalated_tickets are the permissions
+        # that have since moved away from this default — each checked
+        # separately below.
         expected_allowed_roles = {'supervisor', 'manager', 'admin'}
         other_permissions = set(RolePermission.Permission) - {
             RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
+            RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
         }
         for permission in other_permissions:
             allowed_roles = set(
@@ -37,7 +39,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'admin'})
 
     def test_manage_tickets_is_support_manager_and_admin_only(self):
         allowed_roles = set(
@@ -63,7 +65,23 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_MACHINES, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'support_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'support_manager', 'operations_manager', 'admin'})
+
+    def test_view_technicians_also_includes_the_operations_manager(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_TECHNICIANS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'admin'})
+
+    def test_decide_escalated_tickets_is_operations_manager_and_admin(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'operations_manager', 'admin'})
 
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(

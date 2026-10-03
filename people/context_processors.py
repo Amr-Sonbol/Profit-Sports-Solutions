@@ -46,6 +46,13 @@ def notification_bell(request):
             {'kind': 'new_task', 'created_at': notification.created_at, 'task': notification.task}
             for notification in unseen_tasks
         ]
+    from tasks.models import TicketEscalation
+    items += [
+        {'kind': 'escalation_pending', 'created_at': escalation.escalated_at, 'ticket': escalation.ticket}
+        for escalation in TicketEscalation.objects.filter(
+            escalated_to=technician, decision=TicketEscalation.Decision.PENDING, ticket__country=country,
+        ).select_related('ticket')
+    ]
     from tasks.alarms import overdue_unscheduled_tasks
     items += [
         {'kind': 'unscheduled_overdue', 'created_at': task.created_at, 'task': task}

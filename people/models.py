@@ -48,6 +48,7 @@ class Technician(models.Model):
         MANAGER = 'manager', _('Manager')
         SUPPORT_MANAGER = 'support_manager', _('Technical Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
+        OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
         ADMIN = 'admin', _('Admin')
 
     class EmploymentType(models.TextChoices):
@@ -183,6 +184,7 @@ class RolePermission(models.Model):
         MANAGE_TECHNICIANS = 'manage_technicians', _("Edit technicians' details and profile photos")
         MANAGE_CUSTOMERS = 'manage_customers', _('View and edit customers and sites')
         VIEW_MACHINES = 'view_machines', _('View machines and their task/ticket history')
+        DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)

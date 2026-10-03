@@ -5,7 +5,8 @@ from django.utils.html import format_html
 
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, Task, TaskAsset, TaskAssignment,
-    TaskAttachment, TaskEvent, TaskNotification, TaskProduct, TicketInternalNote, TicketNotification, TicketReply,
+    TaskAttachment, TaskEvent, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
+    TicketNotification, TicketReply,
 )
 
 
@@ -297,3 +298,10 @@ class TicketNotificationAdmin(admin.ModelAdmin):
 class TaskNotificationAdmin(admin.ModelAdmin):
     list_display = ['task', 'created_at', 'seen_at']
     search_fields = ['task__task_number']
+
+
+@admin.register(TicketEscalation)
+class TicketEscalationAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'escalated_by', 'escalated_to', 'decision', 'escalated_at', 'decided_at']
+    list_filter = ['decision']
+    search_fields = ['ticket__ticket_number']

@@ -402,6 +402,7 @@ class TicketNotification(models.Model):
     class Kind(models.TextChoices):
         NEW_TICKET = 'new_ticket', _('New ticket')
         NEW_REPLY = 'new_reply', _('New reply')
+        ESCALATION_DECIDED = 'escalation_decided', _('Escalation decided')
 
     ticket = models.ForeignKey(
         CustomerTicket, on_delete=models.CASCADE, related_name='notifications',
@@ -418,6 +419,45 @@ class TicketNotification(models.Model):
 
     def __str__(self):
         return f'{self.get_kind_display()} — {self.ticket}'
+
+
+class TicketEscalation(models.Model):
+    """The support desk handing a ticket up to the Operations Manager, and
+    their decision (docs: ticket_escalation). `reason` and `decision_note`
+    are internal; only `customer_message` is ever shown to the customer.
+    """
+
+    class Decision(models.TextChoices):
+        PENDING = 'pending', _('Awaiting decision')
+        APPROVED = 'approved', _('Approved')
+        REJECTED = 'rejected', _('Rejected')
+        INSTRUCTIONS = 'instructions', _('Instructions given')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='escalations', verbose_name=_('ticket'),
+    )
+    escalated_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='escalations_raised', verbose_name=_('escalated by'),
+    )
+    escalated_to = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='escalations_received', verbose_name=_('escalated to'),
+    )
+    reason = models.TextField(_('reason'), help_text=_('internal — never shown to the customer'))
+    customer_message = models.TextField(
+        _('message to the customer'), blank=True, help_text=_('optional — shown on the customer’s ticket page'),
+    )
+    decision = models.CharField(_('decision'), max_length=20, choices=Decision.choices, default=Decision.PENDING)
+    decision_note = models.TextField(_('decision note'), blank=True)
+    escalated_at = models.DateTimeField(_('escalated at'))
+    decided_at = models.DateTimeField(_('decided at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('ticket escalation')
+        verbose_name_plural = _('ticket escalations')
+        ordering = ['-escalated_at']
+
+    def __str__(self):
+        return f'Escalation — {self.ticket}'
 
 
 class TaskNotification(models.Model):

@@ -17,7 +17,9 @@ from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Count, IntegerField, Prefetch, ProtectedError, Q, Sum, Value, When
+from django.db.models import (
+    Case, Count, Exists, IntegerField, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
+)
 from django.forms import formset_factory
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -44,7 +46,7 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
-    CorrectEventTimeForm, CountryCreateForm,
+    CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
@@ -54,7 +56,7 @@ from .forms import (
 from .models import (
     CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
-    TaskProduct, TicketInternalNote, TicketNotification, TicketReply,
+    TaskProduct, TicketEscalation, TicketInternalNote, TicketNotification, TicketReply,
 )
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
@@ -1857,6 +1859,61 @@ def _send_reply_to_staff(request, reply):
     )
 
 
+def _send_escalation_email(request, escalation):
+    """Best-effort email to the Operations Manager a ticket was escalated to."""
+    recipient = escalation.escalated_to
+    if not recipient.user_id or not recipient.user.email:
+        return
+    ticket = escalation.ticket
+    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    with translation.override('en'):
+        subject = _('Ticket escalated to you — %(number)s') % {'number': ticket.ticket_number}
+        message = _(
+            '%(by)s escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n\n'
+            '%(reason)s\n\nDecide here:\n%(link)s\n',
+        ) % {
+            'by': escalation.escalated_by.full_name, 'number': ticket.ticket_number,
+            'company': ticket.company_name, 'site': ticket.site_description, 'reason': escalation.reason,
+            'link': link,
+        }
+    _send_notification_email(
+        subject, message, 'tasks/email/ticket_escalated.html',
+        {
+            'escalated_by': escalation.escalated_by.full_name, 'ticket_number': ticket.ticket_number,
+            'company': ticket.company_name, 'site': ticket.site_description, 'reason': escalation.reason,
+            'link': link,
+        },
+        [recipient.user.email],
+    )
+
+
+def _send_escalation_decided_email(request, escalation):
+    """Best-effort email back to whoever escalated, once it's decided."""
+    recipient = escalation.escalated_by
+    if not recipient.user_id or not recipient.user.email:
+        return
+    ticket = escalation.ticket
+    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    with translation.override('en'):
+        subject = _('Escalation decided — %(number)s') % {'number': ticket.ticket_number}
+        decision = escalation.get_decision_display()
+        message = _(
+            '%(by)s decided the escalation on ticket %(number)s: %(decision)s.\n\n%(note)s\n\n'
+            'Carry on here:\n%(link)s\n',
+        ) % {
+            'by': escalation.escalated_to.full_name, 'number': ticket.ticket_number, 'decision': decision,
+            'note': escalation.decision_note, 'link': link,
+        }
+    _send_notification_email(
+        subject, message, 'tasks/email/escalation_decided.html',
+        {
+            'decided_by': escalation.escalated_to.full_name, 'ticket_number': ticket.ticket_number,
+            'decision': decision, 'note': escalation.decision_note, 'link': link,
+        },
+        [recipient.user.email],
+    )
+
+
 def _staff_notification_recipients(country, roles):
     """Logins in this country, among these roles, with an email on file —
     who gets alerted about a new ticket or a new task. The bell only
@@ -1977,6 +2034,9 @@ def ticket_status(request, token):
     context = {
         'ticket': ticket, 'can_reply': can_reply, 'reply_form': reply_form,
         'replies': ticket.replies.select_related('sent_by'),
+        # Only what the customer may see is used from these: the dates and
+        # customer_message — never reason, decision or decision_note.
+        'escalations': ticket.escalations.order_by('escalated_at'),
     }
     return render(request, 'tasks/ticket_status.html', context)
 
@@ -1999,7 +2059,11 @@ def ticket_list(request):
     date = parse_date(request.GET.get('date', '') or '')
     active_country = get_active_country(request)
 
-    tickets = CustomerTicket.objects.filter(country=active_country).select_related('assigned_to', 'customer')
+    tickets = CustomerTicket.objects.filter(country=active_country).select_related('assigned_to', 'customer').annotate(
+        is_escalated=Exists(
+            TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
+        ),
+    )
     if status != 'all':
         tickets = tickets.filter(status=status)
     if ticket_id:
@@ -2063,7 +2127,11 @@ def all_tickets(request):
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
-    tickets = CustomerTicket.objects.select_related('assigned_to', 'country', 'customer')
+    tickets = CustomerTicket.objects.select_related('assigned_to', 'country', 'customer').annotate(
+        is_escalated=Exists(
+            TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
+        ),
+    )
     if status != 'all':
         tickets = tickets.filter(status=status)
     if ticket_id:
@@ -2125,8 +2193,20 @@ def ticket_review(request, pk):
         role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
     ).exists()
     is_assignee = ticket.assigned_to_id == technician.id
-    if not (can_manage or is_assignee):
+    escalations = list(ticket.escalations.select_related('escalated_by', 'escalated_to'))
+    # Whoever a ticket was escalated to can open it (read-only, like an
+    # assignee) — and decide it while it's pending.
+    is_escalated_to = any(e.escalated_to_id == technician.id for e in escalations)
+    if not (can_manage or is_assignee or is_escalated_to):
         raise PermissionDenied
+    pending_escalation = next((e for e in escalations if e.decision == TicketEscalation.Decision.PENDING), None)
+    can_decide = bool(
+        pending_escalation and pending_escalation.escalated_to_id == technician.id
+        and RolePermission.objects.filter(
+            role=technician.role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
+        ).exists()
+    )
+    can_escalate = can_manage and _ticket_is_open(ticket) and pending_escalation is None
 
     if can_manage:
         ticket.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
@@ -2139,9 +2219,39 @@ def ticket_review(request, pk):
     reply_form = TicketReplyForm()
     can_reply = _ticket_is_open(ticket)
     internal_note_form = TicketInternalNoteForm()
+    escalate_form = EscalateTicketForm(country=ticket.country, escalated_by=technician)
+    decide_form = DecideEscalationForm()
+
+    if request.method == 'POST' and request.POST.get('action') == 'decide_escalation' and can_decide:
+        decide_form = DecideEscalationForm(request.POST)
+        if decide_form.is_valid():
+            pending_escalation.decision = decide_form.cleaned_data['decision']
+            pending_escalation.decision_note = decide_form.cleaned_data['decision_note']
+            pending_escalation.decided_at = timezone.now()
+            pending_escalation.save(update_fields=['decision', 'decision_note', 'decided_at'])
+            TicketNotification.objects.create(
+                ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=timezone.now(),
+            )
+            _send_escalation_decided_email(request, pending_escalation)
+            messages.success(request, _('Decision sent back to the support desk.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
+
+        if action == 'escalate' and can_escalate:
+            escalate_form = EscalateTicketForm(request.POST, country=ticket.country, escalated_by=technician)
+            if escalate_form.is_valid():
+                escalation = TicketEscalation.objects.create(
+                    ticket=ticket, escalated_by=technician,
+                    escalated_to=escalate_form.cleaned_data['escalated_to'],
+                    reason=escalate_form.cleaned_data['reason'],
+                    customer_message=escalate_form.cleaned_data['customer_message'],
+                    escalated_at=timezone.now(),
+                )
+                _send_escalation_email(request, escalation)
+                messages.success(request, _('Escalated to the Operations Manager.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
 
         if action == 'add_internal_note' and can_manage:
             internal_note_form = TicketInternalNoteForm(request.POST, request.FILES)
@@ -2246,6 +2356,9 @@ def ticket_review(request, pk):
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
         'replies': ticket.replies.select_related('sent_by'),
+        'escalations': escalations, 'pending_escalation': pending_escalation,
+        'can_escalate': can_escalate, 'escalate_form': escalate_form,
+        'can_decide': can_decide, 'decide_form': decide_form,
     }
     if can_manage:
         context['internal_note_form'] = internal_note_form
