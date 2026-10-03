@@ -72,6 +72,9 @@ export interface TaskDetail {
   can_file_report: boolean;
   // The task type's own setting — the API refuses a report without one.
   requires_signature: boolean;
+  // The lead's own last tap ("Accepted", "Arrived", ...) while it can still
+  // be undone — 10 minutes, nothing since. Null otherwise.
+  undoable_step: string | null;
 }
 
 export interface PartUsed {

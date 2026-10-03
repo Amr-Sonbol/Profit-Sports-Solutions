@@ -141,6 +141,17 @@ export default function TaskDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
+          {task.is_lead && task.undoable_step ? (
+            <TouchableOpacity
+              style={[styles.undoButton, { borderColor: theme.primary }, isBusy && styles.buttonDisabled]}
+              onPress={() => handleAction('undo')}
+              disabled={isBusy}
+            >
+              <ThemedText themeColor="primary">Undo “{task.undoable_step}”</ThemedText>
+              <ThemedText themeColor="textSecondary" type="small">Tapped by mistake? Undo within 10 minutes.</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+
           {task.can_file_report ? (
             <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.primary }]}
@@ -219,6 +230,7 @@ const styles = StyleSheet.create({
   error: { textAlign: 'center' },
   button: { borderRadius: Spacing.two, paddingVertical: Spacing.three, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
+  undoButton: { borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
   photoButton: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two },
