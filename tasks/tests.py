@@ -5359,6 +5359,23 @@ class MyReportFormTests(TaskTestCase):
         response = self.client.post(self.url, self._base_payload(labour_hours='2.00'))
         self.assertEqual(response.status_code, 302)
 
+    def test_signature_drawn_on_the_pad_is_saved_as_an_image(self):
+        self.client.login(username='tech1', password='pass12345')
+        drawn = (
+            'data:image/png;base64,'
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+        )
+        response = self.client.post(self.url, self._base_payload(signature_drawn=drawn))
+        self.assertEqual(response.status_code, 302)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertTrue(report.signature_url.endswith('.png'))
+
+    def test_garbled_drawn_signature_is_a_form_error(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload(signature_drawn='data:image/png;base64,@@@'))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
     def test_status_not_editable_redirects_with_message(self):
         self.task.status = Task.Status.ASSIGNED
         self.task.save()

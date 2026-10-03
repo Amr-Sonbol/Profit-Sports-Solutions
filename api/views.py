@@ -1,8 +1,4 @@
-import base64
-import binascii
-
 from django.contrib.auth import authenticate
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -209,24 +205,6 @@ class MyTaskAttachmentView(APIView):
         return Response(status=status.HTTP_201_CREATED)
 
 
-def _signature_from_data_url(value):
-    """The app's signature pad hands back a `data:image/png;base64,...`
-    string — turned into an uploaded file here so it goes through
-    WorkReportForm's own size/extension checks like a web upload does.
-    Returns None for a blank value, raises ValueError if it can't be read.
-    """
-    if not value:
-        return None
-    header, _sep, encoded = value.partition(',')
-    if not header.startswith('data:image/png;base64'):
-        raise ValueError
-    try:
-        content = base64.b64decode(encoded, validate=True)
-    except binascii.Error:
-        raise ValueError
-    return SimpleUploadedFile('signature.png', content, content_type='image/png')
-
-
 class MyTaskReportView(APIView):
     """The lead's work report — findings, parts used, labour hours and the
     customer's signature. GET returns {report: ... or null}; POST
@@ -268,19 +246,14 @@ class MyTaskReportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            signature = _signature_from_data_url(request.data.get('signature'))
-        except ValueError:
-            return Response({'signature': ['Could not read the signature.']}, status=status.HTTP_400_BAD_REQUEST)
-
         data = {
             field: request.data.get(field, '')
             for field in ('findings', 'action_taken', 'labour_hours', 'customer_name')
         }
         data['resolved'] = str(bool(request.data.get('resolved')))
+        data['signature_drawn'] = request.data.get('signature') or ''
         report_form = WorkReportForm(
-            data, {'signature': signature} if signature else {}, instance=getattr(task, 'report', None),
-            require_signature=_requires_signature(task),
+            data, instance=getattr(task, 'report', None), require_signature=_requires_signature(task),
         )
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
 

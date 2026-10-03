@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 16:48+0000\n"
+"POT-Creation-Date: 2026-10-03 16:52+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -140,6 +140,9 @@ msgstr ""
 #, python-format
 msgid "A short delay for your Profit Sports Solutions visit — %(number)s"
 msgstr "تأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
+
+msgid "A signature is already on file — sign again only to replace it."
+msgstr "يوجد توقيع محفوظ بالفعل — وقّع مرة أخرى فقط لاستبداله."
 
 msgid "A task type with that code already exists."
 msgstr "يوجد بالفعل نوع مهمة بهذا الرمز."
@@ -528,6 +531,9 @@ msgstr "اختر نوع مهمة موجودًا أو أضف نوعًا جديد�
 msgid "Choose the machine and an outcome, or leave this row blank."
 msgstr "اختر الجهاز والنتيجة، أو اترك هذا الصف فارغًا."
 
+msgid "Clear signature"
+msgstr "مسح التوقيع"
+
 msgid "Close task"
 msgstr "إغلاق المهمة"
 
@@ -619,6 +625,9 @@ msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
+
+msgid "Could not read the signature — please sign again."
+msgstr "تعذّرت قراءة التوقيع — يرجى التوقيع مرة أخرى."
 
 msgid "Count"
 msgstr "العدد"
@@ -1755,6 +1764,9 @@ msgstr "المهام المفتوحة"
 msgid "Optional — anything the next session should know."
 msgstr "اختياري — أي شيء يجب أن تعرفه الجلسة التالية."
 
+msgid "Or upload a photo of a paper signature:"
+msgstr "أو ارفع صورة لتوقيع ورقي:"
+
 msgid "Other"
 msgstr "أخرى"
 
@@ -2247,6 +2259,9 @@ msgstr "عرض المهام"
 
 msgid "Sick"
 msgstr "مرض"
+
+msgid "Signature pad"
+msgstr "لوحة التوقيع"
 
 msgid "Signed by"
 msgstr "وقّعه"

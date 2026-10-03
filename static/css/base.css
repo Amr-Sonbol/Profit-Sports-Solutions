@@ -1165,3 +1165,21 @@ tbody tr:hover {
 .button--danger {
     background: var(--color-danger);
 }
+
+/* Work report signature pad (static/js/signature-pad.js). */
+.signature-pad {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.signature-pad__canvas {
+    inline-size: 100%;
+    block-size: 180px;
+    border: 1px solid #d0d4da;
+    border-radius: 6px;
+    background: #ffffff;
+    /* Lets a finger draw instead of scrolling the page. */
+    touch-action: none;
+}

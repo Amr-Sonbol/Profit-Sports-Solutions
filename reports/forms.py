@@ -1,4 +1,8 @@
+import base64
+import binascii
+
 from django import forms
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.utils.translation import gettext_lazy as _
 
@@ -6,6 +10,20 @@ from .models import CustomerFeedback, WorkReport
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def _signature_from_data_url(value):
+    """A `data:image/png;base64,...` string from a signature pad, as an
+    uploaded PNG file. Raises ValueError if it isn't one.
+    """
+    header, _sep, encoded = value.partition(',')
+    if header != 'data:image/png;base64':
+        raise ValueError
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except binascii.Error:
+        raise ValueError
+    return SimpleUploadedFile('signature.png', content, content_type='image/png')
 
 
 class WorkReportForm(forms.ModelForm):
@@ -18,6 +36,10 @@ class WorkReportForm(forms.ModelForm):
         widget=forms.FileInput(attrs={'accept': 'image/*'}),
         validators=[FileExtensionValidator(allowed_extensions=SIGNATURE_EXTENSIONS)],
     )
+    # A signature drawn on screen — the web page's signature pad and the
+    # mobile app both send it as a PNG data URL. Turned into the same
+    # `signature` file an upload would be, so it gets the same checks.
+    signature_drawn = forms.CharField(required=False, widget=forms.HiddenInput)
 
     class Meta:
         model = WorkReport
@@ -35,13 +57,25 @@ class WorkReportForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['resolved'].initial = str(self.instance.resolved)
 
-    def clean_signature(self):
-        signature = self.cleaned_data.get('signature')
+    def clean(self):
+        cleaned = super().clean()
+        if 'signature' in self.errors:
+            return cleaned
+        signature = cleaned.get('signature')
+        drawn = cleaned.get('signature_drawn')
+        if not signature and drawn:
+            try:
+                signature = _signature_from_data_url(drawn)
+            except ValueError:
+                self.add_error('signature', _('Could not read the signature — please sign again.'))
+                return cleaned
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 5 MB.'))
-        if self.require_signature and not signature and not self.instance.signature_url:
-            raise forms.ValidationError(_('This type of task needs the customer’s signature.'))
-        return signature
+            self.add_error('signature', _('File is too large — the limit is 5 MB.'))
+        elif self.require_signature and not signature and not self.instance.signature_url:
+            self.add_error('signature', _('This type of task needs the customer’s signature.'))
+        else:
+            cleaned['signature'] = signature
+        return cleaned
 
 
 class CustomerFeedbackForm(forms.Form):
