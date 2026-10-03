@@ -2473,7 +2473,21 @@ def my_progress(request):
         actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
     ).count()
 
+    # Same rule as the supervisors' Hours page: a report's hours belong
+    # to the lead who filed it.
+    month_start, month_end = _month_window(timezone.localtime().date().replace(day=1))
+    month_reports = list(
+        WorkReport.objects.filter(
+            submitted_at__gte=month_start, submitted_at__lt=month_end,
+            task__assignments__technician=technician, task__assignments__role=TaskAssignment.Role.LEAD,
+            task__assignments__is_active=True,
+        ).select_related('task').distinct(),
+    )
+
     context = {
+        'month_hours': sum(report.labour_hours for report in month_reports),
+        'month_report_count': len(month_reports),
+        'month_overrun_count': sum(1 for report in month_reports if report.is_overrun),
         'skills': skills,
         'conduct_areas': conduct_areas,
         'certification': certification,
@@ -2714,8 +2728,7 @@ def technician_hours(request):
     active_country = get_active_country(request)
 
     period_start_date = _resolve_report_month(request)
-    period_start = timezone.make_aware(datetime.combine(period_start_date, datetime.min.time()))
-    period_end = timezone.make_aware(datetime.combine(_shift_month(period_start_date, 1), datetime.min.time()))
+    period_start, period_end = _month_window(period_start_date)
 
     reports = WorkReport.objects.filter(
         submitted_at__gte=period_start, submitted_at__lt=period_end, task__site__customer__country=active_country,
@@ -3097,6 +3110,13 @@ def _shift_month(first_of_month, delta):
     return date(year, month, 1)
 
 
+def _month_window(first_of_month):
+    """Aware [start, end) datetimes covering one calendar month."""
+    start = timezone.make_aware(datetime.combine(first_of_month, datetime.min.time()))
+    end = timezone.make_aware(datetime.combine(_shift_month(first_of_month, 1), datetime.min.time()))
+    return start, end
+
+
 def _resolve_report_month(request):
     """The first-of-month date this report covers, from ?month=YYYY-MM,
     defaulting to the current month. Always a clean first-of-month date —
@@ -3116,10 +3136,7 @@ def _month_report_querysets(period_start_date):
     scoped to any active country, since this report is for leadership,
     not one country's board.
     """
-    period_start = timezone.make_aware(datetime.combine(period_start_date, datetime.min.time()))
-    period_end = timezone.make_aware(
-        datetime.combine(_shift_month(period_start_date, 1), datetime.min.time()),
-    )
+    period_start, period_end = _month_window(period_start_date)
     tickets = CustomerTicket.objects.filter(
         submitted_at__gte=period_start, submitted_at__lt=period_end,
     ).select_related('country').order_by('submitted_at')

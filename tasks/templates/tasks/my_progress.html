@@ -73,6 +73,26 @@
 </div>
 
 <div class="section">
+    <h2>{% translate "This month" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Labour hours" %}</dt>
+            <dd>{{ month_hours }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Reports filed" %}</dt>
+            <dd>{{ month_report_count }}</dd>
+        </div>
+        {% if month_overrun_count %}
+        <div>
+            <dt>{% translate "Well over estimate" %}</dt>
+            <dd>{{ month_overrun_count }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+</div>
+
+<div class="section">
     <h2>{% translate "Reliability" %}</h2>
     <dl class="detail-grid">
         <div>

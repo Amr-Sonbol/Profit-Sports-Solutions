@@ -5736,3 +5736,15 @@ class TechnicianHoursTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         self.assertContains(self.client.get(f'/tasks/{task.pk}/'), 'Well over estimate')
         self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Well over estimate')
+
+    def test_technician_sees_own_month_hours_on_my_progress(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(str(response.context['month_hours']), '3.50')
+        self.assertEqual(response.context['month_report_count'], 2)
+
+    def test_helper_gets_no_hours_on_my_progress(self):
+        self.client.login(username='helper1', password='pass12345')
+        response = self.client.get('/tasks/my-progress/')
+        self.assertEqual(response.context['month_hours'], 0)
