@@ -25,6 +25,7 @@ urlpatterns = [
     path('tickets/<int:pk>/', views.ticket_review, name='ticket_review'),
     path('technicians/', views.technician_list, name='technician_list'),
     path('technicians/all/', views.all_technicians, name='all_technicians'),
+    path('technicians/hours/', views.technician_hours, name='technician_hours'),
     path('technicians/availability/', views.technician_availability, name='technician_availability'),
     path('technicians/new/', views.technician_create, name='technician_create'),
     path('technicians/<int:pk>/board/', views.technician_board, name='technician_board'),

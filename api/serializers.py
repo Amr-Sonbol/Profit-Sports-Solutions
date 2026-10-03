@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from reports.models import PartUsed, WorkReport
 from tasks.models import CustomerTicket, Task, TaskAttachment, TaskEvent
 
 
@@ -43,6 +44,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     site_name = serializers.CharField(source='site.name')
     site_address = serializers.CharField(source='site.address')
     customer_name = serializers.CharField(source='site.customer.name')
+    currency_code = serializers.CharField(source='site.customer.country.currency_code')
     status_display = serializers.CharField(source='get_status_display')
     priority_display = serializers.CharField(source='get_priority_display')
     task_type_name = serializers.CharField(source='task_type.display_name', default='')
@@ -53,15 +55,17 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     next_action = serializers.SerializerMethodField()
     is_lead = serializers.SerializerMethodField()
     can_file_report = serializers.SerializerMethodField()
+    requires_signature = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
-            'id', 'task_number', 'site_name', 'site_address', 'customer_name',
+            'id', 'task_number', 'site_name', 'site_address', 'customer_name', 'currency_code',
             'status', 'status_display', 'priority', 'priority_display',
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
             'events', 'attachments', 'next_action', 'is_lead', 'can_file_report',
+            'requires_signature',
         ]
 
     def get_next_action(self, obj):
@@ -73,6 +77,9 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     def get_can_file_report(self, obj):
         return self.context.get('can_file_report', False)
 
+    def get_requires_signature(self, obj):
+        return self.context.get('requires_signature', False)
+
 
 class CustomerTicketSerializer(serializers.ModelSerializer):
     country_name = serializers.CharField(source='country.display_name')
@@ -83,4 +90,21 @@ class CustomerTicketSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'company_name', 'site_description', 'country_name', 'status', 'status_display',
             'contact_name', 'contact_phone', 'description', 'submitted_at',
+        ]
+
+
+class PartUsedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PartUsed
+        fields = ['part_code', 'description', 'quantity', 'unit_cost', 'currency_code']
+
+
+class WorkReportSerializer(serializers.ModelSerializer):
+    parts_used = PartUsedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WorkReport
+        fields = [
+            'findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
+            'signature_url', 'submitted_at', 'parts_used',
         ]

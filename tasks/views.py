@@ -40,7 +40,7 @@ from people.permissions import (
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
-from reports.models import CustomerFeedback, PartUsed
+from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm,
@@ -2701,6 +2701,65 @@ def all_technicians(request):
 
 
 @login_required
+def technician_hours(request):
+    """Labour hours from filed work reports, per technician, for one month
+    in the active country — how a supervisor/manager/admin follows each
+    technician's actual workload. A report's hours count toward the lead
+    who filed it (the report covers the whole job), so the team total
+    never double-counts; helpers get a "helped on" count instead. Every
+    active technician gets a row, so someone with nothing filed shows up
+    as zero rather than going unnoticed.
+    """
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    active_country = get_active_country(request)
+
+    period_start_date = _resolve_report_month(request)
+    period_start = timezone.make_aware(datetime.combine(period_start_date, datetime.min.time()))
+    period_end = timezone.make_aware(datetime.combine(_shift_month(period_start_date, 1), datetime.min.time()))
+
+    reports = WorkReport.objects.filter(
+        submitted_at__gte=period_start, submitted_at__lt=period_end, task__site__customer__country=active_country,
+    ).select_related('task__site__customer').prefetch_related(
+        Prefetch(
+            'task__assignments', queryset=TaskAssignment.objects.filter(is_active=True), to_attr='active_assignments',
+        ),
+    ).order_by('submitted_at')
+
+    leads_reports = defaultdict(list)
+    helped_on = defaultdict(int)
+    for report in reports:
+        for assignment in report.task.active_assignments:
+            if assignment.role == TaskAssignment.Role.LEAD:
+                leads_reports[assignment.technician_id].append(report)
+            else:
+                helped_on[assignment.technician_id] += 1
+
+    rows = []
+    for technician in Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'):
+        own_reports = leads_reports[technician.pk]
+        hours = sum(report.labour_hours for report in own_reports)
+        estimated = sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours)
+        rows.append({
+            'technician': technician,
+            'reports': own_reports,
+            'hours': hours,
+            'estimated': estimated,
+            'helped_on': helped_on[technician.pk],
+        })
+
+    context = {
+        'rows': rows,
+        'total_hours': sum(row['hours'] for row in rows),
+        'total_reports': sum(len(row['reports']) for row in rows),
+        'period_start': period_start_date,
+        'prev_month': _shift_month(period_start_date, -1),
+        'next_month': _shift_month(period_start_date, 1),
+        'this_month': timezone.localtime().date().replace(day=1),
+    }
+    return render(request, 'tasks/technician_hours.html', context)
+
+
+@login_required
 def technician_board(request, pk):
     """A supervisor's view of one technician's week — same shape as
     my_week, just for someone else, with the same country scoping used
@@ -3384,6 +3443,70 @@ def my_task_detail(request, pk):
     return render(request, 'tasks/my_task_detail.html', context)
 
 
+def _requires_signature(task):
+    return bool(task.task_type and task.task_type.requires_signature)
+
+
+def save_work_report(request, task, technician, report_form, part_rows):
+    """Saves a validated WorkReportForm plus its parts and moves the task
+    on — shared by the web form below and the mobile API, so both follow
+    the same status rules. Call inside transaction.atomic(). Sets
+    `first_submission` on the returned report (True if this filing moved
+    the task to awaiting approval, False for a later correction).
+    """
+    saved_report = report_form.save(commit=False)
+    saved_report.task = task
+    saved_report.submitted_at = timezone.now()
+    signature = report_form.cleaned_data.get('signature')
+    if signature:
+        path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
+        saved_report.signature_url = request.build_absolute_uri(default_storage.url(path))
+    saved_report.save()
+
+    saved_report.parts_used.all().delete()
+    for cleaned in part_rows:
+        if cleaned.get('part_code') and cleaned.get('quantity') and cleaned.get('unit_cost'):
+            PartUsed.objects.create(
+                report=saved_report, part_code=cleaned['part_code'],
+                description=cleaned.get('description', ''), quantity=cleaned['quantity'],
+                unit_cost=cleaned['unit_cost'], currency_code=cleaned['currency_code'],
+            )
+
+    now = timezone.now()
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
+        occurred_at=now, actor=request.user,
+    )
+    saved_report.first_submission = task.status not in (
+        Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
+    )
+    if saved_report.first_submission:
+        # A technician's own report needs their supervisor's sign-off
+        # before a manager ever sees it; a supervisor filing it themselves
+        # (they're the lead on some tasks too) skips straight to the
+        # manager, same as before this step existed.
+        task.status = (
+            Task.Status.PENDING_SUPERVISOR_REVIEW if technician.role == Technician.Role.TECHNICIAN
+            else Task.Status.COMPLETED
+        )
+        task.save(update_fields=['status'])
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.COMPLETED,
+            occurred_at=now, actor=request.user,
+        )
+    return saved_report
+
+
+def report_saved_message(first_submission, task):
+    if first_submission and task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
+        return _('Report submitted — awaiting your supervisor’s review.')
+    if first_submission:
+        return _('Report submitted — awaiting manager approval before the task closes.')
+    if task.status in (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED):
+        return _('Report updated — still awaiting approval.')
+    return _('Report updated.')
+
+
 @login_required
 def my_report_form(request, pk):
     """Filing this report is the lead's own last step — there's no
@@ -3428,7 +3551,9 @@ def my_report_form(request, pk):
     ]
 
     if request.method == 'POST':
-        report_form = WorkReportForm(request.POST, request.FILES, instance=report)
+        report_form = WorkReportForm(
+            request.POST, request.FILES, instance=report, require_signature=_requires_signature(task),
+        )
         existing_formset = ExistingAssetFormSet(
             request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )
@@ -3440,14 +3565,7 @@ def my_report_form(request, pk):
             and new_formset.is_valid() and part_formset.is_valid()
         ):
             with transaction.atomic():
-                saved_report = report_form.save(commit=False)
-                saved_report.task = task
-                saved_report.submitted_at = timezone.now()
-                signature = report_form.cleaned_data.get('signature')
-                if signature:
-                    path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
-                    saved_report.signature_url = request.build_absolute_uri(default_storage.url(path))
-                saved_report.save()
+                saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 
                 TaskAsset.objects.filter(task=task).delete()
                 for cleaned in existing_formset.cleaned_data:
@@ -3461,51 +3579,10 @@ def my_report_form(request, pk):
                         )
                         TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'])
 
-                saved_report.parts_used.all().delete()
-                for cleaned in part_formset.cleaned_data:
-                    if cleaned.get('part_code') and cleaned.get('quantity') and cleaned.get('unit_cost'):
-                        PartUsed.objects.create(
-                            report=saved_report, part_code=cleaned['part_code'],
-                            description=cleaned.get('description', ''), quantity=cleaned['quantity'],
-                            unit_cost=cleaned['unit_cost'], currency_code=cleaned['currency_code'],
-                        )
-
-                now = timezone.now()
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
-                    occurred_at=now, actor=request.user,
-                )
-                pending_statuses = (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED)
-                if task.status not in (*pending_statuses, Task.Status.CLOSED):
-                    # A technician's own report needs their supervisor's
-                    # sign-off before a manager ever sees it; a supervisor
-                    # filing it themselves (they're the lead on some tasks
-                    # too) skips straight to the manager, same as before
-                    # this step existed.
-                    task.status = (
-                        Task.Status.PENDING_SUPERVISOR_REVIEW if technician.role == Technician.Role.TECHNICIAN
-                        else Task.Status.COMPLETED
-                    )
-                    task.save(update_fields=['status'])
-                    TaskEvent.objects.create(
-                        task=task, event_type=TaskEvent.EventType.COMPLETED,
-                        occurred_at=now, actor=request.user,
-                    )
-                    if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
-                        messages.success(
-                            request, _('Report submitted — awaiting your supervisor’s review.'),
-                        )
-                    else:
-                        messages.success(
-                            request, _('Report submitted — awaiting manager approval before the task closes.'),
-                        )
-                elif task.status in pending_statuses:
-                    messages.success(request, _('Report updated — still awaiting approval.'))
-                else:
-                    messages.success(request, _('Report updated.'))
+            messages.success(request, report_saved_message(saved_report.first_submission, task))
             return redirect('tasks:my_task_detail', pk=task.pk)
     else:
-        report_form = WorkReportForm(instance=report)
+        report_form = WorkReportForm(instance=report, require_signature=_requires_signature(task))
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )

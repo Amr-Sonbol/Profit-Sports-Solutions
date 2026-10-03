@@ -5340,6 +5340,25 @@ class MyReportFormTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
 
+    def test_task_type_requiring_signature_blocks_a_report_without_one(self):
+        self.task_type.requires_signature = True
+        self.task_type.save(update_fields=['requires_signature'])
+        self.task.task_type = self.task_type
+        self.task.save(update_fields=['task_type'])
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload())
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+        signature = SimpleUploadedFile('sig.png', b'png bytes', content_type='image/png')
+        response = self.client.post(self.url, {**self._base_payload(), 'signature': signature})
+        self.assertEqual(response.status_code, 302)
+
+        # A later correction without a new upload keeps the one on file.
+        response = self.client.post(self.url, self._base_payload(labour_hours='2.00'))
+        self.assertEqual(response.status_code, 302)
+
     def test_status_not_editable_redirects_with_message(self):
         self.task.status = Task.Status.ASSIGNED
         self.task.save()
@@ -5615,3 +5634,81 @@ class MyReportFormTests(TaskTestCase):
         parts = list(report.parts_used.all())
         self.assertEqual(len(parts), 1)
         self.assertEqual(parts[0].part_code, 'NEW-1')
+
+
+class TechnicianHoursTests(TaskTestCase):
+    url = '/tasks/technicians/hours/'
+
+    def setUp(self):
+        super().setUp()
+        self.helper_user = User.objects.create_user('helper1', password='pass12345')
+        self.helper = Technician.objects.create(
+            user=self.helper_user, country=self.country, full_name='Omar Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.task = self._task_with_report('AE-0001', hours='2.50', estimated='2.00')
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self._task_with_report('AE-0002', hours='1.00')
+
+    def _task_with_report(self, number, hours, estimated=None, submitted_at=None, site=None):
+        task = Task.objects.create(
+            task_number=number, site=site or self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+            estimated_hours=estimated,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=task, findings='x', resolved=True, labour_hours=hours, customer_name='Ali',
+            submitted_at=submitted_at or timezone.now(),
+        )
+        return task
+
+    def _row(self, response, technician):
+        return next(row for row in response.context['rows'] if row['technician'] == technician)
+
+    def test_supervisor_sees_hours_summed_for_the_lead(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        row = self._row(response, self.technician)
+        self.assertEqual(len(row['reports']), 2)
+        self.assertEqual(str(row['hours']), '3.50')
+        self.assertEqual(str(row['estimated']), '2.00')
+        self.assertEqual(str(response.context['total_hours']), '3.50')
+
+    def test_helper_gets_a_count_not_the_hours(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        row = self._row(self.client.get(self.url), self.helper)
+        self.assertEqual(row['hours'], 0)
+        self.assertEqual(row['helped_on'], 1)
+
+    def test_other_months_and_countries_are_excluded(self):
+        self._task_with_report('AE-0003', hours='5.00', submitted_at=timezone.now() - timedelta(days=62))
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek', address='Cairo')
+        self._task_with_report('EG-0001', hours='9.00', site=other_site)
+
+        self.client.login(username='supervisor1', password='pass12345')
+        row = self._row(self.client.get(self.url), self.technician)
+        self.assertEqual(str(row['hours']), '3.50')
+
+    def test_earlier_month_is_reachable(self):
+        earlier = timezone.now() - timedelta(days=62)
+        self._task_with_report('AE-0003', hours='5.00', submitted_at=earlier)
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url, {'month': timezone.localtime(earlier).strftime('%Y-%m')})
+        self.assertEqual(str(self._row(response, self.technician)['hours']), '5.00')
+
+    def test_technician_is_forbidden(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 403)

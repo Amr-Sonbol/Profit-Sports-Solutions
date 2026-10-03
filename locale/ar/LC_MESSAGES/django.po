@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-27 22:06+0000\n"
+"POT-Creation-Date: 2026-10-03 16:33+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -21,6 +21,20 @@ msgstr "متبقٍ %(days)s يوم"
 #, python-format
 msgid "%(days)sd left — behind"
 msgstr "متبقٍ %(days)s يوم — متأخر"
+
+#, python-format
+msgid "%(hours)s h"
+msgstr "%(hours)s س"
+
+#, python-format
+msgid "%(hours)s labour hours across %(reports)s filed report."
+msgid_plural "%(hours)s labour hours across %(reports)s filed reports."
+msgstr[0] "%(hours)s ساعة عمل، ولا توجد تقارير مقدمة."
+msgstr[1] "%(hours)s ساعة عمل في تقرير واحد مقدم."
+msgstr[2] "%(hours)s ساعة عمل في تقريرين مقدمين."
+msgstr[3] "%(hours)s ساعة عمل في %(reports)s تقارير مقدمة."
+msgstr[4] "%(hours)s ساعة عمل في %(reports)s تقريرًا مقدمًا."
+msgstr[5] "%(hours)s ساعة عمل في %(reports)s تقرير مقدم."
 
 #, python-format
 msgid "%(minutes)s minutes"
@@ -93,6 +107,9 @@ msgstr ""
 "\n"
 "راجعها من هنا:\n"
 "%(link)s\n"
+
+msgid "A report’s hours count toward the lead technician who filed it."
+msgstr "تُحتسب ساعات التقرير للفني الرئيسي الذي قدّمه."
 
 #, python-format
 msgid ""
@@ -980,6 +997,9 @@ msgstr "خطأ"
 msgid "Estimated finish"
 msgstr "الانتهاء المتوقع"
 
+msgid "Estimated hours"
+msgstr "الساعات المقدرة"
+
 msgid "Every active customer in every country — for search and management. Doesn't follow the country switcher above."
 msgstr "كل عميل نشط في كل دولة — للبحث والإدارة. لا يتبع مبدّل الدولة أعلاه."
 
@@ -1090,6 +1110,9 @@ msgstr "صالة رياضية"
 
 msgid "Gym address"
 msgstr "عنوان النادي الرياضي"
+
+msgid "Helped on"
+msgstr "ساعد في"
 
 msgid "Helper"
 msgstr "مساعد"
@@ -1202,6 +1225,9 @@ msgstr "إجازة رسمية"
 
 msgid "Hotel"
 msgstr "فندق"
+
+msgid "Hours"
+msgstr "الساعات"
 
 msgid "How did we do?"
 msgstr "كيف كان أداؤنا؟"
@@ -1982,6 +2008,9 @@ msgstr "تاريخ الإبلاغ"
 msgid "Reported serial numbers"
 msgstr "الأرقام التسلسلية المُبلَّغ عنها"
 
+msgid "Reports filed"
+msgstr "التقارير المقدمة"
+
 msgid "Request again"
 msgstr "طلب مرة أخرى"
 
@@ -2003,6 +2032,9 @@ msgstr "مطلوب لتاريخ"
 #, python-format
 msgid "Requested on %(time)s"
 msgstr "طلب في %(time)s"
+
+msgid "Required for this type of task."
+msgstr "مطلوب لهذا النوع من المهام."
 
 msgid "Required skill"
 msgstr "المهارة المطلوبة"
@@ -2200,6 +2232,9 @@ msgstr "عرض العملاء الموقوفين"
 msgid "Show deactivated technicians"
 msgstr "عرض الفنيين الموقوفين"
 
+msgid "Show tasks"
+msgstr "عرض المهام"
+
 msgid "Sick"
 msgstr "مرض"
 
@@ -2374,6 +2409,9 @@ msgstr "توفر الفنيين"
 msgid "Technician deactivated."
 msgstr "تم إيقاف الفني."
 
+msgid "Technician hours"
+msgstr "ساعات الفنيين"
+
 msgid "Technician reactivated."
 msgstr "تمت إعادة تفعيل الفني."
 
@@ -2472,6 +2510,9 @@ msgstr "هذا الطلب غير مغلق."
 
 msgid "This ticket is resolved — the conversation is closed."
 msgstr "تم حل هذا الطلب — المحادثة مغلقة."
+
+msgid "This type of task needs the customer’s signature."
+msgstr "يتطلب هذا النوع من المهام توقيع العميل."
 
 msgid "This week"
 msgstr "هذا الأسبوع"
@@ -2968,6 +3009,10 @@ msgstr "سبب الإنهاء"
 
 msgid "ended at"
 msgstr "انتهى في"
+
+#, python-format
+msgid "est. %(hours)s h"
+msgstr "المتوقع %(hours)s س"
 
 msgid "estimated hours"
 msgstr "الساعات المقدرة"

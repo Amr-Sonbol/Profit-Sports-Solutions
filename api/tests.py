@@ -5,6 +5,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from people.models import RolePermission, Technician
+from reports.models import WorkReport
 from tasks.models import Task, TaskAssignment, TaskAttachment, TaskEvent
 from tasks.tests import TaskTestCase
 
@@ -182,6 +183,142 @@ class MyTaskAttachmentTests(ApiTestCase):
             **self.auth(token),
         )
         self.assertEqual(response.status_code, 400)
+
+
+# A 1x1 transparent PNG — enough to stand in for a drawn signature.
+SIGNATURE_DATA_URL = (
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+)
+
+
+class MyTaskReportTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+
+    def _file(self, token, **overrides):
+        body = {
+            'findings': 'Belt worn through', 'action_taken': 'Replaced belt', 'resolved': True,
+            'labour_hours': '2.50', 'customer_name': 'Ali Manager',
+            'parts': [{
+                'part_code': 'BELT-01', 'description': 'Treadmill belt', 'quantity': 1,
+                'unit_cost': '120.00', 'currency_code': 'AED',
+            }],
+            'signature': SIGNATURE_DATA_URL,
+            **overrides,
+        }
+        return self.client.post(
+            f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+            content_type='application/json', **self.auth(token),
+        )
+
+    def test_filing_saves_report_parts_and_signature(self):
+        token = self.token_for('tech1')
+        response = self._file(token)
+        self.assertEqual(response.status_code, 201)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(str(report.labour_hours), '2.50')
+        self.assertTrue(report.resolved)
+        self.assertTrue(report.signature_url.startswith('http'))
+        self.assertEqual(list(report.parts_used.values_list('part_code', flat=True)), ['BELT-01'])
+
+    def test_technicians_report_goes_to_supervisor_review(self):
+        token = self.token_for('tech1')
+        response = self._file(token)
+        self.assertEqual(response.json()['status'], Task.Status.PENDING_SUPERVISOR_REVIEW)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.PENDING_SUPERVISOR_REVIEW)
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.COMPLETED).exists())
+
+    def test_correction_keeps_status_and_signature(self):
+        token = self.token_for('tech1')
+        self._file(token)
+        first_signature = WorkReport.objects.get(task=self.task).signature_url
+        response = self._file(token, labour_hours='3.00', signature=None, parts=[])
+        self.assertEqual(response.status_code, 200)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(str(report.labour_hours), '3.00')
+        self.assertEqual(report.signature_url, first_signature)
+        self.assertFalse(report.parts_used.exists())
+        self.assertEqual(
+            TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.COMPLETED).count(), 1,
+        )
+
+    def test_get_returns_saved_report(self):
+        token = self.token_for('tech1')
+        response = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token))
+        self.assertIsNone(response.json()['report'])
+        self._file(token)
+        body = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['report']
+        self.assertEqual(body['labour_hours'], '2.50')
+        self.assertEqual(body['parts_used'][0]['part_code'], 'BELT-01')
+
+    def test_missing_labour_hours_is_rejected(self):
+        token = self.token_for('tech1')
+        response = self._file(token, labour_hours='')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('labour_hours', response.json())
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_half_filled_part_row_is_rejected(self):
+        token = self.token_for('tech1')
+        response = self._file(token, parts=[{'part_code': 'BELT-01', 'quantity': 1}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('parts', response.json())
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_unreadable_signature_is_rejected(self):
+        token = self.token_for('tech1')
+        response = self._file(token, signature='data:image/png;base64,@@@not-base64@@@')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_task_type_requiring_signature_needs_one(self):
+        self.task_type.requires_signature = True
+        self.task_type.save(update_fields=['requires_signature'])
+        self.task.task_type = self.task_type
+        self.task.save(update_fields=['task_type'])
+        token = self.token_for('tech1')
+
+        detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertTrue(detail['requires_signature'])
+
+        response = self._file(token, signature=None)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('signature', response.json())
+        self.assertEqual(self._file(token).status_code, 201)
+
+    def test_cannot_file_before_work_starts(self):
+        self.task.status = Task.Status.ACCEPTED
+        self.task.save(update_fields=['status'])
+        token = self.token_for('tech1')
+        self.assertEqual(self._file(token).status_code, 400)
+
+    def test_cannot_file_while_paused(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.PAUSED, occurred_at=timezone.now(),
+            actor=self.tech_user, note='Waiting for part',
+        )
+        token = self.token_for('tech1')
+        self.assertEqual(self._file(token).status_code, 400)
+
+    def test_helper_cannot_file(self):
+        helper_user = User.objects.create_user('helper1', password='pass12345')
+        helper = Technician.objects.create(
+            user=helper_user, country=self.country, full_name='Omar Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        token = self.token_for('helper1')
+        self.assertEqual(self._file(token).status_code, 403)
+
+    def test_requires_a_token(self):
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', {}, content_type='application/json')
+        self.assertEqual(response.status_code, 401)
 
 
 class TaskListTests(ApiTestCase):

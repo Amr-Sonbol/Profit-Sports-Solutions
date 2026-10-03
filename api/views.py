@@ -1,4 +1,9 @@
+import base64
+import binascii
+
 from django.contrib.auth import authenticate
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -8,16 +13,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from people.models import RolePermission
+from reports.forms import PartUsedItemForm, WorkReportForm
 from people.permissions import get_active_country
 from tasks.forms import BlockTaskForm, PauseTaskForm, TaskAttachmentUploadForm
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
     BLOCKABLE_STATUSES, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS, _next_technician_action,
-    _save_attachment, _task_is_paused, _with_lead_prefetch,
+    _requires_signature, _save_attachment, _task_is_paused, _with_lead_prefetch, report_saved_message,
+    save_work_report,
 )
 
 from .permissions import IsTechnician, require_role_permission
-from .serializers import CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer
+from .serializers import CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, WorkReportSerializer
 
 
 class LoginView(APIView):
@@ -98,7 +105,7 @@ class TaskListView(APIView):
 def _get_my_assignment(request, pk):
     return get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer__country', 'task__task_type', 'task__brand', 'task__required_skill',
         ),
         task__pk=pk, technician=request.user.technician, is_active=True,
     )
@@ -121,6 +128,7 @@ class MyTaskDetailView(APIView):
             'next_action': next_action,
             'is_lead': is_lead,
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
+            'requires_signature': _requires_signature(task),
         }
         return Response(TaskDetailSerializer(task, context=context).data)
 
@@ -199,6 +207,104 @@ class MyTaskAttachmentView(APIView):
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
         _save_attachment(request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'])
         return Response(status=status.HTTP_201_CREATED)
+
+
+def _signature_from_data_url(value):
+    """The app's signature pad hands back a `data:image/png;base64,...`
+    string — turned into an uploaded file here so it goes through
+    WorkReportForm's own size/extension checks like a web upload does.
+    Returns None for a blank value, raises ValueError if it can't be read.
+    """
+    if not value:
+        return None
+    header, _sep, encoded = value.partition(',')
+    if not header.startswith('data:image/png;base64'):
+        raise ValueError
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except binascii.Error:
+        raise ValueError
+    return SimpleUploadedFile('signature.png', content, content_type='image/png')
+
+
+class MyTaskReportView(APIView):
+    """The lead's work report — findings, parts used, labour hours and the
+    customer's signature. GET returns {report: ... or null}; POST
+    files or corrects it, with the same rules and status changes as the
+    web form (tasks.views.my_report_form), via the same save_work_report.
+
+    POST body (JSON): findings, action_taken, resolved (bool),
+    labour_hours, customer_name, parts (list of {part_code, description,
+    quantity, unit_cost, currency_code}), signature (PNG data URL,
+    optional — leaving it out keeps the one already on file).
+    """
+
+    permission_classes = [IsTechnician]
+
+    def _get_lead_task(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        if assignment.role != TaskAssignment.Role.LEAD:
+            return None
+        return assignment.task
+
+    def get(self, request, pk):
+        task = self._get_lead_task(request, pk)
+        if task is None:
+            return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
+        report = getattr(task, 'report', None)
+        return Response({'report': WorkReportSerializer(report).data if report else None})
+
+    def post(self, request, pk):
+        task = self._get_lead_task(request, pk)
+        if task is None:
+            return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
+        if task.status not in REPORT_EDITABLE_STATUSES:
+            return Response(
+                {'detail': 'Start work on this task before filing a report.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        if task.status == Task.Status.IN_PROGRESS and _task_is_paused(task):
+            return Response(
+                {'detail': 'Mark yourself started again before filing the report.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            signature = _signature_from_data_url(request.data.get('signature'))
+        except ValueError:
+            return Response({'signature': ['Could not read the signature.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = {
+            field: request.data.get(field, '')
+            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name')
+        }
+        data['resolved'] = str(bool(request.data.get('resolved')))
+        report_form = WorkReportForm(
+            data, {'signature': signature} if signature else {}, instance=getattr(task, 'report', None),
+            require_signature=_requires_signature(task),
+        )
+        part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
+
+        errors = {}
+        if not report_form.is_valid():
+            errors.update(report_form.errors)
+        part_errors = [form.errors for form in part_forms if not form.is_valid()]
+        if part_errors:
+            errors['parts'] = part_errors
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            report = save_work_report(
+                request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
+            )
+        return Response(
+            {
+                'status': task.status,
+                'message': str(report_saved_message(report.first_submission, task)),
+                'report': WorkReportSerializer(report).data,
+            },
+            status=status.HTTP_201_CREATED if report.first_submission else status.HTTP_200_OK,
+        )
 
 
 class TicketListView(APIView):

@@ -27,8 +27,11 @@ class WorkReportForm(forms.ModelForm):
             'action_taken': forms.Textarea(attrs={'rows': 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, require_signature=False, **kwargs):
         super().__init__(*args, **kwargs)
+        # The task type's requires_signature — met by a new upload or one
+        # already on file from an earlier filing of this same report.
+        self.require_signature = require_signature
         if self.instance and self.instance.pk:
             self.fields['resolved'].initial = str(self.instance.resolved)
 
@@ -36,6 +39,8 @@ class WorkReportForm(forms.ModelForm):
         signature = self.cleaned_data.get('signature')
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
             raise forms.ValidationError(_('File is too large — the limit is 5 MB.'))
+        if self.require_signature and not signature and not self.instance.signature_url:
+            raise forms.ValidationError(_('This type of task needs the customer’s signature.'))
         return signature
 
 

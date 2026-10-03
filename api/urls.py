@@ -11,6 +11,7 @@ urlpatterns = [
     path('my-tasks/<int:pk>/', views.MyTaskDetailView.as_view(), name='my_task_detail'),
     path('my-tasks/<int:pk>/action/', views.MyTaskActionView.as_view(), name='my_task_action'),
     path('my-tasks/<int:pk>/attachments/', views.MyTaskAttachmentView.as_view(), name='my_task_attachment'),
+    path('my-tasks/<int:pk>/report/', views.MyTaskReportView.as_view(), name='my_task_report'),
     path('tasks/', views.TaskListView.as_view(), name='task_list'),
     path('tickets/', views.TicketListView.as_view(), name='ticket_list'),
 ]

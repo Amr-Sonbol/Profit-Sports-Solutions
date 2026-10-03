@@ -53,6 +53,7 @@
             <div class="field {% if report_form.signature.errors %}field--error{% endif %}">
                 <label for="{{ report_form.signature.id_for_label }}">{{ report_form.signature.label }}</label>
                 {{ report_form.signature }}
+                {% if report_form.require_signature %}<p class="field__help">{% translate "Required for this type of task." %}</p>{% endif %}
                 {% for error in report_form.signature.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
         </div>

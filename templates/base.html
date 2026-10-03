@@ -111,6 +111,7 @@
                 {% endif %}
                 {% if 'view_technicians' in role_permissions %}
                     <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
+                    <a href="{% url 'tasks:technician_hours' %}">{% translate "Hours" %}</a>
                 {% endif %}
                 {% if 'manage_customers' in role_permissions %}
                     <a href="{% url 'customers:customer_list' %}">{% translate "Customers" %}</a>
