@@ -56,6 +56,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     is_lead = serializers.SerializerMethodField()
     can_file_report = serializers.SerializerMethodField()
     requires_signature = serializers.SerializerMethodField()
+    undoable_step = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -65,7 +66,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
             'events', 'attachments', 'next_action', 'is_lead', 'can_file_report',
-            'requires_signature',
+            'requires_signature', 'undoable_step',
         ]
 
     def get_next_action(self, obj):
@@ -79,6 +80,13 @@ class TaskDetailSerializer(serializers.ModelSerializer):
 
     def get_requires_signature(self, obj):
         return self.context.get('requires_signature', False)
+
+    def get_undoable_step(self, obj):
+        """The display name of the lead's own last tap if they can still
+        undo it (tasks.views.undoable_tap), else null.
+        """
+        event = self.context.get('undoable_tap')
+        return event.get_event_type_display() if event else None
 
 
 class CustomerTicketSerializer(serializers.ModelSerializer):

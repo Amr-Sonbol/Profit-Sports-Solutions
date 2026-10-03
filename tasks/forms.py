@@ -1101,3 +1101,31 @@ class AssignTicketForm(forms.Form):
         self.fields['assigned_to'].queryset = Technician.objects.filter(
             is_active=True, country=country, role__in=list(ticket_manager_roles),
         ).order_by('full_name')
+
+
+class CorrectEventTimeForm(forms.Form):
+    """A manager/admin correcting when a tap really happened. The window it
+    must fall in (after the previous event, before the next, never in the
+    future) comes from the view, which knows the neighbouring events.
+    """
+
+    corrected_at = forms.DateTimeField(
+        label=_('Correct time'), input_formats=[DATETIME_INPUT_FORMAT],
+        widget=forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
+    )
+    reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
+
+    def __init__(self, *args, earliest=None, latest=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.earliest = earliest
+        self.latest = latest
+
+    def clean_corrected_at(self):
+        value = self.cleaned_data['corrected_at']
+        if value > timezone.now():
+            raise forms.ValidationError(_('A corrected time can’t be in the future.'))
+        if self.earliest and value < self.earliest:
+            raise forms.ValidationError(_('That’s before the previous step on this task.'))
+        if self.latest and value > self.latest:
+            raise forms.ValidationError(_('That’s after the next step on this task.'))
+        return value

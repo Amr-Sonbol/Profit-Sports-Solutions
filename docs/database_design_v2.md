@@ -643,8 +643,9 @@ Handles several technicians on one task, and one technician across many tasks.
 | event_type | varchar | see below |
 | occurred_at | timestamptz | UTC |
 | actor_id | FK → user | |
-| corrected_at | timestamptz | nullable — supervisor's correction |
-| corrected_by_id | FK → user | nullable — supervisors only |
+| corrected_at | timestamptz | nullable — a manager's/admin's correction |
+| corrected_by_id | FK → user | nullable — manager tier only |
+| correction_reason | text | required whenever `corrected_at` is set |
 | note | text | |
 
 **Event types:** created, assigned, reassigned, rescheduled, delay_notice, schedule_change_requested, schedule_change_approved, schedule_change_denied, accepted, en_route, arrived, blocked, started, paused, resumed, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled, negligence. `completed` fires when the lead files the report, `report_approved` when a manager approves it through the normal pipeline (see §4/§5). `closed` is the separate manager-only direct-close bypass — for a task that turns out not to need a report at all (customer cancelled, resolved another way) — usable from any status except already-`closed`; the reason lives in the event's own `note`. Both `report_approved` and `closed` land the task on `Task.Status.CLOSED`, just by different paths. `report_rejected` and `reopened` are the ones still unused: this round of approval has no reject step, just a single approve action, and nothing yet reopens a closed task.
@@ -681,11 +682,14 @@ At most one `pending` row per task at a time — a second request can't be filed
 
 ### Correcting a forgotten tap
 
-Technicians forget to press complete and remember in the car. **Only a supervisor may correct a time.** The technician can flag that a time is wrong and state what it should have been; he cannot change it himself.
+Technicians forget to press complete and remember in the car. **Only a manager or admin may correct a time**, and always with a reason (`correction_reason`). The technician or supervisor tells them what it should have been; neither changes it themselves.
 
-- **The supervisor corrects it at report review**, which he is doing anyway.
-- **Never before `arrived`, never in the future.** Enforce both.
-- **The original is kept.** `occurred_at` is never overwritten; the correction goes in `corrected_at` with the supervisor's id in `corrected_by_id`.
+- **Correctable:** the lead's own taps — accepted, en_route, arrived, started, paused, resumed — and completed.
+- **Never in the future, never out of order.** A corrected time can't fall before the previous event on the task or after the next one (each at its own corrected time if it has one). Enforced.
+- **The original is kept.** `occurred_at` is never overwritten — not from the app, and it's read-only in the Django admin too; the correction goes in `corrected_at` with the manager's id in `corrected_by_id`.
+- **Corrected times count.** Reliability figures (on-time arrival, acceptance time) use `corrected_at` where it's set.
+
+**A mistaken tap, caught straight away, is the technician's own to undo.** For 10 minutes after tapping, the lead can undo their own most recent tap (accepted, en_route, arrived, started, paused, resumed) if nothing has happened on the task since; the event is removed and the task's status goes back (accept → assigned, start → accepted). Removing it rather than flagging it is safe: tapping again later can only record a later time, never an earlier one.
 
 **Prevention beats correction.** If a task has been `in_progress` for several hours with no activity, the app should ask — *still working at Fitness Time Olaya?* — one tap to confirm or complete. This catches most forgotten buttons at the time, while the answer is still accurate, and keeps corrections rare enough that reviewing them is not a burden.
 

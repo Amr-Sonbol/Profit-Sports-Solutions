@@ -43,7 +43,8 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm, CountryCreateForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
+    CorrectEventTimeForm, CountryCreateForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
@@ -441,7 +442,7 @@ def _reliability_stats(technician):
             if not arrived:
                 continue
             counted += 1
-            if arrived.occurred_at <= task.promised_at:
+            if arrived.effective_at <= task.promised_at:
                 on_time += 1
         if counted < RELIABILITY_MIN_SAMPLE:
             return None, counted
@@ -456,8 +457,8 @@ def _reliability_stats(technician):
             accepted = next(
                 (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ACCEPTED), None,
             )
-            if assigned and accepted and accepted.occurred_at > assigned.occurred_at:
-                deltas.append((accepted.occurred_at - assigned.occurred_at).total_seconds() / 60)
+            if assigned and accepted and accepted.effective_at > assigned.effective_at:
+                deltas.append((accepted.effective_at - assigned.effective_at).total_seconds() / 60)
         return _median_minutes(deltas) if len(deltas) >= RELIABILITY_MIN_SAMPLE else None
 
     overall_on_time_percent, overall_sample = _on_time_stats(led_tasks)
@@ -541,6 +542,65 @@ def _next_technician_action(task):
             return 'arrive'
         return 'en_route'
     return None
+
+
+# A lead's own mistaken tap can be undone by them for this long — after
+# that, a manager or admin corrects the time instead (correct_event_time).
+UNDO_WINDOW = timedelta(minutes=10)
+UNDOABLE_TAPS = {
+    TaskEvent.EventType.ACCEPTED, TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED,
+    TaskEvent.EventType.STARTED, TaskEvent.EventType.PAUSED, TaskEvent.EventType.RESUMED,
+}
+# Undoing these moves the status back; the others never changed it.
+UNDO_STATUS = {
+    TaskEvent.EventType.ACCEPTED: (Task.Status.ACCEPTED, Task.Status.ASSIGNED),
+    TaskEvent.EventType.STARTED: (Task.Status.IN_PROGRESS, Task.Status.ACCEPTED),
+}
+CORRECTABLE_EVENTS = UNDOABLE_TAPS | {TaskEvent.EventType.COMPLETED}
+
+
+def undoable_tap(task, user):
+    """The lead's own last tap, if it's still theirs to undo: the most
+    recent event on the task, one of theirs, under 10 minutes old, and the
+    task still in the status that tap left it in. Otherwise None.
+    """
+    last = task.events.order_by('-occurred_at', '-pk').first()
+    if (
+        last is None or last.event_type not in UNDOABLE_TAPS or last.actor_id != user.pk
+        or last.corrected_at or timezone.now() - last.occurred_at > UNDO_WINDOW
+    ):
+        return None
+    if last.event_type in UNDO_STATUS and task.status != UNDO_STATUS[last.event_type][0]:
+        return None
+    return last
+
+
+def undo_last_tap(task, user):
+    """Removes the lead's own mistaken tap and puts the status back.
+    Shared by the web task screen and the mobile API. False if there's
+    nothing they can undo.
+    """
+    with transaction.atomic():
+        event = undoable_tap(task, user)
+        if event is None:
+            return False
+        if event.event_type in UNDO_STATUS:
+            task.status = UNDO_STATUS[event.event_type][1]
+            task.save(update_fields=['status'])
+        event.delete()
+    return True
+
+
+def _correction_window(event):
+    """The earliest/latest a corrected time for this event may be — after
+    the event before it and before the event after it, each at its own
+    effective (corrected or original) time.
+    """
+    events = list(event.task.events.order_by('occurred_at', 'pk'))
+    index = next(i for i, e in enumerate(events) if e.pk == event.pk)
+    earliest = events[index - 1].effective_at if index > 0 else None
+    latest = events[index + 1].effective_at if index + 1 < len(events) else None
+    return earliest, latest
 
 
 def _task_is_paused(task):
@@ -1300,6 +1360,23 @@ def task_detail(request, pk):
             messages.error(request, _('This task has no report awaiting approval.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'correct_event':
+        require_manager(request)
+        event = get_object_or_404(
+            task.events, pk=request.POST.get('event_id'), event_type__in=CORRECTABLE_EVENTS,
+        )
+        earliest, latest = _correction_window(event)
+        correct_form = CorrectEventTimeForm(request.POST, earliest=earliest, latest=latest)
+        if correct_form.is_valid():
+            event.corrected_at = correct_form.cleaned_data['corrected_at']
+            event.corrected_by = request.user
+            event.correction_reason = correct_form.cleaned_data['reason']
+            event.save(update_fields=['corrected_at', 'corrected_by', 'correction_reason'])
+            messages.success(request, _('Time corrected.'))
+        else:
+            messages.error(request, ' '.join(error for errors in correct_form.errors.values() for error in errors))
+        return redirect('tasks:task_detail', pk=task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'reopen':
         # Admin-only — undoes a manager's close decision, back to
         # "awaiting manager approval" (not further back than that; the
@@ -1396,6 +1473,7 @@ def task_detail(request, pk):
         'active_lead': active_lead,
         'active_helpers': active_helpers,
         'events': events,
+        'correctable_event_types': CORRECTABLE_EVENTS,
         'attachments': task.attachments.select_related('uploaded_by'),
         'ticket_attachments': source_ticket.attachments.all() if source_ticket else [],
         'task_assets': task.task_assets.select_related('asset'),
@@ -3429,6 +3507,7 @@ def my_task_detail(request, pk):
     can_block = is_lead and task.status in BLOCKABLE_STATUSES and not is_paused
     can_pause = is_lead and task.status == Task.Status.IN_PROGRESS and not is_paused
     can_resume = is_paused
+    undoable = undoable_tap(task, request.user) if is_lead else None
 
     TaskMessageRecipient.objects.filter(
         message__task=task, technician=technician, seen_at__isnull=True,
@@ -3491,6 +3570,13 @@ def my_task_detail(request, pk):
             messages.success(request, _('Marked started again.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
+        elif action == 'undo' and is_lead:
+            if undo_last_tap(task, request.user):
+                messages.success(request, _('Undone.'))
+            else:
+                messages.error(request, _('That can no longer be undone — ask a manager to correct the time.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
         elif action == 'upload':
             upload_form = TaskAttachmentUploadForm(request.POST, request.FILES)
             if upload_form.is_valid():
@@ -3513,7 +3599,8 @@ def my_task_detail(request, pk):
         # Block/pause/resume all matter most exactly when there's no
         # next_action — the task is IN_PROGRESS and just being worked —
         # so the section can't be gated on next_action alone.
-        'show_status_section': bool(next_action) or can_block or can_pause or can_resume,
+        'show_status_section': bool(next_action) or can_block or can_pause or can_resume or bool(undoable),
+        'undoable_tap': undoable,
         'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
         'report': getattr(task, 'report', None),
         'attachments': task.attachments.select_related('uploaded_by'),

@@ -5907,3 +5907,126 @@ class TaskAdminDeleteTests(TaskTestCase):
         response = self.client.post(f'/admin/tasks/task/{task.pk}/delete/', {'post': 'yes'})
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Task.objects.filter(pk=task.pk).exists())
+
+
+class TapUndoAndCorrectionTests(TaskTestCase):
+    """A lead undoing their own mistaken tap (10 minutes), and a manager
+    correcting a time later, with a reason.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now() - timedelta(days=1), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.ASSIGNED,
+            occurred_at=timezone.now() - timedelta(hours=3), actor=self.supervisor_user,
+        )
+        self.url = f'/tasks/my/{self.task.pk}/'
+        self.client.login(username='tech1', password='pass12345')
+
+    def _tap(self, action):
+        return self.client.post(self.url, {'action': action})
+
+    def test_undo_accept_puts_the_task_back_to_assigned(self):
+        self._tap('accept')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+        self.assertIsNotNone(self.client.get(self.url).context['undoable_tap'])
+
+        self._tap('undo')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+        self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.ACCEPTED).exists())
+
+    def test_undo_start_puts_the_task_back_to_accepted(self):
+        for action in ['accept', 'en_route', 'arrive', 'start']:
+            self._tap(action)
+        self._tap('undo')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+        self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.ARRIVED).exists())
+
+    def test_only_the_last_tap_is_undone(self):
+        self._tap('accept')
+        self._tap('en_route')
+        self._tap('undo')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+        self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.EN_ROUTE).exists())
+        self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.ACCEPTED).exists())
+
+    def test_no_undo_after_ten_minutes(self):
+        self._tap('accept')
+        self.task.events.filter(event_type=TaskEvent.EventType.ACCEPTED).update(
+            occurred_at=timezone.now() - timedelta(minutes=11),
+        )
+        self._tap('undo')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ACCEPTED)
+
+    def test_cannot_undo_someone_elses_event(self):
+        # The last event is the supervisor's assignment, not a tap of theirs.
+        self._tap('undo')
+        self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.ASSIGNED).exists())
+
+    # --- manager corrections ---
+
+    def _manager_login(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+
+    def _correct(self, event, when, reason='Forgot to tap on site'):
+        return self.client.post(f'/tasks/{self.task.pk}/', {
+            'action': 'correct_event', 'event_id': event.pk,
+            # Typed in the manager's own country time, as the form shows it.
+            'corrected_at': timezone.localtime(when, ZoneInfo(self.country.timezone)).strftime('%Y-%m-%dT%H:%M'),
+            'reason': reason,
+        })
+
+    def _accepted_event(self):
+        self._tap('accept')
+        event = self.task.events.get(event_type=TaskEvent.EventType.ACCEPTED)
+        event.occurred_at = timezone.now() - timedelta(hours=1)
+        event.save(update_fields=['occurred_at'])
+        return event
+
+    def test_manager_corrects_a_time_and_the_original_is_kept(self):
+        event = self._accepted_event()
+        original = event.occurred_at
+        self._manager_login()
+        self._correct(event, timezone.now() - timedelta(hours=2))
+        event.refresh_from_db()
+        self.assertEqual(event.occurred_at, original)
+        self.assertIsNotNone(event.corrected_at)
+        self.assertEqual(event.correction_reason, 'Forgot to tap on site')
+        self.assertEqual(event.corrected_by.username, 'manager1')
+
+    def test_correction_needs_a_reason_and_a_sensible_time(self):
+        event = self._accepted_event()
+        self._manager_login()
+        self._correct(event, timezone.now() - timedelta(hours=2), reason='')
+        self._correct(event, timezone.now() + timedelta(hours=1))
+        self._correct(event, timezone.now() - timedelta(hours=5))  # before the assignment
+        event.refresh_from_db()
+        self.assertIsNone(event.corrected_at)
+
+    def test_supervisor_cannot_correct_times(self):
+        event = self._accepted_event()
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self._correct(event, timezone.now() - timedelta(hours=2))
+        self.assertEqual(response.status_code, 403)
+        event.refresh_from_db()
+        self.assertIsNone(event.corrected_at)

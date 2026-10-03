@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 17:37+0000\n"
+"POT-Creation-Date: 2026-10-03 17:42+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -72,6 +72,9 @@ msgstr "مسار الـ٩٠ يومًا"
 
 msgid "A brand with that name already exists — pick it from the list instead."
 msgstr "توجد بالفعل علامة تجارية بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
+
+msgid "A corrected time can’t be in the future."
+msgstr "لا يمكن أن يكون الوقت المصحح في المستقبل."
 
 msgid "A login with that email already exists."
 msgstr "يوجد حساب دخول بهذا البريد الإلكتروني بالفعل."
@@ -625,6 +628,9 @@ msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
+
+msgid "Correct time"
+msgstr "تصحيح الوقت"
 
 msgid "Could not read the signature — please sign again."
 msgstr "تعذّرت قراءة التوقيع — يرجى التوقيع مرة أخرى."
@@ -2127,6 +2133,9 @@ msgstr "حفظ"
 msgid "Save changes"
 msgstr "حفظ التغييرات"
 
+msgid "Save correction"
+msgstr "حفظ التصحيح"
+
 msgid "Save report"
 msgstr "حفظ التقرير"
 
@@ -2384,6 +2393,9 @@ msgstr "تبديل"
 msgid "TNT"
 msgstr "TNT"
 
+msgid "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time."
+msgstr "ضغطت بالخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك يمكن للمدير تصحيح الوقت."
+
 msgid "Task"
 msgstr "المهمة"
 
@@ -2466,6 +2478,15 @@ msgstr "الفنيون"
 
 msgid "Thank you!"
 msgstr "شكرًا لك!"
+
+msgid "That can no longer be undone — ask a manager to correct the time."
+msgstr "لم يعد بالإمكان التراجع عن ذلك — اطلب من المدير تصحيح الوقت."
+
+msgid "That’s after the next step on this task."
+msgstr "هذا الوقت بعد الخطوة التالية في هذه المهمة."
+
+msgid "That’s before the previous step on this task."
+msgstr "هذا الوقت قبل الخطوة السابقة في هذه المهمة."
 
 #, python-format
 msgid ""
@@ -2608,6 +2629,9 @@ msgstr "الطلبات الواردة (%(total)s)"
 msgid "Time"
 msgstr "الوقت"
 
+msgid "Time corrected."
+msgstr "تم تصحيح الوقت."
+
 msgid "Time set."
 msgstr "تم تحديد الوقت."
 
@@ -2659,8 +2683,15 @@ msgstr "غير مسندة"
 msgid "Unavailable"
 msgstr "غير متاح"
 
+#, python-format
+msgid "Undo “%(step)s”"
+msgstr "التراجع عن «%(step)s»"
+
 msgid "Undoes the close decision, back to awaiting manager approval — the filed report itself is untouched."
 msgstr "يتراجع عن قرار الإغلاق، ليعود بانتظار موافقة المدير — التقرير المُقدَّم نفسه يبقى كما هو."
+
+msgid "Undone."
+msgstr "تم التراجع."
 
 msgid "Unit cost"
 msgstr "سعر الوحدة"
@@ -2792,6 +2823,9 @@ msgstr "واتساب"
 msgid "When"
 msgstr "متى"
 
+msgid "When it really happened"
+msgstr "متى حدث فعلًا"
+
 msgid "Which role can do what. Self-service technician screens (My week, My skills, ...) aren't listed here — they stay open to any signed-in technician regardless of role."
 msgstr "أي دور يمكنه فعل ماذا. شاشات الفني الذاتية (أسبوعي، مهاراتي، ...) غير مدرجة هنا — تبقى متاحة لأي فني مسجل دخوله بغض النظر عن دوره."
 
@@ -2868,6 +2902,9 @@ msgstr "اسم المستخدم الخاص بك، في حال نسيته:"
 
 msgid "a manager creates this from the technician's Edit screen, same as a customer's portal login"
 msgstr "ينشئه المدير من شاشة تعديل بيانات الفني، تمامًا كحساب بوابة العميل"
+
+msgid "a manager's or admin's correction"
+msgstr "تصحيح من المدير أو مسؤول النظام"
 
 msgid "a self-rating is a starting guess — only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي مجرد تخمين أولي — لا يُحتسب سوى مراجعة المشرف ضمن الاعتماد"
@@ -2995,6 +3032,9 @@ msgstr "صححه"
 #, python-format
 msgid "corrected to %(time)s by %(by_name)s"
 msgstr "صُحح إلى %(time)s بواسطة %(by_name)s"
+
+msgid "correction reason"
+msgstr "سبب التصحيح"
 
 msgid "countries"
 msgstr "الدول"
@@ -3164,6 +3204,9 @@ msgstr "المستوى"
 
 msgid "login account"
 msgstr "حساب الدخول"
+
+msgid "managers and admins only"
+msgstr "للمديرين ومسؤولي النظام فقط"
 
 msgid "media type"
 msgstr "نوع الوسائط"
@@ -3471,12 +3514,6 @@ msgstr "نوع التخزين"
 msgid "submitted at"
 msgstr "قُدّم في"
 
-msgid "supervisor's correction"
-msgstr "تصحيح المشرف"
-
-msgid "supervisors only"
-msgstr "للمشرفين فقط"
-
 msgid "task"
 msgstr "المهمة"
 
@@ -3728,3 +3765,6 @@ msgstr "← العودة إلى العملاء النشطين"
 
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
+
+#~ msgid "supervisors only"
+#~ msgstr "للمشرفين فقط"

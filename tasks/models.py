@@ -654,13 +654,14 @@ class TaskEvent(models.Model):
     )
     corrected_at = models.DateTimeField(
         _('corrected at'), null=True, blank=True,
-        help_text=_("supervisor's correction"),
+        help_text=_("a manager's or admin's correction"),
     )
     corrected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='task_event_corrections',
         null=True, blank=True, verbose_name=_('corrected by'),
-        help_text=_('supervisors only'),
+        help_text=_('managers and admins only'),
     )
+    correction_reason = models.TextField(_('correction reason'), blank=True)
     note = models.TextField(_('note'), blank=True)
 
     class Meta:
@@ -674,6 +675,11 @@ class TaskEvent(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.event_type}'
+
+    @property
+    def effective_at(self):
+        """When it really happened — the correction if there is one."""
+        return self.corrected_at or self.occurred_at
 
 
 class ScheduleChangeRequest(models.Model):

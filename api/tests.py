@@ -607,3 +607,25 @@ class TeamTaskApiTests(ApiTestCase):
         self.customer.save(update_fields=['country'])
         token = self.token_for('supervisor1')
         self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).status_code, 404)
+
+
+class MyTaskUndoApiTests(ApiTestCase):
+    def test_undo_through_the_api(self):
+        token = self.token_for('tech1')
+        self.client.post(
+            f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': 'accept'}),
+            content_type='application/json', **self.auth(token),
+        )
+        detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertEqual(detail['undoable_step'], 'Accepted')
+
+        response = self.client.post(
+            f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': 'undo'}),
+            content_type='application/json', **self.auth(token),
+        )
+        self.assertEqual(response.json()['status'], Task.Status.ASSIGNED)
+        response = self.client.post(
+            f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': 'undo'}),
+            content_type='application/json', **self.auth(token),
+        )
+        self.assertEqual(response.status_code, 400)

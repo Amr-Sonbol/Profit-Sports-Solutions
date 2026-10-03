@@ -218,6 +218,9 @@ class TaskEventAdmin(admin.ModelAdmin):
     list_display = ['task', 'event_type', 'occurred_at', 'actor']
     search_fields = ['task__task_number']
     list_filter = ['event_type']
+    # The original time is never overwritten (docs: "Correcting a
+    # forgotten tap") — corrections go through task detail, with a reason.
+    readonly_fields = ['occurred_at', 'corrected_at', 'corrected_by', 'correction_reason']
 
 
 @admin.register(ScheduleChangeRequest)

@@ -650,6 +650,29 @@
             {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
             {% if event.corrected_at %}
             <p class="muted">{% blocktranslate with time=event.corrected_at|date:"SHORT_DATETIME_FORMAT" by_name=event.corrected_by.technician.full_name %}corrected to {{ time }} by {{ by_name }}{% endblocktranslate %}</p>
+            {% if event.correction_reason %}<p class="timeline__note">{{ event.correction_reason }}</p>{% endif %}
+            {% endif %}
+            {% if user.technician.is_manager_tier and event.event_type in correctable_event_types %}
+            <details>
+                <summary>{% translate "Correct time" %}</summary>
+                <form method="post" class="form-grid" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="correct_event">
+                    <input type="hidden" name="event_id" value="{{ event.pk }}">
+                    <div class="field">
+                        <label for="correct-at-{{ event.pk }}">{% translate "When it really happened" %}</label>
+                        <input type="datetime-local" id="correct-at-{{ event.pk }}" name="corrected_at" required
+                               value="{{ event.effective_at|date:'Y-m-d\TH:i' }}">
+                    </div>
+                    <div class="field">
+                        <label for="correct-reason-{{ event.pk }}">{% translate "Reason" %}</label>
+                        <textarea id="correct-reason-{{ event.pk }}" name="reason" rows="2" required></textarea>
+                    </div>
+                    <div class="field field--submit">
+                        <button type="submit" class="button button--secondary">{% translate "Save correction" %}</button>
+                    </div>
+                </form>
+            </details>
             {% endif %}
         </li>
         {% endfor %}

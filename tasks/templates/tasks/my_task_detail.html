@@ -110,7 +110,19 @@
             <button type="submit" class="button">{% translate "Started again" %}</button>
         </form>
         {% endif %}
+        {% if undoable_tap %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="undo">
+            <button type="submit" class="button button--secondary">
+                {% blocktranslate with step=undoable_tap.get_event_type_display %}Undo “{{ step }}”{% endblocktranslate %}
+            </button>
+        </form>
+        {% endif %}
     </div>
+    {% if undoable_tap %}
+    <p class="field__help">{% translate "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time." %}</p>
+    {% endif %}
 
     {% if can_pause %}
     <form method="post" class="form-grid" novalidate>

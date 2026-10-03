@@ -21,7 +21,7 @@ from tasks.views import (
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
     _requires_signature, _save_attachment, _task_is_paused, _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report,
+    report_saved_message, save_work_report, undo_last_tap, undoable_tap,
 )
 
 from .permissions import IsTechnician, has_role_permission, require_role_permission
@@ -132,14 +132,16 @@ class MyTaskDetailView(APIView):
             'is_lead': is_lead,
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
             'requires_signature': _requires_signature(task),
+            'undoable_tap': undoable_tap(task, request.user) if is_lead else None,
         }
         return Response(TaskDetailSerializer(task, context=context).data)
 
 
 class MyTaskActionView(APIView):
     """One of the lead's next-step buttons (accept / en_route / arrive /
-    start), or block/pause/resume — the same state machine as
-    my_task_detail's POST handling, reused rather than re-implemented.
+    start), undo (their own last tap, within 10 minutes), or
+    block/pause/resume — the same state machine as my_task_detail's POST
+    handling, reused rather than re-implemented.
     """
 
     permission_classes = [IsTechnician]
@@ -153,6 +155,14 @@ class MyTaskActionView(APIView):
 
         action = request.data.get('action')
         next_action = _next_technician_action(task)
+
+        if action == 'undo':
+            if not undo_last_tap(task, request.user):
+                return Response(
+                    {'detail': 'That can no longer be undone — ask a manager to correct the time.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response({'status': task.status})
 
         if action in TECHNICIAN_ACTIONS and action == next_action:
             event_type, new_status = TECHNICIAN_ACTIONS[action]
