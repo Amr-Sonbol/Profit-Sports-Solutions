@@ -198,6 +198,10 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / 'locale']
 
+# Day-month-year everywhere, in both languages — not Django's 'en'
+# locale default (month-first). See spots/formats/<lang>/formats.py.
+FORMAT_MODULE_PATH = ['spots.formats']
+
 # All timestamps are stored in UTC; convert to local time only at display.
 TIME_ZONE = 'UTC'
 
