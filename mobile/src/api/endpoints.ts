@@ -1,5 +1,7 @@
 import { apiRequest } from './client';
-import type { Me, TaskDetail, TaskListItem, Ticket, WorkReport, WorkReportInput } from '@/types';
+import type {
+  Candidate, Me, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+} from '@/types';
 
 export function login(username: string, password: string) {
   return apiRequest<{ token: string } & Me>('/api/login/', {
@@ -53,6 +55,27 @@ export function submitMyReport(id: number, report: WorkReportInput) {
 
 export function fetchTeamTasks() {
   return apiRequest<TaskListItem[]>('/api/tasks/');
+}
+
+export function fetchTeamTaskDetail(id: number) {
+  return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/`);
+}
+
+export function fetchAssignmentCandidates(id: number) {
+  return apiRequest<Candidate[]>(`/api/tasks/${id}/candidates/`);
+}
+
+export type AssignAction =
+  | { action: 'set_lead'; technician: number; end_reason?: string }
+  | { action: 'add_helper'; technician: number }
+  | { action: 'remove_helper'; assignment_id: number; end_reason: string };
+
+export function assignTask(id: number, body: AssignAction) {
+  return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/assign/`, { method: 'POST', body });
+}
+
+export function approveTaskReport(id: number) {
+  return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/approve/`, { method: 'POST', body: {} });
 }
 
 export function fetchNewTickets() {

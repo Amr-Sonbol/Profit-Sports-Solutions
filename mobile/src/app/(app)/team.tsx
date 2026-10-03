@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -20,6 +20,7 @@ import type { TaskListItem } from '@/types';
  */
 export default function TeamTasksScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -69,19 +70,17 @@ export default function TeamTasksScreen() {
               tasks !== null ? <ThemedText themeColor="textSecondary">No open tasks.</ThemedText> : null
             }
             renderItem={({ item }) => (
-              // Not tappable into a detail screen yet — the API only has
-              // a detail endpoint for a technician's own assignment
-              // (/api/my-tasks/:id/), not an arbitrary task a supervisor
-              // is just viewing. A real "view any task" endpoint is a
-              // follow-up, not something to fake here.
-              <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+              <TouchableOpacity
+                style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+                onPress={() => router.push(`/team-task/${item.id}`)}
+              >
                 <ThemedText type="smallBold">{item.task_number}</ThemedText>
                 <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
                 <ThemedView style={styles.row}>
                   <ThemedText themeColor="primary" type="small">{item.status_display}</ThemedText>
                   <ThemedText themeColor="textSecondary" type="small">{item.priority_display}</ThemedText>
                 </ThemedView>
-              </ThemedView>
+              </TouchableOpacity>
             )}
           />
         )}

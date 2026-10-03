@@ -121,3 +121,32 @@ export interface ApiError {
   detail?: string;
   [field: string]: unknown;
 }
+
+export interface Assignment {
+  id: number;
+  technician_id: number;
+  technician_name: string;
+  role: 'lead' | 'helper';
+  assigned_at: string;
+}
+
+// A supervisor's/manager's view of any task in scope (api/views.py
+// TeamTaskDetailView). The can_* flags are decided by the server.
+export interface TeamTaskDetail extends TaskDetail {
+  lead: Assignment | null;
+  helpers: Assignment[];
+  report: WorkReport | null;
+  responsible_supervisor_name: string;
+  can_assign: boolean;
+  can_supervisor_approve: boolean;
+  can_manager_approve: boolean;
+}
+
+export interface Candidate {
+  id: number;
+  full_name: string;
+  is_available: boolean;
+  skill_level: number | null;
+  next_task_number: string | null;
+  next_task_at: string | null;
+}

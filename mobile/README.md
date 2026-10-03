@@ -31,30 +31,24 @@ scan the QR code with Expo Go on a physical device. The Django backend
   reuses its save logic (`tasks.views.save_work_report`).
 - Profile (`src/app/(app)/profile.tsx`) — name, role, country, sign out.
 
-## What's here but read-only (supervisors)
+## Supervisors, managers and admins
 
-- Team (`src/app/(app)/team.tsx`) — every open task in the supervisor's
-  country. Not tappable into a detail view — the API's only task-detail
-  endpoint (`/api/my-tasks/:id/`) is scoped to a technician's own
-  assignment, so there's nothing to show yet for a task that isn't theirs.
-- Tickets (`src/app/(app)/tickets.tsx`) — new customer tickets. Same
-  limitation: viewing only, no assign/convert/dismiss action exists in the
-  API yet.
+- Team (`src/app/(app)/team.tsx`) — every open task in the active
+  country; tap one for its detail (`src/app/(app)/team-task/[id].tsx`):
+  the team, the filed report, and the actions the server says this person
+  may take — assign or change the lead, add or remove helpers (with a
+  reason, same as the web), and approve the report (supervisor sign-off,
+  or a manager's approve-and-close). Same rules as the web: country
+  scope, the responsible-supervisor lock, no team changes once work has
+  started.
+- Tickets (`src/app/(app)/tickets.tsx`) — new customer tickets, read-only.
+  Converting a ticket into a task means matching it to a customer and site,
+  which stays on the web ticket desk.
 
 Both show a plain message instead of a list for anyone without the
 underlying web permission (`view_tasks` / `manage_tickets`) — nothing is
 hidden by role name, since permissions are configurable per role on the
 web side (Roles & permissions screen).
-
-## What isn't built yet
-
-Real supervisor use needs new endpoints on the Django side first — none
-of this exists in `api/views.py` yet:
-
-- View any task's full detail (not just one's own assignment)
-- Assign a ticket or task to a technician
-- Convert a ticket to a task
-- Approve/review a filed work report
 
 ## Talking to the API
 
