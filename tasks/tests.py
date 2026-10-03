@@ -1,6 +1,7 @@
 import tempfile
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -5779,3 +5780,84 @@ class TechnicianHoursTests(TaskTestCase):
     def test_csv_export_is_forbidden_to_technicians(self):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/technicians/hours/export/').status_code, 403)
+
+
+class UnscheduledAlarmTests(TaskTestCase):
+    """The 24-working-hour "still not scheduled" alarm (tasks/alarms.py)."""
+
+    def setUp(self):
+        super().setUp()
+        self.country.timezone = 'Asia/Riyadh'
+        self.country.weekend_days = '4,5'  # Friday–Saturday
+        self.country.save()
+        self.tz = ZoneInfo('Asia/Riyadh')
+        self.supervisor = self.supervisor_user.technician
+
+    def _task(self, number='SA-0001', created_at=None, **fields):
+        created_at = created_at or timezone.now() - timedelta(days=5)
+        task = Task.objects.create(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=created_at, created_by=self.supervisor_user, status=Task.Status.NEW, **fields,
+        )
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.CREATED, occurred_at=created_at, actor=self.supervisor_user,
+        )
+        return task
+
+    def _local(self, *args):
+        return datetime(*args, tzinfo=self.tz)
+
+    def test_weekend_days_do_not_count(self):
+        from tasks.alarms import working_hours_between
+
+        # Thursday 15:00 -> Sunday 15:00 is 72 hours, only 24 of them working.
+        thursday = self._local(2026, 10, 1, 15)
+        sunday = self._local(2026, 10, 4, 15)
+        self.assertEqual(working_hours_between(thursday, sunday, self.tz, {4, 5}), 24)
+        # Saturday–Sunday weekend: rest of Thursday (9h) plus all of Friday (24h).
+        self.assertEqual(working_hours_between(thursday, sunday, self.tz, {5, 6}), 33)
+
+    def test_created_thursday_is_not_overdue_until_after_sunday(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        task = self._task(created_at=self._local(2026, 10, 1, 15))
+        saturday_night = self._local(2026, 10, 3, 23)
+        sunday_evening = self._local(2026, 10, 4, 16)
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=saturday_night), [])
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=sunday_evening), [task])
+
+    def test_scheduled_or_started_tasks_are_not_flagged(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        self._task('SA-0001', scheduled_date=timezone.localdate())
+        self._task('SA-0002', scheduled_for=timezone.now())
+        started = self._task('SA-0003')
+        started.status = Task.Status.IN_PROGRESS
+        started.save(update_fields=['status'])
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor), [])
+
+    def test_only_the_responsible_supervisor_sees_their_task(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        other_user = User.objects.create_user('supervisor2', password='pass12345')
+        other = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Samir Super',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        task = self._task(responsible_supervisor=other)
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor), [])
+        self.assertEqual(overdue_unscheduled_tasks(self.country, other), [task])
+
+    def test_plain_technician_gets_no_alarm(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        self._task()
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.technician), [])
+
+    def test_alarm_shows_in_the_supervisors_bell(self):
+        self._task()
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertContains(response, 'Not scheduled after 24 working hours')
+        self.assertEqual(response.context['unseen_notifications'][0]['kind'], 'unscheduled_overdue')

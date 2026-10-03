@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 16:52+0000\n"
+"POT-Creation-Date: 2026-10-03 16:57+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1112,6 +1112,9 @@ msgstr "متاح"
 msgid "Freelance"
 msgstr "مستقل"
 
+msgid "Friday"
+msgstr "الجمعة"
+
 msgid "From customer"
 msgstr "من العميل"
 
@@ -1446,6 +1449,9 @@ msgstr "أعمدة مطلوبة مفقودة: %(columns)s"
 msgid "Model"
 msgstr "الموديل"
 
+msgid "Monday"
+msgstr "الإثنين"
+
 msgid "Monthly report"
 msgstr "التقرير الشهري"
 
@@ -1680,6 +1686,9 @@ msgstr "لم يتم الطلب بعد."
 
 msgid "Not required for certification — an additional, advanced skill set."
 msgstr "غير مطلوب للاعتماد — مجموعة مهارات إضافية متقدمة."
+
+msgid "Not scheduled after 24 working hours"
+msgstr "لم تُجدول بعد 24 ساعة عمل"
 
 msgid "Not yet certified"
 msgstr "غير معتمد بعد"
@@ -2106,6 +2115,9 @@ msgstr "الصف"
 msgid "Running late?"
 msgstr "هل هناك تأخير؟"
 
+msgid "Saturday"
+msgstr "السبت"
+
 msgid "Save"
 msgstr "حفظ"
 
@@ -2351,6 +2363,9 @@ msgstr "تم الإرسال — بانتظار مراجعة المشرف."
 msgid "Submitted — task closed."
 msgstr "تم الإرسال — أغلقت المهمة."
 
+msgid "Sunday"
+msgstr "الأحد"
+
 msgid "Supervisor"
 msgstr "مشرف"
 
@@ -2542,6 +2557,9 @@ msgstr "يتطلب هذا النوع من المهام توقيع العميل."
 msgid "This week"
 msgstr "هذا الأسبوع"
 
+msgid "Thursday"
+msgstr "الخميس"
+
 msgid "Ticket"
 msgstr "التذكرة"
 
@@ -2616,6 +2634,9 @@ msgstr "وسيلة نقل"
 
 msgid "Trim color"
 msgstr "لون الحواف"
+
+msgid "Tuesday"
+msgstr "الثلاثاء"
 
 msgid "Type"
 msgstr "النوع"
@@ -2723,8 +2744,14 @@ msgstr "يسعدنا معرفة رأيك في زيارة Profit Sports Solutions
 msgid "We're happy to help! Thank you for reaching out — our team is reviewing your ticket now."
 msgstr "يسعدنا مساعدتك! شكرًا لتواصلك معنا — فريقنا يراجع طلبك الآن."
 
+msgid "Wednesday"
+msgstr "الأربعاء"
+
 msgid "Week view"
 msgstr "عرض الأسبوع"
+
+msgid "Weekend days"
+msgstr "أيام عطلة نهاية الأسبوع"
 
 msgid "Welcome"
 msgstr "أهلاً بك"
@@ -2922,6 +2949,9 @@ msgstr "سبب الإغلاق"
 
 msgid "code"
 msgstr "الرمز"
+
+msgid "comma-separated weekday numbers, Monday = 0 — e.g. 4,5 for Friday–Saturday"
+msgstr "أرقام أيام الأسبوع مفصولة بفواصل، الإثنين = 0 — مثلًا 4,5 للجمعة والسبت"
 
 msgid "comment"
 msgstr "تعليق"
@@ -3621,6 +3651,9 @@ msgstr "المستخدم"
 
 msgid "warranty end"
 msgstr "نهاية الضمان"
+
+msgid "weekend days"
+msgstr "أيام عطلة نهاية الأسبوع"
 
 msgid "what the customer is owed"
 msgstr "ما هو مستحق للعميل"

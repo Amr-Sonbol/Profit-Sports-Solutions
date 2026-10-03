@@ -1183,3 +1183,9 @@ tbody tr:hover {
     /* Lets a finger draw instead of scrolling the page. */
     touch-action: none;
 }
+
+/* Bell item for a task still unscheduled after 24 working hours. */
+.notif-alarm {
+    color: #c0392b;
+    font-weight: 600;
+}

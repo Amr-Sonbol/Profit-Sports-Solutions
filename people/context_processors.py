@@ -17,7 +17,9 @@ def notification_bell(request):
     they personally open that task. Country-scoped like everything else
     here. Three different notification models, merged into one list
     here rather than in any one app's own views, since this is the only
-    place that needs them together.
+    place that needs them together. Tasks still waiting for a date after
+    24 working hours (tasks.alarms) show up here too — computed live, so
+    they stay until the task is scheduled rather than until opened.
     """
     technician = getattr(request.user, 'technician', None)
     if technician is None:
@@ -44,6 +46,11 @@ def notification_bell(request):
             {'kind': 'new_task', 'created_at': notification.created_at, 'task': notification.task}
             for notification in unseen_tasks
         ]
+    from tasks.alarms import overdue_unscheduled_tasks
+    items += [
+        {'kind': 'unscheduled_overdue', 'created_at': task.created_at, 'task': task}
+        for task in overdue_unscheduled_tasks(country, technician)
+    ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
     ).select_related('message__task')
@@ -58,6 +65,9 @@ def notification_bell(request):
     if not items and not (can_manage_tickets or technician.is_manager_tier):
         return {}
     items.sort(key=lambda item: item['created_at'], reverse=True)
+    # Overdue-scheduling alarms are the oldest items by nature — kept on
+    # top so they're never pushed out of the ten shown by newer ones.
+    items.sort(key=lambda item: item['kind'] != 'unscheduled_overdue')
     return {
         'unseen_notifications': items[:10],
         'unseen_notification_count': len(items),

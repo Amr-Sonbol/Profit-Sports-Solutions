@@ -20,6 +20,10 @@ class Country(models.Model):
         help_text=_('IANA name, e.g. Asia/Riyadh'),
     )
     currency_code = models.CharField(_('currency code'), max_length=3)
+    weekend_days = models.CharField(
+        _('weekend days'), max_length=13, default='4,5',
+        help_text=_('comma-separated weekday numbers, Monday = 0 — e.g. 4,5 for Friday–Saturday'),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
@@ -30,6 +34,11 @@ class Country(models.Model):
     @property
     def display_name(self):
         return self.name_ar if get_language() == 'ar' else self.name
+
+    @property
+    def weekend_weekdays(self):
+        """weekend_days as a set of ints (Monday = 0), for date.weekday()."""
+        return {int(day) for day in self.weekend_days.split(',') if day.strip()}
 
     def __str__(self):
         return self.display_name

@@ -660,9 +660,21 @@ class CountryCreateForm(forms.ModelForm):
     deleting one no longer in use, happen from the Countries list itself.
     """
 
+    WEEKDAY_CHOICES = [
+        ('0', _('Monday')), ('1', _('Tuesday')), ('2', _('Wednesday')), ('3', _('Thursday')),
+        ('4', _('Friday')), ('5', _('Saturday')), ('6', _('Sunday')),
+    ]
+    weekend_days = forms.MultipleChoiceField(
+        choices=WEEKDAY_CHOICES, initial=['4', '5'], widget=forms.CheckboxSelectMultiple,
+        label=_('Weekend days'), required=False,
+    )
+
     class Meta:
         model = Country
-        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code']
+        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days']
+
+    def clean_weekend_days(self):
+        return ','.join(sorted(self.cleaned_data['weekend_days']))
 
 
 class TechnicianCreateForm(forms.ModelForm):
