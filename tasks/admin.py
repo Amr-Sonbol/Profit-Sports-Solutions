@@ -39,6 +39,12 @@ class TaskAdmin(admin.ModelAdmin):
     list_filter = ['status', 'priority', 'billing_type', 'source', 'is_warranty']
     inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline, TaskProductInline]
 
+    def has_delete_permission(self, request, obj=None):
+        # A task is never deleted, from anywhere — one that's no longer
+        # needed is closed or cancelled by a manager/admin instead, so its
+        # history stays.
+        return False
+
 
 def _has_file(field_name):
     """A task where this field is genuinely set — not '' and not NULL.

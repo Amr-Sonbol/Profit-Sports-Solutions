@@ -5861,3 +5861,17 @@ class UnscheduledAlarmTests(TaskTestCase):
         response = self.client.get('/tasks/')
         self.assertContains(response, 'Not scheduled after 24 working hours')
         self.assertEqual(response.context['unseen_notifications'][0]['kind'], 'unscheduled_overdue')
+
+
+class TaskAdminDeleteTests(TaskTestCase):
+    def test_even_a_superuser_cannot_delete_a_task_from_the_admin(self):
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        User.objects.create_superuser('root', password='pass12345')
+        self.client.login(username='root', password='pass12345')
+        response = self.client.post(f'/admin/tasks/task/{task.pk}/delete/', {'post': 'yes'})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Task.objects.filter(pk=task.pk).exists())
