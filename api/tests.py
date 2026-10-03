@@ -289,6 +289,15 @@ class MyTaskReportTests(ApiTestCase):
         self.assertIn('signature', response.json())
         self.assertEqual(self._file(token).status_code, 201)
 
+    def test_cannot_change_once_closed(self):
+        token = self.token_for('tech1')
+        self._file(token)
+        self.task.status = Task.Status.CLOSED
+        self.task.save(update_fields=['status'])
+        response = self._file(token, labour_hours='9.00')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('closed', response.json()['detail'])
+
     def test_cannot_file_before_work_starts(self):
         self.task.status = Task.Status.ACCEPTED
         self.task.save(update_fields=['status'])

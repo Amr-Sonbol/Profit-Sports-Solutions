@@ -253,6 +253,11 @@ class MyTaskReportView(APIView):
         task = self._get_lead_task(request, pk)
         if task is None:
             return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
+        if task.status == Task.Status.CLOSED:
+            return Response(
+                {'detail': 'This task is closed — only a manager or admin can correct its report now.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if task.status not in REPORT_EDITABLE_STATUSES:
             return Response(
                 {'detail': 'Start work on this task before filing a report.'}, status=status.HTTP_400_BAD_REQUEST,

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 17:42+0000\n"
+"POT-Creation-Date: 2026-10-03 18:06+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -628,6 +628,9 @@ msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
+
+msgid "Correct report"
+msgstr "تصحيح التقرير"
 
 msgid "Correct time"
 msgstr "تصحيح الوقت"
@@ -1770,6 +1773,12 @@ msgstr "صف واحد لكل موقع — السلسلة ذات الفروع ا�
 msgid "Only a closed task can be flagged."
 msgstr "يمكن الإبلاغ فقط عن مهمة مغلقة."
 
+msgid "Only a manager or admin can change this once the report is filed."
+msgstr "لا يمكن تغيير هذا بعد تقديم التقرير إلا من قِبل مدير أو مسؤول النظام."
+
+msgid "Only a manager or admin can change this once work has started."
+msgstr "لا يمكن تغيير هذا بعد بدء العمل إلا من قِبل مدير أو مسؤول النظام."
+
 msgid "Only if the customer later complained about this specific visit and it was the technician's own fault — not every complaint is negligence. Feeds their reliability record; they won't see this flag themselves."
 msgstr "فقط إذا اشتكى العميل لاحقًا من هذه الزيارة تحديدًا وكان الخطأ من الفني نفسه — ليست كل شكوى إهمالاً. يُضاف هذا إلى سجل موثوقيته، ولن يرى الفني هذه العلامة بنفسه."
 
@@ -2548,6 +2557,9 @@ msgstr "هذا الموعد غير مُقفل — عدّله مباشرة بدل
 msgid "This task already has a report — saving below updates it."
 msgstr "هذه المهمة لديها تقرير بالفعل — الحفظ أدناه يحدّثه."
 
+msgid "This task has no filed report to correct."
+msgstr "لا يوجد بهذه المهمة تقرير مقدم لتصحيحه."
+
 msgid "This task has no report awaiting approval."
 msgstr "لا يوجد بهذه المهمة تقرير بانتظار الموافقة."
 
@@ -2556,6 +2568,9 @@ msgstr "لا يوجد بهذه المهمة تقرير بانتظار مراجع
 
 msgid "This task is already closed."
 msgstr "هذه المهمة مغلقة بالفعل."
+
+msgid "This task is closed — only a manager or admin can correct its report now."
+msgstr "هذه المهمة مغلقة — لا يمكن تصحيح تقريرها الآن إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "This task is finished, so its products can only be changed by a manager or admin."
 msgstr "هذه المهمة منتهية، لذا لا يمكن تعديل منتجاتها إلا من قِبل مدير أو مسؤول النظام."

@@ -116,11 +116,15 @@ TECHNICIAN_ACTIONS = {
 }
 BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 
-# A report can only be filed once work is underway, or corrected any time
-# after — while awaiting a supervisor's or manager's approval, or even
-# after it closed.
+# The lead can file a report once work is underway, and correct it while
+# it's awaiting a supervisor's or manager's approval. Once the task is
+# closed, the approved report is a record — only a manager or admin
+# corrects it then (task_report_correct).
 REPORT_EDITABLE_STATUSES = {
-    Task.Status.IN_PROGRESS, Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
+    Task.Status.IN_PROGRESS, Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED,
+}
+MANAGER_REPORT_CORRECTABLE_STATUSES = {
+    Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
 }
 # Once the job is finished, its product lines are a record — a supervisor
 # can fix their own mistakes while the task is open, but after this only
@@ -1380,8 +1384,8 @@ def task_detail(request, pk):
     if request.method == 'POST' and request.POST.get('action') == 'reopen':
         # Admin-only — undoes a manager's close decision, back to
         # "awaiting manager approval" (not further back than that; the
-        # filed report itself is untouched and was always correctable
-        # anyway, closed or not — see REPORT_EDITABLE_STATUSES).
+        # filed report itself is untouched — a manager can correct it
+        # closed or not, see task_report_correct).
         if requesting_technician.role != Technician.Role.ADMIN:
             raise PermissionDenied
         if task.status != Task.Status.CLOSED:
@@ -3690,9 +3694,10 @@ def my_report_form(request, pk):
     """Filing this report is the lead's own last step — there's no
     separate "mark complete" tap. Saving it (first time or a later
     correction) marks the task completed; only a manager approving it
-    from task detail actually closes it. Correcting an already-completed
-    or already-closed report just re-saves it, without moving status
-    backward or re-firing the completed event.
+    from task detail actually closes it. Correcting a report still
+    awaiting approval just re-saves it, without moving status backward or
+    re-firing the completed event; once closed, it's a manager's to
+    correct (task_report_correct).
     """
     technician = require_technician(request)
 
@@ -3701,7 +3706,10 @@ def my_report_form(request, pk):
         task__pk=pk, technician=technician, is_active=True, role=TaskAssignment.Role.LEAD,
     )
     task = assignment.task
-    report = getattr(task, 'report', None)
+
+    if task.status == Task.Status.CLOSED:
+        messages.error(request, _('This task is closed — only a manager or admin can correct its report now.'))
+        return redirect('tasks:my_task_detail', pk=task.pk)
 
     if task.status not in REPORT_EDITABLE_STATUSES:
         messages.error(request, _('Start work on this task before filing a report.'))
@@ -3711,6 +3719,33 @@ def my_report_form(request, pk):
         messages.error(request, _('Mark yourself started again before filing the report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
+    return _report_form(request, task, technician, reverse('tasks:my_task_detail', args=[task.pk]))
+
+
+@login_required
+def task_report_correct(request, pk):
+    """A manager or admin correcting a filed report — including after the
+    task closed, when the lead no longer can. Same form and save path as
+    the lead's own; a correction never moves the task's status (only a
+    first filing does), and the history records who saved it.
+    """
+    manager = require_manager(request)
+    task = _scoped_or_404(
+        Task.objects.select_related('site__customer__country', 'report'),
+        pk, manager, get_active_country(request), 'site__customer__country',
+    )
+    if getattr(task, 'report', None) is None or task.status not in MANAGER_REPORT_CORRECTABLE_STATUSES:
+        messages.error(request, _('This task has no filed report to correct.'))
+        return redirect('tasks:task_detail', pk=task.pk)
+    return _report_form(request, task, manager, reverse('tasks:task_detail', args=[task.pk]))
+
+
+def _report_form(request, task, technician, back_url):
+    """The report form itself (report, machines, parts), shared by the
+    lead filing it and a manager correcting it. `back_url` is where both
+    the back link and a successful save go.
+    """
+    report = getattr(task, 'report', None)
     task_assets = task.task_assets.select_related('asset__brand')
     parts = report.parts_used.all() if report else PartUsed.objects.none()
 
@@ -3758,7 +3793,7 @@ def my_report_form(request, pk):
                         TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'])
 
             messages.success(request, report_saved_message(saved_report.first_submission, task))
-            return redirect('tasks:my_task_detail', pk=task.pk)
+            return redirect(back_url)
     else:
         report_form = WorkReportForm(instance=report, require_signature=_requires_signature(task))
         existing_formset = ExistingAssetFormSet(
@@ -3770,6 +3805,7 @@ def my_report_form(request, pk):
     context = {
         'task': task,
         'report': report,
+        'back_url': back_url,
         'can_edit': True,
         'report_form': report_form,
         'existing_formset': existing_formset,

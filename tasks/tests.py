@@ -5451,20 +5451,42 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
 
-    def test_resubmitting_after_approval_stays_closed(self):
+    def test_lead_cannot_change_the_report_once_closed(self):
         self.client.login(username='tech1', password='pass12345')
         self.client.post(self.url, self._base_payload())
-
         self.task.refresh_from_db()
         self.task.status = Task.Status.CLOSED
         self.task.save(update_fields=['status'])
 
-        self.client.post(self.url, self._base_payload(findings='Belt worn out, fixed again'))
+        response = self.client.post(self.url, self._base_payload(labour_hours='9.00'))
+        self.assertRedirects(response, f'/tasks/my/{self.task.pk}/')
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '1.50')
+
+    def test_manager_corrects_a_closed_report_and_it_stays_closed(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post(self.url, self._base_payload())
+        self.task.refresh_from_db()
+        self.task.status = Task.Status.CLOSED
+        self.task.save(update_fields=['status'])
+
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        correct_url = f'/tasks/{self.task.pk}/report/correct/'
+        response = self.client.post(correct_url, self._base_payload(labour_hours='2.25'))
+        self.assertRedirects(response, f'/tasks/{self.task.pk}/', fetch_redirect_response=False)
 
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.CLOSED)
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.25')
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
-        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
+
+    def test_supervisor_cannot_use_the_manager_correction(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get(f'/tasks/{self.task.pk}/report/correct/').status_code, 403)
 
     def test_resolved_is_required(self):
         self.client.login(username='tech1', password='pass12345')
@@ -6030,3 +6052,84 @@ class TapUndoAndCorrectionTests(TaskTestCase):
         self.assertEqual(response.status_code, 403)
         event.refresh_from_db()
         self.assertIsNone(event.corrected_at)
+
+
+class SupervisorFieldLockTests(TaskTestCase):
+    """Estimate, billing, warranty and the responsible supervisor lock for
+    supervisors once the report is filed; the promised date once work has
+    started. Managers can still change all of them.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.supervisor = self.supervisor_user.technician
+        self.task = Task.objects.create(
+            task_number='UAE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
+            promised_at=timezone.now() + timedelta(days=1), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, estimated_hours='2.00', responsible_supervisor=self.supervisor,
+        )
+        self.url = f'/tasks/{self.task.pk}/edit/'
+
+    def _payload(self, **overrides):
+        payload = {
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CONTRACT, 'is_warranty': 'true', 'estimated_hours': '9.00',
+            'responsible_supervisor': '', 'description': '',
+            'promised_at': (timezone.localtime(timezone.now() + timedelta(days=5), ZoneInfo(self.country.timezone))
+                            .strftime('%Y-%m-%dT%H:%M')),
+            'products-TOTAL_FORMS': '0', 'products-INITIAL_FORMS': '0',
+            'products-MIN_NUM_FORMS': '0', 'products-MAX_NUM_FORMS': '1000',
+        }
+        payload.update(overrides)
+        return payload
+
+    def _set_status(self, status):
+        self.task.status = status
+        self.task.save(update_fields=['status'])
+
+    def test_supervisor_edits_freely_while_the_task_is_open(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(responsible_supervisor=self.supervisor.pk))
+        self.task.refresh_from_db()
+        self.assertEqual(str(self.task.estimated_hours), '9.00')
+        self.assertEqual(self.task.billing_type, Task.BillingType.CONTRACT)
+
+    def test_supervisor_cannot_change_them_after_the_report_is_filed(self):
+        self._set_status(Task.Status.PENDING_SUPERVISOR_REVIEW)
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload())
+        self.assertEqual(response.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(str(self.task.estimated_hours), '2.00')
+        self.assertEqual(self.task.billing_type, Task.BillingType.CHARGEABLE)
+        self.assertIsNone(self.task.is_warranty)
+        self.assertEqual(self.task.responsible_supervisor, self.supervisor)
+
+    def test_promised_date_locks_once_work_starts(self):
+        original = self.task.promised_at
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED, occurred_at=timezone.now(),
+            actor=self.tech_user,
+        )
+        self._set_status(Task.Status.IN_PROGRESS)
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(responsible_supervisor=self.supervisor.pk))
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.promised_at.replace(second=0, microsecond=0),
+                         original.replace(second=0, microsecond=0))
+        # Still before the report, so the estimate is still theirs to change.
+        self.assertEqual(str(self.task.estimated_hours), '9.00')
+
+    def test_manager_can_still_change_them(self):
+        self._set_status(Task.Status.COMPLETED)
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(self.url, self._payload(responsible_supervisor=self.supervisor.pk))
+        self.task.refresh_from_db()
+        self.assertEqual(str(self.task.estimated_hours), '9.00')
+        self.assertEqual(self.task.billing_type, Task.BillingType.CONTRACT)

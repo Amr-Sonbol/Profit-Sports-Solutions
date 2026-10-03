@@ -14,7 +14,7 @@ from reference.models import Brand, ConductArea, Country, Skill, TaskType
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
-    MAX_TICKET_ATTACHMENT_COUNT, CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment,
+    MAX_TICKET_ATTACHMENT_COUNT, CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -216,6 +216,17 @@ class TaskCreateForm(forms.ModelForm):
         return cleaned
 
 
+# Once the report is filed, these are the record of the job — what the
+# customer is billed, what the hours are measured against, who answers for
+# it. A supervisor sets them while the task is open; after that only the
+# manager tier changes them. (Product lines follow the same idea, see
+# PRODUCTS_LOCKED_STATUSES in views.py.)
+REPORT_FILED_STATUSES = {
+    Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED,
+}
+LOCKED_AFTER_REPORT_FIELDS = ['estimated_hours', 'billing_type', 'is_warranty', 'responsible_supervisor']
+
+
 class TaskEditForm(forms.ModelForm):
     """Editing an existing task — deliberately narrower than creation.
     `site` isn't here: moving a task to a different site after the fact
@@ -344,6 +355,22 @@ class TaskEditForm(forms.ModelForm):
                 'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
             ]:
                 del self.fields[field_name]
+
+            # Disabled, not removed: still shown, and Django ignores any
+            # posted value for a disabled field, keeping the saved one.
+            if instance.pk and instance.status in REPORT_FILED_STATUSES:
+                for field_name in LOCKED_AFTER_REPORT_FIELDS:
+                    self.fields[field_name].disabled = True
+                    self.fields[field_name].help_text = _(
+                        'Only a manager or admin can change this once the report is filed.',
+                    )
+            # The promised date is what on-time arrival is measured
+            # against, so it stops moving once work has actually started.
+            if instance.pk and instance.events.filter(event_type=TaskEvent.EventType.STARTED).exists():
+                self.fields['promised_at'].disabled = True
+                self.fields['promised_at'].help_text = _(
+                    'Only a manager or admin can change this once work has started.',
+                )
 
     def clean(self):
         cleaned = super().clean()

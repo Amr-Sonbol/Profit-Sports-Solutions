@@ -17,6 +17,7 @@ urlpatterns = [
     path('first-login/', views.first_login, name='first_login'),
     path('my/<int:pk>/', views.my_task_detail, name='my_task_detail'),
     path('my/<int:pk>/report/', views.my_report_form, name='my_report_form'),
+    path('<int:pk>/report/correct/', views.task_report_correct, name='task_report_correct'),
     path('new/', views.task_create, name='task_create'),
     path('tickets/new/', views.ticket_form, name='ticket_form'),
     path('tickets/status/<str:token>/', views.ticket_status, name='ticket_status'),

@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:my_task_detail' task.pk %}" class="back-link">{% translate "Back to task" %}</a>
+        <a href="{{ back_url }}" class="back-link">{% translate "Back to task" %}</a>
         <h1><span class="task-number">{{ task.task_number }}</span> {% translate "— Report" %}</h1>
     </div>
 </div>

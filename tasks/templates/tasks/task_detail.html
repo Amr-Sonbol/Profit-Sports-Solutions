@@ -482,6 +482,9 @@
         </form>
         {% endif %}
     {% endif %}
+    {% if user.technician.is_manager_tier and task.status != 'cancelled' %}
+    <p><a href="{% url 'tasks:task_report_correct' task.pk %}" class="button button--secondary">{% translate "Correct report" %}</a></p>
+    {% endif %}
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Resolved" %}</dt>
