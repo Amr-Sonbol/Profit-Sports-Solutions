@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from reports.models import PartUsed, WorkReport
-from tasks.models import CustomerTicket, Task, TaskAttachment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent
 
 
 class TaskListSerializer(serializers.ModelSerializer):
@@ -108,3 +108,58 @@ class WorkReportSerializer(serializers.ModelSerializer):
             'findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
             'signature_url', 'submitted_at', 'parts_used',
         ]
+
+
+class AssignmentSerializer(serializers.ModelSerializer):
+    technician_id = serializers.IntegerField(source='technician.id')
+    technician_name = serializers.CharField(source='technician.full_name')
+
+    class Meta:
+        model = TaskAssignment
+        fields = ['id', 'technician_id', 'technician_name', 'role', 'assigned_at']
+
+
+class TeamTaskDetailSerializer(TaskDetailSerializer):
+    """A supervisor's/manager's view of any task in scope — the
+    technician detail plus who's on it, the filed report, and what the
+    requester may do next (computed by the view, never guessed by the app).
+    """
+
+    lead = serializers.SerializerMethodField()
+    helpers = serializers.SerializerMethodField()
+    report = serializers.SerializerMethodField()
+    responsible_supervisor_name = serializers.CharField(source='responsible_supervisor.full_name', default='')
+    can_assign = serializers.SerializerMethodField()
+    can_supervisor_approve = serializers.SerializerMethodField()
+    can_manager_approve = serializers.SerializerMethodField()
+
+    class Meta(TaskDetailSerializer.Meta):
+        fields = TaskDetailSerializer.Meta.fields + [
+            'lead', 'helpers', 'report', 'responsible_supervisor_name',
+            'can_assign', 'can_supervisor_approve', 'can_manager_approve',
+        ]
+
+    def _active(self, obj):
+        return [a for a in obj.assignments.all() if a.is_active]
+
+    def get_lead(self, obj):
+        lead = next((a for a in self._active(obj) if a.role == TaskAssignment.Role.LEAD), None)
+        return AssignmentSerializer(lead).data if lead else None
+
+    def get_helpers(self, obj):
+        return AssignmentSerializer(
+            [a for a in self._active(obj) if a.role == TaskAssignment.Role.HELPER], many=True,
+        ).data
+
+    def get_report(self, obj):
+        report = getattr(obj, 'report', None)
+        return WorkReportSerializer(report).data if report else None
+
+    def get_can_assign(self, obj):
+        return self.context.get('can_assign', False)
+
+    def get_can_supervisor_approve(self, obj):
+        return self.context.get('can_supervisor_approve', False)
+
+    def get_can_manager_approve(self, obj):
+        return self.context.get('can_manager_approve', False)

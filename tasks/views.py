@@ -1064,6 +1064,44 @@ def all_tasks(request):
     return render(request, 'tasks/all_tasks.html', context)
 
 
+def can_supervisor_approve(technician, task):
+    """The task's own responsible_supervisor signs off on a technician's
+    report before it ever reaches a manager; a manager can also do this
+    themselves (a superset, same as everywhere else), which matters if no
+    supervisor is set yet.
+    """
+    return technician.is_manager_tier or technician.id == task.responsible_supervisor_id
+
+
+def approve_report_as_supervisor(task, actor):
+    """Pending supervisor review -> completed (awaiting the manager).
+    False if there's no report waiting on a supervisor. Shared by the web
+    task detail and the mobile API; the caller checks permission.
+    """
+    if task.status != Task.Status.PENDING_SUPERVISOR_REVIEW:
+        return False
+    task.status = Task.Status.COMPLETED
+    task.save(update_fields=['status'])
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.SUPERVISOR_APPROVED, occurred_at=timezone.now(), actor=actor,
+    )
+    return True
+
+
+def approve_report_as_manager(task, actor):
+    """Completed -> closed. False if there's no report waiting on a
+    manager. The caller checks the manager tier.
+    """
+    if task.status != Task.Status.COMPLETED:
+        return False
+    task.status = Task.Status.CLOSED
+    task.save(update_fields=['status'])
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.REPORT_APPROVED, occurred_at=timezone.now(), actor=actor,
+    )
+    return True
+
+
 @login_required
 def task_detail(request, pk):
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
@@ -1242,36 +1280,20 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_report_supervisor':
-        # The task's own responsible_supervisor signs off on a
-        # technician's report before it ever reaches a manager; a
-        # manager can also do this themselves (a superset, same as
-        # everywhere else), which matters if no supervisor is set yet.
-        if not (requesting_technician.is_manager_tier or requesting_technician.id == task.responsible_supervisor_id):
+        if not can_supervisor_approve(requesting_technician, task):
             raise PermissionDenied
-        if task.status != Task.Status.PENDING_SUPERVISOR_REVIEW:
-            messages.error(request, _('This task has no report awaiting supervisor review.'))
-        else:
-            task.status = Task.Status.COMPLETED
-            task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.SUPERVISOR_APPROVED,
-                occurred_at=timezone.now(), actor=request.user,
-            )
+        if approve_report_as_supervisor(task, request.user):
             messages.success(request, _('Approved — now awaiting manager approval before the task closes.'))
+        else:
+            messages.error(request, _('This task has no report awaiting supervisor review.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_report':
         require_manager(request)
-        if task.status != Task.Status.COMPLETED:
-            messages.error(request, _('This task has no report awaiting approval.'))
-        else:
-            task.status = Task.Status.CLOSED
-            task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.REPORT_APPROVED,
-                occurred_at=timezone.now(), actor=request.user,
-            )
+        if approve_report_as_manager(task, request.user):
             messages.success(request, _('Report approved. Task closed.'))
+        else:
+            messages.error(request, _('This task has no report awaiting approval.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'reopen':

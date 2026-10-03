@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -9,18 +10,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from people.models import RolePermission
+from people.permissions import get_active_country, require_manager, scoped_or_404
 from reports.forms import PartUsedItemForm, WorkReportForm
-from people.permissions import get_active_country
-from tasks.forms import BlockTaskForm, PauseTaskForm, TaskAttachmentUploadForm
+from tasks.forms import (
+    AddHelperForm, BlockTaskForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm,
+)
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
-    BLOCKABLE_STATUSES, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS, _next_technician_action,
-    _requires_signature, _save_attachment, _task_is_paused, _with_lead_prefetch, report_saved_message,
-    save_work_report,
+    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
+    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    _requires_signature, _save_attachment, _task_is_paused, _technicians_with_next_scheduled_task,
+    _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
+    report_saved_message, save_work_report,
 )
 
-from .permissions import IsTechnician, require_role_permission
-from .serializers import CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, WorkReportSerializer
+from .permissions import IsTechnician, has_role_permission, require_role_permission
+from .serializers import (
+    CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
+)
 
 
 class LoginView(APIView):
@@ -278,6 +285,174 @@ class MyTaskReportView(APIView):
             },
             status=status.HTTP_201_CREATED if report.first_submission else status.HTTP_200_OK,
         )
+
+
+def _get_team_task(request, pk):
+    """Same scope as the web task detail: the active country, or any
+    country for the manager tier.
+    """
+    return scoped_or_404(
+        Task.objects.select_related(
+            'site__customer__country', 'task_type', 'brand', 'required_skill', 'responsible_supervisor', 'report',
+        ).prefetch_related('assignments__technician', 'report__parts_used'),
+        pk, request.user.technician, get_active_country(request), 'site__customer__country',
+    )
+
+
+def _owns_task(request, task):
+    try:
+        _require_task_owner(request, task)
+    except PermissionDenied:
+        return False
+    return True
+
+
+def _team_task_response(request, task):
+    technician = request.user.technician
+    owns = _owns_task(request, task)
+    context = {
+        'requires_signature': bool(task.task_type and task.task_type.requires_signature),
+        'can_assign': (
+            owns and task.status not in ASSIGNMENT_LOCKED_STATUSES
+            and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
+        ),
+        'can_supervisor_approve': (
+            task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
+        ),
+        'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
+    }
+    return Response(TeamTaskDetailSerializer(task, context=context).data)
+
+
+class TeamTaskDetailView(APIView):
+    """Any task in the requester's scope, with its lead/helpers, report,
+    and which of assign/approve the requester can do — the mobile side of
+    the web task detail for supervisors, managers and admins.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def get(self, request, pk):
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
+class TeamTaskCandidatesView(APIView):
+    """Technicians who could take this task — same pool as the web assign
+    screen, with skill level and their next booked job so a clash shows.
+    Only available ones can be picked (`is_available`).
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.ASSIGN_TASKS)]
+
+    def get(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        assigned_ids = {a.technician_id for a in task.assignments.all() if a.is_active}
+        candidates = _technicians_with_next_scheduled_task(
+            _candidates_with_skill_level(_assignment_candidates(task, exclude_ids=assigned_ids), task),
+        )
+        return Response([
+            {
+                'id': technician.pk,
+                'full_name': technician.full_name,
+                'is_available': technician.is_available,
+                'skill_level': technician.skill_level,
+                'next_task_number': technician.next_scheduled_task.task_number
+                if technician.next_scheduled_task else None,
+                'next_task_at': technician.next_scheduled_task.scheduled_for
+                if technician.next_scheduled_task else None,
+            }
+            for technician in candidates
+        ])
+
+
+class TeamTaskAssignView(APIView):
+    """set_lead / add_helper / remove_helper — the web assign screen's
+    actions, with the same forms, lock and ownership rules.
+
+    Body: {"action": "set_lead", "technician": id, "end_reason": "..."}
+    (end_reason only when replacing a lead), {"action": "add_helper",
+    "technician": id}, or {"action": "remove_helper", "assignment_id": id,
+    "end_reason": "..."}.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.ASSIGN_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        if task.status in ASSIGNMENT_LOCKED_STATUSES:
+            return Response(
+                {'detail': 'Work has started — the team can no longer be changed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        active = [a for a in task.assignments.all() if a.is_active]
+        active_lead = next((a for a in active if a.role == TaskAssignment.Role.LEAD), None)
+        selectable = _assignment_candidates(task, exclude_ids={a.technician_id for a in active}).filter(
+            is_available=True,
+        )
+        action = request.data.get('action')
+
+        if action == 'set_lead':
+            form = SetLeadForm(request.data, technicians=selectable, requires_reason=bool(active_lead))
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            _set_lead(
+                task, active_lead, form.cleaned_data['technician'], form.cleaned_data.get('end_reason', ''),
+                request.user,
+            )
+        elif action == 'add_helper':
+            if not active_lead:
+                return Response({'detail': 'Set a lead first.'}, status=status.HTTP_400_BAD_REQUEST)
+            form = AddHelperForm(request.data, technicians=selectable)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            TaskAssignment.objects.create(
+                task=task, technician=form.cleaned_data['technician'], role=TaskAssignment.Role.HELPER,
+                assigned_at=timezone.now(), is_active=True,
+            )
+        elif action == 'remove_helper':
+            helper = get_object_or_404(
+                TaskAssignment, pk=request.data.get('assignment_id'), task=task,
+                role=TaskAssignment.Role.HELPER, is_active=True,
+            )
+            form = RemoveAssignmentForm(request.data)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            helper.is_active = False
+            helper.ended_at = timezone.now()
+            helper.end_reason = form.cleaned_data['end_reason']
+            helper.save()
+        else:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
+class TeamTaskApproveView(APIView):
+    """Approves the filed report one step: the responsible supervisor (or
+    a manager) moves it from supervisor review to awaiting the manager; a
+    manager/admin approves and closes. Same helpers as the web buttons.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        technician = request.user.technician
+        if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
+            if not can_supervisor_approve(technician, task):
+                raise PermissionDenied
+            approve_report_as_supervisor(task, request.user)
+        elif task.status == Task.Status.COMPLETED:
+            require_manager(request)
+            approve_report_as_manager(task, request.user)
+        else:
+            return Response(
+                {'detail': 'This task has no report awaiting approval.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        return _team_task_response(request, task)
 
 
 class TicketListView(APIView):

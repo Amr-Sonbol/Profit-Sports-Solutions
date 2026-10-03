@@ -492,3 +492,118 @@ class ApiSecurityTests(ApiTestCase):
                 content_type='application/json',
             )
             self.assertEqual(response.status_code, 429)
+
+
+class TeamTaskApiTests(ApiTestCase):
+    """The supervisor/manager endpoints: task detail, candidates, assign, approve."""
+
+    def setUp(self):
+        super().setUp()
+        self.supervisor = self.supervisor_user.technician
+        self.other_user = User.objects.create_user('tech2', password='pass12345')
+        self.other_tech = Technician.objects.create(
+            user=self.other_user, country=self.country, full_name='Omar Other',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def _post(self, token, path, body):
+        return self.client.post(
+            f'/api/tasks/{self.task.pk}/{path}/', json.dumps(body), content_type='application/json',
+            **self.auth(token),
+        )
+
+    def test_supervisor_sees_task_with_team_and_permissions(self):
+        token = self.token_for('supervisor1')
+        body = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertEqual(body['lead']['technician_name'], 'Tarek Tech')
+        self.assertEqual(body['helpers'], [])
+        self.assertTrue(body['can_assign'])
+        self.assertFalse(body['can_manager_approve'])
+
+    def test_technician_cannot_use_team_endpoints(self):
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).status_code, 403)
+        self.assertEqual(self._post(token, 'assign', {'action': 'add_helper'}).status_code, 403)
+
+    def test_candidates_exclude_people_already_on_the_task(self):
+        token = self.token_for('supervisor1')
+        names = [c['full_name'] for c in self.client.get(
+            f'/api/tasks/{self.task.pk}/candidates/', **self.auth(token)).json()]
+        self.assertIn('Omar Other', names)
+        self.assertNotIn('Tarek Tech', names)
+
+    def test_add_and_remove_helper(self):
+        token = self.token_for('supervisor1')
+        body = self._post(token, 'assign', {'action': 'add_helper', 'technician': self.other_tech.pk}).json()
+        self.assertEqual(body['helpers'][0]['technician_name'], 'Omar Other')
+
+        body = self._post(token, 'assign', {
+            'action': 'remove_helper', 'assignment_id': body['helpers'][0]['id'], 'end_reason': 'overloaded',
+        }).json()
+        self.assertEqual(body['helpers'], [])
+
+    def test_replacing_the_lead_needs_a_reason(self):
+        token = self.token_for('supervisor1')
+        response = self._post(token, 'assign', {'action': 'set_lead', 'technician': self.other_tech.pk})
+        self.assertEqual(response.status_code, 400)
+        response = self._post(token, 'assign', {
+            'action': 'set_lead', 'technician': self.other_tech.pk, 'end_reason': 'sick',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['lead']['technician_name'], 'Omar Other')
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.REASSIGNED).exists())
+
+    def test_team_is_locked_once_work_starts(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        token = self.token_for('supervisor1')
+        response = self._post(token, 'assign', {'action': 'add_helper', 'technician': self.other_tech.pk})
+        self.assertEqual(response.status_code, 400)
+
+    def test_another_supervisors_task_is_off_limits(self):
+        other_sup_user = User.objects.create_user('supervisor2', password='pass12345')
+        other_sup = Technician.objects.create(
+            user=other_sup_user, country=self.country, full_name='Samir Super',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.task.responsible_supervisor = other_sup
+        self.task.save(update_fields=['responsible_supervisor'])
+        token = self.token_for('supervisor1')
+        self.assertFalse(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['can_assign'])
+        response = self._post(token, 'assign', {'action': 'add_helper', 'technician': self.other_tech.pk})
+        self.assertEqual(response.status_code, 403)
+
+    def test_two_step_approval(self):
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.responsible_supervisor = self.supervisor
+        self.task.save(update_fields=['status', 'responsible_supervisor'])
+
+        supervisor_token = self.token_for('supervisor1')
+        body = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(supervisor_token)).json()
+        self.assertTrue(body['can_supervisor_approve'])
+        response = self._post(supervisor_token, 'approve', {})
+        self.assertEqual(response.json()['status'], Task.Status.COMPLETED)
+
+        # The supervisor can't do the manager's step.
+        self.assertEqual(self._post(supervisor_token, 'approve', {}).status_code, 403)
+
+        manager_token = self.token_for('manager1')
+        response = self._post(manager_token, 'approve', {})
+        self.assertEqual(response.json()['status'], Task.Status.CLOSED)
+        self.assertEqual(self._post(manager_token, 'approve', {}).status_code, 400)
+
+    def test_other_country_task_is_404_for_a_supervisor(self):
+        from reference.models import Country
+
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        self.customer.country = other_country
+        self.customer.save(update_fields=['country'])
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).status_code, 404)
