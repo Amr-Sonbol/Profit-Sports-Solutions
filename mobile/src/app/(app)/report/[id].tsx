@@ -73,7 +73,11 @@ export default function ReportScreen() {
   const [customerName, setCustomerName] = useState('');
   const [parts, setParts] = useState<PartRow[]>([]);
   const [signatureOnFile, setSignatureOnFile] = useState(false);
-  const [hasDrawn, setHasDrawn] = useState(false);
+  // Signing happens on its own screen (see the `signing` branch below) so
+  // the customer never sees labour hours or part prices while signing.
+  const [signing, setSigning] = useState(false);
+  const [newSignature, setNewSignature] = useState<string | null>(null);
+  const [signError, setSignError] = useState('');
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -111,7 +115,7 @@ export default function ReportScreen() {
     setParts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   };
 
-  const submit = async (signature: string | null) => {
+  const submit = async () => {
     setIsBusy(true);
     setErrors({});
     try {
@@ -125,7 +129,7 @@ export default function ReportScreen() {
         parts: parts
           .filter((row) => row.part_code || row.quantity || row.unit_cost)
           .map((row) => ({ ...row, quantity: Number(row.quantity) || 0 })),
-        signature,
+        signature: newSignature,
       });
       Alert.alert('Report saved', result.message);
       router.back();
@@ -141,20 +145,11 @@ export default function ReportScreen() {
     }
   };
 
-  // The pad only hands its image back through onOK, so a drawn signature
-  // is read first and the submit continues from there.
-  const handleSubmit = () => {
-    if (hasDrawn) {
-      setIsBusy(true);
-      signatureRef.current?.readSignature();
-    } else {
-      submit(null);
-    }
-  };
-
-  const clearSignature = () => {
-    signatureRef.current?.clearSignature();
-    setHasDrawn(false);
+  // The pad only hands its image back through onOK/onEmpty, so "Done"
+  // asks for it and the answer arrives there.
+  const finishSigning = () => {
+    setSignError('');
+    signatureRef.current?.readSignature();
   };
 
   if (!task) {
@@ -166,6 +161,78 @@ export default function ReportScreen() {
   }
 
   const inputStyle = [styles.input, { color: theme.text, borderColor: theme.backgroundSelected }];
+
+  if (signing) {
+    const usedParts = parts.filter((row) => row.part_code);
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <ScrollView contentContainerStyle={styles.content} scrollEnabled={scrollEnabled}>
+            <ThemedText type="title" style={styles.title}>Please review and sign</ThemedText>
+            <ThemedText themeColor="textSecondary">{task.task_number} — {task.customer_name}</ThemedText>
+
+            <ThemedView style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="smallBold">What we found</ThemedText>
+              <ThemedText>{findings || '—'}</ThemedText>
+              {actionTaken ? (
+                <>
+                  <ThemedText type="smallBold">What we did</ThemedText>
+                  <ThemedText>{actionTaken}</ThemedText>
+                </>
+              ) : null}
+              <ThemedText type="smallBold">Problem resolved</ThemedText>
+              <ThemedText>{resolved ? 'Yes' : 'No'}</ThemedText>
+              {usedParts.length > 0 ? (
+                <>
+                  <ThemedText type="smallBold">Parts used</ThemedText>
+                  {usedParts.map((row, index) => (
+                    <ThemedText key={index}>
+                      {row.quantity || '1'} × {row.part_code}{row.description ? ` — ${row.description}` : ''}
+                    </ThemedText>
+                  ))}
+                </>
+              ) : null}
+            </ThemedView>
+
+            <Field label="Your name" error={errors.customer_name}>
+              <TextInput style={inputStyle} value={customerName} onChangeText={setCustomerName} />
+            </Field>
+
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Your signature</ThemedText>
+              <ThemedView style={[styles.signatureBox, { borderColor: theme.backgroundSelected }]}>
+                <SignatureCanvas
+                  ref={signatureRef}
+                  webStyle={SIGNATURE_WEB_STYLE}
+                  backgroundColor="#ffffff"
+                  penColor="#000000"
+                  imageType="image/png"
+                  onBegin={() => setScrollEnabled(false)}
+                  onEnd={() => setScrollEnabled(true)}
+                  onOK={(signature) => {
+                    setNewSignature(signature);
+                    setSigning(false);
+                  }}
+                  onEmpty={() => setSignError('Please sign in the box above.')}
+                />
+              </ThemedView>
+              <TouchableOpacity onPress={() => signatureRef.current?.clearSignature()}>
+                <ThemedText themeColor="primary" type="small">Clear signature</ThemedText>
+              </TouchableOpacity>
+              {signError ? <ThemedText themeColor="danger" type="small">{signError}</ThemedText> : null}
+            </ThemedView>
+
+            <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={finishSigning}>
+              <ThemedText style={styles.buttonText}>Done — hand back to the technician</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSigning(false)} style={styles.centerLink}>
+              <ThemedText themeColor="textSecondary">Cancel</ThemedText>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -260,38 +327,31 @@ export default function ReportScreen() {
               </TouchableOpacity>
             </ThemedView>
 
-            <Field label="Customer name (who signs)" error={errors.customer_name}>
-              <TextInput style={inputStyle} value={customerName} onChangeText={setCustomerName} />
-            </Field>
-
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
-                Customer signature{task.requires_signature ? ' (required)' : ''}
+                Customer sign-off{task.requires_signature ? ' (required)' : ''}
               </ThemedText>
-              {signatureOnFile ? (
-                <ThemedText themeColor="textSecondary" type="small">
-                  A signature is already on file — sign again only to replace it.
+              <ThemedText themeColor="textSecondary" type="small">
+                {newSignature
+                  ? `Signed by ${customerName || 'the customer'} ✓`
+                  : signatureOnFile
+                    ? `Signed by ${customerName || 'the customer'} — sign again only to replace it.`
+                    : 'The customer reviews the work and signs on their own screen — they won’t see hours or prices.'}
+              </ThemedText>
+              <TouchableOpacity
+                style={[styles.secondaryButton, { borderColor: theme.primary }]}
+                onPress={() => {
+                  setSignError('');
+                  setSigning(true);
+                }}
+              >
+                <ThemedText themeColor="primary">
+                  {newSignature || signatureOnFile ? 'Sign again' : 'Hand to customer to sign'}
                 </ThemedText>
-              ) : null}
-              <ThemedView style={[styles.signatureBox, { borderColor: theme.backgroundSelected }]}>
-                <SignatureCanvas
-                  ref={signatureRef}
-                  webStyle={SIGNATURE_WEB_STYLE}
-                  backgroundColor="#ffffff"
-                  penColor="#000000"
-                  imageType="image/png"
-                  onBegin={() => {
-                    setScrollEnabled(false);
-                    setHasDrawn(true);
-                  }}
-                  onEnd={() => setScrollEnabled(true)}
-                  onOK={(signature) => submit(signature)}
-                  onEmpty={() => submit(null)}
-                />
-              </ThemedView>
-              <TouchableOpacity onPress={clearSignature}>
-                <ThemedText themeColor="primary" type="small">Clear signature</ThemedText>
               </TouchableOpacity>
+              {errors.customer_name ? (
+                <ThemedText themeColor="danger" type="small">{errors.customer_name}</ThemedText>
+              ) : null}
               {errors.signature ? <ThemedText themeColor="danger" type="small">{errors.signature}</ThemedText> : null}
             </ThemedView>
 
@@ -299,7 +359,7 @@ export default function ReportScreen() {
 
             <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
-              onPress={handleSubmit}
+              onPress={submit}
               disabled={isBusy}
             >
               {isBusy ? <ActivityIndicator color="#fff" /> : (
@@ -346,6 +406,8 @@ const styles = StyleSheet.create({
   partNumber: { flex: 1 },
   partCurrency: { width: 72 },
   secondaryButton: { borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
+  summary: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
+  centerLink: { alignItems: 'center', paddingVertical: Spacing.two },
   signatureBox: { height: 200, borderWidth: 1, borderRadius: Spacing.two, overflow: 'hidden' },
   formError: { textAlign: 'center' },
   button: { borderRadius: Spacing.two, paddingVertical: Spacing.three, alignItems: 'center' },
