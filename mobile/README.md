@@ -25,6 +25,10 @@ scan the QR code with Expo Go on a physical device. The Django backend
 - Task detail (`src/app/(app)/task/[id].tsx`) — status, description, the
   one next action button (accept → en route → arrived → start), and adding
   a fault/serial-plate/before/after photo.
+- Work report (`src/app/(app)/report/[id].tsx`) — findings, action taken,
+  resolved, labour hours, parts used, and the customer signing on screen
+  (`react-native-signature-canvas`). Same rules as the web form — the API
+  reuses its save logic (`tasks.views.save_work_report`).
 - Profile (`src/app/(app)/profile.tsx`) — name, role, country, sign out.
 
 ## What's here but read-only (supervisors)
@@ -51,11 +55,6 @@ of this exists in `api/views.py` yet:
 - Assign a ticket or task to a technician
 - Convert a ticket to a task
 - Approve/review a filed work report
-
-Also not built on the technician side: filing the work report itself
-(parts used, labor hours, signature) once a task reaches that point —
-`can_file_report` comes back from the API already, the screen for it
-doesn't exist yet.
 
 ## Talking to the API
 

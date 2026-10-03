@@ -141,6 +141,17 @@ export default function TaskDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
+          {task.can_file_report ? (
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => router.push(`/report/${task.id}`)}
+            >
+              <ThemedText style={styles.buttonText}>
+                {task.status === 'in_progress' ? 'File work report' : 'Edit work report'}
+              </ThemedText>
+            </TouchableOpacity>
+          ) : null}
+
           <ThemedView style={styles.section}>
             <ThemedText type="smallBold">Add a photo</ThemedText>
             <ThemedView style={styles.photoRow}>

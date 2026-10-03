@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import type { Me, TaskDetail, TaskListItem, Ticket } from '@/types';
+import type { Me, TaskDetail, TaskListItem, Ticket, WorkReport, WorkReportInput } from '@/types';
 
 export function login(username: string, password: string) {
   return apiRequest<{ token: string } & Me>('/api/login/', {
@@ -37,6 +37,17 @@ export function uploadTaskAttachment(id: number, fileUri: string, fileName: stri
     method: 'POST',
     body: form,
     isFormData: true,
+  });
+}
+
+export function fetchMyReport(id: number) {
+  return apiRequest<{ report: WorkReport | null }>(`/api/my-tasks/${id}/report/`);
+}
+
+export function submitMyReport(id: number, report: WorkReportInput) {
+  return apiRequest<{ status: string; message: string; report: WorkReport }>(`/api/my-tasks/${id}/report/`, {
+    method: 'POST',
+    body: report,
   });
 }
 

@@ -48,6 +48,7 @@ export interface TaskDetail {
   site_name: string;
   site_address: string;
   customer_name: string;
+  currency_code: string;
   status: string;
   status_display: string;
   priority: string;
@@ -69,6 +70,38 @@ export interface TaskDetail {
   next_action: string | null;
   is_lead: boolean;
   can_file_report: boolean;
+  // The task type's own setting — the API refuses a report without one.
+  requires_signature: boolean;
+}
+
+export interface PartUsed {
+  part_code: string;
+  description: string;
+  quantity: number;
+  unit_cost: string;
+  currency_code: string;
+}
+
+export interface WorkReport {
+  findings: string;
+  action_taken: string;
+  resolved: boolean;
+  labour_hours: string;
+  customer_name: string;
+  signature_url: string;
+  submitted_at: string;
+  parts_used: PartUsed[];
+}
+
+export interface WorkReportInput {
+  findings: string;
+  action_taken: string;
+  resolved: boolean;
+  labour_hours: string;
+  customer_name: string;
+  parts: PartUsed[];
+  // A PNG data URL from the signature pad; null keeps the one on file.
+  signature: string | null;
 }
 
 export interface Ticket {
