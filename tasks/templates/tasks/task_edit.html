@@ -29,6 +29,33 @@
         </div>
 
         <h2>{% translate "Products" %}</h2>
+        {% if products_locked %}
+        <p class="field__help">{% translate "This task is finished, so its products can only be changed by a manager or admin." %}</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{% translate "Product code" %}</th>
+                        <th>{% translate "Serial number" %}</th>
+                        <th>{% translate "Quantity" %}</th>
+                        <th>{% translate "Note" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in task.products.all %}
+                    <tr>
+                        <td>{{ product.product_code }}</td>
+                        <td>{{ product.serial_number|default:"—" }}</td>
+                        <td>{{ product.quantity }}</td>
+                        <td>{{ product.note|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="empty-state">{% translate "No products." %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
         <p class="field__help">{% translate "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved. For an actual machine, fill in its own checklist: custom color per component, and what it got swapped for if the one ordered wasn't available." %}</p>
         {{ product_formset.management_form }}
         {% if product_formset.non_form_errors %}
@@ -73,6 +100,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
 
         <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>

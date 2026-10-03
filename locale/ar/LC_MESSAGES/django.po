@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 16:57+0000\n"
+"POT-Creation-Date: 2026-10-03 17:37+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1621,6 +1621,9 @@ msgstr "لا توجد صور بعد."
 msgid "No portal login yet — create one so this customer can track their own tickets and service history. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password and confirm their contact details the first time they sign in."
 msgstr "لا يوجد حساب دخول للبوابة بعد — أنشئ واحدًا ليتمكن هذا العميل من متابعة تذاكره وسجل الصيانة الخاص به. تُولَّد كلمة مرور مؤقتة تلقائيًا وتُرسل له بالبريد الإلكتروني مع رابط تسجيل الدخول؛ وسيعيّن كلمة المرور الخاصة به ويؤكد بيانات التواصل معه عند أول تسجيل دخول."
 
+msgid "No products."
+msgstr "لا توجد منتجات."
+
 msgid "No sites yet."
 msgstr "لا توجد فروع بعد."
 
@@ -2532,6 +2535,9 @@ msgstr "لا يوجد بهذه المهمة تقرير بانتظار مراجع
 
 msgid "This task is already closed."
 msgstr "هذه المهمة مغلقة بالفعل."
+
+msgid "This task is finished, so its products can only be changed by a manager or admin."
+msgstr "هذه المهمة منتهية، لذا لا يمكن تعديل منتجاتها إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "This task is not closed."
 msgstr "هذه المهمة غير مغلقة."

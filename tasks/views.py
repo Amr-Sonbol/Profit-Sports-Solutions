@@ -121,6 +121,10 @@ BLOCKABLE_STATUSES = {Task.Status.ACCEPTED, Task.Status.IN_PROGRESS}
 REPORT_EDITABLE_STATUSES = {
     Task.Status.IN_PROGRESS, Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
 }
+# Once the job is finished, its product lines are a record — a supervisor
+# can fix their own mistakes while the task is open, but after this only
+# the manager tier can change them.
+PRODUCTS_LOCKED_STATUSES = {Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED}
 EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
@@ -1436,6 +1440,7 @@ def task_edit(request, pk):
     task_country = task.site.customer.country
     previous_scheduled_for = task.scheduled_for
     previous_scheduled_date = task.scheduled_date
+    products_locked = not is_manager and task.status in PRODUCTS_LOCKED_STATUSES
 
     TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS, can_delete=True)
     product_initial = [
@@ -1451,8 +1456,8 @@ def task_edit(request, pk):
         form = TaskEditForm(
             request.POST, request.FILES, instance=task, country=task_country, is_manager=is_manager,
         )
-        product_formset = TaskProductFormSet(request.POST, prefix='products')
-        if form.is_valid() and product_formset.is_valid():
+        product_formset = None if products_locked else TaskProductFormSet(request.POST, prefix='products')
+        if form.is_valid() and (products_locked or product_formset.is_valid()):
             with transaction.atomic():
                 updated_task = form.save()
                 rescheduled = (
@@ -1464,17 +1469,18 @@ def task_edit(request, pk):
                         task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
                         occurred_at=timezone.now(), actor=request.user,
                     )
-                updated_task.products.all().delete()
-                for cleaned in product_formset.cleaned_data:
-                    if cleaned.get('product_code') and not cleaned.get('DELETE'):
-                        TaskProduct.objects.create(
-                            task=updated_task, product_code=cleaned['product_code'],
-                            serial_number=cleaned.get('serial_number', ''), quantity=cleaned['quantity'],
-                            replacement=cleaned.get('replacement', ''), frame=cleaned.get('frame', ''),
-                            arm=cleaned.get('arm', ''), padding=cleaned.get('padding', ''),
-                            trim=cleaned.get('trim', ''), comment=cleaned.get('comment', ''),
-                            note=cleaned.get('note', ''),
-                        )
+                if not products_locked:
+                    updated_task.products.all().delete()
+                    for cleaned in product_formset.cleaned_data:
+                        if cleaned.get('product_code') and not cleaned.get('DELETE'):
+                            TaskProduct.objects.create(
+                                task=updated_task, product_code=cleaned['product_code'],
+                                serial_number=cleaned.get('serial_number', ''), quantity=cleaned['quantity'],
+                                replacement=cleaned.get('replacement', ''), frame=cleaned.get('frame', ''),
+                                arm=cleaned.get('arm', ''), padding=cleaned.get('padding', ''),
+                                trim=cleaned.get('trim', ''), comment=cleaned.get('comment', ''),
+                                note=cleaned.get('note', ''),
+                            )
             notices = []
             if (
                 rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
@@ -1495,11 +1501,10 @@ def task_edit(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
-        product_formset = TaskProductFormSet(initial=product_initial, prefix='products')
+        product_formset = None if products_locked else TaskProductFormSet(initial=product_initial, prefix='products')
 
-    return render(
-        request, 'tasks/task_edit.html', {'task': task, 'form': form, 'product_formset': product_formset},
-    )
+    context = {'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked}
+    return render(request, 'tasks/task_edit.html', context)
 
 
 @login_required

@@ -20,7 +20,8 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
-    TaskMessage, TaskMessageRecipient, TaskNotification, TicketInternalNote, TicketNotification, TicketReply,
+    TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketInternalNote, TicketNotification,
+    TicketReply,
 )
 
 User = get_user_model()
@@ -641,6 +642,37 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual(len(products), 1)
         self.assertEqual(products[0].product_code, 'PNL-NEW')
         self.assertEqual(products[0].quantity, 3)
+
+    def _replace_products_with(self, code):
+        return self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': code, 'products-0-serial_number': '', 'products-0-quantity': '1',
+        }))
+
+    def test_supervisor_cannot_change_products_once_the_task_is_finished(self):
+        TaskProduct.objects.create(task=self.task, product_code='PNL-OLD', quantity=1)
+        self.task.status = Task.Status.COMPLETED
+        self.task.save(update_fields=['status'])
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertContains(self.client.get(self.url), 'can only be changed by a manager or admin')
+        response = self._replace_products_with('PNL-NEW')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(self.task.products.values_list('product_code', flat=True)), ['PNL-OLD'])
+
+    def test_manager_can_still_change_products_on_a_finished_task(self):
+        TaskProduct.objects.create(task=self.task, product_code='PNL-OLD', quantity=1)
+        self.task.status = Task.Status.CLOSED
+        self.task.save(update_fields=['status'])
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+        self.client.login(username='manager1', password='pass12345')
+        self._replace_products_with('PNL-NEW')
+        self.assertEqual(list(self.task.products.values_list('product_code', flat=True)), ['PNL-NEW'])
 
     def test_product_row_saves_the_installation_checklist_fields(self):
         self.client.login(username='supervisor1', password='pass12345')
