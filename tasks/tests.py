@@ -5748,3 +5748,17 @@ class TechnicianHoursTests(TaskTestCase):
         self.client.login(username='helper1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
         self.assertEqual(response.context['month_hours'], 0)
+
+    def test_csv_export_has_summary_and_report_rows(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/hours/export/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        body = response.content.decode()
+        self.assertIn('Tarek Tech,2,3.50,2.00,0,0', body)
+        self.assertIn('Omar Helper,0,0,,0,1', body)
+        self.assertIn('Tarek Tech,AE-0001,Fitness First', body)
+
+    def test_csv_export_is_forbidden_to_technicians(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/technicians/hours/export/').status_code, 403)

@@ -2714,22 +2714,13 @@ def all_technicians(request):
     return render(request, 'tasks/all_technicians.html', {'rows': rows, 'search': search})
 
 
-@login_required
-def technician_hours(request):
-    """Labour hours from filed work reports, per technician, for one month
-    in the active country — how a supervisor/manager/admin follows each
-    technician's actual workload. A report's hours count toward the lead
-    who filed it (the report covers the whole job), so the team total
-    never double-counts; helpers get a "helped on" count instead. Every
-    active technician gets a row, so someone with nothing filed shows up
-    as zero rather than going unnoticed.
+def _technician_hours_rows(active_country, period_start_date):
+    """One row per active technician in the country: the work reports they
+    filed as lead that month, their hours, estimate and overruns, and how
+    many reported tasks they helped on. Shared by the Hours page and its
+    CSV export.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
-    active_country = get_active_country(request)
-
-    period_start_date = _resolve_report_month(request)
     period_start, period_end = _month_window(period_start_date)
-
     reports = WorkReport.objects.filter(
         submitted_at__gte=period_start, submitted_at__lt=period_end, task__site__customer__country=active_country,
     ).select_related('task__site__customer').prefetch_related(
@@ -2750,16 +2741,30 @@ def technician_hours(request):
     rows = []
     for technician in Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'):
         own_reports = leads_reports[technician.pk]
-        hours = sum(report.labour_hours for report in own_reports)
-        estimated = sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours)
         rows.append({
             'technician': technician,
             'reports': own_reports,
-            'hours': hours,
-            'estimated': estimated,
+            'hours': sum(report.labour_hours for report in own_reports),
+            'estimated': sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours),
             'helped_on': helped_on[technician.pk],
             'overrun_count': sum(1 for report in own_reports if report.is_overrun),
         })
+    return rows
+
+
+@login_required
+def technician_hours(request):
+    """Labour hours from filed work reports, per technician, for one month
+    in the active country — how a supervisor/manager/admin follows each
+    technician's actual workload. A report's hours count toward the lead
+    who filed it (the report covers the whole job), so the team total
+    never double-counts; helpers get a "helped on" count instead. Every
+    active technician gets a row, so someone with nothing filed shows up
+    as zero rather than going unnoticed.
+    """
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    period_start_date = _resolve_report_month(request)
+    rows = _technician_hours_rows(get_active_country(request), period_start_date)
 
     context = {
         'rows': rows,
@@ -2771,6 +2776,47 @@ def technician_hours(request):
         'this_month': timezone.localtime().date().replace(day=1),
     }
     return render(request, 'tasks/technician_hours.html', context)
+
+
+@login_required
+def technician_hours_export(request):
+    """The Hours page as CSV — a per-technician summary, then every report
+    behind it, for payroll/month-end. Same permission and country scope.
+    """
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    active_country = get_active_country(request)
+    period_start_date = _resolve_report_month(request)
+    rows = _technician_hours_rows(active_country, period_start_date)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = (
+        f'attachment; filename="technician-hours-{active_country.iso_code}-{period_start_date:%Y-%m}.csv"'
+    )
+    writer = csv.writer(response)
+
+    writer.writerow([f'Technician hours — {active_country.name} — {period_start_date:%B %Y}'])
+    writer.writerow(['Technician', 'Reports filed', 'Labour hours', 'Estimated hours', 'Well over estimate', 'Helped on'])
+    for row in rows:
+        writer.writerow([
+            row['technician'].full_name, len(row['reports']), row['hours'], row['estimated'] or '',
+            row['overrun_count'], row['helped_on'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['Reports'])
+    writer.writerow([
+        'Technician', 'Task number', 'Customer', 'Submitted at', 'Labour hours', 'Estimated hours',
+        'Well over estimate',
+    ])
+    for row in rows:
+        for report in row['reports']:
+            writer.writerow([
+                row['technician'].full_name, report.task.task_number, report.task.site.customer.name,
+                timezone.localtime(report.submitted_at).strftime('%Y-%m-%d %H:%M'), report.labour_hours,
+                report.task.estimated_hours or '', 'yes' if report.is_overrun else '',
+            ])
+
+    return response
 
 
 @login_required
