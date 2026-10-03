@@ -1,0 +1,9 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Hi {{ contact }},</p>
+<p style="margin:0 0 16px;">Thanks for contacting us. We've received your request and created ticket {{ ticket_number }}.</p>
+<p style="margin:0 0 16px;">Our team responds within 24 hours, Sunday–Friday. You'll get an email as soon as there's an update.</p>
+<p style="margin:0 0 16px;">Please make sure you've attached photos or videos for each issue you're facing. This helps our team understand the problem and resolve your case faster.</p>
+{% include "tasks/email/_button.html" with url=link label="View ticket" %}
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}

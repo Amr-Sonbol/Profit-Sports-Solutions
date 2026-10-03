@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
@@ -7,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
-    SKILL_LEVEL_CHOICES, Technician,
+    SKILL_LEVEL_CHOICES, RolePermission, Technician,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 
@@ -74,6 +75,7 @@ class TaskCreateForm(forms.ModelForm):
 
     def __init__(self, *args, country, ticket=None, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
+        self.is_admin = is_admin
         self.fields['site'].queryset = Site.objects.filter(
             customer__is_active=True, customer__country=country,
         ).select_related('customer')
@@ -81,7 +83,17 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
-        self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
+        if is_admin:
+            self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
+        else:
+            # Creating a site is admin-only (customers.views.customer_detail
+            # is the same rule) — without this, "+ Add new site" here would
+            # be a second, unrestricted door to the same thing.
+            for field_name in [
+                'new_site_customer', 'new_site_name', 'new_site_address',
+                'new_site_contact_name', 'new_site_contact_phone', 'new_site_access_notes',
+            ]:
+                del self.fields[field_name]
         # Any active supervisor or manager in the country, same pool as
         # AssignTicketForm's assigned_to — never a technician, and picking
         # one here is entirely optional (see Task.responsible_supervisor).
@@ -144,7 +156,7 @@ class TaskCreateForm(forms.ModelForm):
 
                 if matched_site:
                     self.fields['site'].initial = matched_site.pk
-                else:
+                elif is_admin:
                     self.fields['new_site_name'].initial = ticket.site_description
                     self.fields['new_site_address'].initial = ticket.site_address
                     self.fields['new_site_contact_name'].initial = ticket.contact_name
@@ -165,7 +177,10 @@ class TaskCreateForm(forms.ModelForm):
         if site and (new_site_name or new_site_customer):
             self.add_error(None, _('Choose an existing site or add a new one below, not both.'))
         elif not site and not (new_site_name and new_site_customer):
-            self.add_error('site', _('Choose a site, or add a new one below.'))
+            if self.is_admin:
+                self.add_error('site', _('Choose a site, or add a new one below.'))
+            else:
+                self.add_error('site', _("Choose a site — an admin can add a new one if it isn't listed."))
         elif not site and Site.objects.filter(customer=new_site_customer, name__iexact=new_site_name).exists():
             self.add_error('new_site_name', _('This customer already has a site with that name.'))
 
@@ -238,13 +253,14 @@ class TaskEditForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority',
-            'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
+            'task_type', 'brand', 'required_skill', 'min_level', 'description', 'reported_serial_numbers',
+            'priority', 'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
             'responsible_supervisor', 'pak_reference_number', 'shipping_company', 'shipping_tracking_number',
-            'quotation', 'factory_offer', 'invoice', 'delivery_note',
+            'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
         ]
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
+            'reported_serial_numbers': forms.Textarea(attrs={'rows': 3}),
             'promised_at': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
             'quotation': forms.ClearableFileInput(attrs={'accept': 'application/pdf,image/*'}),
@@ -290,6 +306,19 @@ class TaskEditForm(forms.ModelForm):
                 self.initial['scheduled_for'] = timezone.localtime(self.initial['scheduled_for']).strftime(
                     DATETIME_INPUT_FORMAT,
                 )
+            # schedule_mode/scheduled_date_only are declared fields, not
+            # Meta fields, so Django appends them after every Meta field —
+            # all the way past the shipment/document fields, nowhere near
+            # scheduled_for itself. Move them to sit right next to it.
+            self.order_fields([
+                'task_type', 'brand', 'required_skill', 'min_level', 'description',
+                'reported_serial_numbers', 'priority',
+                'source', 'is_warranty', 'billing_type', 'promised_at',
+                'schedule_mode', 'scheduled_for', 'scheduled_date_only',
+                'estimated_hours', 'responsible_supervisor',
+                'pak_reference_number', 'shipping_company', 'shipping_tracking_number',
+                'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
+            ])
         else:
             # A supervisor only ever sees the plain scheduled_for field
             # in the one case they can still freely edit it — no lock in
@@ -308,8 +337,12 @@ class TaskEditForm(forms.ModelForm):
                     )
             # Quotation/factory offer/invoice/delivery note are manager-tier
             # documents — a supervisor never sees or uploads them, same as
-            # task_detail's own Documents section.
-            for field_name in ['quotation', 'factory_offer', 'invoice', 'delivery_note']:
+            # task_detail's own Documents section. Whether the invoice
+            # itself is also shown to the supervisor is a manager-only
+            # toggle too — a supervisor can't grant themselves that.
+            for field_name in [
+                'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
+            ]:
                 del self.fields[field_name]
 
     def clean(self):
@@ -318,12 +351,20 @@ class TaskEditForm(forms.ModelForm):
             mode = cleaned.get('schedule_mode')
             date_only = cleaned.get('scheduled_date_only')
             full_datetime = cleaned.get('scheduled_for')
+            # Infer the mode from whichever field actually has a value if
+            # the radio itself wasn't touched — the two fields sit far
+            # apart in the form (scheduled_for near the top of the task's
+            # own fields, the radio down with the rest of scheduling), so
+            # requiring the radio as well as the field it implies was an
+            # easy-to-miss trap: fill in "Scheduled for" and save, and the
+            # only feedback was an error on a completely different field.
+            if not mode:
+                mode = self.ScheduleMode.FULL if full_datetime else self.ScheduleMode.DAY_ONLY if date_only else ''
+                cleaned['schedule_mode'] = mode
             if mode == self.ScheduleMode.DAY_ONLY and not date_only:
                 self.add_error('scheduled_date_only', _('Enter a date.'))
             elif mode == self.ScheduleMode.FULL and not full_datetime:
                 self.add_error('scheduled_for', _('Enter the exact date and time.'))
-            elif not mode and (date_only or full_datetime):
-                self.add_error('schedule_mode', _('Choose day-only or a full date and time.'))
         return cleaned
 
     def _clean_document(self, field_name):
@@ -416,12 +457,51 @@ class MarkUnavailableForm(forms.Form):
     )
 
 
+class CreateTechnicianLoginForm(forms.Form):
+    """Just an email — it becomes both the login username and the address
+    the temporary password is emailed to (views.send_technician_login_email),
+    same pattern as a customer's own portal login. The password itself is
+    system-generated; the technician sets their own real one the first
+    time they sign in (tasks:first_login).
+    """
+    email = forms.EmailField(label=_('Email'))
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        if get_user_model().objects.filter(username__iexact=email).exists():
+            raise forms.ValidationError(_('A login with that email already exists.'))
+        return email
+
+
 class DeactivateTechnicianForm(forms.Form):
     """Permanent, unlike MarkUnavailableForm above — resigned, terminated,
     etc. Free text rather than fixed choices: the reasons here vary too
     much to usefully bucket, and this is a one-off note, not reported on.
     """
     reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
+
+
+class TechnicianFirstLoginForm(forms.Form):
+    """Shown once, the first time a technician signs in on a temporary
+    password — just the password itself; everything else about their own
+    record (photo, language) is already editable any time from My profile,
+    not a one-time gate the way a customer's contact details are.
+    """
+    new_password1 = forms.CharField(widget=forms.PasswordInput, label=_('New password'))
+    new_password2 = forms.CharField(widget=forms.PasswordInput, label=_('Confirm new password'))
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_new_password2(self):
+        password1 = self.cleaned_data.get('new_password1')
+        password2 = self.cleaned_data.get('new_password2')
+        if password1 and password2 and password1 != password2:
+            raise forms.ValidationError(_("The two password fields didn't match."))
+        if password1:
+            password_validation.validate_password(password1, self.user)
+        return password2
 
 
 class SelfRateLevelForm(forms.Form):
@@ -588,9 +668,8 @@ class CountryCreateForm(forms.ModelForm):
 class TechnicianCreateForm(forms.ModelForm):
     """Country comes from the supervisor creating it, set in the view —
     never a field here, same scoping every other per-country screen uses.
-    No `user` field: a technician can exist with no linked login until
-    Microsoft SSO wires one up (see Technician.user's own help text) —
-    nothing here to fill in for that yet.
+    No `user` field: same as a customer, the login is a separate step
+    from the Edit screen afterward, not part of creation itself.
     """
 
     class Meta:
@@ -607,11 +686,16 @@ class TechnicianCreateForm(forms.ModelForm):
 class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
     """A supervisor or manager editing someone else's record, from the
     roster. Photo/name/phone/language/email are open to anyone with
-    manage_technicians; country/role/employment details are manager-only
-    HR decisions — same reasoning this already applied to country alone
+    manage_technicians; country/employment details are manager-only HR
+    decisions — same reasoning this already applied to country alone
     (the only other cross-country action, the active-country switcher,
-    is manager-only too), now extended to promotions/demotions and the
-    rest of the office-side fields.
+    is manager-only too), now extended to the rest of the office-side
+    fields. Role is narrower still — admin-only, not just manager — since
+    it's a privilege grant: whoever creates a login next inherits
+    whatever role is already sitting on the record, and technician_create
+    is admin-only for exactly this reason, so a plain manager promoting
+    someone to admin from here would just be the same escalation through
+    a different door.
 
     Email lives on the linked auth user, not Technician, same pattern as
     MyProfileForm — but unlike a technician editing their own profile,
@@ -632,7 +716,7 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
             'hired_on': forms.DateInput(attrs={'type': 'date'}),
         }
 
-    def __init__(self, *args, is_manager=True, **kwargs):
+    def __init__(self, *args, is_manager=True, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk and self.instance.user_id:
             self.fields['email'].initial = self.instance.user.email
@@ -641,8 +725,11 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
         if not is_manager:
             for field_name in ['country', 'role', 'employment_type', 'has_transport', 'can_carry_large', 'hired_on']:
                 del self.fields[field_name]
-        elif 'country' in self.fields:
-            self.fields['country'].queryset = Country.objects.filter(is_active=True)
+        else:
+            if 'country' in self.fields:
+                self.fields['country'].queryset = Country.objects.filter(is_active=True)
+            if not is_admin:
+                del self.fields['role']
 
     def save(self, commit=True):
         technician = super().save(commit=commit)
@@ -909,21 +996,14 @@ class CloseTicketForm(forms.Form):
 
 class TicketReplyForm(forms.Form):
     """One message — same shape for staff replying and a customer
-    replying back, on either the staff review screen or the public
-    token page. Which side sent it is recorded by the view, not here.
-
-    is_quotation is meaningless for a customer's own reply — the view
-    never reads it off that path, only off the staff one (ticket_review).
+    replying back, on either the staff review screen or the customer's
+    own portal. Which side sent it is recorded by the view, not here.
     """
     message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
     attachment = forms.FileField(
         required=False, label=_('Photo, video, or PDF'),
         help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
-    )
-    is_quotation = forms.BooleanField(
-        required=False, label=_('This is the quotation'),
-        help_text=_('sends the customer the dedicated quotation email instead of a plain reply notice, with this attachment included'),
     )
 
     def clean_attachment(self):
@@ -932,18 +1012,30 @@ class TicketReplyForm(forms.Form):
             raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
         return attachment
 
-    def clean(self):
-        cleaned_data = super().clean()
-        if cleaned_data.get('is_quotation') and not cleaned_data.get('attachment'):
-            raise forms.ValidationError(_('Attach the quotation file to send it as the quotation.'))
-        return cleaned_data
-
 
 class TicketInternalNoteForm(forms.Form):
     """A manager-tier-only progress note — never seen by the customer or
     by a supervisor/technician, unlike TicketReplyForm.
     """
     message = forms.CharField(label=_('Note'), widget=forms.Textarea(attrs={'rows': 3}))
+    attachment = forms.FileField(
+        required=False, label=_('Attachment'),
+        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    def clean_attachment(self):
+        attachment = self.cleaned_data['attachment']
+        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+        return attachment
+
+
+class TaskMessageForm(forms.Form):
+    """A note posted to a task's own thread — text only, no attachment;
+    photos already have their own place (the fault-evidence upload).
+    """
+    message = forms.CharField(label=_('Message'), widget=forms.Textarea(attrs={'rows': 2}))
 
 
 class TicketLogisticsForm(forms.ModelForm):
@@ -980,15 +1072,20 @@ class TicketEditForm(forms.ModelForm):
 
 
 class AssignTicketForm(forms.Form):
-    """Who's handling this ticket — any active supervisor or manager in
-    its own country, not necessarily the person who'll ultimately convert
-    or dismiss it. Never a technician: tickets are supervisor-side triage,
-    not something that shows up on a technician's own work screens.
+    """Who's handling this ticket — any active technician, in its own
+    country, whose role currently has manage_tickets — not necessarily
+    the person who'll ultimately convert or dismiss it. Driven by the
+    same RolePermission table ticket_review itself checks, not a
+    hardcoded role list, so it always matches whichever role (or roles)
+    Roles & Permissions currently grants ticket access to.
     """
     assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Assign to'))
 
     def __init__(self, *args, country=None, **kwargs):
         super().__init__(*args, **kwargs)
+        ticket_manager_roles = RolePermission.objects.filter(
+            permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
+        ).values_list('role', flat=True)
         self.fields['assigned_to'].queryset = Technician.objects.filter(
-            is_active=True, country=country,
-        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+            is_active=True, country=country, role__in=list(ticket_manager_roles),
+        ).order_by('full_name')

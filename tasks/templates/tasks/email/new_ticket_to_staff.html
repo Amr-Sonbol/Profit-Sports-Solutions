@@ -1,0 +1,11 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">A new ticket has come in.</p>
+<p style="margin:0 0 16px;">
+    <strong>Ticket:</strong> {{ ticket_number }}<br>
+    <strong>Company:</strong> {{ company }}<br>
+    <strong>Site:</strong> {{ site }}
+</p>
+<p style="margin:0 0 16px;white-space:pre-line;">{{ description }}</p>
+{% include "tasks/email/_button.html" with url=link label="Review ticket" %}
+{% endblock %}

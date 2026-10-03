@@ -16,8 +16,66 @@
         {% endif %}
         <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
         {% if active_country %}
-        <span class="badge badge--muted">{{ active_country.name }}</span>
+        <span class="badge badge--muted">{{ active_country.display_name }}</span>
         {% endif %}
+        {% if user.technician %}
+            <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
+            <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                {% if unseen_notification_count %}
+                <span class="notif-bell__badge">{{ unseen_notification_count }}</span>
+                {% endif %}
+            </label>
+            <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
+            <div class="notif-dropdown">
+                <h2>{% translate "Notifications" %}</h2>
+                {% if unseen_notifications %}
+                <ul class="plain-list">
+                    {% for notification in unseen_notifications %}
+                    <li>
+                        {% if notification.kind == 'new_task' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}">
+                            {% translate "New task" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'task_message' %}
+                        <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
+                            {% translate "New message" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% else %}
+                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}">
+                            {% if notification.kind == 'new_ticket' %}{% translate "New ticket" %}{% else %}{% translate "New reply" %}{% endif %}
+                            — {{ notification.ticket.company_name }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
+                        {% endif %}
+                        <span class="muted">{{ notification.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-state">{% translate "Nothing new." %}</p>
+                {% endif %}
+            </div>
+        {% endif %}
+        <div class="lang-switch__group lang-switch__group--header">
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="en" class="lang-switch__option {% if LANGUAGE_CODE == 'en' %}lang-switch__option--active{% endif %}">EN</button>
+            </form>
+            <form method="post" action="{% url 'set_language' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit" name="language" value="ar" class="lang-switch__option {% if LANGUAGE_CODE == 'ar' %}lang-switch__option--active{% endif %}">AR</button>
+            </form>
+        </div>
         {% if user.is_authenticated %}
             <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
@@ -34,7 +92,7 @@
                     <label for="country-switch">{% translate "Viewing" %}</label>
                     <select id="country-switch" name="country">
                         {% for country in switchable_countries %}
-                        <option value="{{ country.pk }}" {% if active_country.pk == country.pk %}selected{% endif %}>{{ country.name }}</option>
+                        <option value="{{ country.pk }}" {% if active_country.pk == country.pk %}selected{% endif %}>{{ country.display_name }}</option>
                         {% endfor %}
                     </select>
                     <button type="submit" class="button button--secondary">{% translate "Switch" %}</button>
@@ -57,14 +115,17 @@
                 {% if 'manage_customers' in role_permissions %}
                     <a href="{% url 'customers:customer_list' %}">{% translate "Customers" %}</a>
                 {% endif %}
+                {% if 'view_machines' in role_permissions %}
+                    <a href="{% url 'tasks:machine_list' %}">{% translate "Machines" %}</a>
+                {% endif %}
                 {% if 'manage_tickets' in role_permissions %}
                     <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>
+                    <a href="{% url 'tasks:all_tickets' %}">{% translate "All tickets" %}</a>
                 {% endif %}
                 {% if user.technician.is_manager_tier %}
                     <a href="{% url 'tasks:all_tasks' %}">{% translate "All tasks" %}</a>
                     <a href="{% url 'tasks:all_week' %}">{% translate "All week" %}</a>
                     <a href="{% url 'tasks:all_technicians' %}">{% translate "All technicians" %}</a>
-                    <a href="{% url 'tasks:all_tickets' %}">{% translate "All tickets" %}</a>
                     <a href="{% url 'tasks:monthly_report' %}">{% translate "Monthly report" %}</a>
                     <a href="{% url 'tasks:skill_list' %}">{% translate "Skills" %}</a>
                     <a href="{% url 'tasks:brand_list' %}">{% translate "Brands" %}</a>

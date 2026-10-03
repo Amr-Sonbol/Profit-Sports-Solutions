@@ -45,7 +45,19 @@ class Customer(models.Model):
         related_name='customer', verbose_name=_('login account'),
         help_text=_('one account covers every site under this customer — created by staff, never self-signup'),
     )
+    must_change_password = models.BooleanField(
+        _('must change password'), default=False,
+        help_text=_(
+            'set when staff creates the login with a temporary system-generated password — the '
+            'customer is walked through setting their own password and confirming their contact '
+            'details once, the first time they sign in, before reaching the rest of the portal',
+        ),
+    )
     is_active = models.BooleanField(_('active'), default=True)
+    deactivation_reason = models.CharField(
+        _('deactivation reason'), max_length=255, blank=True,
+        help_text=_('why this customer was deactivated — contract ended, closed down, etc.'),
+    )
 
     class Meta:
         verbose_name = _('customer')
@@ -54,6 +66,20 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
+
+    def set_active(self, is_active, reason=''):
+        """The one place is_active ever changes — keeps the linked login
+        (if any) in lockstep, so a deactivated customer can't just log
+        back in. Same pattern as Technician.set_active. Never deletes the
+        record itself — a deactivated customer keeps its history (sites,
+        tasks, tickets), it just drops off the active roster.
+        """
+        self.is_active = is_active
+        self.deactivation_reason = reason if not is_active else ''
+        self.save(update_fields=['is_active', 'deactivation_reason'])
+        if self.user_id is not None and self.user.is_active != is_active:
+            self.user.is_active = is_active
+            self.user.save(update_fields=['is_active'])
 
 
 class Site(models.Model):

@@ -211,8 +211,20 @@ class TicketListTests(ApiTestCase):
         response = self.client.get('/api/tickets/', **self.auth(token))
         self.assertEqual(response.status_code, 403)
 
-    def test_supervisor_can_list_tickets(self):
+    def test_supervisor_is_forbidden(self):
+        # manage_tickets moved to the technical support manager role —
+        # a plain supervisor has no ticket access at all now.
         token = self.token_for('supervisor1')
+        response = self.client.get('/api/tickets/', **self.auth(token))
+        self.assertEqual(response.status_code, 403)
+
+    def test_support_manager_can_list_tickets(self):
+        support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=support_user, country=self.country, full_name='Sara Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        token = self.token_for('support1')
         response = self.client.get('/api/tickets/', **self.auth(token))
         self.assertEqual(response.status_code, 200)
 
@@ -320,7 +332,12 @@ class ApiSecurityTests(ApiTestCase):
             contact_name='Sara', contact_phone='0501234567', description='Broken treadmill',
             submitted_at=timezone.now(), status='new',
         )
-        token = self.token_for('supervisor1')
+        support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=support_user, country=self.country, full_name='Sara Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        token = self.token_for('support1')
         response = self.client.get('/api/tickets/', **self.auth(token))
         self.assertEqual(response.json(), [])
 

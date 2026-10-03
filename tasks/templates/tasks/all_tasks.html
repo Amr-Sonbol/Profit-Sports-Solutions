@@ -49,7 +49,7 @@
         <select id="filter-country" name="country">
             <option value="">{% translate "All countries" %}</option>
             {% for country in countries %}
-            <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.name }}</option>
+            <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.display_name }}</option>
             {% endfor %}
         </select>
     </div>
@@ -75,7 +75,7 @@
             {% for task in page_obj %}
             <tr>
                 <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
-                <td>{{ task.site.customer.country.name }}</td>
+                <td>{{ task.site.customer.country.display_name }}</td>
                 <td>
                     {{ task.site.customer.name }}
                     <div class="muted">{{ task.site.name }}</div>

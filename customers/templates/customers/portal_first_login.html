@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Welcome" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Welcome — let's finish setting up your account" %}</h1>
+</div>
+
+<div class="section">
+    <p class="field__help">
+        {% translate "Just this once — set your own password and confirm how we should reach you. After this, signing in goes straight to your account." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Continue" %}</button>
+    </form>
+</div>
+{% endblock %}

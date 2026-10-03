@@ -52,7 +52,7 @@ def _me_payload(user):
         'full_name': technician.full_name,
         'role': technician.role,
         'role_display': technician.get_role_display(),
-        'country': technician.country.name,
+        'country': technician.country.display_name,
         'language': technician.language,
     }
 

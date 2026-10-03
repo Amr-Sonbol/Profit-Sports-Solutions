@@ -1,62 +1,85 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Ticket status" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{{ ticket.ticket_number }} — {% translate "Ticket status" %}{% endblock %}
 
 {% block content %}
-<div class="feedback-card">
-    <h1>{% translate "Ticket status" %}</h1>
-    <p class="muted"><strong>{{ ticket.ticket_number }}</strong> — {{ ticket.company_name }} — {{ ticket.site_description }}</p>
-    <p class="muted">{% blocktranslate with date=ticket.submitted_at|date:"SHORT_DATE_FORMAT" %}Submitted {{ date }}{% endblocktranslate %}</p>
+<div class="page__header">
+    <div>
+        <a href="{% url 'customers:portal_home' %}" class="back-link">{% translate "Back to your tickets" %}</a>
+        <h1>{{ ticket.ticket_number }} — {{ ticket.company_name }}</h1>
+    </div>
+    <div class="badge-row">
+        {% if ticket.status == 'new' %}
+        <span class="badge badge--status-new">{% translate "Received" %}</span>
+        {% elif ticket.status == 'converted' %}
+        <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+        {% elif ticket.status == 'closed' %}
+        <span class="badge badge--status-completed">{% translate "Resolved" %}</span>
+        {% elif ticket.status == 'dismissed' %}
+        <span class="badge badge--muted">{% translate "Closed" %}</span>
+        {% endif %}
+    </div>
+</div>
 
-    {% if ticket.status == 'new' %}
-    <span class="badge badge--status-new">{% translate "Received" %}</span>
-    <p>{% translate "We're reviewing your ticket and will be in touch shortly to arrange a visit." %}</p>
-    {% elif ticket.status == 'converted' %}
-    <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
-    {% if ticket.task.scheduled_for %}
-    <p>
-        {% blocktranslate with date=ticket.task.scheduled_for|date:"SHORT_DATETIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}
-    </p>
-    {% else %}
-    <p>{% translate "Your ticket has become a service task. We'll be in touch to schedule a visit." %}</p>
-    {% endif %}
-    {% elif ticket.status == 'closed' %}
-    <span class="badge badge--status-completed">{% translate "Resolved" %}</span>
-    <p>{% translate "This ticket has been resolved. Contact us if you still need help." %}</p>
-    {% elif ticket.status == 'dismissed' %}
-    <span class="badge badge--muted">{% translate "Closed" %}</span>
-    <p>{% translate "This ticket has been reviewed and closed. Contact us if you still need help." %}</p>
-    {% endif %}
+<div class="section">
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Site / location" %}</dt>
+            <dd>{{ ticket.site_description }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Submitted" %}</dt>
+            <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
+        </div>
+    </dl>
+    <div class="description">
+        {% if ticket.status == 'new' %}
+        <p>{% translate "We're happy to help! Thank you for reaching out — our team is reviewing your ticket now." %}</p>
+        {% elif ticket.status == 'converted' %}
+            {% if ticket.task.scheduled_for %}
+            <p>{% blocktranslate with date=ticket.task.scheduled_for|date:"SHORT_DATETIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}</p>
+            {% else %}
+            <p>{% translate "Your ticket has become a service task. We'll be in touch to schedule a visit." %}</p>
+            {% endif %}
+        {% elif ticket.status == 'closed' %}
+        <p>{% translate "This ticket has been resolved. Contact us if you still need help." %}</p>
+        {% elif ticket.status == 'dismissed' %}
+        <p>{% translate "This ticket has been reviewed and closed. Contact us if you still need help." %}</p>
+        {% endif %}
+    </div>
+</div>
 
+<div class="section">
     <h2>{% translate "Messages" %}</h2>
     {% if replies %}
-    <ul class="plain-list">
+    <div class="chat-thread">
         {% for reply in replies %}
-        <li>
-            <span class="badge {% if reply.sender == 'staff' %}badge--muted{% else %}badge--status-new{% endif %}">
-                {% if reply.sender == 'staff' %}{% translate "Profit Sports Solutions" %}{% else %}{% translate "You" %}{% endif %}
-            </span>
-            {% if reply.is_quotation %}
-            <span class="badge badge--status-completed">{% translate "Quotation" %}</span>
-            {% endif %}
-            <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
-            <p>{{ reply.message }}</p>
-            {% if reply.attachment %}
-            <p>
-                <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
-            </p>
-            {% endif %}
-        </li>
+        <div class="chat-message {% if reply.sender == 'customer' %}chat-message--mine{% endif %}">
+            <div class="chat-meta">
+                <span class="chat-name">
+                    {% if reply.sender == 'staff' %}{% translate "Profit Sports Solutions" %}{% else %}{% translate "You" %}{% endif %}
+                </span>
+                <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            </div>
+            <div class="chat-bubble">
+                <p>{{ reply.message }}</p>
+                {% if reply.attachment %}
+                <p class="chat-attachment">
+                    <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                    | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
         {% endfor %}
-    </ul>
+    </div>
     {% else %}
     <p class="empty-state">{% translate "No messages yet." %}</p>
     {% endif %}
 
     {% if can_reply %}
-    <form method="post" enctype="multipart/form-data" novalidate>
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
         {% csrf_token %}
         {% if reply_form.non_field_errors %}
             <p class="flash flash--error">{{ reply_form.non_field_errors }}</p>
@@ -71,17 +94,12 @@
             {{ reply_form.attachment }}
             {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        <button type="submit" class="button">{% translate "Send" %}</button>
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Send" %}</button>
+        </div>
     </form>
     {% else %}
     <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
-    {% endif %}
-
-    {% if not request.user.is_authenticated %}
-    {% url 'customers:portal_login' as portal_login_url %}
-    <p class="muted">
-        {% blocktranslate with login_url=portal_login_url %}Already have an account? <a href="{{ login_url }}">Log in</a> to see all your tickets in one place.{% endblocktranslate %}
-    </p>
     {% endif %}
 </div>
 {% endblock %}

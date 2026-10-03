@@ -75,7 +75,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
 
 
 class CustomerTicketSerializer(serializers.ModelSerializer):
-    country_name = serializers.CharField(source='country.name')
+    country_name = serializers.CharField(source='country.display_name')
     status_display = serializers.CharField(source='get_status_display')
 
     class Meta:

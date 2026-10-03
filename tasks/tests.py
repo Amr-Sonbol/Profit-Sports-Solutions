@@ -2,6 +2,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,7 +19,7 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
-    TicketInternalNote, TicketReply,
+    TaskMessage, TaskMessageRecipient, TaskNotification, TicketInternalNote, TicketNotification, TicketReply,
 )
 
 User = get_user_model()
@@ -33,7 +34,7 @@ class TaskTestCase(TestCase):
 
     def setUp(self):
         self.country = Country.objects.create(
-            name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
+            name='UAE', name_ar='الإمارات', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
         )
         self.brand = Brand.objects.create(name='Technogym')
         self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
@@ -158,6 +159,28 @@ class TaskDetailTests(TaskTestCase):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(f'/tasks/{self.task.pk}/')
         self.assertContains(response, 'Quotation')
+
+    def test_supervisor_sees_only_the_invoice_when_made_visible(self):
+        # invoice_visible_to_supervisor opens up the invoice specifically
+        # — not quotation/factory offer/delivery note — for a supervisor
+        # collecting cash on site for this one task.
+        self.task.quotation = SimpleUploadedFile('quote.pdf', b'%PDF-1.4', content_type='application/pdf')
+        self.task.invoice = SimpleUploadedFile('invoice.pdf', b'%PDF-1.4', content_type='application/pdf')
+        self.task.invoice_visible_to_supervisor = True
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertContains(response, 'Invoice')
+        self.assertNotContains(response, 'Quotation')
+
+    def test_supervisor_does_not_see_invoice_by_default(self):
+        self.task.invoice = SimpleUploadedFile('invoice.pdf', b'%PDF-1.4', content_type='application/pdf')
+        self.task.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertNotContains(response, 'Invoice')
 
     def test_notify_requires_a_scheduled_time(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -430,8 +453,22 @@ class TaskEditTests(TaskTestCase):
     def test_supervisor_form_has_no_document_fields(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
-        for field_name in ['quotation', 'factory_offer', 'invoice', 'delivery_note']:
+        for field_name in [
+            'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
+        ]:
             self.assertNotIn(field_name, response.context['form'].fields)
+
+    def test_manager_makes_the_invoice_visible_to_the_supervisor(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Mona Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, self._payload(invoice_visible_to_supervisor='on'))
+        self.assertEqual(response.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertTrue(self.task.invoice_visible_to_supervisor)
 
     def test_other_country_task_gives_404(self):
         other_country = Country.objects.create(
@@ -721,6 +758,18 @@ class TaskScheduleLockingTests(TaskTestCase):
         self.assertEqual(self.task.scheduled_date.isoformat(), '2026-10-01')
         self.assertTrue(self.task.schedule_time_locked)
 
+    def test_manager_can_schedule_without_touching_the_mode_radio(self):
+        # schedule_mode and scheduled_for are two separate fields far
+        # apart in the form; a manager who just fills in "Scheduled for"
+        # without also clicking a radio button must still be able to save.
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.edit_url, self._edit_payload(scheduled_for='2026-10-01T09:00'))
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)
+        self.assertTrue(self.task.schedule_time_locked)
+
     def test_supervisor_can_still_schedule_their_own_task_freely(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.edit_url, self._edit_payload(scheduled_for='2026-10-01T09:00'))
@@ -1000,6 +1049,310 @@ class TaskApprovalTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
 
+    def test_admin_can_reopen_a_closed_task(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.task.status = Task.Status.CLOSED
+        self.task.save()
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.REOPENED).exists())
+
+    def test_manager_cannot_reopen(self):
+        self.task.status = Task.Status.CLOSED
+        self.task.save()
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'})
+        self.assertEqual(response.status_code, 403)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+
+    def test_cannot_reopen_a_task_that_is_not_closed(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'}, follow=True)
+
+        self.assertContains(response, 'not closed')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    def test_close_directly_bypasses_the_whole_chain_regardless_of_status(self):
+        # admin/manager can always close directly, report or no report,
+        # whatever status the task is currently sitting at.
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'close_directly', 'note': 'Customer cancelled.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+
+
+class TaskSupervisorApprovalTests(TaskTestCase):
+    """A technician's own report needs their supervisor's sign-off before
+    a manager ever sees it (pending_supervisor_review); a supervisor
+    filing it themselves skips straight to completed, exactly as before
+    this step existed.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=self.supervisor_user.technician,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+        self.report_url = f'/tasks/my/{self.task.pk}/report/'
+
+    def _report_payload(self):
+        return {
+            'findings': 'Belt worn out', 'action_taken': 'Replaced belt', 'resolved': 'True',
+            'labour_hours': '1.50', 'customer_name': 'Ali Manager',
+            'existing-TOTAL_FORMS': '0', 'existing-INITIAL_FORMS': '0',
+            'existing-MIN_NUM_FORMS': '0', 'existing-MAX_NUM_FORMS': '1000',
+            'new-TOTAL_FORMS': '0', 'new-INITIAL_FORMS': '0',
+            'new-MIN_NUM_FORMS': '0', 'new-MAX_NUM_FORMS': '1000',
+            'parts-TOTAL_FORMS': '0', 'parts-INITIAL_FORMS': '0',
+            'parts-MIN_NUM_FORMS': '0', 'parts-MAX_NUM_FORMS': '1000',
+        }
+
+    def _assign_lead(self, technician):
+        TaskAssignment.objects.create(
+            task=self.task, technician=technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+    def test_technicians_report_goes_to_pending_supervisor_review(self):
+        self._assign_lead(self.technician)
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(self.report_url, self._report_payload())
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.PENDING_SUPERVISOR_REVIEW)
+
+    def test_supervisors_own_report_skips_straight_to_completed(self):
+        self._assign_lead(self.supervisor_user.technician)
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.report_url, self._report_payload())
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    def test_responsible_supervisor_approves_a_technicians_report(self):
+        self._assign_lead(self.technician)
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save(update_fields=['status'])
+        WorkReport.objects.create(
+            task=self.task, findings='Belt worn out', resolved=True,
+            labour_hours='1.50', customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report_supervisor'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        event = self.task.events.get(event_type=TaskEvent.EventType.SUPERVISOR_APPROVED)
+        self.assertEqual(event.actor, self.supervisor_user)
+
+    def test_a_different_supervisor_cannot_approve(self):
+        other_user = User.objects.create_user('other_sup', password='pass12345')
+        Technician.objects.create(
+            user=other_user, country=self.country, full_name='Nadia Other',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save(update_fields=['status'])
+
+        self.client.login(username='other_sup', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report_supervisor'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_manager_can_also_approve_as_supervisor(self):
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save(update_fields=['status'])
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report_supervisor'})
+        self.assertEqual(response.status_code, 302)
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    def test_manager_cannot_approve_report_while_pending_supervisor_review(self):
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save(update_fields=['status'])
+
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'approve_report'}, follow=True)
+
+        self.assertContains(response, 'no report awaiting approval')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.PENDING_SUPERVISOR_REVIEW)
+
+
+class TaskMessageTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.warehouse_user = User.objects.create_user('warehouse1', password='pass12345')
+        Technician.objects.create(
+            user=self.warehouse_user, country=self.country, full_name='Wael Warehouse',
+            language='en', role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff',
+        )
+        self.helper_user = User.objects.create_user('helper1', password='pass12345')
+        self.helper = Technician.objects.create(
+            user=self.helper_user, country=self.country, full_name='Hani Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.uninvolved_user = User.objects.create_user('uninvolved_tech', password='pass12345')
+        Technician.objects.create(
+            user=self.uninvolved_user, country=self.country, full_name='Nora Nobody',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=self.supervisor_user.technician, pak_reference_number='PAK-42',
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.helper, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def test_warehouse_manager_gets_403_on_customers(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.get('/customers/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_warehouse_manager_gets_403_on_tickets(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_warehouse_manager_can_search_tasks_by_pak(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'pak_reference': 'PAK-42'})
+        self.assertEqual(response.status_code, 200)
+        tasks = [task.task_number for task in response.context['page_obj']]
+        self.assertEqual(tasks, [self.task.task_number])
+
+    def test_warehouse_manager_sees_the_tracking_number(self):
+        self.task.shipping_tracking_number = 'TRACK-99'
+        self.task.save()
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'TRACK-99')
+
+    def test_warehouse_manager_posts_a_message_and_notifies_the_team(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'add_message', 'message': 'Part arrived today.'})
+        self.assertEqual(response.status_code, 302)
+
+        task_message = TaskMessage.objects.get(task=self.task)
+        self.assertEqual(task_message.message, 'Part arrived today.')
+        self.assertEqual(task_message.sent_by, self.warehouse_user)
+
+        notified = set(
+            TaskMessageRecipient.objects.filter(message=task_message).values_list('technician__full_name', flat=True),
+        )
+        # Lead + helper + responsible supervisor + creator (also the
+        # supervisor here) + every manager-tier person in the country —
+        # never the warehouse manager who just sent it, and never the
+        # uninvolved technician.
+        self.assertEqual(notified, {'Tarek Tech', 'Hani Helper', 'Sara Super', 'Maya Manager'})
+
+    def test_sender_is_not_their_own_recipient(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, {'action': 'add_message', 'message': 'Heads up.'})
+        task_message = TaskMessage.objects.get(task=self.task)
+        self.assertFalse(
+            TaskMessageRecipient.objects.filter(message=task_message, technician=self.supervisor_user.technician).exists(),
+        )
+
+    def test_uninvolved_technician_gets_no_notification(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post(self.url, {'action': 'add_message', 'message': 'Part arrived today.'})
+        task_message = TaskMessage.objects.get(task=self.task)
+        uninvolved_technician = Technician.objects.get(full_name='Nora Nobody')
+        self.assertFalse(
+            TaskMessageRecipient.objects.filter(message=task_message, technician=uninvolved_technician).exists(),
+        )
+
+    def test_technician_sees_the_message_on_my_task_detail(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post(self.url, {'action': 'add_message', 'message': 'Part arrived today.'})
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(f'/tasks/my/{self.task.pk}/')
+        self.assertContains(response, 'Part arrived today.')
+
+    def test_bell_shows_the_unseen_message_then_clears_on_open(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post(self.url, {'action': 'add_message', 'message': 'Part arrived today.'})
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.context['unseen_notification_count'], 1)
+
+        self.client.get(f'/tasks/my/{self.task.pk}/')
+        response = self.client.get('/tasks/my-week/')
+        self.assertNotIn('unseen_notification_count', response.context)
+
+    def test_technician_can_reply_and_notifies_the_warehouse_manager(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(
+            f'/tasks/my/{self.task.pk}/', {'action': 'add_message', 'message': 'Got it, thanks.'},
+        )
+        self.assertEqual(response.status_code, 302)
+        task_message = TaskMessage.objects.get(task=self.task)
+        self.assertEqual(task_message.sent_by, self.tech_user)
+        # The warehouse manager isn't on the job, isn't the responsible
+        # supervisor, and isn't manager-tier — a reply from the lead
+        # doesn't re-notify them, same as any other non-participant.
+        self.assertFalse(
+            TaskMessageRecipient.objects.filter(
+                message=task_message, technician__user=self.warehouse_user,
+            ).exists(),
+        )
+
 
 class TaskListTests(TaskTestCase):
     def _make_task(self, number, **overrides):
@@ -1162,6 +1515,14 @@ class TaskListTests(TaskTestCase):
 
 
 class TaskCreateTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/new/')
@@ -1179,7 +1540,42 @@ class TaskCreateTests(TaskTestCase):
 
         form = response.context['form']
         self.assertNotIn(other_site, form.fields['site'].queryset)
-        self.assertNotIn(other_customer, form.fields['new_site_customer'].queryset)
+        # Adding a new site is admin-only (see below) — a supervisor's
+        # form doesn't carry that field at all.
+        self.assertNotIn('new_site_customer', form.fields)
+
+    def test_supervisor_has_no_new_site_fields(self):
+        # Creating a site is admin-only, same rule as
+        # customers.views.customer_detail's "Add a site" form — a
+        # supervisor gets the plain site dropdown only.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/new/')
+        for field_name in [
+            'new_site_customer', 'new_site_name', 'new_site_address',
+            'new_site_contact_name', 'new_site_contact_phone', 'new_site_access_notes',
+        ]:
+            self.assertNotIn(field_name, response.context['form'].fields)
+
+    def test_supervisor_cannot_create_a_new_site_this_way(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', self._base_new_task_payload(
+            new_site_customer=self.customer.pk, new_site_name='Downtown Branch',
+            new_site_address='Downtown Dubai',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Task.objects.count(), 0)
+        self.assertFalse(Site.objects.filter(name='Downtown Branch').exists())
+        self.assertTrue(response.context['form'].errors.get('site'))
+
+    def test_admin_dropdown_excludes_other_country_customers(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/new/')
+        self.assertNotIn(other_customer, response.context['form'].fields['new_site_customer'].queryset)
 
     def test_responsible_supervisor_dropdown_excludes_technicians_and_other_countries(self):
         other_country = Country.objects.create(
@@ -1216,6 +1612,32 @@ class TaskCreateTests(TaskTestCase):
 
         task = Task.objects.get()
         self.assertEqual(task.responsible_supervisor, supervisor)
+
+    def test_creating_a_task_notifies_and_emails_managers_and_admins(self):
+        manager_user = User.objects.create_user('manager1', email='dana@example.com', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post('/tasks/new/', {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL,
+            'source': Task.Source.PHONE,
+            'billing_type': Task.BillingType.CHARGEABLE,
+            'reported_at': '2026-09-06T10:00',
+            'is_warranty': '',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        task = Task.objects.get()
+        notification = task.notifications.get()
+        self.assertIsNone(notification.seen_at)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(task.task_number, mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, [manager_user.email])
 
     def test_team_schedule_shows_who_is_already_booked(self):
         busy_task = Task.objects.create(
@@ -1370,7 +1792,7 @@ class TaskCreateTests(TaskTestCase):
         return payload
 
     def test_new_site_is_created_under_the_chosen_customer(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/new/', self._base_new_task_payload(
             new_site_customer=self.customer.pk, new_site_name='Downtown Branch',
             new_site_address='Downtown Dubai',
@@ -1383,7 +1805,7 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(task.site.address, 'Downtown Dubai')
 
     def test_duplicate_new_site_name_for_same_customer_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/new/', self._base_new_task_payload(
             new_site_customer=self.customer.pk, new_site_name=self.site.name,
         ))
@@ -1392,7 +1814,7 @@ class TaskCreateTests(TaskTestCase):
         self.assertTrue(response.context['form'].errors.get('new_site_name'))
 
     def test_site_and_new_site_together_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/new/', self._base_new_task_payload(
             site=self.site.pk, new_site_customer=self.customer.pk, new_site_name='Downtown Branch',
         ))
@@ -1442,7 +1864,7 @@ class TaskCreateTests(TaskTestCase):
     def test_oversized_new_site_name_is_rejected_cleanly(self):
         # Site.name is max_length=150 — this must fail as a normal form
         # error, not crash with a database "value too long" error.
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post('/tasks/new/', self._base_new_task_payload(
             new_site_customer=self.customer.pk, new_site_name='x' * 151,
         ))
@@ -1525,6 +1947,11 @@ class TicketFormTests(TaskTestCase):
 class TicketListTests(TaskTestCase):
     def setUp(self):
         super().setUp()
+        self.support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=self.support_user, country=self.country, full_name='Dana Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
         self.ticket = CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
             contact_name='Ali Manager', contact_phone='0501234567',
@@ -1536,8 +1963,27 @@ class TicketListTests(TaskTestCase):
         response = self.client.get('/tasks/tickets/')
         self.assertEqual(response.status_code, 403)
 
-    def test_supervisor_sees_new_tickets_by_default(self):
+    def test_supervisor_gets_403(self):
+        # Tickets are technical-support-manager/admin-only now — a
+        # supervisor gets no ticket access at all, not even read-only triage.
         self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_plain_manager_gets_403(self):
+        # Plain Manager lost manage_tickets too — only the technical
+        # support manager (and admin) has it now.
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_support_manager_sees_new_tickets_by_default(self):
+        self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Fitness First')
@@ -1552,7 +1998,7 @@ class TicketListTests(TaskTestCase):
             description='Something broke.', submitted_at=timezone.now(),
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/', {'status': 'all'})
         self.assertNotContains(response, 'Cairo Gym')
 
@@ -1565,7 +2011,7 @@ class TicketListTests(TaskTestCase):
             description='Bike display broken.', submitted_at=timezone.now(),
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/', {'status': 'all', 'pak': '99001'})
         self.assertContains(response, 'Fitness First')
         self.assertNotContains(response, 'One Fit Gym')
@@ -1579,7 +2025,7 @@ class TicketListTests(TaskTestCase):
             description='Bike display broken.', submitted_at=timezone.now(),
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/', {'status': 'all', 'site': 'Dubai'})
         self.assertContains(response, 'Fitness First')
         self.assertNotContains(response, 'One Fit Gym')
@@ -1588,6 +2034,11 @@ class TicketListTests(TaskTestCase):
 class TicketReviewTests(TaskTestCase):
     def setUp(self):
         super().setUp()
+        self.support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=self.support_user, country=self.country, full_name='Dana Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
         self.ticket = CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
             contact_name='Ali Manager', contact_phone='0501234567',
@@ -1597,6 +2048,14 @@ class TicketReviewTests(TaskTestCase):
 
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_gets_403(self):
+        # Tickets are technical-support-manager/admin-only now — a supervisor gets no
+        # access at all, not even read-only (unless individually
+        # assigned, and a supervisor can no longer be assigned either).
+        self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
@@ -1615,7 +2074,7 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_dismiss_requires_a_reason(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': ''})
         self.assertEqual(response.status_code, 200)
 
@@ -1623,17 +2082,108 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
 
     def test_dismiss_sets_status_and_reason(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': 'Duplicate report.'})
         self.assertEqual(response.status_code, 302)
 
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, CustomerTicket.Status.DISMISSED)
         self.assertEqual(self.ticket.dismissal_reason, 'Duplicate report.')
-        self.assertEqual(self.ticket.reviewed_by, self.supervisor_user)
+        self.assertEqual(self.ticket.reviewed_by, self.support_user)
+
+    def test_close_works_from_new(self):
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Advice given by phone.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+        self.assertEqual(self.ticket.close_reason, 'Advice given by phone.')
+        self.assertEqual(self.ticket.reviewed_by, self.support_user)
+
+    def test_close_works_from_dismissed_too(self):
+        # Close reaches a ticket from any status but already-closed — a
+        # dismissed one can still be closed instead, no reopen needed first.
+        self.ticket.status = CustomerTicket.Status.DISMISSED
+        self.ticket.dismissal_reason = 'Wrong call.'
+        self.ticket.save(update_fields=['status', 'dismissal_reason'])
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Actually handled by phone.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_close_works_from_converted_too(self):
+        self.ticket.status = CustomerTicket.Status.CONVERTED
+        self.ticket.save(update_fields=['status'])
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Closing it out too.'})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_cannot_close_an_already_closed_ticket(self):
+        self.ticket.status = CustomerTicket.Status.CLOSED
+        self.ticket.close_reason = 'Already handled.'
+        self.ticket.save(update_fields=['status', 'close_reason'])
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Trying again.'})
+        self.assertEqual(response.status_code, 200)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.close_reason, 'Already handled.')
+
+    def test_admin_can_reopen_a_closed_ticket(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.ticket.status = CustomerTicket.Status.CLOSED
+        self.ticket.close_reason = 'Handled by phone.'
+        self.ticket.save(update_fields=['status', 'close_reason'])
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
+
+    def test_support_manager_cannot_reopen(self):
+        # Support manager can close a ticket, but reopening one is a step
+        # further, admin-only — same fixed-floor pattern as require_admin.
+        self.ticket.status = CustomerTicket.Status.CLOSED
+        self.ticket.close_reason = 'Handled by phone.'
+        self.ticket.save(update_fields=['status', 'close_reason'])
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'})
+        self.assertEqual(response.status_code, 200)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_reopen_a_ticket_that_is_not_closed_errors(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'reopen'}, follow=True)
+        self.assertContains(response, 'not closed')
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
 
     def test_editing_details_includes_customer_code_and_shipping_address(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
             'action': 'edit_details', 'company_name': self.ticket.company_name,
             'customer_code': 'ACC-42', 'site_description': self.ticket.site_description,
@@ -1649,7 +2199,7 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.shipping_address, 'Warehouse 3, Al Quoz')
 
     def test_updating_logistics(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
             'action': 'update_logistics', 'pak_reference_number': 'PAK-42',
             'shipping_tracking_number': 'TRACK-99',
@@ -1664,7 +2214,7 @@ class TicketReviewTests(TaskTestCase):
         self.ticket.contact_email = 'ali@fitnessfirst.example'
         self.ticket.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
@@ -1676,7 +2226,7 @@ class TicketReviewTests(TaskTestCase):
         self.ticket.contact_email = 'ali@fitnessfirst.example'
         self.ticket.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'notify_shipping'})
         self.assertEqual(response.status_code, 302)
 
@@ -1779,6 +2329,22 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.task.pak_reference_number, 'PAK-42')
         self.assertEqual(self.ticket.task.shipping_tracking_number, 'TRACK-99')
 
+    def test_converting_carries_over_reported_serial_numbers(self):
+        self.ticket.serial_numbers = 'SN-1234\nSN-5678'
+        self.ticket.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        self.client.post(create_url, {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Treadmill belt squeaking.',
+        })
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.task.reported_serial_numbers, 'SN-1234\nSN-5678')
+
     def test_cannot_reconvert_an_already_converted_ticket(self):
         task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
@@ -1793,23 +2359,40 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.get(f'/tasks/new/?ticket={self.ticket.pk}')
         self.assertEqual(response.status_code, 404)
 
-    def test_supervisor_assigns_a_colleague(self):
+    def test_support_manager_assigns_a_colleague(self):
+        other_user = User.objects.create_user('support2', password='pass12345')
+        other_manager = Technician.objects.create(
+            user=other_user, country=self.country, full_name='Layla Lead',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'assign', 'assigned_to': other_manager.pk})
+        self.assertEqual(response.status_code, 302)
+
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.assigned_to, other_manager)
+        self.assertIsNotNone(self.ticket.assigned_at)
+
+    def test_supervisors_are_not_offered_as_assignees_either(self):
+        # Tickets are technical-support-manager/admin-only now — a supervisor can't be
+        # handed one even individually, same as a technician never could.
         other_user = User.objects.create_user('supervisor2', password='pass12345')
         other_supervisor = Technician.objects.create(
             user=other_user, country=self.country, full_name='Layla Lead',
             language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'assign', 'assigned_to': other_supervisor.pk})
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['assign_form'].errors.get('assigned_to'))
 
         self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.assigned_to, other_supervisor)
-        self.assertIsNotNone(self.ticket.assigned_at)
+        self.assertIsNone(self.ticket.assigned_to)
 
     def test_technicians_are_not_offered_as_assignees(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'assign', 'assigned_to': self.technician.pk})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['assign_form'].errors.get('assigned_to'))
@@ -1818,18 +2401,23 @@ class TicketReviewTests(TaskTestCase):
         self.assertIsNone(self.ticket.assigned_to)
 
     def test_assignee_can_view_but_not_dismiss_or_convert(self):
-        other_user = User.objects.create_user('supervisor2', password='pass12345')
-        other_supervisor = Technician.objects.create(
+        # The is_assignee read-only fallback still matters for a support manager
+        # specifically (an admin could turn manage_tickets off for the Technical
+        # Support Manager role but still delegate one ticket to one) — a
+        # supervisor can no longer reach this at all, since one can't be
+        # assigned a ticket in the first place.
+        other_user = User.objects.create_user('support2', password='pass12345')
+        other_manager = Technician.objects.create(
             user=other_user, country=self.country, full_name='Layla Lead',
-            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
         )
         RolePermission.objects.filter(
-            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.MANAGE_TICKETS,
+            role=Technician.Role.SUPPORT_MANAGER, permission=RolePermission.Permission.MANAGE_TICKETS,
         ).update(allowed=False)
-        self.ticket.assigned_to = other_supervisor
+        self.ticket.assigned_to = other_manager
         self.ticket.save()
 
-        self.client.login(username='supervisor2', password='pass12345')
+        self.client.login(username='support2', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
 
@@ -1860,25 +2448,35 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
 
-    def test_manager_can_add_and_see_internal_notes(self):
-        manager_user = User.objects.create_user('manager1', password='pass12345')
-        Technician.objects.create(
-            user=manager_user, country=self.country, full_name='Dana Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
-        )
-
-        self.client.login(username='manager1', password='pass12345')
+    def test_support_manager_can_add_and_see_internal_notes(self):
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'add_internal_note', 'message': 'Waiting on the part.'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 1)
 
         note = TicketInternalNote.objects.get(ticket=self.ticket)
         self.assertEqual(note.message, 'Waiting on the part.')
-        self.assertEqual(note.author, manager_user)
+        self.assertEqual(note.author, self.support_user)
 
         response = self.client.get(self.url)
         self.assertContains(response, 'Internal notes')
         self.assertContains(response, 'Waiting on the part.')
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_support_manager_can_attach_a_file_to_an_internal_note(self):
+        photo = SimpleUploadedFile('vendor_quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'add_internal_note', 'message': 'Vendor quote attached.', 'attachment': photo,
+        })
+        self.assertEqual(response.status_code, 302)
+
+        note = TicketInternalNote.objects.get(ticket=self.ticket)
+        self.assertTrue(note.attachment.name.endswith('.pdf'))
+
+        response = self.client.get(self.url)
+        self.assertContains(response, 'vendor_quote')
 
     def test_admin_can_add_internal_note(self):
         admin_user = User.objects.create_user('admin1', password='pass12345')
@@ -1892,70 +2490,24 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 1)
 
-    def test_supervisor_does_not_see_internal_notes_section(self):
-        # supervisor1 has manage_tickets (the fixture default), but internal
-        # notes are gated on is_manager_tier, not that permission — a
-        # supervisor triaging tickets day to day should never see them.
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get(self.url)
-        self.assertNotContains(response, 'Internal notes')
-        self.assertNotIn('internal_note_form', response.context)
-        self.assertNotIn('internal_notes', response.context)
-
-    def test_supervisor_cannot_add_internal_note_via_crafted_post(self):
-        # Not just hidden in the UI — a crafted POST from a supervisor is
-        # ignored server-side too, same pattern as the ticket-site lock.
+    def test_supervisor_cannot_add_internal_note(self):
+        # Not just a manager-tier UI gate — a supervisor has no
+        # manage_tickets at all now, so this is blocked before the
+        # action dispatch ever runs, same as any other ticket action.
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {'action': 'add_internal_note', 'message': 'Sneaking this in.'})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(TicketInternalNote.objects.filter(ticket=self.ticket).count(), 0)
-
-    def test_marking_a_reply_as_the_quotation_requires_an_attachment(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Here it is.', 'is_quotation': 'on'})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(TicketReply.objects.count(), 0)
-
-    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-    def test_sending_a_reply_marked_as_the_quotation_emails_the_dedicated_template_with_the_file_attached(self):
-        self.ticket.contact_email = 'ali@fitnessfirst.example'
-        self.ticket.save(update_fields=['contact_email'])
-        quote_file = SimpleUploadedFile('quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
-
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {
-            'action': 'add_reply', 'message': 'Please see the attached quotation.',
-            'is_quotation': 'on', 'attachment': quote_file,
-        })
-        self.assertEqual(response.status_code, 302)
-
-        reply = TicketReply.objects.get()
-        self.assertTrue(reply.is_quotation)
-
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('Your quotation is ready', mail.outbox[0].subject)
-        # Two attachments now: the inline logo (every email gets one) plus
-        # the quotation file itself — pick out the actual quotation by
-        # filename rather than assuming a position or a plain tuple, since
-        # the logo attaches as a raw MIMEImage, not a (name, content, type)
-        # tuple the way the quotation file does.
-        pdf_names = [
-            a[0] for a in mail.outbox[0].attachments
-            if isinstance(a, tuple) and a[0].endswith('.pdf')
-        ]
-        self.assertEqual(len(pdf_names), 1)
-        self.assertTrue(pdf_names[0].startswith('quote'))
 
     def test_plain_reply_is_unaffected_and_uses_the_ordinary_subject(self):
         self.ticket.contact_email = 'ali@fitnessfirst.example'
         self.ticket.save(update_fields=['contact_email'])
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Just checking in.'})
         self.assertEqual(response.status_code, 302)
 
-        reply = TicketReply.objects.get()
-        self.assertFalse(reply.is_quotation)
+        self.assertEqual(TicketReply.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('New reply on your ticket', mail.outbox[0].subject)
         # Every email carries the inline logo now — no real (downloadable)
@@ -1963,22 +2515,261 @@ class TicketReviewTests(TaskTestCase):
         self.assertFalse(any(isinstance(a, tuple) for a in mail.outbox[0].attachments))
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-    def test_customer_reply_ignores_is_quotation_even_if_posted(self):
-        # The customer-facing token page never renders this field, and a
-        # crafted POST there still can't set it — ticket_status only ever
-        # creates the reply with an explicit field list, is_quotation is
-        # not among them.
+    def test_reply_with_an_attachment_emails_it_to_the_customer(self):
+        # No dedicated "quotation" flow anymore — whatever staff attaches
+        # to any reply (quotation, report, photo) goes out on the email
+        # itself, since the reply text already says what it's for.
         self.ticket.contact_email = 'ali@fitnessfirst.example'
         self.ticket.save(update_fields=['contact_email'])
-        attachment = SimpleUploadedFile('photo.jpg', b'not a real image', content_type='image/jpeg')
+        quote_file = SimpleUploadedFile('quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
 
-        response = self.client.post(f'/tasks/tickets/status/{self.ticket.token}/', {
-            'message': 'Trying to sneak this in.', 'is_quotation': 'on', 'attachment': attachment,
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post(self.url, {
+            'action': 'add_reply', 'message': 'Please see the attached quotation.', 'attachment': quote_file,
         })
         self.assertEqual(response.status_code, 302)
 
-        reply = TicketReply.objects.get()
-        self.assertFalse(reply.is_quotation)
+        self.assertEqual(TicketReply.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        # Two attachments now: the inline logo (every email gets one) plus
+        # the file itself — pick it out by filename rather than assuming a
+        # position or a plain tuple, since the logo attaches as a raw
+        # MIMEImage, not a (name, content, type) tuple the way this does.
+        pdf_names = [
+            a[0] for a in mail.outbox[0].attachments
+            if isinstance(a, tuple) and a[0].endswith('.pdf')
+        ]
+        self.assertEqual(len(pdf_names), 1)
+        self.assertTrue(pdf_names[0].startswith('quote'))
+
+    def test_customer_reply_creates_a_new_reply_notification(self):
+        portal_user = User.objects.create_user('fitnessfirst_portal2', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+        self.ticket.customer = self.customer
+        self.ticket.save(update_fields=['customer'])
+
+        self.client.login(username='fitnessfirst_portal2', password='pass12345')
+        self.client.post(f'/tasks/tickets/status/{self.ticket.token}/', {'message': 'Any update?'})
+
+        notification = self.ticket.notifications.get()
+        self.assertEqual(notification.kind, TicketNotification.Kind.NEW_REPLY)
+        self.assertIsNone(notification.seen_at)
+
+    def test_support_manager_opening_the_ticket_marks_notifications_seen(self):
+        TicketNotification.objects.create(
+            ticket=self.ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+        )
+
+        self.client.login(username='support1', password='pass12345')
+        self.client.get(self.url)
+
+        notification = self.ticket.notifications.get()
+        self.assertIsNotNone(notification.seen_at)
+
+    def test_supervisor_cannot_open_the_ticket_to_clear_notifications(self):
+        # A supervisor has no ticket access at all now, so this is moot
+        # in practice — confirming it anyway: blocked entirely, and the
+        # notification stays right where it was.
+        TicketNotification.objects.create(
+            ticket=self.ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+        )
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+        notification = self.ticket.notifications.get()
+        self.assertIsNone(notification.seen_at)
+
+
+class TicketStatusAccessTests(TaskTestCase):
+    """ticket_status used to be a public, no-login page (the token was the
+    customer's whole identity). It's now login-required and scoped to the
+    ticket's own customer — these lock that in.
+    """
+    def setUp(self):
+        super().setUp()
+        self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
+        self.customer.user = self.portal_user
+        self.customer.save(update_fields=['user'])
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, customer=self.customer,
+            ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/tickets/status/{self.ticket.token}/'
+
+    def test_anonymous_visitor_is_redirected_to_the_portal_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/customers/portal/login/', response.url)
+
+    def test_a_different_customers_login_gets_403(self):
+        other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        other_user = User.objects.create_user('other_portal', password='pass12345')
+        other_customer.user = other_user
+        other_customer.save(update_fields=['user'])
+
+        self.client.login(username='other_portal', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_login_gets_403_too(self):
+        # ticket_review is the staff-facing equivalent — a technician
+        # account has no .customer, so it's turned away here regardless
+        # of role.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_owning_customer_can_view_it(self):
+        self.client.login(username='fitnessfirst_portal', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+
+class NotificationBellTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
+            contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+        TicketNotification.objects.create(
+            ticket=self.ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+        )
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=self.support_user, country=self.country, full_name='Sara Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+
+    def test_support_manager_sees_the_unseen_ticket_notification(self):
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.context['unseen_notification_count'], 1)
+        self.assertEqual(len(response.context['unseen_notifications']), 1)
+
+    def test_plain_manager_does_not_see_ticket_notifications(self):
+        # manage_tickets moved to the technical support manager — a
+        # plain manager's bell stays empty until there's a task for them.
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertEqual(response.context['unseen_notification_count'], 0)
+
+    def test_support_manager_does_not_see_task_notifications(self):
+        # The technical support manager isn't manager-tier, so the task
+        # half of the bell stays off for them, symmetric to the above.
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        TaskNotification.objects.create(task=task, created_at=timezone.now())
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.context['unseen_notification_count'], 1)
+        kinds = {item['kind'] for item in response.context['unseen_notifications']}
+        self.assertNotIn('new_task', kinds)
+
+    def test_admin_sees_both_halves_of_the_bell(self):
+        # Admin is a superset of both — manage_tickets and is_manager_tier
+        # — so it's the one role that sees everything together.
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        TaskNotification.objects.create(task=task, created_at=timezone.now())
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertEqual(response.context['unseen_notification_count'], 2)
+        kinds = {item['kind'] for item in response.context['unseen_notifications']}
+        self.assertIn('new_task', kinds)
+
+    def test_plain_manager_does_not_see_an_all_tickets_link(self):
+        # Found live: this link used to sit under is_manager_tier instead
+        # of manage_tickets, so a plain manager saw a link to a screen
+        # that then 403'd them.
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertNotContains(response, '/tasks/tickets/all/')
+
+    def test_support_manager_sees_the_all_tickets_link(self):
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertContains(response, '/tasks/tickets/all/')
+
+    def test_supervisor_gets_no_bell_context_at_all(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertNotIn('unseen_notification_count', response.context)
+
+    def test_technician_gets_no_bell_context_at_all(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertNotIn('unseen_notification_count', response.context)
+
+    def test_a_different_countrys_notification_does_not_count(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_ticket = CustomerTicket.objects.create(
+            country=other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Nour', contact_phone='0100000000',
+            description='Something broke.', submitted_at=timezone.now(),
+        )
+        TicketNotification.objects.create(
+            ticket=other_ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+        )
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/tickets/')
+        self.assertEqual(response.context['unseen_notification_count'], 1)
+
+    def test_manager_opening_the_task_marks_its_notification_seen(self):
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        TaskNotification.objects.create(task=task, created_at=timezone.now())
+
+        self.client.login(username='manager1', password='pass12345')
+        self.client.get(f'/tasks/{task.pk}/')
+
+        notification = task.notifications.get()
+        self.assertIsNotNone(notification.seen_at)
+
+    def test_supervisor_opening_the_task_does_not_mark_its_notification_seen(self):
+        task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.NEW,
+        )
+        TaskNotification.objects.create(task=task, created_at=timezone.now())
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.get(f'/tasks/{task.pk}/')
+
+        notification = task.notifications.get()
+        self.assertIsNone(notification.seen_at)
 
 
 class TaskAssignTests(TaskTestCase):
@@ -2162,6 +2953,40 @@ class TaskAssignTests(TaskTestCase):
         candidate_names = {t.full_name for t in response.context['candidates']}
         self.assertNotIn('Nour Cairo', candidate_names)
 
+    def test_unavailable_technician_still_shown_but_not_selectable(self):
+        self.helper.is_available = False
+        self.helper.unavailable_reason = Technician.UnavailableReason.SICK
+        self.helper.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+
+        candidate_ids = {t.pk for t in response.context['candidates']}
+        self.assertIn(self.helper.pk, candidate_ids)
+
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.helper.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.task.assignments.filter(technician=self.helper).exists())
+
+    def test_status_column_has_no_toggle_controls(self):
+        # Moved to technician_availability — this screen only displays
+        # status now, it can't change it.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertNotContains(response, 'Mark unavailable')
+        self.assertNotContains(response, 'Mark available')
+
+
+class TechnicianAvailabilityTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = '/tasks/technicians/availability/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
     def test_mark_unavailable_requires_a_reason(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {
@@ -2196,21 +3021,6 @@ class TaskAssignTests(TaskTestCase):
         self.technician.refresh_from_db()
         self.assertTrue(self.technician.is_available)
         self.assertEqual(self.technician.unavailable_reason, '')
-
-    def test_unavailable_technician_still_shown_but_not_selectable(self):
-        self.helper.is_available = False
-        self.helper.unavailable_reason = Technician.UnavailableReason.SICK
-        self.helper.save()
-
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get(self.url)
-
-        candidate_ids = {t.pk for t in response.context['candidates']}
-        self.assertIn(self.helper.pk, candidate_ids)
-
-        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.helper.pk})
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(self.task.assignments.filter(technician=self.helper).exists())
 
     def test_cannot_mark_unavailable_technician_from_another_country(self):
         other_country = Country.objects.create(
@@ -2964,7 +3774,9 @@ class MyProfileTests(TaskTestCase):
     def test_shows_country_and_certification_overview(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-profile/')
-        self.assertContains(response, self.country.name)
+        # tech1's language is Arabic (see TaskTestCase.setUp), so the
+        # country name shows via display_name in Arabic, not English.
+        self.assertContains(response, self.country.name_ar)
         self.assertFalse(response.context['certification']['is_certified'])
         # The only technician-role fixture in this country, so always #1 of 1 —
         # the leaderboard ranks every active technician, points or not.
@@ -3132,10 +3944,13 @@ class DashboardTests(TaskTestCase):
         fields.update(overrides)
         return Task.objects.create(**fields)
 
-    def test_technician_gets_403(self):
+    def test_technician_can_view_it_too(self):
+        # Every role has view_dashboard now — it's the universal landing
+        # page (spots.views.home) — so a technician gets a normal 200,
+        # not the 403 this used to be.
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/dashboard/')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
 
     def test_shows_technician_availability(self):
         self.technician.is_available = False
@@ -3298,6 +4113,106 @@ class TechnicianBoardTests(TaskTestCase):
         self.assertEqual(response.context['unscheduled'][0].my_role, TaskAssignment.Role.HELPER)
 
 
+class MachineListTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=self.support_user, country=self.country, full_name='Dana Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/machines/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_sees_the_asset(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/machines/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.asset.model_name)
+
+    def test_support_manager_sees_the_asset(self):
+        # view_machines is granted to every office role, not just
+        # whoever also has manage_tickets or view_tasks.
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/machines/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.asset.model_name)
+
+    def test_other_country_asset_is_excluded(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        Asset.objects.create(site=other_site, brand=self.brand, model_name='Other Country Machine')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/machines/')
+        self.assertNotContains(response, 'Other Country Machine')
+
+    def test_search_by_serial_number(self):
+        self.asset.serial_no = 'SN-4242'
+        self.asset.save()
+        Asset.objects.create(site=self.site, brand=self.brand, model_name='Unrelated Machine', serial_no='SN-9999')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/machines/', {'q': 'SN-4242'})
+
+        model_names = [asset.model_name for asset in response.context['page_obj']]
+        self.assertEqual(model_names, [self.asset.model_name])
+
+
+class MachineDetailTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.CLOSED,
+        )
+        self.task_asset = TaskAsset.objects.create(
+            task=self.task, asset=self.asset, outcome=TaskAsset.Outcome.REPAIRED,
+        )
+        self.url = f'/tasks/machines/{self.asset.pk}/'
+
+    def test_technician_gets_403(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_shows_task_history(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.task.task_number)
+        self.assertContains(response, 'Repaired')
+
+    def test_shows_the_originating_ticket_once_recorded_against_this_asset(self):
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0001', company_name='Fitness First',
+            site_description='Marina Branch', contact_name='Ali', contact_phone='0501234567',
+            description='Belt squeaking.', submitted_at=timezone.now(),
+            task=self.task, status=CustomerTicket.Status.CONVERTED,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertContains(response, ticket.ticket_number)
+
+    def test_other_country_asset_gives_404(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        other_asset = Asset.objects.create(site=other_site, brand=self.brand, model_name='Other Country Machine')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/machines/{other_asset.pk}/')
+        self.assertEqual(response.status_code, 404)
+
+
 class TechnicianSkillsTests(TaskTestCase):
     def setUp(self):
         super().setUp()
@@ -3395,6 +4310,11 @@ class TechnicianCreateTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.url = '/tasks/technicians/new/'
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
 
     def _payload(self, **overrides):
         payload = {
@@ -3409,8 +4329,29 @@ class TechnicianCreateTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
-    def test_supervisor_creates_a_technician(self):
+    def test_supervisor_gets_403(self):
+        # Creating a technician is where its role gets set — a privilege
+        # grant — so it's admin-only now, not just manage_technicians
+        # (which supervisors have by default). See technician_edit's own
+        # role field for the matching restriction on an existing record.
         self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload())
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Technician.objects.filter(full_name='Nour New').exists())
+
+    def test_manager_gets_403(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, self._payload())
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Technician.objects.filter(full_name='Nour New').exists())
+
+    def test_admin_creates_a_technician(self):
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post(self.url, self._payload())
         self.assertEqual(response.status_code, 302)
 
@@ -3420,33 +4361,31 @@ class TechnicianCreateTests(TaskTestCase):
         self.assertIsNone(technician.user)
         self.assertTrue(technician.is_active)
 
-    def test_can_create_a_supervisor_too(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, self._payload(role=Technician.Role.SUPERVISOR))
-        self.assertEqual(response.status_code, 302)
-
-        technician = Technician.objects.get(full_name='Nour New')
-        self.assertEqual(technician.role, Technician.Role.SUPERVISOR)
+    def test_admin_can_create_any_role(self):
+        for role in [
+            Technician.Role.SUPERVISOR, Technician.Role.MANAGER, Technician.Role.SUPPORT_MANAGER,
+            Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
+        ]:
+            with self.subTest(role=role):
+                self.client.login(username='admin1', password='pass12345')
+                response = self.client.post(self.url, self._payload(full_name=f'New {role}', role=role))
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(Technician.objects.get(full_name=f'New {role}').role, role)
 
     def test_missing_full_name_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         payload = self._payload()
         del payload['full_name']
         response = self.client.post(self.url, payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Technician.objects.filter(full_name='').count(), 0)
 
-    def test_created_in_the_managers_active_country(self):
-        manager_user = User.objects.create_user('manager1', password='pass12345')
-        Technician.objects.create(
-            user=manager_user, country=self.country, full_name='Maya Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
-        )
+    def test_created_in_the_admins_active_country(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
 
-        self.client.login(username='manager1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         self.client.post('/tasks/active-country/', {'country': other_country.pk})
 
         response = self.client.post(self.url, self._payload())
@@ -3463,6 +4402,11 @@ class TechnicianEditTests(TaskTestCase):
         Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Maya Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
         )
         self.url = f'/tasks/technicians/{self.technician.pk}/edit/'
 
@@ -3553,6 +4497,25 @@ class TechnicianEditTests(TaskTestCase):
         self.technician.refresh_from_db()
         self.assertEqual(self.technician.country, self.country)
 
+    def test_manager_cannot_change_a_technicians_role(self):
+        # Role is a privilege grant — narrower than the rest of the
+        # manager-only fields (country, employment type, ...), admin-only
+        # instead, same reasoning as technician_create.
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload(role=Technician.Role.ADMIN))
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.role, Technician.Role.TECHNICIAN)
+
+    def test_admin_changes_a_technicians_role(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, self._base_payload(role=Technician.Role.SUPERVISOR))
+        self.assertEqual(response.status_code, 302)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.role, Technician.Role.SUPERVISOR)
+
     def test_relocated_technician_drops_off_the_old_countrys_roster(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
@@ -3563,6 +4526,85 @@ class TechnicianEditTests(TaskTestCase):
         response = self.client.get('/tasks/technicians/')
         technicians = [row['technician'] for row in response.context['rows']]
         self.assertNotIn(self.technician, technicians)
+
+
+class TechnicianLoginTests(TaskTestCase):
+    """A manager creating a login for a technician added without one —
+    same UserCreationForm/SetPasswordForm pattern as a customer's own
+    'Portal login' section on their edit screen (customers/views.py).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Maya Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.helper = Technician.objects.create(
+            country=self.country, full_name='Hani Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.url = f'/tasks/technicians/{self.helper.pk}/edit/'
+
+    def test_manager_can_create_a_login(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'create_login', 'email': 'hani@example.com'})
+        self.assertEqual(response.status_code, 302)
+        self.helper.refresh_from_db()
+        self.assertIsNotNone(self.helper.user_id)
+        self.assertEqual(self.helper.user.username, 'hani@example.com')
+        self.assertEqual(self.helper.user.email, 'hani@example.com')
+        self.assertTrue(self.helper.must_change_password)
+        # A real, unguessable password was set — not left blank/unusable.
+        self.assertTrue(self.helper.user.has_usable_password())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['hani@example.com'])
+        self.assertIn('hani@example.com', mail.outbox[0].body)
+
+    def test_supervisor_cannot_create_a_login(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'create_login', 'email': 'hani@example.com'})
+        self.assertEqual(response.status_code, 200)
+        self.helper.refresh_from_db()
+        self.assertIsNone(self.helper.user_id)
+
+    def test_cannot_create_a_second_login_with_the_same_email(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(self.url, {'action': 'create_login', 'email': 'hani@example.com'})
+
+        other_helper = Technician.objects.create(
+            country=self.country, full_name='Other Helper',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        response = self.client.post(
+            f'/tasks/technicians/{other_helper.pk}/edit/', {'action': 'create_login', 'email': 'hani@example.com'},
+        )
+        self.assertEqual(response.status_code, 200)
+        other_helper.refresh_from_db()
+        self.assertIsNone(other_helper.user_id)
+
+    def test_manager_can_reset_an_existing_password(self):
+        # self.technician (tech1) already has a login, from TaskTestCase.
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
+            'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.tech_user.refresh_from_db()
+        self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
+
+    def test_no_login_form_once_one_exists(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        self.assertIsNone(response.context['login_form'])
+        self.assertIsNotNone(response.context['password_form'])
+
+    def test_no_password_form_before_one_exists(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertIsNotNone(response.context['login_form'])
+        self.assertIsNone(response.context['password_form'])
 
 
 class SkillListTests(TaskTestCase):
@@ -3824,6 +4866,11 @@ class ActiveCountryTests(TaskTestCase):
             user=self.manager_user, country=self.country, full_name='Mona Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
+        self.admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=self.admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
         self.egypt = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
@@ -3878,7 +4925,10 @@ class ActiveCountryTests(TaskTestCase):
         self.assertRedirects(response, '/tasks/dashboard/')
 
     def test_new_customer_is_created_in_the_active_country(self):
-        self.client.login(username='manager1', password='pass12345')
+        # customer_create is admin-only (see customers.views), so this
+        # exercises the active-country switch and the creation itself
+        # under the same admin login.
+        self.client.login(username='admin1', password='pass12345')
         self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
 
         response = self.client.post('/customers/new/', {'name': 'Nile Gym', 'segment': 'gym'})
@@ -3887,15 +4937,150 @@ class ActiveCountryTests(TaskTestCase):
 
 
 class HomeRedirectTests(TaskTestCase):
-    def test_supervisor_lands_on_task_list(self):
+    # The dashboard is now everyone's landing page, regardless of role —
+    # see spots.views.home and migration 0024_dashboard_is_the_default_landing_page.
+
+    def test_supervisor_lands_on_dashboard(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/')
+        self.assertRedirects(response, '/tasks/dashboard/')
 
-    def test_technician_lands_on_my_week(self):
+    def test_technician_lands_on_dashboard(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/my-week/')
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_plain_manager_lands_on_dashboard(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_support_manager_lands_on_dashboard(self):
+        support_user = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=support_user, country=self.country, full_name='Sara Support',
+            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_admin_lands_on_dashboard(self):
+        admin_user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=admin_user, country=self.country, full_name='Amina Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_customer_lands_on_portal_home(self):
+        portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/customers/portal/')
+
+    def test_technician_on_a_temporary_password_lands_on_first_login(self):
+        self.technician.must_change_password = True
+        self.technician.save(update_fields=['must_change_password'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/tasks/first-login/')
+
+    def test_customer_on_a_temporary_password_lands_on_portal_first_login(self):
+        portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.must_change_password = True
+        self.customer.save(update_fields=['user', 'must_change_password'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.get('/')
+        self.assertRedirects(response, '/customers/portal/first-login/')
+
+
+class TechnicianFirstLoginTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        self.technician.must_change_password = True
+        self.technician.save(update_fields=['must_change_password'])
+        self.client.login(username='tech1', password='pass12345')
+
+    def test_shown_while_must_change_password_is_set(self):
+        response = self.client.get('/tasks/first-login/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_redirects_to_dashboard_once_cleared(self):
+        self.technician.must_change_password = False
+        self.technician.save(update_fields=['must_change_password'])
+        response = self.client.get('/tasks/first-login/')
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+    def test_submitting_sets_the_password_and_clears_the_flag(self):
+        response = self.client.post('/tasks/first-login/', {
+            'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertRedirects(response, '/tasks/dashboard/')
+
+        self.technician.refresh_from_db()
+        self.assertFalse(self.technician.must_change_password)
+        self.technician.user.refresh_from_db()
+        self.assertTrue(self.technician.user.check_password('br4nd-New-Pass!'))
+
+
+class SetLanguageTests(TaskTestCase):
+    """spots.views.set_language replaces Django's own — for a signed-in
+    technician or customer it must persist to their saved language field
+    (spots.middleware.TechnicianLocaleMiddleware re-activates that on
+    every request, so a session-only change would silently revert on the
+    very next page load); an anonymous visitor still just gets the
+    ordinary session/cookie switch.
+    """
+    def test_anonymous_visitor_gets_the_session_cookie_switch(self):
+        response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/accounts/login/'})
+        self.assertRedirects(response, '/accounts/login/', fetch_redirect_response=False)
+        self.assertEqual(response.cookies[settings.LANGUAGE_COOKIE_NAME].value, 'ar')
+
+    def test_technician_switch_persists_to_their_own_language_field(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/tasks/my-week/'})
+        self.assertRedirects(response, '/tasks/my-week/', fetch_redirect_response=False)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.language, 'ar')
+
+    def test_customer_switch_persists_to_their_own_language_field(self):
+        portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+
+        self.client.login(username='fitnessfirst_portal', password='pass12345')
+        response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/customers/portal/'})
+        self.assertRedirects(response, '/customers/portal/', fetch_redirect_response=False)
+
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.language, 'ar')
+
+    def test_unsafe_next_url_falls_back_to_root(self):
+        response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': 'https://evil.example/'})
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+
+    def test_invalid_language_code_is_ignored(self):
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/i18n/setlang/', {'language': 'fr', 'next': '/tasks/my-week/'})
+        self.assertRedirects(response, '/tasks/my-week/', fetch_redirect_response=False)
+
+        self.technician.refresh_from_db()
+        self.assertEqual(self.technician.language, 'en')
 
 
 class MyTaskDetailTests(TaskTestCase):
@@ -4177,21 +5362,23 @@ class MyReportFormTests(TaskTestCase):
         submitted_event = self.task.events.get(event_type=TaskEvent.EventType.REPORT_SUBMITTED)
         self.assertEqual(submitted_event.actor, self.tech_user)
 
-    def test_submitting_the_report_marks_it_completed_not_closed(self):
+    def test_technicians_report_awaits_supervisor_review_not_completed_directly(self):
+        # tech1 is a plain technician — their own report needs their
+        # supervisor's sign-off before it counts as completed.
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post(self.url, self._base_payload())
         self.assertEqual(response.status_code, 302)
 
         self.task.refresh_from_db()
-        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertEqual(self.task.status, Task.Status.PENDING_SUPERVISOR_REVIEW)
 
-    def test_resubmitting_the_report_stays_completed_and_does_not_relog_completed_event(self):
+    def test_resubmitting_the_report_stays_pending_and_does_not_relog_completed_event(self):
         self.client.login(username='tech1', password='pass12345')
         self.client.post(self.url, self._base_payload())
         self.client.post(self.url, self._base_payload(findings='Belt worn out, fixed again'))
 
         self.task.refresh_from_db()
-        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertEqual(self.task.status, Task.Status.PENDING_SUPERVISOR_REVIEW)
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.REPORT_SUBMITTED).count(), 2)
 

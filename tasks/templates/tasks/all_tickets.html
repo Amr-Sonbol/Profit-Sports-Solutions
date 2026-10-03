@@ -53,7 +53,7 @@
         <select id="filter-country" name="country">
             <option value="">{% translate "All countries" %}</option>
             {% for country in countries %}
-            <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.name }}</option>
+            <option value="{{ country.pk }}" {% if selected_country == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.display_name }}</option>
             {% endfor %}
         </select>
     </div>
@@ -79,7 +79,7 @@
             <tr>
                 <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
-                <td>{{ ticket.country.name }}</td>
+                <td>{{ ticket.country.display_name }}</td>
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>

@@ -21,6 +21,7 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 - **`language` goes on the technician, not the country.** Some Saudi staff prefer English, some Egyptian staff Arabic. It is a personal setting.
 - **Codes stay left-to-right inside Arabic text.** Task numbers, serials, model codes, phone numbers all need `dir="ltr"` on the element. This is the most common Arabic bug, and it looks broken to Arabic readers while looking fine to a developer who does not read Arabic.
 - **Western digits, not Arabic-Indic.** 012, not ٠١٢. Avoids trouble where serials and part codes mix with numbers.
+- **Dates read day-month-year, in both languages** — not the month-first order Django's own `en` locale defaults to. `spots/formats/{en,ar}/formats.py`, loaded via `FORMAT_MODULE_PATH` in settings, override `DATE_FORMAT`/`SHORT_DATE_FORMAT`/`DATETIME_FORMAT`/`SHORT_DATETIME_FORMAT` for both locales so every `|date`/`|time` filter and admin display follows this without each template having to say so.
 - **Warranty claims need a decision.** If findings are written in Arabic and the claim goes to a principal in Europe, someone must translate. Either require English fault descriptions on warranty tasks, or translate at claim time in the office.
 
 ---
@@ -53,6 +54,8 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 
 **Changing a country's `task_prefix` only affects tasks created afterward.** `_next_task_number` counts existing tasks that already start with the new prefix, which is always zero right after a change — task numbering restarts at 1 under the new prefix rather than continuing the old sequence, and every task number ever issued keeps the prefix it was created with.
 
+Bilingual like `skill`/`task_type`/`conduct_area` — a `display_name` property picks `name_ar` when Arabic is active, same pattern, same reasoning. Every screen and email that shows a country name to a user reads `display_name`, not `name` directly — a raw `.name` is only correct on the Countries management screen itself, where `name` and `name_ar` are shown side by side as the two fields being edited, and in the monthly report's CSV export, which is an English-only data export whose own column headers aren't translated either.
+
 ### brand
 Panatta, Skillcore, Digilock, and any future principal. Available in all countries.
 
@@ -73,7 +76,7 @@ No brand name is ever hardcoded in the application. Adding a principal is an off
 | id | PK | |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `other` (shown as "Basic") or `cardio` — see below |
+| category | varchar | `other` (shown as "Basic") or `cardio` (shown as "Advanced") — see below |
 | is_active | bool | |
 
 Bilingual like `task_type`/`conduct_area` — a `display_name` property picks `name_ar` when Arabic is active, same pattern, same reasoning.
@@ -132,10 +135,20 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
 | user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
+| must_change_password | bool | set when staff creates the login — cleared once the customer sets their own password and confirms their contact details on first sign-in |
+| deactivation_reason | varchar | why this customer was deactivated — contract ended, closed down, etc.; cleared on reactivation |
 
-**`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there, the same way it routes a technician to their own week; nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
+**`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there; every other login (any technician role) lands on the dashboard, the one shared overview screen — nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
 
-**The portal has its own login page** (`/customers/portal/login/`, branded "Customer portal" rather than the plain staff one) with a language switcher for the not-yet-authenticated case (Django's built-in `set_language`) — once logged in, `language` above takes over via `TechnicianLocaleMiddleware`, the same middleware that already drives a technician's. It rejects a staff login typed in there by mistake ("This isn't a customer account"), and the shared `/accounts/login/` still works for a customer too — `home`'s routing doesn't care which page authenticated them. Self-service password reset (Django's built-in `PasswordResetView` et al., emailing `user.email` — backfilled from `contact_email` when the login is created) is available from both login pages, for any account with an email on file, not just customers.
+**Creating a login only asks for an email** — it becomes both the `user.username` and `user.email`, one thing for the customer to remember instead of a separate invented username. A system-generated temporary password is set and emailed to that address (never shown on screen), and `must_change_password` is set so the customer is walked to a one-time screen (`customers:portal_first_login`) the first time they sign in — set a real password and confirm the contact details staff may not have had yet (a bulk import, say) — before reaching the rest of the portal. That screen only touches the customer-level `contact_*` fields, not any individual site's — one login already covers every site, so there's nothing per-site to fill in here. The login email stays in lockstep with `contact_email` afterward too: whenever a manager edits the customer and `contact_email` differs from `user.email`, the login email is updated to match, rather than the two drifting apart.
+
+**Deactivating a customer (`Customer.set_active`) is the one place `is_active` ever changes**, and it keeps the linked login in lockstep — `user.is_active` is set to match, so a deactivated customer can't log back in even though their record (and its history — sites, tasks, tickets) is never deleted, per the project's own rule. Reactivating clears `deactivation_reason` and restores the login the same way. Both actions, like creating a login or resetting a password, are manager-tier only, from the customer's own Edit screen.
+
+**The portal has its own login page** (`/customers/portal/login/`, branded "Customer portal" rather than the plain staff one). It rejects a staff login typed in there by mistake ("This isn't a customer account"), and the shared `/accounts/login/` still works for a customer too — `home`'s routing doesn't care which page authenticated them. Self-service password reset (Django's built-in `PasswordResetView` et al., emailing `user.email` — backfilled from `contact_email` when the login is created) is available from both login pages, for any account with an email on file, not just customers.
+
+**All customers (`/customers/all/`) is a manager-tier cross-country roster** — every active customer regardless of the viewer's active country, searchable by name, the same fixed-floor pattern as All tasks/All technicians. Opening one from there reaches the same `customer_detail`/`customer_edit` screens as the country-scoped Customers list, which allow manager-tier access across country boundaries for exactly this reason (`people.permissions.scoped_or_404`, shared with the technician roster's own cross-country reach).
+
+**The language toggle lives in the header on every page, not just the login screens** (`spots.views.set_language`, registered at the URL Django's own `set_language` used to own, `name='set_language'` unchanged). For a signed-in technician or customer it writes straight to their own `language` field instead of the session — `TechnicianLocaleMiddleware` re-activates that stored value on every request, so a session-only change would silently revert on the very next page load; this is the same field My Profile's own language dropdown sets, just reachable from anywhere. An anonymous visitor (the login pages) still gets the ordinary session/cookie switch, since there's no profile yet to save it to. The header itself (`.site-header`) forces `direction: ltr` regardless of language — it's chrome, not reading content, so the logo/hamburger/bell/language-toggle stay in the same physical spot either way. The two panels that hang off it with real prose (the notification dropdown, the nav sidebar) restore the page's actual direction so their text reads naturally, but their own position is pinned with physical properties (`left`/`border-right` on the nav sidebar, `inset-inline-end` on the dropdown resolving against the header's forced ltr), not logical ones — so the sidebar always opens from the same physical side and the dropdown always anchors under the bell, in either language.
 
 ### site
 A hotel group is one customer with many sites.
@@ -175,6 +188,8 @@ The serial is needed when requesting spare parts on the principal's portal — w
 
 **The trade-off, stated plainly.** Until a machine has been serviced once it is not in your system, so you cannot tell whether the broken treadmill is the same one that failed last year. After a year of normal work, the machines that matter — the ones that break — will all be recorded.
 
+**The Machines screen (`/tasks/machines/`) is where that record actually gets looked up** — every asset in the active country, searchable by serial, model, brand, site, or customer, gated on its own `view_machines` permission (supervisor, manager, support_manager, admin by default — not technician, who only ever sees the machines on their own current task, from the report screen itself). Opening one shows its full task history via `task_asset` — every task it's been recorded against, each task's own status, and, if that task started life as a customer complaint, a link straight to that ticket too. There's no direct ticket-to-asset link (a ticket only ever names a serial as free text — see `task.reported_serial_numbers` above), so a ticket surfaces here only once its task has actually recorded this specific machine, not just mentioned a matching serial in passing.
+
 ---
 
 ## 3. People
@@ -185,12 +200,12 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| user_id | FK → auth user | for Microsoft SSO later |
+| user_id | FK → auth user | nullable — a manager creates this from Edit, same as a customer's portal login |
 | country_id | FK → country | |
 | full_name | varchar | |
 | phone | varchar | |
 | language | varchar | `ar` or `en` — per person, not per country |
-| role | varchar | technician, supervisor, manager |
+| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), warehouse_manager (Warehouse Manager), admin |
 | employment_type | varchar | staff, freelance |
 | has_transport | bool | |
 | can_carry_large | bool | can move a treadmill motor or locker bank |
@@ -199,12 +214,15 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | is_available | bool | can currently be assigned work — separate from `is_active` |
 | unavailable_reason | varchar | sick, leave, holiday, other — set when `is_available` is false |
 | photo | file | nullable — a headshot, shown on the roster, boards, and task detail |
+| must_change_password | bool | set when a manager creates the login — cleared once the technician sets their own password on first sign-in |
 
-**`is_active` is employment; `is_available` is today.** A technician stays `is_active` for as long as they work here — deactivating that is an office action for someone who's left. `is_available` is the day-to-day toggle a supervisor flips from the assign screen when someone calls in sick or is on leave, so they stop showing up as a candidate for new lead/helper assignments without touching their employment record. It says nothing about tasks they're already on.
+**`is_active` is employment; `is_available` is today.** A technician stays `is_active` for as long as they work here — deactivating that is an office action for someone who's left. `is_available` is the day-to-day toggle a supervisor flips from its own screen (`technician_availability` — separate from any one task, since the same person is either available or not everywhere, not just for the task someone happens to be assigning) when someone calls in sick or is on leave, so they stop showing up as a candidate for new lead/helper assignments without touching their employment record. It says nothing about tasks they're already on. `task_assign` only ever displays the status, with a link across to change it.
 
 **Freelancers see only their own tasks and the sites attached to them** — never the customer list or other technicians' records. A freelancer may work for a competitor next month.
 
-**`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo from the roster's edit screen; the same permission also gates adding a new record in the first place, from the roster's own "Add technician" screen — country comes from whoever's adding it (or their active country, if a manager), same as customer creation. No `user` is created or linked at that point; the record works standalone until SSO exists to attach one.
+**`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo, name, phone, or email from the roster's edit screen; `country` and `employment_type`/`has_transport`/`can_carry_large`/`hired_on` on that same screen are manager-only, not just `manage_technicians`. `role` is narrower still — admin-only — since it's a privilege grant: whoever creates the login next inherits whatever role the record already has. Creating a technician record in the first place, from the roster's own "Add technician" screen, is admin-only for the same reason — country comes from whoever's adding it (their active country), same as customer creation. No `user` is created or linked at that point — a manager or admin creates the login as a separate, manager-tier step from that same Edit screen afterward, not part of creation itself (unchanged — the login itself grants no role beyond whatever the record already has, which by then only an admin could have set).
+
+**Creating a login only asks for an email** — it becomes both the `user.username` and `user.email`, one thing to remember instead of a separate invented username. A system-generated temporary password is set and emailed to that address (never shown on screen), and `must_change_password` is set so the technician is walked to a one-time "set your password" screen (`tasks:first_login`) the first time they sign in, before reaching the dashboard. Everything else about their own record stays editable any time from My profile, so that screen asks for nothing but the password.
 
 **Relocating a technician to another country, from that same edit screen, is manager-only — not just `manage_technicians`.** It's the only other place in the app (besides the header's active-country switcher, also `require_manager`) where one action reaches across a country boundary; letting any supervisor do it would mean one country's supervisor could move a technician into a country they have nothing to do with. A supervisor with `manage_technicians` still sees and uses the same screen, just without the country field.
 
@@ -218,17 +236,23 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| role | varchar | technician, supervisor, manager |
+| role | varchar | technician, supervisor, manager, support_manager, admin |
 | permission | varchar | see below |
 | allowed | bool | |
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (add technicians, edit their profile photo), `manage_customers` (add customers and sites). Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default).
 
-**Managed from its own screen (`/tasks/roles/`), manager-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Manager access to that one screen is a fixed floor (`require_manager`), everything else runs through it.
+**`warehouse_manager` exists for exactly one job: receiving shipments.** It gets `view_dashboard` and `view_tasks` and nothing else — `view_tasks` alone is enough to search the task list by PAK reference number (already a filter there, for anyone who can reach it), open a task to read its shipping details (PAK, carrier, tracking number — never gated beyond `view_tasks` itself), and post a task message confirming a part arrived. No ticket, technician, or customer access, same narrow-by-design shape as `support_manager` before it. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
 
-**Seeded to change nothing on its own.** The migration that creates this table reproduces exactly what used to be hardcoded — supervisor and manager allowed, technician not — for every permission. Nothing about who can do what actually changes until a manager edits the matrix.
+**Managed from its own screen (`/tasks/roles/`), admin-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Admin access to that one screen is a fixed floor (`require_admin`), everything else runs through it.
+
+**Seeded to change nothing on its own.** The migration that creates this table reproduces exactly what used to be hardcoded — supervisor and manager allowed, technician not — for every permission. Nothing about who can do what actually changes until an admin edits the matrix.
+
+**`manage_tickets` has moved twice since it was first seeded** — supervisor and manager by default, then supervisor and technician dropped entirely (tickets became manager/admin-only), then manager itself dropped in favor of the narrower `support_manager` role (`0021_revoke_manage_tickets_from_supervisor`, `0023_seed_technical_support_manager`). Today only `support_manager` and `admin` have it. Every ticket-specific check reads this permission directly rather than `technician.is_manager_tier` — `AssignTicketForm`'s queryset, the new-ticket staff email, and the ticket half of the notification bell all derive the current role set from this table, so they never drift out of sync with whatever the matrix says today. `is_manager_tier` itself is unchanged (manager, admin) and still gates everything ticket-unrelated — the task half of the bell, cross-country reach, the fixed-floor reference screens.
+
+**Every role has a row for every permission — `support_manager` needed a one-off backfill to catch up (`0025_backfill_support_manager_permission_rows`).** Adding the role (`0022`) only changed the `role` field's choices; `0023`/`0024` each created a row for one specific permission (`manage_tickets`, `view_dashboard`) via `update_or_create`, leaving the other seven permissions with no row for this role at all. A missing row already behaves exactly like `allowed=False` everywhere it's read (`require_permission`, the `role_permissions` screen's matrix), so nothing was ever actually broken — but the invariant is worth keeping intact so the matrix stays simple to audit, hence the backfill.
 
 ### technician_skill
 The capability matrix. Answers "can he do this job", separately from "will he do it well". Holds only the *current* level — `technician_skill_assessment`, below, keeps the full history behind it.
@@ -282,7 +306,7 @@ Write this on one page in Arabic and English. Without certificates, these four s
 
 ### The certification bar
 
-**"Certified technician" means level ≥ 3, supervisor-confirmed, on every `other`-category skill and every conduct area.** Cardio skills don't count toward this bar — clearing one instead marks readiness for the supervisor track. Self-ratings don't count either, no matter how high; only a supervisor's confirmation moves the bar.
+**"Certified technician" means level ≥ 3, supervisor-confirmed, on every `other`-category (Basic) skill and every conduct area.** `cardio`-category (Advanced) skills don't count toward this bar — they're an additional, optional skill set, tracked separately as `cardio_ready` (shown on My progress and the technician's own skills screen once at least one is confirmed). Self-ratings don't count either, no matter how high; only a supervisor's confirmation moves the bar.
 
 This status is shown to the technician themselves (My progress) and to supervisors reviewing their country's roster. It's a fact, not a gate: nothing in the app currently blocks a task assignment or pay decision on it. (There used to be a report-approval-rate metric shown alongside it, tied to the old report-review workflow — removed along with that workflow; see §4's task status flow.)
 
@@ -309,6 +333,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | required_skill_id | FK → skill | nullable |
 | min_level | int | nullable |
 | description | text | what the customer reported |
+| reported_serial_numbers | text | blank — one per line, copied from `customer_ticket.serial_numbers` at conversion; editable afterward like `description` |
 | priority | varchar | low, normal, high, emergency |
 | source | varchar | phone, whatsapp, email, internal, portal |
 | is_warranty | bool | nullable until known |
@@ -331,17 +356,22 @@ This status is shown to the technician themselves (My progress) and to superviso
 | factory_offer_uploaded_at | timestamptz | nullable |
 | invoice | file | nullable — pdf/image, edit screen only |
 | invoice_uploaded_at | timestamptz | nullable |
+| invoice_visible_to_supervisor | bool | default false — a manager-only per-task override; see below |
 | delivery_note | file | nullable — pdf/image, edit screen only — the shipment paperwork, uploaded once the parts arrive |
 | delivery_note_uploaded_at | timestamptz | nullable |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
-**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → `completed` → `closed`.
+**Quotation, factory offer, and delivery note stay manager-tier only; the invoice can be opened up per task.** Sometimes a supervisor is the one on site collecting cash from the customer and needs to show or check the invoice — `invoice_visible_to_supervisor` is a plain checkbox on the task's Edit screen (manager-only, like the document fields themselves) that adds the invoice, and only the invoice, to what a supervisor sees in that task's own Documents section. It defaults off and is a per-task decision, not a role permission — turning it on for one job doesn't change what a supervisor sees on any other task.
+
+**Status flow:** `new` → `assigned` → `accepted` → `in_progress` → (`pending_supervisor_review` →) `completed` → `closed`.
 Plus `blocked` and `cancelled` as endings.
 
-**Filing the report marks the task completed; a manager approving it is what actually closes it.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone — that submission moves `status` to `completed` and logs a `completed` task_event, in the same transaction as saving the report itself. From there, only a manager can close it: an "Approve and close" button on the task's own detail page (no separate queue screen, no rejection reason — just that one button), which moves `status` to `closed` and logs a `report_approved` task_event. Re-submitting the report at any point afterward (a correction) is always allowed and doesn't move `status` backward or re-fire the completed event — there's nothing to unlock first, only the close itself is gated.
+**Filing the report marks the task completed — or, if a technician filed it, pending their supervisor's review first; a manager approving it is what actually closes it either way.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone. Who submits it decides what happens next: a **technician** lead moves `status` to `pending_supervisor_review` — the task's own `responsible_supervisor` (or any manager, a superset) then approves it from the task's detail page, which moves it on to `completed` and logs a `supervisor_approved` event. A **supervisor** lead (some tasks are staffed that way) skips that step entirely and moves straight to `completed`, exactly as before this existed. Either way, `completed` logs the same `completed` task_event, in the same transaction as saving the report itself. From `completed`, only a manager can close it: an "Approve and close" button on the task's own detail page (no separate queue screen, no rejection reason — just that one button), which moves `status` to `closed` and logs a `report_approved` task_event. Re-submitting the report at any point afterward (a correction) is always allowed and doesn't move `status` backward or re-fire the completed event — there's nothing to unlock first, only the close itself is gated.
 
-This is deliberately lighter than an earlier version of the same idea, which had a full pending/approved/rejected workflow with a required rejection reason and its own review screen — that got removed for not fitting how the business runs, and this replacement is a narrower requirement (a manager's own sign-off before a task counts as done), not a return to that queue. It's also manager-only, not configurable per role the way most of `role_permission` is — the same fixed-floor pattern `role_permissions` itself uses, so a bad edit to the permission matrix can't accidentally hand this out or lock everyone out of it.
+**A manager or admin can bypass all of this at any time** — "Close task" (`close_directly`, manager-tier) closes a task directly from any non-closed status, report or no report, exceptional cases only (customer cancelled, didn't need a visit, etc.). **An admin can also reopen a closed task** (`reopen`, admin-only) — back to `completed`, i.e. undoing just the manager's close decision, not further; the filed report itself was never locked by being closed, so there's nothing else to restore.
+
+This is deliberately lighter than an earlier version of the same idea, which had a full pending/approved/rejected workflow with a required rejection reason and its own review screen — that got removed for not fitting how the business runs at the time. The supervisor step reintroduces a narrow slice of that (approval, not rejection — `report_rejected` stays an unused, historical event type), scoped to exactly one case: a technician's own report needs someone to check it before a manager sees it; a supervisor's own report doesn't, since they're already that check. `close_directly`/`approve_report`/`reopen` stay manager-tier (or admin) fixed floors, not configurable per role the way most of `role_permission` is — the same fixed-floor pattern `role_permissions` itself uses, so a bad edit to the permission matrix can't accidentally hand these out or lock everyone out of them.
 
 **`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
@@ -400,7 +430,7 @@ A complaint or request — always submitted by a signed-in customer picking one 
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | status | varchar | new, converted, dismissed, closed |
-| assigned_to_id | FK → technician | nullable — who's handling it, a supervisor or manager (never a technician) |
+| assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager or admin), read from `role_permission` directly, not hardcoded |
 | assigned_at | timestamptz | nullable |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
 | shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
@@ -412,15 +442,17 @@ A complaint or request — always submitted by a signed-in customer picking one 
 | close_reason | varchar | nullable |
 | token | varchar(43) | unique, auto-generated — see below |
 
-**`token` lets a ticket be checked, and replied to, without staying logged in** — the same unguessable-link pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). It's what the portal's own ticket list links to (`ticket_status`), and doubles as a no-login fallback if a customer loses their session but kept the link.
+**`token` picks the ticket that `ticket_status` renders** — the same unguessable-random-string pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). `ticket_status` requires the viewer to be logged in as that ticket's own `customer` (`@login_required` plus an ownership check — anyone else, including a different logged-in customer, gets `PermissionDenied`); the token is only a stable, unguessable way to address one ticket in a URL, not a substitute for login.
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
 
 **`site_id` is the customer's own pick from their registered sites** — authoritative, not a guess, so it carries straight through to the resulting task with no re-matching and no chance to swap it out mid-conversion; only an admin can change it on the create-task screen. The supervisor reviewing a ticket either converts it (that site, a different existing one they pick instead, or a new one — task creation's own choice), dismisses it with a reason, or closes it with a reason.
 
-**Closed is separate from dismissed.** Dismissed means invalid or spam — never real work. Closed means the issue was genuinely resolved without ever needing a task — advice given over the phone, handled some other way. Both are terminal and end the reply conversation (see `ticket_reply` below); the distinction is only which reason field explains why no task exists.
+**Closed is separate from dismissed.** Dismissed means invalid or spam — never real work. Closed means the issue was genuinely resolved without ever needing a task — advice given over the phone, handled some other way. Dismissed still ends the reply conversation (see `ticket_reply` below); the distinction is only which reason field explains why no task exists.
 
-**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_company`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; any of the three can also just be set directly, since parts more often ship after the task exists.
+**Close reaches a ticket from any status, not just `new`** — support_manager/admin can close it whether it's still new, already converted, or already dismissed; `close_reason` records why. **Reopening a closed ticket is admin-only**, back to `new` — the same fixed-floor step up from support_manager that `require_admin` uses elsewhere. Neither action is truly terminal any more: close ends the reply conversation and unlocks the ticket's own feedback request (below), but an admin can always undo it.
+
+**Converting reuses task creation itself**, not a separate form — the ticket's free-text fields become initial hints on the normal create-task screen, `task.source` gets set to `portal`, and the ticket links to whatever task comes out of it. Nothing new to keep in sync if task creation changes later. If `pak_reference_number`/`shipping_company`/`shipping_tracking_number` were already set on the ticket, they carry over onto the new task; any of the three can also just be set directly, since parts more often ship after the task exists. `serial_numbers` carries over the same way, straight into `task.reported_serial_numbers` — so the team sees which machines the customer named the moment the task exists, without waiting for anyone to visit. It's a plain text snapshot, not a link to any `asset` row: nothing in the ticket names a brand or model, so there's not enough to match one confidently. Whatever the team actually finds on site — those serials or new ones — still goes on the work report as usual (`task_asset`, below), same as before this field existed.
 
 **`pak_reference_number`, `shipping_company`, and `shipping_tracking_number` exist on both `customer_ticket` and `task`, always optional, filled in later once parts actually ship** — never known at submission time. `shipping_company` is a fixed choice (DHL, FedEx, UPS, Aramex, TNT, local courier, other) — free text drifts the same way an unmanaged `task_type` would. The carrier and tracking number are the only two ever emailed to a customer (a manual "Notify customer" button next to each, same fail-silent pattern as the schedule/delay notices) — the carrier is dropped from the email when it's blank, and just the tracking number goes out on its own; PAK is internal bookkeeping and never leaves the app.
 
@@ -432,20 +464,21 @@ The back-and-forth on a ticket, either side, in order.
 | id | PK | |
 | ticket_id | FK → customer_ticket | |
 | sender | varchar | staff, customer |
-| sent_by_id | FK → user | nullable — always set for staff; set for a customer only if they replied through their portal login rather than the anonymous token page |
+| sent_by_id | FK → user | always set — staff, or the customer's own portal login (every ticket now requires signing in to submit, so there's no anonymous side to this any more) |
 | message | text | |
 | attachment | file | nullable — photo, short video, or PDF, same allowlist/25 MB limit as `customer_ticket_attachment` |
-| is_quotation | bool | default `false` — staff-only; marks this reply as the quotation, see below |
 | sent_at | timestamptz | |
 
-**`is_quotation` sends a dedicated "Your quotation is ready" email with the attachment itself attached, not just linked** — instead of the plain "New reply on your report" notice every other staff reply sends. Requires an attachment (`TicketReplyForm.clean()`); never set on a customer's own reply (`ticket_status` view never reads it off that path, so a crafted POST there can't mark one), and never rendered on the customer-facing reply form to begin with.
+**Every staff reply's attachment (if any) rides along on the "New reply on your ticket" email itself, attached, not just linked** — there's no separate "quotation" flow; staff write whatever the customer needs to know in the message text and attach the file, same as any other reply.
 
-**Open while the ticket is still new, or converted but the resulting task isn't finished yet** (`_ticket_is_open`, `tasks/views.py`) — closed once dismissed, once the ticket itself is closed directly, or once that task itself reaches `closed`. Not tied to `customer_ticket.status` alone: "converted" can mean the work just started, and the customer should still be able to ask about it. A **cancelled** task does *not* close the conversation — cancellation isn't a resolution, so the issue is still open and staff still needs to be able to talk to the customer about it. Once actually closed, the thread becomes read-only on both the staff review screen and the customer's own token page. A customer can reply from either place they can already reach a ticket: the public `ticket_status` page (token-based, no login) or, if they're logged in, the same page linked from their portal — there's no separate reply screen to keep in sync.
+**Open while the ticket is still new, or converted but the resulting task isn't finished yet** (`_ticket_is_open`, `tasks/views.py`) — closed once dismissed, once the ticket itself is closed directly, or once that task itself reaches `closed`. Not tied to `customer_ticket.status` alone: "converted" can mean the work just started, and the customer should still be able to ask about it. A **cancelled** task does *not* close the conversation — cancellation isn't a resolution, so the issue is still open and staff still needs to be able to talk to the customer about it. Once actually closed, the thread becomes read-only on both the staff review screen and the customer's own `ticket_status` page.
+
+**`ticket_status` (`tasks/views.py`) requires a portal login, and only ever renders a ticket that belongs to the signed-in customer** (`ticket.customer_id != customer.id` → 403) — the token in its URL (`<str:token>/`) is just how the ticket gets picked, a leftover from before every ticket required signing in to submit; it carries no access on its own any more, and there's no anonymous version of this page.
 
 **Each reply sends a best-effort email the other way**, same fail-silent pattern as every other notification here. A staff reply emails `customer_ticket.contact_email`, if one was given. A customer reply emails `assigned_to`'s login email, if the ticket is assigned to someone with one on file — there's no fixed office address to fall back to, so an unassigned ticket's customer replies simply don't email anyone until someone picks it up.
 
 ### ticket_internal_note
-A manager-tier-only progress note on a ticket — separate from `ticket_reply`, which the customer (and, for triage, any staff with `manage_tickets`) can see. This one is never shown to the customer, and never shown to a supervisor or technician either — only Manager and Admin, gated on `technician.is_manager_tier` rather than the `manage_tickets` permission, since that permission is often also granted to supervisors for day-to-day ticket triage.
+A progress note on a ticket, visible only to whoever can manage it — separate from `ticket_reply`, which the customer sees too. Gated on `manage_tickets` directly (the same `can_manage` check `ticket_review` computes for everything else on the screen), not `is_manager_tier` — tickets are their own permission now, held by `support_manager` and `admin`, not every manager-tier person.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -453,9 +486,62 @@ A manager-tier-only progress note on a ticket — separate from `ticket_reply`, 
 | ticket_id | FK → customer_ticket | |
 | author_id | FK → user | nullable |
 | message | text | |
+| attachment | file | nullable — same allowlist/25 MB limit as `customer_ticket_attachment`; manager-tier only, same as the note itself |
 | created_at | timestamptz | |
 
 **A running log, not a single overwritable field** — each note is its own row, timestamped and attributed, so a manager can see how the state of a ticket evolved over time rather than just its latest value.
+
+### ticket_notification
+A new ticket, or a new customer reply on an existing one — feeds the ticket half of the header bell, gated on `manage_tickets` (today, support manager and admin), same as `ticket_internal_note`. A plain manager, supervisor, or technician never sees it — the first for the same reason as the note above, the other two because they have no ticket access to begin with.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| ticket_id | FK → customer_ticket | |
+| kind | varchar | `new_ticket` or `new_reply` |
+| created_at | timestamptz | |
+| seen_at | timestamptz | nullable — set the moment any manager/admin opens the ticket (`ticket_review`) |
+
+**A shared team inbox, not per-user.** There's one row per event, not one per (event, viewer) pair — opening a ticket clears its notifications for every manager/admin at once, the same way any one of them acting on a ticket already handles it for the whole team. Created in `portal_ticket_new` (a new ticket) and `ticket_status` (a customer's own reply) — never for a staff reply, since staff already know they just sent one. Also fires a best-effort email to every manager/admin in the ticket's country (`send_new_ticket_email_to_staff`), separate from the bell.
+
+### task_notification
+A newly created task, for the same header bell as `ticket_notification` — a separate model since a task and a ticket are different things to point a FK at, and there's only one kind of task notification so far (no `kind` column needed).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | |
+| created_at | timestamptz | |
+| seen_at | timestamptz | nullable — set the moment any manager/admin opens the task (`task_detail`) |
+
+Same shared-team-inbox pattern as `ticket_notification`: created in `task_create`, cleared for everyone the moment any manager/admin opens the task. Also fires a best-effort email to every manager/admin in the task's country (`_send_new_task_email_to_staff`), separate from the bell.
+
+**The bell itself merges three models** in one context processor (`people.context_processors.notification_bell`), country-scoped like everything else here. `ticket_notification` and `task_notification` are a shared team inbox, gated independently — tickets on `manage_tickets`, tasks on `is_manager_tier` — and combined for whoever holds both (today, just admin). `task_message_recipient`, below, is different: every technician, any role, checks their own row.
+
+### task_message
+A note posted to a task's own thread — the warehouse manager confirming a part arrived, a supervisor flagging something for the team, anyone following up. Separate from `task_event` (a system-logged status change, never free text on its own) and a staff document upload — this is just people talking to each other about the job.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | |
+| sent_by_id | FK → user | |
+| message | text | |
+| sent_at | timestamptz | |
+
+Visible to anyone who can already see the task — `task_detail` (office side) and `my_task_detail` (a technician's own) both render the same thread and post to the same action. No attachment of its own; a photo still goes through the existing fault-evidence upload.
+
+### task_message_recipient
+Who a `task_message` actually notifies, and whether they've seen it — the one **per-recipient** notification in this app, unlike the shared-inbox pattern `ticket_notification`/`task_notification` use. A message names real individuals, computed at send time (`_task_message_recipients`, `tasks/views.py`): whoever's actually on the job right now (active lead, active helpers), the task's own `responsible_supervisor`, whoever created it, and every manager-tier (`manager`, `admin`) technician in the task's country — so the people running the country stay in the loop on every job, not just the ones they happen to open. The sender is excluded from their own message's recipients.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| message_id | FK → task_message | |
+| technician_id | FK → technician | |
+| seen_at | timestamptz | nullable — set the moment *this* technician opens the task (`task_detail` or `my_task_detail`), not for anyone else |
+
+Unique on (message, technician) — the same person can't end up with two rows for one message even if they qualify as a recipient more than one way (say, a manager who's also the responsible supervisor).
 
 ### customer_ticket_attachment
 A customer's own phone photo or short video of the fault, uploaded with the ticket. No `uploaded_by` of its own — the ticket already records who submitted it (`ticket.customer`) — and no link/URL option the way `task_attachment` has, since a customer only ever uploads a real file. Capped at 10 files per ticket, on top of the 25 MB-per-file limit, so a single submission can't attach an unbounded number of files and exhaust storage.

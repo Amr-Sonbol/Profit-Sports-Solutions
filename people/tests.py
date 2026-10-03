@@ -9,23 +9,106 @@ User = get_user_model()
 
 
 class SeedRolePermissionsTests(TestCase):
-    """Locks in the data migration in 0006_seed_role_permissions.py — it
-    must reproduce exactly what require_supervisor used to hardcode.
+    """Locks in the current shape of the RolePermission matrix — the
+    original blanket supervisor+manager+admin seed (0006), narrowed twice
+    for tickets (0021, 0023) and widened once for the dashboard (0024).
     """
 
-    def test_matches_old_hardcoded_supervisor_check(self):
+    def test_most_permissions_match_old_hardcoded_supervisor_check(self):
+        # manage_tickets, view_dashboard, view_machines, and view_tasks
+        # are the permissions that have since moved away from this
+        # default — each checked separately below.
         expected_allowed_roles = {'supervisor', 'manager', 'admin'}
-        for permission in RolePermission.Permission:
+        other_permissions = set(RolePermission.Permission) - {
+            RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
+            RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
+        }
+        for permission in other_permissions:
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
             )
             self.assertEqual(allowed_roles, expected_allowed_roles, permission)
 
+    def test_view_tasks_also_includes_the_warehouse_manager(self):
+        # The warehouse manager needs to search tasks by PAK reference and
+        # open one to post a message — view_tasks alone covers both.
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'admin'})
+
+    def test_manage_tickets_is_support_manager_and_admin_only(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'support_manager', 'admin'})
+
+    def test_view_dashboard_is_available_to_every_role(self):
+        # The dashboard is now everyone's landing page after signing in
+        # (spots.views.home) — every role needs to be able to see it.
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_DASHBOARD, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {r for r, _ in Technician.Role.choices})
+
+    def test_view_machines_is_every_office_role_but_technician(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_MACHINES, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'support_manager', 'admin'})
+
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(
             RolePermission.objects.count(),
-            len(RolePermission.Permission) * 4,
+            len(RolePermission.Permission) * len(Technician.Role.choices),
         )
+
+
+class ActiveCountryContextTests(TestCase):
+    """The header country switcher — manager-tier only (manager or admin),
+    matching get_active_country's own is_manager_tier check. Found live:
+    the context processor used to check role == MANAGER specifically,
+    so admin — who the backend already lets switch — had no UI control
+    to do it at all.
+    """
+
+    def setUp(self):
+        self.country = Country.objects.create(
+            name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
+        )
+        for username, role in [
+            ('tech1', Technician.Role.TECHNICIAN), ('supervisor1', Technician.Role.SUPERVISOR),
+            ('manager1', Technician.Role.MANAGER), ('support1', Technician.Role.SUPPORT_MANAGER),
+            ('admin1', Technician.Role.ADMIN),
+        ]:
+            user = User.objects.create_user(username, password='pass12345')
+            Technician.objects.create(
+                user=user, country=self.country, full_name=username,
+                language='en', role=role, employment_type='staff',
+            )
+
+    def test_manager_and_admin_can_switch_countries(self):
+        for username in ('manager1', 'admin1'):
+            self.client.login(username=username, password='pass12345')
+            response = self.client.get('/tasks/dashboard/')
+            self.assertIn('switchable_countries', response.context, username)
+            self.assertGreater(len(response.context['switchable_countries']), 0, username)
+            self.client.logout()
+
+    def test_everyone_else_gets_no_switcher(self):
+        for username in ('tech1', 'supervisor1', 'support1'):
+            self.client.login(username=username, password='pass12345')
+            response = self.client.get('/tasks/dashboard/')
+            self.assertNotIn('switchable_countries', response.context, username)
+            self.client.logout()
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], AXES_ENABLED=True)

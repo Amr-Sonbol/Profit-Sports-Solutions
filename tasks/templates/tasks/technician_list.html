@@ -6,9 +6,14 @@
 {% block content %}
 <div class="page__header">
     <h1>{% translate "Technicians" %}</h1>
-    {% if 'manage_technicians' in role_permissions %}
-    <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add technician" %}</a>
-    {% endif %}
+    <div class="badge-row">
+        {% if 'assign_tasks' in role_permissions %}
+        <a href="{% url 'tasks:technician_availability' %}" class="button button--secondary">{% translate "Availability" %}</a>
+        {% endif %}
+        {% if user.technician.role == 'admin' %}
+        <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add technician" %}</a>
+        {% endif %}
+    </div>
 </div>
 
 <form method="get" class="filters">
@@ -68,7 +73,7 @@
                         </span>
                         {% endif %}
                         {% if row.certification.cardio_ready %}
-                        <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                        <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
                         {% endif %}
                     </td>
                     <td>

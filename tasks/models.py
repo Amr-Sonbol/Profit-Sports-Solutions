@@ -20,6 +20,34 @@ MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
 # could attach an unbounded number of files and exhaust storage.
 MAX_TICKET_ATTACHMENT_COUNT = 10
 
+
+# `MEDIA_URL` is served with no per-file login check (whatever's in
+# front of it — Django's own dev server, or a web server/CDN in
+# production — just returns whatever's on disk), so a file is only as
+# private as its URL is hard to guess. A flat `<folder>/<original
+# filename>` path is guessable — phone cameras reuse the same few
+# filename patterns (`IMG_0001.jpg`, `20250101_120000.jpg`) — so every
+# upload gets its own random directory instead; the original filename
+# is kept underneath it purely so a human looking at the path can still
+# tell what it is. Near-identical top-level functions rather than one
+# parameterized by a closure, since a migration must be able to import
+# each `upload_to` by its own dotted path — a closure's isn't stable
+# enough for that.
+def _ticket_attachment_path(instance, filename):
+    return f'ticket_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _ticket_reply_attachment_path(instance, filename):
+    return f'ticket_reply_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _ticket_internal_note_attachment_path(instance, filename):
+    return f'ticket_internal_note_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _task_document_path(instance, filename):
+    return f'task_documents/{secrets.token_hex(16)}/{filename}'
+
 # The paperwork trail for a task — quotation, factory offer, invoice,
 # delivery note. Almost always a PDF export; jpg/png covers a photo of
 # a paper one.
@@ -67,6 +95,7 @@ class Task(models.Model):
         ASSIGNED = 'assigned', _('Assigned')
         ACCEPTED = 'accepted', _('Accepted')
         IN_PROGRESS = 'in_progress', _('In progress')
+        PENDING_SUPERVISOR_REVIEW = 'pending_supervisor_review', _('Pending supervisor review')
         COMPLETED = 'completed', _('Completed')
         CLOSED = 'closed', _('Closed')
         BLOCKED = 'blocked', _('Blocked')
@@ -94,6 +123,14 @@ class Task(models.Model):
     )
     min_level = models.PositiveSmallIntegerField(_('minimum level'), null=True, blank=True)
     description = models.TextField(_('description'), blank=True, help_text=_('what the customer reported'))
+    reported_serial_numbers = models.TextField(
+        _('reported serial numbers'), blank=True,
+        help_text=_(
+            'copied from the ticket at conversion, one per line — the machines the customer '
+            'named before anyone visited. The team can find more on site; those go on the '
+            'work report as usual, not here.',
+        ),
+    )
     priority = models.CharField(_('priority'), max_length=20, choices=Priority.choices)
     source = models.CharField(_('source'), max_length=20, choices=Source.choices)
     is_warranty = models.BooleanField(_('is warranty'), null=True, blank=True)
@@ -125,7 +162,7 @@ class Task(models.Model):
         _('estimated hours'), max_digits=4, decimal_places=2, null=True, blank=True,
         help_text=_('roughly how long the job should take — shown as an estimated finish time'),
     )
-    status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
+    status = models.CharField(_('status'), max_length=25, choices=Status.choices, default=Status.NEW)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tasks_created',
         verbose_name=_('created by'),
@@ -144,22 +181,29 @@ class Task(models.Model):
     )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     quotation = models.FileField(
-        _('quotation'), upload_to='task_documents/', null=True, blank=True,
+        _('quotation'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     quotation_uploaded_at = models.DateTimeField(_('quotation uploaded at'), null=True, blank=True)
     factory_offer = models.FileField(
-        _('factory offer'), upload_to='task_documents/', null=True, blank=True,
+        _('factory offer'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     factory_offer_uploaded_at = models.DateTimeField(_('factory offer uploaded at'), null=True, blank=True)
     invoice = models.FileField(
-        _('invoice'), upload_to='task_documents/', null=True, blank=True,
+        _('invoice'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
+    invoice_visible_to_supervisor = models.BooleanField(
+        _('show invoice to the supervisor'), default=False,
+        help_text=_(
+            'documents are manager-tier by default — turn this on for a specific task when a '
+            'supervisor is the one collecting payment on site and needs to see the invoice',
+        ),
+    )
     delivery_note = models.FileField(
-        _('delivery note'), upload_to='task_documents/', null=True, blank=True,
+        _('delivery note'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
         help_text=_('the shipment paperwork — uploaded once the parts arrive'),
     )
@@ -219,10 +263,7 @@ class CustomerTicket(models.Model):
     customer = models.ForeignKey(
         Customer, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets', verbose_name=_('customer'),
-        help_text=_(
-            'set automatically — at submission if the customer was logged in, '
-            'otherwise once the ticket is converted to a task'
-        ),
+        help_text=_('set automatically at submission — every ticket is submitted by a logged-in customer'),
     )
     site = models.ForeignKey(
         Site, on_delete=models.SET_NULL, null=True, blank=True,
@@ -315,9 +356,9 @@ class TicketReply(models.Model):
     resulting task isn't finished yet — read-only once dismissed,
     closed directly, or once that task itself is closed (a cancelled
     task does not close it — see _ticket_is_open, tasks/views.py).
-    `sent_by` is a real login either way: staff always
-    has one, and a customer does too when they replied through their
-    portal login rather than the anonymous token page.
+    `sent_by` is always a real login — staff or the customer's own
+    portal account (every ticket now requires signing in to submit,
+    see CustomerTicket).
     """
 
     class Sender(models.TextChoices):
@@ -335,12 +376,8 @@ class TicketReply(models.Model):
     )
     message = models.TextField(_('message'))
     attachment = models.FileField(
-        _('attachment'), upload_to='ticket_reply_attachments/', null=True, blank=True,
+        _('attachment'), upload_to=_ticket_reply_attachment_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
-    )
-    is_quotation = models.BooleanField(
-        _('is quotation'), default=False,
-        help_text=_('sends the dedicated quotation email (with the attachment) instead of a plain reply notice — staff only'),
     )
     sent_at = models.DateTimeField(_('sent at'))
 
@@ -351,6 +388,124 @@ class TicketReply(models.Model):
 
     def __str__(self):
         return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
+
+
+class TicketNotification(models.Model):
+    """A new ticket, or a new customer reply on an existing one — for the
+    header bell every manager/admin sees. A shared team inbox, not
+    per-user: any manager-tier person opening the ticket (ticket_review)
+    clears it for everyone, the same way any one of them acting on a
+    ticket already handles it for the team. Never shown to a supervisor
+    or technician — same is_manager_tier gate TicketInternalNote uses.
+    """
+
+    class Kind(models.TextChoices):
+        NEW_TICKET = 'new_ticket', _('New ticket')
+        NEW_REPLY = 'new_reply', _('New reply')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='notifications',
+        verbose_name=_('ticket'),
+    )
+    kind = models.CharField(_('kind'), max_length=20, choices=Kind.choices)
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('ticket notification')
+        verbose_name_plural = _('ticket notifications')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_kind_display()} — {self.ticket}'
+
+
+class TaskNotification(models.Model):
+    """A newly created task — for the same header bell every manager/admin
+    sees, alongside TicketNotification. Same shared-team-inbox pattern:
+    any manager-tier person opening the task (task_detail) clears it for
+    everyone. A separate model, not a shared one with TicketNotification,
+    since a task and a ticket are different things to point a FK at —
+    there's only one kind of task notification so far, unlike the
+    ticket one's new_ticket/new_reply split.
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='notifications',
+        verbose_name=_('task'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('task notification')
+        verbose_name_plural = _('task notifications')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'New task — {self.task}'
+
+
+class TaskMessage(models.Model):
+    """A free-form note posted to a task's own thread — the warehouse
+    manager confirming a part arrived, a supervisor flagging something
+    for the team, anyone following up. Distinct from task_event (a
+    system-logged status change) and a staff document upload — this is
+    just people talking to each other about the job, visible to anyone
+    who can already see the task. Who actually gets notified about it is
+    TaskMessageRecipient, below.
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='messages',
+        verbose_name=_('task'),
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='task_messages_sent',
+        verbose_name=_('sent by'),
+    )
+    message = models.TextField(_('message'))
+    sent_at = models.DateTimeField(_('sent at'))
+
+    class Meta:
+        verbose_name = _('task message')
+        verbose_name_plural = _('task messages')
+        ordering = ['sent_at']
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.sent_by}'
+
+
+class TaskMessageRecipient(models.Model):
+    """Who a task_message actually notifies, and whether they've seen it
+    yet — unlike TaskNotification's shared inbox (any manager-tier person
+    opening the task clears it for everyone), a message names real
+    individuals: whoever's actually on the job right now (active lead,
+    active helpers, the responsible supervisor) plus whoever created the
+    task and every manager-tier person in its country — so each gets
+    their own bell entry until they personally open the task, not just
+    whoever happens to look first.
+    """
+
+    message = models.ForeignKey(
+        TaskMessage, on_delete=models.CASCADE, related_name='recipients',
+        verbose_name=_('message'),
+    )
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='task_message_notifications',
+        verbose_name=_('technician'),
+    )
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('task message recipient')
+        verbose_name_plural = _('task message recipients')
+        constraints = [
+            models.UniqueConstraint(fields=['message', 'technician'], name='unique_task_message_recipient'),
+        ]
+
+    def __str__(self):
+        return f'{self.message} → {self.technician}'
 
 
 class TicketInternalNote(models.Model):
@@ -369,6 +524,10 @@ class TicketInternalNote(models.Model):
         related_name='ticket_internal_notes', verbose_name=_('author'),
     )
     message = models.TextField(_('note'))
+    attachment = models.FileField(
+        _('attachment'), upload_to=_ticket_internal_note_attachment_path, null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
     created_at = models.DateTimeField(_('created at'))
 
     class Meta:
@@ -382,8 +541,8 @@ class TicketInternalNote(models.Model):
 
 class CustomerTicketAttachment(models.Model):
     """A customer's own phone photo or video of the fault, uploaded with
-    the ticket — no login, so no uploaded_by; a plain FileField, since
-    there's no external-link case to support the way TaskAttachment has.
+    the ticket — the ticket itself already records who submitted it
+    (ticket.customer), so there's no separate uploaded_by here.
     """
 
     ticket = models.ForeignKey(
@@ -391,7 +550,7 @@ class CustomerTicketAttachment(models.Model):
         verbose_name=_('ticket'),
     )
     file = models.FileField(
-        _('file'), upload_to='ticket_attachments/',
+        _('file'), upload_to=_ticket_attachment_path,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     uploaded_at = models.DateTimeField(_('uploaded at'))
@@ -476,6 +635,7 @@ class TaskEvent(models.Model):
         COMPLETED = 'completed', _('Completed')
         REPORT_SUBMITTED = 'report_submitted', _('Report submitted')
         REPORT_REJECTED = 'report_rejected', _('Report rejected')
+        SUPERVISOR_APPROVED = 'supervisor_approved', _('Approved by supervisor')
         REPORT_APPROVED = 'report_approved', _('Report approved')
         CLOSED = 'closed', _('Closed')
         REOPENED = 'reopened', _('Reopened')

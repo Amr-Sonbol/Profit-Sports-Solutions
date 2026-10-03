@@ -53,7 +53,7 @@
         </div>
     </dl>
     {% if certification.cardio_ready %}
-    <p class="muted">{% translate "Cardio-certified — ready for the supervisor track." %}</p>
+    <p class="muted">{% translate "Certified in advanced skills." %}</p>
     {% endif %}
     <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Rate yourself on a skill or conduct area" %}</a></p>
 </div>
@@ -151,7 +151,7 @@
                 <tr>
                     <td>
                         {{ skill.display_name }}
-                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
+                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Advanced" %}</span>{% endif %}
                     </td>
                     <td>{{ skill.current.level|default:"—" }}</td>
                     <td>

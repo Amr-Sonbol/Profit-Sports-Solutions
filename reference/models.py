@@ -27,8 +27,12 @@ class Country(models.Model):
         verbose_name_plural = _('countries')
         ordering = ['name']
 
+    @property
+    def display_name(self):
+        return self.name_ar if get_language() == 'ar' else self.name
+
     def __str__(self):
-        return self.name
+        return self.display_name
 
 
 class Brand(models.Model):
@@ -56,7 +60,7 @@ class Skill(models.Model):
 
     class Category(models.TextChoices):
         OTHER = 'other', _('Basic')
-        CARDIO = 'cardio', _('Cardio')
+        CARDIO = 'cardio', _('Advanced')
 
     name = models.CharField(_('name'), max_length=100)
     # default='' only backfills existing rows cleanly (see the migration
@@ -65,7 +69,7 @@ class Skill(models.Model):
     name_ar = models.CharField(_('name (Arabic)'), max_length=100, default='')
     category = models.CharField(
         _('category'), max_length=10, choices=Category.choices, default=Category.OTHER,
-        help_text=_("cardio skills don't count toward the technician certification bar"),
+        help_text=_("advanced skills don't count toward the technician certification bar"),
     )
     is_active = models.BooleanField(_('active'), default=True)
 

@@ -141,6 +141,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'people.context_processors.role_permissions',
                 'people.context_processors.active_country',
+                'people.context_processors.notification_bell',
                 'spots.context_processors.static_version',
             ],
         },

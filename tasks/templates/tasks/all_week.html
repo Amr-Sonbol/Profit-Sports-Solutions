@@ -32,7 +32,7 @@
         <li>
             <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
             <span class="muted">{{ task.scheduled_for|date:"TIME_FORMAT" }}</span>
-            <span class="badge badge--muted">{{ task.site.customer.country.name }}</span>
+            <span class="badge badge--muted">{{ task.site.customer.country.display_name }}</span>
             {{ task.site.customer.name }} — {{ task.site.name }}
             <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
             <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
@@ -53,7 +53,7 @@
         {% for task in unscheduled %}
         <li>
             <a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>
-            <span class="badge badge--muted">{{ task.site.customer.country.name }}</span>
+            <span class="badge badge--muted">{{ task.site.customer.country.display_name }}</span>
             {{ task.site.customer.name }} — {{ task.site.name }}
             <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
             <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
