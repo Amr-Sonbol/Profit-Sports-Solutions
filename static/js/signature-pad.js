@@ -67,6 +67,22 @@
 
   pad.querySelector('[data-signature-clear]').addEventListener('click', resetCanvas);
 
+  // "Hand to customer to sign" switches the form into the customer's view
+  // (hours and prices hidden by CSS); "Done" switches it back.
+  var start = form.querySelector('[data-signoff-start]');
+  if (start) {
+    start.hidden = false;
+    start.querySelector('button').addEventListener('click', function () {
+      form.classList.add('is-signing');
+      pad.scrollIntoView({ block: 'center' });
+      // The canvas was sized while visible; resize now it's on screen.
+      resetCanvas();
+    });
+    form.querySelector('[data-signoff-done]').addEventListener('click', function () {
+      form.classList.remove('is-signing');
+    });
+  }
+
   form.addEventListener('submit', function () {
     hiddenInput.value = hasDrawn ? canvas.toDataURL('image/png') : '';
   });

@@ -1189,3 +1189,18 @@ tbody tr:hover {
     color: #c0392b;
     font-weight: 600;
 }
+
+/* Work report customer sign-off (static/js/signature-pad.js): while the
+   customer signs, hide what's for staff only — hours, prices, machine
+   outcomes, the save button. */
+.report-form [data-signing-only] {
+    display: none;
+}
+
+.report-form.is-signing [data-signing-only] {
+    display: block;
+}
+
+.report-form.is-signing [data-staff-only] {
+    display: none;
+}

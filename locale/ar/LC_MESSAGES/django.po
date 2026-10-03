@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 18:28+0000\n"
+"POT-Creation-Date: 2026-10-03 18:39+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -773,6 +773,9 @@ msgstr "تمت إعادة تفعيل العميل."
 msgid "Customer request"
 msgstr "طلب العميل"
 
+msgid "Customer sign-off"
+msgstr "توقيع العميل"
+
 msgid "Customer signature"
 msgstr "توقيع العميل"
 
@@ -983,6 +986,9 @@ msgstr "تمت إضافة المستند."
 msgid "Documents"
 msgstr "المستندات"
 
+msgid "Done — hand back to the technician"
+msgstr "تم — أعد الشاشة إلى الفني"
+
 msgid "Download"
 msgstr "تنزيل"
 
@@ -1085,6 +1091,9 @@ msgstr "تم التصعيد إلى مدير العمليات."
 
 msgid "Escalated to you — decision needed"
 msgstr "مُصعّدة إليك — مطلوب قرار"
+
+msgid "Escalated — awaiting the Operations Manager’s decision"
+msgstr "مُصعّدة — بانتظار قرار مدير العمليات"
 
 msgid "Escalation"
 msgstr "التصعيد"
@@ -1201,6 +1210,9 @@ msgstr "الجمعة"
 msgid "From customer"
 msgstr "من العميل"
 
+msgid "Getting complicated? Escalate to the Operations Manager"
+msgstr "أصبحت الحالة معقدة؟ صعّدها إلى مدير العمليات"
+
 msgid "Go to home"
 msgstr "الذهاب إلى الصفحة الرئيسية"
 
@@ -1215,6 +1227,12 @@ msgstr "صالة رياضية"
 
 msgid "Gym address"
 msgstr "عنوان النادي الرياضي"
+
+msgid "Hand the screen to the customer to review the work and sign — hours and prices are hidden while they do."
+msgstr "سلّم الشاشة للعميل لمراجعة العمل والتوقيع — تُخفى الساعات والأسعار أثناء ذلك."
+
+msgid "Hand to customer to sign"
+msgstr "سلّم للعميل للتوقيع"
 
 msgid "Helped on"
 msgstr "ساعد في"

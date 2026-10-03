@@ -147,6 +147,11 @@
             <button type="submit" class="button button--secondary">{% translate "Send reply" %}</button>
         </div>
     </form>
+    {% if can_escalate %}
+    <p><a href="#escalation">{% translate "Getting complicated? Escalate to the Operations Manager" %}</a></p>
+    {% elif pending_escalation %}
+    <p class="field__help"><a href="#escalation">{% translate "Escalated — awaiting the Operations Manager’s decision" %}</a></p>
+    {% endif %}
     {% elif can_manage %}
     <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
     {% endif %}
@@ -221,7 +226,7 @@
 {% endif %}
 
 {% if escalations or can_escalate %}
-<div class="section">
+<div class="section" id="escalation">
     <h2>{% translate "Escalation" %}</h2>
     {% for escalation in escalations %}
     <div class="escalation">

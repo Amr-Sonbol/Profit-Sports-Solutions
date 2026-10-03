@@ -5484,6 +5484,14 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.25')
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
 
+    def test_hours_and_prices_are_marked_staff_only_for_the_signing_view(self):
+        self.client.login(username='tech1', password='pass12345')
+        html = self.client.get(self.url).content.decode()
+        self.assertIn('data-report-form', html)
+        hours_field = html[html.index('name="labour_hours"') - 400:html.index('name="labour_hours"')]
+        self.assertIn('data-staff-only', hours_field)
+        self.assertIn('data-signoff-start', html)
+
     def test_supervisor_cannot_use_the_manager_correction(self):
         self.client.login(username='supervisor1', password='pass12345')
         self.assertEqual(self.client.get(f'/tasks/{self.task.pk}/report/correct/').status_code, 403)
@@ -6240,6 +6248,19 @@ class TicketEscalationTests(TaskTestCase):
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertNotContains(response, 'Not covered.')
         self.assertNotContains(response, 'Rejected')
+
+    def test_escalate_shortcut_sits_by_the_reply_box_while_open(self):
+        self.client.login(username='support1', password='pass12345')
+        self.assertContains(self.client.get(self.url), 'href="#escalation"')
+        self.ticket.status = CustomerTicket.Status.DISMISSED
+        self.ticket.save(update_fields=['status'])
+        self.assertFalse(self.client.get(self.url).context['can_escalate'])
+
+    def test_can_escalate_again_after_a_decision(self):
+        self._escalate()
+        TicketEscalation.objects.update(decision=TicketEscalation.Decision.INSTRUCTIONS, decided_at=timezone.now())
+        self._escalate()
+        self.assertEqual(TicketEscalation.objects.filter(ticket=self.ticket).count(), 2)
 
     def test_ticket_list_flags_pending_escalations(self):
         self._escalate()
