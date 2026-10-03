@@ -783,7 +783,7 @@ class PauseTaskForm(forms.Form):
     """
     note = forms.CharField(
         label=_('Note'), required=False, widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('Optional — anything the next session should know.'),
+        help_text=_('Optional — any notes needed before work resumes.'),
     )
 
 

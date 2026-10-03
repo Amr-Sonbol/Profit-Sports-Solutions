@@ -1761,8 +1761,8 @@ msgstr "مفتوحة"
 msgid "Open tasks"
 msgstr "المهام المفتوحة"
 
-msgid "Optional — anything the next session should know."
-msgstr "اختياري — أي شيء يجب أن تعرفه الجلسة التالية."
+msgid "Optional — any notes needed before work resumes."
+msgstr "اختياري — أي ملاحظات لازمة قبل استئناف العمل."
 
 msgid "Or upload a photo of a paper signature:"
 msgstr "أو ارفع صورة لتوقيع ورقي:"
