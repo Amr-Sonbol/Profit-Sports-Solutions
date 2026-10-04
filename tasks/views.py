@@ -40,7 +40,7 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
-from reference.models import Brand, ConductArea, Country, Skill, TaskType
+from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
@@ -48,7 +48,7 @@ from .forms import (
     AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
+    NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
     TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
@@ -3607,6 +3607,80 @@ def brand_create(request):
 
 
 @login_required
+def part_list(request):
+    """The parts catalogue (docs: part) — add one, upload a CSV, edit a
+    description, switch one off or back on. Gated by manage_parts, so the
+    warehouse manager can keep it up to date, not just the manager tier.
+    """
+    require_permission(request, RolePermission.Permission.MANAGE_PARTS)
+    add_form = PartForm()
+    import_form = PartImportForm()
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add':
+            add_form = PartForm(request.POST)
+            if add_form.is_valid():
+                add_form.save()
+                messages.success(request, _('Part added.'))
+                return redirect('tasks:part_list')
+        elif action == 'import':
+            import_form = PartImportForm(request.POST, request.FILES)
+            if import_form.is_valid():
+                added, updated = _import_parts(import_form.cleaned_data['file'])
+                messages.success(
+                    request, _('%(added)s parts added, %(updated)s updated.') % {'added': added, 'updated': updated},
+                )
+                return redirect('tasks:part_list')
+        elif action in ('toggle_active', 'edit_description'):
+            part = get_object_or_404(Part, pk=request.POST.get('part_id'))
+            if action == 'toggle_active':
+                part.is_active = not part.is_active
+                part.save(update_fields=['is_active'])
+            else:
+                part.description = request.POST.get('description', '').strip()[:200]
+                part.save(update_fields=['description'])
+            messages.success(request, _('Part updated.'))
+            return redirect('tasks:part_list')
+
+    search = request.GET.get('q', '').strip()
+    parts = Part.objects.all()
+    if search:
+        parts = parts.filter(Q(code__icontains=search) | Q(description__icontains=search))
+    paginator = Paginator(parts.order_by('-is_active', 'code'), 50)
+    context = {
+        'page_obj': paginator.get_page(request.GET.get('page')), 'search': search,
+        'add_form': add_form, 'import_form': import_form,
+    }
+    return render(request, 'tasks/part_list.html', context)
+
+
+def _import_parts(uploaded_file):
+    """Rows of code, description. A new code is added; an existing one gets
+    its description updated (and is switched back on). A first row whose
+    code reads "code" is taken as a header and skipped.
+    """
+    text = uploaded_file.read().decode('utf-8-sig', errors='replace')
+    added = updated = 0
+    for index, row in enumerate(csv.reader(text.splitlines())):
+        if not row or not row[0].strip():
+            continue
+        code = row[0].strip().upper()[:50]
+        if index == 0 and code == 'CODE':
+            continue
+        description = row[1].strip()[:200] if len(row) > 1 else ''
+        part, created = Part.objects.get_or_create(code=code, defaults={'description': description})
+        if created:
+            added += 1
+        elif description != part.description or not part.is_active:
+            part.description = description or part.description
+            part.is_active = True
+            part.save(update_fields=['description', 'is_active'])
+            updated += 1
+    return added, updated
+
+
+@login_required
 def country_list(request):
     """Every country the roster and every other per-country screen can
     scope to — manager-only, same fixed-floor reasoning as skill_list.
@@ -3968,6 +4042,7 @@ def _report_form(request, task, technician, back_url):
         'task': task,
         'report': report,
         'back_url': back_url,
+        'catalogue_parts': Part.objects.filter(is_active=True),
         'can_edit': True,
         'report_form': report_form,
         'existing_formset': existing_formset,

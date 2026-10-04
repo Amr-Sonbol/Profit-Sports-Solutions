@@ -185,6 +185,7 @@ class RolePermission(models.Model):
         MANAGE_CUSTOMERS = 'manage_customers', _('View and edit customers and sites')
         VIEW_MACHINES = 'view_machines', _('View machines and their task/ticket history')
         DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
+        MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)

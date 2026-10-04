@@ -6385,3 +6385,67 @@ class TechnicianTripTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         self._add_trip(self.ksa, 0, 0)
         self.assertFalse(self.TechnicianTrip.objects.exists())
+
+
+class PartsCatalogueTests(TaskTestCase):
+    """The parts catalogue: who maintains it, CSV upload, and reports
+    having to use its codes once it has any.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Part
+
+        self.Part = Part
+        self.warehouse_user = User.objects.create_user('warehouse1', password='pass12345')
+        Technician.objects.create(
+            user=self.warehouse_user, country=self.country, full_name='Walid Warehouse',
+            language='en', role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff',
+        )
+
+    def test_warehouse_manager_maintains_the_list_and_supervisor_cannot(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post('/tasks/parts/', {'action': 'add', 'code': 'belt-01', 'description': 'Treadmill belt'})
+        self.assertEqual(self.Part.objects.get().code, 'BELT-01')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/parts/').status_code, 403)
+
+    def test_duplicate_code_is_refused(self):
+        self.Part.objects.create(code='BELT-01')
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post('/tasks/parts/', {'action': 'add', 'code': 'Belt-01'})
+        self.assertEqual(self.Part.objects.count(), 1)
+
+    def test_csv_upload_adds_and_updates(self):
+        self.Part.objects.create(code='BELT-01', description='old')
+        upload = SimpleUploadedFile(
+            'parts.csv', 'code,description\nbelt-01,Treadmill belt\nPAD-7,Seat pad\n'.encode(), content_type='text/csv',
+        )
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post('/tasks/parts/', {'action': 'import', 'file': upload})
+        self.assertEqual(self.Part.objects.get(code='BELT-01').description, 'Treadmill belt')
+        self.assertEqual(self.Part.objects.get(code='PAD-7').description, 'Seat pad')
+        self.assertFalse(self.Part.objects.filter(code='CODE').exists())
+
+    def test_report_parts_must_come_from_the_catalogue(self):
+        from reports.forms import PartUsedItemForm
+
+        row = {'quantity': 1, 'unit_cost': '10.00', 'currency_code': 'AED'}
+        # Empty catalogue: free text, as before.
+        self.assertTrue(PartUsedItemForm({**row, 'part_code': 'ANY-1'}).is_valid())
+
+        self.Part.objects.create(code='BELT-01', description='Treadmill belt')
+        self.assertFalse(PartUsedItemForm({**row, 'part_code': 'ANY-1'}).is_valid())
+        form = PartUsedItemForm({**row, 'part_code': 'belt-01'})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['part_code'], 'BELT-01')
+        self.assertEqual(form.cleaned_data['description'], 'Treadmill belt')
+
+    def test_switched_off_parts_cannot_be_used(self):
+        from reports.forms import PartUsedItemForm
+
+        self.Part.objects.create(code='BELT-01')
+        self.Part.objects.create(code='OLD-9', is_active=False)
+        form = PartUsedItemForm({'part_code': 'OLD-9', 'quantity': 1, 'unit_cost': '1', 'currency_code': 'AED'})
+        self.assertFalse(form.is_valid())

@@ -638,3 +638,14 @@ class MyTaskUndoApiTests(ApiTestCase):
             content_type='application/json', **self.auth(token),
         )
         self.assertEqual(response.status_code, 400)
+
+
+class PartListApiTests(ApiTestCase):
+    def test_lists_active_parts_only(self):
+        from reference.models import Part
+
+        Part.objects.create(code='BELT-01', description='Treadmill belt')
+        Part.objects.create(code='OLD-9', is_active=False)
+        token = self.token_for('tech1')
+        response = self.client.get('/api/parts/', **self.auth(token))
+        self.assertEqual(response.json(), [{'code': 'BELT-01', 'description': 'Treadmill belt'}])

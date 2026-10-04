@@ -6,6 +6,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.validators import FileExtensionValidator, RegexValidator
 from django.utils.translation import gettext_lazy as _
 
+from reference.models import Part
+
 from .models import CustomerFeedback, WorkReport
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
@@ -94,7 +96,10 @@ class PartUsedItemForm(forms.Form):
     # plain forms.Form, not a ModelForm, so nothing else catches an
     # oversized value before it reaches PartUsed.objects.create() and fails
     # as an ugly DB error instead of a clean validation message.
-    part_code = forms.CharField(required=False, max_length=50, label=_('Part code'))
+    part_code = forms.CharField(
+        required=False, max_length=50, label=_('Part code'),
+        widget=forms.TextInput(attrs={'list': 'parts-catalogue', 'autocomplete': 'off'}),
+    )
     description = forms.CharField(required=False, max_length=200, label=_('Description'))
     # PositiveIntegerField has no upper bound of its own; capped here to a
     # figure no real parts count would ever reach, well short of Postgres's
@@ -107,8 +112,31 @@ class PartUsedItemForm(forms.Form):
         validators=[RegexValidator(r'^[A-Z]{3}$', _('Enter a 3-letter currency code, e.g. AED.'))],
     )
 
+    def clean_part_code(self):
+        """Once the catalogue has any active part, the code must be one of
+        them — matched case-insensitively and saved as the catalogue spells
+        it. While the catalogue is empty, any code goes, as before.
+        """
+        code = self.cleaned_data.get('part_code', '').strip()
+        if not code:
+            return code
+        catalogue = Part.objects.filter(is_active=True)
+        if not catalogue.exists():
+            return code
+        part = catalogue.filter(code__iexact=code).first()
+        if part is None:
+            raise forms.ValidationError(
+                _('“%(code)s” isn’t in the parts list — pick one from the list, or ask for it to be added.'),
+                params={'code': code},
+            )
+        self.catalogue_part = part
+        return part.code
+
     def clean(self):
         cleaned = super().clean()
+        part = getattr(self, 'catalogue_part', None)
+        if part and not cleaned.get('description'):
+            cleaned['description'] = part.description
         if not any(cleaned.get(f) for f in ('part_code', 'quantity', 'unit_cost')):
             return cleaned
         missing = [f for f in ('part_code', 'quantity', 'unit_cost', 'currency_code') if not cleaned.get(f)]

@@ -150,3 +150,25 @@ class TaskType(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class Part(models.Model):
+    """The parts catalogue (docs: part) — code and optional description,
+    no prices. Switched off rather than deleted.
+    """
+
+    code = models.CharField(_('code'), max_length=50, unique=True)
+    description = models.CharField(_('description'), max_length=200, blank=True)
+    is_active = models.BooleanField(_('active'), default=True)
+
+    class Meta:
+        verbose_name = _('part')
+        verbose_name_plural = _('parts')
+        ordering = ['code']
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.code} — {self.description}' if self.description else self.code

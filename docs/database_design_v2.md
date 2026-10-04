@@ -71,6 +71,18 @@ Panatta, Skillcore, Digilock, and any future principal. Available in all countri
 
 No brand name is ever hardcoded in the application. Adding a principal is an office action.
 
+### part
+The parts catalogue technicians pick from on the work report, instead of typing codes by hand. Code and description only — no prices; the technician still enters the cost on each report (`part_used`).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| code | varchar | unique, stored upper-case |
+| description | varchar | optional |
+| is_active | bool | switched off rather than deleted — past reports keep their codes |
+
+Maintained from the Parts screen by anyone with `manage_parts` (manager, warehouse_manager and admin by default) — one at a time, or uploaded as a CSV (`code,description`; an existing code just gets its description updated). Seeded from every code already used on a report, so it doesn't start empty. **Once the catalogue has any active part, a report's part code must be one of them** (case-insensitive, saved as the catalogue's spelling, with its description filled in when left blank); while it's empty, codes are free text as before.
+
 ### skill
 **One skill per repair task — brand-agnostic.** Replacing a pin is the same skill whatever brand it's on; what a technician is actually rated on is whether they can do that specific job, not "how good are they at Panatta in general." This replaced an earlier version of the table where each brand carried its own single skill row (plus a second `Cardio` row for the two brands that needed one) — that framing didn't match how the business evaluates competence, so it's gone.
 
@@ -245,7 +257,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — operations_manager and admin by default).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default).
 
 **`operations_manager` is who the support desk escalates to.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines` and `decide_escalated_tickets` — not `manage_tickets`: it isn't a second ticket desk, it only opens the tickets escalated to it (read-only, plus the decision itself), the same way a ticket's assignee can open just that ticket.
 
@@ -761,7 +773,7 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 |---|---|---|
 | id | PK | |
 | report_id | FK → work_report | |
-| part_code | varchar | |
+| part_code | varchar | a `part.code` once the catalogue is in use — kept as text, so a later catalogue change never rewrites history |
 | description | varchar | |
 | quantity | int | |
 | unit_cost | decimal | |

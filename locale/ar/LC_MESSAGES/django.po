@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 18:46+0000\n"
+"POT-Creation-Date: 2026-10-04 10:31+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,6 +13,10 @@ msgstr ""
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
+
+#, python-format
+msgid "%(added)s parts added, %(updated)s updated."
+msgstr "أُضيفت %(added)s قطع، وحُدّثت %(updated)s."
 
 #, python-format
 msgid ""
@@ -227,6 +231,9 @@ msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذ�
 msgid "Add a contact email for this site before requesting feedback."
 msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل طلب التقييم."
 
+msgid "Add a part"
+msgstr "إضافة قطعة"
+
 msgid "Add a shipping tracking number before notifying the customer."
 msgstr "أضف رقم تتبع الشحن قبل إشعار العميل."
 
@@ -253,6 +260,9 @@ msgstr "إضافة مساعد"
 
 msgid "Add note"
 msgstr "إضافة ملاحظة"
+
+msgid "Add part"
+msgstr "إضافة القطعة"
 
 msgid "Add site"
 msgstr "إضافة الفرع"
@@ -1507,6 +1517,9 @@ msgstr "الأجهزة المشمولة"
 msgid "Machines covered this visit"
 msgstr "الأجهزة المشمولة في هذه الزيارة"
 
+msgid "Maintain the parts catalogue"
+msgstr "إدارة قائمة قطع الغيار"
+
 msgid "Maintenance"
 msgstr "صيانة"
 
@@ -1737,6 +1750,12 @@ msgstr "لم يتم تعيين أحد بعد."
 msgid "No open tasks."
 msgstr "لا توجد مهام مفتوحة."
 
+msgid "No parts match that search."
+msgstr "لا توجد قطع تطابق هذا البحث."
+
+msgid "No parts yet — add them above or upload a list."
+msgstr "لا توجد قطع بعد — أضفها أعلاه أو ارفع قائمة."
+
 msgid "No photos yet."
 msgstr "لا توجد صور بعد."
 
@@ -1948,8 +1967,17 @@ msgstr "الصفحة غير موجودة"
 msgid "Part"
 msgstr "القطعة"
 
+msgid "Part added."
+msgstr "تمت إضافة القطعة."
+
 msgid "Part code"
 msgstr "رمز القطعة"
+
+msgid "Part updated."
+msgstr "تم تحديث القطعة."
+
+msgid "Parts"
+msgstr "قطع الغيار"
 
 msgid "Parts used"
 msgstr "القطع المستخدمة"
@@ -2316,6 +2344,9 @@ msgstr "الجدولة"
 msgid "Search"
 msgstr "بحث"
 
+msgid "Search by code or description"
+msgstr "ابحث بالرمز أو الوصف"
+
 msgid "Search by name"
 msgstr "البحث بالاسم"
 
@@ -2537,6 +2568,15 @@ msgstr "المشرفون"
 msgid "Switch"
 msgstr "تبديل"
 
+msgid "Switch off"
+msgstr "إيقاف"
+
+msgid "Switch on"
+msgstr "تفعيل"
+
+msgid "Switched off"
+msgstr "موقوفة"
+
 msgid "TNT"
 msgstr "TNT"
 
@@ -2626,6 +2666,9 @@ msgstr "شكرًا لك!"
 msgid "That can no longer be undone — ask a manager to correct the time."
 msgstr "لم يعد بالإمكان التراجع عن ذلك — اطلب من المدير تصحيح الوقت."
 
+msgid "That code is already in the list."
+msgstr "هذا الرمز موجود في القائمة بالفعل."
+
 msgid "That’s after the next step on this task."
 msgstr "هذا الوقت بعد الخطوة التالية في هذه المهمة."
 
@@ -2651,6 +2694,9 @@ msgstr ""
 #, python-format
 msgid "The day is set for %(date)s — pick the exact time."
 msgstr "اليوم محدد بتاريخ %(date)s — اختر الوقت الدقيق."
+
+msgid "The list technicians pick from when they record parts on a work report. Switch a part off instead of deleting it — past reports keep their codes."
+msgstr "القائمة التي يختار منها الفنيون عند تسجيل القطع في تقرير العمل. أوقف القطعة بدلًا من حذفها — تحتفظ التقارير السابقة برموزها."
 
 msgid "The trip can’t end before it starts."
 msgstr "لا يمكن أن تنتهي الرحلة قبل أن تبدأ."
@@ -2837,6 +2883,9 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
+msgid "Two columns: code, description. A header row is fine."
+msgstr "عمودان: الرمز، الوصف. لا مانع من وجود صف عناوين."
+
 msgid "Type"
 msgstr "النوع"
 
@@ -2880,6 +2929,9 @@ msgstr "رفع"
 
 msgid "Upload a .csv file."
 msgstr "ارفع ملف .csv."
+
+msgid "Upload a list"
+msgstr "رفع قائمة"
 
 msgid "Upload these from the task's Edit screen."
 msgstr "ارفعها من شاشة تعديل المهمة."
@@ -3479,11 +3531,17 @@ msgstr "يحل محل رمز ISO كبادئة لرقم المهمة — مثل K
 msgid "padding color"
 msgstr "لون الحشوة"
 
+msgid "part"
+msgstr "قطعة"
+
 msgid "part code"
 msgstr "رمز القطعة"
 
 msgid "part used"
 msgstr "القطعة المستخدمة"
+
+msgid "parts"
+msgstr "قطع"
 
 msgid "parts used"
 msgstr "القطع المستخدمة"
@@ -3982,6 +4040,10 @@ msgstr "تقارير العمل"
 
 msgid "— Report"
 msgstr "— التقرير"
+
+#, python-format
+msgid "“%(code)s” isn’t in the parts list — pick one from the list, or ask for it to be added."
+msgstr "«%(code)s» غير موجودة في قائمة القطع — اختر من القائمة أو اطلب إضافتها."
 
 #, python-format
 msgid "“%(name)s” still has technicians, customers, or tickets attached to it — deactivate it instead of deleting."

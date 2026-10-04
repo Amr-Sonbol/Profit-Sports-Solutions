@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from people.models import RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
+from reference.models import Part
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm,
@@ -471,6 +472,15 @@ class TeamTaskApproveView(APIView):
                 {'detail': 'This task has no report awaiting approval.'}, status=status.HTTP_400_BAD_REQUEST,
             )
         return _team_task_response(request, task)
+
+
+class PartListView(APIView):
+    """The active parts catalogue, for the report screen's picker."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        return Response(list(Part.objects.filter(is_active=True).values('code', 'description')))
 
 
 class TicketListView(APIView):

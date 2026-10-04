@@ -10,7 +10,7 @@ from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
     SKILL_LEVEL_CHOICES, RolePermission, Technician, TechnicianTrip,
 )
-from reference.models import Brand, ConductArea, Country, Skill, TaskType
+from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
@@ -1227,3 +1227,22 @@ class TechnicianTripForm(forms.ModelForm):
         if start and end and end < start:
             self.add_error('end_date', _('The trip can’t end before it starts.'))
         return cleaned
+
+
+class PartForm(forms.ModelForm):
+    class Meta:
+        model = Part
+        fields = ['code', 'description']
+
+    def clean_code(self):
+        code = self.cleaned_data['code'].strip().upper()
+        if Part.objects.filter(code=code).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError(_('That code is already in the list.'))
+        return code
+
+
+class PartImportForm(forms.Form):
+    file = forms.FileField(
+        label=_('CSV file'), help_text=_('Two columns: code, description. A header row is fine.'),
+        validators=[FileExtensionValidator(allowed_extensions=['csv'])],
+    )

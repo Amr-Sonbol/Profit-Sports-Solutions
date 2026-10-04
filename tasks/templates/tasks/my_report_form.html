@@ -185,6 +185,11 @@
 {% endblock %}
 
 {% block scripts %}
+{% if catalogue_parts %}
+<datalist id="parts-catalogue">
+    {% for part in catalogue_parts %}<option value="{{ part.code }}">{{ part.description }}</option>{% endfor %}
+</datalist>
+{% endif %}
 {% load static %}
 <script src="{% static 'js/signature-pad.js' %}" defer></script>
 {% endblock %}
