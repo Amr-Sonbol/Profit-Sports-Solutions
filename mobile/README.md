@@ -33,7 +33,7 @@ scan the QR code with Expo Go on a physical device. The Django backend
 
 ## Working with no signal
 
- keeps the last-loaded copy of My Tasks, each task, its report and the
+`src/offline.ts` keeps the last-loaded copy of My Tasks, each task, its report and the
 parts list on the phone, so a technician who opened them earlier can still fill in a
 report in a basement gym. Submitting with no connection saves the report on the phone;
 My Tasks sends it automatically the next time it loads (or on pull-to-refresh) and shows
