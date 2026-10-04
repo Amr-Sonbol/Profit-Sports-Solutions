@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
-import { clearToken, getToken, setToken as persistToken } from '@/api/client';
+import { ApiRequestError, clearToken, getToken, setToken as persistToken } from '@/api/client';
 import { fetchMe, login as loginRequest } from '@/api/endpoints';
+import { withOfflineCopy } from '@/offline';
+import { registerForPush, unregisterForPush } from '@/push';
 import type { Me } from '@/types';
 
 interface AuthContextValue {
@@ -40,9 +42,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
       try {
-        setMe(await fetchMe());
-      } catch {
-        await clearToken();
+        // With no signal, the last-known profile keeps them signed in (a
+        // report can be filed offline); only the server actually refusing
+        // the token signs them out.
+        const { data, offline } = await withOfflineCopy('me', fetchMe);
+        setMe(data);
+        if (!offline) {
+          registerForPush();
+        }
+      } catch (err) {
+        if (err instanceof ApiRequestError) {
+          await clearToken();
+        }
       } finally {
         setIsLoading(false);
       }
@@ -54,9 +65,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await persistToken(response.token);
     const { token: _token, ...profile } = response;
     setMe(profile);
+    registerForPush();
   };
 
   const signOut = async () => {
+    await unregisterForPush();
     await clearToken();
     setMe(null);
   };

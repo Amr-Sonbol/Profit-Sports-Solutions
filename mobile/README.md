@@ -41,6 +41,23 @@ it as "waiting to send" until then. If the server refuses it (say a part code th
 since been switched off), it stays there marked "not sent — tap to fix". Status
 buttons (accept, on my way, ...) still need a connection.
 
+## Push notifications
+
+`src/push.ts` registers the phone with the API after sign-in (and drops it on
+sign-out); the server (`people/push.py`) sends through Expo's push service when
+someone is assigned to a task, a report is waiting on its supervisor, a ticket is
+escalated to someone, or a task message names someone. Tapping one opens that task.
+
+**It needs the app linked to a free Expo account first** — until then (and in a
+simulator) it quietly does nothing:
+
+```bash
+npx eas-cli@latest login      # your expo.dev account
+npx eas-cli@latest init       # adds extra.eas.projectId to app.json
+```
+
+Push only works in a real build (`eas build`), not in Expo Go on Android.
+
 ## Supervisors, managers and admins
 
 - Team (`src/app/(app)/team.tsx`) — every open task in the active

@@ -39,7 +39,8 @@
         {
           "photosPermission": "Attach a photo of the fault, serial plate, or completed work to a task."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

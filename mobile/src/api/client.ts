@@ -55,7 +55,7 @@ export class ApiRequestError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
   /** For multipart uploads — pass a FormData body instead of JSON. */
   isFormData?: boolean;
