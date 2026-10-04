@@ -149,6 +149,8 @@ export interface Candidate {
   id: number;
   full_name: string;
   is_available: boolean;
+  // Their home country when they're working here on a trip, else null.
+  visiting_from: string | null;
   skill_level: number | null;
   next_task_number: string | null;
   next_task_at: string | null;

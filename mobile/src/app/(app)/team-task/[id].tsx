@@ -184,6 +184,7 @@ export default function TeamTaskScreen() {
                   <ThemedText style={!candidate.is_available ? styles.unavailable : undefined}>
                     {candidate.full_name}
                     {candidate.skill_level != null ? ` — level ${candidate.skill_level}` : ''}
+                    {candidate.visiting_from ? ` (visiting from ${candidate.visiting_from})` : ''}
                   </ThemedText>
                   <ThemedText themeColor="textSecondary" type="small">
                     {!candidate.is_available
