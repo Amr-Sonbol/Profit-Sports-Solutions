@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import type {
-  Candidate, Me, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Candidate, CataloguePart, Me, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -51,6 +51,10 @@ export function submitMyReport(id: number, report: WorkReportInput) {
     method: 'POST',
     body: report,
   });
+}
+
+export function fetchParts() {
+  return apiRequest<CataloguePart[]>('/api/parts/');
 }
 
 export function fetchTeamTasks() {

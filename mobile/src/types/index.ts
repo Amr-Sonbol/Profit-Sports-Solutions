@@ -145,6 +145,11 @@ export interface TeamTaskDetail extends TaskDetail {
   can_manager_approve: boolean;
 }
 
+export interface CataloguePart {
+  code: string;
+  description: string;
+}
+
 export interface Candidate {
   id: number;
   full_name: string;

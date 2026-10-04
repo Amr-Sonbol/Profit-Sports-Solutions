@@ -7,12 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
 
 import { ApiRequestError } from '@/api/client';
-import { fetchMyReport, fetchMyTaskDetail, submitMyReport } from '@/api/endpoints';
+import { fetchMyReport, fetchMyTaskDetail, fetchParts, submitMyReport } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskDetail } from '@/types';
+import type { CataloguePart, TaskDetail } from '@/types';
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -72,6 +72,9 @@ export default function ReportScreen() {
   const [labourHours, setLabourHours] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [parts, setParts] = useState<PartRow[]>([]);
+  // The parts catalogue (Parts screen on the web); once it has anything in
+  // it, the API only accepts codes from it — so suggest them as they type.
+  const [catalogue, setCatalogue] = useState<CataloguePart[]>([]);
   const [signatureOnFile, setSignatureOnFile] = useState(false);
   // Signing happens on its own screen (see the `signing` branch below) so
   // the customer never sees labour hours or part prices while signing.
@@ -85,10 +88,11 @@ export default function ReportScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [detail, { report }] = await Promise.all([
-        fetchMyTaskDetail(Number(id)), fetchMyReport(Number(id)),
+      const [detail, { report }, catalogueParts] = await Promise.all([
+        fetchMyTaskDetail(Number(id)), fetchMyReport(Number(id)), fetchParts(),
       ]);
       setTask(detail);
+      setCatalogue(catalogueParts);
       if (report) {
         setFindings(report.findings);
         setActionTaken(report.action_taken);
@@ -110,6 +114,18 @@ export default function ReportScreen() {
       load();
     }, [load]),
   );
+
+  // Up to five catalogue parts matching what's typed, hidden once it's an
+  // exact catalogue code.
+  const partSuggestions = (typed: string): CataloguePart[] => {
+    const query = typed.trim().toUpperCase();
+    if (!query || catalogue.some((part) => part.code === query)) {
+      return [];
+    }
+    return catalogue
+      .filter((part) => part.code.includes(query) || part.description.toUpperCase().includes(query))
+      .slice(0, 5);
+  };
 
   const updatePart = (index: number, field: keyof PartRow, value: string) => {
     setParts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
@@ -291,6 +307,23 @@ export default function ReportScreen() {
                     placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
                     onChangeText={(value) => updatePart(index, 'part_code', value)}
                   />
+                  {partSuggestions(row.part_code).map((part) => (
+                    <TouchableOpacity
+                      key={part.code}
+                      style={[styles.suggestion, { borderColor: theme.backgroundSelected }]}
+                      onPress={() => {
+                        updatePart(index, 'part_code', part.code);
+                        if (!row.description) {
+                          updatePart(index, 'description', part.description);
+                        }
+                      }}
+                    >
+                      <ThemedText type="small">
+                        <ThemedText type="smallBold">{part.code}</ThemedText>
+                        {part.description ? ` — ${part.description}` : ''}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
                   <TextInput
                     style={inputStyle} value={row.description} placeholder="Description"
                     placeholderTextColor={theme.textSecondary}
@@ -401,6 +434,7 @@ const styles = StyleSheet.create({
     flex: 1, borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center',
   },
   toggleTextActive: { color: '#fff', fontWeight: '600' },
+  suggestion: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   partCard: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: Spacing.two },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },
