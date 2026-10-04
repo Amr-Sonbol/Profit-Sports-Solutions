@@ -5776,11 +5776,20 @@ class TechnicianHoursTests(TaskTestCase):
         )
         other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
         other_site = Site.objects.create(customer=other_customer, name='Zamalek', address='Cairo')
-        self._task_with_report('EG-0001', hours='9.00', site=other_site)
+        # An Egyptian technician's report — not this country's hours.
+        cairo_user = User.objects.create_user('cairo_tech', password='pass12345')
+        cairo_tech = Technician.objects.create(
+            user=cairo_user, country=other_country, full_name='Cairo Tech',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        cairo_task = self._task_with_report('EG-0001', hours='9.00', site=other_site)
+        cairo_task.assignments.update(technician=cairo_tech)
 
         self.client.login(username='supervisor1', password='pass12345')
-        row = self._row(self.client.get(self.url), self.technician)
+        response = self.client.get(self.url)
+        row = self._row(response, self.technician)
         self.assertEqual(str(row['hours']), '3.50')
+        self.assertNotIn(cairo_tech, [r['technician'] for r in response.context['rows']])
 
     def test_earlier_month_is_reachable(self):
         earlier = timezone.now() - timedelta(days=62)
@@ -6266,3 +6275,113 @@ class TicketEscalationTests(TaskTestCase):
         self._escalate()
         response = self.client.get('/tasks/tickets/')
         self.assertTrue(response.context['tickets'][0].is_escalated)
+
+
+class TechnicianTripTests(TaskTestCase):
+    """A technician on a trip abroad: assignable there during the trip,
+    hours still counted at home.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from people.models import TechnicianTrip
+
+        self.TechnicianTrip = TechnicianTrip
+        self.ksa = Country.objects.create(
+            name='Saudi Arabia', name_ar='السعودية', iso_code='SA', timezone='Asia/Riyadh', currency_code='SAR',
+        )
+        ksa_customer = Customer.objects.create(country=self.ksa, name='Riyadh Gym', segment='gym')
+        self.ksa_site = Site.objects.create(customer=ksa_customer, name='Olaya', address='Riyadh')
+        self.ksa_sup_user = User.objects.create_user('ksa_sup', password='pass12345')
+        Technician.objects.create(
+            user=self.ksa_sup_user, country=self.ksa, full_name='Khalid Super',
+            language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.ksa_task = Task.objects.create(
+            task_number='KSA-0001', site=self.ksa_site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.ksa_sup_user,
+            status=Task.Status.NEW, scheduled_date=timezone.localdate() + timedelta(days=3),
+        )
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.edit_url = f'/tasks/technicians/{self.technician.pk}/edit/'
+
+    def _trip(self, start_offset, end_offset):
+        today = timezone.localdate()
+        return self.TechnicianTrip.objects.create(
+            technician=self.technician, country=self.ksa, start_date=today + timedelta(days=start_offset),
+            end_date=today + timedelta(days=end_offset), created_by=self.manager_user, created_at=timezone.now(),
+        )
+
+    def _add_trip(self, country, start_offset, end_offset):
+        today = timezone.localdate()
+        return self.client.post(self.edit_url, {
+            'action': 'add_trip', 'country': country.pk, 'note': 'Installation project',
+            'start_date': (today + timedelta(days=start_offset)).isoformat(),
+            'end_date': (today + timedelta(days=end_offset)).isoformat(),
+        })
+
+    def _candidate_names(self):
+        self.client.login(username='ksa_sup', password='pass12345')
+        response = self.client.get(f'/tasks/{self.ksa_task.pk}/assign/')
+        return [t.full_name for t in response.context['candidates']], response
+
+    def test_visitor_is_a_candidate_during_the_trip(self):
+        self._trip(1, 5)
+        names, response = self._candidate_names()
+        self.assertIn('Tarek Tech', names)
+        self.assertContains(response, 'Visiting from')
+
+    def test_not_a_candidate_outside_the_trip_dates(self):
+        self._trip(4, 6)  # the task is scheduled for day 3
+        names, _response = self._candidate_names()
+        self.assertNotIn('Tarek Tech', names)
+
+    def test_destination_supervisor_can_assign_the_visitor(self):
+        self._trip(1, 5)
+        self.client.login(username='ksa_sup', password='pass12345')
+        self.client.post(f'/tasks/{self.ksa_task.pk}/assign/', {
+            'action': 'set_lead', 'technician': self.technician.pk,
+        })
+        self.assertTrue(self.ksa_task.assignments.filter(technician=self.technician, is_active=True).exists())
+
+    def test_hours_abroad_count_on_the_home_hours_page(self):
+        TaskAssignment.objects.create(
+            task=self.ksa_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        WorkReport.objects.create(
+            task=self.ksa_task, findings='x', resolved=True, labour_hours='4.00', customer_name='Ali',
+            submitted_at=timezone.now(),
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/technicians/hours/')
+        row = next(r for r in response.context['rows'] if r['technician'] == self.technician)
+        self.assertEqual(str(row['hours']), '4.00')
+
+    def test_manager_adds_and_cancels_a_trip(self):
+        self.client.login(username='manager1', password='pass12345')
+        self._add_trip(self.ksa, 1, 5)
+        trip = self.TechnicianTrip.objects.get(technician=self.technician)
+        self.client.post(self.edit_url, {'action': 'cancel_trip', 'trip_id': trip.pk})
+        self.assertFalse(self.TechnicianTrip.objects.exists())
+
+    def test_trip_cannot_end_before_it_starts_or_be_to_home(self):
+        self.client.login(username='manager1', password='pass12345')
+        self._add_trip(self.ksa, 5, 1)
+        self._add_trip(self.country, 0, 0)
+        self.assertFalse(self.TechnicianTrip.objects.exists())
+
+    def test_past_trip_cannot_be_cancelled(self):
+        trip = self._trip(-10, -2)
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(self.edit_url, {'action': 'cancel_trip', 'trip_id': trip.pk})
+        self.assertTrue(self.TechnicianTrip.objects.filter(pk=trip.pk).exists())
+
+    def test_supervisor_cannot_add_trips(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self._add_trip(self.ksa, 0, 0)
+        self.assertFalse(self.TechnicianTrip.objects.exists())

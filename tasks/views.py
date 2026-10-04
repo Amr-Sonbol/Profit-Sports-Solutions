@@ -34,7 +34,7 @@ from django.utils.translation import gettext as _
 from customers.models import Asset, Customer, Site
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
-    TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
+    TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
@@ -51,7 +51,8 @@ from .forms import (
     NegligenceFlagForm, NewAssetForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
     TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
-    TechnicianEditForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm, TicketReplyForm,
+    TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
+    TicketReplyForm,
 )
 from .models import (
     CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
@@ -201,11 +202,32 @@ def save_new_ticket(ticket):
     raise IntegrityError('Could not generate a unique ticket number')
 
 
+def _task_work_date(task):
+    """The day the work happens, in the task's own country — its scheduled
+    day if it has one, otherwise today.
+    """
+    tz = ZoneInfo(task.site.customer.country.timezone)
+    if task.scheduled_for:
+        return task.scheduled_for.astimezone(tz).date()
+    if task.scheduled_date:
+        return task.scheduled_date
+    return timezone.now().astimezone(tz).date()
+
+
 def _assignment_candidates(task, exclude_ids):
-    """Active technicians in the task's country, not already on the task."""
+    """Active technicians in the task's country, plus anyone on a trip
+    there covering the task's work day (docs: technician_trip), not
+    already on the task. A visitor's `country` is still their home one —
+    templates show "Visiting from ..." when it differs from the task's.
+    """
+    country = task.site.customer.country
+    work_date = _task_work_date(task)
+    visiting = TechnicianTrip.objects.filter(
+        country=country, start_date__lte=work_date, end_date__gte=work_date,
+    ).values('technician_id')
     return Technician.objects.filter(
-        is_active=True, country=task.site.customer.country,
-    ).exclude(pk__in=exclude_ids).order_by('full_name')
+        Q(country=country) | Q(pk__in=visiting), is_active=True,
+    ).exclude(pk__in=exclude_ids).select_related('country').order_by('full_name')
 
 
 def _candidates_with_skill_level(candidates_qs, task):
@@ -2859,7 +2881,7 @@ def technician_create(request):
             technician = form.save(commit=False)
             technician.country = get_active_country(request)
             technician.save()
-            messages.success(request, _('Technician added.'))
+            messages.success(request, _('User added.'))
             return redirect('tasks:technician_list')
     else:
         form = TechnicianCreateForm()
@@ -2943,9 +2965,13 @@ def _technician_hours_rows(active_country, period_start_date):
     CSV export.
     """
     period_start, period_end = _month_window(period_start_date)
+    technicians = list(Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'))
+    # By who worked on it, not where the task was — a technician's hours
+    # on a trip abroad still count at home (docs: technician_trip).
     reports = WorkReport.objects.filter(
-        submitted_at__gte=period_start, submitted_at__lt=period_end, task__site__customer__country=active_country,
-    ).select_related('task__site__customer').prefetch_related(
+        submitted_at__gte=period_start, submitted_at__lt=period_end,
+        task__assignments__technician__in=technicians, task__assignments__is_active=True,
+    ).distinct().select_related('task__site__customer').prefetch_related(
         Prefetch(
             'task__assignments', queryset=TaskAssignment.objects.filter(is_active=True), to_attr='active_assignments',
         ),
@@ -2961,7 +2987,7 @@ def _technician_hours_rows(active_country, period_start_date):
                 helped_on[assignment.technician_id] += 1
 
     rows = []
-    for technician in Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'):
+    for technician in technicians:
         own_reports = leads_reports[technician.pk]
         rows.append({
             'technician': technician,
@@ -3208,6 +3234,27 @@ def technician_edit(request, pk):
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager, is_admin=is_admin)
     deactivate_form = DeactivateTechnicianForm()
+    trip_form = TechnicianTripForm(home_country=technician.country) if is_manager else None
+
+    if request.method == 'POST' and request.POST.get('action') == 'add_trip' and is_manager:
+        trip_form = TechnicianTripForm(request.POST, home_country=technician.country)
+        if trip_form.is_valid():
+            trip = trip_form.save(commit=False)
+            trip.technician = technician
+            trip.created_by = request.user
+            trip.created_at = timezone.now()
+            trip.save()
+            messages.success(request, _('Trip added.'))
+            return redirect('tasks:technician_edit', pk=technician.pk)
+
+    if request.method == 'POST' and request.POST.get('action') == 'cancel_trip' and is_manager:
+        trip = get_object_or_404(
+            technician.trips, pk=request.POST.get('trip_id'), end_date__gte=timezone.localdate(),
+        )
+        trip.delete()
+        messages.success(request, _('Trip cancelled.'))
+        return redirect('tasks:technician_edit', pk=technician.pk)
+
     login_form = CreateTechnicianLoginForm() if is_manager and technician.user_id is None else None
     password_form = SetPasswordForm(user=technician.user) if is_manager and technician.user_id else None
 
@@ -3250,6 +3297,8 @@ def technician_edit(request, pk):
     context = {
         'technician': technician, 'form': form, 'deactivate_form': deactivate_form,
         'login_form': login_form, 'password_form': password_form, 'is_manager': is_manager,
+        'trip_form': trip_form, 'trips': technician.trips.select_related('country'),
+        'today': timezone.localdate(),
     }
     return render(request, 'tasks/technician_edit.html', context)
 

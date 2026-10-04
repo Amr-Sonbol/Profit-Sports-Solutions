@@ -259,6 +259,22 @@ Unique on (role, permission).
 
 **Every role has a row for every permission — `support_manager` needed a one-off backfill to catch up (`0025_backfill_support_manager_permission_rows`).** Adding the role (`0022`) only changed the `role` field's choices; `0023`/`0024` each created a row for one specific permission (`manage_tickets`, `view_dashboard`) via `update_or_create`, leaving the other seven permissions with no row for this role at all. A missing row already behaves exactly like `allowed=False` everywhere it's read (`require_permission`, the `role_permissions` screen's matrix), so nothing was ever actually broken — but the invariant is worth keeping intact so the matrix stays simple to audit, hence the backfill.
 
+### technician_trip
+A technician or supervisor working in another country for set dates — so that country can assign them without moving their whole record there.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| technician_id | FK → technician | |
+| country_id | FK → country | where they're going — never their own country |
+| start_date | date | |
+| end_date | date | inclusive; never before `start_date` |
+| note | varchar | optional, e.g. "KSA installation project" |
+| created_by_id | FK → user | a manager or admin |
+| created_at | timestamptz | |
+
+**A visitor is assignable, nothing more.** On a task in the trip's country whose work date (its scheduled day, or today if unscheduled, in that country's timezone) falls inside the trip, the person appears among the assignment candidates — labelled "Visiting from <home country>" — so that country's supervisors (anyone with `assign_tasks` there) and managers can make them lead or helper, on the web and in the mobile app. Their own `technician.country` never changes: they stay on their home roster, week board and reliability figures, and their labour hours count on their **home** country's Hours page wherever the task was. Recorded and cancelled only by the manager tier, from the technician's edit screen; a trip that has already ended can't be cancelled, so the record of past travel stays.
+
 ### technician_skill
 The capability matrix. Answers "can he do this job", separately from "will he do it well". Holds only the *current* level — `technician_skill_assessment`, below, keeps the full history behind it.
 

@@ -229,6 +229,36 @@ class NotificationSettings(models.Model):
         return str(_('Notification settings'))
 
 
+class TechnicianTrip(models.Model):
+    """A technician working in another country for set dates (docs:
+    technician_trip) — assignable there during the trip, while their own
+    country, roster, figures and hours stay at home.
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='trips', verbose_name=_('technician'),
+    )
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name='visiting_trips', verbose_name=_('country'),
+    )
+    start_date = models.DateField(_('start date'))
+    end_date = models.DateField(_('end date'))
+    note = models.CharField(_('note'), max_length=200, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='trips_recorded',
+        verbose_name=_('recorded by'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('trip')
+        verbose_name_plural = _('trips')
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f'{self.technician} — {self.country} ({self.start_date} to {self.end_date})'
+
+
 class TechnicianSkill(models.Model):
     """The current level snapshot. `TechnicianSkillAssessment` holds the
     full history of self-ratings and supervisor reviews behind it.

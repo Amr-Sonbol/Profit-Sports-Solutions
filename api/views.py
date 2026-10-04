@@ -371,6 +371,9 @@ class TeamTaskCandidatesView(APIView):
                 'id': technician.pk,
                 'full_name': technician.full_name,
                 'is_available': technician.is_available,
+                # Their home country when they're here on a trip, else null.
+                'visiting_from': technician.country.display_name
+                if technician.country_id != task.site.customer.country_id else None,
                 'skill_level': technician.skill_level,
                 'next_task_number': technician.next_scheduled_task.task_number
                 if technician.next_scheduled_task else None,

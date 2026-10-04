@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-03 18:39+0000\n"
+"POT-Creation-Date: 2026-10-03 18:46+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -260,8 +260,11 @@ msgstr "إضافة الفرع"
 msgid "Add skill"
 msgstr "إضافة مهارة"
 
-msgid "Add technician"
-msgstr "إضافة فني"
+msgid "Add trip"
+msgstr "إضافة رحلة"
+
+msgid "Add user"
+msgstr "إضافة مستخدم"
 
 msgid "Added"
 msgstr "أُضيف"
@@ -506,6 +509,9 @@ msgstr "العلامات التجارية"
 
 msgid "CSV file"
 msgstr "ملف CSV"
+
+msgid "Cancel trip"
+msgstr "إلغاء الرحلة"
 
 msgid "Cancelled"
 msgstr "ملغاة"
@@ -1131,6 +1137,9 @@ msgstr "طلبات كل الدول دفعة واحدة. لا يتبع مبدّل
 
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
+
+msgid "Every staff account is added here — choose the role first: technician, supervisor, manager, Technical Support Manager, Warehouse Manager, Operations Manager or admin."
+msgstr "تُضاف جميع حسابات الموظفين من هنا — اختر الدور أولًا: فني، مشرف، مدير، مدير الدعم الفني، مدير المستودع، مدير العمليات أو مسؤول النظام."
 
 msgid "Every task in every country — for tracking, inspection, and audit. Doesn't follow the country switcher above."
 msgstr "كل مهمة في كل دولة — للتتبع والفحص والتدقيق. لا يتبع مبدّل الدولة أعلاه."
@@ -2593,9 +2602,6 @@ msgstr "مدير الدعم الفني"
 msgid "Technician"
 msgstr "الفني"
 
-msgid "Technician added."
-msgstr "تمت إضافة الفني."
-
 msgid "Technician availability"
 msgstr "توفر الفنيين"
 
@@ -2645,6 +2651,9 @@ msgstr ""
 #, python-format
 msgid "The day is set for %(date)s — pick the exact time."
 msgstr "اليوم محدد بتاريخ %(date)s — اختر الوقت الدقيق."
+
+msgid "The trip can’t end before it starts."
+msgstr "لا يمكن أن تنتهي الرحلة قبل أن تبدأ."
 
 msgid "The two password fields didn't match."
 msgstr "حقلا كلمة المرور غير متطابقين."
@@ -2816,6 +2825,15 @@ msgstr "وسيلة نقل"
 msgid "Trim color"
 msgstr "لون الحواف"
 
+msgid "Trip added."
+msgstr "تمت إضافة الرحلة."
+
+msgid "Trip cancelled."
+msgstr "تم إلغاء الرحلة."
+
+msgid "Trips"
+msgstr "الرحلات"
+
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
@@ -2865,6 +2883,9 @@ msgstr "ارفع ملف .csv."
 
 msgid "Upload these from the task's Edit screen."
 msgstr "ارفعها من شاشة تعديل المهمة."
+
+msgid "User added."
+msgstr "تمت إضافة المستخدم."
 
 msgid "Username"
 msgstr "اسم المستخدم"
@@ -2916,6 +2937,10 @@ msgstr "تعرض بيانات"
 
 msgid "Visible to managers and admins only — never shown to the customer or on the ticket's conversation."
 msgstr "مرئي للمديرين ومسؤولي النظام فقط — لا يظهر أبدًا للعميل أو في محادثة الطلب."
+
+#, python-format
+msgid "Visiting from %(country)s"
+msgstr "زائر من %(country)s"
 
 msgid "Warehouse Manager"
 msgstr "مدير المستودع"
@@ -2997,6 +3022,9 @@ msgstr "سبب عدم تحويل هذا الطلب إلى مهمة — رسال�
 
 msgid "Work report"
 msgstr "تقرير العمل"
+
+msgid "Working in another country for set dates. During a trip they can be assigned tasks there; their own country, hours and figures stay here."
+msgstr "العمل في دولة أخرى لفترة محددة. خلال الرحلة يمكن إسناد مهام إليه هناك، بينما تبقى دولته وساعاته وأرقامه هنا."
 
 msgid "Written report"
 msgstr "تقرير مكتوب"
@@ -3272,6 +3300,9 @@ msgstr "إرسال بريد إلكتروني للعميل تلقائيًا عن�
 msgid "employment type"
 msgstr "نوع التوظيف"
 
+msgid "end date"
+msgstr "تاريخ الانتهاء"
+
 msgid "end reason"
 msgstr "سبب الإنهاء"
 
@@ -3508,6 +3539,9 @@ msgstr "التقييم"
 msgid "reason"
 msgstr "السبب"
 
+msgid "recorded by"
+msgstr "سجّلها"
+
 msgid "replacement"
 msgstr "البديل"
 
@@ -3687,6 +3721,9 @@ msgstr "المصدر"
 msgid "stable key, never changes"
 msgstr "مفتاح ثابت، لا يتغير أبدًا"
 
+msgid "start date"
+msgstr "تاريخ البدء"
+
 msgid "status"
 msgstr "الحالة"
 
@@ -3855,6 +3892,12 @@ msgstr "الرمز"
 msgid "trim color"
 msgstr "لون الحواف"
 
+msgid "trip"
+msgstr "رحلة"
+
+msgid "trips"
+msgstr "رحلات"
+
 msgid "unavailable reason"
 msgstr "سبب عدم التوفر"
 
@@ -3953,6 +3996,12 @@ msgstr "← العودة إلى العملاء النشطين"
 
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
+
+#~ msgid "Add technician"
+#~ msgstr "إضافة فني"
+
+#~ msgid "Technician added."
+#~ msgstr "تمت إضافة الفني."
 
 #~ msgid "supervisors only"
 #~ msgstr "للمشرفين فقط"

@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
-    SKILL_LEVEL_CHOICES, RolePermission, Technician,
+    SKILL_LEVEL_CHOICES, RolePermission, Technician, TechnicianTrip,
 )
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 
@@ -714,8 +714,9 @@ class TechnicianCreateForm(forms.ModelForm):
 
     class Meta:
         model = Technician
+        # Role first: this one screen adds every kind of staff account.
         fields = [
-            'full_name', 'phone', 'language', 'role', 'employment_type',
+            'role', 'full_name', 'phone', 'language', 'employment_type',
             'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
@@ -1201,3 +1202,28 @@ class DecideEscalationForm(forms.Form):
         label=_('Note for the support desk (internal)'), widget=forms.Textarea(attrs={'rows': 3}),
         help_text=_('Never shown to the customer.'),
     )
+
+
+class TechnicianTripForm(forms.ModelForm):
+    """A manager recording a trip abroad (docs: technician_trip)."""
+
+    class Meta:
+        model = TechnicianTrip
+        fields = ['country', 'start_date', 'end_date', 'note']
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date'}),
+            'end_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def __init__(self, *args, home_country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['country'].queryset = Country.objects.filter(is_active=True).exclude(
+            pk=getattr(home_country, 'pk', None),
+        ).order_by('name')
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get('start_date'), cleaned.get('end_date')
+        if start and end and end < start:
+            self.add_error('end_date', _('The trip can’t end before it starts.'))
+        return cleaned

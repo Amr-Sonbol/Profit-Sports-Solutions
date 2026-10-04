@@ -124,7 +124,12 @@
             <tbody>
                 {% for technician in candidates %}
                 <tr>
-                    <td>{{ technician.full_name }}</td>
+                    <td>
+                        {{ technician.full_name }}
+                        {% if technician.country_id != task.site.customer.country_id %}
+                        <span class="badge badge--muted">{% blocktranslate with country=technician.country.display_name %}Visiting from {{ country }}{% endblocktranslate %}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ technician.get_employment_type_display }}</td>
                     <td>{% if technician.has_transport %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     <td>{% if technician.can_carry_large %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>

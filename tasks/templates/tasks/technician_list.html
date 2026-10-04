@@ -12,7 +12,7 @@
         <a href="{% url 'tasks:technician_availability' %}" class="button button--secondary">{% translate "Availability" %}</a>
         {% endif %}
         {% if user.technician.role == 'admin' %}
-        <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add technician" %}</a>
+        <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add user" %}</a>
         {% endif %}
     </div>
 </div>

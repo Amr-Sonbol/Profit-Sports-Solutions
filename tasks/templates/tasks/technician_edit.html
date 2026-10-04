@@ -82,6 +82,44 @@
 
 {% if is_manager %}
 <div class="section">
+    <h2>{% translate "Trips" %}</h2>
+    <p class="field__help">{% translate "Working in another country for set dates. During a trip they can be assigned tasks there; their own country, hours and figures stay here." %}</p>
+    {% if trips %}
+    <ul class="plain-list">
+        {% for trip in trips %}
+        <li>
+            <strong>{{ trip.country.display_name }}</strong>,
+            {{ trip.start_date|date:"SHORT_DATE_FORMAT" }} – {{ trip.end_date|date:"SHORT_DATE_FORMAT" }}
+            {% if trip.note %}<span class="muted">— {{ trip.note }}</span>{% endif %}
+            {% if trip.end_date >= today %}
+            <form method="post" class="inline-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel_trip">
+                <input type="hidden" name="trip_id" value="{{ trip.pk }}">
+                <button type="submit" class="button button--secondary">{% translate "Cancel trip" %}</button>
+            </form>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_trip">
+        {% for field in trip_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Add trip" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
     <h2>{% translate "Deactivate" %}</h2>
     <p class="field__help">
         {% translate "Removes them from the roster, blocks assignment, and blocks their login (if they have one) — for someone who's resigned, been let go, or otherwise left the company." %}
