@@ -16,7 +16,8 @@ import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
   ['sick', 'Sick'], ['leave', 'Leave'], ['overloaded', 'Overloaded'], ['skill_mismatch', 'Skill mismatch'],
-  ['customer_request', 'Customer request'], ['emergency', 'Emergency'], ['vehicle', 'Vehicle'], ['other', 'Other'],
+  ['customer_request', 'Customer request'], ['emergency', 'Emergency'], ['vehicle', 'Vehicle'],
+  ['left_company', 'Left the company'], ['other', 'Other'],
 ];
 
 // What the picker is choosing for: a new lead, an extra helper, or why a
