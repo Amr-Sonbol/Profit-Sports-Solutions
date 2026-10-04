@@ -14,6 +14,12 @@
         <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
     </div>
 </div>
+{% if departed_on_task %}
+<p class="flash flash--error">
+    {% translate "Someone on this task has left the company." %}
+    {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
+</p>
+{% endif %}
 
 <div class="section">
     <div class="section__header">

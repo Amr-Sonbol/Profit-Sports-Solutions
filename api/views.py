@@ -19,7 +19,7 @@ from tasks.forms import (
 )
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
-    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
+    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
     _requires_signature, _save_attachment, _task_is_paused, _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
@@ -330,8 +330,10 @@ def _team_task_response(request, task):
     context = {
         'requires_signature': bool(task.task_type and task.task_type.requires_signature),
         'can_assign': (
-            owns and task.status not in ASSIGNMENT_LOCKED_STATUSES
-            and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
+            owns and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
+            and any(
+                assignment_changeable(task, a) for a in [None, *(a for a in task.assignments.all() if a.is_active)]
+            )
         ),
         'can_supervisor_approve': (
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
@@ -401,20 +403,19 @@ class TeamTaskAssignView(APIView):
     def post(self, request, pk):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
-        if task.status in ASSIGNMENT_LOCKED_STATUSES:
-            return Response(
-                {'detail': 'Work has started — the team can no longer be changed.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         active = [a for a in task.assignments.all() if a.is_active]
         active_lead = next((a for a in active if a.role == TaskAssignment.Role.LEAD), None)
+        locked_message = Response(
+            {'detail': 'Work has started — the team can no longer be changed.'}, status=status.HTTP_400_BAD_REQUEST,
+        )
         selectable = _assignment_candidates(task, exclude_ids={a.technician_id for a in active}).filter(
             is_available=True,
         )
         action = request.data.get('action')
 
         if action == 'set_lead':
+            if not assignment_changeable(task, active_lead):
+                return locked_message
             form = SetLeadForm(request.data, technicians=selectable, requires_reason=bool(active_lead))
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -423,6 +424,8 @@ class TeamTaskAssignView(APIView):
                 request.user,
             )
         elif action == 'add_helper':
+            if not assignment_changeable(task):
+                return locked_message
             if not active_lead:
                 return Response({'detail': 'Set a lead first.'}, status=status.HTTP_400_BAD_REQUEST)
             form = AddHelperForm(request.data, technicians=selectable)
@@ -438,6 +441,8 @@ class TeamTaskAssignView(APIView):
                 TaskAssignment, pk=request.data.get('assignment_id'), task=task,
                 role=TaskAssignment.Role.HELPER, is_active=True,
             )
+            if not assignment_changeable(task, helper):
+                return locked_message
             form = RemoveAssignmentForm(request.data)
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)

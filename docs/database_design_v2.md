@@ -683,7 +683,7 @@ Handles several technicians on one task, and one technician across many tasks.
 | assigned_at | timestamptz | |
 | is_active | bool | false once replaced |
 | ended_at | timestamptz | nullable |
-| end_reason | varchar | required on reassignment — one tap, never free text |
+| end_reason | varchar | required on reassignment — one tap, never free text (sick, leave, overloaded, skill_mismatch, customer_request, emergency, vehicle, left_company, other) |
 
 **Exactly one active `lead` per task.** Enforce in the database.
 
@@ -691,7 +691,7 @@ Handles several technicians on one task, and one technician across many tasks.
 
 **Reason codes:** sick, leave, overloaded, skill_mismatch, customer_request, emergency, vehicle, other. Include `other` so nobody has to stop and think.
 
-**Blocked once work starts.** After `in_progress`, handover means closing the task and raising a new one — otherwise two people's work lands in one report.
+**Blocked once work starts.** After `in_progress`, handover means closing the task and raising a new one — otherwise two people's work lands in one report. **One exception: someone who has left.** If a person on an `in_progress` task is deactivated, they — and only they — can still be replaced (or, as a helper, removed), so the task isn't stuck with nobody able to finish it; the new lead carries on and the status stays `in_progress` (`assignment_changeable`, `tasks/views.py`). End reason `left_company`. Deactivating someone with open tasks lands on their page with the list to reassign, and those tasks show a warning until it's done.
 
 **Notify the technician when a task is taken away**, not only when one is given.
 

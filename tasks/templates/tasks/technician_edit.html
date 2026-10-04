@@ -80,6 +80,22 @@
 </div>
 {% endif %}
 
+{% if tasks_to_reassign %}
+<div class="section">
+    <h2>{% translate "Open tasks to reassign" %}</h2>
+    <p class="field__help">{% translate "They've been deactivated but are still on these tasks. Open each one and pick someone else — as lead, choose the reason “Left the company”." %}</p>
+    <ul class="plain-list">
+        {% for task in tasks_to_reassign %}
+        <li>
+            <strong>{{ task.task_number }}</strong> — {{ task.site.customer.name }}, {{ task.site.name }}
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+            <a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 {% if is_manager %}
 <div class="section">
     <h2>{% translate "Trips" %}</h2>

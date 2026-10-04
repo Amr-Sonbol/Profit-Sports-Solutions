@@ -6449,3 +6449,76 @@ class PartsCatalogueTests(TaskTestCase):
         self.Part.objects.create(code='OLD-9', is_active=False)
         form = PartUsedItemForm({'part_code': 'OLD-9', 'quantity': 1, 'unit_cost': '1', 'currency_code': 'AED'})
         self.assertFalse(form.is_valid())
+
+
+class DepartedTechnicianTests(TaskTestCase):
+    """Deactivating someone still on tasks, then handing their work on."""
+
+    def setUp(self):
+        super().setUp()
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.replacement_user = User.objects.create_user('tech2', password='pass12345')
+        self.replacement = Technician.objects.create(
+            user=self.replacement_user, country=self.country, full_name='Rami Replacement',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.IN_PROGRESS,
+        )
+        self.lead = TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.assign_url = f'/tasks/{self.task.pk}/assign/'
+
+    def _deactivate(self):
+        self.client.login(username='manager1', password='pass12345')
+        return self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
+            'action': 'deactivate', 'reason': 'Contract ended',
+        })
+
+    def test_deactivating_someone_with_open_tasks_lists_them_to_reassign(self):
+        response = self._deactivate()
+        self.assertRedirects(response, f'/tasks/technicians/{self.technician.pk}/edit/')
+        page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        self.assertEqual(page.context['tasks_to_reassign'], [self.task])
+
+    def test_departed_lead_can_be_replaced_even_after_work_started(self):
+        self._deactivate()
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertTrue(self.client.get(f'/tasks/{self.task.pk}/').context['departed_on_task'])
+        self.client.post(self.assign_url, {
+            'action': 'set_lead', 'technician': self.replacement.pk, 'end_reason': 'left_company',
+        })
+        new_lead = self.task.assignments.get(is_active=True, role=TaskAssignment.Role.LEAD)
+        self.assertEqual(new_lead.technician, self.replacement)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+        self.lead.refresh_from_db()
+        self.assertEqual(self.lead.end_reason, 'left_company')
+
+    def test_an_active_lead_stays_locked_once_work_started(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.assign_url, {
+            'action': 'set_lead', 'technician': self.replacement.pk, 'end_reason': 'sick',
+        })
+        self.assertEqual(self.task.assignments.get(is_active=True).technician, self.technician)
+
+    def test_departed_helper_can_be_removed_after_work_started(self):
+        helper = TaskAssignment.objects.create(
+            task=self.task, technician=self.replacement, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.replacement.set_active(False, reason='Left')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.assign_url, {
+            'action': 'remove_helper', 'assignment_id': helper.pk, 'end_reason': 'left_company',
+        })
+        helper.refresh_from_db()
+        self.assertFalse(helper.is_active)

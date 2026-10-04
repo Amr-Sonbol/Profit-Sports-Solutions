@@ -14,7 +14,13 @@
     </div>
 </div>
 
-{% if locked %}
+{% if locked and can_set_lead %}
+<div class="section">
+    <p class="flash flash--error">
+        {% translate "The lead has left the company. Work has already started, so only they can be replaced — the new lead carries on from where the task is." %}
+    </p>
+</div>
+{% elif locked %}
 <div class="section">
     <p class="empty-state">
         {% translate "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead." %}
@@ -29,6 +35,7 @@
         <li>
             <span class="badge badge--role-lead">{% translate "Lead" %}</span>
             {{ active_lead.technician.full_name }}
+            {% if not active_lead.technician.is_active %}<span class="badge badge--status-blocked">{% translate "Left the company" %}</span>{% endif %}
             <span class="muted">{% blocktranslate with time=active_lead.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
         </li>
     </ul>
@@ -36,7 +43,7 @@
     <p class="empty-state">{% translate "No one is assigned yet." %}</p>
     {% endif %}
 
-    {% if not locked %}
+    {% if can_set_lead %}
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="set_lead">
@@ -65,8 +72,9 @@
         <li>
             <span class="badge badge--role-helper">{% translate "Helper" %}</span>
             {{ helper.technician.full_name }}
+            {% if not helper.technician.is_active %}<span class="badge badge--status-blocked">{% translate "Left the company" %}</span>{% endif %}
             <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
-            {% if not locked %}
+            {% if helper.removable %}
             <form method="post" class="inline-form" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="remove_helper">

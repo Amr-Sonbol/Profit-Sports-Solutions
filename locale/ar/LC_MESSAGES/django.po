@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-04 10:51+0000\n"
+"POT-Creation-Date: 2026-10-04 11:23+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -855,6 +855,9 @@ msgstr "إيقاف الفني"
 msgid "Deactivated"
 msgstr "موقوف"
 
+msgid "Deactivated. Reassign their open tasks below."
+msgstr "تم الإيقاف. أعد إسناد مهامه المفتوحة أدناه."
+
 #, python-format
 msgid ""
 "Dear %(contact)s,\n"
@@ -1476,6 +1479,9 @@ msgstr "إجازة"
 msgid "Leave contact fields blank to use the customer's own contact instead."
 msgstr "اترك حقول التواصل فارغة لاستخدام بيانات تواصل العميل نفسه."
 
+msgid "Left the company"
+msgstr "غادر الشركة"
+
 msgid "Level"
 msgstr "المستوى"
 
@@ -1945,6 +1951,9 @@ msgstr "مفتوحة"
 msgid "Open tasks"
 msgstr "المهام المفتوحة"
 
+msgid "Open tasks to reassign"
+msgstr "مهام مفتوحة لإعادة الإسناد"
+
 msgid "Operations Manager"
 msgstr "مدير العمليات"
 
@@ -2154,6 +2163,9 @@ msgstr "سبب استبدال الفني الرئيسي الحالي"
 
 msgid "Reason:"
 msgstr "السبب:"
+
+msgid "Reassign"
+msgstr "إعادة الإسناد"
 
 msgid "Reassigned"
 msgstr "أُعيد تعيينه"
@@ -2533,6 +2545,9 @@ msgstr "المهارات"
 msgid "Skipped"
 msgstr "تم التخطي"
 
+msgid "Someone on this task has left the company."
+msgstr "أحد العاملين على هذه المهمة غادر الشركة."
+
 msgid "Source"
 msgstr "المصدر"
 
@@ -2720,6 +2735,9 @@ msgstr ""
 msgid "The day is set for %(date)s — pick the exact time."
 msgstr "اليوم محدد بتاريخ %(date)s — اختر الوقت الدقيق."
 
+msgid "The lead has left the company. Work has already started, so only they can be replaced — the new lead carries on from where the task is."
+msgstr "غادر الفني الرئيسي الشركة. بدأ العمل بالفعل، لذا يمكن استبداله هو فقط — يكمل الفني الجديد من حيث توقفت المهمة."
+
 msgid "The list technicians pick from when they record parts on a work report. Switch a part off instead of deleting it — past reports keep their codes."
 msgstr "القائمة التي يختار منها الفنيون عند تسجيل القطع في تقرير العمل. أوقف القطعة بدلًا من حذفها — تحتفظ التقارير السابقة برموزها."
 
@@ -2734,6 +2752,9 @@ msgstr "يوجد بالفعل طلب قيد الانتظار لهذه المهم
 
 msgid "There is no day-only schedule waiting for a time."
 msgstr "لا يوجد موعد بيوم فقط بانتظار تحديد وقت."
+
+msgid "They've been deactivated but are still on these tasks. Open each one and pick someone else — as lead, choose the reason “Left the company”."
+msgstr "تم إيقافه لكنه ما زال على هذه المهام. افتح كل مهمة واختر شخصًا آخر — وعند تغيير الفني الرئيسي اختر السبب «غادر الشركة»."
 
 msgid "This customer already has a site with that name"
 msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم"

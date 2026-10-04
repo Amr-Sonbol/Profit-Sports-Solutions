@@ -617,6 +617,7 @@ class TaskAssignment(models.Model):
         CUSTOMER_REQUEST = 'customer_request', _('Customer request')
         EMERGENCY = 'emergency', _('Emergency')
         VEHICLE = 'vehicle', _('Vehicle')
+        LEFT_COMPANY = 'left_company', _('Left the company')
         OTHER = 'other', _('Other')
 
     task = models.ForeignKey(

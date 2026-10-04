@@ -101,6 +101,30 @@ ASSIGNMENT_LOCKED_STATUSES = {
     Task.Status.CANCELLED,
 }
 
+# Someone who's left (deactivated) can still be replaced on a task already
+# underway — otherwise it would be stuck with nobody able to finish it. The
+# new lead carries on; status stays in_progress. Once the report is filed,
+# there's nothing left to hand over.
+DEPARTED_REPLACEABLE_STATUSES = {Task.Status.IN_PROGRESS}
+
+# Statuses where a deactivated person's assignment still needs handing on.
+NEEDS_REASSIGNING_STATUSES = [
+    Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED,
+]
+
+
+def assignment_changeable(task, assignment=None):
+    """Whether this assignment (or, with none, the team in general) can
+    still change: always before work starts, and for someone who has left
+    while the task is still underway.
+    """
+    if task.status not in ASSIGNMENT_LOCKED_STATUSES:
+        return True
+    return bool(
+        assignment and not assignment.technician.is_active and task.status in DEPARTED_REPLACEABLE_STATUSES
+    )
+
+
 # Once a lead is (re)assigned, an in-progress task pipeline restarts at
 # "assigned" — the new lead has not accepted yet. Statuses outside this set
 # (e.g. blocked) are left alone.
@@ -1510,6 +1534,9 @@ def task_detail(request, pk):
         'active_helpers': active_helpers,
         'events': events,
         'correctable_event_types': CORRECTABLE_EVENTS,
+        'departed_on_task': task.status in NEEDS_REASSIGNING_STATUSES and task.assignments.filter(
+            is_active=True, technician__is_active=False,
+        ).exists(),
         'attachments': task.attachments.select_related('uploaded_by'),
         'ticket_attachments': source_ticket.attachments.all() if source_ticket else [],
         'task_assets': task.task_assets.select_related('asset'),
@@ -2456,6 +2483,9 @@ def task_assign(request, pk):
     assigned_ids = {a.technician_id for a in active_assignments}
 
     locked = task.status in ASSIGNMENT_LOCKED_STATUSES
+    can_set_lead = assignment_changeable(task, active_lead)
+    for helper in active_helpers:
+        helper.removable = assignment_changeable(task, helper)
     candidates_qs = _assignment_candidates(task, exclude_ids=assigned_ids)
     # Shown in the candidates table regardless of availability, so a
     # supervisor can see and flip someone back — but only available
@@ -2468,7 +2498,7 @@ def task_assign(request, pk):
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'set_lead' and not locked:
+        if action == 'set_lead' and can_set_lead:
             set_lead_form = SetLeadForm(request.POST, technicians=selectable_qs, requires_reason=bool(active_lead))
             if set_lead_form.is_valid():
                 _set_lead(
@@ -2489,13 +2519,13 @@ def task_assign(request, pk):
                 messages.success(request, _('Helper added.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
-        elif action == 'remove_helper' and not locked:
+        elif action == 'remove_helper':
             helper = get_object_or_404(
-                TaskAssignment, pk=request.POST.get('assignment_id'), task=task,
+                TaskAssignment.objects.select_related('technician'), pk=request.POST.get('assignment_id'), task=task,
                 role=TaskAssignment.Role.HELPER, is_active=True,
             )
             remove_form = RemoveAssignmentForm(request.POST)
-            if remove_form.is_valid():
+            if assignment_changeable(task, helper) and remove_form.is_valid():
                 helper.is_active = False
                 helper.ended_at = timezone.now()
                 helper.end_reason = remove_form.cleaned_data['end_reason']
@@ -2509,6 +2539,7 @@ def task_assign(request, pk):
         'active_helpers': active_helpers,
         'candidates': _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)),
         'locked': locked,
+        'can_set_lead': can_set_lead,
         'set_lead_form': set_lead_form,
         'add_helper_form': add_helper_form,
         'remove_form': RemoveAssignmentForm(),
@@ -3232,6 +3263,16 @@ def technician_skills(request, pk):
     return render(request, 'tasks/technician_skills.html', context)
 
 
+def _tasks_to_reassign(technician):
+    """Open tasks a (deactivated) person is still on, lead or helper."""
+    return list(
+        Task.objects.filter(
+            assignments__technician=technician, assignments__is_active=True,
+            status__in=NEEDS_REASSIGNING_STATUSES,
+        ).select_related('site__customer').distinct().order_by('scheduled_for'),
+    )
+
+
 @login_required
 def technician_edit(request, pk):
     """A supervisor or manager managing someone else's record, from the
@@ -3280,6 +3321,9 @@ def technician_edit(request, pk):
         deactivate_form = DeactivateTechnicianForm(request.POST)
         if deactivate_form.is_valid():
             technician.set_active(False, reason=deactivate_form.cleaned_data['reason'])
+            if _tasks_to_reassign(technician):
+                messages.success(request, _('Deactivated. Reassign their open tasks below.'))
+                return redirect('tasks:technician_edit', pk=technician.pk)
             messages.success(request, _('Technician deactivated.'))
             return redirect('tasks:technician_list')
 
@@ -3316,6 +3360,7 @@ def technician_edit(request, pk):
         'technician': technician, 'form': form, 'deactivate_form': deactivate_form,
         'login_form': login_form, 'password_form': password_form, 'is_manager': is_manager,
         'trip_form': trip_form, 'trips': technician.trips.select_related('country'),
+        'tasks_to_reassign': _tasks_to_reassign(technician) if not technician.is_active else [],
         'today': timezone.localdate(),
     }
     return render(request, 'tasks/technician_edit.html', context)
