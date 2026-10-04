@@ -430,3 +430,22 @@ class TechnicianConductAssessment(models.Model):
             f'{self.technician.full_name} — {self.conduct_area} '
             f'({self.level}, {self.get_source_display()})'
         )
+
+
+class PushDevice(models.Model):
+    """A phone that receives push notifications for this technician
+    (docs: push_device) — registered by the mobile app after sign-in.
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='push_devices', verbose_name=_('technician'),
+    )
+    token = models.CharField(_('push token'), max_length=200, unique=True)
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('push device')
+        verbose_name_plural = _('push devices')
+
+    def __str__(self):
+        return f'{self.technician} — {self.token[:24]}'

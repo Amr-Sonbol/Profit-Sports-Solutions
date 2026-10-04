@@ -432,6 +432,18 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 **Most shipments come from the factory, not the customer** — so alongside the customer-facing "Notify customer" button, setting or changing `shipping_tracking_number` from the task's Edit screen also always emails the task's own `responsible_supervisor`, automatically, no button to click. This is a different email to a different audience (internal, in English, with a link back to the task) from the customer-facing one, and it only fires when there's a `responsible_supervisor` with a login and an email on file — an unowned task notifies no one.
 
+### push_device
+A phone that can receive push notifications for a technician (any role) — registered by the mobile app after sign-in, removed on sign-out.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| technician_id | FK → technician | |
+| token | varchar | the Expo push token (`ExponentPushToken[...]`), unique — a phone that signs in as someone else moves to them |
+| created_at | timestamptz | |
+
+Sent through Expo's push service (`people/push.py`), best-effort and fail-silent like email — a failed push never blocks the action behind it; a token Expo reports as no longer registered is deleted. **Sent when:** a technician is made lead or helper on a task; a technician's report is waiting on the task's responsible supervisor; a ticket is escalated to someone; a task message names someone. Never for their own actions. Off entirely unless `EXPO_PUSH_ENABLED` is on (it is by default; tests and local runs without phones simply have no devices registered).
+
 ### notification_settings
 A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
 

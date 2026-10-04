@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-04 10:31+0000\n"
+"POT-Creation-Date: 2026-10-04 10:51+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -89,6 +89,18 @@ msgstr[5] "%(hours)s ساعة عمل في %(reports)s تقرير مقدم."
 #, python-format
 msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
+
+#, python-format
+msgid "%(number)s — %(company)s"
+msgstr "%(number)s — %(company)s"
+
+#, python-format
+msgid "%(number)s — %(site)s"
+msgstr "%(number)s — %(site)s"
+
+#, python-format
+msgid "%(number)s — filed by %(name)s"
+msgstr "%(number)s — قدّمه %(name)s"
 
 #, python-format
 msgid "%(source)s — %(time)s"
@@ -278,6 +290,9 @@ msgstr "إضافة مستخدم"
 
 msgid "Added"
 msgstr "أُضيف"
+
+msgid "Added as helper"
+msgstr "أُضفت كمساعد"
 
 msgid "Added to existing customer"
 msgstr "أُضيف إلى عميل موجود"
@@ -1633,6 +1648,10 @@ msgstr "أجهزة جديدة تم العثور عليها"
 msgid "New message"
 msgstr "رسالة جديدة"
 
+#, python-format
+msgid "New message — %(number)s"
+msgstr "رسالة جديدة — %(number)s"
+
 msgid "New password"
 msgstr "كلمة المرور الجديدة"
 
@@ -1652,6 +1671,9 @@ msgstr "مهمة جديدة"
 #, python-format
 msgid "New task %(number)s — %(site)s"
 msgstr "مهمة جديدة %(number)s — %(site)s"
+
+msgid "New task assigned"
+msgstr "أُسندت إليك مهمة جديدة"
 
 msgid "New task type"
 msgstr "نوع مهمة جديد"
@@ -2210,6 +2232,9 @@ msgstr "تم تحديث التقرير — لا يزال بانتظار المو
 
 msgid "Report updated."
 msgstr "تم تحديث التقرير."
+
+msgid "Report waiting for your review"
+msgstr "تقرير بانتظار مراجعتك"
 
 msgid "Reported"
 msgstr "تاريخ الإبلاغ"
@@ -2808,6 +2833,9 @@ msgstr "تم تحديث تفاصيل الطلب."
 
 msgid "Ticket dismissed."
 msgstr "تم رفض التذكرة."
+
+msgid "Ticket escalated to you"
+msgstr "تذكرة مُصعّدة إليك"
 
 #, python-format
 msgid "Ticket escalated to you — %(number)s"
@@ -3581,6 +3609,15 @@ msgstr "الموعد الموعود"
 
 msgid "purpose"
 msgstr "الغرض"
+
+msgid "push device"
+msgstr "جهاز الإشعارات"
+
+msgid "push devices"
+msgstr "أجهزة الإشعارات"
+
+msgid "push token"
+msgstr "رمز الإشعارات"
 
 msgid "quantity"
 msgstr "الكمية"

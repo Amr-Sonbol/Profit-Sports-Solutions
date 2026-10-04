@@ -40,6 +40,7 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
+from people.push import push_assigned, push_in_their_language
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
@@ -682,6 +683,13 @@ def _post_task_message(request, task, text):
     TaskMessageRecipient.objects.bulk_create([
         TaskMessageRecipient(message=message, technician=recipient) for recipient in recipients
     ])
+    for recipient in recipients:
+        push_in_their_language(
+            recipient,
+            lambda: _('New message — %(number)s') % {'number': task.task_number},
+            lambda: text[:150],
+            {'type': 'task_message', 'task_id': task.pk},
+        )
     return message
 
 
@@ -2272,6 +2280,14 @@ def ticket_review(request, pk):
                     escalated_at=timezone.now(),
                 )
                 _send_escalation_email(request, escalation)
+                push_in_their_language(
+                    escalation.escalated_to,
+                    lambda: _('Ticket escalated to you'),
+                    lambda: _('%(number)s — %(company)s') % {
+                        'number': ticket.ticket_number, 'company': ticket.company_name,
+                    },
+                    {'type': 'ticket', 'ticket_id': ticket.pk},
+                )
                 messages.success(request, _('Escalated to the Operations Manager.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
@@ -2422,6 +2438,7 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
         if task.status in STATUSES_RESET_BY_ASSIGNMENT:
             task.status = Task.Status.ASSIGNED
             task.save(update_fields=['status'])
+    push_assigned(technician, task, is_lead=True)
 
 
 @login_required
@@ -2468,6 +2485,7 @@ def task_assign(request, pk):
                     task=task, technician=add_helper_form.cleaned_data['technician'],
                     role=TaskAssignment.Role.HELPER, assigned_at=timezone.now(), is_active=True,
                 )
+                push_assigned(add_helper_form.cleaned_data['technician'], task, is_lead=False)
                 messages.success(request, _('Helper added.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
@@ -3912,6 +3930,15 @@ def save_work_report(request, task, technician, report_form, part_rows):
             task=task, event_type=TaskEvent.EventType.COMPLETED,
             occurred_at=now, actor=request.user,
         )
+        if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
+            push_in_their_language(
+                task.responsible_supervisor,
+                lambda: _('Report waiting for your review'),
+                lambda: _('%(number)s — filed by %(name)s') % {
+                    'number': task.task_number, 'name': technician.full_name,
+                },
+                {'type': 'team_task', 'task_id': task.pk},
+            )
     return saved_report
 
 

@@ -9,8 +9,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from people.models import RolePermission
+from people.models import PushDevice, RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
+from people.push import push_assigned
 from reference.models import Part
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
@@ -431,6 +432,7 @@ class TeamTaskAssignView(APIView):
                 task=task, technician=form.cleaned_data['technician'], role=TaskAssignment.Role.HELPER,
                 assigned_at=timezone.now(), is_active=True,
             )
+            push_assigned(form.cleaned_data['technician'], task, is_lead=False)
         elif action == 'remove_helper':
             helper = get_object_or_404(
                 TaskAssignment, pk=request.data.get('assignment_id'), task=task,
@@ -472,6 +474,31 @@ class TeamTaskApproveView(APIView):
                 {'detail': 'This task has no report awaiting approval.'}, status=status.HTTP_400_BAD_REQUEST,
             )
         return _team_task_response(request, task)
+
+
+class PushDeviceView(APIView):
+    """The app registering this phone for push notifications after sign-in
+    (POST {"token": "ExponentPushToken[...]"}), and dropping it on sign-out
+    (DELETE with the same body). A phone signing in as someone else moves
+    to them.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request):
+        token = str(request.data.get('token', '')).strip()
+        if not token.startswith(('ExponentPushToken[', 'ExpoPushToken[')):
+            return Response({'detail': 'Not an Expo push token.'}, status=status.HTTP_400_BAD_REQUEST)
+        PushDevice.objects.update_or_create(
+            token=token, defaults={'technician': request.user.technician, 'created_at': timezone.now()},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def delete(self, request):
+        PushDevice.objects.filter(
+            token=str(request.data.get('token', '')), technician=request.user.technician,
+        ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PartListView(APIView):

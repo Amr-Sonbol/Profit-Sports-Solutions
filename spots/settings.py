@@ -249,6 +249,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Defaults to printing to the console so local dev and tests never need
 # real credentials — set EMAIL_BACKEND and the rest in .env to send for real.
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+
+# Push notifications to the mobile app via Expo's push service (people/push.py).
+EXPO_PUSH_ENABLED = config('EXPO_PUSH_ENABLED', default=True, cast=bool)
 EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')

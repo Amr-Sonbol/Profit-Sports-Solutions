@@ -649,3 +649,86 @@ class PartListApiTests(ApiTestCase):
         token = self.token_for('tech1')
         response = self.client.get('/api/parts/', **self.auth(token))
         self.assertEqual(response.json(), [{'code': 'BELT-01', 'description': 'Treadmill belt'}])
+
+
+class PushDeviceTests(ApiTestCase):
+    """Registering phones, and pushes going out (Expo's service mocked)."""
+
+    TOKEN = 'ExponentPushToken[abc123]'
+
+    def _register(self, token, username='tech1'):
+        return self.client.post(
+            '/api/push-device/', json.dumps({'token': token}), content_type='application/json',
+            **self.auth(self.token_for(username)),
+        )
+
+    def _expo_reply(self, mock_urlopen, tickets):
+        from unittest.mock import MagicMock
+
+        response = MagicMock()
+        response.read.return_value = json.dumps({'data': tickets}).encode()
+        mock_urlopen.return_value.__enter__.return_value = response
+
+    def test_register_and_unregister(self):
+        from people.models import PushDevice
+
+        self.assertEqual(self._register(self.TOKEN).status_code, 204)
+        self.assertEqual(PushDevice.objects.get().technician, self.technician)
+        self.assertEqual(self._register('not-a-token').status_code, 400)
+
+        self.client.delete(
+            '/api/push-device/', json.dumps({'token': self.TOKEN}), content_type='application/json',
+            **self.auth(self.token_for('tech1')),
+        )
+        self.assertFalse(PushDevice.objects.exists())
+
+    def test_a_phone_signing_in_as_someone_else_moves_to_them(self):
+        from people.models import PushDevice
+
+        self._register(self.TOKEN)
+        self._register(self.TOKEN, username='supervisor1')
+        self.assertEqual(PushDevice.objects.get().technician.user.username, 'supervisor1')
+
+    def test_assigning_a_lead_pushes_to_their_phone(self):
+        from unittest.mock import patch
+
+        from tasks.views import _set_lead
+
+        self._register(self.TOKEN)
+        with patch('people.push.urlopen') as mock_urlopen:
+            self._expo_reply(mock_urlopen, [{'status': 'ok'}])
+            _set_lead(self.task, self.assignment, self.technician, 'other', self.supervisor_user)
+        sent = json.loads(mock_urlopen.call_args.args[0].data)
+        self.assertEqual(sent[0]['to'], self.TOKEN)
+        self.assertEqual(sent[0]['data'], {'type': 'my_task', 'task_id': self.task.pk})
+
+    def test_nothing_is_sent_without_a_registered_phone(self):
+        from unittest.mock import patch
+
+        from tasks.views import _set_lead
+
+        with patch('people.push.urlopen') as mock_urlopen:
+            _set_lead(self.task, self.assignment, self.technician, 'other', self.supervisor_user)
+        mock_urlopen.assert_not_called()
+
+    def test_unregistered_phones_are_forgotten(self):
+        from unittest.mock import patch
+
+        from people.models import PushDevice
+        from people.push import send_push
+
+        self._register(self.TOKEN)
+        with patch('people.push.urlopen') as mock_urlopen:
+            self._expo_reply(mock_urlopen, [{'status': 'error', 'details': {'error': 'DeviceNotRegistered'}}])
+            send_push([self.technician], 'x', 'y')
+        self.assertFalse(PushDevice.objects.exists())
+
+    def test_a_failed_push_never_breaks_the_action(self):
+        from unittest.mock import patch
+
+        from tasks.views import _set_lead
+
+        self._register(self.TOKEN)
+        with patch('people.push.urlopen', side_effect=OSError('no network')):
+            _set_lead(self.task, self.assignment, self.technician, 'other', self.supervisor_user)
+        self.assertTrue(self.task.assignments.filter(technician=self.technician, is_active=True).exists())

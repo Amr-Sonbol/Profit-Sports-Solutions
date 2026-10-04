@@ -4,7 +4,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
     NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
-    TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
+    PushDevice, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 
 User = get_user_model()
@@ -138,4 +138,10 @@ class TechnicianConductAssessmentAdmin(admin.ModelAdmin):
 class TechnicianTripAdmin(admin.ModelAdmin):
     list_display = ['technician', 'country', 'start_date', 'end_date', 'created_by']
     list_filter = ['country']
+    search_fields = ['technician__full_name']
+
+
+@admin.register(PushDevice)
+class PushDeviceAdmin(admin.ModelAdmin):
+    list_display = ['technician', 'token', 'created_at']
     search_fields = ['technician__full_name']
