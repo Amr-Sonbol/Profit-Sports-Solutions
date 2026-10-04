@@ -12,7 +12,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { CataloguePart, TaskDetail } from '@/types';
+import {
+  isNetworkError, pendingReportFor, removePendingReport, savePendingReport, withOfflineCopy,
+} from '@/offline';
+import type { CataloguePart, TaskDetail, WorkReport } from '@/types';
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -85,15 +88,39 @@ export default function ReportScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [isOffline, setIsOffline] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [detail, { report }, catalogueParts] = await Promise.all([
-        fetchMyTaskDetail(Number(id)), fetchMyReport(Number(id)), fetchParts(),
+      // With no signal, each falls back to the copy kept from the last time
+      // it loaded (src/offline.ts), so a report can still be filled in.
+      const [detail, reportResult, catalogueResult] = await Promise.all([
+        withOfflineCopy(`task-${id}`, () => fetchMyTaskDetail(Number(id))),
+        withOfflineCopy(`report-${id}`, () => fetchMyReport(Number(id))),
+        withOfflineCopy('parts', fetchParts),
       ]);
-      setTask(detail);
-      setCatalogue(catalogueParts);
-      if (report) {
+      setTask(detail.data);
+      setCatalogue(catalogueResult.data);
+      setIsOffline(detail.offline || reportResult.offline);
+      const report: WorkReport | null = reportResult.data.report;
+      const pending = pendingReportFor(Number(id));
+      if (pending) {
+        // A report already filled in here but not sent yet — carry on from it.
+        const input = pending.input;
+        setFindings(input.findings);
+        setActionTaken(input.action_taken);
+        setResolved(input.resolved);
+        setLabourHours(input.labour_hours);
+        setCustomerName(input.customer_name);
+        setNewSignature(input.signature);
+        setSignatureOnFile(Boolean(report?.signature_url));
+        setParts(input.parts.map((part) => ({
+          ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
+        })));
+        if (pending.error) {
+          setErrors({ form: `This report couldn’t be sent: ${pending.error} Fix it and submit again.` });
+        }
+      } else if (report) {
         setFindings(report.findings);
         setActionTaken(report.action_taken);
         setResolved(report.resolved);
@@ -134,23 +161,32 @@ export default function ReportScreen() {
   const submit = async () => {
     setIsBusy(true);
     setErrors({});
+    const input = {
+      findings,
+      action_taken: actionTaken,
+      resolved,
+      labour_hours: labourHours,
+      customer_name: customerName,
+      // Fully blank rows are just unused space, same as the web form.
+      parts: parts
+        .filter((row) => row.part_code || row.quantity || row.unit_cost)
+        .map((row) => ({ ...row, quantity: Number(row.quantity) || 0 })),
+      signature: newSignature,
+    };
     try {
-      const result = await submitMyReport(Number(id), {
-        findings,
-        action_taken: actionTaken,
-        resolved,
-        labour_hours: labourHours,
-        customer_name: customerName,
-        // Fully blank rows are just unused space, same as the web form.
-        parts: parts
-          .filter((row) => row.part_code || row.quantity || row.unit_cost)
-          .map((row) => ({ ...row, quantity: Number(row.quantity) || 0 })),
-        signature: newSignature,
-      });
+      const result = await submitMyReport(Number(id), input);
+      removePendingReport(Number(id));
       Alert.alert('Report saved', result.message);
       router.back();
     } catch (err) {
-      if (err instanceof ApiRequestError && err.status === 400) {
+      if (isNetworkError(err) && task) {
+        savePendingReport(Number(id), task.task_number, input);
+        Alert.alert(
+          'Saved on this phone',
+          'No connection right now. The report will be sent automatically when you’re back online.',
+        );
+        router.back();
+      } else if (err instanceof ApiRequestError && err.status === 400) {
         const fieldErrors = fieldErrorsFrom(err.body);
         setErrors(Object.keys(fieldErrors).length ? fieldErrors : { form: err.message });
       } else {
@@ -261,6 +297,11 @@ export default function ReportScreen() {
           <ScrollView contentContainerStyle={styles.content} scrollEnabled={scrollEnabled}>
             <ThemedText type="title" style={styles.title}>Work report</ThemedText>
             <ThemedText themeColor="textSecondary">{task.task_number} — {task.customer_name}</ThemedText>
+            {isOffline ? (
+              <ThemedText themeColor="danger" type="small">
+                No connection — you can still fill this in; it’ll be sent once you’re back online.
+              </ThemedText>
+            ) : null}
 
             <Field label="What did you find?" error={errors.findings}>
               <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />

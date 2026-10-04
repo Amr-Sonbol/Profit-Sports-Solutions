@@ -4,6 +4,7 @@ import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyTasks } from '@/api/endpoints';
+import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -15,10 +16,22 @@ export default function MyTasksScreen() {
   const theme = useTheme();
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState<PendingReport[]>([]);
 
+  // Sends any report filed with no signal first (src/offline.ts), then
+  // loads the list — falling back to the last copy when offline.
   const load = useCallback(async () => {
-    const data = await fetchMyTasks();
-    setTasks(data);
+    setPending(await sendPendingReports());
+    try {
+      const { data, offline } = await withOfflineCopy('my-tasks', fetchMyTasks);
+      setTasks(data);
+      setIsOffline(offline);
+      setError('');
+    } catch {
+      setError('Could not load your tasks.');
+    }
   }, []);
 
   // Refetches every time this tab is focused, not just on mount — a task
@@ -42,6 +55,26 @@ export default function MyTasksScreen() {
         <ThemedText type="title" style={styles.heading}>
           My Tasks
         </ThemedText>
+        {isOffline ? (
+          <ThemedText themeColor="danger" type="small" style={styles.notice}>
+            No connection — showing your tasks as they were last loaded.
+          </ThemedText>
+        ) : null}
+        {error ? <ThemedText themeColor="danger" style={styles.notice}>{error}</ThemedText> : null}
+        {pending.map((report) => (
+          <TouchableOpacity
+            key={report.taskId}
+            style={[styles.pendingCard, { borderColor: report.error ? theme.danger : theme.primary }]}
+            onPress={() => router.push(`/report/${report.taskId}`)}
+          >
+            <ThemedText type="smallBold">
+              {report.error ? 'Report not sent — tap to fix' : 'Report waiting to send'} — {report.taskNumber}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {report.error ?? 'It’ll go automatically when you’re back online. Pull down to retry.'}
+            </ThemedText>
+          </TouchableOpacity>
+        ))}
         <FlatList
           data={tasks ?? []}
           keyExtractor={(item) => String(item.id)}
@@ -74,6 +107,11 @@ export default function MyTasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  notice: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
+  pendingCard: {
+    borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one,
+    marginHorizontal: Spacing.three, marginBottom: Spacing.two,
+  },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },

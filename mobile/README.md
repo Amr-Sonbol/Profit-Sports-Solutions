@@ -31,6 +31,16 @@ scan the QR code with Expo Go on a physical device. The Django backend
   reuses its save logic (`tasks.views.save_work_report`).
 - Profile (`src/app/(app)/profile.tsx`) — name, role, country, sign out.
 
+## Working with no signal
+
+ keeps the last-loaded copy of My Tasks, each task, its report and the
+parts list on the phone, so a technician who opened them earlier can still fill in a
+report in a basement gym. Submitting with no connection saves the report on the phone;
+My Tasks sends it automatically the next time it loads (or on pull-to-refresh) and shows
+it as "waiting to send" until then. If the server refuses it (say a part code that's
+since been switched off), it stays there marked "not sent — tap to fix". Status
+buttons (accept, on my way, ...) still need a connection.
+
 ## Supervisors, managers and admins
 
 - Team (`src/app/(app)/team.tsx`) — every open task in the active

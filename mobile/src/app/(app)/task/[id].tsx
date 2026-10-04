@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { withOfflineCopy } from '@/offline';
 import type { TaskDetail } from '@/types';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -28,10 +29,13 @@ export default function TaskDetailScreen() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
+  const [isOffline, setIsOffline] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setTask(await fetchMyTaskDetail(Number(id)));
+      const { data, offline } = await withOfflineCopy(`task-${id}`, () => fetchMyTaskDetail(Number(id)));
+      setTask(data);
+      setIsOffline(offline);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not load this task.');
     }
@@ -107,6 +111,12 @@ export default function TaskDetailScreen() {
             {task.customer_name}
           </ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          {isOffline ? (
+            <ThemedText themeColor="danger" type="small">
+              No connection — showing what was loaded last. Status buttons need a connection; the report can be
+              filed offline.
+            </ThemedText>
+          ) : null}
 
           <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
             <Row label="Status" value={task.status_display} />
