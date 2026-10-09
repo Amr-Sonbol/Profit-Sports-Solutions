@@ -124,7 +124,9 @@ class TaskCreateForm(forms.ModelForm):
         # Coming from a customer ticket — hint the free-text fields with
         # what the customer said.
         if ticket is not None:
-            self.fields['source'].initial = Task.Source.PORTAL
+            # Same values as Task.Source — a ticket staff opened from a
+            # phone call keeps "Phone" on the task.
+            self.fields['source'].initial = ticket.source
             self.fields['description'].initial = ticket.description
             self.fields['reported_at'].initial = timezone.localtime(ticket.submitted_at).strftime(
                 DATETIME_INPUT_FORMAT,
@@ -988,12 +990,8 @@ class MultipleFileField(forms.FileField):
         return single_file_clean(data, initial)
 
 
-class CustomerPortalTicketForm(forms.ModelForm):
-    """A logged-in customer reporting an issue at one of their own
-    sites — the only way to submit a ticket. The company name, site, and
-    address are never typed here at all; a portal login already knows
-    who they are and where their sites are (set directly in the view).
-    """
+class TicketAttachmentsForm(forms.Form):
+    """The photos/video box shared by both ways a ticket is opened."""
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
@@ -1003,6 +1001,27 @@ class CustomerPortalTicketForm(forms.ModelForm):
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
+
+    def clean_attachments(self):
+        files = self.cleaned_data['attachments']
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
+        for file in files:
+            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
+                    'name': file.name,
+                })
+        return files
+
+
+class CustomerPortalTicketForm(TicketAttachmentsForm, forms.ModelForm):
+    """A logged-in customer reporting an issue at one of their own
+    sites. The company name, site, and address are never typed here at
+    all; a portal login already knows who they are and where their sites
+    are (set directly in the view).
+    """
 
     class Meta:
         model = CustomerTicket
@@ -1021,18 +1040,101 @@ class CustomerPortalTicketForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields = {'site': forms.ModelChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
 
-    def clean_attachments(self):
-        files = self.cleaned_data['attachments']
-        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
-            raise forms.ValidationError(
-                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
-            )
-        for file in files:
-            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
-                    'name': file.name,
-                })
-        return files
+
+class SiteChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, site):
+        return f'{site.customer.name} — {site.name}'
+
+
+class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
+    """Staff opening a ticket for a customer who phoned, messaged or
+    emailed (open_tickets) — the same ticket a customer would submit from
+    their portal, so it goes through the same review, and the customer can
+    follow it and reply there. Contact fields left blank fall back to the
+    site's (or customer's) own contact.
+    """
+
+    site = SiteChoiceField(queryset=Site.objects.none(), label=_('Customer and site'))
+    source = forms.ChoiceField(
+        label=_('How the customer reached us'),
+        choices=[
+            (value, label) for value, label in CustomerTicket.Source.choices
+            if value != CustomerTicket.Source.PORTAL
+        ],
+    )
+
+    class Meta:
+        model = CustomerTicket
+        fields = [
+            'site', 'source', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
+            'serial_numbers', 'description', 'notes',
+        ]
+        widgets = {
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
+            'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
+            'description': forms.Textarea(attrs={'rows': 5}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+    def __init__(self, *args, country, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['site'].queryset = (
+            Site.objects.filter(customer__country=country, customer__is_active=True)
+            .select_related('customer').order_by('customer__name', 'name')
+        )
+        for name in ('contact_name', 'contact_phone'):
+            self.fields[name].required = False
+            self.fields[name].help_text = _('Leave empty to use the site’s own contact.')
+        # On a phone call the serials often aren't known yet.
+        self.fields['serial_numbers'].required = False
+
+
+class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
+    """A stock request, vendor follow-up or other internal matter — no
+    customer, nothing ever sent to one. Goes to whoever it's assigned to,
+    who follows it up with internal notes until it's closed.
+    """
+
+    assigned_to = forms.ModelChoiceField(
+        queryset=Technician.objects.none(), label=_('For'),
+        help_text=_('Who should handle it — they’re notified and it shows in their internal tickets.'),
+    )
+
+    class Meta:
+        model = CustomerTicket
+        fields = ['subject', 'vendor_name', 'description', 'assigned_to']
+        labels = {'description': _('Details')}
+        help_texts = {'description': ''}
+        widgets = {'description': forms.Textarea(attrs={'rows': 5})}
+
+    def __init__(self, *args, kind, country, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['subject'].required = True
+        self.fields['subject'].help_text = ''
+        if kind == CustomerTicket.Kind.VENDOR:
+            self.fields['vendor_name'].required = True
+        else:
+            del self.fields['vendor_name']
+        self.fields['assigned_to'].queryset = Technician.objects.filter(
+            is_active=True, country=country,
+        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+        self.fields['assigned_to'].label_from_instance = (
+            lambda technician: f'{technician.full_name} — {technician.get_role_display()}'
+        )
+
+
+class InternalTicketNoteForm(forms.Form):
+    message = forms.CharField(label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3}))
+
+
+class ReassignInternalTicketForm(forms.Form):
+    assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Hand it to'))
+
+    def __init__(self, *args, country, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['assigned_to'].queryset = Technician.objects.filter(
+            is_active=True, country=country,
+        ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
 
 
 class DismissTicketForm(forms.Form):

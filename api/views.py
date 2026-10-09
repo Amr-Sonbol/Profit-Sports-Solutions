@@ -28,7 +28,8 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report, undo_last_tap, undoable_tap,
+    report_saved_message, save_work_report, search_tasks, search_tickets, undo_last_tap, undoable_tap,
+    SEARCH_RESULT_LIMIT,
 )
 
 from .permissions import IsTechnician, has_role_permission, require_role_permission
@@ -98,8 +99,10 @@ class MyTaskListView(APIView):
 
 
 class TaskListView(APIView):
-    """Every task in the requester's active country — the supervisor/
-    manager/admin view, same scope as the web task list.
+    """Every open task in the requester's active country — the supervisor/
+    manager/admin view, same scope as the web task list. With ?q=, a
+    search across every status instead (tasks.views.search_tasks), newest
+    first, at most SEARCH_RESULT_LIMIT.
     """
 
     permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
@@ -108,7 +111,12 @@ class TaskListView(APIView):
         active_country = get_active_country(request)
         tasks = _with_lead_prefetch(
             Task.objects.filter(site__customer__country=active_country).select_related('site__customer'),
-        ).filter(status__in=OPEN_STATUSES)
+        )
+        text = request.query_params.get('q', '').strip()
+        if text:
+            tasks = search_tasks(tasks, text)
+        else:
+            tasks = tasks.filter(status__in=OPEN_STATUSES)
         return Response(TaskListSerializer(tasks, many=True).data)
 
 
@@ -586,7 +594,8 @@ class PartListView(APIView):
 
 class TicketListView(APIView):
     """New customer tickets in the requester's active country — supervisor/
-    manager/admin only, same permission as the web ticket list.
+    manager/admin only, same permission as the web ticket list. With ?q=,
+    a search across every status instead (tasks.views.search_tickets).
     """
 
     permission_classes = [require_role_permission(RolePermission.Permission.MANAGE_TICKETS)]
@@ -594,6 +603,12 @@ class TicketListView(APIView):
     def get(self, request):
         active_country = get_active_country(request)
         tickets = CustomerTicket.objects.filter(
-            country=active_country, status=CustomerTicket.Status.NEW,
-        ).select_related('country').order_by('-submitted_at')
+            country=active_country, kind=CustomerTicket.Kind.CUSTOMER,
+        ).select_related('country')
+        text = request.query_params.get('q', '').strip()
+        if text:
+            # A search looks at every ticket, not just new ones.
+            tickets = search_tickets(tickets, text).order_by('-submitted_at')[:SEARCH_RESULT_LIMIT]
+        else:
+            tickets = tickets.filter(status=CustomerTicket.Status.NEW).order_by('-submitted_at')
         return Response(CustomerTicketSerializer(tickets, many=True).data)

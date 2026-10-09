@@ -96,7 +96,7 @@ class CustomerTicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerTicket
         fields = [
-            'id', 'company_name', 'site_description', 'country_name', 'status', 'status_display',
+            'id', 'ticket_number', 'company_name', 'site_description', 'country_name', 'status', 'status_display',
             'contact_name', 'contact_phone', 'description', 'submitted_at',
         ]
 

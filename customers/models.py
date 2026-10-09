@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from people.models import Technician
 from reference.models import Brand, Country
+from spots.indexes import contains_search_index
 
 
 class Customer(models.Model):
@@ -63,6 +64,7 @@ class Customer(models.Model):
         verbose_name = _('customer')
         verbose_name_plural = _('customers')
         ordering = ['name']
+        indexes = [contains_search_index('name', 'customer_name_trgm')]
 
     def __str__(self):
         return self.name
@@ -117,6 +119,10 @@ class Site(models.Model):
         verbose_name = _('site')
         verbose_name_plural = _('sites')
         ordering = ['customer__name', 'name']
+        indexes = [
+            contains_search_index('name', 'site_name_trgm'),
+            contains_search_index('address', 'site_address_trgm'),
+        ]
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
@@ -175,6 +181,8 @@ class Asset(models.Model):
         ordering = ['site__name', 'model_name']
         indexes = [
             models.Index(fields=['site', 'status']),
+            contains_search_index('serial_no', 'asset_serial_trgm'),
+            contains_search_index('model_name', 'asset_model_trgm'),
         ]
 
     def __str__(self):

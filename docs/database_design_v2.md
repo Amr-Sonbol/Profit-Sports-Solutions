@@ -459,7 +459,7 @@ A single row (`pk=1`, created on first use), manager-controlled from the same Ro
 | auto_notify_on_reschedule | bool | default `false` |
 
 ### customer_ticket
-A complaint or request — always submitted by a signed-in customer picking one of their own registered sites. There's no anonymous path: a brand-new customer reaches the company outside the app (phone, WhatsApp, email) and staff registers them — `/tasks/tickets/new/`, the old public no-login form, now just redirects to the portal login. `customer_id`/`site_id` are still nullable columns rather than required ones, so any ticket already in the database from before this changed stays valid as-is; every ticket submitted from now on always has both set.
+A complaint or request from a customer — or an internal matter staff need to follow up (see `kind`). A customer ticket is submitted either by a signed-in customer picking one of their own registered sites, or by staff on the customer's behalf when they phoned, messaged or emailed (`open_tickets`, "New ticket"). There's no anonymous path: a brand-new customer reaches the company outside the app and staff registers them — `/tasks/tickets/new/`, the old public no-login form, now just redirects to the portal login. `customer_id`/`site_id` are still nullable columns rather than required ones, so any ticket already in the database from before this changed stays valid as-is; every ticket submitted from now on always has both set.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -480,6 +480,11 @@ A complaint or request — always submitted by a signed-in customer picking one 
 | description | text | what's wrong with each machine — asked to keep one paragraph per serial |
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
+| kind | varchar | `customer` (default), `stock` (stock request), `vendor` (vendor follow-up), `other` (other internal) |
+| source | varchar | customer tickets: `portal` (default), `phone`, `whatsapp`, `email` — the same values as `task.source`, so a task made from it keeps the channel |
+| opened_by_id | FK → user | nullable — the staff member who opened it; empty when the customer did |
+| subject | varchar | internal tickets only |
+| vendor_name | varchar | vendor follow-ups only (required there) |
 | status | varchar | new, converted, dismissed, closed |
 | assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager or admin), read from `role_permission` directly, not hardcoded |
 | assigned_at | timestamptz | nullable |
@@ -496,6 +501,8 @@ A complaint or request — always submitted by a signed-in customer picking one 
 **`token` picks the ticket that `ticket_status` renders** — the same unguessable-random-string pattern `customer_feedback.token` already uses (`secrets.token_urlsafe(32)`, generated in `save()`). `ticket_status` requires the viewer to be logged in as that ticket's own `customer` (`@login_required` plus an ownership check — anyone else, including a different logged-in customer, gets `PermissionDenied`); the token is only a stable, unguessable way to address one ticket in a URL, not a substitute for login.
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
+
+**Staff open tickets for customers, and internal ones (`open_tickets` — Technical Support Manager, Operations Manager and Admin by default).** "New ticket" has a type at the top. *Customer*: staff pick the customer's site and how they reached us; contact fields left empty use the site's own contact, and serials are optional (often unknown on a call). It's then an ordinary customer ticket — the same confirmation email, the same review, visible and answerable in the customer's portal — and the review page shows who opened it and how. *Stock request, vendor follow-up, other*: no customer, nothing ever sent to one, never converted into a task. Just a subject (and the vendor, for a vendor follow-up), details, files, and who it's for — any office staff in the country, not technicians. That person is pushed, and it sits in their bell and on "Internal tickets" until it's closed. The assignee, the opener and ticket reviewers (`manage_tickets`) can add notes (`ticket_internal_note`), hand it to someone else, or close it with the result (`close_reason`); each step pushes the other party. Internal tickets never appear in the customer ticket lists, the app's ticket screen, search or the monthly report.
 
 **`site_id` is the customer's own pick from their registered sites** — authoritative, not a guess, so it carries straight through to the resulting task with no re-matching and no chance to swap it out mid-conversion; only an admin can change it on the create-task screen. The supervisor reviewing a ticket either converts it (that site, a different existing one they pick instead, or a new one — task creation's own choice), dismisses it with a reason, or closes it with a reason.
 
@@ -889,7 +896,24 @@ CREATE INDEX ON technician_skill (skill_id, level);
 CREATE INDEX ON technician_skill (source);
 CREATE INDEX ON technician_conduct (source);
 CREATE INDEX ON asset (site_id, status);
+CREATE INDEX ON customer_ticket (country_id, status, submitted_at DESC);
 ```
+
+**Search uses trigram indexes.** Every search box matches text *anywhere* in a field (Django's `icontains`, i.e. `UPPER(col) LIKE '%…%'`), which a normal index can't help with. The `pg_trgm` extension's GIN indexes on `UPPER(col)` can (`spots/indexes.py`; Django needs `django.contrib.postgres` installed to write them):
+
+```sql
+CREATE EXTENSION pg_trgm;
+-- one per searched column, all USING gin ((UPPER(col)) gin_trgm_ops):
+--   task: task_number, pak_reference_number
+--   customer_ticket: ticket_number, company_name, site_description, site_address,
+--                    pak_reference_number, contact_name, contact_phone
+--   customer: name     site: name, address
+--   asset: serial_no, model_name     task_product: serial_number
+```
+
+They take over once a search has 3 or more characters. Measured on 200,000 tasks and 100,000 tickets: single-field searches went from 14–23 ms to under 4 ms, and the cost no longer grows with the table. The app's one-box task search (`search_tasks`) searches each field on its own and merges the newest 50, since a single OR across joined tables makes Postgres read every task regardless of indexes.
+
+**Arabic spelling variants aren't folded yet** — "احمد" doesn't find "أحمد". If that matters for names, add a normalised copy of the searched columns (hamza forms → ا, ة → ه, ى → ي) and search that instead.
 
 ---
 

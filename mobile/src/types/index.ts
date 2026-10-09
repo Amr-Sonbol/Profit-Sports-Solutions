@@ -126,6 +126,7 @@ export interface WorkReportInput {
 
 export interface Ticket {
   id: number;
+  ticket_number: string;
   company_name: string;
   site_description: string;
   country_name: string;

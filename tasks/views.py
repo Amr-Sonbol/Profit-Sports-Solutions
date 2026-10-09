@@ -46,7 +46,8 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
+    AddHelperForm, AssignTicketForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
+    StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
@@ -57,7 +58,7 @@ from .forms import (
 )
 from .location import record_tap
 from .models import (
-    CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
+    CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
     TaskProduct, TicketEscalation, TicketInternalNote, TicketNotification, TicketReply,
 )
@@ -561,6 +562,44 @@ def _with_lead_prefetch(queryset):
             ).select_related('technician'),
             to_attr='lead_assignments',
         ),
+    )
+
+
+# The mobile app's search box (api/views.py): this many newest matches.
+SEARCH_RESULT_LIMIT = 50
+
+
+def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
+    """The `limit` newest of `tasks` matching `text` anywhere in their
+    number, PAK reference, site name or address, customer name, or a
+    machine/product serial number. Each of those is searched on its own
+    (each with its index, spots/indexes.py) for its own newest `limit`,
+    and the newest of all those win — the same answer as one big OR, but
+    without Postgres having to read every task to get it.
+    """
+    sites = Site.objects.filter(Q(name__icontains=text) | Q(address__icontains=text)).values('pk')
+    customers = Customer.objects.filter(name__icontains=text).values('pk')
+    by_asset = TaskAsset.objects.filter(
+        asset__in=Asset.objects.filter(serial_no__icontains=text).values('pk'),
+    ).values('task_id')
+    by_product = TaskProduct.objects.filter(serial_number__icontains=text).values('task_id')
+    ids = set()
+    for condition in (
+        Q(task_number__icontains=text), Q(pak_reference_number__icontains=text),
+        Q(site__in=sites), Q(site__customer__in=customers), Q(pk__in=by_asset), Q(pk__in=by_product),
+    ):
+        ids.update(tasks.filter(condition).order_by('-reported_at').values_list('pk', flat=True)[:limit])
+    return tasks.filter(pk__in=ids).order_by('-reported_at')[:limit]
+
+
+def search_tickets(tickets, text):
+    """Tickets matching `text` in anything the office searches them by —
+    number, gym, site, address, contact name or phone, PAK reference."""
+    return tickets.filter(
+        Q(ticket_number__icontains=text) | Q(company_name__icontains=text)
+        | Q(site_description__icontains=text) | Q(site_address__icontains=text)
+        | Q(contact_name__icontains=text) | Q(contact_phone__icontains=text)
+        | Q(pak_reference_number__icontains=text),
     )
 
 
@@ -2148,7 +2187,9 @@ def ticket_list(request):
     date = parse_date(request.GET.get('date', '') or '')
     active_country = get_active_country(request)
 
-    tickets = CustomerTicket.objects.filter(country=active_country).select_related('assigned_to', 'customer').annotate(
+    tickets = CustomerTicket.objects.filter(
+        country=active_country, kind=CustomerTicket.Kind.CUSTOMER,
+    ).select_related('assigned_to', 'customer').annotate(
         is_escalated=Exists(
             TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
         ),
@@ -2216,7 +2257,9 @@ def all_tickets(request):
     date = parse_date(request.GET.get('date', '') or '')
     country_id = request.GET.get('country', '')
 
-    tickets = CustomerTicket.objects.select_related('assigned_to', 'country', 'customer').annotate(
+    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER).select_related(
+        'assigned_to', 'country', 'customer',
+    ).annotate(
         is_escalated=Exists(
             TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
         ),
@@ -2277,6 +2320,8 @@ def ticket_review(request, pk):
     # manager reaches any ticket regardless, same as _scoped_or_404 gives
     # them everywhere else — the point of the all_tickets board.
     ticket = _scoped_or_404(CustomerTicket.objects, pk, technician, get_active_country(request), 'country')
+    if ticket.kind != CustomerTicket.Kind.CUSTOMER:
+        return redirect('tasks:internal_ticket', pk=ticket.pk)
 
     can_manage = RolePermission.objects.filter(
         role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
@@ -3632,7 +3677,7 @@ def _month_report_querysets(period_start_date):
     """
     period_start, period_end = _month_window(period_start_date)
     tickets = CustomerTicket.objects.filter(
-        submitted_at__gte=period_start, submitted_at__lt=period_end,
+        submitted_at__gte=period_start, submitted_at__lt=period_end, kind=CustomerTicket.Kind.CUSTOMER,
     ).select_related('country').order_by('submitted_at')
     tasks = Task.objects.filter(
         reported_at__gte=period_start, reported_at__lt=period_end,
@@ -4253,3 +4298,189 @@ def _report_form(request, task, technician, back_url):
         'part_formset': part_formset,
     }
     return render(request, 'tasks/my_report_form.html', context)
+
+
+INTERNAL_TICKET_KINDS = [CustomerTicket.Kind.STOCK, CustomerTicket.Kind.VENDOR, CustomerTicket.Kind.OTHER]
+
+
+def _has_permission(technician, permission):
+    return RolePermission.objects.filter(role=technician.role, permission=permission, allowed=True).exists()
+
+
+@login_required
+def ticket_open(request):
+    """Staff opening a ticket (open_tickets): for a customer who phoned,
+    messaged or emailed — then it's a normal customer ticket, reviewed the
+    usual way and visible in their portal — or an internal one (stock
+    request, vendor follow-up, other) for whoever it's assigned to. Which
+    kind comes from ?kind=, so each form is plain HTML, no script.
+    """
+    technician = require_permission(request, RolePermission.Permission.OPEN_TICKETS)
+    country = get_active_country(request)
+    kind = request.GET.get('kind', CustomerTicket.Kind.CUSTOMER)
+    if kind not in CustomerTicket.Kind.values:
+        kind = CustomerTicket.Kind.CUSTOMER
+    is_customer = kind == CustomerTicket.Kind.CUSTOMER
+
+    def make_form(*args):
+        if is_customer:
+            return StaffTicketForm(*args, country=country)
+        return InternalTicketForm(*args, kind=kind, country=country)
+
+    form = make_form(request.POST, request.FILES) if request.method == 'POST' else make_form()
+    if request.method == 'POST' and form.is_valid():
+        now = timezone.now()
+        ticket = form.save(commit=False)
+        ticket.kind = kind
+        ticket.country = country
+        ticket.opened_by = request.user
+        ticket.submitted_at = now
+        if is_customer:
+            site = form.cleaned_data['site']
+            ticket.customer = site.customer
+            ticket.site = site
+            ticket.company_name = site.customer.name
+            ticket.customer_code = site.customer.code
+            ticket.site_description = site.name
+            ticket.site_address = site.address
+            ticket.contact_name = ticket.contact_name or site.effective_contact_name
+            ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
+            ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
+        else:
+            ticket.assigned_at = now
+        with transaction.atomic():
+            save_new_ticket(ticket)
+            for uploaded_file in form.cleaned_data['attachments']:
+                CustomerTicketAttachment.objects.create(ticket=ticket, file=uploaded_file, uploaded_at=now)
+            if is_customer:
+                TicketNotification.objects.create(
+                    ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=now,
+                )
+        if is_customer:
+            send_ticket_confirmation_to_customer(request, ticket)
+            send_new_ticket_email_to_staff(request, ticket)
+        elif ticket.assigned_to != technician:
+            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket for you'))
+        messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
+        if not is_customer:
+            return redirect('tasks:internal_ticket', pk=ticket.pk)
+        if _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+        return redirect('home')
+
+    return render(request, 'tasks/staff_ticket_new.html', {
+        'form': form, 'kind': kind, 'kinds': CustomerTicket.Kind.choices,
+    })
+
+
+def _push_internal_ticket(technician, ticket, title):
+    push_in_their_language(
+        technician,
+        lambda: title,
+        lambda: f'{ticket.ticket_number} — {ticket.subject}',
+        {'type': 'internal_ticket', 'ticket_id': ticket.pk},
+    )
+
+
+def _visible_internal_tickets(technician, country):
+    """Internal tickets this person may see: all of them for a ticket
+    reviewer (manage_tickets), otherwise the ones assigned to them or that
+    they opened.
+    """
+    tickets = CustomerTicket.objects.filter(kind__in=INTERNAL_TICKET_KINDS, country=country)
+    if _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
+        return tickets
+    return tickets.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
+
+
+@login_required
+def internal_tickets(request):
+    """Stock requests, vendor follow-ups and other internal tickets —
+    open ones first, newest first."""
+    technician = require_technician(request)
+    if technician.role == Technician.Role.TECHNICIAN:
+        raise PermissionDenied
+    status = request.GET.get('status', 'open')
+    tickets = _visible_internal_tickets(technician, get_active_country(request)).select_related(
+        'assigned_to', 'opened_by__technician',
+    ).order_by('-submitted_at')
+    if status == 'open':
+        tickets = tickets.filter(status=CustomerTicket.Status.NEW)
+    elif status == 'closed':
+        tickets = tickets.filter(status=CustomerTicket.Status.CLOSED)
+    return render(request, 'tasks/internal_tickets.html', {
+        'tickets': tickets[:200], 'status': status,
+        'can_open': _has_permission(technician, RolePermission.Permission.OPEN_TICKETS),
+    })
+
+
+@login_required
+def internal_ticket(request, pk):
+    """One internal ticket: notes back and forth, handing it to someone
+    else, and closing it with the result. The assignee, the opener and
+    ticket reviewers can all act on it."""
+    technician = require_technician(request)
+    ticket = get_object_or_404(
+        _visible_internal_tickets(technician, get_active_country(request)).select_related(
+            'assigned_to', 'opened_by__technician',
+        ),
+        pk=pk,
+    )
+    country = get_active_country(request)
+    is_open = ticket.status == CustomerTicket.Status.NEW
+    note_form = InternalTicketNoteForm()
+    reassign_form = ReassignInternalTicketForm(country=country, initial={'assigned_to': ticket.assigned_to})
+    close_form = CloseTicketForm()
+
+    if request.method == 'POST' and is_open:
+        action = request.POST.get('action')
+        opener = getattr(ticket.opened_by, 'technician', None)
+        # Whoever didn't write it hears about it: the assignee, or the
+        # opener when the assignee is the one acting.
+        other = opener if technician == ticket.assigned_to else ticket.assigned_to
+        if action == 'add_note':
+            note_form = InternalTicketNoteForm(request.POST)
+            if note_form.is_valid():
+                TicketInternalNote.objects.create(
+                    ticket=ticket, author=request.user, message=note_form.cleaned_data['message'],
+                    created_at=timezone.now(),
+                )
+                if other and other != technician:
+                    _push_internal_ticket(other, ticket, _('New note on an internal ticket'))
+                return redirect('tasks:internal_ticket', pk=ticket.pk)
+        elif action == 'reassign':
+            reassign_form = ReassignInternalTicketForm(request.POST, country=country)
+            if reassign_form.is_valid():
+                ticket.assigned_to = reassign_form.cleaned_data['assigned_to']
+                ticket.assigned_at = timezone.now()
+                ticket.save(update_fields=['assigned_to', 'assigned_at'])
+                TicketInternalNote.objects.create(
+                    ticket=ticket, author=request.user, created_at=timezone.now(),
+                    message=_('Handed to %(name)s.') % {'name': ticket.assigned_to.full_name},
+                )
+                if ticket.assigned_to != technician:
+                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket for you'))
+                messages.success(request, _('Handed over.'))
+                return redirect('tasks:internal_ticket', pk=ticket.pk)
+        elif action == 'close':
+            close_form = CloseTicketForm(request.POST)
+            if close_form.is_valid():
+                ticket.status = CustomerTicket.Status.CLOSED
+                ticket.close_reason = close_form.cleaned_data['close_reason']
+                ticket.reviewed_by = request.user
+                ticket.reviewed_at = timezone.now()
+                ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+                if other and other != technician:
+                    _push_internal_ticket(other, ticket, _('Internal ticket closed'))
+                messages.success(request, _('Ticket closed.'))
+                return redirect('tasks:internal_ticket', pk=ticket.pk)
+
+    return render(request, 'tasks/internal_ticket.html', {
+        'ticket': ticket,
+        'is_open': is_open,
+        'notes': ticket.internal_notes.select_related('author__technician').order_by('created_at'),
+        'attachments': ticket.attachments.all(),
+        'note_form': note_form,
+        'reassign_form': reassign_form,
+        'close_form': close_form,
+    })

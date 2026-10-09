@@ -24,7 +24,7 @@ class SeedRolePermissionsTests(TestCase):
             RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
             RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
-            RolePermission.Permission.MANAGE_PARTS,
+            RolePermission.Permission.MANAGE_PARTS, RolePermission.Permission.OPEN_TICKETS,
         }
         for permission in other_permissions:
             allowed_roles = set(
@@ -41,6 +41,14 @@ class SeedRolePermissionsTests(TestCase):
             ).values_list('role', flat=True),
         )
         self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'admin'})
+
+    def test_open_tickets_is_support_and_operations_managers_and_admin(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.OPEN_TICKETS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
     def test_manage_tickets_is_support_manager_and_admin_only(self):
         allowed_roles = set(

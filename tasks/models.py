@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
+from spots.indexes import contains_search_index
 
 # A customer's own phone photos/videos of the fault — kept separate from
 # TaskAttachment's own list (tasks/forms.py) since this one has no LINK
@@ -225,6 +226,8 @@ class Task(models.Model):
             models.Index(fields=['status', 'promised_at']),
             models.Index(fields=['site', 'status']),
             models.Index(fields=['scheduled_for', 'status']),
+            contains_search_index('task_number', 'task_number_trgm'),
+            contains_search_index('pak_reference_number', 'task_pak_trgm'),
         ]
 
     @property
@@ -251,6 +254,34 @@ class CustomerTicket(models.Model):
         CONVERTED = 'converted', _('Converted to task')
         DISMISSED = 'dismissed', _('Dismissed')
         CLOSED = 'closed', _('Closed')
+
+    class Kind(models.TextChoices):
+        CUSTOMER = 'customer', _('Customer')
+        STOCK = 'stock', _('Stock request')
+        VENDOR = 'vendor', _('Vendor follow-up')
+        OTHER = 'other', _('Other internal')
+
+    # How a customer ticket reached us — the same values as Task.Source,
+    # so a task made from it keeps the channel.
+    class Source(models.TextChoices):
+        PORTAL = 'portal', _('Customer portal')
+        PHONE = 'phone', _('Phone')
+        WHATSAPP = 'whatsapp', _('WhatsApp')
+        EMAIL = 'email', _('Email')
+
+    # Customer tickets come from the portal or from staff on the customer's
+    # behalf; internal ones (stock, vendor, other) are staff-only — no
+    # customer, nothing ever sent to one — and go to whoever they're
+    # assigned to (docs: customer_ticket).
+    kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
+    source = models.CharField(_('source'), max_length=10, choices=Source.choices, default=Source.PORTAL)
+    opened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='tickets_opened', verbose_name=_('opened by'),
+        help_text=_('the staff member who opened it — empty when the customer did'),
+    )
+    subject = models.CharField(_('subject'), max_length=200, blank=True, help_text=_('internal tickets only'))
+    vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
 
     ticket_number = models.CharField(
         _('ticket number'), max_length=30, unique=True,
@@ -340,6 +371,17 @@ class CustomerTicket(models.Model):
         verbose_name = _('customer ticket')
         verbose_name_plural = _('customer tickets')
         ordering = ['-submitted_at']
+        indexes = [
+            # Every ticket list: one country, one status, newest first.
+            models.Index(fields=['country', 'status', '-submitted_at'], name='ticket_country_status_idx'),
+            contains_search_index('ticket_number', 'ticket_number_trgm'),
+            contains_search_index('company_name', 'ticket_company_trgm'),
+            contains_search_index('site_description', 'ticket_site_trgm'),
+            contains_search_index('site_address', 'ticket_address_trgm'),
+            contains_search_index('pak_reference_number', 'ticket_pak_trgm'),
+            contains_search_index('contact_name', 'ticket_contact_trgm'),
+            contains_search_index('contact_phone', 'ticket_phone_trgm'),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.token:
@@ -909,6 +951,7 @@ class TaskProduct(models.Model):
         verbose_name = _('task product')
         verbose_name_plural = _('task products')
         ordering = ['task', 'product_code']
+        indexes = [contains_search_index('serial_number', 'taskproduct_serial_trgm')]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'

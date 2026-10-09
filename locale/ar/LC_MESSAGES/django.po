@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 18:15+0000\n"
+"POT-Creation-Date: 2026-10-09 18:42+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -293,6 +293,9 @@ msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذ�
 msgid "Add a contact email for this site before requesting feedback."
 msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل طلب التقييم."
 
+msgid "Add a note"
+msgstr "أضف ملاحظة"
+
 msgid "Add a part"
 msgstr "إضافة قطعة"
 
@@ -471,6 +474,10 @@ msgstr "أرفق %(count)d ملفات كحد أقصى."
 msgid "Attachment"
 msgstr "مرفق"
 
+#, python-format
+msgid "Attachment %(number)s"
+msgstr "مرفق %(number)s"
+
 msgid "Attachments"
 msgstr "المرفقات"
 
@@ -500,6 +507,9 @@ msgstr "بانتظار موافقة المدير قبل إغلاق هذه الم
 
 msgid "Awaiting the responsible supervisor's review before a manager can approve it."
 msgstr "بانتظار مراجعة المشرف المسؤول قبل أن يتمكن المدير من الموافقة عليه."
+
+msgid "Back"
+msgstr "رجوع"
 
 msgid "Back to all tasks"
 msgstr "العودة إلى كل المهام"
@@ -675,6 +685,9 @@ msgstr "أغلق المهمة (بتقديم تقريرها) قبل طلب الت
 msgid "Close ticket"
 msgstr "إغلاق الطلب"
 
+msgid "Close with result"
+msgstr "إغلاق مع النتيجة"
+
 msgid "Closed"
 msgstr "مغلقة"
 
@@ -835,6 +848,9 @@ msgstr "العميل / الموقع"
 
 msgid "Customer added."
 msgstr "تمت إضافة العميل."
+
+msgid "Customer and site"
+msgstr "العميل والموقع"
 
 msgid "Customer code"
 msgstr "رمز العميل"
@@ -1301,6 +1317,12 @@ msgstr "الملاحظات: %(text)s"
 msgid "Flag negligence"
 msgstr "الإبلاغ عن إهمال"
 
+msgid "For"
+msgstr "إلى"
+
+msgid "For a customer who phoned, messaged or emailed. It becomes a normal ticket: the customer gets the usual confirmation and can follow it and reply in their portal."
+msgstr "لعميل اتصل أو راسل أو أرسل بريداً. تصبح تذكرة عادية: يتلقى العميل التأكيد المعتاد ويمكنه متابعتها والرد عليها من بوابته."
+
 msgid "For exceptional cases only — customer cancelled, turned out not to need a visit, etc. Bypasses the normal report and approval."
 msgstr "للحالات الاستثنائية فقط — ألغى العميل الطلب، أو تبيّن أنه لا يحتاج زيارة، إلخ. يتجاوز هذا التقرير والموافقة المعتادين."
 
@@ -1343,11 +1365,27 @@ msgstr "صالة رياضية"
 msgid "Gym address"
 msgstr "عنوان النادي الرياضي"
 
+msgid "Hand it to"
+msgstr "سلّمها إلى"
+
+msgid "Hand it to someone else"
+msgstr "سلّمها لشخص آخر"
+
+msgid "Hand over"
+msgstr "تسليم"
+
 msgid "Hand the screen to the customer to review the work and sign — hours and prices are hidden while they do."
 msgstr "سلّم الشاشة للعميل لمراجعة العمل والتوقيع — تُخفى الساعات والأسعار أثناء ذلك."
 
 msgid "Hand to customer to sign"
 msgstr "سلّم للعميل للتوقيع"
+
+msgid "Handed over."
+msgstr "تم التسليم."
+
+#, python-format
+msgid "Handed to %(name)s."
+msgstr "سُلّمت إلى %(name)s."
 
 msgid "Helped on"
 msgstr "ساعد في"
@@ -1486,6 +1524,9 @@ msgstr "كيف حُل الأمر دون مهمة — نصيحة قُدّمت، �
 msgid "How the customer hears about a rescheduled visit — a supervisor sending it deliberately from task detail, or the system sending it the moment the date or time changes."
 msgstr "كيف يعرف العميل بتغيير الموعد — إما بإرسال المشرف تنبيهًا يدويًا من تفاصيل المهمة، أو بإرسال النظام له تلقائيًا فور تغيير التاريخ أو الوقت."
 
+msgid "How the customer reached us"
+msgstr "كيف تواصل معنا العميل"
+
 msgid "How would you rate the visit?"
 msgstr "كيف تقيّم الزيارة؟"
 
@@ -1537,6 +1578,18 @@ msgstr "داخلي"
 msgid "Internal notes"
 msgstr "الملاحظات الداخلية"
 
+msgid "Internal only — nothing is sent to a customer. The person it's for is notified, and you both follow it up with notes until it's closed."
+msgstr "داخلية فقط — لا يُرسل شيء إلى العميل. يُبلَّغ الشخص المعني، وتتابعانها معاً بالملاحظات حتى إغلاقها."
+
+msgid "Internal ticket closed"
+msgstr "أُغلقت التذكرة الداخلية"
+
+msgid "Internal ticket for you"
+msgstr "تذكرة داخلية لك"
+
+msgid "Internal tickets"
+msgstr "التذاكر الداخلية"
+
 msgid "Invoice"
 msgstr "الفاتورة"
 
@@ -1566,6 +1619,9 @@ msgstr "إجازة"
 
 msgid "Leave contact fields blank to use the customer's own contact instead."
 msgstr "اترك حقول التواصل فارغة لاستخدام بيانات تواصل العميل نفسه."
+
+msgid "Leave empty to use the site’s own contact."
+msgstr "اتركه فارغاً لاستخدام جهة اتصال الموقع."
 
 msgid "Left the company"
 msgstr "غادر الشركة"
@@ -1742,6 +1798,9 @@ msgstr "تم إنشاء عميل جديد"
 msgid "New customer reply — ticket %(number)s"
 msgstr "رد جديد من العميل — الطلب %(number)s"
 
+msgid "New internal ticket for you"
+msgstr "تذكرة داخلية جديدة لك"
+
 msgid "New machines found"
 msgstr "أجهزة جديدة تم العثور عليها"
 
@@ -1751,6 +1810,9 @@ msgstr "رسالة جديدة"
 #, python-format
 msgid "New message — %(number)s"
 msgstr "رسالة جديدة — %(number)s"
+
+msgid "New note on an internal ticket"
+msgstr "ملاحظة جديدة على تذكرة داخلية"
 
 msgid "New password"
 msgstr "كلمة المرور الجديدة"
@@ -1851,6 +1913,9 @@ msgstr "لا يوجد مساعدون في هذه المهمة."
 msgid "No internal notes yet."
 msgstr "لا توجد ملاحظات داخلية بعد."
 
+msgid "No internal tickets here."
+msgstr "لا توجد تذاكر داخلية هنا."
+
 msgid "No location sent"
 msgstr "لم يُرسل الموقع"
 
@@ -1868,6 +1933,9 @@ msgstr "لا توجد رسائل بعد."
 
 msgid "No negligence flags on record."
 msgstr "لا توجد بلاغات إهمال مسجّلة."
+
+msgid "No notes yet."
+msgstr "لا توجد ملاحظات بعد."
 
 msgid "No one is assigned yet."
 msgstr "لم يتم تعيين أحد بعد."
@@ -1984,6 +2052,9 @@ msgstr "تمت إضافة الملاحظة."
 msgid "Note for the support desk (internal)"
 msgstr "ملاحظة لفريق الدعم (داخلية)"
 
+msgid "Notes"
+msgstr "الملاحظات"
+
 msgid "Nothing logged yet."
 msgstr "لا يوجد شيء مسجّل بعد."
 
@@ -2061,6 +2132,18 @@ msgstr "المهام المفتوحة"
 msgid "Open tasks to reassign"
 msgstr "مهام مفتوحة لإعادة الإسناد"
 
+msgid "Open ticket"
+msgstr "فتح التذكرة"
+
+msgid "Open tickets for a customer (phone, WhatsApp, email)"
+msgstr "فتح تذاكر نيابةً عن العميل (هاتف، واتساب، بريد)"
+
+msgid "Opened"
+msgstr "تاريخ الفتح"
+
+msgid "Opened by"
+msgstr "فتحها"
+
 msgid "Operations Manager"
 msgstr "مدير العمليات"
 
@@ -2072,6 +2155,9 @@ msgstr "أو ارفع صورة لتوقيع ورقي:"
 
 msgid "Other"
 msgstr "أخرى"
+
+msgid "Other internal"
+msgstr "داخلية أخرى"
 
 #, python-format
 msgid "Our Operations Manager reviewed your request on %(when)s. Our team will follow up with you here."
@@ -2425,6 +2511,9 @@ msgstr "المسؤول"
 msgid "Responsible supervisor"
 msgstr "المشرف المسؤول"
 
+msgid "Result"
+msgstr "النتيجة"
+
 msgid "Results"
 msgstr "النتائج"
 
@@ -2712,8 +2801,14 @@ msgstr "استُؤنف العمل"
 msgid "Status"
 msgstr "الحالة"
 
+msgid "Stock request"
+msgstr "طلب مخزون"
+
 msgid "Stopped for today"
 msgstr "تم الإيقاف لليوم"
+
+msgid "Subject"
+msgstr "الموضوع"
 
 msgid "Submit"
 msgstr "إرسال"
@@ -2991,6 +3086,10 @@ msgid "Ticket"
 msgstr "التذكرة"
 
 #, python-format
+msgid "Ticket %(number)s opened."
+msgstr "فُتحت التذكرة %(number)s."
+
+#, python-format
 msgid "Ticket %(number)s received — Profit Sports Solutions"
 msgstr "تم استلام الطلب %(number)s — Profit Sports Solutions"
 
@@ -3093,6 +3192,9 @@ msgstr "عمودان: الرمز، الوصف. لا مانع من وجود صف 
 msgid "Type"
 msgstr "النوع"
 
+msgid "Type of ticket"
+msgstr "نوع التذكرة"
+
 msgid "UPS"
 msgstr "UPS"
 
@@ -3148,6 +3250,12 @@ msgstr "اسم المستخدم"
 
 msgid "Vehicle"
 msgstr "مركبة"
+
+msgid "Vendor"
+msgstr "المورّد"
+
+msgid "Vendor follow-up"
+msgstr "متابعة مع مورّد"
 
 msgid "Video"
 msgstr "فيديو"
@@ -3241,6 +3349,9 @@ msgstr "تجاوز التقدير بكثير"
 msgid "What happened"
 msgstr "ماذا حدث"
 
+msgid "What happened — stock ordered, vendor replied, sorted out, etc."
+msgstr "ما الذي حدث — طُلب المخزون، ردّ المورّد، حُلّت المسألة، إلخ."
+
 msgid "What is this"
 msgstr "ما هذا"
 
@@ -3267,6 +3378,9 @@ msgstr "أي دور يمكنه فعل ماذا. شاشات الفني الذات
 
 msgid "Who"
 msgstr "من"
+
+msgid "Who should handle it — they’re notified and it shows in their internal tickets."
+msgstr "من يجب أن يتولاها — يُبلَّغ وتظهر في تذاكره الداخلية."
 
 msgid "Who's already booked, so you can pick a time that doesn't collide. Open someone's week for the full day-by-day picture — how crowded each day is, not just what's next."
 msgstr "من هو مشغول بالفعل، حتى تختار وقتًا لا يتعارض. افتح أسبوع أي شخص للاطلاع على الصورة الكاملة يومًا بيوم — مدى ازدحام كل يوم، وليس المهمة القادمة فقط."
@@ -3663,6 +3777,9 @@ msgstr "تاريخ التعيين"
 msgid "installed on"
 msgstr "تاريخ التركيب"
 
+msgid "internal tickets only"
+msgstr "للتذاكر الداخلية فقط"
+
 msgid "internal — never shown to the customer"
 msgstr "داخلي — لا يظهر للعميل أبدًا"
 
@@ -3762,6 +3879,9 @@ msgstr "معطّل افتراضيًا — يقوم المشرف بإرساله �
 
 msgid "one account covers every site under this customer — created by staff, never self-signup"
 msgstr "حساب واحد يغطي كل مواقع هذا العميل — ينشئه الموظفون، ولا يمكن للعميل التسجيل بنفسه"
+
+msgid "opened by"
+msgstr "فتحها"
 
 msgid "optional — shown on the customer’s ticket page"
 msgstr "اختياري — يظهر في صفحة تذكرة العميل"
@@ -4041,6 +4161,9 @@ msgstr "الحالة"
 msgid "storage kind"
 msgstr "نوع التخزين"
 
+msgid "subject"
+msgstr "الموضوع"
+
 msgid "submitted at"
 msgstr "قُدّم في"
 
@@ -4153,6 +4276,9 @@ msgstr "الحقل الوحيد المؤكد عند الإنشاء"
 msgid "the shipment paperwork — uploaded once the parts arrive"
 msgstr "مستندات الشحنة — تُرفع بمجرد وصول القطع"
 
+msgid "the staff member who opened it — empty when the customer did"
+msgstr "الموظف الذي فتحها — فارغ إن فتحها العميل"
+
 msgid "the technician himself for a self-rating, the supervisor for a review"
 msgstr "الفني نفسه للتقييم الذاتي، والمشرف للمراجعة"
 
@@ -4216,6 +4342,9 @@ msgstr "رحلة"
 msgid "trips"
 msgstr "رحلات"
 
+msgid "type"
+msgstr "النوع"
+
 msgid "unavailable reason"
 msgstr "سبب عدم التوفر"
 
@@ -4240,6 +4369,9 @@ msgstr "يُستخدم بدلاً من الوقت أدناه عند الجدول
 
 msgid "user"
 msgstr "المستخدم"
+
+msgid "vendor"
+msgstr "المورّد"
 
 msgid "warranty end"
 msgstr "نهاية الضمان"

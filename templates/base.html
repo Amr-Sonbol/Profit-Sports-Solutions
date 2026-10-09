@@ -61,6 +61,12 @@
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
+                        {% elif notification.kind == 'internal_ticket' %}
+                        <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
+                            {% translate "Internal ticket for you" %}
+                            — {{ notification.ticket.subject }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
                         {% elif notification.kind == 'task_message' %}
                         <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
                             {% translate "New message" %}

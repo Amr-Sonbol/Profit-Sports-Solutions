@@ -28,6 +28,12 @@
             <dt>{% translate "Submitted" %}</dt>
             <dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
         </div>
+        {% if ticket.opened_by %}
+        <div>
+            <dt>{% translate "Opened by" %}</dt>
+            <dd>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {{ ticket.get_source_display }}</dd>
+        </div>
+        {% endif %}
         <div>
             <dt>{% translate "Site / location" %}</dt>
             <dd>{{ ticket.site_description }}</dd>

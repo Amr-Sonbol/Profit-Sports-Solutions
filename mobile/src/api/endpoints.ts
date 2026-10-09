@@ -63,8 +63,9 @@ export function fetchParts() {
   return apiRequest<CataloguePart[]>('/api/parts/');
 }
 
-export function fetchTeamTasks() {
-  return apiRequest<TaskListItem[]>('/api/tasks/');
+/** Open tasks; with `search`, matches across every status (newest 50). */
+export function fetchTeamTasks(search = '') {
+  return apiRequest<TaskListItem[]>(search ? `/api/tasks/?q=${encodeURIComponent(search)}` : '/api/tasks/');
 }
 
 export function fetchTeamTaskDetail(id: number) {
@@ -88,6 +89,7 @@ export function approveTaskReport(id: number) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/approve/`, { method: 'POST', body: {} });
 }
 
-export function fetchNewTickets() {
-  return apiRequest<Ticket[]>('/api/tickets/');
+/** New tickets; with `search`, matches across every status (newest 50). */
+export function fetchNewTickets(search = '') {
+  return apiRequest<Ticket[]>(search ? `/api/tickets/?q=${encodeURIComponent(search)}` : '/api/tickets/');
 }

@@ -880,3 +880,48 @@ class TapLocationTests(ApiTestCase):
         )
         self.assertEqual(self._event(TaskEvent.EventType.REPORT_SUBMITTED).location_status, 'away')
         self.assertTrue(WorkReport.objects.get(task=self.task).has_taps_away_from_site)
+
+
+class ListSearchApiTests(ApiTestCase):
+    """The app's search boxes: ?q= on the team task list and ticket list."""
+
+    def setUp(self):
+        super().setUp()
+        from tasks.models import CustomerTicket, TaskProduct
+
+        self.done = Task.objects.create(
+            task_number='UAE-0099', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.CLOSED, pak_reference_number='PAK-77777',
+        )
+        TaskProduct.objects.create(task=self.done, product_code='TM-1', serial_number='SER-4242')
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0042', company_name='Iron Temple Gym', site_description='JBR',
+            contact_name='Huda', contact_phone='0501112233', description='x', submitted_at=timezone.now(),
+            status='closed',
+        )
+        self.token = self.token_for('supervisor1')
+
+    def _numbers(self, path):
+        return [row.get('task_number') or row.get('ticket_number')
+                for row in self.client.get(path, **self.auth(self.token)).json()]
+
+    def test_without_a_search_only_open_tasks(self):
+        self.assertEqual(self._numbers('/api/tasks/'), ['UAE-0001'])
+
+    def test_search_finds_closed_tasks_by_any_field(self):
+        for text in ('0099', 'pak-777', 'SER-4242', 'fitness first', 'marina'):
+            with self.subTest(text=text):
+                self.assertIn('UAE-0099', self._numbers(f'/api/tasks/?q={text}'))
+        self.assertEqual(self._numbers('/api/tasks/?q=nothing-like-this'), [])
+
+    def test_ticket_search_covers_every_status(self):
+        Technician.objects.create(
+            user=User.objects.create_user('support1', password='pass12345'), country=self.country,
+            full_name='Sara Support', language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.token = self.token_for('support1')
+        self.assertEqual(self._numbers('/api/tickets/'), [])
+        for text in ('T0042', 'iron temple', '1112233', 'huda'):
+            with self.subTest(text=text):
+                self.assertEqual(self._numbers(f'/api/tickets/?q={text}'), ['AE-T0042'])

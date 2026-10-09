@@ -6782,3 +6782,100 @@ class TappedHoursTests(TaskTestCase):
         }, helpers=[helper])
         self.assertFalse(form.is_valid())
         self.assertIn(f'helper_hours_{helper.pk}', form.errors)
+
+
+class StaffOpenedTicketTests(TaskTestCase):
+    """Technical support and operations managers opening tickets: for a
+    customer who phoned, or internal ones (stock, vendor, other)."""
+
+    def setUp(self):
+        super().setUp()
+        self.support = self._staff('support1', Technician.Role.SUPPORT_MANAGER)
+        self.ops = self._staff('ops1', Technician.Role.OPERATIONS_MANAGER)
+        self.warehouse = self._staff('warehouse1', Technician.Role.WAREHOUSE_MANAGER)
+        self.site.contact_name, self.site.contact_phone = 'Ali Manager', '0501234567'
+        self.site.save()
+
+    def _staff(self, username, role):
+        return Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345'), country=self.country,
+            full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+
+    def _customer_ticket(self, **extra):
+        return self.client.post('/tasks/tickets/open/?kind=customer', {
+            'site': self.site.pk, 'source': 'phone', 'description': 'Treadmill belt slipping', **extra,
+        })
+
+    def test_support_manager_opens_a_ticket_for_a_customer_who_phoned(self):
+        self.client.login(username='support1', password='pass12345')
+        response = self._customer_ticket()
+        ticket = CustomerTicket.objects.get()
+        self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
+        self.assertEqual(ticket.kind, 'customer')
+        self.assertEqual(ticket.source, 'phone')
+        self.assertEqual(ticket.customer, self.customer)
+        self.assertEqual(ticket.opened_by, self.support.user)
+        # Contact left empty: the site's own is used.
+        self.assertEqual(ticket.contact_name, 'Ali Manager')
+        self.assertTrue(TicketNotification.objects.filter(ticket=ticket, kind='new_ticket').exists())
+        # A task made from it keeps the channel.
+        self._staff('manager1', Technician.Role.MANAGER)
+        self.client.login(username='manager1', password='pass12345')
+        form = self.client.get(f'/tasks/new/?ticket={ticket.pk}').context['form']
+        self.assertEqual(form['source'].initial, 'phone')
+
+    def test_operations_manager_can_open_one_too(self):
+        self.client.login(username='ops1', password='pass12345')
+        response = self._customer_ticket()
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+        self.assertEqual(CustomerTicket.objects.get().opened_by, self.ops.user)
+
+    def test_supervisor_cannot_open_tickets(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self._customer_ticket().status_code, 403)
+
+    def _stock_request(self):
+        self.client.login(username='support1', password='pass12345')
+        with patch('tasks.views.push_in_their_language') as push:
+            self.client.post('/tasks/tickets/open/?kind=stock', {
+                'subject': 'Need 10 running belts', 'description': 'For the Marina jobs',
+                'assigned_to': self.warehouse.pk,
+            })
+        push.assert_called_once()
+        return CustomerTicket.objects.get()
+
+    def test_internal_ticket_goes_to_whoever_it_is_for(self):
+        ticket = self._stock_request()
+        self.assertEqual(ticket.kind, 'stock')
+        self.assertEqual(ticket.assigned_to, self.warehouse)
+
+        self.client.login(username='warehouse1', password='pass12345')
+        listed = self.client.get('/tasks/tickets/internal/').context['tickets']
+        self.assertEqual(list(listed), [ticket])
+        bell = self.client.get('/').context['unseen_notifications']
+        self.assertTrue(any(item['kind'] == 'internal_ticket' for item in bell))
+
+        self.client.post(f'/tasks/tickets/internal/{ticket.pk}/', {'action': 'add_note', 'message': 'Ordered'})
+        self.client.post(f'/tasks/tickets/internal/{ticket.pk}/', {'action': 'close', 'close_reason': 'Delivered'})
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, 'closed')
+        self.assertEqual(ticket.internal_notes.get().message, 'Ordered')
+
+    def test_internal_tickets_stay_out_of_customer_lists(self):
+        ticket = self._stock_request()
+        self.assertNotIn(ticket, self.client.get('/tasks/tickets/?status=all').context['tickets'])
+        response = self.client.get(f'/tasks/tickets/{ticket.pk}/')
+        self.assertRedirects(response, f'/tasks/tickets/internal/{ticket.pk}/', fetch_redirect_response=False)
+
+    def test_someone_not_involved_cannot_see_it(self):
+        ticket = self._stock_request()
+        self.client.login(username='ops1', password='pass12345')
+        self.assertEqual(self.client.get(f'/tasks/tickets/internal/{ticket.pk}/').status_code, 404)
+
+    def test_vendor_follow_up_needs_the_vendor(self):
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.post('/tasks/tickets/open/?kind=vendor', {
+            'subject': 'Chase the treadmill motor', 'description': 'Late', 'assigned_to': self.support.pk,
+        })
+        self.assertIn('vendor_name', response.context['form'].errors)

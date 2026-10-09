@@ -5,9 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchTeamTasks } from '@/api/endpoints';
+import { SearchBox } from '@/components/search-box';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskListItem } from '@/types';
 
@@ -24,10 +26,12 @@ export default function TeamTasksScreen() {
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const query = useDebouncedValue(search.trim());
 
   const load = useCallback(async () => {
     try {
-      setTasks(await fetchTeamTasks());
+      setTasks(await fetchTeamTasks(query));
       setError('');
     } catch (err) {
       setError(
@@ -36,7 +40,7 @@ export default function TeamTasksScreen() {
           : 'Could not load tasks.',
       );
     }
-  }, []);
+  }, [query]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,6 +60,7 @@ export default function TeamTasksScreen() {
         <ThemedText type="title" style={styles.heading}>
           Team
         </ThemedText>
+        <SearchBox value={search} onChangeText={setSearch} placeholder="Search task, customer, site, PAK, serial" />
         {error ? (
           <ThemedText themeColor="textSecondary" style={styles.message}>
             {error}
@@ -67,7 +72,9 @@ export default function TeamTasksScreen() {
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
             ListEmptyComponent={
-              tasks !== null ? <ThemedText themeColor="textSecondary">No open tasks.</ThemedText> : null
+              tasks !== null ? (
+                <ThemedText themeColor="textSecondary">{query ? 'No tasks match.' : 'No open tasks.'}</ThemedText>
+              ) : null
             }
             renderItem={({ item }) => (
               <TouchableOpacity

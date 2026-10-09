@@ -61,6 +61,15 @@ def notification_bell(request):
         {'kind': 'unscheduled_overdue', 'created_at': task.created_at, 'task': task}
         for task in overdue_unscheduled_tasks(country, technician)
     ]
+    # Internal tickets (stock, vendor, other) waiting on this person — live,
+    # so they stay until closed, like the overdue alarms above.
+    from tasks.models import CustomerTicket
+    items += [
+        {'kind': 'internal_ticket', 'created_at': ticket.assigned_at or ticket.submitted_at, 'ticket': ticket}
+        for ticket in CustomerTicket.objects.filter(
+            assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
+        ).exclude(kind=CustomerTicket.Kind.CUSTOMER)
+    ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
     ).select_related('message__task')
@@ -132,6 +141,11 @@ def nav_pages(technician, allowed):
     if RolePermission.Permission.MANAGE_TICKETS in allowed:
         add('tasks:ticket_list', _('Tickets'), 'inbox')
         add('tasks:all_tickets', _('All tickets'), 'archive')
+    if RolePermission.Permission.OPEN_TICKETS in allowed:
+        add('tasks:ticket_open', _('New ticket'), 'file-plus')
+    # Anyone in the office can be handed a stock request or vendor follow-up.
+    if technician.role != technician.Role.TECHNICIAN:
+        add('tasks:internal_tickets', _('Internal tickets'), 'list')
     if technician.is_manager_tier:
         add('tasks:all_tasks', _('All tasks'), 'layers')
         add('tasks:all_week', _('All week'), 'calendar')

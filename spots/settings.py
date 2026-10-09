@@ -65,6 +65,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Trigram search indexes (spots/indexes.py) need its index support.
+    'django.contrib.postgres',
     'axes',
     'rest_framework',
     'rest_framework.authtoken',
