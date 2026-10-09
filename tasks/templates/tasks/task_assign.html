@@ -14,10 +14,22 @@
     </div>
 </div>
 
-{% if locked and can_set_lead %}
+{% if manager_override %}
+<div class="section">
+    <p class="flash flash--info">
+        {% translate "Work has already started. As a manager or admin you can still change the team — the new lead carries on from where the task is." %}
+    </p>
+</div>
+{% elif locked and can_set_lead %}
 <div class="section">
     <p class="flash flash--error">
         {% translate "The lead has left the company. Work has already started, so only they can be replaced — the new lead carries on from where the task is." %}
+    </p>
+</div>
+{% elif locked and task.status == 'in_progress' %}
+<div class="section">
+    <p class="empty-state">
+        {% translate "Work has started, so only a manager or admin can change the team now." %}
     </p>
 </div>
 {% elif locked %}

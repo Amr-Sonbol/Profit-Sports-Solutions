@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 14:46+0000\n"
+"POT-Creation-Date: 2026-10-09 15:07+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -3127,6 +3127,12 @@ msgstr "سبب الإغلاق دون تقرير — ألغى العميل الط
 
 msgid "Why this ticket isn't becoming a task — spam, duplicate, not us, etc."
 msgstr "سبب عدم تحويل هذا الطلب إلى مهمة — رسالة مزعجة، تكرار، لا يخصنا، إلخ.سبب عدم تحويل هذه التذكرة إلى مهمة — رسالة مزعجة، تكرار، ليست من اختصاصنا، إلخ."
+
+msgid "Work has already started. As a manager or admin you can still change the team — the new lead carries on from where the task is."
+msgstr "بدأ العمل بالفعل. بصفتك مديرًا أو مسؤول النظام لا يزال بإمكانك تغيير الفريق — يكمل الفني الرئيسي الجديد من حيث توقفت المهمة."
+
+msgid "Work has started, so only a manager or admin can change the team now."
+msgstr "بدأ العمل، لذا لا يمكن تغيير الفريق الآن إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "Work report"
 msgstr "تقرير العمل"

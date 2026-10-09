@@ -332,7 +332,8 @@ def _team_task_response(request, task):
         'can_assign': (
             owns and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
             and any(
-                assignment_changeable(task, a) for a in [None, *(a for a in task.assignments.all() if a.is_active)]
+                assignment_changeable(task, a, technician)
+                for a in [None, *(a for a in task.assignments.all() if a.is_active)]
             )
         ),
         'can_supervisor_approve': (
@@ -403,6 +404,7 @@ class TeamTaskAssignView(APIView):
     def post(self, request, pk):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
+        technician = request.user.technician
         active = [a for a in task.assignments.all() if a.is_active]
         active_lead = next((a for a in active if a.role == TaskAssignment.Role.LEAD), None)
         locked_message = Response(
@@ -414,7 +416,7 @@ class TeamTaskAssignView(APIView):
         action = request.data.get('action')
 
         if action == 'set_lead':
-            if not assignment_changeable(task, active_lead):
+            if not assignment_changeable(task, active_lead, technician):
                 return locked_message
             form = SetLeadForm(request.data, technicians=selectable, requires_reason=bool(active_lead))
             if not form.is_valid():
@@ -424,7 +426,7 @@ class TeamTaskAssignView(APIView):
                 request.user,
             )
         elif action == 'add_helper':
-            if not assignment_changeable(task):
+            if not assignment_changeable(task, technician=technician):
                 return locked_message
             if not active_lead:
                 return Response({'detail': 'Set a lead first.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -441,7 +443,7 @@ class TeamTaskAssignView(APIView):
                 TaskAssignment, pk=request.data.get('assignment_id'), task=task,
                 role=TaskAssignment.Role.HELPER, is_active=True,
             )
-            if not assignment_changeable(task, helper):
+            if not assignment_changeable(task, helper, technician):
                 return locked_message
             form = RemoveAssignmentForm(request.data)
             if not form.is_valid():

@@ -574,6 +574,15 @@ class TeamTaskApiTests(ApiTestCase):
         response = self._post(token, 'assign', {'action': 'add_helper', 'technician': self.other_tech.pk})
         self.assertEqual(response.status_code, 400)
 
+    def test_manager_can_change_the_team_once_work_starts(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        token = self.token_for('manager1')
+        self.assertTrue(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['can_assign'])
+        response = self._post(token, 'assign', {'action': 'add_helper', 'technician': self.other_tech.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['helpers'][0]['technician_name'], 'Omar Other')
+
     def test_another_supervisors_task_is_off_limits(self):
         other_sup_user = User.objects.create_user('supervisor2', password='pass12345')
         other_sup = Technician.objects.create(

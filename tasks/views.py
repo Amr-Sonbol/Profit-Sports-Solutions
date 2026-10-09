@@ -101,11 +101,12 @@ ASSIGNMENT_LOCKED_STATUSES = {
     Task.Status.CANCELLED,
 }
 
-# Someone who's left (deactivated) can still be replaced on a task already
-# underway — otherwise it would be stuck with nobody able to finish it. The
-# new lead carries on; status stays in_progress. Once the report is filed,
-# there's nothing left to hand over.
-DEPARTED_REPLACEABLE_STATUSES = {Task.Status.IN_PROGRESS}
+# While a task is underway, the team can still change in two cases: a
+# manager or admin reshuffling it, and anyone replacing someone who has
+# left (deactivated) — otherwise the task would be stuck with nobody able
+# to finish it. Either way the new lead carries on; status stays
+# in_progress. Once the report is filed, there's nothing left to hand over.
+UNDERWAY_CHANGEABLE_STATUSES = {Task.Status.IN_PROGRESS}
 
 # Statuses where a deactivated person's assignment still needs handing on.
 NEEDS_REASSIGNING_STATUSES = [
@@ -113,16 +114,19 @@ NEEDS_REASSIGNING_STATUSES = [
 ]
 
 
-def assignment_changeable(task, assignment=None):
+def assignment_changeable(task, assignment=None, technician=None):
     """Whether this assignment (or, with none, the team in general) can
-    still change: always before work starts, and for someone who has left
-    while the task is still underway.
+    still change for the requesting `technician`: always before work
+    starts, and while the task is still underway either for the manager
+    tier, or for someone who has left.
     """
     if task.status not in ASSIGNMENT_LOCKED_STATUSES:
         return True
-    return bool(
-        assignment and not assignment.technician.is_active and task.status in DEPARTED_REPLACEABLE_STATUSES
-    )
+    if task.status not in UNDERWAY_CHANGEABLE_STATUSES:
+        return False
+    if technician is not None and technician.is_manager_tier:
+        return True
+    return bool(assignment and not assignment.technician.is_active)
 
 
 # Once a lead is (re)assigned, an in-progress task pipeline restarts at
@@ -2482,10 +2486,12 @@ def task_assign(request, pk):
     active_helpers = [a for a in active_assignments if a.role == TaskAssignment.Role.HELPER]
     assigned_ids = {a.technician_id for a in active_assignments}
 
-    locked = task.status in ASSIGNMENT_LOCKED_STATUSES
-    can_set_lead = assignment_changeable(task, active_lead)
+    locked = not assignment_changeable(task, technician=requesting_technician)
+    # Work has started, but a manager/admin can still reshuffle the team.
+    manager_override = not locked and task.status in ASSIGNMENT_LOCKED_STATUSES
+    can_set_lead = assignment_changeable(task, active_lead, requesting_technician)
     for helper in active_helpers:
-        helper.removable = assignment_changeable(task, helper)
+        helper.removable = assignment_changeable(task, helper, requesting_technician)
     candidates_qs = _assignment_candidates(task, exclude_ids=assigned_ids)
     # Shown in the candidates table regardless of availability, so a
     # supervisor can see and flip someone back — but only available
@@ -2525,7 +2531,7 @@ def task_assign(request, pk):
                 role=TaskAssignment.Role.HELPER, is_active=True,
             )
             remove_form = RemoveAssignmentForm(request.POST)
-            if assignment_changeable(task, helper) and remove_form.is_valid():
+            if assignment_changeable(task, helper, requesting_technician) and remove_form.is_valid():
                 helper.is_active = False
                 helper.ended_at = timezone.now()
                 helper.end_reason = remove_form.cleaned_data['end_reason']
@@ -2539,6 +2545,7 @@ def task_assign(request, pk):
         'active_helpers': active_helpers,
         'candidates': _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)),
         'locked': locked,
+        'manager_override': manager_override,
         'can_set_lead': can_set_lead,
         'set_lead_form': set_lead_form,
         'add_helper_form': add_helper_form,

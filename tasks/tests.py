@@ -6531,6 +6531,39 @@ class DepartedTechnicianTests(TaskTestCase):
         })
         self.assertEqual(self.task.assignments.get(is_active=True).technician, self.technician)
 
+    def test_manager_can_change_the_team_once_work_started(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(self.assign_url)
+        self.assertFalse(response.context['locked'])
+        self.assertTrue(response.context['manager_override'])
+
+        self.client.post(self.assign_url, {
+            'action': 'set_lead', 'technician': self.replacement.pk, 'end_reason': 'overloaded',
+        })
+        new_lead = self.task.assignments.get(is_active=True, role=TaskAssignment.Role.LEAD)
+        self.assertEqual(new_lead.technician, self.replacement)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+        self.client.post(self.assign_url, {'action': 'add_helper', 'technician': self.technician.pk})
+        helper = self.task.assignments.get(is_active=True, role=TaskAssignment.Role.HELPER)
+        self.assertEqual(helper.technician, self.technician)
+        self.client.post(self.assign_url, {
+            'action': 'remove_helper', 'assignment_id': helper.pk, 'end_reason': 'overloaded',
+        })
+        helper.refresh_from_db()
+        self.assertFalse(helper.is_active)
+
+    def test_manager_cannot_change_the_team_once_the_report_is_filed(self):
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save(update_fields=['status'])
+        self.client.login(username='manager1', password='pass12345')
+        self.assertTrue(self.client.get(self.assign_url).context['locked'])
+        self.client.post(self.assign_url, {
+            'action': 'set_lead', 'technician': self.replacement.pk, 'end_reason': 'overloaded',
+        })
+        self.assertEqual(self.task.assignments.get(is_active=True).technician, self.technician)
+
     def test_departed_helper_can_be_removed_after_work_started(self):
         helper = TaskAssignment.objects.create(
             task=self.task, technician=self.replacement, role=TaskAssignment.Role.HELPER,
