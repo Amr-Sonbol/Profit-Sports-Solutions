@@ -259,8 +259,8 @@ export default function TeamTaskScreen() {
               )}
               disabled={isBusy}
             >
-              {isBusy ? <ActivityIndicator color="#fff" /> : (
-                <ThemedText style={styles.buttonText}>
+              {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
                   {task.can_manager_approve ? 'Approve and close' : 'Approve report'}
                 </ThemedText>
               )}

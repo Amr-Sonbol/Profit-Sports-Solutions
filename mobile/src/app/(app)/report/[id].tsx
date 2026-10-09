@@ -275,7 +275,7 @@ export default function ReportScreen() {
             </ThemedView>
 
             <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={finishSigning}>
-              <ThemedText style={styles.buttonText}>Done — hand back to the technician</ThemedText>
+              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Done — hand back to the technician</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setSigning(false)} style={styles.centerLink}>
               <ThemedText themeColor="textSecondary">Cancel</ThemedText>
@@ -324,7 +324,7 @@ export default function ReportScreen() {
                     ]}
                     onPress={() => setResolved(value)}
                   >
-                    <ThemedText style={resolved === value ? styles.toggleTextActive : undefined}>
+                    <ThemedText style={resolved === value ? [styles.toggleTextActive, { color: theme.onPrimary }] : undefined}>
                       {value ? 'Yes' : 'No'}
                     </ThemedText>
                   </TouchableOpacity>
@@ -436,8 +436,8 @@ export default function ReportScreen() {
               onPress={submit}
               disabled={isBusy}
             >
-              {isBusy ? <ActivityIndicator color="#fff" /> : (
-                <ThemedText style={styles.buttonText}>Submit report</ThemedText>
+              {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Submit report</ThemedText>
               )}
             </TouchableOpacity>
           </ScrollView>

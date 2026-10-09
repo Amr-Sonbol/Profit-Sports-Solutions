@@ -145,8 +145,8 @@ export default function TaskDetailScreen() {
               onPress={() => handleAction(task.next_action!)}
               disabled={isBusy}
             >
-              {isBusy ? <ActivityIndicator color="#fff" /> : (
-                <ThemedText style={styles.buttonText}>{ACTION_LABELS[task.next_action]}</ThemedText>
+              {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>{ACTION_LABELS[task.next_action]}</ThemedText>
               )}
             </TouchableOpacity>
           ) : null}
@@ -167,7 +167,7 @@ export default function TaskDetailScreen() {
               style={[styles.button, { backgroundColor: theme.primary }]}
               onPress={() => router.push(`/report/${task.id}`)}
             >
-              <ThemedText style={styles.buttonText}>
+              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
                 {task.status === 'in_progress' ? 'File work report' : 'Edit work report'}
               </ThemedText>
             </TouchableOpacity>

@@ -1,11 +1,14 @@
 :root {
     color-scheme: light;
-    --color-bg: #f5f6f7;
+    /* Black and white, straight from the logo — the accent is black too.
+       Status badges keep their own colours below so they stay readable
+       at a glance. */
+    --color-bg: #f4f4f4;
     --color-surface: #ffffff;
-    --color-border: #dde1e4;
-    --color-text: #1c2126;
-    --color-muted: #667085;
-    --color-accent: #2f6feb;
+    --color-border: #dadada;
+    --color-text: #000000;
+    --color-muted: #5c5c5c;
+    --color-accent: #000000;
     --color-danger: #c0392b;
     /* Same amber already used for high-priority/in-progress badges — named
        here so the dashboard's stat tiles can reuse it as a real "needs
@@ -21,7 +24,8 @@ body {
     margin: 0;
     background: var(--color-bg);
     color: var(--color-text);
-    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    /* One body face for both scripts (loaded in base.html). */
+    font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
     /* 16px, not 15 — below that, iOS Safari zooms the whole page in when a
        technician taps into a form field, which is disorienting on a phone
        and the single most common mobile form complaint. */
@@ -44,6 +48,24 @@ textarea:focus-visible {
 
 a {
     color: var(--color-accent);
+}
+
+/* Page titles lean forward like the logo's italic lettering — and lean
+   the other way in Arabic, with the reading direction. Only titles lean;
+   body text, tables and forms stay upright. */
+h1 {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    transform: skewX(-10deg);
+    transform-origin: bottom;
+}
+
+html[dir="rtl"] h1 {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+    text-transform: none;
+    transform: skewX(10deg);
 }
 
 /* Everything that used to live across the header (nav links, user info)
@@ -321,7 +343,8 @@ html[dir="rtl"] .notif-dropdown > * {
 
 .page__header h1 {
     margin: 0;
-    font-size: 1.375rem;
+    font-size: 1.75rem;
+    line-height: 1.15;
 }
 
 .flash {
@@ -336,7 +359,7 @@ html[dir="rtl"] .notif-dropdown > * {
 }
 
 .flash--info {
-    background: #eaf0fb;
+    background: #ededed;
     color: var(--color-accent);
 }
 
@@ -530,8 +553,8 @@ tbody tr:hover {
 }
 
 .chat-message--mine .chat-bubble {
-    background: #eaf0fb;
-    border-color: #eaf0fb;
+    background: #ededed;
+    border-color: #ededed;
     border-end-start-radius: 0.9rem;
     border-end-end-radius: 0.2rem;
 }
@@ -710,7 +733,6 @@ tbody tr:hover {
     padding: 1rem 0.75rem;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
     color: var(--color-text);
     text-align: center;
     text-decoration: none;
@@ -719,7 +741,7 @@ tbody tr:hover {
 
 .welcome-tile:hover {
     border-color: var(--color-accent);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .welcome-tile .icon {
@@ -727,8 +749,18 @@ tbody tr:hover {
 }
 
 .welcome-tile__label {
-    font-weight: 500;
-    line-height: 1.3;
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    font-size: 1.15rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    transform: skewX(-10deg);
+}
+
+html[dir="rtl"] .welcome-tile__label {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+    text-transform: none;
+    transform: skewX(10deg);
 }
 
 .detail-grid {
@@ -1208,7 +1240,8 @@ tbody tr:hover {
     background: var(--color-accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    /* Square, like the logo's letterforms. */
+    border-radius: 0;
     /* ~44px tall at the 16px base font — a comfortable tap target, not
        just a comfortable click target. */
     padding-block: 0.7rem;
@@ -1221,7 +1254,7 @@ tbody tr:hover {
 .button--secondary {
     background: var(--color-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-text);
 }
 
 .button--danger {

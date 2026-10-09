@@ -72,7 +72,7 @@ export default function SignInScreen() {
             onPress={handleSubmit}
             disabled={isSubmitting || !username || !password}
           >
-            {isSubmitting ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.buttonText}>Sign in</ThemedText>}
+            {isSubmitting ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Sign in</ThemedText>}
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
