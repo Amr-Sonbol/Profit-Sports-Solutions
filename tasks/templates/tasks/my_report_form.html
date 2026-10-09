@@ -46,6 +46,21 @@
                 {% for error in report_form.labour_hours.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
         </div>
+        {% if report_form.helpers %}
+        <div data-staff-only>
+            <h3>{% translate "Helpers' hours" %}</h3>
+            <p class="field__help">{% translate "Each helper gets the same hours as above. Fill one in only if it was different — for example, someone who left early." %}</p>
+            <div class="form-grid">
+                {% for field in report_form.helper_fields %}
+                <div class="field {% if field.errors %}field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {{ existing_formset.management_form }}
@@ -171,6 +186,14 @@
                 {{ report_form.signature }}
                 {% if report_form.require_signature %}<p class="field__help">{% translate "Required for this type of task." %}</p>{% endif %}
                 {% for error in report_form.signature.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field field--checkbox signature-waiver" data-staff-only>
+                <label>{{ report_form.signature_waived }} {{ report_form.signature_waived.label }}</label>
+            </div>
+            <div class="field signature-waiver__reason {% if report_form.signature_waived_reason.errors %}field--error{% endif %}" data-staff-only>
+                <label for="{{ report_form.signature_waived_reason.id_for_label }}">{{ report_form.signature_waived_reason.label }}</label>
+                {{ report_form.signature_waived_reason }}
+                {% for error in report_form.signature_waived_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
         </div>
         <p data-signing-only>

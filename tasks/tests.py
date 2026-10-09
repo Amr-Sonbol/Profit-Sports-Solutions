@@ -1,4 +1,5 @@
 import tempfile
+from unittest.mock import patch
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
@@ -5782,13 +5783,32 @@ class TechnicianHoursTests(TaskTestCase):
         self.assertEqual(len(row['reports']), 2)
         self.assertEqual(str(row['hours']), '3.50')
         self.assertEqual(str(row['estimated']), '2.00')
-        self.assertEqual(str(response.context['total_hours']), '3.50')
+        # Person-hours: the lead's 3.50, plus the helper's 2.50 on AE-0001.
+        self.assertEqual(str(response.context['total_hours']), '6.00')
 
-    def test_helper_gets_a_count_not_the_hours(self):
+    def test_helper_gets_the_report_hours_by_default(self):
         self.client.login(username='supervisor1', password='pass12345')
         row = self._row(self.client.get(self.url), self.helper)
-        self.assertEqual(row['hours'], 0)
+        self.assertEqual(str(row['hours']), '2.50')
         self.assertEqual(row['helped_on'], 1)
+
+    def test_helper_hours_the_lead_entered_win(self):
+        self.task.assignments.filter(technician=self.helper).update(labour_hours='1.00')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(str(self._row(self.client.get(self.url), self.helper)['hours']), '1.00')
+
+    def test_hours_before_a_handover_count_for_the_old_lead(self):
+        task = Task.objects.create(
+            task_number='AE-0003', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.IN_PROGRESS,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.helper, role=TaskAssignment.Role.LEAD, assigned_at=timezone.now(),
+            is_active=False, ended_at=timezone.now(), end_reason='sick', labour_hours='1.25',
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(str(self._row(self.client.get(self.url), self.helper)['hours']), '3.75')
 
     def test_other_months_and_countries_are_excluded(self):
         self._task_with_report('AE-0003', hours='5.00', submitted_at=timezone.now() - timedelta(days=62))
@@ -5854,10 +5874,10 @@ class TechnicianHoursTests(TaskTestCase):
         self.assertEqual(str(response.context['month_hours']), '3.50')
         self.assertEqual(response.context['month_report_count'], 2)
 
-    def test_helper_gets_no_hours_on_my_progress(self):
+    def test_helper_sees_their_hours_on_my_progress(self):
         self.client.login(username='helper1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
-        self.assertEqual(response.context['month_hours'], 0)
+        self.assertEqual(str(response.context['month_hours']), '2.50')
 
     def test_csv_export_has_summary_and_report_rows(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -5866,7 +5886,8 @@ class TechnicianHoursTests(TaskTestCase):
         self.assertEqual(response['Content-Type'], 'text/csv')
         body = response.content.decode()
         self.assertIn('Tarek Tech,2,3.50,2.00,0,0', body)
-        self.assertIn('Omar Helper,0,0,,0,1', body)
+        self.assertIn('Omar Helper,0,2.50,,0,1', body)
+        self.assertIn('Omar Helper,AE-0001,Fitness First', body)
         self.assertIn('Tarek Tech,AE-0001,Fitness First', body)
 
     def test_csv_export_is_forbidden_to_technicians(self):
@@ -6576,3 +6597,113 @@ class DepartedTechnicianTests(TaskTestCase):
         })
         helper.refresh_from_db()
         self.assertFalse(helper.is_active)
+
+
+class CancelTaskTests(TaskTestCase):
+    """A manager calls a task off before its report is filed."""
+
+    def setUp(self):
+        super().setUp()
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def test_manager_cancels_with_a_reason_and_the_team_is_told(self):
+        self.client.login(username='manager1', password='pass12345')
+        with patch('tasks.views.push_cancelled') as push:
+            self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'Customer called it off'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CANCELLED)
+        event = self.task.events.get(event_type=TaskEvent.EventType.CANCELLED)
+        self.assertEqual(event.note, 'Customer called it off')
+        push.assert_called_once_with(self.technician, self.task)
+
+    def test_a_reason_is_required(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': ''})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+    def test_cannot_cancel_once_the_report_is_filed(self):
+        self.task.status = Task.Status.COMPLETED
+        self.task.save(update_fields=['status'])
+        self.client.login(username='manager1', password='pass12345')
+        self.assertFalse(self.client.get(self.url).context['can_cancel'])
+        self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'x'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    def test_supervisor_cannot_cancel(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'x'})
+        self.assertEqual(response.status_code, 403)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+
+class TakenOffTaskTests(TaskTestCase):
+    """Whoever is taken off a task hears about it, and a lead swapped
+    mid-job keeps the hours the manager says they put in."""
+
+    def setUp(self):
+        super().setUp()
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.other = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Rami Other', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.IN_PROGRESS,
+        )
+        self.lead = TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/{self.task.pk}/assign/'
+
+    def test_replaced_lead_is_told_and_keeps_their_hours(self):
+        self.client.login(username='manager1', password='pass12345')
+        with patch('tasks.views.push_removed') as push:
+            self.client.post(self.url, {
+                'action': 'set_lead', 'technician': self.other.pk, 'end_reason': 'sick', 'hours_worked': '1.5',
+            })
+        push.assert_called_once_with(self.technician, self.task)
+        self.lead.refresh_from_db()
+        self.assertEqual(str(self.lead.labour_hours), '1.50')
+
+    def test_removed_helper_is_told(self):
+        helper = TaskAssignment.objects.create(
+            task=self.task, technician=self.other, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.client.login(username='manager1', password='pass12345')
+        with patch('tasks.views.push_removed') as push:
+            self.client.post(self.url, {
+                'action': 'remove_helper', 'assignment_id': helper.pk, 'end_reason': 'overloaded',
+            })
+        push.assert_called_once_with(self.other, self.task)
+
+    def test_hours_box_only_when_replacing_a_lead_mid_job(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.assertIn('hours_worked', self.client.get(self.url).context['set_lead_form'].fields)
+        self.task.status = Task.Status.ASSIGNED
+        self.task.save(update_fields=['status'])
+        self.assertNotIn('hours_worked', self.client.get(self.url).context['set_lead_form'].fields)

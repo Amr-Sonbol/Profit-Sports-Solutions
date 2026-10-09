@@ -92,8 +92,16 @@ export interface WorkReport {
   labour_hours: string;
   customer_name: string;
   signature_url: string;
+  signature_waived_reason: string;
   submitted_at: string;
   parts_used: PartUsed[];
+}
+
+/** A helper on the job — their hours default to the report's own. */
+export interface ReportHelper {
+  id: number;
+  technician_name: string;
+  labour_hours: string | null;
 }
 
 export interface WorkReportInput {
@@ -105,6 +113,10 @@ export interface WorkReportInput {
   parts: PartUsed[];
   // A PNG data URL from the signature pad; null keeps the one on file.
   signature: string | null;
+  // Filled in when the customer wasn't there to sign.
+  signature_waived_reason?: string;
+  // Helper assignment id -> hours; empty means the same as labour_hours.
+  helper_hours?: Record<string, string>;
 }
 
 export interface Ticket {

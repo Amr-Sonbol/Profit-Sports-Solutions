@@ -1261,6 +1261,16 @@ html[dir="rtl"] .welcome-tile__label {
     background: var(--color-danger);
 }
 
+/* "Customer not available to sign": the reason box shows once ticked. */
+.signature-waiver__reason {
+    display: none;
+}
+
+.signature-waiver:has(input:checked) + .signature-waiver__reason,
+.signature-waiver__reason.field--error {
+    display: block;
+}
+
 /* Work report signature pad (static/js/signature-pad.js). */
 .signature-pad {
     display: flex;

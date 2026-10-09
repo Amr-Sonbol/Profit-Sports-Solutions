@@ -741,3 +741,77 @@ class PushDeviceTests(ApiTestCase):
         with patch('people.push.urlopen', side_effect=OSError('no network')):
             _set_lead(self.task, self.assignment, self.technician, 'other', self.supervisor_user)
         self.assertTrue(self.task.assignments.filter(technician=self.technician, is_active=True).exists())
+
+
+class ReportFixesApiTests(ApiTestCase):
+    """Signature waivers, helper hours, and a report from a lead who was
+    taken off the task before it reached the server."""
+
+    def setUp(self):
+        super().setUp()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        self.task.task_type = self.task_type
+        self.task_type.requires_signature = True
+        self.task_type.save(update_fields=['requires_signature'])
+        self.task.save(update_fields=['task_type'])
+
+    def _file(self, token, **overrides):
+        body = {
+            'findings': 'Belt worn', 'action_taken': 'Replaced belt', 'resolved': True,
+            'labour_hours': '3.00', 'customer_name': 'Ali', 'parts': [], 'signature': None, **overrides,
+        }
+        return self.client.post(
+            f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+            content_type='application/json', **self.auth(token),
+        )
+
+    def test_no_signature_needs_a_reason(self):
+        token = self.token_for('tech1')
+        self.assertEqual(self._file(token).status_code, 400)
+        response = self._file(token, signature_waived_reason='Gym manager was off site')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.task.report.signature_waived_reason, 'Gym manager was off site')
+
+    def test_lead_sets_a_helpers_hours(self):
+        helper_tech = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Omar Helper', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        helper = TaskAssignment.objects.create(
+            task=self.task, technician=helper_tech, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        token = self.token_for('tech1')
+        helpers = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['helpers']
+        self.assertEqual(helpers[0]['technician_name'], 'Omar Helper')
+        self._file(token, signature_waived_reason='Not there', helper_hours={str(helper.pk): '1.5'})
+        helper.refresh_from_db()
+        self.assertEqual(str(helper.labour_hours), '1.50')
+
+    def test_report_from_a_replaced_lead_goes_to_the_team(self):
+        from tasks.models import TaskMessage
+
+        new_lead = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Rami New', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        token = self.token_for('tech1')
+        self.assignment.is_active = False
+        self.assignment.ended_at = timezone.now()
+        self.assignment.end_reason = 'sick'
+        self.assignment.save()
+        TaskAssignment.objects.create(
+            task=self.task, technician=new_lead, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+
+        response = self._file(token, labour_hours='2.00')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()['report'])
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        message = TaskMessage.objects.get(task=self.task)
+        self.assertIn('Belt worn', message.message)
+        self.assertTrue(message.recipients.filter(technician=new_lead).exists())
+        self.assignment.refresh_from_db()
+        self.assertEqual(str(self.assignment.labour_hours), '2.00')

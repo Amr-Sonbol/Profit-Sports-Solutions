@@ -26,6 +26,10 @@ class WorkReport(models.Model):
     labour_hours = models.DecimalField(_('labour hours'), max_digits=5, decimal_places=2)
     customer_name = models.CharField(_('customer name'), max_length=150, help_text=_('who signed'))
     signature_url = models.URLField(_('signature URL'), blank=True)
+    signature_waived_reason = models.TextField(
+        _('why there is no signature'), blank=True,
+        help_text=_('filled in when the customer was not available to sign'),
+    )
     submitted_at = models.DateTimeField(_('submitted at'))
 
     class Meta:

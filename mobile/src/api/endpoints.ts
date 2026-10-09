@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import type {
-  Candidate, CataloguePart, Me, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Candidate, CataloguePart, Me, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -43,11 +43,13 @@ export function uploadTaskAttachment(id: number, fileUri: string, fileName: stri
 }
 
 export function fetchMyReport(id: number) {
-  return apiRequest<{ report: WorkReport | null }>(`/api/my-tasks/${id}/report/`);
+  return apiRequest<{ report: WorkReport | null; helpers?: ReportHelper[] }>(`/api/my-tasks/${id}/report/`);
 }
 
 export function submitMyReport(id: number, report: WorkReportInput) {
-  return apiRequest<{ status: string; message: string; report: WorkReport }>(`/api/my-tasks/${id}/report/`, {
+  // `report` is null when the server forwarded it to the team instead
+  // (sent after this person was taken off the task).
+  return apiRequest<{ status: string; message: string; report: WorkReport | null }>(`/api/my-tasks/${id}/report/`, {
     method: 'POST',
     body: report,
   });

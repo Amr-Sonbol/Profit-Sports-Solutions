@@ -40,13 +40,13 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
-from people.push import push_assigned, push_in_their_language
+from people.push import push_assigned, push_cancelled, push_in_their_language, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
+    AddHelperForm, AssignTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
@@ -162,6 +162,11 @@ MANAGER_REPORT_CORRECTABLE_STATUSES = {
 # can fix their own mistakes while the task is open, but after this only
 # the manager tier can change them.
 PRODUCTS_LOCKED_STATUSES = {Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED}
+# A manager can cancel a task any time before its report is filed — after
+# that the work happened, so "Close task" is the way out instead.
+CANCELLABLE_STATUSES = {
+    Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED,
+}
 EXISTING_ASSET_ROWS = 4
 NEW_ASSET_ROWS = 4
 PART_ROWS = 5
@@ -1478,6 +1483,26 @@ def task_detail(request, pk):
             messages.success(request, _('Task closed.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
+    cancel_task_form = CancelTaskForm(prefix='cancel')
+    if request.method == 'POST' and request.POST.get('action') == 'cancel_task':
+        require_manager(request)
+        if task.status not in CANCELLABLE_STATUSES:
+            messages.error(request, _('This task can no longer be cancelled.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        cancel_task_form = CancelTaskForm(request.POST, prefix='cancel')
+        if cancel_task_form.is_valid():
+            task.status = Task.Status.CANCELLED
+            task.save(update_fields=['status'])
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.CANCELLED,
+                occurred_at=timezone.now(), actor=request.user,
+                note=cancel_task_form.cleaned_data['note'],
+            )
+            for assignment in task.assignments.filter(is_active=True).select_related('technician'):
+                push_cancelled(assignment.technician, task)
+            messages.success(request, _('Task cancelled.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+
     negligence_form = NegligenceFlagForm()
     if request.method == 'POST' and request.POST.get('action') == 'flag_negligence':
         require_manager(request)
@@ -1548,6 +1573,8 @@ def task_detail(request, pk):
         'report': getattr(task, 'report', None),
         'feedback': getattr(task, 'feedback', None),
         'close_task_form': close_task_form,
+        'cancel_task_form': cancel_task_form,
+        'can_cancel': task.status in CANCELLABLE_STATUSES,
         'negligence_form': negligence_form,
         'pending_schedule_request': pending_schedule_request,
         'can_upload_staff_document': can_upload_staff_document,
@@ -2449,12 +2476,16 @@ def _require_task_owner(request, task):
         raise PermissionDenied
 
 
-def _set_lead(task, active_lead, technician, end_reason, actor):
+def _set_lead(task, active_lead, technician, end_reason, actor, hours_worked=None):
+    """`hours_worked`: what the outgoing lead already put in, on a job
+    already underway — counted toward their hours (_handover_hours)."""
     with transaction.atomic():
         if active_lead:
             active_lead.is_active = False
             active_lead.ended_at = timezone.now()
             active_lead.end_reason = end_reason
+            if hours_worked is not None:
+                active_lead.labour_hours = hours_worked
             active_lead.save()
             event_type = TaskEvent.EventType.REASSIGNED
         else:
@@ -2470,6 +2501,8 @@ def _set_lead(task, active_lead, technician, end_reason, actor):
             task.status = Task.Status.ASSIGNED
             task.save(update_fields=['status'])
     push_assigned(technician, task, is_lead=True)
+    if active_lead and active_lead.technician != technician:
+        push_removed(active_lead.technician, task)
 
 
 @login_required
@@ -2498,18 +2531,22 @@ def task_assign(request, pk):
     # technicians can actually be picked as lead or helper.
     selectable_qs = candidates_qs.filter(is_available=True)
 
-    set_lead_form = SetLeadForm(technicians=selectable_qs, requires_reason=bool(active_lead))
+    ask_hours = bool(active_lead) and task.status == Task.Status.IN_PROGRESS
+    set_lead_form = SetLeadForm(technicians=selectable_qs, requires_reason=bool(active_lead), ask_hours=ask_hours)
     add_helper_form = AddHelperForm(technicians=selectable_qs) if active_lead else None
 
     if request.method == 'POST':
         action = request.POST.get('action')
 
         if action == 'set_lead' and can_set_lead:
-            set_lead_form = SetLeadForm(request.POST, technicians=selectable_qs, requires_reason=bool(active_lead))
+            set_lead_form = SetLeadForm(
+                request.POST, technicians=selectable_qs, requires_reason=bool(active_lead), ask_hours=ask_hours,
+            )
             if set_lead_form.is_valid():
                 _set_lead(
                     task, active_lead, set_lead_form.cleaned_data['technician'],
                     set_lead_form.cleaned_data.get('end_reason', ''), request.user,
+                    set_lead_form.cleaned_data.get('hours_worked'),
                 )
                 messages.success(request, _('Lead technician set.'))
                 return redirect('tasks:task_assign', pk=task.pk)
@@ -2536,6 +2573,7 @@ def task_assign(request, pk):
                 helper.ended_at = timezone.now()
                 helper.end_reason = remove_form.cleaned_data['end_reason']
                 helper.save()
+                push_removed(helper.technician, task)
                 messages.success(request, _('Helper removed.'))
                 return redirect('tasks:task_assign', pk=task.pk)
 
@@ -2773,9 +2811,10 @@ def my_progress(request):
         actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
     ).count()
 
-    # Same rule as the supervisors' Hours page: a report's hours belong
-    # to the lead who filed it.
-    month_start, month_end = _month_window(timezone.localtime().date().replace(day=1))
+    # Same rule and figure as the supervisors' Hours page — lead, helper
+    # and handover hours alike.
+    month_first = timezone.localtime().date().replace(day=1)
+    month_start, month_end = _month_window(month_first)
     month_reports = list(
         WorkReport.objects.filter(
             submitted_at__gte=month_start, submitted_at__lt=month_end,
@@ -2783,9 +2822,13 @@ def my_progress(request):
             task__assignments__is_active=True,
         ).select_related('task').distinct(),
     )
+    own_row = next(
+        (row for row in _technician_hours_rows(technician.country, month_first) if row['technician'] == technician),
+        None,
+    )
 
     context = {
-        'month_hours': sum(report.labour_hours for report in month_reports),
+        'month_hours': own_row['hours'] if own_row else 0,
         'month_report_count': len(month_reports),
         'month_overrun_count': sum(1 for report in month_reports if report.is_overrun),
         'skills': skills,
@@ -3014,11 +3057,26 @@ def all_technicians(request):
     return render(request, 'tasks/all_technicians.html', {'rows': rows, 'search': search})
 
 
+def _handover_hours(technicians, period_start, period_end):
+    """Hours a lead put into a job before being taken off it — the report,
+    filed later by whoever took over, only credits the new lead. Keyed by
+    technician id, counted in the month the handover happened.
+    """
+    handovers = defaultdict(list)
+    for assignment in TaskAssignment.objects.filter(
+        technician__in=technicians, role=TaskAssignment.Role.LEAD, is_active=False, labour_hours__isnull=False,
+        ended_at__gte=period_start, ended_at__lt=period_end,
+    ).select_related('task__site__customer').order_by('ended_at'):
+        handovers[assignment.technician_id].append(assignment)
+    return handovers
+
+
 def _technician_hours_rows(active_country, period_start_date):
-    """One row per active technician in the country: the work reports they
-    filed as lead that month, their hours, estimate and overruns, and how
-    many reported tasks they helped on. Shared by the Hours page and its
-    CSV export.
+    """One row per active technician in the country for that month: the
+    work reports they filed as lead, the ones they helped on, and their
+    hours — a report's hours count for everyone on the team, except where
+    the lead entered a helper's own (helper_hours), plus any hours put in
+    before a handover. Shared by the Hours page and its CSV export.
     """
     period_start, period_end = _month_window(period_start_date)
     technicians = list(Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'))
@@ -3035,20 +3093,34 @@ def _technician_hours_rows(active_country, period_start_date):
 
     leads_reports = defaultdict(list)
     helped_on = defaultdict(int)
+    helper_hours = defaultdict(int)
+    helped_reports = defaultdict(list)
     for report in reports:
         for assignment in report.task.active_assignments:
             if assignment.role == TaskAssignment.Role.LEAD:
                 leads_reports[assignment.technician_id].append(report)
             else:
                 helped_on[assignment.technician_id] += 1
+                hours = report.labour_hours if assignment.labour_hours is None else assignment.labour_hours
+                helper_hours[assignment.technician_id] += hours
+                helped_reports[assignment.technician_id].append((report, hours))
+
+    handovers = _handover_hours(technicians, period_start, period_end)
 
     rows = []
     for technician in technicians:
         own_reports = leads_reports[technician.pk]
+        own_handovers = handovers[technician.pk]
         rows.append({
             'technician': technician,
             'reports': own_reports,
-            'hours': sum(report.labour_hours for report in own_reports),
+            'handovers': own_handovers,
+            'helped_reports': helped_reports[technician.pk],
+            'hours': (
+                sum(report.labour_hours for report in own_reports)
+                + helper_hours[technician.pk]
+                + sum(assignment.labour_hours for assignment in own_handovers)
+            ),
             'estimated': sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours),
             'helped_on': helped_on[technician.pk],
             'overrun_count': sum(1 for report in own_reports if report.is_overrun),
@@ -3060,11 +3132,10 @@ def _technician_hours_rows(active_country, period_start_date):
 def technician_hours(request):
     """Labour hours from filed work reports, per technician, for one month
     in the active country — how a supervisor/manager/admin follows each
-    technician's actual workload. A report's hours count toward the lead
-    who filed it (the report covers the whole job), so the team total
-    never double-counts; helpers get a "helped on" count instead. Every
-    active technician gets a row, so someone with nothing filed shows up
-    as zero rather than going unnoticed.
+    technician's actual workload. A report's hours count for each person
+    on the team (see _technician_hours_rows), so the total is person-hours.
+    Every active technician gets a row, so someone with nothing filed
+    shows up as zero rather than going unnoticed.
     """
     require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     period_start_date = _resolve_report_month(request)
@@ -3119,6 +3190,28 @@ def technician_hours_export(request):
                 timezone.localtime(report.submitted_at).strftime('%Y-%m-%d %H:%M'), report.labour_hours,
                 report.task.estimated_hours or '', 'yes' if report.is_overrun else '',
             ])
+
+    if any(row['helped_reports'] for row in rows):
+        writer.writerow([])
+        writer.writerow(['Hours as a helper'])
+        writer.writerow(['Technician', 'Task number', 'Customer', 'Submitted at', 'Labour hours'])
+        for row in rows:
+            for report, hours in row['helped_reports']:
+                writer.writerow([
+                    row['technician'].full_name, report.task.task_number, report.task.site.customer.name,
+                    timezone.localtime(report.submitted_at).strftime('%Y-%m-%d %H:%M'), hours,
+                ])
+
+    if any(row['handovers'] for row in rows):
+        writer.writerow([])
+        writer.writerow(['Hours before a handover'])
+        writer.writerow(['Technician', 'Task number', 'Customer', 'Taken off at', 'Labour hours'])
+        for row in rows:
+            for assignment in row['handovers']:
+                writer.writerow([
+                    row['technician'].full_name, assignment.task.task_number, assignment.task.site.customer.name,
+                    timezone.localtime(assignment.ended_at).strftime('%Y-%m-%d %H:%M'), assignment.labour_hours,
+                ])
 
     return response
 
@@ -3935,6 +4028,13 @@ def _requires_signature(task):
     return bool(task.task_type and task.task_type.requires_signature)
 
 
+def _active_helpers(task):
+    """The helpers on the job now — each gets an hours box on the report."""
+    return list(
+        task.assignments.filter(is_active=True, role=TaskAssignment.Role.HELPER).select_related('technician'),
+    )
+
+
 def save_work_report(request, task, technician, report_form, part_rows):
     """Saves a validated WorkReportForm plus its parts and moves the task
     on — shared by the web form below and the mobile API, so both follow
@@ -3950,6 +4050,10 @@ def save_work_report(request, task, technician, report_form, part_rows):
         path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
         saved_report.signature_url = request.build_absolute_uri(default_storage.url(path))
     saved_report.save()
+
+    for assignment, hours in report_form.helper_hours().items():
+        assignment.labour_hours = hours
+        assignment.save(update_fields=['labour_hours'])
 
     saved_report.parts_used.all().delete()
     for cleaned in part_rows:
@@ -4078,9 +4182,11 @@ def _report_form(request, task, technician, back_url):
         for part in parts
     ]
 
+    helpers = _active_helpers(task)
     if request.method == 'POST':
         report_form = WorkReportForm(
             request.POST, request.FILES, instance=report, require_signature=_requires_signature(task),
+            helpers=helpers,
         )
         existing_formset = ExistingAssetFormSet(
             request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
@@ -4110,7 +4216,7 @@ def _report_form(request, task, technician, back_url):
             messages.success(request, report_saved_message(saved_report.first_submission, task))
             return redirect(back_url)
     else:
-        report_form = WorkReportForm(instance=report, require_signature=_requires_signature(task))
+        report_form = WorkReportForm(instance=report, require_signature=_requires_signature(task), helpers=helpers)
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )

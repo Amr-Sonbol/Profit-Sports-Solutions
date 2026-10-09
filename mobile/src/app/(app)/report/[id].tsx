@@ -15,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import {
   isNetworkError, pendingReportFor, removePendingReport, savePendingReport, withOfflineCopy,
 } from '@/offline';
-import type { CataloguePart, TaskDetail, WorkReport } from '@/types';
+import type { CataloguePart, ReportHelper, TaskDetail, WorkReport } from '@/types';
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -89,6 +89,11 @@ export default function ReportScreen() {
   const [loadError, setLoadError] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isOffline, setIsOffline] = useState(false);
+  const [helpers, setHelpers] = useState<ReportHelper[]>([]);
+  // Helper assignment id -> hours typed; empty = same as the report's.
+  const [helperHours, setHelperHours] = useState<Record<string, string>>({});
+  const [notSigned, setNotSigned] = useState(false);
+  const [waivedReason, setWaivedReason] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -103,6 +108,9 @@ export default function ReportScreen() {
       setCatalogue(catalogueResult.data);
       setIsOffline(detail.offline || reportResult.offline);
       const report: WorkReport | null = reportResult.data.report;
+      const reportHelpers = reportResult.data.helpers ?? [];
+      setHelpers(reportHelpers);
+      setHelperHours(Object.fromEntries(reportHelpers.map((helper) => [String(helper.id), helper.labour_hours ?? ''])));
       const pending = pendingReportFor(Number(id));
       if (pending) {
         // A report already filled in here but not sent yet — carry on from it.
@@ -114,6 +122,11 @@ export default function ReportScreen() {
         setCustomerName(input.customer_name);
         setNewSignature(input.signature);
         setSignatureOnFile(Boolean(report?.signature_url));
+        setNotSigned(Boolean(input.signature_waived_reason));
+        setWaivedReason(input.signature_waived_reason ?? '');
+        if (input.helper_hours) {
+          setHelperHours((current) => ({ ...current, ...input.helper_hours }));
+        }
         setParts(input.parts.map((part) => ({
           ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
         })));
@@ -127,6 +140,8 @@ export default function ReportScreen() {
         setLabourHours(report.labour_hours);
         setCustomerName(report.customer_name);
         setSignatureOnFile(Boolean(report.signature_url));
+        setNotSigned(Boolean(report.signature_waived_reason));
+        setWaivedReason(report.signature_waived_reason ?? '');
         setParts(report.parts_used.map((part) => ({
           ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
         })));
@@ -171,7 +186,9 @@ export default function ReportScreen() {
       parts: parts
         .filter((row) => row.part_code || row.quantity || row.unit_cost)
         .map((row) => ({ ...row, quantity: Number(row.quantity) || 0 })),
-      signature: newSignature,
+      signature: notSigned ? null : newSignature,
+      signature_waived_reason: notSigned ? waivedReason : '',
+      helper_hours: helperHours,
     };
     try {
       const result = await submitMyReport(Number(id), input);
@@ -339,6 +356,27 @@ export default function ReportScreen() {
               />
             </Field>
 
+            {helpers.length > 0 ? (
+              <ThemedView style={styles.section}>
+                <ThemedText type="smallBold">Helpers’ hours</ThemedText>
+                <ThemedText themeColor="textSecondary" type="small">
+                  Each helper gets the same hours as above. Fill one in only if it was different.
+                </ThemedText>
+                {helpers.map((helper) => (
+                  <Field
+                    key={helper.id} label={helper.technician_name} error={errors[`helper_hours_${helper.id}`]}
+                  >
+                    <TextInput
+                      style={inputStyle} value={helperHours[String(helper.id)] ?? ''}
+                      onChangeText={(value) => setHelperHours((current) => ({ ...current, [String(helper.id)]: value }))}
+                      keyboardType="decimal-pad" placeholder="Same as the report"
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  </Field>
+                ))}
+              </ThemedView>
+            ) : null}
+
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Parts used</ThemedText>
               {parts.map((row, index) => (
@@ -427,6 +465,30 @@ export default function ReportScreen() {
                 <ThemedText themeColor="danger" type="small">{errors.customer_name}</ThemedText>
               ) : null}
               {errors.signature ? <ThemedText themeColor="danger" type="small">{errors.signature}</ThemedText> : null}
+              <TouchableOpacity
+                style={styles.checkRow}
+                onPress={() => setNotSigned((value) => !value)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: notSigned }}
+              >
+                <ThemedView
+                  style={[
+                    styles.checkBox, { borderColor: theme.text },
+                    notSigned && { backgroundColor: theme.primary, borderColor: theme.primary },
+                  ]}
+                >
+                  {notSigned ? <ThemedText style={{ color: theme.onPrimary }}>✓</ThemedText> : null}
+                </ThemedView>
+                <ThemedText>Customer not available to sign</ThemedText>
+              </TouchableOpacity>
+              {notSigned ? (
+                <Field label="Why couldn’t they sign?" error={errors.signature_waived_reason}>
+                  <TextInput
+                    style={[inputStyle, styles.multiline]} value={waivedReason} onChangeText={setWaivedReason}
+                    multiline
+                  />
+                </Field>
+              ) : null}
             </ThemedView>
 
             {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}
@@ -485,6 +547,10 @@ const styles = StyleSheet.create({
   centerLink: { alignItems: 'center', paddingVertical: Spacing.two },
   signatureBox: { height: 200, borderWidth: 1, borderRadius: Spacing.two, overflow: 'hidden' },
   formError: { textAlign: 'center' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 44 },
+  checkBox: {
+    width: 24, height: 24, borderWidth: 2, borderRadius: 4, alignItems: 'center', justifyContent: 'center',
+  },
   button: { borderRadius: Spacing.two, paddingVertical: Spacing.three, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },

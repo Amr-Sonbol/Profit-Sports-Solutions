@@ -114,7 +114,7 @@ class WorkReportSerializer(serializers.ModelSerializer):
         model = WorkReport
         fields = [
             'findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
-            'signature_url', 'submitted_at', 'parts_used',
+            'signature_url', 'signature_waived_reason', 'submitted_at', 'parts_used',
         ]
 
 

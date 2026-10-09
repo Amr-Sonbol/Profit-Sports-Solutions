@@ -1,8 +1,11 @@
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth import authenticate
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
@@ -11,7 +14,7 @@ from rest_framework.views import APIView
 
 from people.models import PushDevice, RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
-from people.push import push_assigned
+from people.push import push_assigned, push_removed
 from reference.models import Part
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
@@ -21,7 +24,8 @@ from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
-    _requires_signature, _save_attachment, _task_is_paused, _technicians_with_next_scheduled_task,
+    _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
+    _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     report_saved_message, save_work_report, undo_last_tap, undoable_tap,
 )
@@ -233,7 +237,15 @@ class MyTaskReportView(APIView):
     POST body (JSON): findings, action_taken, resolved (bool),
     labour_hours, customer_name, parts (list of {part_code, description,
     quantity, unit_cost, currency_code}), signature (PNG data URL,
-    optional — leaving it out keeps the one already on file).
+    optional — leaving it out keeps the one already on file),
+    signature_waived_reason (customer not available to sign — files
+    without a signature), helper_hours ({assignment id: hours} for a
+    helper whose hours differ from the report's).
+
+    A lead taken off the task before their report reached the server (it
+    waited on the phone with no signal) isn't refused: the report goes to
+    the team as a task message instead, and its hours count toward them
+    as handover hours — so the work isn't lost.
     """
 
     permission_classes = [IsTechnician]
@@ -249,9 +261,25 @@ class MyTaskReportView(APIView):
         if task is None:
             return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
         report = getattr(task, 'report', None)
-        return Response({'report': WorkReportSerializer(report).data if report else None})
+        return Response({
+            'report': WorkReportSerializer(report).data if report else None,
+            # Each helper's hours box: empty = same as the report's.
+            'helpers': [
+                {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
+                for a in _active_helpers(task)
+            ],
+        })
 
     def post(self, request, pk):
+        former_lead = TaskAssignment.objects.filter(
+            task__pk=pk, technician=request.user.technician, role=TaskAssignment.Role.LEAD, is_active=False,
+        ).select_related('task__site__customer__country').order_by('-ended_at').first()
+        on_task = TaskAssignment.objects.filter(
+            task__pk=pk, technician=request.user.technician, is_active=True,
+        ).exists()
+        if former_lead and not on_task:
+            return self._forward_from_former_lead(request, former_lead)
+
         task = self._get_lead_task(request, pk)
         if task is None:
             return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
@@ -276,8 +304,15 @@ class MyTaskReportView(APIView):
         }
         data['resolved'] = str(bool(request.data.get('resolved')))
         data['signature_drawn'] = request.data.get('signature') or ''
+        waived_reason = request.data.get('signature_waived_reason') or ''
+        if waived_reason:
+            data['signature_waived'] = 'on'
+            data['signature_waived_reason'] = waived_reason
+        for assignment_id, hours in (request.data.get('helper_hours') or {}).items():
+            data[f'helper_hours_{assignment_id}'] = '' if hours is None else str(hours)
         report_form = WorkReportForm(
             data, instance=getattr(task, 'report', None), require_signature=_requires_signature(task),
+            helpers=_active_helpers(task),
         )
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
 
@@ -302,6 +337,41 @@ class MyTaskReportView(APIView):
             },
             status=status.HTTP_201_CREATED if report.first_submission else status.HTTP_200_OK,
         )
+
+    def _forward_from_former_lead(self, request, assignment):
+        task = assignment.task
+        try:
+            hours = Decimal(str(request.data.get('labour_hours') or '')).quantize(Decimal('0.01'))
+        except InvalidOperation:
+            hours = None
+        if hours is not None and Decimal('0') <= hours < Decimal('1000'):
+            assignment.labour_hours = hours
+            assignment.save(update_fields=['labour_hours'])
+
+        lines = [
+            _('Report from %(name)s, sent after they were taken off this task:') % {
+                'name': request.user.technician.full_name,
+            },
+            _('Findings: %(text)s') % {'text': request.data.get('findings') or '—'},
+        ]
+        if request.data.get('action_taken'):
+            lines.append(_('Action taken: %(text)s') % {'text': request.data['action_taken']})
+        lines.append(_('Resolved: %(answer)s') % {'answer': _('Yes') if request.data.get('resolved') else _('No')})
+        if hours is not None:
+            lines.append(_('Hours worked: %(hours)s') % {'hours': hours})
+        parts = [
+            f"{part.get('part_code', '')} × {part.get('quantity', '')}"
+            for part in request.data.get('parts') or [] if part.get('part_code')
+        ]
+        if parts:
+            lines.append(_('Parts used: %(parts)s') % {'parts': ', '.join(parts)})
+        _post_task_message(request, task, '\n'.join(lines))
+
+        return Response({
+            'status': task.status,
+            'message': _('You are no longer on this task, so your report was sent to the team as a message.'),
+            'report': None,
+        })
 
 
 def _get_team_task(request, pk):
@@ -418,12 +488,15 @@ class TeamTaskAssignView(APIView):
         if action == 'set_lead':
             if not assignment_changeable(task, active_lead, technician):
                 return locked_message
-            form = SetLeadForm(request.data, technicians=selectable, requires_reason=bool(active_lead))
+            form = SetLeadForm(
+                request.data, technicians=selectable, requires_reason=bool(active_lead),
+                ask_hours=bool(active_lead) and task.status == Task.Status.IN_PROGRESS,
+            )
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
             _set_lead(
                 task, active_lead, form.cleaned_data['technician'], form.cleaned_data.get('end_reason', ''),
-                request.user,
+                request.user, form.cleaned_data.get('hours_worked'),
             )
         elif action == 'add_helper':
             if not assignment_changeable(task, technician=technician):
@@ -452,6 +525,7 @@ class TeamTaskAssignView(APIView):
             helper.ended_at = timezone.now()
             helper.end_reason = form.cleaned_data['end_reason']
             helper.save()
+            push_removed(helper.technician, task)
         else:
             return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
 

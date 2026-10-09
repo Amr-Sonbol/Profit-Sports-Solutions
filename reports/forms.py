@@ -42,22 +42,44 @@ class WorkReportForm(forms.ModelForm):
     # mobile app both send it as a PNG data URL. Turned into the same
     # `signature` file an upload would be, so it gets the same checks.
     signature_drawn = forms.CharField(required=False, widget=forms.HiddenInput)
+    # The customer wasn't there to sign — files the report anyway, with
+    # the reason on record instead of a signature.
+    signature_waived = forms.BooleanField(required=False, label=_('Customer not available to sign'))
 
     class Meta:
         model = WorkReport
-        fields = ['findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name']
+        fields = ['findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name', 'signature_waived_reason']
         widgets = {
             'findings': forms.Textarea(attrs={'rows': 3}),
             'action_taken': forms.Textarea(attrs={'rows': 3}),
+            'signature_waived_reason': forms.Textarea(attrs={'rows': 2}),
         }
+        labels = {'signature_waived_reason': _('Why the customer could not sign')}
 
-    def __init__(self, *args, require_signature=False, **kwargs):
+    def __init__(self, *args, require_signature=False, helpers=(), **kwargs):
         super().__init__(*args, **kwargs)
         # The task type's requires_signature — met by a new upload or one
         # already on file from an earlier filing of this same report.
         self.require_signature = require_signature
         if self.instance and self.instance.pk:
             self.fields['resolved'].initial = str(self.instance.resolved)
+            self.fields['signature_waived'].initial = bool(self.instance.signature_waived_reason)
+        # A helper's hours default to the report's own; the lead fills one
+        # in only when it differs (someone who left early, say).
+        self.helpers = list(helpers)
+        for assignment in self.helpers:
+            self.fields[f'helper_hours_{assignment.pk}'] = forms.DecimalField(
+                required=False, min_value=0, max_digits=5, decimal_places=2,
+                initial=assignment.labour_hours, label=assignment.technician.full_name,
+                widget=forms.NumberInput(attrs={'step': '0.25', 'placeholder': _('Same as the report')}),
+            )
+
+    def helper_fields(self):
+        return [self[f'helper_hours_{a.pk}'] for a in self.helpers]
+
+    def helper_hours(self):
+        """{helper assignment: hours, or None for "same as the report"}."""
+        return {a: self.cleaned_data.get(f'helper_hours_{a.pk}') for a in self.helpers}
 
     def clean(self):
         cleaned = super().clean()
@@ -71,9 +93,14 @@ class WorkReportForm(forms.ModelForm):
             except ValueError:
                 self.add_error('signature', _('Could not read the signature — please sign again.'))
                 return cleaned
+        waived = cleaned.get('signature_waived')
+        if waived and not (cleaned.get('signature_waived_reason') or '').strip():
+            self.add_error('signature_waived_reason', _('Say why the customer could not sign.'))
+        if not waived:
+            cleaned['signature_waived_reason'] = ''
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
             self.add_error('signature', _('File is too large — the limit is 5 MB.'))
-        elif self.require_signature and not signature and not self.instance.signature_url:
+        elif self.require_signature and not signature and not self.instance.signature_url and not waived:
             self.add_error('signature', _('This type of task needs the customer’s signature.'))
         else:
             cleaned['signature'] = signature

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 15:07+0000\n"
+"POT-Creation-Date: 2026-10-09 17:46+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -99,6 +99,10 @@ msgid "%(number)s — %(site)s"
 msgstr "%(number)s — %(site)s"
 
 #, python-format
+msgid "%(number)s — %(site)s. You no longer need to go."
+msgstr "%(number)s — %(site)s. لم تعد بحاجة إلى الذهاب."
+
+#, python-format
 msgid "%(number)s — filed by %(name)s"
 msgstr "%(number)s — قدّمه %(name)s"
 
@@ -173,8 +177,8 @@ msgstr ""
 "راجعها من هنا:\n"
 "%(link)s\n"
 
-msgid "A report’s hours count toward the lead technician who filed it."
-msgstr "تُحتسب ساعات التقرير للفني الرئيسي الذي قدّمه."
+msgid "A report’s hours count for everyone on the team — lead and helpers — unless the lead entered a helper’s own hours. Hours worked before a handover count too."
+msgstr "تُحتسب ساعات التقرير لكل أعضاء الفريق — الفني الرئيسي والمساعدين — إلا إذا أدخل الفني الرئيسي ساعات مختلفة لمساعد. وتُحتسب أيضاً الساعات المعمولة قبل التسليم."
 
 #, python-format
 msgid ""
@@ -227,6 +231,10 @@ msgstr "الإجراء"
 
 msgid "Action taken"
 msgstr "الإجراء المتخذ"
+
+#, python-format
+msgid "Action taken: %(text)s"
+msgstr "الإجراء المتخذ: %(text)s"
 
 msgid "Activate"
 msgstr "تفعيل"
@@ -535,6 +543,12 @@ msgstr "العلامات التجارية"
 msgid "CSV file"
 msgstr "ملف CSV"
 
+msgid "Calls the task off before any report is filed. Everyone on it is notified, and the customer's ticket conversation stays open."
+msgstr "يلغي المهمة قبل تقديم أي تقرير. يُبلَّغ كل من عليها، وتبقى محادثة تذكرة العميل مفتوحة."
+
+msgid "Cancel task"
+msgstr "إلغاء المهمة"
+
 msgid "Cancel trip"
 msgstr "إلغاء الرحلة"
 
@@ -711,6 +725,9 @@ msgstr "تعذّرت قراءة التوقيع — يرجى التوقيع مر�
 msgid "Count"
 msgstr "العدد"
 
+msgid "Counted toward their hours, since the report will be filed by the new lead. Leave empty if unknown."
+msgstr "تُحتسب ضمن ساعاته، لأن التقرير سيقدمه الفني الرئيسي الجديد. اتركه فارغاً إن لم تكن تعرف."
+
 msgid "Countries"
 msgstr "الدول"
 
@@ -779,6 +796,9 @@ msgstr "تم إيقاف العميل."
 
 msgid "Customer feedback"
 msgstr "تقييم العميل"
+
+msgid "Customer not available to sign"
+msgstr "العميل غير متاح للتوقيع"
 
 msgid "Customer notification"
 msgstr "إشعار العميل"
@@ -1036,6 +1056,9 @@ msgstr "تنزيل نموذج CSV"
 msgid "Each file must be under 25 MB — “%(name)s” is too large."
 msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميجابايت — \"%(name)s\" كبير جدًا."
 
+msgid "Each helper gets the same hours as above. Fill one in only if it was different — for example, someone who left early."
+msgstr "يحصل كل مساعد على نفس الساعات أعلاه. املأ الخانة فقط إن كانت مختلفة — مثلاً لمن غادر مبكراً."
+
 msgid "Edit"
 msgstr "تعديل"
 
@@ -1220,6 +1243,10 @@ msgstr "أدخل رمز القطعة والكمية وسعر الوحدة وال
 msgid "Findings"
 msgstr "النتائج"
 
+#, python-format
+msgid "Findings: %(text)s"
+msgstr "الملاحظات: %(text)s"
+
 msgid "Flag negligence"
 msgstr "الإبلاغ عن إهمال"
 
@@ -1285,6 +1312,9 @@ msgstr "تمت إزالة المساعد."
 
 msgid "Helpers"
 msgstr "المساعدون"
+
+msgid "Helpers' hours"
+msgstr "ساعات المساعدين"
 
 #, python-format
 msgid ""
@@ -1388,6 +1418,13 @@ msgstr "فندق"
 
 msgid "Hours"
 msgstr "الساعات"
+
+msgid "Hours the current lead already worked"
+msgstr "الساعات التي عملها الفني الرئيسي الحالي"
+
+#, python-format
+msgid "Hours worked: %(hours)s"
+msgstr "ساعات العمل: %(hours)s"
 
 msgid "How did we do?"
 msgstr "كيف كان أداؤنا؟"
@@ -1862,6 +1899,9 @@ msgstr "غير مطلوب للاعتماد — مجموعة مهارات إضا�
 msgid "Not scheduled after 24 working hours"
 msgstr "لم تُجدول بعد 24 ساعة عمل"
 
+msgid "Not signed"
+msgstr "غير موقَّع"
+
 msgid "Not yet certified"
 msgstr "غير معتمد بعد"
 
@@ -2015,6 +2055,10 @@ msgstr "قطع الغيار"
 
 msgid "Parts used"
 msgstr "القطع المستخدمة"
+
+#, python-format
+msgid "Parts used: %(parts)s"
+msgstr "القطع المستخدمة: %(parts)s"
 
 msgid "Password"
 msgstr "كلمة المرور"
@@ -2230,6 +2274,10 @@ msgstr "تمت الموافقة على التقرير. أغلقت المهمة."
 msgid "Report blocked"
 msgstr "الإبلاغ عن عائق"
 
+#, python-format
+msgid "Report from %(name)s, sent after they were taken off this task:"
+msgstr "تقرير من %(name)s، أُرسل بعد إخراجه من هذه المهمة:"
+
 msgid "Report rejected"
 msgstr "تم رفض التقرير"
 
@@ -2297,6 +2345,10 @@ msgstr "إعادة تعيين كلمة المرور"
 msgid "Resolved"
 msgstr "تم الحل"
 
+#, python-format
+msgid "Resolved: %(answer)s"
+msgstr "تم الحل: %(answer)s"
+
 msgid "Responsible"
 msgstr "المسؤول"
 
@@ -2333,6 +2385,9 @@ msgstr "الصف"
 msgid "Running late?"
 msgstr "هل هناك تأخير؟"
 
+msgid "Same as the report"
+msgstr "نفس ساعات التقرير"
+
 msgid "Saturday"
 msgstr "السبت"
 
@@ -2347,6 +2402,9 @@ msgstr "حفظ التصحيح"
 
 msgid "Save report"
 msgstr "حفظ التقرير"
+
+msgid "Say why the customer could not sign."
+msgstr "اذكر سبب عدم تمكن العميل من التوقيع."
 
 msgid "Schedule change approved"
 msgstr "تمت الموافقة على تغيير الموعد"
@@ -2623,6 +2681,9 @@ msgstr "موقوفة"
 msgid "TNT"
 msgstr "TNT"
 
+msgid "Taken off a task"
+msgstr "أُخرجت من مهمة"
+
 msgid "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time."
 msgstr "ضغطت بالخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك يمكن للمدير تصحيح الوقت."
 
@@ -2638,6 +2699,12 @@ msgstr "تم إنشاء المهمة %(number)s."
 
 msgid "Task ID"
 msgstr "رقم المهمة"
+
+msgid "Task cancelled"
+msgstr "أُلغيت المهمة"
+
+msgid "Task cancelled."
+msgstr "أُلغيت المهمة."
 
 msgid "Task closed."
 msgstr "تم إغلاق المهمة."
@@ -2789,6 +2856,9 @@ msgstr "هذا الموعد غير مُقفل — عدّله مباشرة بدل
 
 msgid "This task already has a report — saving below updates it."
 msgstr "هذه المهمة لديها تقرير بالفعل — الحفظ أدناه يحدّثه."
+
+msgid "This task can no longer be cancelled."
+msgstr "لم يعد من الممكن إلغاء هذه المهمة."
 
 msgid "This task has no filed report to correct."
 msgstr "لا يوجد بهذه المهمة تقرير مقدم لتصحيحه."
@@ -3122,6 +3192,12 @@ msgstr "من هو مشغول بالفعل، حتى تختار وقتًا لا ي
 msgid "Who's available for work right now — separate from any one task, so marking someone unavailable here applies everywhere, not just to a single assignment."
 msgstr "من هو متاح للعمل الآن — بمعزل عن أي مهمة واحدة، لذا فإن تحديد شخص كغير متاح هنا يُطبَّق في كل مكان، وليس في تكليف واحد فقط."
 
+msgid "Why the customer could not sign"
+msgstr "سبب عدم توقيع العميل"
+
+msgid "Why the task is cancelled — for example, the customer called it off."
+msgstr "سبب إلغاء المهمة — مثلاً، ألغاها العميل."
+
 msgid "Why this is closing without a report — customer cancelled, resolved another way, etc."
 msgstr "سبب الإغلاق دون تقرير — ألغى العميل الطلب، أو حُل بطريقة أخرى، إلخ."
 
@@ -3148,6 +3224,9 @@ msgstr "نعم"
 
 msgid "You"
 msgstr "أنت"
+
+msgid "You are no longer on this task, so your report was sent to the team as a message."
+msgstr "لم تعد ضمن هذه المهمة، لذلك أُرسل تقريرك إلى الفريق كرسالة."
 
 msgid "You don't have permission to do that. If you think this is wrong, check with a manager or admin."
 msgstr "ليس لديك صلاحية للقيام بذلك. إذا كنت تعتقد أن هذا خطأ، راجع مديرًا أو مسؤول النظام."
@@ -3459,6 +3538,9 @@ msgstr "الحقول التي يعرضها نموذج التقرير لهذا ا
 
 msgid "file"
 msgstr "الملف"
+
+msgid "filled in when the customer was not available to sign"
+msgstr "يُملأ عندما لا يكون العميل متاحاً للتوقيع"
 
 msgid "findings"
 msgstr "النتائج"
@@ -3973,6 +4055,9 @@ msgstr "الفني نفسه للتقييم الذاتي، والمشرف للم�
 msgid "this company’s account/reference code, if it has one"
 msgstr "رمز حساب/مرجع هذه الشركة، إن وُجد"
 
+msgid "this person’s own hours on the job, when not the report’s: a helper’s, or a lead’s before a handover"
+msgstr "ساعات هذا الشخص في العمل إن اختلفت عن ساعات التقرير: لمساعد، أو لفني رئيسي قبل التسليم"
+
 msgid "ticket"
 msgstr "الطلب"
 
@@ -4097,6 +4182,9 @@ msgstr "من يتولى هذا الأمر — مشرف أو مدير، وليس 
 msgid "who signed"
 msgstr "من وقّع"
 
+msgid "why there is no signature"
+msgstr "سبب عدم وجود توقيع"
+
 msgid "why this customer was deactivated — contract ended, closed down, etc."
 msgstr "سبب إيقاف هذا العميل — انتهاء التعاقد، إغلاق النشاط، إلخ."
 
@@ -4129,6 +4217,9 @@ msgstr "← العودة إلى العملاء النشطين"
 
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
+
+#~ msgid "A report’s hours count toward the lead technician who filed it."
+#~ msgstr "تُحتسب ساعات التقرير للفني الرئيسي الذي قدّمه."
 
 #~ msgid "Add technician"
 #~ msgstr "إضافة فني"

@@ -450,13 +450,21 @@ class SetLeadForm(forms.Form):
         choices=[('', '---------')] + TaskAssignment.EndReason.choices, required=False,
         label=_('Reason for replacing the current lead'),
     )
+    # Only when replacing a lead on a job already underway (ask_hours).
+    hours_worked = forms.DecimalField(
+        required=False, min_value=0, max_digits=5, decimal_places=2,
+        label=_('Hours the current lead already worked'),
+        help_text=_('Counted toward their hours, since the report will be filed by the new lead. Leave empty if unknown.'),
+    )
 
-    def __init__(self, *args, technicians, requires_reason, **kwargs):
+    def __init__(self, *args, technicians, requires_reason, ask_hours=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['technician'].queryset = technicians
         self.requires_reason = requires_reason
         if not requires_reason:
             del self.fields['end_reason']
+        if not ask_hours:
+            del self.fields['hours_worked']
 
     def clean_end_reason(self):
         end_reason = self.cleaned_data['end_reason']
@@ -836,6 +844,15 @@ class CloseTaskForm(forms.Form):
     note = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
         help_text=_('Why this is closing without a report — customer cancelled, resolved another way, etc.'),
+    )
+
+
+class CancelTaskForm(forms.Form):
+    """Manager-only — calls a task off before any report is filed. Unlike
+    closing, the customer's ticket conversation stays open."""
+    note = forms.CharField(
+        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('Why the task is cancelled — for example, the customer called it off.'),
     )
 
 

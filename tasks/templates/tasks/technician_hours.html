@@ -21,7 +21,7 @@
 <h2>{{ period_start|date:"F Y" }}</h2>
 <p class="muted">
     {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} filed report.{% plural %}{{ hours }} labour hours across {{ reports }} filed reports.{% endblocktranslate %}
-    {% translate "A report’s hours count toward the lead technician who filed it." %}
+    {% translate "A report’s hours count for everyone on the team — lead and helpers — unless the lead entered a helper’s own hours. Hours worked before a handover count too." %}
     {% translate "“Well over estimate” means more than 50% past the task’s estimated hours." %}
 </p>
 
@@ -47,7 +47,7 @@
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{{ row.technician.full_name }}</a>
                     </td>
                     <td>{{ row.reports|length }}</td>
-                    <td>{% if row.reports %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}</td>
+                    <td>{% if row.hours %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}</td>
                     <td>
                         {% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}
                         {% if row.overrun_count %}

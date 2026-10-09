@@ -67,3 +67,30 @@ def push_assigned(technician, task, is_lead):
         lambda: _('%(number)s — %(site)s') % {'number': task.task_number, 'site': task.site.name},
         {'type': 'my_task', 'task_id': task.pk},
     )
+
+
+def push_removed(technician, task):
+    """Tells someone they've been taken off a task, so they don't still
+    head to the site. Skipped for someone who has left the company."""
+    if not technician.is_active:
+        return
+    push_in_their_language(
+        technician,
+        lambda: _('Taken off a task'),
+        lambda: _('%(number)s — %(site)s. You no longer need to go.') % {
+            'number': task.task_number, 'site': task.site.name,
+        },
+        {'type': 'task_removed', 'task_id': task.pk},
+    )
+
+
+def push_cancelled(technician, task):
+    """Tells someone still on a task that it was cancelled."""
+    push_in_their_language(
+        technician,
+        lambda: _('Task cancelled'),
+        lambda: _('%(number)s — %(site)s. You no longer need to go.') % {
+            'number': task.task_number, 'site': task.site.name,
+        },
+        {'type': 'task_cancelled', 'task_id': task.pk},
+    )

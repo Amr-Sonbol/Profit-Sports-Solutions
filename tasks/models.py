@@ -636,6 +636,10 @@ class TaskAssignment(models.Model):
         _('end reason'), max_length=20, choices=EndReason.choices, blank=True,
         help_text=_('required on reassignment — one tap, never free text'),
     )
+    labour_hours = models.DecimalField(
+        _('labour hours'), max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text=_('this person’s own hours on the job, when not the report’s: a helper’s, or a lead’s before a handover'),
+    )
 
     class Meta:
         verbose_name = _('task assignment')

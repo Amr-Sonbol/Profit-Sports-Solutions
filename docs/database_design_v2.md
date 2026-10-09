@@ -402,6 +402,8 @@ Plus `blocked` and `cancelled` as endings.
 
 **Filing the report marks the task completed — or, if a technician filed it, pending their supervisor's review first; a manager approving it is what actually closes it either way.** The lead taps accept → en route → arrived → start (each logs a `task_event`; only "accepted" and "started" move `status`), then submits the report from their phone. Who submits it decides what happens next: a **technician** lead moves `status` to `pending_supervisor_review` — the task's own `responsible_supervisor` (or any manager, a superset) then approves it from the task's detail page, which moves it on to `completed` and logs a `supervisor_approved` event. A **supervisor** lead (some tasks are staffed that way) skips that step entirely and moves straight to `completed`, exactly as before this existed. Either way, `completed` logs the same `completed` task_event, in the same transaction as saving the report itself. From `completed`, only a manager can close it: an "Approve and close" button on the task's own detail page (no separate queue screen, no rejection reason — just that one button), which moves `status` to `closed` and logs a `report_approved` task_event. Re-submitting the report at any point afterward (a correction) is always allowed and doesn't move `status` backward or re-fire the completed event — there's nothing to unlock first, only the close itself is gated.
 
+**A manager or admin can cancel a task** ("Cancel task", manager-tier) any time before its report is filed — `new`, `assigned`, `accepted`, `in_progress` or `blocked` — with a required reason kept on the `cancelled` task_event. Everyone still on it gets a push. After the report is filed the work happened, so "Close task" below is the way out instead.
+
 **A manager or admin can bypass all of this at any time** — "Close task" (`close_directly`, manager-tier) closes a task directly from any non-closed status, report or no report, exceptional cases only (customer cancelled, didn't need a visit, etc.). **An admin can also reopen a closed task** (`reopen`, admin-only) — back to `completed`, i.e. undoing just the manager's close decision, not further; the filed report itself was never locked by being closed, so there's nothing else to restore.
 
 This is deliberately lighter than an earlier version of the same idea, which had a full pending/approved/rejected workflow with a required rejection reason and its own review screen — that got removed for not fitting how the business runs at the time. The supervisor step reintroduces a narrow slice of that (approval, not rejection — `report_rejected` stays an unused, historical event type), scoped to exactly one case: a technician's own report needs someone to check it before a manager sees it; a supervisor's own report doesn't, since they're already that check. `close_directly`/`approve_report`/`reopen` stay manager-tier (or admin) fixed floors, not configurable per role the way most of `role_permission` is — the same fixed-floor pattern `role_permissions` itself uses, so a bad edit to the permission matrix can't accidentally hand these out or lock everyone out of them.
@@ -684,6 +686,7 @@ Handles several technicians on one task, and one technician across many tasks.
 | is_active | bool | false once replaced |
 | ended_at | timestamptz | nullable |
 | end_reason | varchar | required on reassignment — one tap, never free text (sick, leave, overloaded, skill_mismatch, customer_request, emergency, vehicle, left_company, other) |
+| labour_hours | decimal | nullable — this person's own hours on the job, when not simply the report's (see below) |
 
 **Exactly one active `lead` per task.** Enforce in the database.
 
@@ -693,7 +696,13 @@ Handles several technicians on one task, and one technician across many tasks.
 
 **Blocked once work starts.** After `in_progress`, handover means closing the task and raising a new one — otherwise two people's work lands in one report. **Two exceptions while the task is still `in_progress`:** a manager or admin can change the whole team (lead and helpers); and for anyone else, a person who has left can still be replaced. If a person on an `in_progress` task is deactivated, they — and only they — can still be replaced (or, as a helper, removed), so the task isn't stuck with nobody able to finish it. Either way the new lead carries on and the status stays `in_progress` (`assignment_changeable`, `tasks/views.py`). Once the report is filed (`pending_supervisor_review` onward) the team is locked for everyone. End reason `left_company`. Deactivating someone with open tasks lands on their page with the list to reassign, and those tasks show a warning until it's done.
 
-**Notify the technician when a task is taken away**, not only when one is given.
+**Notify the technician when a task is taken away**, not only when one is given — a replaced lead and a removed helper both get a push (`push_removed`), so nobody still drives to the site.
+
+**Labour hours count for everyone on the team.** The report's `labour_hours` is the job's time, and it counts in full for the lead and for each active helper — the Hours page total is person-hours. Two cases fill this row's own `labour_hours` instead:
+- **A helper whose time differed** (left early, joined late): the lead types it on the report, next to each helper's name; empty means "same as the report".
+- **A lead taken off a job already underway:** the hours they put in before the handover — typed by the manager when swapping the lead, or taken from the old lead's own report if it reaches the server afterwards (see work_report). Counted in the month of the handover, since the new lead's report credits only the new team.
+
+**A report from a lead already taken off the task isn't refused.** A report filed with no signal waits on the phone; if the lead was swapped meanwhile, the server can't make it the task's report (the new lead's work goes there), so it posts its contents to the task as a message to the current team, supervisor and managers, and keeps its hours as above. Nothing filled in on site is lost.
 
 ### task_event
 **The most important table.** Written automatically by the app, never typed. Every reliability number later comes from here.
@@ -774,9 +783,12 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | labour_hours | decimal | |
 | customer_name | varchar | who signed |
 | signature_url | varchar | |
+| signature_waived_reason | text | blank — filled in when the customer wasn't available to sign |
 | submitted_at | timestamptz | |
 
 **The lead submits one report for the whole task**, with helpers listed. The customer signs once.
+
+**No signature needs a reason.** On a task type that requires a signature, the lead can still file when the customer isn't there by ticking "Customer not available to sign" and saying why. The task page shows "Not signed" with the reason, so the office can follow up.
 
 **No `approved_at`/`rejection_reason` columns here, and reports are never locked.** The task's own `status` carries the approval state now (`completed` → `closed`, see task's status-flow note above), not the report — a manager approving is a task action, logged as a `report_approved` task_event, not a field written on this row. The report itself can always be corrected by submitting again, whatever the task's status is; nothing about it needs unlocking first.
 

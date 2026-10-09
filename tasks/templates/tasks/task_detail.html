@@ -506,7 +506,10 @@
         </div>
         <div>
             <dt>{% translate "Signed by" %}</dt>
-            <dd>{{ report.customer_name }}</dd>
+            <dd>
+                {{ report.customer_name }}
+                {% if report.signature_waived_reason %}<span class="badge badge--status-in_progress">{% translate "Not signed" %}</span>{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Submitted" %}</dt>
@@ -521,6 +524,12 @@
     <div class="description">
         <dt>{% translate "Action taken" %}</dt>
         <p>{{ report.action_taken }}</p>
+    </div>
+    {% endif %}
+    {% if report.signature_waived_reason %}
+    <div class="description">
+        <dt>{% translate "Why the customer could not sign" %}</dt>
+        <p>{{ report.signature_waived_reason }}</p>
     </div>
     {% endif %}
     {% if report.parts_used.all %}
@@ -547,6 +556,26 @@
         </table>
     </div>
     {% endif %}
+</div>
+{% endif %}
+
+{% if user.technician.is_manager_tier and can_cancel %}
+<div class="section">
+    <h2>{% translate "Cancel task" %}</h2>
+    <p class="field__help">{% translate "Calls the task off before any report is filed. Everyone on it is notified, and the customer's ticket conversation stays open." %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cancel_task">
+        <div class="field {% if cancel_task_form.note.errors %}field--error{% endif %}">
+            <label for="{{ cancel_task_form.note.id_for_label }}">{{ cancel_task_form.note.label }}</label>
+            {{ cancel_task_form.note }}
+            <p class="field__help">{{ cancel_task_form.note.help_text }}</p>
+            {% for error in cancel_task_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Cancel task" %}</button>
+        </div>
+    </form>
 </div>
 {% endif %}
 
