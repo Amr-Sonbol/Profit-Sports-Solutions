@@ -63,3 +63,20 @@ services:
         fromDatabase:
           name: spots-db
           property: port
+      # Without these every notification email (escalations, ticket
+      # confirmations, feedback requests) is only printed to the log —
+      # see tasks/checks.py. The sync: false ones are filled in on Render.
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

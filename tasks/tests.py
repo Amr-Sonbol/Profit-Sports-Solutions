@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -6238,6 +6239,39 @@ class TicketEscalationTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['can_decide'])
         self.assertEqual(response.context['unseen_notifications'][0]['kind'], 'escalation_pending')
+
+    def test_the_email_goes_out_the_moment_it_is_escalated(self):
+        self._escalate()
+        email = mail.outbox[-1]
+        self.assertEqual(email.to, ['ops@example.com'])
+        self.assertIn('AE-T0001', email.subject)
+        self.assertIn('free replacement outside warranty', email.body)
+
+    def test_escalating_to_someone_without_an_email_warns(self):
+        self.ops_user.email = ''
+        self.ops_user.save(update_fields=['email'])
+        response = self._escalate()
+        self.assertEqual(len(mail.outbox), 0)
+        shown = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(any('no email address' in message for message in shown))
+
+    def test_a_failed_send_is_logged_not_swallowed(self):
+        with patch('django.core.mail.EmailMultiAlternatives.send', side_effect=OSError('SMTP down')):
+            with self.assertLogs('tasks.views', level='ERROR') as logs:
+                self._escalate()
+        self.assertIn('Ticket escalated to you', logs.output[0])
+        # The escalation itself still happened.
+        self.assertTrue(TicketEscalation.objects.filter(ticket=self.ticket).exists())
+
+    def test_deploy_check_flags_emails_that_only_go_to_the_log(self):
+        from tasks.checks import email_is_really_sent
+
+        with override_settings(EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend', EMAIL_HOST=''):
+            self.assertEqual([w.id for w in email_is_really_sent(None)], ['tasks.W001'])
+        with override_settings(
+            EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend', EMAIL_HOST='smtp.example.com',
+        ):
+            self.assertEqual(email_is_really_sent(None), [])
 
     def test_only_one_pending_escalation_at_a_time(self):
         self._escalate()

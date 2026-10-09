@@ -1,4 +1,5 @@
 import csv
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
@@ -62,6 +63,8 @@ from .models import (
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
     TaskProduct, TicketEscalation, TicketInternalNote, TicketNotification, TicketReply,
 )
+
+logger = logging.getLogger(__name__)
 
 TASK_NUMBER_CREATE_ATTEMPTS = 5
 WEEK_LENGTH = 7
@@ -789,9 +792,9 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     """Every outbound notification email in this app goes through here
     — a plain-text body for clients that don't render HTML, and a
     matching styled HTML alternative (tasks/templates/tasks/email/)
-    for everyone else. Always fail-silent, same as every caller
-    already was: a failed send must never block the action that
-    triggered it.
+    for everyone else. A failed send never blocks the action that
+    triggered it, but it's logged as an error, so it reaches Sentry
+    instead of vanishing.
 
     attachment, when given, is a real file on the ticket/task itself
     (e.g. a quotation) — attached as-is, not just linked.
@@ -821,7 +824,10 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
             email.attach(attachment.name.rsplit('/', 1)[-1], attachment.read())
         finally:
             attachment.close()
-    email.send(fail_silently=True)
+    try:
+        email.send()
+    except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
+        logger.exception('Notification email failed: %s', subject)
 
 
 def _send_schedule_notification(task):
@@ -2384,6 +2390,12 @@ def ticket_review(request, pk):
                     escalated_at=timezone.now(),
                 )
                 _send_escalation_email(request, escalation)
+                recipient = escalation.escalated_to
+                if not (recipient.user_id and recipient.user.email):
+                    messages.warning(request, _(
+                        '%(name)s has no email address on file, so they were only alerted in the app. '
+                        'Add one on their profile.',
+                    ) % {'name': recipient.full_name})
                 push_in_their_language(
                     escalation.escalated_to,
                     lambda: _('Ticket escalated to you'),

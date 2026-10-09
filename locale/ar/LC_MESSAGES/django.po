@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 18:42+0000\n"
+"POT-Creation-Date: 2026-10-09 18:54+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -121,6 +121,10 @@ msgstr "%(m)s م"
 #, python-format
 msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
+
+#, python-format
+msgid "%(name)s has no email address on file, so they were only alerted in the app. Add one on their profile."
+msgstr "لا يوجد بريد إلكتروني مسجّل لـ %(name)s، لذلك تم تنبيهه داخل التطبيق فقط. أضف بريداً في ملفه الشخصي."
 
 #, python-format
 msgid "%(number)s — %(company)s"
