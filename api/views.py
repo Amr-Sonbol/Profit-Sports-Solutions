@@ -20,6 +20,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm,
 )
+from tasks.location import record_tap
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
@@ -172,9 +173,7 @@ class MyTaskActionView(APIView):
 
         if action in TECHNICIAN_ACTIONS and action == next_action:
             event_type, new_status = TECHNICIAN_ACTIONS[action]
-            TaskEvent.objects.create(
-                task=task, event_type=event_type, occurred_at=timezone.now(), actor=request.user,
-            )
+            record_tap(task, event_type, request.user, request.data)
             if new_status:
                 task.status = new_status
                 task.save(update_fields=['status'])
@@ -185,16 +184,11 @@ class MyTaskActionView(APIView):
             form = PauseTaskForm(request.data)
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.PAUSED, occurred_at=timezone.now(),
-                actor=request.user, note=form.cleaned_data['note'],
-            )
+            record_tap(task, TaskEvent.EventType.PAUSED, request.user, request.data, note=form.cleaned_data['note'])
             return Response({'status': task.status})
 
         if action == 'resume' and is_paused:
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.RESUMED, occurred_at=timezone.now(), actor=request.user,
-            )
+            record_tap(task, TaskEvent.EventType.RESUMED, request.user, request.data)
             return Response({'status': task.status})
 
         if action == 'block' and task.status in BLOCKABLE_STATUSES and not is_paused:
@@ -203,10 +197,7 @@ class MyTaskActionView(APIView):
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
             task.status = Task.Status.BLOCKED
             task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
-                actor=request.user, note=form.cleaned_data['note'],
-            )
+            record_tap(task, TaskEvent.EventType.BLOCKED, request.user, request.data, note=form.cleaned_data['note'])
             return Response({'status': task.status})
 
         return Response({'detail': 'That action is not available right now.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -490,7 +481,9 @@ class TeamTaskAssignView(APIView):
                 return locked_message
             form = SetLeadForm(
                 request.data, technicians=selectable, requires_reason=bool(active_lead),
-                ask_hours=bool(active_lead) and task.status == Task.Status.IN_PROGRESS,
+                ask_hours=(
+                    bool(active_lead) and task.status == Task.Status.IN_PROGRESS and technician.is_manager_tier
+                ),
             )
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)

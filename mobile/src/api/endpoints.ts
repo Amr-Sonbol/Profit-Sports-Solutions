@@ -1,3 +1,5 @@
+import { currentLocation } from '@/location';
+
 import { apiRequest } from './client';
 import type {
   Candidate, CataloguePart, Me, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
@@ -22,10 +24,12 @@ export function fetchMyTaskDetail(id: number) {
   return apiRequest<TaskDetail>(`/api/my-tasks/${id}/`);
 }
 
-export function sendTaskAction(id: number, action: string, note?: string) {
+export async function sendTaskAction(id: number, action: string, note?: string) {
+  // Every tap but undo goes with where the phone is (src/location.ts).
+  const location = action === 'undo' ? null : await currentLocation();
   return apiRequest<{ status: string }>(`/api/my-tasks/${id}/action/`, {
     method: 'POST',
-    body: note ? { action, note } : { action },
+    body: { action, ...(note ? { note } : {}), ...(location ?? {}) },
   });
 }
 

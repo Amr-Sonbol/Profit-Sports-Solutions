@@ -709,6 +709,34 @@ class TaskEvent(models.Model):
     correction_reason = models.TextField(_('correction reason'), blank=True)
     note = models.TextField(_('note'), blank=True)
 
+    class LocationStatus(models.TextChoices):
+        AT_SITE = 'at_site', _('At the site')
+        AWAY = 'away', _('Not at the site')
+        NO_LOCATION = 'no_location', _('No location sent')
+        SITE_UNKNOWN = 'site_unknown', _('Site location not set')
+
+    # Where the phone was at a technician's tap (tasks.location) — taken
+    # only at the tap, never tracked in between. Blank on events that
+    # aren't taps.
+    latitude = models.DecimalField(_('latitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(_('longitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    location_accuracy_m = models.PositiveIntegerField(_('location accuracy (m)'), null=True, blank=True)
+    distance_m = models.PositiveIntegerField(
+        _('distance from the site (m)'), null=True, blank=True,
+        help_text=_('worked out at the tap, from the site location at that time'),
+    )
+    location_status = models.CharField(
+        _('location'), max_length=15, choices=LocationStatus.choices, blank=True,
+    )
+
+    @property
+    def distance_display(self):
+        if self.distance_m is None:
+            return ''
+        if self.distance_m >= 1000:
+            return _('%(km)s km') % {'km': f'{self.distance_m / 1000:.1f}'}
+        return _('%(m)s m') % {'m': self.distance_m}
+
     class Meta:
         verbose_name = _('task event')
         verbose_name_plural = _('task events')

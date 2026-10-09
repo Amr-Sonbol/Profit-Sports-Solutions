@@ -93,6 +93,13 @@ class WorkReportForm(forms.ModelForm):
             except ValueError:
                 self.add_error('signature', _('Could not read the signature — please sign again.'))
                 return cleaned
+        labour_hours = cleaned.get('labour_hours')
+        for assignment in self.helpers:
+            hours = cleaned.get(f'helper_hours_{assignment.pk}')
+            if hours is not None and labour_hours is not None and hours > labour_hours:
+                self.add_error(
+                    f'helper_hours_{assignment.pk}', _('A helper can’t have more hours than the job itself.'),
+                )
         waived = cleaned.get('signature_waived')
         if waived and not (cleaned.get('signature_waived_reason') or '').strip():
             self.add_error('signature_waived_reason', _('Say why the customer could not sign.'))

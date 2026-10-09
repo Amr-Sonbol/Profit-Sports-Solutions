@@ -16,7 +16,7 @@
     {% translate "This task already has a report — saving below updates it." %}
 </p>
 {% endif %}
-<form method="post" enctype="multipart/form-data" class="report-form" data-report-form novalidate>
+<form method="post" enctype="multipart/form-data" class="report-form" data-report-form novalidate data-locate>
     {% csrf_token %}
 
     <div class="section">
@@ -215,4 +215,5 @@
 {% endif %}
 {% load static %}
 <script src="{% static 'js/signature-pad.js' %}" defer></script>
+<script src="{% static 'js/tap-location.js' %}" defer></script>
 {% endblock %}

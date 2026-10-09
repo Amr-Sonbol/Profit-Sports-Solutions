@@ -5,12 +5,18 @@ from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from tasks.models import Task
+from tasks.models import Task, TaskEvent
 
 
 # Labour hours this far past the task's estimate get flagged to
 # supervisors — 1.5 means more than 50% over.
 OVERRUN_RATIO = Decimal('1.5')
+
+# Typed labour hours this far above the time the app's own taps show get
+# flagged — both more than 25% and more than half an hour over, so a
+# short job rounded up isn't flagged.
+ABOVE_TAPPED_RATIO = Decimal('1.25')
+ABOVE_TAPPED_SLACK = Decimal('0.5')
 
 
 class WorkReport(models.Model):
@@ -48,6 +54,52 @@ class WorkReport(models.Model):
         """
         estimated = self.task.estimated_hours
         return bool(estimated) and self.labour_hours > estimated * OVERRUN_RATIO
+
+    @property
+    def tapped_hours(self):
+        """Time on the job by the app's own taps — the first "start" to
+        the report first being filed, minus time paused — which nobody can
+        backdate. A manager's correction of a tap's time counts (effective_at).
+        None without both taps. Uses task.events.all(), so a list of reports
+        should prefetch task__events.
+        """
+        events = sorted(self.task.events.all(), key=lambda event: event.effective_at)
+        started = next((e.effective_at for e in events if e.event_type == TaskEvent.EventType.STARTED), None)
+        filed = next(
+            (e.effective_at for e in events if e.event_type == TaskEvent.EventType.REPORT_SUBMITTED), None,
+        )
+        if started is None or filed is None or filed <= started:
+            return None
+        worked = filed - started
+        paused_at = None
+        for event in events:
+            if not started <= event.effective_at <= filed:
+                continue
+            if event.event_type == TaskEvent.EventType.PAUSED:
+                paused_at = event.effective_at
+            elif event.event_type == TaskEvent.EventType.RESUMED and paused_at:
+                worked -= event.effective_at - paused_at
+                paused_at = None
+        return (Decimal(worked.total_seconds()) / 3600).quantize(Decimal('0.01'))
+
+    @property
+    def has_taps_away_from_site(self):
+        """True when an on-site tap on this job (arrived, started, report…)
+        came from away from the site. Uses task.events.all() like
+        tapped_hours."""
+        return any(
+            event.location_status == TaskEvent.LocationStatus.AWAY for event in self.task.events.all()
+        )
+
+    @property
+    def is_above_tapped(self):
+        """True when the typed hours are well above the tapped time — worth
+        a supervisor asking about. Typing fewer hours is never flagged.
+        """
+        tapped = self.tapped_hours
+        return tapped is not None and self.labour_hours > max(
+            tapped * ABOVE_TAPPED_RATIO, tapped + ABOVE_TAPPED_SLACK,
+        )
 
 
 class PartUsed(models.Model):

@@ -6701,9 +6701,84 @@ class TakenOffTaskTests(TaskTestCase):
             })
         push.assert_called_once_with(self.other, self.task)
 
+    def test_supervisor_never_gets_the_hours_box(self):
+        self.technician.set_active(False, reason='Left')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertTrue(self.client.get(self.url).context['can_set_lead'])
+        self.assertNotIn('hours_worked', self.client.get(self.url).context['set_lead_form'].fields)
+
     def test_hours_box_only_when_replacing_a_lead_mid_job(self):
         self.client.login(username='manager1', password='pass12345')
         self.assertIn('hours_worked', self.client.get(self.url).context['set_lead_form'].fields)
         self.task.status = Task.Status.ASSIGNED
         self.task.save(update_fields=['status'])
         self.assertNotIn('hours_worked', self.client.get(self.url).context['set_lead_form'].fields)
+
+
+class TappedHoursTests(TaskTestCase):
+    """Typed hours checked against the app's own taps."""
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.COMPLETED,
+        )
+        self.start = timezone.now() - timedelta(hours=5)
+        self._tap(TaskEvent.EventType.STARTED, 0)
+        self._tap(TaskEvent.EventType.PAUSED, 1)
+        self._tap(TaskEvent.EventType.RESUMED, 2)
+        self._tap(TaskEvent.EventType.REPORT_SUBMITTED, 3)  # 3 h start to filed, 1 h paused
+
+    def _tap(self, event_type, hours_after_start):
+        TaskEvent.objects.create(
+            task=self.task, event_type=event_type, actor=self.tech_user,
+            occurred_at=self.start + timedelta(hours=hours_after_start),
+        )
+
+    def _report(self, hours):
+        report = WorkReport.objects.create(
+            task=self.task, findings='x', resolved=True, labour_hours=hours, customer_name='Ali',
+            submitted_at=timezone.now(),
+        )
+        return WorkReport.objects.get(pk=report.pk)
+
+    def test_tapped_time_leaves_out_pauses(self):
+        self.assertEqual(str(self._report('2.00').tapped_hours), '2.00')
+
+    def test_hours_well_above_the_taps_are_flagged(self):
+        self.assertTrue(self._report('6.00').is_above_tapped)
+
+    def test_a_managers_corrected_time_counts(self):
+        started = self.task.events.get(event_type=TaskEvent.EventType.STARTED)
+        started.corrected_at = started.occurred_at - timedelta(hours=4)
+        started.save(update_fields=['corrected_at'])
+        report = self._report('6.00')
+        self.assertEqual(str(report.tapped_hours), '6.00')
+        self.assertFalse(report.is_above_tapped)
+
+    def test_a_little_over_or_under_is_not_flagged(self):
+        self.assertFalse(self._report('2.50').is_above_tapped)
+        self.task.report.delete()
+        self.assertFalse(self._report('1.00').is_above_tapped)
+
+    def test_no_start_tap_means_no_check(self):
+        self.task.events.filter(event_type=TaskEvent.EventType.STARTED).delete()
+        report = self._report('9.00')
+        self.assertIsNone(report.tapped_hours)
+        self.assertFalse(report.is_above_tapped)
+
+    def test_helper_cannot_have_more_hours_than_the_job(self):
+        from reports.forms import WorkReportForm
+
+        helper = TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.HELPER,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        form = WorkReportForm({
+            'findings': 'x', 'resolved': 'True', 'labour_hours': '2', 'customer_name': 'Ali',
+            f'helper_hours_{helper.pk}': '3',
+        }, helpers=[helper])
+        self.assertFalse(form.is_valid())
+        self.assertIn(f'helper_hours_{helper.pk}', form.errors)

@@ -178,6 +178,10 @@ A hotel group is one customer with many sites.
 | contact_phone | varchar | |
 | contact_email | varchar | nullable — where a feedback request goes; not always known |
 | access_notes | text | gate codes, best hours |
+| latitude, longitude | decimal(9,6) | nullable — where the site is on the map; technicians' taps are checked against it |
+| location_source | varchar | blank, `office` or `arrival` |
+
+**A site's map location comes from the office or the first arrival.** A manager pastes coordinates or a full Google Maps link on the site's edit page (`location_source = office`). Where nobody has, the first technician to tap "Arrived" there sets it (`arrival`) — the edit page then says so, so someone checks it. Clearing the field clears it, and the next arrival sets it again.
 
 **A blank site contact falls back to the customer's own** (`Site.effective_contact_name`/`_phone`/`_email`) — every notification send (schedule confirmation, delay notice, shipping notice, feedback request) reads through these, not the raw columns, so a single-branch customer or a chain sharing one contact only has to enter it once, at the customer level.
 
@@ -718,6 +722,16 @@ Handles several technicians on one task, and one technician across many tasks.
 | corrected_by_id | FK → user | nullable — manager tier only |
 | correction_reason | text | required whenever `corrected_at` is set |
 | note | text | |
+| latitude, longitude | decimal(9,6) | nullable — where the phone was at a technician's tap |
+| location_accuracy_m | int | nullable — the phone's own accuracy estimate |
+| distance_m | int | nullable — from the site, worked out at the tap with the site's location at that time |
+| location_status | varchar | blank on non-taps; `at_site`, `away`, `no_location`, `site_unknown` |
+
+**Every technician tap sends where the phone is** — accept, on the way, arrived, start, pause, resume, blocked, and filing the report — from the app and from the technician's web pages alike (`tasks/location.py`, `static/js/tap-location.js`, `mobile/src/location.ts`). Location is taken only at the tap, never tracked in between, and the phone's permission text says so. A report filed offline carries the location from when Submit was pressed.
+
+**Away from the site is flagged, never blocked.** A weak signal indoors or in a basement gym must not stop real work. Taps that should happen on site — arrived, started, paused, resumed, report_submitted — are `away` beyond 300 m plus the phone's accuracy (counted up to 200 m); accepting and "on the way" keep their distance but are never flagged. No location (permission off, no fix within 10 s) is recorded as `no_location`. Supervisors see the result on the task's history with a map link, and the Hours page counts jobs with taps away from the site, next to "Above tapped time": typed hours well above the time from the Start tap to the report (minus pauses), which nobody can backdate.
+
+**Tell staff before switching this on.** Recording where employees are at work is personal data; check what the law requires in each country before relying on it.
 
 **Event types:** created, assigned, reassigned, rescheduled, delay_notice, schedule_change_requested, schedule_change_approved, schedule_change_denied, accepted, en_route, arrived, blocked, started, paused, resumed, completed, report_submitted, report_rejected, report_approved, closed, reopened, cancelled, negligence. `completed` fires when the lead files the report, `report_approved` when a manager approves it through the normal pipeline (see §4/§5). `closed` is the separate manager-only direct-close bypass — for a task that turns out not to need a report at all (customer cancelled, resolved another way) — usable from any status except already-`closed`; the reason lives in the event's own `note`. Both `report_approved` and `closed` land the task on `Task.Status.CLOSED`, just by different paths. `report_rejected` and `reopened` are the ones still unused: this round of approval has no reject step, just a single approve action, and nothing yet reopens a closed task.
 

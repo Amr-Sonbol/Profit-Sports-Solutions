@@ -100,6 +100,19 @@ class Site(models.Model):
         help_text=_('gate codes, best hours'),
     )
 
+    class LocationSource(models.TextChoices):
+        OFFICE = 'office', _('Entered by the office')
+        ARRIVAL = 'arrival', _('Set by the first arrival')
+
+    # Where the site is on the map — what a technician's taps are checked
+    # against (tasks.location). Entered by the office, or taken from the
+    # first "Arrived" tap when nobody has.
+    latitude = models.DecimalField(_('latitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(_('longitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    location_source = models.CharField(
+        _('location source'), max_length=10, choices=LocationSource.choices, blank=True,
+    )
+
     class Meta:
         verbose_name = _('site')
         verbose_name_plural = _('sites')

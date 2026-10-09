@@ -815,3 +815,68 @@ class ReportFixesApiTests(ApiTestCase):
         self.assertTrue(message.recipients.filter(technician=new_lead).exists())
         self.assignment.refresh_from_db()
         self.assertEqual(str(self.assignment.labour_hours), '2.00')
+
+
+class TapLocationTests(ApiTestCase):
+    """Where the phone was at each tap, checked against the site."""
+
+    MARINA = {'latitude': 25.0772, 'longitude': 55.1306, 'accuracy': 20}
+    # About 1.6 km away along the coast.
+    JBR = {'latitude': 25.0780, 'longitude': 55.1465, 'accuracy': 20}
+
+    def _act(self, token, action, **extra):
+        return self.client.post(
+            f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': action, **extra}),
+            content_type='application/json', **self.auth(token),
+        )
+
+    def _event(self, event_type):
+        return self.task.events.get(event_type=event_type)
+
+    def test_first_arrival_sets_the_site_location(self):
+        token = self.token_for('tech1')
+        self._act(token, 'accept')
+        self._act(token, 'en_route', **self.JBR)
+        self._act(token, 'arrive', **self.MARINA)
+        self.site.refresh_from_db()
+        self.assertEqual(float(self.site.latitude), 25.0772)
+        self.assertEqual(self.site.location_source, 'arrival')
+        self.assertEqual(self._event(TaskEvent.EventType.ARRIVED).location_status, 'at_site')
+        # Before the site had a location, "on the way" couldn't be checked.
+        self.assertEqual(self._event(TaskEvent.EventType.EN_ROUTE).location_status, 'site_unknown')
+
+    def test_a_tap_far_from_the_site_is_flagged_but_counts(self):
+        self.site.latitude, self.site.longitude = 25.0772, 55.1306
+        self.site.save()
+        token = self.token_for('tech1')
+        self._act(token, 'accept')
+        self._act(token, 'en_route', **self.JBR)
+        response = self._act(token, 'arrive', **self.JBR)
+        self.assertEqual(response.status_code, 200)
+        arrived = self._event(TaskEvent.EventType.ARRIVED)
+        self.assertEqual(arrived.location_status, 'away')
+        self.assertGreater(arrived.distance_m, 1000)
+        # "On the way" is away from the site by nature — kept, never flagged.
+        en_route = self._event(TaskEvent.EventType.EN_ROUTE)
+        self.assertEqual(en_route.location_status, '')
+        self.assertIsNotNone(en_route.distance_m)
+
+    def test_no_location_is_recorded_as_such(self):
+        token = self.token_for('tech1')
+        self._act(token, 'accept')
+        self.assertEqual(self._event(TaskEvent.EventType.ACCEPTED).location_status, 'no_location')
+
+    def test_report_filed_away_from_the_site_is_flagged(self):
+        self.site.latitude, self.site.longitude = 25.0772, 55.1306
+        self.site.save()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        token = self.token_for('tech1')
+        self.client.post(
+            f'/api/my-tasks/{self.task.pk}/report/', json.dumps({
+                'findings': 'Belt worn', 'action_taken': '', 'resolved': True, 'labour_hours': '1.00',
+                'customer_name': 'Ali', 'parts': [], **self.JBR,
+            }), content_type='application/json', **self.auth(token),
+        )
+        self.assertEqual(self._event(TaskEvent.EventType.REPORT_SUBMITTED).location_status, 'away')
+        self.assertTrue(WorkReport.objects.get(task=self.task).has_taps_away_from_site)

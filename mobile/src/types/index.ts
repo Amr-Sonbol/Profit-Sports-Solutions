@@ -117,6 +117,11 @@ export interface WorkReportInput {
   signature_waived_reason?: string;
   // Helper assignment id -> hours; empty means the same as labour_hours.
   helper_hours?: Record<string, string>;
+  // Where the phone was when Submit was pressed (src/location.ts) — kept
+  // with a report waiting offline, so it's where it was filled in.
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number | null;
 }
 
 export interface Ticket {

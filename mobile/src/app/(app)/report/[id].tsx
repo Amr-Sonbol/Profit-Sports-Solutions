@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { currentLocation } from '@/location';
 import {
   isNetworkError, pendingReportFor, removePendingReport, savePendingReport, withOfflineCopy,
 } from '@/offline';
@@ -176,6 +177,7 @@ export default function ReportScreen() {
   const submit = async () => {
     setIsBusy(true);
     setErrors({});
+    const location = await currentLocation();
     const input = {
       findings,
       action_taken: actionTaken,
@@ -189,6 +191,7 @@ export default function ReportScreen() {
       signature: notSigned ? null : newSignature,
       signature_waived_reason: notSigned ? waivedReason : '',
       helper_hours: helperHours,
+      ...(location ?? {}),
     };
     try {
       const result = await submitMyReport(Number(id), input);

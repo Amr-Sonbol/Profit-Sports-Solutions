@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 17:46+0000\n"
+"POT-Creation-Date: 2026-10-09 18:15+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -55,6 +55,26 @@ msgid "%(by)s escalated to %(to)s on %(when)s"
 msgstr "صعّدها %(by)s إلى %(to)s في %(when)s"
 
 #, python-format
+msgid "%(count)s job with taps away from the site"
+msgid_plural "%(count)s jobs with taps away from the site"
+msgstr[0] "لا توجد أعمال بضغطات بعيدة عن الموقع"
+msgstr[1] "عمل واحد بضغطات بعيدة عن الموقع"
+msgstr[2] "عملان بضغطات بعيدة عن الموقع"
+msgstr[3] "%(count)s أعمال بضغطات بعيدة عن الموقع"
+msgstr[4] "%(count)s عملاً بضغطات بعيدة عن الموقع"
+msgstr[5] "%(count)s عمل بضغطات بعيدة عن الموقع"
+
+#, python-format
+msgid "%(count)s report above tapped time"
+msgid_plural "%(count)s reports above tapped time"
+msgstr[0] "لا توجد تقارير أعلى من الوقت المسجَّل"
+msgstr[1] "تقرير واحد أعلى من الوقت المسجَّل"
+msgstr[2] "تقريران أعلى من الوقت المسجَّل"
+msgstr[3] "%(count)s تقارير أعلى من الوقت المسجَّل"
+msgstr[4] "%(count)s تقريراً أعلى من الوقت المسجَّل"
+msgstr[5] "%(count)s تقرير أعلى من الوقت المسجَّل"
+
+#, python-format
 msgid "%(count)s task well over estimate"
 msgid_plural "%(count)s tasks well over estimate"
 msgstr[0] "لا توجد مهام تجاوزت التقدير بكثير"
@@ -73,6 +93,10 @@ msgid "%(days)sd left — behind"
 msgstr "متبقٍ %(days)s يوم — متأخر"
 
 #, python-format
+msgid "%(distance)s from the site"
+msgstr "%(distance)s من الموقع"
+
+#, python-format
 msgid "%(hours)s h"
 msgstr "%(hours)s س"
 
@@ -85,6 +109,14 @@ msgstr[2] "%(hours)s ساعة عمل في تقريرين مقدمين."
 msgstr[3] "%(hours)s ساعة عمل في %(reports)s تقارير مقدمة."
 msgstr[4] "%(hours)s ساعة عمل في %(reports)s تقريرًا مقدمًا."
 msgstr[5] "%(hours)s ساعة عمل في %(reports)s تقرير مقدم."
+
+#, python-format
+msgid "%(km)s km"
+msgstr "%(km)s كم"
+
+#, python-format
+msgid "%(m)s m"
+msgstr "%(m)s م"
 
 #, python-format
 msgid "%(minutes)s minutes"
@@ -131,6 +163,9 @@ msgstr "توجد بالفعل علامة تجارية بهذا الاسم — ا
 
 msgid "A corrected time can’t be in the future."
 msgstr "لا يمكن أن يكون الوقت المصحح في المستقبل."
+
+msgid "A helper can’t have more hours than the job itself."
+msgstr "لا يمكن أن تكون ساعات المساعد أكثر من ساعات العمل نفسه."
 
 msgid "A login with that email already exists."
 msgstr "يوجد حساب دخول بهذا البريد الإلكتروني بالفعل."
@@ -216,6 +251,13 @@ msgstr "من المقرر أن يزور فني الموقع بتاريخ %(date)
 #, python-format
 msgid "About visit %(number)s on %(date)s"
 msgstr "عن الزيارة %(number)s بتاريخ %(date)s"
+
+msgid "Above tapped time"
+msgstr "أعلى من الوقت المسجَّل بالضغطات"
+
+#, python-format
+msgid "Above tapped time (%(hours)s h)"
+msgstr "أعلى من الوقت المسجَّل بالضغطات (%(hours)s س)"
 
 msgid "Accept task"
 msgstr "قبول المهمة"
@@ -418,6 +460,9 @@ msgstr "مُسندة إلى"
 
 msgid "Assignment"
 msgstr "التعيين"
+
+msgid "At the site"
+msgstr "في الموقع"
 
 #, python-format
 msgid "Attach at most %(count)d files."
@@ -721,6 +766,9 @@ msgstr "تصحيح الوقت"
 
 msgid "Could not read the signature — please sign again."
 msgstr "تعذّرت قراءة التوقيع — يرجى التوقيع مرة أخرى."
+
+msgid "Couldn’t find coordinates in that. Paste them as “latitude, longitude”, or the full Google Maps link (not a short maps.app.goo.gl one)."
+msgstr "لم نجد إحداثيات في ذلك. الصقها بصيغة «خط العرض، خط الطول»، أو رابط خرائط جوجل الكامل (وليس الرابط المختصر maps.app.goo.gl)."
 
 msgid "Count"
 msgstr "العدد"
@@ -1127,6 +1175,9 @@ msgstr "أدخل البريد الإلكتروني المسجّل لحسابك �
 
 msgid "Enter the exact date and time."
 msgstr "أدخل التاريخ والوقت المحددين."
+
+msgid "Entered by the office"
+msgstr "أدخله المكتب"
 
 msgid "Equipment skills confirmed"
 msgstr "مهارات المعدات المعتمدة"
@@ -1590,6 +1641,12 @@ msgstr "إدارة التعيين"
 msgid "Manager"
 msgstr "مدير"
 
+msgid "Map"
+msgstr "الخريطة"
+
+msgid "Map location"
+msgstr "الموقع على الخريطة"
+
 msgid "Mark available"
 msgstr "وضع علامة متاح"
 
@@ -1794,6 +1851,9 @@ msgstr "لا يوجد مساعدون في هذه المهمة."
 msgid "No internal notes yet."
 msgstr "لا توجد ملاحظات داخلية بعد."
 
+msgid "No location sent"
+msgstr "لم يُرسل الموقع"
+
 msgid "No login yet — create one so they can sign in. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password the first time they sign in."
 msgstr "لا يوجد حساب دخول بعد — أنشئ واحدًا ليتمكن من تسجيل الدخول. تُولَّد كلمة مرور مؤقتة تلقائيًا وتُرسل له بالبريد الإلكتروني مع رابط تسجيل الدخول؛ وسيعيّن كلمة المرور الخاصة به عند أول تسجيل دخول."
 
@@ -1880,6 +1940,13 @@ msgstr "لم يتم الرد بعد."
 
 msgid "Not assigned yet."
 msgstr "لم تُسند بعد."
+
+msgid "Not at the site"
+msgstr "ليس في الموقع"
+
+#, python-format
+msgid "Not at the site · %(distance)s"
+msgstr "ليس في الموقع · %(distance)s"
 
 msgid "Not notified yet."
 msgstr "لم يتم الإشعار بعد."
@@ -2080,6 +2147,9 @@ msgstr "تمت إعادة تعيين كلمة المرور."
 
 msgid "Password set — welcome!"
 msgstr "تم تعيين كلمة المرور — أهلاً بك!"
+
+msgid "Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. Left empty, the first technician to tap “Arrived” here sets it."
+msgstr "الصق الإحداثيات (مثل 25.0772, 55.1306) أو رابط خرائط جوجل كاملاً. إن تُرك فارغاً، يحدده أول فني يضغط «وصلت» هنا."
 
 msgid "Paused for the day"
 msgstr "تم الإيقاف المؤقت لليوم"
@@ -2511,6 +2581,12 @@ msgstr "تعيين كفني رئيسي"
 msgid "Set by a manager — a supervisor must request a change"
 msgstr "حدده مدير — يجب على المشرف طلب تغييره"
 
+msgid "Set by the first arrival"
+msgstr "حُدد عند أول وصول"
+
+msgid "Set by the first technician to arrive — check it, and correct it if it’s off."
+msgstr "حدده أول فني وصل — تحقق منه وصححه إن كان غير دقيق."
+
 msgid "Set level"
 msgstr "تحديد المستوى"
 
@@ -2581,6 +2657,9 @@ msgstr "تمت إضافة الفرع."
 
 msgid "Site contact"
 msgstr "جهة الاتصال بالموقع"
+
+msgid "Site location not set"
+msgstr "موقع المكان غير محدد"
 
 msgid "Site name"
 msgstr "اسم الموقع"
@@ -2686,6 +2765,9 @@ msgstr "أُخرجت من مهمة"
 
 msgid "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time."
 msgstr "ضغطت بالخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك يمكن للمدير تصحيح الوقت."
+
+msgid "Taps away from the site"
+msgstr "ضغطات بعيدة عن الموقع"
 
 msgid "Task"
 msgstr "المهمة"
@@ -3475,6 +3557,9 @@ msgstr "الوصف"
 msgid "dismissal reason"
 msgstr "سبب الرفض"
 
+msgid "distance from the site (m)"
+msgstr "المسافة من الموقع (م)"
+
 msgid "documents are manager-tier by default — turn this on for a specific task when a supervisor is the one collecting payment on site and needs to see the invoice"
 msgstr "المستندات مخصصة للمديرين افتراضيًا — فعّل هذا الخيار لمهمة معيّنة عندما يكون المشرف هو من يُحصّل الدفع في الموقع ويحتاج إلى رؤية الفاتورة"
 
@@ -3599,14 +3684,29 @@ msgstr "ساعات العمل"
 msgid "language"
 msgstr "اللغة"
 
+msgid "latitude"
+msgstr "خط العرض"
+
 msgid "lets the customer check this ticket’s status without an account — see reports.CustomerFeedback"
 msgstr "يتيح للعميل التحقق من حالة هذا الطلب دون حساب — راجع reports.CustomerFeedback"
 
 msgid "level"
 msgstr "المستوى"
 
+msgid "location"
+msgstr "الموقع"
+
+msgid "location accuracy (m)"
+msgstr "دقة الموقع (م)"
+
+msgid "location source"
+msgstr "مصدر الموقع"
+
 msgid "login account"
 msgstr "حساب الدخول"
+
+msgid "longitude"
+msgstr "خط الطول"
 
 msgid "managers and admins only"
 msgstr "للمديرين ومسؤولي النظام فقط"
@@ -3944,6 +4044,10 @@ msgstr "نوع التخزين"
 msgid "submitted at"
 msgstr "قُدّم في"
 
+#, python-format
+msgid "taps: %(hours)s h"
+msgstr "الضغطات: %(hours)s س"
+
 msgid "task"
 msgstr "المهمة"
 
@@ -4197,6 +4301,9 @@ msgstr "تقرير العمل"
 msgid "work reports"
 msgstr "تقارير العمل"
 
+msgid "worked out at the tap, from the site location at that time"
+msgstr "تُحسب عند الضغط، من موقع المكان في ذلك الوقت"
+
 msgid "— Report"
 msgstr "— التقرير"
 
@@ -4207,6 +4314,9 @@ msgstr "«%(code)s» غير موجودة في قائمة القطع — اختر
 #, python-format
 msgid "“%(name)s” still has technicians, customers, or tickets attached to it — deactivate it instead of deleting."
 msgstr "\"%(name)s\" لا يزال مرتبطًا بفنيين أو عملاء أو طلبات — عطّله بدلاً من حذفه."
+
+msgid "“Above tapped time” means the hours typed are well above the time between the Start tap and the report being filed, minus pauses — worth asking about."
+msgstr "«أعلى من الوقت المسجَّل بالضغطات» يعني أن الساعات المكتوبة أعلى بكثير من الوقت بين ضغطة «بدء العمل» وتقديم التقرير، بعد خصم فترات التوقف — ويستحق السؤال عنه."
 
 #, python-format
 msgid "“Well over estimate” means more than 50%% past the task’s estimated hours."

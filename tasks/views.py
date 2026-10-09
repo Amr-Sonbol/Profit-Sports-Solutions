@@ -55,6 +55,7 @@ from .forms import (
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
     TicketReplyForm,
 )
+from .location import record_tap
 from .models import (
     CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
@@ -2531,7 +2532,11 @@ def task_assign(request, pk):
     # technicians can actually be picked as lead or helper.
     selectable_qs = candidates_qs.filter(is_available=True)
 
-    ask_hours = bool(active_lead) and task.status == Task.Status.IN_PROGRESS
+    # Only the manager tier records a replaced lead's hours — supervisors
+    # never set anyone's working hours.
+    ask_hours = (
+        bool(active_lead) and task.status == Task.Status.IN_PROGRESS and requesting_technician.is_manager_tier
+    )
     set_lead_form = SetLeadForm(technicians=selectable_qs, requires_reason=bool(active_lead), ask_hours=ask_hours)
     add_helper_form = AddHelperForm(technicians=selectable_qs) if active_lead else None
 
@@ -3089,6 +3094,7 @@ def _technician_hours_rows(active_country, period_start_date):
         Prefetch(
             'task__assignments', queryset=TaskAssignment.objects.filter(is_active=True), to_attr='active_assignments',
         ),
+        'task__events',
     ).order_by('submitted_at')
 
     leads_reports = defaultdict(list)
@@ -3124,6 +3130,8 @@ def _technician_hours_rows(active_country, period_start_date):
             'estimated': sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours),
             'helped_on': helped_on[technician.pk],
             'overrun_count': sum(1 for report in own_reports if report.is_overrun),
+            'above_tapped_count': sum(1 for report in own_reports if report.is_above_tapped),
+            'away_count': sum(1 for report in own_reports if report.has_taps_away_from_site),
         })
     return rows
 
@@ -3170,25 +3178,31 @@ def technician_hours_export(request):
     writer = csv.writer(response)
 
     writer.writerow([f'Technician hours — {active_country.name} — {period_start_date:%B %Y}'])
-    writer.writerow(['Technician', 'Reports filed', 'Labour hours', 'Estimated hours', 'Well over estimate', 'Helped on'])
+    writer.writerow([
+        'Technician', 'Reports filed', 'Labour hours', 'Estimated hours', 'Well over estimate', 'Helped on',
+        'Above tapped time', 'Taps away from the site',
+    ])
     for row in rows:
         writer.writerow([
             row['technician'].full_name, len(row['reports']), row['hours'], row['estimated'] or '',
-            row['overrun_count'], row['helped_on'],
+            row['overrun_count'], row['helped_on'], row['above_tapped_count'], row['away_count'],
         ])
 
     writer.writerow([])
     writer.writerow(['Reports'])
     writer.writerow([
         'Technician', 'Task number', 'Customer', 'Submitted at', 'Labour hours', 'Estimated hours',
-        'Well over estimate',
+        'Well over estimate', 'Tapped hours', 'Above tapped time', 'Taps away from the site',
     ])
     for row in rows:
         for report in row['reports']:
+            tapped = report.tapped_hours
             writer.writerow([
                 row['technician'].full_name, report.task.task_number, report.task.site.customer.name,
                 timezone.localtime(report.submitted_at).strftime('%Y-%m-%d %H:%M'), report.labour_hours,
                 report.task.estimated_hours or '', 'yes' if report.is_overrun else '',
+                '' if tapped is None else tapped, 'yes' if report.is_above_tapped else '',
+                'yes' if report.has_taps_away_from_site else '',
             ])
 
     if any(row['helped_reports'] for row in rows):
@@ -3934,9 +3948,7 @@ def my_task_detail(request, pk):
         elif action in TECHNICIAN_ACTIONS and action == next_action:
             event_type, new_status = TECHNICIAN_ACTIONS[action]
             with transaction.atomic():
-                TaskEvent.objects.create(
-                    task=task, event_type=event_type, occurred_at=timezone.now(), actor=request.user,
-                )
+                record_tap(task, event_type, request.user, request.POST)
                 if new_status:
                     task.status = new_status
                     task.save(update_fields=['status'])
@@ -3949,9 +3961,9 @@ def my_task_detail(request, pk):
                 with transaction.atomic():
                     task.status = Task.Status.BLOCKED
                     task.save(update_fields=['status'])
-                    TaskEvent.objects.create(
-                        task=task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
-                        actor=request.user, note=block_form.cleaned_data['note'],
+                    record_tap(
+                        task, TaskEvent.EventType.BLOCKED, request.user, request.POST,
+                        note=block_form.cleaned_data['note'],
                     )
                 messages.success(request, _('Task marked blocked.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
@@ -3959,17 +3971,15 @@ def my_task_detail(request, pk):
         elif action == 'pause' and can_pause:
             pause_form = PauseTaskForm(request.POST)
             if pause_form.is_valid():
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.PAUSED, occurred_at=timezone.now(),
-                    actor=request.user, note=pause_form.cleaned_data['note'],
+                record_tap(
+                    task, TaskEvent.EventType.PAUSED, request.user, request.POST,
+                    note=pause_form.cleaned_data['note'],
                 )
                 messages.success(request, _('Marked stopped for today.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'resume' and can_resume:
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.RESUMED, occurred_at=timezone.now(), actor=request.user,
-            )
+            record_tap(task, TaskEvent.EventType.RESUMED, request.user, request.POST)
             messages.success(request, _('Marked started again.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
@@ -4065,10 +4075,17 @@ def save_work_report(request, task, technician, report_form, part_rows):
             )
 
     now = timezone.now()
-    TaskEvent.objects.create(
-        task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED,
-        occurred_at=now, actor=request.user,
-    )
+    # Where the lead filed it from counts like any other tap; a manager
+    # correcting it from the office doesn't.
+    if task.assignments.filter(technician=technician, role=TaskAssignment.Role.LEAD, is_active=True).exists():
+        record_tap(
+            task, TaskEvent.EventType.REPORT_SUBMITTED, request.user, getattr(request, 'data', request.POST),
+            occurred_at=now,
+        )
+    else:
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=now, actor=request.user,
+        )
     saved_report.first_submission = task.status not in (
         Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
     )

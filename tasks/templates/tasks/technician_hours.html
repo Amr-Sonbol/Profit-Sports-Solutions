@@ -23,6 +23,7 @@
     {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} filed report.{% plural %}{{ hours }} labour hours across {{ reports }} filed reports.{% endblocktranslate %}
     {% translate "A report’s hours count for everyone on the team — lead and helpers — unless the lead entered a helper’s own hours. Hours worked before a handover count too." %}
     {% translate "“Well over estimate” means more than 50% past the task’s estimated hours." %}
+    {% translate "“Above tapped time” means the hours typed are well above the time between the Start tap and the report being filed, minus pauses — worth asking about." %}
 </p>
 
 <div class="section">
@@ -47,7 +48,19 @@
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{{ row.technician.full_name }}</a>
                     </td>
                     <td>{{ row.reports|length }}</td>
-                    <td>{% if row.hours %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}</td>
+                    <td>
+                        {% if row.hours %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}
+                        {% if row.above_tapped_count %}
+                        <span class="badge badge--status-in_progress">
+                            {% blocktranslate count count=row.above_tapped_count %}{{ count }} report above tapped time{% plural %}{{ count }} reports above tapped time{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                        {% if row.away_count %}
+                        <span class="badge badge--status-blocked">
+                            {% blocktranslate count count=row.away_count %}{{ count }} job with taps away from the site{% plural %}{{ count }} jobs with taps away from the site{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}
                         {% if row.overrun_count %}
@@ -71,6 +84,8 @@
                                     <span class="muted">({% blocktranslate with hours=report.task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>
                                     {% endif %}
                                     {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
+                                    {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% blocktranslate with hours=report.tapped_hours %}Above tapped time ({{ hours }} h){% endblocktranslate %}</span>{% endif %}
+                                    {% if report.has_taps_away_from_site %}<span class="badge badge--status-blocked">{% translate "Taps away from the site" %}</span>{% endif %}
                                 </li>
                                 {% endfor %}
                             </ul>

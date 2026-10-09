@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -91,7 +91,7 @@
     <h2>{% translate "Status" %}</h2>
     <div class="button-row">
         {% if next_action %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ next_action }}">
             <button type="submit" class="button">
@@ -104,7 +104,7 @@
         </form>
         {% endif %}
         {% if can_resume %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="resume">
             <button type="submit" class="button">{% translate "Started again" %}</button>
@@ -125,7 +125,7 @@
     {% endif %}
 
     {% if can_pause %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-locate>
         {% csrf_token %}
         <input type="hidden" name="action" value="pause">
         <div class="field {% if pause_form.note.errors %}field--error{% endif %}">
@@ -141,7 +141,7 @@
     {% endif %}
 
     {% if can_block %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-locate>
         {% csrf_token %}
         <input type="hidden" name="action" value="block">
         <div class="field {% if block_form.note.errors %}field--error{% endif %}">
@@ -268,4 +268,8 @@
     <p class="empty-state">{% translate "No events yet." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/tap-location.js' %}" defer></script>
 {% endblock %}

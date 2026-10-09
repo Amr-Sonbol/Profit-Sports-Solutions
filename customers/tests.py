@@ -682,3 +682,41 @@ class PortalTicketNewTests(CustomerTestCase):
         attachment = CustomerTicket.objects.get().attachments.get()
         self.assertNotEqual(attachment.file.name, 'ticket_attachments/IMG_0001.jpg')
         self.assertTrue(attachment.file.name.endswith('/IMG_0001.jpg'))
+
+
+class SiteMapLocationTests(CustomerTestCase):
+    def _post(self, map_location):
+        return self.client.post(f'/customers/sites/{self.site.pk}/edit/', {
+            'name': 'Marina Branch', 'address': 'Dubai Marina', 'contact_name': '', 'contact_phone': '',
+            'contact_email': '', 'access_notes': '', 'map_location': map_location,
+        })
+
+    def test_coordinates_or_a_maps_link_set_the_location(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        for text in (
+            '25.0772, 55.1306',
+            'https://www.google.com/maps/place/Gym/@25.0772,55.1306,17z/data=x',
+            'https://www.google.com/maps/place/Gym/data=!3d25.0772!4d55.1306',
+            'https://maps.google.com/?q=25.0772,55.1306',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(self._post(text).status_code, 302)
+                self.site.refresh_from_db()
+                self.assertEqual(float(self.site.latitude), 25.0772)
+                self.assertEqual(float(self.site.longitude), 55.1306)
+                self.assertEqual(self.site.location_source, 'office')
+
+    def test_a_link_without_coordinates_is_refused(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self._post('https://maps.app.goo.gl/abc123')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('map_location', response.context['form'].errors)
+
+    def test_saving_unchanged_keeps_where_it_came_from(self):
+        self.site.latitude, self.site.longitude, self.site.location_source = 25.0772, 55.1306, 'arrival'
+        self.site.save()
+        self.client.login(username='supervisor1', password='pass12345')
+        initial = self.client.get(f'/customers/sites/{self.site.pk}/edit/').context['form']['map_location'].initial
+        self._post(initial)
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.location_source, 'arrival')

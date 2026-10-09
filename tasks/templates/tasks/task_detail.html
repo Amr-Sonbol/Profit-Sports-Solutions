@@ -502,6 +502,10 @@
                 {{ report.labour_hours }}
                 {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
                 {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
+                {% with tapped=report.tapped_hours %}{% if tapped is not None %}
+                <span class="muted">({% blocktranslate with hours=tapped %}taps: {{ hours }} h{% endblocktranslate %})</span>
+                {% endif %}{% endwith %}
+                {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% translate "Above tapped time" %}</span>{% endif %}
             </dd>
         </div>
         <div>
@@ -685,6 +689,7 @@
             <span class="timeline__type">{{ event.get_event_type_display }}</span>
             {% endif %}
             <span class="muted">{{ event.actor.technician.full_name|default:event.actor.get_username }}</span>
+            {% include "tasks/_tap_location.html" %}
             {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
             {% if event.corrected_at %}
             <p class="muted">{% blocktranslate with time=event.corrected_at|date:"SHORT_DATETIME_FORMAT" by_name=event.corrected_by.technician.full_name %}corrected to {{ time }} by {{ by_name }}{% endblocktranslate %}</p>
