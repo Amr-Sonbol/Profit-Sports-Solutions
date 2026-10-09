@@ -4970,48 +4970,69 @@ class ActiveCountryTests(TaskTestCase):
 
 
 class HomeRedirectTests(TaskTestCase):
-    # The dashboard is now everyone's landing page, regardless of role —
-    # see spots.views.home and migration 0024_dashboard_is_the_default_landing_page.
+    # Every staff login lands on the welcome page: one icon tile per page
+    # that person can open, from the same list as the header menu
+    # (people.context_processors.nav_pages) — see spots.views.home.
 
-    def test_supervisor_lands_on_dashboard(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+    def _make_staff(self, username, role):
+        user = User.objects.create_user(username, password='pass12345')
+        Technician.objects.create(
+            user=user, country=self.country, full_name=username.title(),
+            language='en', role=role, employment_type='staff',
+        )
+        self.client.login(username=username, password='pass12345')
 
-    def test_technician_lands_on_dashboard(self):
+    def _tile_urls(self, response):
+        self.assertTemplateUsed(response, 'welcome.html')
+        return [page['url'] for page in response.context['nav_pages']]
+
+    def test_technician_sees_only_their_own_pages(self):
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+        urls = self._tile_urls(self.client.get('/'))
+        self.assertEqual(urls[:4], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/', '/tasks/dashboard/'])
+        for url in ('/tasks/all/', '/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
+            self.assertNotIn(url, urls)
 
-    def test_plain_manager_lands_on_dashboard(self):
-        manager_user = User.objects.create_user('manager1', password='pass12345')
-        Technician.objects.create(
-            user=manager_user, country=self.country, full_name='Dana Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
-        )
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+    def test_supervisor_sees_tasks_but_not_manager_pages(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        urls = self._tile_urls(self.client.get('/'))
+        self.assertIn('/tasks/', urls)
+        self.assertNotIn('/tasks/all/', urls)
+        self.assertNotIn('/tasks/roles/', urls)
 
-    def test_support_manager_lands_on_dashboard(self):
-        support_user = User.objects.create_user('support1', password='pass12345')
-        Technician.objects.create(
-            user=support_user, country=self.country, full_name='Sara Support',
-            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
-        )
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+    def test_manager_sees_manager_pages_but_not_admin_ones(self):
+        self._make_staff('manager1', Technician.Role.MANAGER)
+        urls = self._tile_urls(self.client.get('/'))
+        self.assertIn('/tasks/all/', urls)
+        self.assertIn('/tasks/countries/', urls)
+        self.assertNotIn('/tasks/my-week/', urls)
+        self.assertNotIn('/tasks/roles/', urls)
 
-    def test_admin_lands_on_dashboard(self):
-        admin_user = User.objects.create_user('admin1', password='pass12345')
-        Technician.objects.create(
-            user=admin_user, country=self.country, full_name='Amina Admin',
-            language='en', role=Technician.Role.ADMIN, employment_type='staff',
-        )
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.get('/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+    def test_admin_sees_roles_and_audit_log(self):
+        self._make_staff('admin1', Technician.Role.ADMIN)
+        urls = self._tile_urls(self.client.get('/'))
+        self.assertIn('/tasks/roles/', urls)
+        self.assertIn('/tasks/audit-log/', urls)
+
+    def test_every_tile_opens_for_that_role(self):
+        # The tiles promise access — each one must actually load, not 403.
+        for username, role in [
+            ('tech2', Technician.Role.TECHNICIAN), ('super2', Technician.Role.SUPERVISOR),
+            ('support1', Technician.Role.SUPPORT_MANAGER), ('warehouse1', Technician.Role.WAREHOUSE_MANAGER),
+            ('ops1', Technician.Role.OPERATIONS_MANAGER), ('manager2', Technician.Role.MANAGER),
+            ('admin2', Technician.Role.ADMIN),
+        ]:
+            self._make_staff(username, role)
+            for url in self._tile_urls(self.client.get('/')) + ['/tasks/my-profile/']:
+                with self.subTest(role=role, url=url):
+                    self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_tiles_follow_the_roles_and_permissions_screen(self):
+        RolePermission.objects.filter(
+            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
+        ).update(allowed=False)
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertNotIn('/tasks/', self._tile_urls(self.client.get('/')))
 
     def test_customer_lands_on_portal_home(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')

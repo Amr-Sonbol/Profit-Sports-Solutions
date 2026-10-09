@@ -14,7 +14,11 @@
                 <span></span><span></span><span></span>
             </label>
         {% endif %}
+        {% if user.is_authenticated %}
+        <a href="{% url 'home' %}" class="site-header__logo-link"><img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo"></a>
+        {% else %}
         <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="site-header__logo">
+        {% endif %}
         {% if active_country %}
         <span class="badge badge--muted">{{ active_country.display_name }}</span>
         {% endif %}
@@ -110,47 +114,9 @@
                     <button type="submit" class="button button--secondary">{% translate "Switch" %}</button>
                 </form>
                 {% endif %}
-                {% if user.technician and not user.technician.is_manager_tier %}
-                    <a href="{% url 'tasks:my_week' %}">{% translate "My week" %}</a>
-                    <a href="{% url 'tasks:my_progress' %}">{% translate "My progress" %}</a>
-                    <a href="{% url 'tasks:my_skills' %}">{% translate "My skills" %}</a>
-                {% endif %}
-                {% if 'view_dashboard' in role_permissions %}
-                    <a href="{% url 'tasks:dashboard' %}">{% translate "Dashboard" %}</a>
-                {% endif %}
-                {% if 'view_tasks' in role_permissions %}
-                    <a href="{% url 'tasks:task_list' %}">{% translate "Tasks" %}</a>
-                {% endif %}
-                {% if 'view_technicians' in role_permissions %}
-                    <a href="{% url 'tasks:technician_list' %}">{% translate "Technicians" %}</a>
-                    <a href="{% url 'tasks:technician_hours' %}">{% translate "Hours" %}</a>
-                {% endif %}
-                {% if 'manage_customers' in role_permissions %}
-                    <a href="{% url 'customers:customer_list' %}">{% translate "Customers" %}</a>
-                {% endif %}
-                {% if 'manage_parts' in role_permissions %}
-                    <a href="{% url 'tasks:part_list' %}">{% translate "Parts" %}</a>
-                {% endif %}
-                {% if 'view_machines' in role_permissions %}
-                    <a href="{% url 'tasks:machine_list' %}">{% translate "Machines" %}</a>
-                {% endif %}
-                {% if 'manage_tickets' in role_permissions %}
-                    <a href="{% url 'tasks:ticket_list' %}">{% translate "Tickets" %}</a>
-                    <a href="{% url 'tasks:all_tickets' %}">{% translate "All tickets" %}</a>
-                {% endif %}
-                {% if user.technician.is_manager_tier %}
-                    <a href="{% url 'tasks:all_tasks' %}">{% translate "All tasks" %}</a>
-                    <a href="{% url 'tasks:all_week' %}">{% translate "All week" %}</a>
-                    <a href="{% url 'tasks:all_technicians' %}">{% translate "All technicians" %}</a>
-                    <a href="{% url 'tasks:monthly_report' %}">{% translate "Monthly report" %}</a>
-                    <a href="{% url 'tasks:skill_list' %}">{% translate "Skills" %}</a>
-                    <a href="{% url 'tasks:brand_list' %}">{% translate "Brands" %}</a>
-                    <a href="{% url 'tasks:country_list' %}">{% translate "Countries" %}</a>
-                {% endif %}
-                {% if user.technician.role == 'admin' %}
-                    <a href="{% url 'tasks:role_permissions' %}">{% translate "Roles" %}</a>
-                    <a href="{% url 'tasks:audit_log' %}">{% translate "Audit log" %}</a>
-                {% endif %}
+                {% for page in nav_pages %}
+                    <a href="{{ page.url }}">{{ page.label }}</a>
+                {% endfor %}
                 {% if user.customer %}
                     <a href="{% url 'customers:portal_home' %}">{% translate "My account" %}</a>
                 {% endif %}

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-04 11:23+0000\n"
+"POT-Creation-Date: 2026-10-09 14:46+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1995,6 +1995,9 @@ msgstr "صفحة %(number)s من %(total)s"
 msgid "Page not found"
 msgstr "الصفحة غير موجودة"
 
+msgid "Pages"
+msgstr "الصفحات"
+
 msgid "Part"
 msgstr "القطعة"
 
@@ -3075,6 +3078,10 @@ msgstr "أهلاً بك — لنكمل إعداد حسابك"
 
 msgid "Welcome — set your password"
 msgstr "أهلاً بك — عيّن كلمة المرور"
+
+#, python-format
+msgid "Welcome, %(name)s"
+msgstr "أهلاً بك، %(name)s"
 
 msgid "Well over estimate"
 msgstr "تجاوز التقدير بكثير"

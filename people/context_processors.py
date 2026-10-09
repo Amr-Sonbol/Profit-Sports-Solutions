@@ -1,3 +1,6 @@
+from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
+
 from reference.models import Country
 
 from .models import RolePermission
@@ -93,7 +96,54 @@ def role_permissions(request):
     allowed = set(
         RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
     )
-    return {'role_permissions': allowed}
+    return {'role_permissions': allowed, 'nav_pages': nav_pages(technician, allowed)}
+
+
+def nav_pages(technician, allowed):
+    """Every page this technician can open, in header-menu order, as
+    (url, label, icon) dicts — the one list both the header menu and the
+    welcome page's icon tiles are drawn from, so the two can't disagree.
+    Each gate here mirrors the check the page's own view enforces
+    (require_permission / require_technician / require_manager /
+    require_admin); `icon` names a symbol in templates/_icon.html.
+    """
+    pages = []
+
+    def add(url_name, label, icon):
+        pages.append({'url': reverse(url_name), 'label': label, 'icon': icon})
+
+    if not technician.is_manager_tier:
+        add('tasks:my_week', _('My week'), 'calendar')
+        add('tasks:my_progress', _('My progress'), 'trending-up')
+        add('tasks:my_skills', _('My skills'), 'award')
+    if RolePermission.Permission.VIEW_DASHBOARD in allowed:
+        add('tasks:dashboard', _('Dashboard'), 'grid')
+    if RolePermission.Permission.VIEW_TASKS in allowed:
+        add('tasks:task_list', _('Tasks'), 'clipboard')
+    if RolePermission.Permission.VIEW_TECHNICIANS in allowed:
+        add('tasks:technician_list', _('Technicians'), 'users')
+        add('tasks:technician_hours', _('Hours'), 'clock')
+    if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
+        add('customers:customer_list', _('Customers'), 'briefcase')
+    if RolePermission.Permission.MANAGE_PARTS in allowed:
+        add('tasks:part_list', _('Parts'), 'package')
+    if RolePermission.Permission.VIEW_MACHINES in allowed:
+        add('tasks:machine_list', _('Machines'), 'activity')
+    if RolePermission.Permission.MANAGE_TICKETS in allowed:
+        add('tasks:ticket_list', _('Tickets'), 'inbox')
+        add('tasks:all_tickets', _('All tickets'), 'archive')
+    if technician.is_manager_tier:
+        add('tasks:all_tasks', _('All tasks'), 'layers')
+        add('tasks:all_week', _('All week'), 'calendar')
+        add('tasks:all_technicians', _('All technicians'), 'users')
+        add('tasks:monthly_report', _('Monthly report'), 'bar-chart')
+        add('tasks:skill_list', _('Skills'), 'award')
+        add('tasks:brand_list', _('Brands'), 'tag')
+        add('tasks:country_list', _('Countries'), 'globe')
+    if technician.role == technician.Role.ADMIN:
+        add('tasks:role_permissions', _('Roles'), 'shield')
+        add('tasks:audit_log', _('Audit log'), 'file-text')
+    return pages
 
 
 def active_country(request):

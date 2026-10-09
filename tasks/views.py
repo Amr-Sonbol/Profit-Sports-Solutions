@@ -971,8 +971,8 @@ def _send_feedback_email(request, feedback):
 def dashboard(request):
     """At a glance: who's available today, and every open task with its
     lead and schedule. Every role has view_dashboard (see migration
-    0024_dashboard_is_the_default_landing_page) since this is now the
-    landing page every login lands on — spots.views.home.
+    0024_dashboard_is_the_default_landing_page) since every role's
+    welcome page (spots.views.home) links to it.
     """
     require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
     active_country = get_active_country(request)
