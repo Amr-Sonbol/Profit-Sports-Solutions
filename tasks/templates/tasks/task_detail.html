@@ -14,6 +14,12 @@
         <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
     </div>
 </div>
+{% if departed_on_task %}
+<p class="flash flash--error">
+    {% translate "Someone on this task has left the company." %}
+    {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
+</p>
+{% endif %}
 
 <div class="section">
     <div class="section__header">
@@ -39,7 +45,7 @@
         </div>
         <div>
             <dt>{% translate "Required skill" %}</dt>
-            <dd>{{ task.required_skill.name|default:"—" }}{% if task.min_level %} ({% translate "level" %} {{ task.min_level }}){% endif %}</dd>
+            <dd>{{ task.required_skill.display_name|default:"—" }}{% if task.min_level %} ({% translate "level" %} {{ task.min_level }}){% endif %}</dd>
         </div>
         <div>
             <dt>{% translate "Billing type" %}</dt>
@@ -81,6 +87,13 @@
     <div class="description">
         <dt>{% translate "Description" %}</dt>
         <p>{{ task.description }}</p>
+    </div>
+    {% endif %}
+    {% if task.reported_serial_numbers %}
+    <div class="description">
+        <dt>{% translate "Reported serial numbers" %}</dt>
+        <p class="field__help">{% translate "As the customer reported them — add anything else found on site to the work report instead." %}</p>
+        <p class="pre-line">{{ task.reported_serial_numbers }}</p>
     </div>
     {% endif %}
 </div>
@@ -229,9 +242,10 @@
     <p class="field__help">{% translate "Add a contact email for this site before notifying the customer." %}</p>
     {% endif %}
 
-    {% if user.technician.is_manager_tier %}
+    {% if user.technician.is_manager_tier or task.invoice_visible_to_supervisor %}
     <h3>{% translate "Documents" %}</h3>
     <dl class="detail-grid">
+        {% if user.technician.is_manager_tier %}
         <div>
             <dt>{% translate "Quotation" %}</dt>
             <dd>
@@ -252,6 +266,7 @@
                 {% else %}—{% endif %}
             </dd>
         </div>
+        {% endif %}
         <div>
             <dt>{% translate "Invoice" %}</dt>
             <dd>
@@ -262,6 +277,7 @@
                 {% else %}—{% endif %}
             </dd>
         </div>
+        {% if user.technician.is_manager_tier %}
         <div>
             <dt>{% translate "Delivery note" %}</dt>
             <dd>
@@ -272,8 +288,11 @@
                 {% else %}—{% endif %}
             </dd>
         </div>
+        {% endif %}
     </dl>
+    {% if user.technician.is_manager_tier %}
     <p class="field__help">{% translate "Upload these from the task's Edit screen." %}</p>
+    {% endif %}
     {% endif %}
 
     <h3>{% translate "Shipping" %}</h3>
@@ -450,7 +469,16 @@
 {% if report %}
 <div class="section">
     <h2>{% translate "Work report" %}</h2>
-    {% if task.status == 'completed' %}
+    {% if task.status == 'pending_supervisor_review' %}
+    <p class="flash flash--info">{% translate "Awaiting the responsible supervisor's review before a manager can approve it." %}</p>
+        {% if can_approve_as_supervisor %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="approve_report_supervisor">
+            <button type="submit" class="button">{% translate "Approve for manager review" %}</button>
+        </form>
+        {% endif %}
+    {% elif task.status == 'completed' %}
     <p class="flash flash--info">{% translate "Awaiting manager approval before this task closes." %}</p>
         {% if user.technician.is_manager_tier %}
         <form method="post" novalidate>
@@ -460,6 +488,9 @@
         </form>
         {% endif %}
     {% endif %}
+    {% if user.technician.is_manager_tier and task.status != 'cancelled' %}
+    <p><a href="{% url 'tasks:task_report_correct' task.pk %}" class="button button--secondary">{% translate "Correct report" %}</a></p>
+    {% endif %}
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Resolved" %}</dt>
@@ -467,11 +498,22 @@
         </div>
         <div>
             <dt>{% translate "Labour hours" %}</dt>
-            <dd>{{ report.labour_hours }}</dd>
+            <dd>
+                {{ report.labour_hours }}
+                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
+                {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
+                {% with tapped=report.tapped_hours %}{% if tapped is not None %}
+                <span class="muted">({% blocktranslate with hours=tapped %}taps: {{ hours }} h{% endblocktranslate %})</span>
+                {% endif %}{% endwith %}
+                {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% translate "Above tapped time" %}</span>{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Signed by" %}</dt>
-            <dd>{{ report.customer_name }}</dd>
+            <dd>
+                {{ report.customer_name }}
+                {% if report.signature_waived_reason %}<span class="badge badge--status-in_progress">{% translate "Not signed" %}</span>{% endif %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Submitted" %}</dt>
@@ -486,6 +528,12 @@
     <div class="description">
         <dt>{% translate "Action taken" %}</dt>
         <p>{{ report.action_taken }}</p>
+    </div>
+    {% endif %}
+    {% if report.signature_waived_reason %}
+    <div class="description">
+        <dt>{% translate "Why the customer could not sign" %}</dt>
+        <p>{{ report.signature_waived_reason }}</p>
     </div>
     {% endif %}
     {% if report.parts_used.all %}
@@ -515,6 +563,26 @@
 </div>
 {% endif %}
 
+{% if user.technician.is_manager_tier and can_cancel %}
+<div class="section">
+    <h2>{% translate "Cancel task" %}</h2>
+    <p class="field__help">{% translate "Calls the task off before any report is filed. Everyone on it is notified, and the customer's ticket conversation stays open." %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cancel_task">
+        <div class="field {% if cancel_task_form.note.errors %}field--error{% endif %}">
+            <label for="{{ cancel_task_form.note.id_for_label }}">{{ cancel_task_form.note.label }}</label>
+            {{ cancel_task_form.note }}
+            <p class="field__help">{{ cancel_task_form.note.help_text }}</p>
+            {% for error in cancel_task_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--danger">{% translate "Cancel task" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
 {% if user.technician.is_manager_tier %}
 {% if task.status != 'closed' %}
 <div class="section">
@@ -538,6 +606,17 @@
     </form>
 </div>
 {% elif task.status == 'closed' %}
+{% if user.technician.role == 'admin' %}
+<div class="section">
+    <h2>{% translate "Reopen" %}</h2>
+    <p class="field__help">{% translate "Undoes the close decision, back to awaiting manager approval — the filed report itself is untouched." %}</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reopen">
+        <button type="submit" class="button button--secondary">{% translate "Reopen task" %}</button>
+    </form>
+</div>
+{% endif %}
 <div class="section">
     <h2>{% translate "Flag negligence" %}</h2>
     <p class="field__help">{% translate "Only if the customer later complained about this specific visit and it was the technician's own fault — not every complaint is negligence. Feeds their reliability record; they won't see this flag themselves." %}</p>
@@ -562,6 +641,42 @@
 {% endif %}
 
 <div class="section">
+    <h2>{% translate "Messages" %}</h2>
+    {% if task_messages %}
+    <div class="chat-thread">
+        {% for task_message in task_messages %}
+        <div class="chat-message {% if task_message.sent_by == user %}chat-message--mine{% endif %}">
+            <div class="chat-meta">
+                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}</span>
+                <span class="muted">{{ task_message.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            </div>
+            <div class="chat-bubble">
+                <p>{{ task_message.message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No messages yet." %}</p>
+    {% endif %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_message">
+        {% if message_form.non_field_errors %}
+            <p class="flash flash--error">{{ message_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if message_form.message.errors %}field--error{% endif %}">
+            <label for="{{ message_form.message.id_for_label }}">{{ message_form.message.label }}</label>
+            {{ message_form.message }}
+            {% for error in message_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Send message" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
     <h2>{% translate "History" %}</h2>
     {% if events %}
     <ul class="timeline">
@@ -574,9 +689,33 @@
             <span class="timeline__type">{{ event.get_event_type_display }}</span>
             {% endif %}
             <span class="muted">{{ event.actor.technician.full_name|default:event.actor.get_username }}</span>
+            {% include "tasks/_tap_location.html" %}
             {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
             {% if event.corrected_at %}
             <p class="muted">{% blocktranslate with time=event.corrected_at|date:"SHORT_DATETIME_FORMAT" by_name=event.corrected_by.technician.full_name %}corrected to {{ time }} by {{ by_name }}{% endblocktranslate %}</p>
+            {% if event.correction_reason %}<p class="timeline__note">{{ event.correction_reason }}</p>{% endif %}
+            {% endif %}
+            {% if user.technician.is_manager_tier and event.event_type in correctable_event_types %}
+            <details>
+                <summary>{% translate "Correct time" %}</summary>
+                <form method="post" class="form-grid" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="correct_event">
+                    <input type="hidden" name="event_id" value="{{ event.pk }}">
+                    <div class="field">
+                        <label for="correct-at-{{ event.pk }}">{% translate "When it really happened" %}</label>
+                        <input type="datetime-local" id="correct-at-{{ event.pk }}" name="corrected_at" required
+                               value="{{ event.effective_at|date:'Y-m-d\TH:i' }}">
+                    </div>
+                    <div class="field">
+                        <label for="correct-reason-{{ event.pk }}">{% translate "Reason" %}</label>
+                        <textarea id="correct-reason-{{ event.pk }}" name="reason" rows="2" required></textarea>
+                    </div>
+                    <div class="field field--submit">
+                        <button type="submit" class="button button--secondary">{% translate "Save correction" %}</button>
+                    </div>
+                </form>
+            </details>
             {% endif %}
         </li>
         {% endfor %}

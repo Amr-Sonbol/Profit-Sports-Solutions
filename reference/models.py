@@ -20,6 +20,10 @@ class Country(models.Model):
         help_text=_('IANA name, e.g. Asia/Riyadh'),
     )
     currency_code = models.CharField(_('currency code'), max_length=3)
+    weekend_days = models.CharField(
+        _('weekend days'), max_length=13, default='4,5',
+        help_text=_('comma-separated weekday numbers, Monday = 0 — e.g. 4,5 for Friday–Saturday'),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
@@ -27,8 +31,17 @@ class Country(models.Model):
         verbose_name_plural = _('countries')
         ordering = ['name']
 
+    @property
+    def display_name(self):
+        return self.name_ar if get_language() == 'ar' else self.name
+
+    @property
+    def weekend_weekdays(self):
+        """weekend_days as a set of ints (Monday = 0), for date.weekday()."""
+        return {int(day) for day in self.weekend_days.split(',') if day.strip()}
+
     def __str__(self):
-        return self.name
+        return self.display_name
 
 
 class Brand(models.Model):
@@ -56,7 +69,7 @@ class Skill(models.Model):
 
     class Category(models.TextChoices):
         OTHER = 'other', _('Basic')
-        CARDIO = 'cardio', _('Cardio')
+        CARDIO = 'cardio', _('Advanced')
 
     name = models.CharField(_('name'), max_length=100)
     # default='' only backfills existing rows cleanly (see the migration
@@ -65,7 +78,7 @@ class Skill(models.Model):
     name_ar = models.CharField(_('name (Arabic)'), max_length=100, default='')
     category = models.CharField(
         _('category'), max_length=10, choices=Category.choices, default=Category.OTHER,
-        help_text=_("cardio skills don't count toward the technician certification bar"),
+        help_text=_("advanced skills don't count toward the technician certification bar"),
     )
     is_active = models.BooleanField(_('active'), default=True)
 
@@ -137,3 +150,25 @@ class TaskType(models.Model):
 
     def __str__(self):
         return self.display_name
+
+
+class Part(models.Model):
+    """The parts catalogue (docs: part) — code and optional description,
+    no prices. Switched off rather than deleted.
+    """
+
+    code = models.CharField(_('code'), max_length=50, unique=True)
+    description = models.CharField(_('description'), max_length=200, blank=True)
+    is_active = models.BooleanField(_('active'), default=True)
+
+    class Meta:
+        verbose_name = _('part')
+        verbose_name_plural = _('parts')
+        ordering = ['code']
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.code} — {self.description}' if self.description else self.code

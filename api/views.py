@@ -1,23 +1,41 @@
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth import authenticate
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from people.models import RolePermission
-from people.permissions import get_active_country
-from tasks.forms import BlockTaskForm, PauseTaskForm, TaskAttachmentUploadForm
+from people.models import PushDevice, RolePermission
+from people.permissions import get_active_country, require_manager, scoped_or_404
+from people.push import push_assigned, push_removed
+from reference.models import Part
+from reports.forms import PartUsedItemForm, WorkReportForm
+from tasks.forms import (
+    AddHelperForm, BlockTaskForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm,
+)
+from tasks.location import record_tap
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
 from tasks.views import (
-    BLOCKABLE_STATUSES, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS, _next_technician_action,
-    _save_attachment, _task_is_paused, _with_lead_prefetch,
+    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
+    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
+    _technicians_with_next_scheduled_task,
+    _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
+    report_saved_message, save_work_report, search_tasks, search_tickets, undo_last_tap, undoable_tap,
+    SEARCH_RESULT_LIMIT,
 )
 
-from .permissions import IsTechnician, require_role_permission
-from .serializers import CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer
+from .permissions import IsTechnician, has_role_permission, require_role_permission
+from .serializers import (
+    CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
+)
 
 
 class LoginView(APIView):
@@ -52,7 +70,7 @@ def _me_payload(user):
         'full_name': technician.full_name,
         'role': technician.role,
         'role_display': technician.get_role_display(),
-        'country': technician.country.name,
+        'country': technician.country.display_name,
         'language': technician.language,
     }
 
@@ -81,8 +99,10 @@ class MyTaskListView(APIView):
 
 
 class TaskListView(APIView):
-    """Every task in the requester's active country — the supervisor/
-    manager/admin view, same scope as the web task list.
+    """Every open task in the requester's active country — the supervisor/
+    manager/admin view, same scope as the web task list. With ?q=, a
+    search across every status instead (tasks.views.search_tasks), newest
+    first, at most SEARCH_RESULT_LIMIT.
     """
 
     permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
@@ -91,14 +111,19 @@ class TaskListView(APIView):
         active_country = get_active_country(request)
         tasks = _with_lead_prefetch(
             Task.objects.filter(site__customer__country=active_country).select_related('site__customer'),
-        ).filter(status__in=OPEN_STATUSES)
+        )
+        text = request.query_params.get('q', '').strip()
+        if text:
+            tasks = search_tasks(tasks, text)
+        else:
+            tasks = tasks.filter(status__in=OPEN_STATUSES)
         return Response(TaskListSerializer(tasks, many=True).data)
 
 
 def _get_my_assignment(request, pk):
     return get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer__country', 'task__task_type', 'task__brand', 'task__required_skill',
         ),
         task__pk=pk, technician=request.user.technician, is_active=True,
     )
@@ -121,14 +146,17 @@ class MyTaskDetailView(APIView):
             'next_action': next_action,
             'is_lead': is_lead,
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
+            'requires_signature': _requires_signature(task),
+            'undoable_tap': undoable_tap(task, request.user) if is_lead else None,
         }
         return Response(TaskDetailSerializer(task, context=context).data)
 
 
 class MyTaskActionView(APIView):
     """One of the lead's next-step buttons (accept / en_route / arrive /
-    start), or block/pause/resume — the same state machine as
-    my_task_detail's POST handling, reused rather than re-implemented.
+    start), undo (their own last tap, within 10 minutes), or
+    block/pause/resume — the same state machine as my_task_detail's POST
+    handling, reused rather than re-implemented.
     """
 
     permission_classes = [IsTechnician]
@@ -143,11 +171,17 @@ class MyTaskActionView(APIView):
         action = request.data.get('action')
         next_action = _next_technician_action(task)
 
+        if action == 'undo':
+            if not undo_last_tap(task, request.user):
+                return Response(
+                    {'detail': 'That can no longer be undone — ask a manager to correct the time.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response({'status': task.status})
+
         if action in TECHNICIAN_ACTIONS and action == next_action:
             event_type, new_status = TECHNICIAN_ACTIONS[action]
-            TaskEvent.objects.create(
-                task=task, event_type=event_type, occurred_at=timezone.now(), actor=request.user,
-            )
+            record_tap(task, event_type, request.user, request.data)
             if new_status:
                 task.status = new_status
                 task.save(update_fields=['status'])
@@ -158,16 +192,11 @@ class MyTaskActionView(APIView):
             form = PauseTaskForm(request.data)
             if not form.is_valid():
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.PAUSED, occurred_at=timezone.now(),
-                actor=request.user, note=form.cleaned_data['note'],
-            )
+            record_tap(task, TaskEvent.EventType.PAUSED, request.user, request.data, note=form.cleaned_data['note'])
             return Response({'status': task.status})
 
         if action == 'resume' and is_paused:
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.RESUMED, occurred_at=timezone.now(), actor=request.user,
-            )
+            record_tap(task, TaskEvent.EventType.RESUMED, request.user, request.data)
             return Response({'status': task.status})
 
         if action == 'block' and task.status in BLOCKABLE_STATUSES and not is_paused:
@@ -176,10 +205,7 @@ class MyTaskActionView(APIView):
                 return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
             task.status = Task.Status.BLOCKED
             task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
-                actor=request.user, note=form.cleaned_data['note'],
-            )
+            record_tap(task, TaskEvent.EventType.BLOCKED, request.user, request.data, note=form.cleaned_data['note'])
             return Response({'status': task.status})
 
         return Response({'detail': 'That action is not available right now.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -201,9 +227,375 @@ class MyTaskAttachmentView(APIView):
         return Response(status=status.HTTP_201_CREATED)
 
 
+class MyTaskReportView(APIView):
+    """The lead's work report — findings, parts used, labour hours and the
+    customer's signature. GET returns {report: ... or null}; POST
+    files or corrects it, with the same rules and status changes as the
+    web form (tasks.views.my_report_form), via the same save_work_report.
+
+    POST body (JSON): findings, action_taken, resolved (bool),
+    labour_hours, customer_name, parts (list of {part_code, description,
+    quantity, unit_cost, currency_code}), signature (PNG data URL,
+    optional — leaving it out keeps the one already on file),
+    signature_waived_reason (customer not available to sign — files
+    without a signature), helper_hours ({assignment id: hours} for a
+    helper whose hours differ from the report's).
+
+    A lead taken off the task before their report reached the server (it
+    waited on the phone with no signal) isn't refused: the report goes to
+    the team as a task message instead, and its hours count toward them
+    as handover hours — so the work isn't lost.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def _get_lead_task(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        if assignment.role != TaskAssignment.Role.LEAD:
+            return None
+        return assignment.task
+
+    def get(self, request, pk):
+        task = self._get_lead_task(request, pk)
+        if task is None:
+            return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
+        report = getattr(task, 'report', None)
+        return Response({
+            'report': WorkReportSerializer(report).data if report else None,
+            # Each helper's hours box: empty = same as the report's.
+            'helpers': [
+                {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
+                for a in _active_helpers(task)
+            ],
+        })
+
+    def post(self, request, pk):
+        former_lead = TaskAssignment.objects.filter(
+            task__pk=pk, technician=request.user.technician, role=TaskAssignment.Role.LEAD, is_active=False,
+        ).select_related('task__site__customer__country').order_by('-ended_at').first()
+        on_task = TaskAssignment.objects.filter(
+            task__pk=pk, technician=request.user.technician, is_active=True,
+        ).exists()
+        if former_lead and not on_task:
+            return self._forward_from_former_lead(request, former_lead)
+
+        task = self._get_lead_task(request, pk)
+        if task is None:
+            return Response({'detail': 'Only the lead can file the report.'}, status=status.HTTP_403_FORBIDDEN)
+        if task.status == Task.Status.CLOSED:
+            return Response(
+                {'detail': 'This task is closed — only a manager or admin can correct its report now.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if task.status not in REPORT_EDITABLE_STATUSES:
+            return Response(
+                {'detail': 'Start work on this task before filing a report.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        if task.status == Task.Status.IN_PROGRESS and _task_is_paused(task):
+            return Response(
+                {'detail': 'Mark yourself started again before filing the report.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = {
+            field: request.data.get(field, '')
+            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name')
+        }
+        data['resolved'] = str(bool(request.data.get('resolved')))
+        data['signature_drawn'] = request.data.get('signature') or ''
+        waived_reason = request.data.get('signature_waived_reason') or ''
+        if waived_reason:
+            data['signature_waived'] = 'on'
+            data['signature_waived_reason'] = waived_reason
+        for assignment_id, hours in (request.data.get('helper_hours') or {}).items():
+            data[f'helper_hours_{assignment_id}'] = '' if hours is None else str(hours)
+        report_form = WorkReportForm(
+            data, instance=getattr(task, 'report', None), require_signature=_requires_signature(task),
+            helpers=_active_helpers(task),
+        )
+        part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
+
+        errors = {}
+        if not report_form.is_valid():
+            errors.update(report_form.errors)
+        part_errors = [form.errors for form in part_forms if not form.is_valid()]
+        if part_errors:
+            errors['parts'] = part_errors
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            report = save_work_report(
+                request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
+            )
+        return Response(
+            {
+                'status': task.status,
+                'message': str(report_saved_message(report.first_submission, task)),
+                'report': WorkReportSerializer(report).data,
+            },
+            status=status.HTTP_201_CREATED if report.first_submission else status.HTTP_200_OK,
+        )
+
+    def _forward_from_former_lead(self, request, assignment):
+        task = assignment.task
+        try:
+            hours = Decimal(str(request.data.get('labour_hours') or '')).quantize(Decimal('0.01'))
+        except InvalidOperation:
+            hours = None
+        if hours is not None and Decimal('0') <= hours < Decimal('1000'):
+            assignment.labour_hours = hours
+            assignment.save(update_fields=['labour_hours'])
+
+        lines = [
+            _('Report from %(name)s, sent after they were taken off this task:') % {
+                'name': request.user.technician.full_name,
+            },
+            _('Findings: %(text)s') % {'text': request.data.get('findings') or '—'},
+        ]
+        if request.data.get('action_taken'):
+            lines.append(_('Action taken: %(text)s') % {'text': request.data['action_taken']})
+        lines.append(_('Resolved: %(answer)s') % {'answer': _('Yes') if request.data.get('resolved') else _('No')})
+        if hours is not None:
+            lines.append(_('Hours worked: %(hours)s') % {'hours': hours})
+        parts = [
+            f"{part.get('part_code', '')} × {part.get('quantity', '')}"
+            for part in request.data.get('parts') or [] if part.get('part_code')
+        ]
+        if parts:
+            lines.append(_('Parts used: %(parts)s') % {'parts': ', '.join(parts)})
+        _post_task_message(request, task, '\n'.join(lines))
+
+        return Response({
+            'status': task.status,
+            'message': _('You are no longer on this task, so your report was sent to the team as a message.'),
+            'report': None,
+        })
+
+
+def _get_team_task(request, pk):
+    """Same scope as the web task detail: the active country, or any
+    country for the manager tier.
+    """
+    return scoped_or_404(
+        Task.objects.select_related(
+            'site__customer__country', 'task_type', 'brand', 'required_skill', 'responsible_supervisor', 'report',
+        ).prefetch_related('assignments__technician', 'report__parts_used'),
+        pk, request.user.technician, get_active_country(request), 'site__customer__country',
+    )
+
+
+def _owns_task(request, task):
+    try:
+        _require_task_owner(request, task)
+    except PermissionDenied:
+        return False
+    return True
+
+
+def _team_task_response(request, task):
+    technician = request.user.technician
+    owns = _owns_task(request, task)
+    context = {
+        'requires_signature': bool(task.task_type and task.task_type.requires_signature),
+        'can_assign': (
+            owns and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
+            and any(
+                assignment_changeable(task, a, technician)
+                for a in [None, *(a for a in task.assignments.all() if a.is_active)]
+            )
+        ),
+        'can_supervisor_approve': (
+            task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
+        ),
+        'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
+    }
+    return Response(TeamTaskDetailSerializer(task, context=context).data)
+
+
+class TeamTaskDetailView(APIView):
+    """Any task in the requester's scope, with its lead/helpers, report,
+    and which of assign/approve the requester can do — the mobile side of
+    the web task detail for supervisors, managers and admins.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def get(self, request, pk):
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
+class TeamTaskCandidatesView(APIView):
+    """Technicians who could take this task — same pool as the web assign
+    screen, with skill level and their next booked job so a clash shows.
+    Only available ones can be picked (`is_available`).
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.ASSIGN_TASKS)]
+
+    def get(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        assigned_ids = {a.technician_id for a in task.assignments.all() if a.is_active}
+        candidates = _technicians_with_next_scheduled_task(
+            _candidates_with_skill_level(_assignment_candidates(task, exclude_ids=assigned_ids), task),
+        )
+        return Response([
+            {
+                'id': technician.pk,
+                'full_name': technician.full_name,
+                'is_available': technician.is_available,
+                # Their home country when they're here on a trip, else null.
+                'visiting_from': technician.country.display_name
+                if technician.country_id != task.site.customer.country_id else None,
+                'skill_level': technician.skill_level,
+                'next_task_number': technician.next_scheduled_task.task_number
+                if technician.next_scheduled_task else None,
+                'next_task_at': technician.next_scheduled_task.scheduled_for
+                if technician.next_scheduled_task else None,
+            }
+            for technician in candidates
+        ])
+
+
+class TeamTaskAssignView(APIView):
+    """set_lead / add_helper / remove_helper — the web assign screen's
+    actions, with the same forms, lock and ownership rules.
+
+    Body: {"action": "set_lead", "technician": id, "end_reason": "..."}
+    (end_reason only when replacing a lead), {"action": "add_helper",
+    "technician": id}, or {"action": "remove_helper", "assignment_id": id,
+    "end_reason": "..."}.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.ASSIGN_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        technician = request.user.technician
+        active = [a for a in task.assignments.all() if a.is_active]
+        active_lead = next((a for a in active if a.role == TaskAssignment.Role.LEAD), None)
+        locked_message = Response(
+            {'detail': 'Work has started — the team can no longer be changed.'}, status=status.HTTP_400_BAD_REQUEST,
+        )
+        selectable = _assignment_candidates(task, exclude_ids={a.technician_id for a in active}).filter(
+            is_available=True,
+        )
+        action = request.data.get('action')
+
+        if action == 'set_lead':
+            if not assignment_changeable(task, active_lead, technician):
+                return locked_message
+            form = SetLeadForm(
+                request.data, technicians=selectable, requires_reason=bool(active_lead),
+                ask_hours=(
+                    bool(active_lead) and task.status == Task.Status.IN_PROGRESS and technician.is_manager_tier
+                ),
+            )
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            _set_lead(
+                task, active_lead, form.cleaned_data['technician'], form.cleaned_data.get('end_reason', ''),
+                request.user, form.cleaned_data.get('hours_worked'),
+            )
+        elif action == 'add_helper':
+            if not assignment_changeable(task, technician=technician):
+                return locked_message
+            if not active_lead:
+                return Response({'detail': 'Set a lead first.'}, status=status.HTTP_400_BAD_REQUEST)
+            form = AddHelperForm(request.data, technicians=selectable)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            TaskAssignment.objects.create(
+                task=task, technician=form.cleaned_data['technician'], role=TaskAssignment.Role.HELPER,
+                assigned_at=timezone.now(), is_active=True,
+            )
+            push_assigned(form.cleaned_data['technician'], task, is_lead=False)
+        elif action == 'remove_helper':
+            helper = get_object_or_404(
+                TaskAssignment, pk=request.data.get('assignment_id'), task=task,
+                role=TaskAssignment.Role.HELPER, is_active=True,
+            )
+            if not assignment_changeable(task, helper, technician):
+                return locked_message
+            form = RemoveAssignmentForm(request.data)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            helper.is_active = False
+            helper.ended_at = timezone.now()
+            helper.end_reason = form.cleaned_data['end_reason']
+            helper.save()
+            push_removed(helper.technician, task)
+        else:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
+class TeamTaskApproveView(APIView):
+    """Approves the filed report one step: the responsible supervisor (or
+    a manager) moves it from supervisor review to awaiting the manager; a
+    manager/admin approves and closes. Same helpers as the web buttons.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        technician = request.user.technician
+        if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
+            if not can_supervisor_approve(technician, task):
+                raise PermissionDenied
+            approve_report_as_supervisor(task, request.user)
+        elif task.status == Task.Status.COMPLETED:
+            require_manager(request)
+            approve_report_as_manager(task, request.user)
+        else:
+            return Response(
+                {'detail': 'This task has no report awaiting approval.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        return _team_task_response(request, task)
+
+
+class PushDeviceView(APIView):
+    """The app registering this phone for push notifications after sign-in
+    (POST {"token": "ExponentPushToken[...]"}), and dropping it on sign-out
+    (DELETE with the same body). A phone signing in as someone else moves
+    to them.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request):
+        token = str(request.data.get('token', '')).strip()
+        if not token.startswith(('ExponentPushToken[', 'ExpoPushToken[')):
+            return Response({'detail': 'Not an Expo push token.'}, status=status.HTTP_400_BAD_REQUEST)
+        PushDevice.objects.update_or_create(
+            token=token, defaults={'technician': request.user.technician, 'created_at': timezone.now()},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def delete(self, request):
+        PushDevice.objects.filter(
+            token=str(request.data.get('token', '')), technician=request.user.technician,
+        ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PartListView(APIView):
+    """The active parts catalogue, for the report screen's picker."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        return Response(list(Part.objects.filter(is_active=True).values('code', 'description')))
+
+
 class TicketListView(APIView):
     """New customer tickets in the requester's active country — supervisor/
-    manager/admin only, same permission as the web ticket list.
+    manager/admin only, same permission as the web ticket list. With ?q=,
+    a search across every status instead (tasks.views.search_tickets).
     """
 
     permission_classes = [require_role_permission(RolePermission.Permission.MANAGE_TICKETS)]
@@ -211,6 +603,12 @@ class TicketListView(APIView):
     def get(self, request):
         active_country = get_active_country(request)
         tickets = CustomerTicket.objects.filter(
-            country=active_country, status=CustomerTicket.Status.NEW,
-        ).select_related('country').order_by('-submitted_at')
+            country=active_country, kind=CustomerTicket.Kind.CUSTOMER,
+        ).select_related('country')
+        text = request.query_params.get('q', '').strip()
+        if text:
+            # A search looks at every ticket, not just new ones.
+            tickets = search_tickets(tickets, text).order_by('-submitted_at')[:SEARCH_RESULT_LIMIT]
+        else:
+            tickets = tickets.filter(status=CustomerTicket.Status.NEW).order_by('-submitted_at')
         return Response(CustomerTicketSerializer(tickets, many=True).data)

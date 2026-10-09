@@ -1,4 +1,5 @@
 from django.core.exceptions import PermissionDenied
+from django.shortcuts import get_object_or_404
 
 from reference.models import Country
 
@@ -59,6 +60,20 @@ def require_manager(request):
     if technician is None or not technician.is_manager_tier:
         raise PermissionDenied
     return technician
+
+
+def scoped_or_404(queryset, pk, requesting_technician, active_country, country_lookup):
+    """A manager can open any task, technician, or customer regardless of
+    their own active country — the point of the all_tasks/all_technicians/
+    all_customers boards is reaching across every country, so the detail/
+    edit screens those link into can't stay locked to whichever country
+    happens to be active. Every other role stays scoped to it, same as
+    before. Shared across apps (tasks, customers) rather than duplicated,
+    since the rule is identical regardless of what's being looked up.
+    """
+    if not requesting_technician.is_manager_tier:
+        queryset = queryset.filter(**{country_lookup: active_country})
+    return get_object_or_404(queryset, pk=pk)
 
 
 def require_admin(request):

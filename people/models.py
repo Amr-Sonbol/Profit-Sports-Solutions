@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from django.db import models
@@ -25,11 +27,28 @@ ALLOWED_SKILL_EVIDENCE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'
 MAX_SKILL_EVIDENCE_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
+# `MEDIA_URL` is served with no per-file login check (see
+# tasks.models for the same reasoning), so a flat `<folder>/<original
+# filename>` path is as good as public — anyone who gets or guesses the
+# URL can view it with no login at all. Every upload gets its own random
+# directory instead; the original filename stays underneath it purely
+# so a human looking at the path can still tell what it is.
+def _technician_photo_path(instance, filename):
+    return f'technician_photos/{secrets.token_hex(16)}/{filename}'
+
+
+def _skill_evidence_path(instance, filename):
+    return f'skill_evidence/{secrets.token_hex(16)}/{filename}'
+
+
 class Technician(models.Model):
     class Role(models.TextChoices):
         TECHNICIAN = 'technician', _('Technician')
         SUPERVISOR = 'supervisor', _('Supervisor')
         MANAGER = 'manager', _('Manager')
+        SUPPORT_MANAGER = 'support_manager', _('Technical Support Manager')
+        WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
+        OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
         ADMIN = 'admin', _('Admin')
 
     class EmploymentType(models.TextChoices):
@@ -50,7 +69,14 @@ class Technician(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='technician',
         verbose_name=_('user'),
-        help_text=_('for Microsoft SSO later'),
+        help_text=_('a manager creates this from the technician\'s Edit screen, same as a customer\'s portal login'),
+    )
+    must_change_password = models.BooleanField(
+        _('must change password'), default=False,
+        help_text=_(
+            'set when a manager creates the login with a temporary system-generated password — '
+            'they must set their own the first time they sign in, before reaching anything else',
+        ),
     )
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='technicians',
@@ -85,7 +111,7 @@ class Technician(models.Model):
         _('unavailable reason'), max_length=20, choices=UnavailableReason.choices, blank=True,
     )
     photo = models.FileField(
-        _('photo'), upload_to='technician_photos/', null=True, blank=True,
+        _('photo'), upload_to=_technician_photo_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
         help_text=_('shown on the roster, boards, and task detail'),
     )
@@ -155,8 +181,12 @@ class RolePermission(models.Model):
         VIEW_TECHNICIANS = 'view_technicians', _('View technician roster and boards')
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
-        MANAGE_TECHNICIANS = 'manage_technicians', _('Add technicians and edit their profile photos')
-        MANAGE_CUSTOMERS = 'manage_customers', _('Add and view customers and sites')
+        MANAGE_TECHNICIANS = 'manage_technicians', _("Edit technicians' details and profile photos")
+        MANAGE_CUSTOMERS = 'manage_customers', _('View and edit customers and sites')
+        VIEW_MACHINES = 'view_machines', _('View machines and their task/ticket history')
+        DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
+        MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')
+        OPEN_TICKETS = 'open_tickets', _('Open tickets for a customer (phone, WhatsApp, email)')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)
@@ -201,6 +231,36 @@ class NotificationSettings(models.Model):
         return str(_('Notification settings'))
 
 
+class TechnicianTrip(models.Model):
+    """A technician working in another country for set dates (docs:
+    technician_trip) — assignable there during the trip, while their own
+    country, roster, figures and hours stay at home.
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='trips', verbose_name=_('technician'),
+    )
+    country = models.ForeignKey(
+        Country, on_delete=models.PROTECT, related_name='visiting_trips', verbose_name=_('country'),
+    )
+    start_date = models.DateField(_('start date'))
+    end_date = models.DateField(_('end date'))
+    note = models.CharField(_('note'), max_length=200, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='trips_recorded',
+        verbose_name=_('recorded by'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('trip')
+        verbose_name_plural = _('trips')
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f'{self.technician} — {self.country} ({self.start_date} to {self.end_date})'
+
+
 class TechnicianSkill(models.Model):
     """The current level snapshot. `TechnicianSkillAssessment` holds the
     full history of self-ratings and supervisor reviews behind it.
@@ -233,7 +293,7 @@ class TechnicianSkill(models.Model):
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
-        _('evidence'), upload_to='skill_evidence/', null=True, blank=True,
+        _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician actually performing this repair'),
     )
@@ -276,7 +336,7 @@ class TechnicianSkillAssessment(models.Model):
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
-        _('evidence'), upload_to='skill_evidence/', null=True, blank=True,
+        _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician actually performing this repair'),
     )
@@ -371,3 +431,22 @@ class TechnicianConductAssessment(models.Model):
             f'{self.technician.full_name} — {self.conduct_area} '
             f'({self.level}, {self.get_source_display()})'
         )
+
+
+class PushDevice(models.Model):
+    """A phone that receives push notifications for this technician
+    (docs: push_device) — registered by the mobile app after sign-in.
+    """
+
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='push_devices', verbose_name=_('technician'),
+    )
+    token = models.CharField(_('push token'), max_length=200, unique=True)
+    created_at = models.DateTimeField(_('created at'))
+
+    class Meta:
+        verbose_name = _('push device')
+        verbose_name_plural = _('push devices')
+
+    def __str__(self):
+        return f'{self.technician} — {self.token[:24]}'

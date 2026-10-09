@@ -39,6 +39,7 @@
                 <p class="field__help">{{ form.site.help_text }}</p>
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+            {% if user.technician.role == 'admin' %}
             <input type="checkbox" id="toggle-new-site" class="toggle-checkbox" hidden>
             <label for="toggle-new-site" class="add-new-toggle">{% translate "+ Add new site" %}</label>
             <fieldset class="new-item-fieldset">
@@ -76,6 +77,7 @@
                     </div>
                 </div>
             </fieldset>
+            {% endif %}
         </div>
 
         <div class="creatable-field__row">
@@ -164,6 +166,7 @@
                 <tr>
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Role" %}</th>
+                    <th>{% translate "Country" %}</th>
                     <th>{% translate "Next scheduled" %}</th>
                     <th></th>
                 </tr>
@@ -173,6 +176,7 @@
                 <tr>
                     <td>{{ person.full_name }}</td>
                     <td>{{ person.get_role_display }}</td>
+                    <td>{{ active_country.display_name }}</td>
                     <td>
                         {% if person.next_scheduled_task %}
                         <a href="{% url 'tasks:task_detail' person.next_scheduled_task.pk %}">

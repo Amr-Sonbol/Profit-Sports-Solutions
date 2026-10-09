@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Parts" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Parts" %}</h1>
+</div>
+<p class="field__help">{% translate "The list technicians pick from when they record parts on a work report. Switch a part off instead of deleting it — past reports keep their codes." %}</p>
+
+<div class="section">
+    <h2>{% translate "Add a part" %}</h2>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        {% for field in add_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Add part" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
+    <h2>{% translate "Upload a list" %}</h2>
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="import">
+        {% for field in import_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            <p class="field__help">{{ field.help_text }}</p>
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Upload" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
+    <form method="get" class="filters">
+        <div class="filters__search">
+            <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by code or description' %}">
+        </div>
+        <button type="submit" class="button button--secondary">{% translate "Search" %}</button>
+    </form>
+    {% if page_obj.object_list %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Code" %}</th>
+                    <th>{% translate "Description" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for part in page_obj %}
+                <tr>
+                    <td><strong>{{ part.code }}</strong></td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="edit_description">
+                            <input type="hidden" name="part_id" value="{{ part.pk }}">
+                            <input type="text" name="description" value="{{ part.description }}" maxlength="200"
+                                   aria-label="{% translate 'Description' %}">
+                            <button type="submit" class="button button--secondary">{% translate "Save" %}</button>
+                        </form>
+                    </td>
+                    <td>
+                        {% if part.is_active %}
+                        <span class="badge badge--status-completed">{% translate "Active" %}</span>
+                        {% else %}
+                        <span class="badge badge--muted">{% translate "Switched off" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="toggle_active">
+                            <input type="hidden" name="part_id" value="{{ part.pk }}">
+                            <button type="submit" class="button button--secondary">
+                                {% if part.is_active %}{% translate "Switch off" %}{% else %}{% translate "Switch on" %}{% endif %}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <nav class="week-nav">
+        {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}{% if search %}&q={{ search|urlencode }}{% endif %}" class="back-link">{% translate "Previous" %}</a>{% endif %}
+        <span class="muted">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}{% if search %}&q={{ search|urlencode }}{% endif %}" class="forward-link">{% translate "Next" %}</a>{% endif %}
+    </nav>
+    {% endif %}
+    {% elif search %}
+    <p class="empty-state">{% translate "No parts match that search." %}</p>
+    {% else %}
+    <p class="empty-state">{% translate "No parts yet — add them above or upload a list." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

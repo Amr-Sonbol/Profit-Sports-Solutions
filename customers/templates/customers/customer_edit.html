@@ -55,7 +55,7 @@
     </form>
     {% else %}
     <p class="field__help">
-        {% translate "No portal login yet — create one so this customer can track their own tickets and service history." %}
+        {% translate "No portal login yet — create one so this customer can track their own tickets and service history. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password and confirm their contact details the first time they sign in." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}
@@ -71,7 +71,38 @@
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button type="submit" class="button button--secondary">{% translate "Create login" %}</button>
+        <button type="submit" class="button button--secondary">{% translate "Create login and email it" %}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if is_manager %}
+<div class="section">
+    {% if customer.is_active %}
+    <h2>{% translate "Deactivate" %}</h2>
+    <p class="field__help">
+        {% translate "Removes them from the customer list and blocks their login (if they have one) — for a customer whose contract ended or business closed." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="deactivate">
+        {% for field in deactivate_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button button--danger">{% translate "Deactivate customer" %}</button>
+    </form>
+    {% else %}
+    <h2>{% translate "Reactivate" %}</h2>
+    <p class="field__help">{% translate "Deactivated" %}{% if customer.deactivation_reason %}: {{ customer.deactivation_reason }}{% endif %}</p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reactivate">
+        <button type="submit" class="button button--secondary">{% translate "Reactivate customer" %}</button>
     </form>
     {% endif %}
 </div>

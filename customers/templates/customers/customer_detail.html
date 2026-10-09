@@ -20,7 +20,7 @@
         </div>
         <div>
             <dt>{% translate "Country" %}</dt>
-            <dd>{{ customer.country.name }}</dd>
+            <dd>{{ customer.country.display_name }}</dd>
         </div>
         <div>
             <dt>{% translate "Customer code" %}</dt>
@@ -86,6 +86,7 @@
     {% endif %}
 </div>
 
+{% if is_admin %}
 <div class="section">
     <h2>{% translate "Add a site" %}</h2>
     <form method="post" novalidate>
@@ -104,4 +105,5 @@
         <button type="submit" class="button">{% translate "Add site" %}</button>
     </form>
 </div>
+{% endif %}
 {% endblock %}

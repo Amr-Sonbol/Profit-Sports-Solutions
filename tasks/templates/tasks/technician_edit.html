@@ -30,10 +30,36 @@
     </form>
 </div>
 
+{% if login_form %}
+<div class="section">
+    <h2>{% translate "Login" %}</h2>
+    <p class="field__help">
+        {% translate "No login yet — create one so they can sign in. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password the first time they sign in." %}
+    </p>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_login">
+        {% if login_form.non_field_errors %}
+            <p class="flash flash--error">{{ login_form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in login_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Create login and email it" %}</button>
+    </form>
+</div>
+{% endif %}
+
 {% if password_form %}
 <div class="section">
-    <h2>{% translate "Reset password" %}</h2>
+    <h2>{% translate "Login" %}</h2>
     <p class="field__help">
+        {% blocktranslate with username=technician.user.username %}Signs in as “{{ username }}”.{% endblocktranslate %}
         {% translate "Sets a new password for their login directly — they don't need to know the old one." %}
     </p>
     <form method="post" novalidate>
@@ -54,7 +80,61 @@
 </div>
 {% endif %}
 
+{% if tasks_to_reassign %}
+<div class="section">
+    <h2>{% translate "Open tasks to reassign" %}</h2>
+    <p class="field__help">{% translate "They've been deactivated but are still on these tasks. Open each one and pick someone else — as lead, choose the reason “Left the company”." %}</p>
+    <ul class="plain-list">
+        {% for task in tasks_to_reassign %}
+        <li>
+            <strong>{{ task.task_number }}</strong> — {{ task.site.customer.name }}, {{ task.site.name }}
+            <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+            <a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 {% if is_manager %}
+<div class="section">
+    <h2>{% translate "Trips" %}</h2>
+    <p class="field__help">{% translate "Working in another country for set dates. During a trip they can be assigned tasks there; their own country, hours and figures stay here." %}</p>
+    {% if trips %}
+    <ul class="plain-list">
+        {% for trip in trips %}
+        <li>
+            <strong>{{ trip.country.display_name }}</strong>,
+            {{ trip.start_date|date:"SHORT_DATE_FORMAT" }} – {{ trip.end_date|date:"SHORT_DATE_FORMAT" }}
+            {% if trip.note %}<span class="muted">— {{ trip.note }}</span>{% endif %}
+            {% if trip.end_date >= today %}
+            <form method="post" class="inline-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel_trip">
+                <input type="hidden" name="trip_id" value="{{ trip.pk }}">
+                <button type="submit" class="button button--secondary">{% translate "Cancel trip" %}</button>
+            </form>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_trip">
+        {% for field in trip_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Add trip" %}</button>
+        </div>
+    </form>
+</div>
+
 <div class="section">
     <h2>{% translate "Deactivate" %}</h2>
     <p class="field__help">

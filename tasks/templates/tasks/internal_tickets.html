@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Internal tickets" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Internal tickets" %}</h1>
+    {% if can_open %}
+    <a href="{% url 'tasks:ticket_open' %}?kind=stock" class="button">{% translate "New ticket" %}</a>
+    {% endif %}
+</div>
+
+<nav class="tabs">
+    <a href="?status=open" class="{% if status == 'open' %}is-active{% endif %}">{% translate "Open" %}</a>
+    <a href="?status=closed" class="{% if status == 'closed' %}is-active{% endif %}">{% translate "Closed" %}</a>
+    <a href="?status=all" class="{% if status == 'all' %}is-active{% endif %}">{% translate "All" %}</a>
+</nav>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>{% translate "Ticket" %}</th>
+                <th>{% translate "Type" %}</th>
+                <th>{% translate "Subject" %}</th>
+                <th>{% translate "For" %}</th>
+                <th>{% translate "Opened by" %}</th>
+                <th>{% translate "Opened" %}</th>
+                <th>{% translate "Status" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticket in tickets %}
+            <tr>
+                <td><a href="{% url 'tasks:internal_ticket' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
+                <td>{{ ticket.get_kind_display }}</td>
+                <td>{{ ticket.subject }}{% if ticket.vendor_name %} <span class="muted">— {{ ticket.vendor_name }}</span>{% endif %}</td>
+                <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
+                <td>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</td>
+                <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                <td>
+                    {% if ticket.status == 'new' %}<span class="badge badge--status-new">{% translate "Open" %}</span>
+                    {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="empty-state">{% translate "No internal tickets here." %}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -8,9 +8,12 @@
     <h1>{% translate "Customers" %}</h1>
     <div class="button-row">
         {% if user.technician.is_manager_tier %}
-        <a href="{% url 'customers:customer_import' %}" class="button button--secondary">{% translate "Import customers" %}</a>
+        <a href="{% url 'customers:all_customers' %}" class="button button--secondary">{% translate "All customers" %}</a>
         {% endif %}
+        {% if user.technician.role == 'admin' %}
+        <a href="{% url 'customers:customer_import' %}" class="button button--secondary">{% translate "Import customers" %}</a>
         <a href="{% url 'customers:customer_create' %}" class="button">{% translate "Add customer" %}</a>
+        {% endif %}
     </div>
 </div>
 
@@ -18,8 +21,19 @@
     <div class="filters__search">
         <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name' %}">
     </div>
+    {% if show_inactive %}
+    <input type="hidden" name="status" value="active">
+    <button type="submit" class="button button--secondary">{% translate "Search" %}</button>
+    {% else %}
     <button type="submit" class="button">{% translate "Search" %}</button>
+    {% endif %}
 </form>
+
+{% if show_inactive %}
+<a href="?{% if search %}q={{ search }}{% endif %}">{% translate "← Back to active customers" %}</a>
+{% else %}
+<a href="?status=inactive{% if search %}&q={{ search }}{% endif %}">{% translate "Show deactivated customers" %}</a>
+{% endif %}
 
 <div class="section">
     {% if customers %}
@@ -49,6 +63,9 @@
                     </td>
                     <td>
                         <a href="{% url 'customers:customer_detail' customer.pk %}">{% translate "View sites" %}</a>
+                        {% if user.technician.is_manager_tier %}
+                        <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Manage" %}</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -57,6 +74,8 @@
     </div>
     {% elif search %}
     <p class="empty-state">{% translate "No customers match that search." %}</p>
+    {% elif show_inactive %}
+    <p class="empty-state">{% translate "No deactivated customers in your country." %}</p>
     {% else %}
     <p class="empty-state">{% translate "No customers in your country yet." %}</p>
     {% endif %}

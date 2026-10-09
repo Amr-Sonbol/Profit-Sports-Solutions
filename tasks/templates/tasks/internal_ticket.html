@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ ticket.ticket_number }} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tickets" %}</a>
+        <h1><span class="task-number">{{ ticket.ticket_number }}</span></h1>
+    </div>
+    <div class="badge-row">
+        <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
+        {% if is_open %}<span class="badge badge--status-new">{% translate "Open" %}</span>
+        {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
+    </div>
+</div>
+
+<div class="section">
+    <h2>{{ ticket.subject }}</h2>
+    <dl class="detail-grid">
+        {% if ticket.vendor_name %}
+        <div><dt>{% translate "Vendor" %}</dt><dd>{{ ticket.vendor_name }}</dd></div>
+        {% endif %}
+        <div><dt>{% translate "For" %}</dt><dd>{{ ticket.assigned_to.full_name|default:"—" }}</dd></div>
+        <div><dt>{% translate "Opened by" %}</dt><dd>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</dd></div>
+        <div><dt>{% translate "Opened" %}</dt><dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd></div>
+    </dl>
+    <div class="description">
+        <p>{{ ticket.description|linebreaksbr }}</p>
+    </div>
+    {% if attachments %}
+    <ul class="plain-list">
+        {% for attachment in attachments %}
+        <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% blocktranslate with number=forloop.counter %}Attachment {{ number }}{% endblocktranslate %}</a></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if not is_open %}
+    <div class="description">
+        <dt>{% translate "Result" %}</dt>
+        <p>{{ ticket.close_reason }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="section">
+    <h2>{% translate "Notes" %}</h2>
+    {% if notes %}
+    <ul class="plain-list">
+        {% for note in notes %}
+        <li>
+            <strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>
+            <span class="muted">{{ note.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            <p class="timeline__note">{{ note.message|linebreaksbr }}</p>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No notes yet." %}</p>
+    {% endif %}
+
+    {% if is_open %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_note">
+        <div class="field {% if note_form.message.errors %}field--error{% endif %}">
+            <label for="{{ note_form.message.id_for_label }}">{{ note_form.message.label }}</label>
+            {{ note_form.message }}
+            {% for error in note_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Add note" %}</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+{% if is_open %}
+<div class="section">
+    <h2>{% translate "Hand it to someone else" %}</h2>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reassign">
+        <div class="field {% if reassign_form.assigned_to.errors %}field--error{% endif %}">
+            <label for="{{ reassign_form.assigned_to.id_for_label }}">{{ reassign_form.assigned_to.label }}</label>
+            {{ reassign_form.assigned_to }}
+            {% for error in reassign_form.assigned_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Hand over" %}</button>
+        </div>
+    </form>
+</div>
+
+<div class="section">
+    <h2>{% translate "Close with result" %}</h2>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="close">
+        <div class="field {% if close_form.close_reason.errors %}field--error{% endif %}">
+            <label for="{{ close_form.close_reason.id_for_label }}">{% translate "Result" %}</label>
+            {{ close_form.close_reason }}
+            <p class="field__help">{% translate "What happened — stock ordered, vendor replied, sorted out, etc." %}</p>
+            {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Close ticket" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

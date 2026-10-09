@@ -1,7 +1,53 @@
 from django import forms
+from django.contrib.auth import get_user_model, password_validation
 from django.utils.translation import gettext_lazy as _
 
+from tasks.location import parse_coordinates
+
 from .models import Customer, Site
+
+
+class CreateLoginForm(forms.Form):
+    """Just an email — it becomes both the login username and the address
+    the temporary password is emailed to (views.send_customer_login_email),
+    one thing for the customer to remember instead of a separate invented
+    username. The password itself is system-generated
+    (views._generate_temporary_password); the customer sets their own
+    real one the first time they sign in.
+    """
+    email = forms.EmailField(label=_('Email'))
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        if get_user_model().objects.filter(username__iexact=email).exists():
+            raise forms.ValidationError(_('A login with that email already exists.'))
+        return email
+
+
+class CustomerFirstLoginForm(forms.Form):
+    """Shown once, the first time a customer signs in on a temporary
+    password — they set their own password and confirm the contact
+    details staff may not have had when the account was created (a bulk
+    import, say). Prefilled with whatever's already on file.
+    """
+    contact_name = forms.CharField(max_length=150, label=_('Your name'))
+    contact_phone = forms.CharField(max_length=30, label=_('Phone number'))
+    contact_email = forms.EmailField(required=False, label=_('Email'))
+    new_password1 = forms.CharField(widget=forms.PasswordInput, label=_('New password'))
+    new_password2 = forms.CharField(widget=forms.PasswordInput, label=_('Confirm new password'))
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_new_password2(self):
+        password1 = self.cleaned_data.get('new_password1')
+        password2 = self.cleaned_data.get('new_password2')
+        if password1 and password2 and password1 != password2:
+            raise forms.ValidationError(_("The two password fields didn't match."))
+        if password1:
+            password_validation.validate_password(password1, self.user)
+        return password2
 
 
 class CustomerCreateForm(forms.ModelForm):
@@ -29,6 +75,14 @@ class CustomerEditForm(forms.ModelForm):
         widgets = {
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
         }
+
+
+class DeactivateCustomerForm(forms.Form):
+    """Permanent, unlike toggling one site inactive — contract ended,
+    business closed, etc. Free text rather than fixed choices, same as
+    DeactivateTechnicianForm — a one-off note, not reported on.
+    """
+    reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
 
 
 class SiteCreateForm(forms.ModelForm):
@@ -64,6 +118,14 @@ class SiteEditForm(forms.ModelForm):
     only needs to live in one place.
     """
 
+    # Where the site is on the map, which technicians' taps are checked
+    # against. Coordinates or a full Google Maps link; empty clears it.
+    map_location = forms.CharField(
+        required=False, label=_('Map location'),
+        help_text=_('Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. '
+                    'Left empty, the first technician to tap “Arrived” here sets it.'),
+    )
+
     class Meta:
         model = Site
         fields = ['name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes']
@@ -72,6 +134,15 @@ class SiteEditForm(forms.ModelForm):
             'access_notes': forms.Textarea(attrs={'rows': 2}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.latitude is not None:
+            self.fields['map_location'].initial = f'{self.instance.latitude}, {self.instance.longitude}'
+            if self.instance.location_source == Site.LocationSource.ARRIVAL:
+                self.fields['map_location'].help_text = _(
+                    'Set by the first technician to arrive — check it, and correct it if it’s off.',
+                )
+
     def clean_name(self):
         name = self.cleaned_data['name']
         if Site.objects.filter(
@@ -79,6 +150,32 @@ class SiteEditForm(forms.ModelForm):
         ).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError(_('This customer already has a site with that name.'))
         return name
+
+    def clean_map_location(self):
+        text = self.cleaned_data['map_location'].strip()
+        if not text:
+            return None
+        coordinates = parse_coordinates(text)
+        if coordinates is None:
+            raise forms.ValidationError(_(
+                'Couldn’t find coordinates in that. Paste them as “latitude, longitude”, or the full '
+                'Google Maps link (not a short maps.app.goo.gl one).',
+            ))
+        return coordinates
+
+    def save(self, commit=True):
+        site = super().save(commit=False)
+        coordinates = self.cleaned_data.get('map_location')
+        unchanged = coordinates == (site.latitude, site.longitude)
+        if coordinates is None:
+            site.latitude = site.longitude = None
+            site.location_source = ''
+        elif not unchanged:
+            site.latitude, site.longitude = coordinates
+            site.location_source = Site.LocationSource.OFFICE
+        if commit:
+            site.save()
+        return site
 
 
 class CustomerImportForm(forms.Form):

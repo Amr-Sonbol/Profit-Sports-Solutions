@@ -73,6 +73,9 @@
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>
+                    {% if ticket.is_escalated %}
+                    <span class="badge badge--status-blocked">{% translate "Escalated" %}</span>
+                    {% endif %}
                     {% if ticket.status == 'new' %}
                     <span class="badge badge--status-new">{% translate "New" %}</span>
                     {% elif ticket.status == 'converted' %}

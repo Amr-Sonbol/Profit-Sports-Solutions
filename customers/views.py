@@ -2,24 +2,31 @@ import csv
 import io
 
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import get_user_model, login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
-from people.models import RolePermission
-from people.permissions import get_active_country, require_manager, require_permission
+from people.models import RolePermission, Technician
+from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
 from tasks.forms import CustomerPortalTicketForm
-from tasks.models import CustomerTicketAttachment, Task
-from tasks.views import save_new_ticket
+from tasks.models import CustomerTicketAttachment, Task, TicketNotification
+from tasks.views import (
+    save_new_ticket, send_customer_login_email, send_new_ticket_email_to_staff,
+    send_ticket_confirmation_to_customer,
+)
 
-from .forms import CustomerCreateForm, CustomerEditForm, CustomerImportForm, SiteCreateForm, SiteEditForm
+from .forms import (
+    CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm, CustomerImportForm,
+    DeactivateCustomerForm, SiteCreateForm, SiteEditForm,
+)
 from .models import Customer, Site
 
 CUSTOMER_IMPORT_REQUIRED_COLUMNS = ['customer_name', 'site_name', 'site_address']
@@ -27,6 +34,13 @@ CUSTOMER_IMPORT_COLUMNS = CUSTOMER_IMPORT_REQUIRED_COLUMNS + [
     'segment', 'customer_contact_name', 'customer_contact_phone', 'customer_contact_email',
     'site_contact_name', 'site_contact_phone', 'site_contact_email', 'access_notes',
 ]
+
+# Avoids characters easy to mis-type or mis-read out loud/over chat: 0/O, 1/l/I.
+TEMPORARY_PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+
+def _generate_temporary_password():
+    return get_random_string(12, allowed_chars=TEMPORARY_PASSWORD_ALPHABET)
 
 
 @login_required
@@ -36,17 +50,45 @@ def customer_list(request):
     """
     require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
 
+    show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
-    customers = Customer.objects.filter(country=get_active_country(request)).prefetch_related('sites')
+    customers = Customer.objects.filter(
+        is_active=not show_inactive, country=get_active_country(request),
+    ).prefetch_related('sites')
     if search:
         customers = customers.filter(name__icontains=search)
 
-    return render(request, 'customers/customer_list.html', {'customers': customers, 'search': search})
+    return render(request, 'customers/customer_list.html', {
+        'customers': customers, 'search': search, 'show_inactive': show_inactive,
+    })
+
+
+@login_required
+def all_customers(request):
+    """Every customer in every country — a manager's combined roster, same
+    fixed floor as all_tasks/all_technicians. Reaching one from here opens
+    the same customer_detail/edit screens, which allow manager-tier
+    cross-country access for exactly this reason.
+    """
+    require_manager(request)
+
+    search = request.GET.get('q', '').strip()
+    customers = Customer.objects.filter(is_active=True).select_related('country').prefetch_related('sites')
+    if search:
+        customers = customers.filter(name__icontains=search)
+
+    return render(request, 'customers/all_customers.html', {'customers': customers, 'search': search})
 
 
 @login_required
 def customer_create(request):
-    require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    """Admin-only — same reasoning as tasks.views.technician_create:
+    creating the record is the one place a country gets assigned to it,
+    and letting manage_customers alone reach this (a permission the
+    supervisor role has by default) put customer creation in more hands
+    than intended.
+    """
+    require_admin(request)
 
     if request.method == 'POST':
         form = CustomerCreateForm(request.POST)
@@ -64,13 +106,17 @@ def customer_create(request):
 
 @login_required
 def customer_detail(request, pk):
-    """The customer's sites, and a way to add another one — the same
-    country scoping used everywhere else a supervisor looks at one record.
+    """The customer's sites, and — admin-only, same reasoning as
+    customer_create — a way to add another one. A manager or admin
+    reaches any customer regardless of active country (the point of
+    all_customers); everyone else stays scoped to it, as before.
     """
-    require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
-    customer = get_object_or_404(Customer, pk=pk, country=get_active_country(request))
+    requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    is_admin = requesting_technician.role == Technician.Role.ADMIN
+    customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
-    if request.method == 'POST':
+    form = SiteCreateForm(customer=customer) if is_admin else None
+    if request.method == 'POST' and is_admin:
         form = SiteCreateForm(request.POST, customer=customer)
         if form.is_valid():
             site = form.save(commit=False)
@@ -78,33 +124,38 @@ def customer_detail(request, pk):
             site.save()
             messages.success(request, _('Site added.'))
             return redirect('customers:customer_detail', pk=customer.pk)
-    else:
-        form = SiteCreateForm(customer=customer)
 
-    context = {'customer': customer, 'sites': customer.sites.all(), 'form': form}
+    context = {'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin}
     return render(request, 'customers/customer_detail.html', context)
 
 
 @login_required
 def customer_edit(request, pk):
+    """Everything about an existing customer in one place — their own
+    details, their portal login (create it, reset its password), and
+    deactivating them. A manager or admin reaches any customer regardless
+    of active country, same reasoning as customer_detail.
+    """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
     is_manager = requesting_technician.is_manager_tier
-    customer = get_object_or_404(Customer, pk=pk, country=get_active_country(request))
+    customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
     form = CustomerEditForm(instance=customer)
-    login_form = UserCreationForm() if is_manager and customer.user_id is None else None
+    login_form = CreateLoginForm() if is_manager and customer.user_id is None else None
     password_form = SetPasswordForm(user=customer.user) if is_manager and customer.user_id else None
+    deactivate_form = DeactivateCustomerForm()
 
     if request.method == 'POST' and request.POST.get('action') == 'create_login' and login_form is not None:
-        login_form = UserCreationForm(request.POST)
+        login_form = CreateLoginForm(request.POST)
         if login_form.is_valid():
-            user = login_form.save()
-            if customer.contact_email:
-                user.email = customer.contact_email
-                user.save(update_fields=['email'])
+            email = login_form.cleaned_data['email']
+            password = _generate_temporary_password()
+            user = get_user_model().objects.create_user(username=email, email=email, password=password)
             customer.user = user
-            customer.save(update_fields=['user'])
-            messages.success(request, _('Login created.'))
+            customer.must_change_password = True
+            customer.save(update_fields=['user', 'must_change_password'])
+            send_customer_login_email(request, customer, password)
+            messages.success(request, _('Login created and emailed to %(email)s.') % {'email': email})
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
@@ -114,16 +165,34 @@ def customer_edit(request, pk):
             messages.success(request, _('Password reset.'))
             return redirect('customers:customer_edit', pk=customer.pk)
 
+    elif request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
+        deactivate_form = DeactivateCustomerForm(request.POST)
+        if deactivate_form.is_valid():
+            customer.set_active(False, reason=deactivate_form.cleaned_data['reason'])
+            messages.success(request, _('Customer deactivated.'))
+            return redirect('customers:customer_list')
+
+    elif request.method == 'POST' and request.POST.get('action') == 'reactivate' and is_manager:
+        customer.set_active(True)
+        messages.success(request, _('Customer reactivated.'))
+        return redirect('customers:customer_edit', pk=customer.pk)
+
     elif request.method == 'POST':
         form = CustomerEditForm(request.POST, instance=customer)
         if form.is_valid():
             form.save()
+            # The login email stays in lockstep with the business contact
+            # email whenever there is one — one address to keep current,
+            # not two that can quietly drift apart.
+            if customer.user_id and customer.contact_email and customer.user.email != customer.contact_email:
+                customer.user.email = customer.contact_email
+                customer.user.save(update_fields=['email'])
             messages.success(request, _('Customer updated.'))
             return redirect('customers:customer_detail', pk=customer.pk)
 
     context = {
         'customer': customer, 'form': form, 'login_form': login_form,
-        'password_form': password_form, 'is_manager': is_manager,
+        'password_form': password_form, 'deactivate_form': deactivate_form, 'is_manager': is_manager,
     }
     return render(request, 'customers/customer_edit.html', context)
 
@@ -234,10 +303,10 @@ def _import_customers_csv(csv_file, country):
 def customer_import(request):
     """Bulk-add customers and their sites from a CSV export — for
     getting an existing gym list into the app at once instead of
-    one-by-one. Manager-only, same fixed floor as Skills/Countries/
-    Roles: a bad file could create a lot of rows fast.
+    one-by-one. Admin-only, same as customer_create — a bad file could
+    create a lot of rows fast, through the same door.
     """
-    require_manager(request)
+    require_admin(request)
 
     results = None
     if request.method == 'POST':
@@ -283,6 +352,16 @@ def require_customer(request):
     return customer
 
 
+def _portal_landing(user):
+    """Where a customer login lands right after signing in — the one-time
+    setup screen if they're still on a temporary password, their account
+    home otherwise.
+    """
+    if user.customer.must_change_password:
+        return redirect('customers:portal_first_login')
+    return redirect('customers:portal_home')
+
+
 def portal_login(request):
     """A customer's own login page — same underlying auth as the staff
     one (django.contrib.auth), just branded for them and rejecting
@@ -290,7 +369,7 @@ def portal_login(request):
     here by mistake.
     """
     if request.user.is_authenticated:
-        return redirect('customers:portal_home' if hasattr(request.user, 'customer') else 'home')
+        return _portal_landing(request.user) if hasattr(request.user, 'customer') else redirect('home')
 
     next_url = request.POST.get('next') or request.GET.get('next') or ''
 
@@ -299,6 +378,8 @@ def portal_login(request):
         user = form.get_user()
         if hasattr(user, 'customer'):
             login(request, user)
+            if user.customer.must_change_password:
+                return redirect('customers:portal_first_login')
             if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 return redirect(next_url)
             return redirect('customers:portal_home')
@@ -308,12 +389,50 @@ def portal_login(request):
 
 
 @login_required(login_url='customers:portal_login')
+def portal_first_login(request):
+    """A one-time stop between signing in on a temporary password and
+    reaching the rest of the portal — set a real password and confirm
+    contact details staff may not have had (a bulk import, say). Once
+    submitted, must_change_password clears and every later sign-in goes
+    straight through, same as it always did.
+    """
+    customer = require_customer(request)
+    if not customer.must_change_password:
+        return redirect('customers:portal_home')
+
+    if request.method == 'POST':
+        form = CustomerFirstLoginForm(request.POST, user=request.user)
+        if form.is_valid():
+            customer.contact_name = form.cleaned_data['contact_name']
+            customer.contact_phone = form.cleaned_data['contact_phone']
+            customer.contact_email = form.cleaned_data['contact_email']
+            customer.must_change_password = False
+            customer.save(update_fields=[
+                'contact_name', 'contact_phone', 'contact_email', 'must_change_password',
+            ])
+            request.user.set_password(form.cleaned_data['new_password1'])
+            request.user.save(update_fields=['password'])
+            update_session_auth_hash(request, request.user)
+            messages.success(request, _('All set — welcome!'))
+            return redirect('customers:portal_home')
+    else:
+        form = CustomerFirstLoginForm(user=request.user, initial={
+            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            'contact_email': customer.contact_email,
+        })
+
+    return render(request, 'customers/portal_first_login.html', {'form': form})
+
+
+@login_required(login_url='customers:portal_login')
 def portal_home(request):
     """A logged-in customer's own tickets and service history — summary
     only (date, site, type, status). Never the internal report detail,
     technician names, or parts used that staff sees on the same task.
     """
     customer = require_customer(request)
+    if customer.must_change_password:
+        return redirect('customers:portal_first_login')
     tickets = customer.tickets.order_by('-submitted_at')
     visits = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
         '-scheduled_for', '-reported_at',
@@ -328,6 +447,8 @@ def portal_ticket_new(request):
     links the ticket to this customer immediately, no matching needed.
     """
     customer = require_customer(request)
+    if customer.must_change_password:
+        return redirect('customers:portal_first_login')
 
     if request.method == 'POST':
         form = CustomerPortalTicketForm(request.POST, request.FILES, customer=customer)
@@ -348,6 +469,11 @@ def portal_ticket_new(request):
                     CustomerTicketAttachment.objects.create(
                         ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
                     )
+                TicketNotification.objects.create(
+                    ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+                )
+            send_ticket_confirmation_to_customer(request, ticket)
+            send_new_ticket_email_to_staff(request, ticket)
             messages.success(request, _('Ticket %(number)s submitted.') % {'number': ticket.ticket_number})
             return redirect('customers:portal_home')
     else:

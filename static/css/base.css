@@ -1,11 +1,14 @@
 :root {
     color-scheme: light;
-    --color-bg: #f5f6f7;
+    /* Black and white, straight from the logo — the accent is black too.
+       Status badges keep their own colours below so they stay readable
+       at a glance. */
+    --color-bg: #f4f4f4;
     --color-surface: #ffffff;
-    --color-border: #dde1e4;
-    --color-text: #1c2126;
-    --color-muted: #667085;
-    --color-accent: #2f6feb;
+    --color-border: #dadada;
+    --color-text: #000000;
+    --color-muted: #5c5c5c;
+    --color-accent: #000000;
     --color-danger: #c0392b;
     /* Same amber already used for high-priority/in-progress badges — named
        here so the dashboard's stat tiles can reuse it as a real "needs
@@ -21,7 +24,8 @@ body {
     margin: 0;
     background: var(--color-bg);
     color: var(--color-text);
-    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    /* One body face for both scripts (loaded in base.html). */
+    font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
     /* 16px, not 15 — below that, iOS Safari zooms the whole page in when a
        technician taps into a form field, which is disorienting on a phone
        and the single most common mobile form complaint. */
@@ -46,11 +50,36 @@ a {
     color: var(--color-accent);
 }
 
+/* Page titles lean forward like the logo's italic lettering — and lean
+   the other way in Arabic, with the reading direction. Only titles lean;
+   body text, tables and forms stay upright. */
+h1 {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    transform: skewX(-10deg);
+    transform-origin: bottom;
+}
+
+html[dir="rtl"] h1 {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+    text-transform: none;
+    transform: skewX(10deg);
+}
+
 /* Everything that used to live across the header (nav links, user info)
    now lives in the off-canvas sidebar instead, so the header itself is
    just the menu button, logo, and country badge, left-aligned in a row —
    nothing left to push to the far end. */
 .site-header {
+    /* Deliberate exception to the logical-properties rule: the header
+       bar is chrome, not reading content — the logo, hamburger, badge,
+       bell, and language toggle should stay in the same physical spot
+       every time, not swap sides depending on which language is active.
+       Real prose inside it (the notification list, the nav sidebar)
+       overrides this back to the page's actual direction below. */
+    direction: ltr;
     position: relative;
     display: flex;
     flex-direction: row;
@@ -65,6 +94,11 @@ a {
 .site-header__logo {
     height: 2rem;
     width: auto;
+}
+
+/* The logo doubles as the way back to the welcome page's tiles. */
+.site-header__logo-link {
+    display: flex;
 }
 
 /* The three-dash menu button — opens/closes the nav panel below via the
@@ -93,10 +127,15 @@ a {
     border-radius: 1px;
 }
 
-/* A slide-in sidebar, not a dropdown — fixed to the block's full height,
-   off-screen (inline-start: -100%) until the checkbox is checked, then
-   slid into view. inset-inline-start (not left/right or transform) so it
-   slides in from the correct edge automatically in RTL. */
+/* A slide-in sidebar, fixed to the block's full height, off-screen until
+   the checkbox is checked, then slid into view. It hangs off the menu
+   button, which .site-header pins to a fixed physical side (see that
+   rule's comment) — so this panel opens from that same physical side
+   (left) in every language, using physical `left`/`border-right`
+   rather than inset-inline-start/border-inline-end, which would flip
+   with direction. Its contents are real navigation prose though, so
+   `direction: rtl` below restores correct Arabic text/reading order
+   for the links without affecting the panel's own position. */
 .site-header__nav {
     display: flex;
     flex-direction: column;
@@ -104,21 +143,25 @@ a {
     gap: 0.25rem;
     position: fixed;
     inset-block: 0;
-    inset-inline-start: -18rem;
+    left: -18rem;
     width: 18rem;
     max-width: 85vw;
     padding: 1rem;
     background: var(--color-surface);
-    border-inline-end: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
     color: var(--color-muted);
     overflow-y: auto;
     z-index: 30;
-    transition: inset-inline-start 0.2s ease;
+    transition: left 0.2s ease;
+}
+
+html[dir="rtl"] .site-header__nav {
+    direction: rtl;
 }
 
 .nav-toggle:checked ~ .site-header__nav {
-    inset-inline-start: 0;
+    left: 0;
 }
 
 /* Dims the rest of the page behind the open sidebar, and doubles as a
@@ -140,6 +183,104 @@ a {
 .site-header__nav a,
 .site-header__nav .link-button {
     padding-block: 0.5rem;
+}
+
+/* The notification bell — pushed to the far end of the header (opposite
+   the menu button/logo), same hidden-checkbox toggle pattern as the nav
+   sidebar, but a small anchored dropdown instead of a full-height panel. */
+.notif-bell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin-inline-start: auto;
+    padding: 0.4rem;
+    border-radius: 4px;
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.notif-bell:hover {
+    background: var(--color-bg);
+}
+
+.notif-bell__badge {
+    position: absolute;
+    inset-block-start: 0.1rem;
+    inset-inline-end: 0.1rem;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding-inline: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #d64545;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 999px;
+}
+
+.notif-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    cursor: default;
+}
+
+.notif-toggle:checked ~ .notif-overlay {
+    display: block;
+}
+
+.notif-dropdown {
+    display: none;
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-end: 1rem;
+    width: 20rem;
+    max-width: 90vw;
+    max-height: 24rem;
+    overflow-y: auto;
+    margin-block-start: 0.4rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 30;
+}
+
+.notif-toggle:checked ~ .notif-dropdown {
+    display: block;
+}
+
+/* The dropdown box itself stays anchored where the (fixed-position)
+   bell icon is — inset-inline-end above must keep resolving against
+   .site-header's forced ltr for that. Its contents are real prose
+   (ticket/task names), so they get the page's actual direction back. */
+html[dir="rtl"] .notif-dropdown > * {
+    direction: rtl;
+}
+
+.notif-dropdown h2 {
+    margin-block: 0 0.5rem;
+    font-size: 0.95rem;
+}
+
+.notif-dropdown li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding-block: 0.5rem;
+    border-block-end: 1px solid var(--color-border);
+}
+
+.notif-dropdown li:last-child {
+    border-block-end: none;
 }
 
 /* The profile row pinned to the top of the dropdown — avatar, name, and
@@ -202,7 +343,8 @@ a {
 
 .page__header h1 {
     margin: 0;
-    font-size: 1.375rem;
+    font-size: 1.75rem;
+    line-height: 1.15;
 }
 
 .flash {
@@ -217,7 +359,7 @@ a {
 }
 
 .flash--info {
-    background: #eaf0fb;
+    background: #ededed;
     color: var(--color-accent);
 }
 
@@ -234,10 +376,21 @@ a {
     flex: 1 1 16rem;
 }
 
+/* Each filter field is a compact toolbar item, not a full-width form
+   field — without a capped basis they stretch to split whatever room
+   the row has evenly, which on a wide page turns a handful of small
+   inputs into an oversized block. flex-wrap above already lets them
+   spill onto more lines on a narrow screen instead. */
+.filters .field {
+    flex: 0 1 12rem;
+    margin-block-end: 0;
+}
+
 .filters input[type="text"],
 .filters input[type="date"],
 .filters select {
     width: 100%;
+    max-width: 12rem;
     padding: 0.4rem 0.6rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
@@ -349,10 +502,73 @@ tbody tr:hover {
 .badge--status-assigned { background: #f1eafb; color: #7048c7; }
 .badge--status-accepted { background: #f1eafb; color: #7048c7; }
 .badge--status-in_progress { background: #fdf3e3; color: #b5760a; }
+.badge--status-pending_supervisor_review { background: #fdf3e3; color: #b5760a; }
 .badge--status-completed { background: #e9f7ef; color: #1e8449; }
 .badge--status-closed { background: #eef1f3; color: var(--color-muted); }
 .badge--status-blocked { background: #fdecea; color: #c0392b; }
 .badge--status-cancelled { background: #eef1f3; color: var(--color-muted); }
+
+/* Ticket conversation — each message spans the full width of the
+   thread; "mine" (the current viewer's own side, whichever role that
+   is) is marked by the name/timestamp row flipping to the far end and
+   a tinted background, not by a narrow, off-to-one-side bubble.
+   flex-start/flex-end flip automatically with dir, so this needs no
+   separate RTL handling. */
+.chat-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.chat-message {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.chat-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-block-end: 0.2rem;
+    font-size: 0.8rem;
+}
+
+.chat-message--mine .chat-meta {
+    flex-direction: row-reverse;
+}
+
+.chat-name {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.chat-bubble {
+    padding-block: 0.55rem;
+    padding-inline: 0.85rem;
+    border-radius: 0.9rem;
+    border-end-start-radius: 0.2rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+
+.chat-message--mine .chat-bubble {
+    background: #ededed;
+    border-color: #ededed;
+    border-end-start-radius: 0.9rem;
+    border-end-end-radius: 0.2rem;
+}
+
+.chat-bubble p {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
+.chat-attachment {
+    margin-block-start: 0.4rem;
+    font-size: 0.85rem;
+}
 
 .muted {
     color: var(--color-muted);
@@ -481,6 +697,72 @@ tbody tr:hover {
 .stat-tile--warning .stat-tile__value { color: var(--color-warning); }
 .stat-tile--critical .stat-tile__value { color: var(--color-danger); }
 
+/* Welcome page: one icon tile per page the signed-in person can open
+   (people.context_processors.nav_pages), centered in the middle of the
+   page under the greeting. Fixed-width tiles in a centered flex row, so
+   a short last row (or a role with only a few pages) stays centered
+   instead of hugging one side. */
+.welcome {
+    max-width: 46rem;
+    margin-inline: auto;
+    padding-block-start: 2rem;
+}
+
+.welcome__title {
+    margin-block: 0 1.5rem;
+    text-align: center;
+}
+
+.welcome-tiles {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.welcome-tile {
+    /* Two per row on a phone, up to five on a wide screen. */
+    flex: 0 0 8.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    min-height: 7.5rem;
+    padding: 1rem 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    text-align: center;
+    text-decoration: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.welcome-tile:hover {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.welcome-tile .icon {
+    color: var(--color-accent);
+}
+
+.welcome-tile__label {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    font-size: 1.15rem;
+    line-height: 1.2;
+    text-transform: uppercase;
+    transform: skewX(-10deg);
+}
+
+html[dir="rtl"] .welcome-tile__label {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+    text-transform: none;
+    transform: skewX(10deg);
+}
+
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
@@ -594,15 +876,48 @@ tbody tr:hover {
     padding: 1.5rem;
 }
 
-.lang-switch {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    margin-block-end: 0.5rem;
+/* A segmented pill toggle, not two bare text links — the current
+   language reads as selected, same pattern as any bilingual site's
+   header switcher, not an internal admin-tool control. */
+.lang-switch__group {
+    display: inline-flex;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    padding: 0.2rem;
+    background: var(--color-bg);
 }
 
-.lang-switch form {
+.lang-switch__group form {
     display: inline;
+}
+
+/* In the header, it's a plain flex child pushed to the far end — the
+   same margin-auto trick .notif-bell uses, so the two end up next to
+   each other there regardless of which one comes first in the markup. */
+.lang-switch__group--header {
+    margin-inline-start: auto;
+    background: var(--color-bg);
+    flex-shrink: 0;
+}
+
+.lang-switch__option {
+    display: inline-block;
+    border: none;
+    background: transparent;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding-block: 0.3rem;
+    padding-inline: 0.9rem;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.lang-switch__option--active {
+    background: var(--color-surface);
+    color: var(--color-accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 /* The public feedback page — same centered-card idea as .auth-card, just
@@ -925,7 +1240,8 @@ tbody tr:hover {
     background: var(--color-accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    /* Square, like the logo's letterforms. */
+    border-radius: 0;
     /* ~44px tall at the 16px base font — a comfortable tap target, not
        just a comfortable click target. */
     padding-block: 0.7rem;
@@ -938,9 +1254,58 @@ tbody tr:hover {
 .button--secondary {
     background: var(--color-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-text);
 }
 
 .button--danger {
     background: var(--color-danger);
+}
+
+/* "Customer not available to sign": the reason box shows once ticked. */
+.signature-waiver__reason {
+    display: none;
+}
+
+.signature-waiver:has(input:checked) + .signature-waiver__reason,
+.signature-waiver__reason.field--error {
+    display: block;
+}
+
+/* Work report signature pad (static/js/signature-pad.js). */
+.signature-pad {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.signature-pad__canvas {
+    inline-size: 100%;
+    block-size: 180px;
+    border: 1px solid #d0d4da;
+    border-radius: 6px;
+    background: #ffffff;
+    /* Lets a finger draw instead of scrolling the page. */
+    touch-action: none;
+}
+
+/* Bell item for a task still unscheduled after 24 working hours. */
+.notif-alarm {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+/* Work report customer sign-off (static/js/signature-pad.js): while the
+   customer signs, hide what's for staff only — hours, prices, machine
+   outcomes, the save button. */
+.report-form [data-signing-only] {
+    display: none;
+}
+
+.report-form.is-signing [data-signing-only] {
+    display: block;
+}
+
+.report-form.is-signing [data-staff-only] {
+    display: none;
 }

@@ -1,0 +1,6 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">{{ decided_by }} decided the escalation on ticket {{ ticket_number }}: <strong>{{ decision }}</strong>.</p>
+<p style="margin:0 0 16px;white-space:pre-line;">{{ note }}</p>
+{% include "tasks/email/_button.html" with url=link label="Open the ticket" %}
+{% endblock %}

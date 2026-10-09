@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -91,7 +91,7 @@
     <h2>{% translate "Status" %}</h2>
     <div class="button-row">
         {% if next_action %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ next_action }}">
             <button type="submit" class="button">
@@ -104,16 +104,28 @@
         </form>
         {% endif %}
         {% if can_resume %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="resume">
             <button type="submit" class="button">{% translate "Started again" %}</button>
         </form>
         {% endif %}
+        {% if undoable_tap %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="undo">
+            <button type="submit" class="button button--secondary">
+                {% blocktranslate with step=undoable_tap.get_event_type_display %}Undo “{{ step }}”{% endblocktranslate %}
+            </button>
+        </form>
+        {% endif %}
     </div>
+    {% if undoable_tap %}
+    <p class="field__help">{% translate "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time." %}</p>
+    {% endif %}
 
     {% if can_pause %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-locate>
         {% csrf_token %}
         <input type="hidden" name="action" value="pause">
         <div class="field {% if pause_form.note.errors %}field--error{% endif %}">
@@ -129,7 +141,7 @@
     {% endif %}
 
     {% if can_block %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-locate>
         {% csrf_token %}
         <input type="hidden" name="action" value="block">
         <div class="field {% if block_form.note.errors %}field--error{% endif %}">
@@ -192,6 +204,8 @@
     {% if report %}
         {% if task.status == 'closed' %}
         <p class="empty-state">{% translate "Submitted — task closed." %}</p>
+        {% elif task.status == 'pending_supervisor_review' %}
+        <p class="empty-state">{% translate "Submitted — awaiting your supervisor's review." %}</p>
         {% else %}
         <p class="empty-state">{% translate "Submitted — awaiting manager approval." %}</p>
         {% endif %}
@@ -201,6 +215,42 @@
     {% endif %}
 </div>
 {% endif %}
+
+<div class="section">
+    <h2>{% translate "Messages" %}</h2>
+    {% if task_messages %}
+    <div class="chat-thread">
+        {% for task_message in task_messages %}
+        <div class="chat-message {% if task_message.sent_by == user %}chat-message--mine{% endif %}">
+            <div class="chat-meta">
+                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}</span>
+                <span class="muted">{{ task_message.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            </div>
+            <div class="chat-bubble">
+                <p>{{ task_message.message }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No messages yet." %}</p>
+    {% endif %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_message">
+        {% if message_form.non_field_errors %}
+            <p class="flash flash--error">{{ message_form.non_field_errors }}</p>
+        {% endif %}
+        <div class="field {% if message_form.message.errors %}field--error{% endif %}">
+            <label for="{{ message_form.message.id_for_label }}">{{ message_form.message.label }}</label>
+            {{ message_form.message }}
+            {% for error in message_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% translate "Send message" %}</button>
+        </div>
+    </form>
+</div>
 
 <div class="section">
     <h2>{% translate "History" %}</h2>
@@ -218,4 +268,8 @@
     <p class="empty-state">{% translate "No events yet." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/tap-location.js' %}" defer></script>
 {% endblock %}

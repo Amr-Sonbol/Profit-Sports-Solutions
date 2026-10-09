@@ -1,0 +1,82 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# First-time setup (Render dashboard, not this file):
+#   1. New > Blueprint, point it at this repo.
+#   2. Once the service exists, copy its "Deploy Hook" URL (Settings tab)
+#      into this repo's GitHub secret RENDER_DEPLOY_HOOK_URL — that's what
+#      lets .github/workflows/tests.yml redeploy only after tests pass.
+#   3. Once there's a real domain: add it under the service's Settings >
+#      Custom Domains, add it to ALLOWED_HOSTS below, and turn on
+#      SECURE_SSL_REDIRECT / SECURE_HSTS_SECONDS in the same place.
+#
+# autoDeployTrigger is off deliberately — Render's own "deploy on every
+# push" would happily deploy code the test suite hasn't even seen yet.
+# The GitHub Actions deploy job (gated on the test job passing) is the
+# only thing that triggers a deploy, via the hook above.
+databases:
+  - name: spots-db
+    plan: 0.1c-256mb  # "Basic-256mb" on the pricing page, ~$6/mo
+    region: frankfurt
+
+services:
+  - name: spots-web
+    type: web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: 0.5c-512mb  # "Starter" on the pricing page, ~$7/mo
+    region: frankfurt
+    autoDeployTrigger: off
+    healthCheckPath: /accounts/login/
+    dockerCommand: sh -c 'gunicorn spots.wsgi:application --bind 0.0.0.0:$PORT --workers 3'
+    # Ticket attachments, technician photos, task documents, ... — see
+    # docs/database_design_v2.md. Mounted at the app's own MEDIA_ROOT
+    # (spots/settings.py) so uploads survive a redeploy instead of
+    # disappearing with the old container.
+    disk:
+      name: media
+      mountPath: /app/media
+      sizeGB: 5
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ""
+      - key: DB_NAME
+        fromDatabase:
+          name: spots-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: spots-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: spots-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: spots-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: spots-db
+          property: port
+      # Without these every notification email (escalations, ticket
+      # confirmations, feedback requests) is only printed to the log —
+      # see tasks/checks.py. The sync: false ones are filled in on Render.
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

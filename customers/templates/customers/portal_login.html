@@ -5,19 +5,6 @@
 
 {% block content %}
 <div class="auth-card">
-    <div class="lang-switch">
-        <form method="post" action="{% url 'set_language' %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <button type="submit" name="language" value="en" class="link-button">English</button>
-        </form>
-        <form method="post" action="{% url 'set_language' %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.path }}">
-            <button type="submit" name="language" value="ar" class="link-button">العربية</button>
-        </form>
-    </div>
-
     <h1>{% translate "Customer portal" %}</h1>
     <p class="muted">{% translate "Track your reports and service history." %}</p>
 

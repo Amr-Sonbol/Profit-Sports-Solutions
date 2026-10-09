@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Technician availability" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
+        <h1>{% translate "Technician availability" %}</h1>
+    </div>
+</div>
+
+<div class="section">
+    <p class="field__help">{% translate "Who's available for work right now — separate from any one task, so marking someone unavailable here applies everywhere, not just to a single assignment." %}</p>
+    {% if technicians %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Role" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for technician in technicians %}
+                <tr>
+                    <td>{{ technician.full_name }}</td>
+                    <td>{{ technician.get_role_display }}</td>
+                    <td>
+                        {% if technician.is_available %}
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="mark_unavailable">
+                            <input type="hidden" name="technician_id" value="{{ technician.pk }}">
+                            <span class="badge badge--status-new">{% translate "Available" %}</span>
+                            {{ mark_unavailable_form.reason }}
+                            <button type="submit" class="button button--secondary">{% translate "Mark unavailable" %}</button>
+                        </form>
+                        {% else %}
+                        <form method="post" class="inline-form" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="mark_available">
+                            <input type="hidden" name="technician_id" value="{{ technician.pk }}">
+                            <span class="badge badge--status-blocked">
+                                {% translate "Unavailable" %} — {{ technician.get_unavailable_reason_display }}
+                            </span>
+                            <button type="submit" class="button">{% translate "Mark available" %}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active technicians in this country." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

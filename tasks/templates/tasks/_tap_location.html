@@ -1,0 +1,9 @@
+{% load i18n %}{% comment %}
+Where the phone was at a technician's tap (tasks.location) — for supervisors
+and managers on the task page. `event` is a TaskEvent.
+{% endcomment %}{% if event.location_status == 'away' %}<span class="badge badge--status-blocked">{% blocktranslate with distance=event.distance_display %}Not at the site · {{ distance }}{% endblocktranslate %}</span>
+{% elif event.location_status == 'at_site' %}<span class="badge badge--status-completed">{% translate "At the site" %}</span>
+{% elif event.location_status == 'no_location' %}<span class="badge badge--muted">{% translate "No location sent" %}</span>
+{% elif event.location_status == 'site_unknown' %}<span class="badge badge--muted">{% translate "Site location not set" %}</span>
+{% elif event.distance_m is not None %}<span class="muted">{% blocktranslate with distance=event.distance_display %}{{ distance }} from the site{% endblocktranslate %}</span>
+{% endif %}{% if event.latitude is not None %}<a href="https://www.google.com/maps?q={{ event.latitude }},{{ event.longitude }}" target="_blank" rel="noopener">{% translate "Map" %}</a>{% endif %}

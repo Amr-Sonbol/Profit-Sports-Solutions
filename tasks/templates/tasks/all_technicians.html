@@ -37,7 +37,7 @@
                         {% include "_avatar.html" with technician=row.technician %}
                         {{ row.technician.full_name }}
                     </td>
-                    <td>{{ row.technician.country.name }}</td>
+                    <td>{{ row.technician.country.display_name }}</td>
                     <td>{{ row.technician.get_role_display }}</td>
                     <td>
                         {% if row.certification.is_certified %}
@@ -50,7 +50,7 @@
                         </span>
                         {% endif %}
                         {% if row.certification.cardio_ready %}
-                        <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                        <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
                         {% endif %}
                     </td>
                     <td>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Welcome" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="welcome">
+    <h1 class="welcome__title">{% blocktranslate with name=user.technician.full_name %}Welcome, {{ name }}{% endblocktranslate %}</h1>
+
+    <nav class="welcome-tiles" aria-label="{% translate 'Pages' %}">
+        {% for page in nav_pages %}
+        <a href="{{ page.url }}" class="welcome-tile">
+            {% include "_icon.html" with name=page.icon %}
+            <span class="welcome-tile__label">{{ page.label }}</span>
+        </a>
+        {% endfor %}
+        <a href="{% url 'tasks:my_profile' %}" class="welcome-tile">
+            {% include "_icon.html" with name='user' %}
+            <span class="welcome-tile__label">{% translate "My profile" %}</span>
+        </a>
+    </nav>
+</div>
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Technician hours" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Technician hours" %}</h1>
+    <div class="badge-row">
+        <a href="{% url 'tasks:technician_list' %}" class="button button--secondary">{% translate "Technicians" %}</a>
+        <a href="{% url 'tasks:technician_hours_export' %}?month={{ period_start|date:'Y-m' }}" class="button">{% translate "Download CSV" %}</a>
+    </div>
+</div>
+
+<nav class="week-nav">
+    <a href="?month={{ prev_month|date:'Y-m' }}" class="back-link">{% translate "Previous month" %}</a>
+    <a href="?month={{ this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
+    <a href="?month={{ next_month|date:'Y-m' }}" class="forward-link">{% translate "Next month" %}</a>
+</nav>
+
+<h2>{{ period_start|date:"F Y" }}</h2>
+<p class="muted">
+    {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} filed report.{% plural %}{{ hours }} labour hours across {{ reports }} filed reports.{% endblocktranslate %}
+    {% translate "A report’s hours count for everyone on the team — lead and helpers — unless the lead entered a helper’s own hours. Hours worked before a handover count too." %}
+    {% translate "“Well over estimate” means more than 50% past the task’s estimated hours." %}
+    {% translate "“Above tapped time” means the hours typed are well above the time between the Start tap and the report being filed, minus pauses — worth asking about." %}
+</p>
+
+<div class="section">
+    {% if rows %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Reports filed" %}</th>
+                    <th>{% translate "Labour hours" %}</th>
+                    <th>{% translate "Estimated hours" %}</th>
+                    <th>{% translate "Helped on" %}</th>
+                    <th>{% translate "Tasks" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>
+                        {% include "_avatar.html" with technician=row.technician %}
+                        <a href="{% url 'tasks:technician_board' row.technician.pk %}">{{ row.technician.full_name }}</a>
+                    </td>
+                    <td>{{ row.reports|length }}</td>
+                    <td>
+                        {% if row.hours %}<strong>{{ row.hours }}</strong>{% else %}<span class="muted">0</span>{% endif %}
+                        {% if row.above_tapped_count %}
+                        <span class="badge badge--status-in_progress">
+                            {% blocktranslate count count=row.above_tapped_count %}{{ count }} report above tapped time{% plural %}{{ count }} reports above tapped time{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                        {% if row.away_count %}
+                        <span class="badge badge--status-blocked">
+                            {% blocktranslate count count=row.away_count %}{{ count }} job with taps away from the site{% plural %}{{ count }} jobs with taps away from the site{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}
+                        {% if row.overrun_count %}
+                        <span class="badge badge--status-blocked">
+                            {% blocktranslate count count=row.overrun_count %}{{ count }} task well over estimate{% plural %}{{ count }} tasks well over estimate{% endblocktranslate %}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.helped_on }}</td>
+                    <td>
+                        {% if row.reports %}
+                        <details>
+                            <summary>{% translate "Show tasks" %}</summary>
+                            <ul class="plain-list">
+                                {% for report in row.reports %}
+                                <li>
+                                    <a href="{% url 'tasks:task_detail' report.task.pk %}">{{ report.task.task_number }}</a>
+                                    — {{ report.task.site.customer.name }}:
+                                    {% blocktranslate with hours=report.labour_hours %}{{ hours }} h{% endblocktranslate %}
+                                    {% if report.task.estimated_hours %}
+                                    <span class="muted">({% blocktranslate with hours=report.task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>
+                                    {% endif %}
+                                    {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Well over estimate" %}</span>{% endif %}
+                                    {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% blocktranslate with hours=report.tapped_hours %}Above tapped time ({{ hours }} h){% endblocktranslate %}</span>{% endif %}
+                                    {% if report.has_taps_away_from_site %}<span class="badge badge--status-blocked">{% translate "Taps away from the site" %}</span>{% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                        {% else %}
+                        <span class="muted">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active technicians in your country." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -69,7 +69,7 @@
             <tbody>
                 {% for ticket in tickets %}
                 <tr>
-                    <td>{{ ticket.country.name }}</td>
+                    <td>{{ ticket.country.display_name }}</td>
                     <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }}</a></td>
                     <td>{{ ticket.get_status_display }}</td>
                     <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
@@ -99,7 +99,7 @@
                 {% for task in tasks %}
                 <tr>
                     <td><a href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
-                    <td>{{ task.site.customer.country.name }}</td>
+                    <td>{{ task.site.customer.country.display_name }}</td>
                     <td>{{ task.site.customer.name }}</td>
                     <td>{{ task.get_status_display }}</td>
                     <td>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</td>
