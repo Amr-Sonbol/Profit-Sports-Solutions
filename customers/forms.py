@@ -20,7 +20,7 @@ class CreateLoginForm(forms.Form):
     def clean_email(self):
         email = self.cleaned_data['email']
         if get_user_model().objects.filter(username__iexact=email).exists():
-            raise forms.ValidationError(_('A login with that email already exists.'))
+            raise forms.ValidationError(_('An account with this email address already exists.'))
         return email
 
 
@@ -44,7 +44,7 @@ class CustomerFirstLoginForm(forms.Form):
         password1 = self.cleaned_data.get('new_password1')
         password2 = self.cleaned_data.get('new_password2')
         if password1 and password2 and password1 != password2:
-            raise forms.ValidationError(_("The two password fields didn't match."))
+            raise forms.ValidationError(_('The two password fields do not match.'))
         if password1:
             password_validation.validate_password(password1, self.user)
         return password2
@@ -107,7 +107,7 @@ class SiteCreateForm(forms.ModelForm):
     def clean_name(self):
         name = self.cleaned_data['name']
         if self.customer and Site.objects.filter(customer=self.customer, name__iexact=name).exists():
-            raise forms.ValidationError(_('This customer already has a site with that name.'))
+            raise forms.ValidationError(_('This customer already has a site with this name.'))
         return name
 
 
@@ -122,8 +122,8 @@ class SiteEditForm(forms.ModelForm):
     # against. Coordinates or a full Google Maps link; empty clears it.
     map_location = forms.CharField(
         required=False, label=_('Map location'),
-        help_text=_('Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. '
-                    'Left empty, the first technician to tap “Arrived” here sets it.'),
+        help_text=_('Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. If left blank, it '
+                    'will be set by the first technician to tap “Arrived” at this site.'),
     )
 
     class Meta:
@@ -140,7 +140,7 @@ class SiteEditForm(forms.ModelForm):
             self.fields['map_location'].initial = f'{self.instance.latitude}, {self.instance.longitude}'
             if self.instance.location_source == Site.LocationSource.ARRIVAL:
                 self.fields['map_location'].help_text = _(
-                    'Set by the first technician to arrive — check it, and correct it if it’s off.',
+                    'Set by the first technician to arrive. Please verify it and correct it if inaccurate.',
                 )
 
     def clean_name(self):
@@ -148,7 +148,7 @@ class SiteEditForm(forms.ModelForm):
         if Site.objects.filter(
             customer=self.instance.customer, name__iexact=name,
         ).exclude(pk=self.instance.pk).exists():
-            raise forms.ValidationError(_('This customer already has a site with that name.'))
+            raise forms.ValidationError(_('This customer already has a site with this name.'))
         return name
 
     def clean_map_location(self):
@@ -158,8 +158,8 @@ class SiteEditForm(forms.ModelForm):
         coordinates = parse_coordinates(text)
         if coordinates is None:
             raise forms.ValidationError(_(
-                'Couldn’t find coordinates in that. Paste them as “latitude, longitude”, or the full '
-                'Google Maps link (not a short maps.app.goo.gl one).',
+                'Coordinates could not be found in the input. Please enter them as “latitude, longitude”, or paste '
+                'the full Google Maps link (not a shortened maps.app.goo.gl link).',
             ))
         return coordinates
 
@@ -188,5 +188,5 @@ class CustomerImportForm(forms.Form):
     def clean_csv_file(self):
         csv_file = self.cleaned_data['csv_file']
         if not csv_file.name.lower().endswith('.csv'):
-            raise forms.ValidationError(_('Upload a .csv file.'))
+            raise forms.ValidationError(_('Please upload a .csv file.'))
         return csv_file

@@ -13,7 +13,7 @@
 
 {% if report %}
 <p class="flash flash--info">
-    {% translate "This task already has a report — saving below updates it." %}
+    {% translate "This task already has a report. Saving below will update it." %}
 </p>
 {% endif %}
 <form method="post" enctype="multipart/form-data" class="report-form" data-report-form novalidate data-locate>
@@ -49,7 +49,7 @@
         {% if report_form.helpers %}
         <div data-staff-only>
             <h3>{% translate "Helpers' hours" %}</h3>
-            <p class="field__help">{% translate "Each helper gets the same hours as above. Fill one in only if it was different — for example, someone who left early." %}</p>
+            <p class="field__help">{% translate "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early." %}</p>
             <div class="form-grid">
                 {% for field in report_form.helper_fields %}
                 <div class="field {% if field.errors %}field--error{% endif %}">
@@ -164,9 +164,9 @@
 
     <div class="section">
         <h2>{% translate "Customer sign-off" %}</h2>
-        <p class="field__help" data-staff-only>{% translate "Hand the screen to the customer to review the work and sign — hours and prices are hidden while they do." %}</p>
+        <p class="field__help" data-staff-only>{% translate "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step." %}</p>
         <p data-signoff-start hidden data-staff-only>
-            <button type="button" class="button button--secondary">{% translate "Hand to customer to sign" %}</button>
+            <button type="button" class="button button--secondary">{% translate "Hand to customer for signature" %}</button>
         </p>
         <div class="form-grid">
             <div class="field {% if report_form.customer_name.errors %}field--error{% endif %}">
@@ -179,8 +179,8 @@
                 <div class="signature-pad" data-signature-pad hidden>
                     <canvas class="signature-pad__canvas" aria-label="{% translate 'Signature pad' %}"></canvas>
                     <button type="button" class="button button--secondary" data-signature-clear>{% translate "Clear signature" %}</button>
-                    {% if report.signature_url %}<p class="field__help">{% translate "A signature is already on file — sign again only to replace it." %}</p>{% endif %}
-                    <p class="field__help">{% translate "Or upload a photo of a paper signature:" %}</p>
+                    {% if report.signature_url %}<p class="field__help">{% translate "A signature is already on record. Sign again only if you wish to replace it." %}</p>{% endif %}
+                    <p class="field__help">{% translate "Alternatively, upload a photo of a signed paper copy:" %}</p>
                 </div>
                 {{ report_form.signature_drawn }}
                 {{ report_form.signature }}
@@ -197,7 +197,7 @@
             </div>
         </div>
         <p data-signing-only>
-            <button type="button" class="button" data-signoff-done>{% translate "Done — hand back to the technician" %}</button>
+            <button type="button" class="button" data-signoff-done>{% translate "Completed — return to the technician" %}</button>
         </p>
     </div>
 

@@ -194,7 +194,7 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'}, follow=True)
 
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Set a scheduled time')
+        self.assertContains(response, 'Please set a scheduled time')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_requires_a_contact_email(self):
@@ -206,7 +206,7 @@ class TaskDetailTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_sends_email_and_records_who_and_when(self):
@@ -237,7 +237,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': '  '}, follow=True,
         )
 
-        self.assertContains(response, 'Explain the reason for the delay')
+        self.assertContains(response, 'Please state the reason for the delay')
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
 
@@ -250,7 +250,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': 'Traffic'}, follow=True,
         )
 
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_delay_notice_sends_email_and_logs_an_event(self):
@@ -359,7 +359,7 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'send_feedback_request'}, follow=True)
 
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
 
     def test_requesting_feedback_creates_it_and_sends_an_email(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -1001,7 +1001,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a shipping tracking number')
+        self.assertContains(response, 'Please add a shipping tracking number')
 
     def test_requires_a_contact_email(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -1011,7 +1011,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
 
     def test_sends_the_tracking_number_only(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -2389,7 +2389,7 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a shipping tracking number')
+        self.assertContains(response, 'Please add a shipping tracking number')
 
     def test_notify_shipping_sends_the_tracking_number_only(self):
         self.ticket.shipping_tracking_number = 'TRACK-99'
@@ -2440,7 +2440,7 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         create_url = f'/tasks/new/?ticket={self.ticket.pk}'
         response = self.client.get(create_url)
-        self.assertContains(response, 'only an admin can change it')
+        self.assertContains(response, 'Only an administrator can change it')
 
         # A supervisor's edit form has the field disabled, so even a
         # crafted POST naming a different site is ignored server-side —
@@ -2469,7 +2469,7 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='admin1', password='pass12345')
         create_url = f'/tasks/new/?ticket={self.ticket.pk}'
         response = self.client.get(create_url)
-        self.assertContains(response, 'as admin, you can still change it')
+        self.assertContains(response, 'As an administrator, you may still change it')
 
         response = self.client.post(create_url, {
             'site': other_site.pk,
@@ -4089,7 +4089,7 @@ class TechnicianListTests(TaskTestCase):
     def test_search_with_no_matches(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/technicians/', {'q': 'nonexistent'})
-        self.assertContains(response, 'No technicians match that search.')
+        self.assertContains(response, 'No technicians match your search.')
 
 
 class DashboardTests(TaskTestCase):
@@ -5982,13 +5982,13 @@ class TechnicianHoursTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
         self.assertEqual(self._row(response, self.technician)['overrun_count'], 1)
-        self.assertContains(response, 'Well over estimate')
+        self.assertContains(response, 'Significantly over estimate')
 
     def test_task_detail_flags_an_overrun_report(self):
         task = self._task_with_report('AE-0011', hours='5.00', estimated='2.00')
         self.client.login(username='supervisor1', password='pass12345')
-        self.assertContains(self.client.get(f'/tasks/{task.pk}/'), 'Well over estimate')
-        self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Well over estimate')
+        self.assertContains(self.client.get(f'/tasks/{task.pk}/'), 'Significantly over estimate')
+        self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Significantly over estimate')
 
     def test_technician_sees_own_month_hours_on_my_progress(self):
         self.client.login(username='tech1', password='pass12345')
@@ -6095,7 +6095,7 @@ class UnscheduledAlarmTests(TaskTestCase):
         self._task()
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/')
-        self.assertContains(response, 'Not scheduled after 24 working hours')
+        self.assertContains(response, 'Not scheduled within 24 working hours')
         self.assertEqual(response.context['unseen_notifications'][0]['kind'], 'unscheduled_overdue')
 
 

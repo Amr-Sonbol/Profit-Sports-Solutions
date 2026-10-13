@@ -79,7 +79,7 @@
     </div>
     {% if ticket.notes %}
     <div class="description">
-        <dt>{% translate "Anything else we should know" %}</dt>
+        <dt>{% translate "Additional information" %}</dt>
         <p>{{ ticket.notes }}</p>
     </div>
     {% endif %}
@@ -130,7 +130,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No messages yet." %}</p>
+    <p class="empty-state">{% translate "No messages." %}</p>
     {% endif %}
     {% if can_manage and can_reply %}
     <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
@@ -159,14 +159,14 @@
     <p class="field__help"><a href="#escalation">{% blocktranslate with name=pending_escalation.escalated_to.full_name %}Escalated — awaiting a decision from {{ name }}{% endblocktranslate %}</a></p>
     {% endif %}
     {% elif can_manage %}
-    <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
+    <p class="field__help">{% translate "This ticket has been resolved and the conversation is closed." %}</p>
     {% endif %}
 </div>
 
 {% if internal_note_form %}
 <div class="section">
     <h2>{% translate "Internal notes" %}</h2>
-    <p class="field__help">{% translate "Visible to managers and admins only — never shown to the customer or on the ticket's conversation." %}</p>
+    <p class="field__help">{% translate "Visible to managers and administrators only; never shown to the customer or in the ticket conversation." %}</p>
     {% if internal_notes %}
     <ul class="plain-list">
         {% for note in internal_notes %}
@@ -183,7 +183,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No internal notes yet." %}</p>
+    <p class="empty-state">{% translate "No internal notes." %}</p>
     {% endif %}
     <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
         {% csrf_token %}
@@ -242,11 +242,11 @@
             {% else %}
             <span class="badge badge--status-completed">{{ escalation.get_decision_display }}</span>
             {% endif %}
-            {% blocktranslate with by=escalation.escalated_by.full_name to=escalation.escalated_to.full_name when=escalation.escalated_at|date:"SHORT_DATETIME_FORMAT" %}{{ by }} escalated to {{ to }} on {{ when }}{% endblocktranslate %}
+            {% blocktranslate with by=escalation.escalated_by.full_name to=escalation.escalated_to.full_name when=escalation.escalated_at|date:"SHORT_DATETIME_FORMAT" %}Escalated by {{ by }} to {{ to }} on {{ when }}{% endblocktranslate %}
         </p>
         <p class="timeline__note"><strong>{% translate "Reason:" %}</strong> {{ escalation.reason }}</p>
         {% if escalation.customer_message %}
-        <p class="timeline__note"><strong>{% translate "Told the customer:" %}</strong> {{ escalation.customer_message }}</p>
+        <p class="timeline__note"><strong>{% translate "Message sent to the customer:" %}</strong> {{ escalation.customer_message }}</p>
         {% endif %}
         {% if escalation.decided_at %}
         <p class="timeline__note"><strong>{% blocktranslate with when=escalation.decided_at|date:"SHORT_DATETIME_FORMAT" %}Decision ({{ when }}):{% endblocktranslate %}</strong> {{ escalation.decision_note }}</p>
@@ -304,7 +304,7 @@
         <span class="muted">({{ ticket.assigned_to.get_role_display }})</span>
     </p>
     {% else %}
-    <p class="empty-state">{% translate "Not assigned yet." %}</p>
+    <p class="empty-state">{% translate "Not yet assigned." %}</p>
     {% endif %}
     {% if can_manage %}
     <form method="post" class="form-grid" novalidate>
@@ -354,15 +354,15 @@
         <button type="submit" class="button button--secondary">{% translate "Notify customer of tracking number" %}</button>
     </form>
     {% elif not ticket.shipping_tracking_number %}
-    <p class="field__help">{% translate "Add a shipping tracking number before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Please add a shipping tracking number before notifying the customer." %}</p>
     {% else %}
-    <p class="field__help">{% translate "Add a contact email before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Please add a contact email address before notifying the customer." %}</p>
     {% endif %}
 </div>
 {% endif %}
 
 {% if not can_manage %}
-<p class="empty-state">{% translate "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it." %}</p>
+<p class="empty-state">{% translate "This ticket has been assigned to you for review. Only authorised ticket reviewers can convert or dismiss it." %}</p>
 {% else %}
 
 {% if ticket.status == 'new' %}
@@ -401,7 +401,7 @@
 {% if ticket.status != 'closed' %}
 <div class="section">
     <h2>{% translate "Close ticket" %}</h2>
-    <p class="field__help">{% translate "Closes it regardless of its current status — converted or dismissed included." %}</p>
+    <p class="field__help">{% translate "Closes the ticket regardless of its current status, including converted or dismissed tickets." %}</p>
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="close">

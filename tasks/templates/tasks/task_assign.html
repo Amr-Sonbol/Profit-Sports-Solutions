@@ -17,25 +17,25 @@
 {% if manager_override %}
 <div class="section">
     <p class="flash flash--info">
-        {% translate "Work has already started. As a manager or admin you can still change the team — the new lead carries on from where the task is." %}
+        {% translate "Work has already started. As a manager or administrator, you may still change the team; the new lead will continue from the current stage of the task." %}
     </p>
 </div>
 {% elif locked and can_set_lead %}
 <div class="section">
     <p class="flash flash--error">
-        {% translate "The lead has left the company. Work has already started, so only they can be replaced — the new lead carries on from where the task is." %}
+        {% translate "The lead has left the company. As work has already started, only the lead can be replaced; the new lead will continue from the current stage of the task." %}
     </p>
 </div>
 {% elif locked and task.status == 'in_progress' %}
 <div class="section">
     <p class="empty-state">
-        {% translate "Work has started, so only a manager or admin can change the team now." %}
+        {% translate "Work has started, so only a manager or administrator can now change the team." %}
     </p>
 </div>
 {% elif locked %}
 <div class="section">
     <p class="empty-state">
-        {% translate "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead." %}
+        {% translate "The assignment for this task can no longer be changed because work has started. Please close it and create a new task for a handover." %}
     </p>
 </div>
 {% endif %}
@@ -52,7 +52,7 @@
         </li>
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No one is assigned yet." %}</p>
+    <p class="empty-state">{% translate "No one has been assigned." %}</p>
     {% endif %}
 
     {% if can_set_lead %}
@@ -126,7 +126,7 @@
     <h2>{% translate "Available technicians" %}</h2>
     {% url 'tasks:technician_availability' as availability_url %}
     <p class="field__help">
-        {% blocktranslate %}To mark someone unavailable, use <a href="{{ availability_url }}" target="_blank" rel="noopener">Technician availability</a> — it applies everywhere, not just this task.{% endblocktranslate %}
+        {% blocktranslate %}To mark a staff member as unavailable, use <a href="{{ availability_url }}" target="_blank" rel="noopener">Technician availability</a>. This applies across all tasks, not only this one.{% endblocktranslate %}
     </p>
     {% if candidates %}
     <div class="table-wrap">
@@ -178,7 +178,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No active technicians available in this country." %}</p>
+    <p class="empty-state">{% translate "No active technicians are available in this country." %}</p>
     {% endif %}
 </div>
 {% endblock %}

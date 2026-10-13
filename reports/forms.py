@@ -91,24 +91,24 @@ class WorkReportForm(forms.ModelForm):
             try:
                 signature = _signature_from_data_url(drawn)
             except ValueError:
-                self.add_error('signature', _('Could not read the signature — please sign again.'))
+                self.add_error('signature', _('The signature could not be read. Please sign again.'))
                 return cleaned
         labour_hours = cleaned.get('labour_hours')
         for assignment in self.helpers:
             hours = cleaned.get(f'helper_hours_{assignment.pk}')
             if hours is not None and labour_hours is not None and hours > labour_hours:
                 self.add_error(
-                    f'helper_hours_{assignment.pk}', _('A helper can’t have more hours than the job itself.'),
+                    f'helper_hours_{assignment.pk}', _("A helper's hours cannot exceed the total duration of the job."),
                 )
         waived = cleaned.get('signature_waived')
         if waived and not (cleaned.get('signature_waived_reason') or '').strip():
-            self.add_error('signature_waived_reason', _('Say why the customer could not sign.'))
+            self.add_error('signature_waived_reason', _('Please state why the customer could not sign.'))
         if not waived:
             cleaned['signature_waived_reason'] = ''
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
-            self.add_error('signature', _('File is too large — the limit is 5 MB.'))
+            self.add_error('signature', _('The file is too large. The maximum size is 5 MB.'))
         elif self.require_signature and not signature and not self.instance.signature_url and not waived:
-            self.add_error('signature', _('This type of task needs the customer’s signature.'))
+            self.add_error('signature', _("This type of task requires the customer's signature."))
         else:
             cleaned['signature'] = signature
         return cleaned
@@ -120,7 +120,7 @@ class CustomerFeedbackForm(forms.Form):
         widget=forms.RadioSelect, label=_('How would you rate the visit?'),
     )
     comment = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Anything you\'d like to add?')}),
+        required=False, widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Additional comments')}),
         label=_('Comments (optional)'),
     )
 
@@ -160,7 +160,7 @@ class PartUsedItemForm(forms.Form):
         part = catalogue.filter(code__iexact=code).first()
         if part is None:
             raise forms.ValidationError(
-                _('“%(code)s” isn’t in the parts list — pick one from the list, or ask for it to be added.'),
+                _('“%(code)s” is not in the parts list. Please select one from the list or request that it be added.'),
                 params={'code': code},
             )
         self.catalogue_part = part
@@ -176,6 +176,6 @@ class PartUsedItemForm(forms.Form):
         missing = [f for f in ('part_code', 'quantity', 'unit_cost', 'currency_code') if not cleaned.get(f)]
         if missing:
             raise forms.ValidationError(
-                _('Fill in part code, quantity, unit cost and currency, or leave this row blank.'),
+                _('Please complete the part code, quantity, unit cost and currency, or leave this row blank.'),
             )
         return cleaned

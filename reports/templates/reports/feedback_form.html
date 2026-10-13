@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "How did we do?" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "How would you rate our service?" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="feedback-card">
     {% if feedback.submitted_at %}
     <div class="feedback-thanks">
         <div class="feedback-thanks__icon">✓</div>
-        <h1>{% translate "Thank you!" %}</h1>
-        <p class="muted">{% translate "Your feedback has already been recorded — we appreciate you taking the time." %}</p>
+        <h1>{% translate "Thank you." %}</h1>
+        <p class="muted">{% translate "Your feedback has already been recorded. Thank you for your time." %}</p>
         {% if feedback.rating %}
         <p class="feedback-thanks__rating">
             {% blocktranslate with rating=feedback.rating %}You rated us {{ rating }}/5{% endblocktranslate %}
@@ -17,9 +17,9 @@
         {% endif %}
     </div>
     {% else %}
-    <h1>{% translate "How did we do?" %}</h1>
+    <h1>{% translate "How would you rate our service?" %}</h1>
     <p class="feedback-card__intro">
-        {% blocktranslate with number=task.task_number date=visit_date|date:"SHORT_DATE_FORMAT" %}About visit {{ number }} on {{ date }}{% endblocktranslate %}
+        {% blocktranslate with number=task.task_number date=visit_date|date:"SHORT_DATE_FORMAT" %}Regarding visit {{ number }} on {{ date }}{% endblocktranslate %}
     </p>
 
     <form method="post" novalidate>

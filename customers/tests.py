@@ -71,7 +71,7 @@ class CustomerListTests(CustomerTestCase):
     def test_search_with_no_matches(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/customers/', {'q': 'nonexistent'})
-        self.assertContains(response, 'No customers match that search.')
+        self.assertContains(response, 'No customers match your search.')
 
 
 class CustomerCreateTests(CustomerTestCase):

@@ -70,13 +70,14 @@ class Technician(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='technician',
         verbose_name=_('user'),
-        help_text=_('a manager creates this from the technician\'s Edit screen, same as a customer\'s portal login'),
+        help_text=_("created by a manager from the technician's Edit screen, in the same way as a customer's "
+                    'portal login'),
     )
     must_change_password = models.BooleanField(
         _('must change password'), default=False,
         help_text=_(
-            'set when a manager creates the login with a temporary system-generated password — '
-            'they must set their own the first time they sign in, before reaching anything else',
+            'set when a manager creates the login with a temporary system-generated password; the user must set '
+            'their own password at first sign-in before accessing anything else',
         ),
     )
     country = models.ForeignKey(
@@ -102,11 +103,11 @@ class Technician(models.Model):
     is_active = models.BooleanField(_('active'), default=True)
     deactivation_reason = models.CharField(
         _('deactivation reason'), max_length=255, blank=True,
-        help_text=_('why this technician was deactivated — resigned, terminated, etc.'),
+        help_text=_('reason for deactivation, e.g. resignation or termination'),
     )
     is_available = models.BooleanField(
         _('available'), default=True,
-        help_text=_('whether this technician can currently be assigned work — separate from is_active'),
+        help_text=_('whether this technician can currently be assigned work; separate from active status'),
     )
     unavailable_reason = models.CharField(
         _('unavailable reason'), max_length=20, choices=UnavailableReason.choices, blank=True,
@@ -114,7 +115,7 @@ class Technician(models.Model):
     photo = models.FileField(
         _('photo'), upload_to=_technician_photo_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
-        help_text=_('shown on the roster, boards, and task detail'),
+        help_text=_('shown on the roster, boards and task details'),
     )
 
     class Meta:
@@ -240,7 +241,7 @@ class NotificationSettings(models.Model):
 
     auto_notify_on_reschedule = models.BooleanField(
         _('email the customer automatically when a task is rescheduled'), default=False,
-        help_text=_('off by default — a supervisor sends it deliberately from task detail instead'),
+        help_text=_('off by default; a supervisor sends it manually from the task details instead'),
     )
 
     class Meta:
@@ -308,20 +309,20 @@ class TechnicianSkill(models.Model):
     source = models.CharField(
         _('source'), max_length=10, choices=Source.choices,
         help_text=_(
-            'a self-rating is a starting guess — only a supervisor review counts toward certification',
+            'a self-assessment is an initial estimate; only a supervisor review counts toward certification',
         ),
     )
     set_by = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name='levels_set',
         verbose_name=_('set by'),
-        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+        help_text=_('the technician for a self-assessment; the supervisor for a review'),
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
-        help_text=_('photo or video of the technician actually performing this repair'),
+        help_text=_('photo or video of the technician performing this repair'),
     )
 
     class Meta:
@@ -357,14 +358,14 @@ class TechnicianSkillAssessment(models.Model):
     set_by = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name='skill_assessments_made',
         verbose_name=_('set by'),
-        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+        help_text=_('the technician for a self-assessment; the supervisor for a review'),
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
-        help_text=_('photo or video of the technician actually performing this repair'),
+        help_text=_('photo or video of the technician performing this repair'),
     )
 
     class Meta:
@@ -399,13 +400,13 @@ class TechnicianConduct(models.Model):
     source = models.CharField(
         _('source'), max_length=10, choices=Source.choices,
         help_text=_(
-            'a self-rating is a starting guess — only a supervisor review counts toward certification',
+            'a self-assessment is an initial estimate; only a supervisor review counts toward certification',
         ),
     )
     set_by = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name='conduct_ratings_set',
         verbose_name=_('set by'),
-        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+        help_text=_('the technician for a self-assessment; the supervisor for a review'),
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)
@@ -442,7 +443,7 @@ class TechnicianConductAssessment(models.Model):
     set_by = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name='conduct_assessments_made',
         verbose_name=_('set by'),
-        help_text=_('the technician himself for a self-rating, the supervisor for a review'),
+        help_text=_('the technician for a self-assessment; the supervisor for a review'),
     )
     set_on = models.DateField(_('set on'))
     note = models.CharField(_('note'), max_length=255, blank=True)

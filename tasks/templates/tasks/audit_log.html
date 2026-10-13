@@ -9,7 +9,7 @@
 </div>
 
 <p class="muted">
-    {% translate "Every add, change, and delete made from Django admin, newest first. Actions taken from the app's own screens aren't recorded here — a task's own history is on its detail page." %}
+    {% translate "All additions, changes and deletions made through Django admin, newest first. Actions performed on the application's own screens are not recorded here; a task's history is shown on its detail page." %}
 </p>
 
 <div class="section">
@@ -44,7 +44,7 @@
                     <td>{{ entry.get_change_message }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="empty-state">{% translate "Nothing logged yet." %}</td></tr>
+                <tr><td colspan="6" class="empty-state">{% translate "No entries recorded." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

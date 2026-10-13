@@ -16,7 +16,7 @@
         <span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span>
         {% endif %}
         {% if certification.cardio_ready %}
-        <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
+        <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
         {% endif %}
     </div>
 </div>
@@ -190,7 +190,7 @@
             <dd>{{ reliability.total_completed }}</dd>
         </div>
         <div>
-            <dt>{% translate "Tasks helped on" %}</dt>
+            <dt>{% translate "Tasks assisted on" %}</dt>
             <dd>{{ reliability.total_helped }}</dd>
         </div>
         <div>
@@ -199,7 +199,7 @@
                 {% if reliability.on_time_percent is not None %}
                     {{ reliability.on_time_percent }}%
                 {% else %}
-                    <span class="muted">{% blocktranslate with have=reliability.on_time_sample_size need=reliability.min_sample %}not enough completed tasks yet ({{ have }} of {{ need }} needed){% endblocktranslate %}</span>
+                    <span class="muted">{% blocktranslate with have=reliability.on_time_sample_size need=reliability.min_sample %}insufficient completed tasks ({{ have }} of {{ need }} required){% endblocktranslate %}</span>
                 {% endif %}
             </dd>
         </div>
@@ -209,7 +209,7 @@
                 {% if reliability.acceptance_latency_minutes is not None %}
                     {% blocktranslate with minutes=reliability.acceptance_latency_minutes %}{{ minutes }} minutes{% endblocktranslate %}
                 {% else %}
-                    <span class="muted">{% translate "not enough completed tasks yet" %}</span>
+                    <span class="muted">{% translate "insufficient completed tasks" %}</span>
                 {% endif %}
             </dd>
         </div>
@@ -233,7 +233,7 @@
                         {% if row.on_time_percent is not None %}
                             {{ row.on_time_percent }}%
                         {% else %}
-                            <span class="muted">{% translate "not enough data" %}</span>
+                            <span class="muted">{% translate "insufficient data" %}</span>
                         {% endif %}
                     </td>
                 </tr>

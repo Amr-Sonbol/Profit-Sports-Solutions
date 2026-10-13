@@ -34,8 +34,8 @@
     <h2>{% translate "Portal login" %}</h2>
     {% if customer.user_id %}
     <p class="field__help">
-        {% blocktranslate with username=customer.user.username %}This customer can sign in as “{{ username }}” to see their tickets and service history.{% endblocktranslate %}
-        {% blocktranslate %}Share their own login page: {% endblocktranslate %}
+        {% blocktranslate with username=customer.user.username %}This customer can sign in as “{{ username }}” to view their tickets and service history.{% endblocktranslate %}
+        {% blocktranslate %}Share their login page: {% endblocktranslate %}
         <a href="{% url 'customers:portal_login' %}">{% url 'customers:portal_login' %}</a>
     </p>
     <form method="post" novalidate>
@@ -55,7 +55,7 @@
     </form>
     {% else %}
     <p class="field__help">
-        {% translate "No portal login yet — create one so this customer can track their own tickets and service history. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password and confirm their contact details the first time they sign in." %}
+        {% translate "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}
@@ -71,7 +71,7 @@
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button type="submit" class="button button--secondary">{% translate "Create login and email it" %}</button>
+        <button type="submit" class="button button--secondary">{% translate "Create account and send login details" %}</button>
     </form>
     {% endif %}
 </div>
@@ -82,7 +82,7 @@
     {% if customer.is_active %}
     <h2>{% translate "Deactivate" %}</h2>
     <p class="field__help">
-        {% translate "Removes them from the customer list and blocks their login (if they have one) — for a customer whose contract ended or business closed." %}
+        {% translate "Removes the customer from the customer list and disables their login, if any. Use this when a contract has ended or the business has closed." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

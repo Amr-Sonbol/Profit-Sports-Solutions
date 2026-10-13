@@ -7,7 +7,7 @@
 <div class="page__header">
     <h1>{% translate "Parts" %}</h1>
 </div>
-<p class="field__help">{% translate "The list technicians pick from when they record parts on a work report. Switch a part off instead of deleting it — past reports keep their codes." %}</p>
+<p class="field__help">{% translate "The list from which technicians select parts when recording a work report. Deactivate a part rather than deleting it, so that past reports retain their codes." %}</p>
 
 <div class="section">
     <h2>{% translate "Add a part" %}</h2>
@@ -108,9 +108,9 @@
     </nav>
     {% endif %}
     {% elif search %}
-    <p class="empty-state">{% translate "No parts match that search." %}</p>
+    <p class="empty-state">{% translate "No parts match your search." %}</p>
     {% else %}
-    <p class="empty-state">{% translate "No parts yet — add them above or upload a list." %}</p>
+    <p class="empty-state">{% translate "No parts have been added. Add them above or upload a list." %}</p>
     {% endif %}
 </div>
 {% endblock %}

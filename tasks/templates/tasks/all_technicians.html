@@ -7,7 +7,7 @@
 <div class="page__header">
     <h1>{% translate "All technicians" %}</h1>
 </div>
-<p class="field__help">{% translate "Every active technician in every country — for tracking, inspection, and audit. Doesn't follow the country switcher above." %}</p>
+<p class="field__help">{% translate "All active technicians across all countries, for tracking, inspection and audit. This view is not affected by the country selector above." %}</p>
 
 <form method="get" class="filters">
     <div class="filters__search">
@@ -26,7 +26,7 @@
                     <th>{% translate "Country" %}</th>
                     <th>{% translate "Role" %}</th>
                     <th>{% translate "Professional skills" %}</th>
-                    <th>{% translate "90-day track" %}</th>
+                    <th>{% translate "90-day progress" %}</th>
                     <th></th>
                 </tr>
             </thead>
@@ -50,18 +50,18 @@
                         </span>
                         {% endif %}
                         {% if row.certification.cardio_ready %}
-                        <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
+                        <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if row.ninety_day %}
                         {% if row.ninety_day.on_track %}
                         <span class="badge badge--status-completed">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                         </span>
                         {% else %}
                         <span class="badge badge--status-blocked">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                         </span>
                         {% endif %}
                         {% else %}
@@ -79,7 +79,7 @@
         </table>
     </div>
     {% elif search %}
-    <p class="empty-state">{% translate "No technicians match that search." %}</p>
+    <p class="empty-state">{% translate "No technicians match your search." %}</p>
     {% else %}
     <p class="empty-state">{% translate "No active technicians." %}</p>
     {% endif %}

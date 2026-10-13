@@ -146,7 +146,7 @@ def nav_pages(technician, allowed):
     if technician.role != technician.Role.TECHNICIAN:
         add('tasks:internal_tickets', _('Internal tickets'), 'list')
     if technician.is_manager_tier:
-        add('tasks:all_week', _('All week'), 'calendar')
+        add('tasks:all_week', _('Week view — all countries'), 'calendar')
         add('tasks:all_technicians', _('All technicians'), 'users')
         add('tasks:monthly_report', _('Monthly report'), 'bar-chart')
         add('tasks:skill_list', _('Skills'), 'award')

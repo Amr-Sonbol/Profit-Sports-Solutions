@@ -848,8 +848,9 @@ def _send_schedule_notification(task):
         }
         message = _(
             'Dear %(contact)s,\n\n'
-            'This confirms our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n\n'
-            "If this time doesn't work for you, please contact us to reschedule.\n\n"
+            'We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at '
+            '%(time)s.\n\n'
+            'Should this time be inconvenient, please contact us to arrange an alternative.\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': contact, 'site': site, 'date': date, 'time': time}
@@ -870,13 +871,13 @@ def _send_delay_notice(task, reason):
     contact = task.site.effective_contact_name or task.site.customer.name
     site = task.site.name
     with translation.override('en'):
-        subject = _('A short delay for your Profit Sports Solutions visit — %(number)s') % {
+        subject = _('Notice of a brief delay to your Profit Sports Solutions visit — %(number)s') % {
             'number': task.task_number,
         }
         message = _(
             'Dear %(contact)s,\n\n'
-            'Our technician for %(site)s is running behind schedule today: %(reason)s\n\n'
-            "We're sorry for the inconvenience and will be there as soon as we can.\n\n"
+            'Please be advised that our technician for %(site)s is running behind schedule today: %(reason)s\n\n'
+            'We sincerely apologise for any inconvenience and will arrive as soon as possible.\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': contact, 'site': site, 'reason': reason}
@@ -920,12 +921,12 @@ def _send_shipping_notice(contact_name, entity_name, reference, company, trackin
         if company:
             lines.insert(0, _('Carrier: %(company)s') % {'company': carrier_label})
             if tracking_url:
-                lines.append(_('Track it here: %(url)s') % {'url': tracking_url})
+                lines.append(_('Track your shipment here: %(url)s') % {'url': tracking_url})
         tracking_lines = '\n'.join(lines)
         message = _(
             'Dear %(contact)s,\n\n'
-            'Good news — your shipment for %(entity)s is on its way. '
-            'You can track it using the details below.\n\n'
+            'We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track it '
+            'using the details below.\n\n'
             '%(tracking_lines)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
@@ -962,7 +963,7 @@ def _send_shipment_notice_to_supervisor(request, task):
         if url_template:
             tracking_url = url_template.format(tracking=quote(task.shipping_tracking_number))
     with translation.override('en'):
-        subject = _('Shipment on the way — %(task_number)s') % {'task_number': task.task_number}
+        subject = _('Your shipment is on its way — %(task_number)s') % {'task_number': task.task_number}
         if task.shipping_company:
             tracking_line = _('Carrier: %(company)s — tracking number %(tracking)s') % {
                 'company': carrier_label, 'tracking': task.shipping_tracking_number,
@@ -970,9 +971,10 @@ def _send_shipment_notice_to_supervisor(request, task):
         else:
             tracking_line = _('Tracking number: %(tracking)s') % {'tracking': task.shipping_tracking_number}
         message = _(
-            'A shipment for %(task_number)s (%(site)s) now has a tracking number.\n\n'
+            'A tracking number has been assigned to the shipment for %(task_number)s (%(site)s).\n\n'
             '%(tracking_line)s\n\n'
-            'View the task here:\n%(link)s\n',
+            'View the task:\n'
+            '%(link)s\n',
         ) % {
             'task_number': task.task_number, 'site': task.site.name,
             'tracking_line': tracking_line, 'link': link,
@@ -1004,7 +1006,7 @@ def _send_feedback_email(request, feedback):
     site = task.site.name
     with translation.override('en'):
         visit_date = timezone.localtime(task.report.submitted_at, country_tz).date().strftime('%B %d, %Y')
-        subject = _("We'd love your feedback on your recent Profit Sports Solutions visit")
+        subject = _('We would value your feedback on your recent Profit Sports Solutions visit')
         message = _(
             'Dear %(contact)s,\n\n'
             'Thank you for choosing Profit Sports Solutions. We completed a service visit at '
@@ -1242,22 +1244,23 @@ def task_detail(request, pk):
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
         if not task.scheduled_for:
-            messages.error(request, _('Set a scheduled time before notifying the customer.'))
+            messages.error(request, _('Please set a scheduled time before notifying the customer.'))
         elif not task.site.effective_contact_email:
-            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+            messages.error(request, _('Please add a contact email address for this site before notifying the '
+                                      'customer.'))
         else:
             _send_schedule_notification(task)
             task.schedule_notified_at = timezone.now()
             task.schedule_notified_by = request.user
             task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
-            messages.success(request, _('Customer notified of the scheduled visit.'))
+            messages.success(request, _('The customer has been notified of the scheduled visit.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'set_schedule_time':
         set_time_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
         if not task.scheduled_date or task.scheduled_for:
-            messages.error(request, _('There is no day-only schedule waiting for a time.'))
+            messages.error(request, _('There is no day-only schedule awaiting a time.'))
         else:
             time_value = parse_time(request.POST.get('scheduled_time', ''))
             if not time_value:
@@ -1280,7 +1283,7 @@ def task_detail(request, pk):
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
         if not task.schedule_time_locked:
-            messages.error(request, _('This schedule is not locked — edit it directly instead.'))
+            messages.error(request, _('This schedule is not locked. Please edit it directly.'))
         elif task.schedule_change_requests.filter(status=ScheduleChangeRequest.Status.PENDING).exists():
             messages.error(request, _('There is already a pending request for this task.'))
         else:
@@ -1297,7 +1300,7 @@ def task_detail(request, pk):
                     task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_REQUESTED,
                     occurred_at=timezone.now(), actor=request.user, note=change_request.reason,
                 )
-                messages.success(request, _('Change requested — a manager will review it.'))
+                messages.success(request, _('Change requested. A manager will review it.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_schedule_change':
@@ -1348,34 +1351,36 @@ def task_detail(request, pk):
         _require_task_owner(request, task)
         reason = request.POST.get('delay_reason', '').strip()
         if not task.scheduled_for:
-            messages.error(request, _('Set a scheduled time before notifying the customer.'))
+            messages.error(request, _('Please set a scheduled time before notifying the customer.'))
         elif not task.site.effective_contact_email:
-            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+            messages.error(request, _('Please add a contact email address for this site before notifying the '
+                                      'customer.'))
         elif not reason:
-            messages.error(request, _('Explain the reason for the delay before notifying the customer.'))
+            messages.error(request, _('Please state the reason for the delay before notifying the customer.'))
         else:
             _send_delay_notice(task, reason)
             TaskEvent.objects.create(
                 task=task, event_type=TaskEvent.EventType.DELAY_NOTICE,
                 occurred_at=timezone.now(), actor=request.user, note=reason,
             )
-            messages.success(request, _('Customer notified of the delay.'))
+            messages.success(request, _('The customer has been notified of the delay.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_shipping':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
         if not task.shipping_tracking_number:
-            messages.error(request, _('Add a shipping tracking number before notifying the customer.'))
+            messages.error(request, _('Please add a shipping tracking number before notifying the customer.'))
         elif not task.site.effective_contact_email:
-            messages.error(request, _('Add a contact email for this site before notifying the customer.'))
+            messages.error(request, _('Please add a contact email address for this site before notifying the '
+                                      'customer.'))
         else:
             _send_shipping_notice(
                 task.site.effective_contact_name or task.site.customer.name, task.site.name,
                 task.task_number, task.shipping_company,
                 task.shipping_tracking_number, task.site.effective_contact_email,
             )
-            messages.success(request, _('Customer notified of the tracking number.'))
+            messages.success(request, _('The customer has been notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     can_upload_staff_document = requesting_technician.role != Technician.Role.TECHNICIAN
@@ -1394,7 +1399,7 @@ def task_detail(request, pk):
         if not can_supervisor_approve(requesting_technician, task):
             raise PermissionDenied
         if approve_report_as_supervisor(task, request.user):
-            messages.success(request, _('Approved — now awaiting manager approval before the task closes.'))
+            messages.success(request, _('Approved. The task now awaits manager approval before closure.'))
         else:
             messages.error(request, _('This task has no report awaiting supervisor review.'))
         return redirect('tasks:task_detail', pk=task.pk)
@@ -1485,7 +1490,7 @@ def task_detail(request, pk):
     if request.method == 'POST' and request.POST.get('action') == 'flag_negligence':
         require_manager(request)
         if task.status != Task.Status.CLOSED:
-            messages.error(request, _('Only a closed task can be flagged.'))
+            messages.error(request, _('Only closed tasks can be flagged.'))
             return redirect('tasks:task_detail', pk=task.pk)
         negligence_form = NegligenceFlagForm(request.POST)
         if negligence_form.is_valid():
@@ -1501,9 +1506,9 @@ def task_detail(request, pk):
         require_manager(request)
         feedback = getattr(task, 'feedback', None)
         if task.status != Task.Status.CLOSED:
-            messages.error(request, _('Close the task (file its report) before requesting feedback.'))
+            messages.error(request, _('Please close the task (submit its report) before requesting feedback.'))
         elif not task.site.effective_contact_email:
-            messages.error(request, _('Add a contact email for this site before requesting feedback.'))
+            messages.error(request, _('Please add a contact email address for this site before requesting feedback.'))
         else:
             if feedback is None:
                 feedback = CustomerFeedback.objects.create(
@@ -1514,7 +1519,7 @@ def task_detail(request, pk):
                 feedback.requested_by = request.user
                 feedback.save(update_fields=['requested_at', 'requested_by'])
             _send_feedback_email(request, feedback)
-            messages.success(request, _('Feedback request sent.'))
+            messages.success(request, _('The feedback request has been sent.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     assignments = task.assignments.select_related('technician')
@@ -1640,13 +1645,13 @@ def task_edit(request, pk):
                 updated_task.schedule_notified_at = timezone.now()
                 updated_task.schedule_notified_by = request.user
                 updated_task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
-                notices.append(_('Customer notified automatically.'))
+                notices.append(_('The customer has been notified automatically.'))
             if (
                 'shipping_tracking_number' in form.changed_data and updated_task.shipping_tracking_number
                 and updated_task.responsible_supervisor_id
             ):
                 _send_shipment_notice_to_supervisor(request, updated_task)
-                notices.append(_('Supervisor notified of the shipment.'))
+                notices.append(_('The supervisor has been notified of the shipment.'))
             messages.success(request, ' '.join([_('Task updated.')] + notices))
             return redirect('tasks:task_detail', pk=task.pk)
     else:
@@ -1810,11 +1815,12 @@ def send_ticket_confirmation_to_customer(request, ticket):
     with translation.override('en'):
         subject = _('Ticket %(number)s received — Profit Sports Solutions') % {'number': ticket.ticket_number}
         message = _(
-            'Hi %(contact)s,\n\n'
-            "Thanks for contacting us. We've received your request and created ticket #%(number)s.\n\n"
-            "Our team responds within 24 hours, Sunday–Friday. You'll get an email as soon as there's an update.\n\n"
-            "Please make sure you've attached photos or videos for each issue you're facing. This helps our "
-            'team understand the problem and resolve your case faster.\n\n'
+            'Dear %(contact)s,\n\n'
+            'Thank you for contacting us. We have received your request and created ticket #%(number)s.\n\n'
+            'Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there is an '
+            'update.\n\n'
+            'Please ensure that photos or videos are attached for each issue. This will help our team understand '
+            'the problem and resolve your case promptly.\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': ticket.contact_name, 'number': ticket.ticket_number}
@@ -1839,14 +1845,14 @@ def send_customer_login_email(request, customer, password):
     with translation.override('en'):
         subject = _('Your Profit Sports Solutions portal login')
         message = _(
-            'Hi %(contact)s,\n\n'
-            "We've created your customer portal account — from here you can submit service "
-            'requests and track their progress.\n\n'
+            'Dear %(contact)s,\n\n'
+            'Your customer portal account has been created. Through the portal you may submit service requests and '
+            'track their progress.\n\n'
             'Username: %(username)s\n'
             'Temporary password: %(password)s\n\n'
-            "You'll be asked to set your own password and confirm your details the first time "
-            'you sign in.\n\n'
-            'Sign in here:\n%(link)s\n\n'
+            'You will be asked to set your own password and confirm your details when you first sign in.\n\n'
+            'Sign in here:\n'
+            '%(link)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': contact, 'username': customer.user.username, 'password': password, 'link': link}
@@ -1867,12 +1873,13 @@ def send_technician_login_email(request, technician, password):
     with translation.override('en'):
         subject = _('Your Profit Sports Solutions account')
         message = _(
-            'Hi %(contact)s,\n\n'
+            'Dear %(contact)s,\n\n'
             'Your Profit Sports Solutions account has been created.\n\n'
             'Username: %(username)s\n'
             'Temporary password: %(password)s\n\n'
-            "You'll be asked to set your own password the first time you sign in.\n\n"
-            'Sign in here:\n%(link)s\n\n'
+            'You will be asked to set your own password when you first sign in.\n\n'
+            'Sign in here:\n'
+            '%(link)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {'contact': technician.full_name, 'username': technician.user.username, 'password': password, 'link': link}
@@ -1902,7 +1909,8 @@ def _send_reply_to_customer(request, reply):
             'Dear %(contact)s,\n\n'
             'Regarding ticket %(number)s:\n\n'
             '%(reply_message)s\n\n'
-            'You can reply or check the full conversation here:\n%(link)s\n\n'
+            'You may reply or view the full conversation here:\n'
+            '%(link)s\n\n'
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % {
@@ -1932,9 +1940,10 @@ def _send_reply_to_staff(request, reply):
     with translation.override('en'):
         subject = _('New customer reply — ticket %(number)s') % {'number': ticket.ticket_number}
         message = _(
-            'The customer replied on ticket %(number)s (%(company)s — %(site)s):\n\n'
+            'The customer has replied to ticket %(number)s (%(company)s — %(site)s):\n\n'
             '%(reply_message)s\n\n'
-            'View and reply here:\n%(link)s\n',
+            'View and reply:\n'
+            '%(link)s\n',
         ) % {
             'number': ticket.ticket_number, 'company': ticket.company_name, 'site': ticket.site_description,
             'reply_message': reply.message, 'link': link,
@@ -1959,8 +1968,10 @@ def _send_escalation_email(request, escalation):
     with translation.override('en'):
         subject = _('Ticket escalated to you — %(number)s') % {'number': ticket.ticket_number}
         message = _(
-            '%(by)s escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n\n'
-            '%(reason)s\n\nDecide here:\n%(link)s\n',
+            '%(by)s has escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n\n'
+            '%(reason)s\n\n'
+            'Please record your decision here:\n'
+            '%(link)s\n',
         ) % {
             'by': escalation.escalated_by.full_name, 'number': ticket.ticket_number,
             'company': ticket.company_name, 'site': ticket.site_description, 'reason': escalation.reason,
@@ -1988,8 +1999,10 @@ def _send_escalation_decided_email(request, escalation):
         subject = _('Escalation decided — %(number)s') % {'number': ticket.ticket_number}
         decision = escalation.get_decision_display()
         message = _(
-            '%(by)s decided the escalation on ticket %(number)s: %(decision)s.\n\n%(note)s\n\n'
-            'Carry on here:\n%(link)s\n',
+            '%(by)s has issued a decision on the escalation of ticket %(number)s: %(decision)s.\n\n'
+            '%(note)s\n\n'
+            'Please continue processing the ticket here:\n'
+            '%(link)s\n',
         ) % {
             'by': escalation.escalated_to.full_name, 'number': ticket.ticket_number, 'decision': decision,
             'note': escalation.decision_note, 'link': link,
@@ -2044,12 +2057,13 @@ def send_new_ticket_email_to_staff(request, ticket):
             'number': ticket.ticket_number, 'company': ticket.company_name,
         }
         message = _(
-            'A new ticket has come in.\n\n'
+            'A new ticket has been received.\n\n'
             'Ticket: %(number)s\n'
             'Company: %(company)s\n'
             'Site: %(site)s\n'
             'Description: %(description)s\n\n'
-            'Review it here:\n%(link)s\n',
+            'Review the ticket:\n'
+            '%(link)s\n',
         ) % {
             'number': ticket.ticket_number, 'company': ticket.company_name,
             'site': ticket.site_description, 'description': ticket.description, 'link': link,
@@ -2077,11 +2091,12 @@ def _send_new_task_email_to_staff(request, task):
     with translation.override('en'):
         subject = _('New task %(number)s — %(site)s') % {'number': task.task_number, 'site': task.site.name}
         message = _(
-            'A new task was created.\n\n'
+            'A new task has been created.\n\n'
             'Task: %(number)s\n'
             'Site: %(site)s\n'
             'Description: %(description)s\n\n'
-            'View it here:\n%(link)s\n',
+            'View the task:\n'
+            '%(link)s\n',
         ) % {'number': task.task_number, 'site': task.site.name, 'description': task.description, 'link': link}
     _send_notification_email(
         subject, message, 'tasks/email/new_task_to_staff.html',
@@ -2279,7 +2294,7 @@ def ticket_review(request, pk):
                 ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=timezone.now(),
             )
             _send_escalation_decided_email(request, pending_escalation)
-            messages.success(request, _('Decision sent back to the support desk.'))
+            messages.success(request, _('The decision has been returned to the support desk.'))
             return redirect('tasks:ticket_review', pk=ticket.pk)
 
     if request.method == 'POST' and can_manage:
@@ -2311,8 +2326,8 @@ def ticket_review(request, pk):
                 recipient = escalation.escalated_to
                 if not (recipient.user_id and recipient.user.email):
                     messages.warning(request, _(
-                        '%(name)s has no email address on file, so they were only alerted in the app. '
-                        'Add one on their profile.',
+                        '%(name)s has no email address on record and was therefore notified in the application '
+                        'only. Please add an email address to their profile.',
                     ) % {'name': recipient.full_name})
                 push_in_their_language(
                     escalation.escalated_to,
@@ -2365,16 +2380,16 @@ def ticket_review(request, pk):
 
         elif action == 'notify_shipping':
             if not ticket.shipping_tracking_number:
-                messages.error(request, _('Add a shipping tracking number before notifying the customer.'))
+                messages.error(request, _('Please add a shipping tracking number before notifying the customer.'))
             elif not ticket.contact_email:
-                messages.error(request, _('Add a contact email before notifying the customer.'))
+                messages.error(request, _('Please add a contact email address before notifying the customer.'))
             else:
                 _send_shipping_notice(
                     ticket.contact_name, ticket.site_description, f'ticket #{ticket.pk}',
                     ticket.shipping_company,
                     ticket.shipping_tracking_number, ticket.contact_email,
                 )
-                messages.success(request, _('Customer notified of the tracking number.'))
+                messages.success(request, _('The customer has been notified of the tracking number.'))
             return redirect('tasks:ticket_review', pk=ticket.pk)
 
         elif action == 'dismiss' and ticket.status == CustomerTicket.Status.NEW:
@@ -2600,14 +2615,14 @@ def technician_availability(request):
                 technician.is_available = False
                 technician.unavailable_reason = mark_unavailable_form.cleaned_data['reason']
                 technician.save(update_fields=['is_available', 'unavailable_reason'])
-                messages.success(request, _('Marked unavailable.'))
+                messages.success(request, _('Marked as unavailable.'))
                 return redirect('tasks:technician_availability')
 
         elif action == 'mark_available':
             technician.is_available = True
             technician.unavailable_reason = ''
             technician.save(update_fields=['is_available', 'unavailable_reason'])
-            messages.success(request, _('Marked available.'))
+            messages.success(request, _('Marked as available.'))
             return redirect('tasks:technician_availability')
 
     return render(request, 'tasks/technician_availability.html', {
@@ -3412,7 +3427,7 @@ def technician_edit(request, pk):
         if deactivate_form.is_valid():
             technician.set_active(False, reason=deactivate_form.cleaned_data['reason'])
             if _tasks_to_reassign(technician):
-                messages.success(request, _('Deactivated. Reassign their open tasks below.'))
+                messages.success(request, _('Deactivated. Please reassign their open tasks below.'))
                 return redirect('tasks:technician_edit', pk=technician.pk)
             messages.success(request, _('Technician deactivated.'))
             return redirect('tasks:technician_list')
@@ -3427,7 +3442,7 @@ def technician_edit(request, pk):
             technician.must_change_password = True
             technician.save(update_fields=['user', 'must_change_password'])
             send_technician_login_email(request, technician, password)
-            messages.success(request, _('Login created and emailed to %(email)s.') % {'email': email})
+            messages.success(request, _('Login created and sent to %(email)s.') % {'email': email})
             return redirect('tasks:technician_edit', pk=technician.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
@@ -3475,7 +3490,7 @@ def first_login(request):
             request.user.set_password(form.cleaned_data['new_password1'])
             request.user.save(update_fields=['password'])
             update_session_auth_hash(request, request.user)
-            messages.success(request, _('Password set — welcome!'))
+            messages.success(request, _('Your password has been set. Welcome.'))
             return redirect('tasks:dashboard')
     else:
         form = TechnicianFirstLoginForm(user=request.user)
@@ -3494,7 +3509,7 @@ def set_active_country(request):
     if request.method == 'POST':
         country = get_object_or_404(Country, pk=request.POST.get('country'))
         request.session[ACTIVE_COUNTRY_SESSION_KEY] = country.pk
-        messages.success(request, _('Now viewing %(country)s.') % {'country': country.display_name})
+        messages.success(request, _('You are now viewing %(country)s.') % {'country': country.display_name})
 
     next_url = request.POST.get('next', '')
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
@@ -3858,8 +3873,8 @@ def country_list(request):
                 messages.error(
                     request,
                     _(
-                        '“%(name)s” still has technicians, customers, or tickets attached to it — '
-                        'deactivate it instead of deleting.'
+                        '“%(name)s” still has technicians, customers or tickets linked to it. Please deactivate it '
+                        'instead of deleting it.'
                     ) % {'name': country.display_name},
                 )
         return redirect('tasks:country_list')
@@ -3942,7 +3957,7 @@ def my_task_detail(request, pk):
                         task, TaskEvent.EventType.BLOCKED, request.user, request.POST,
                         note=block_form.cleaned_data['note'],
                     )
-                messages.success(request, _('Task marked blocked.'))
+                messages.success(request, _('Task marked as blocked.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'pause' and can_pause:
@@ -3952,19 +3967,19 @@ def my_task_detail(request, pk):
                     task, TaskEvent.EventType.PAUSED, request.user, request.POST,
                     note=pause_form.cleaned_data['note'],
                 )
-                messages.success(request, _('Marked stopped for today.'))
+                messages.success(request, _('Marked as stopped for today.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'resume' and can_resume:
             record_tap(task, TaskEvent.EventType.RESUMED, request.user, request.POST)
-            messages.success(request, _('Marked started again.'))
+            messages.success(request, _('Marked as resumed.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'undo' and is_lead:
             if undo_last_tap(task, request.user):
-                messages.success(request, _('Undone.'))
+                messages.success(request, _('Action undone.'))
             else:
-                messages.error(request, _('That can no longer be undone — ask a manager to correct the time.'))
+                messages.error(request, _('This can no longer be undone. Please ask a manager to correct the time.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'upload':
@@ -4083,8 +4098,8 @@ def save_work_report(request, task, technician, report_form, part_rows):
         if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
             push_in_their_language(
                 task.responsible_supervisor,
-                lambda: _('Report waiting for your review'),
-                lambda: _('%(number)s — filed by %(name)s') % {
+                lambda: _('Report awaiting your review'),
+                lambda: _('%(number)s — submitted by %(name)s') % {
                     'number': task.task_number, 'name': technician.full_name,
                 },
                 {'type': 'team_task', 'task_id': task.pk},
@@ -4094,11 +4109,11 @@ def save_work_report(request, task, technician, report_form, part_rows):
 
 def report_saved_message(first_submission, task):
     if first_submission and task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
-        return _('Report submitted — awaiting your supervisor’s review.')
+        return _("Report submitted — awaiting your supervisor's review.")
     if first_submission:
-        return _('Report submitted — awaiting manager approval before the task closes.')
+        return _('Report submitted — awaiting manager approval before the task is closed.')
     if task.status in (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED):
-        return _('Report updated — still awaiting approval.')
+        return _('Report updated — approval still pending.')
     return _('Report updated.')
 
 
@@ -4121,15 +4136,15 @@ def my_report_form(request, pk):
     task = assignment.task
 
     if task.status == Task.Status.CLOSED:
-        messages.error(request, _('This task is closed — only a manager or admin can correct its report now.'))
+        messages.error(request, _('This task is closed. Only a manager or administrator can now correct its report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
     if task.status not in REPORT_EDITABLE_STATUSES:
-        messages.error(request, _('Start work on this task before filing a report.'))
+        messages.error(request, _('Please start work on this task before submitting a report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
     if task.status == Task.Status.IN_PROGRESS and _task_is_paused(task):
-        messages.error(request, _('Mark yourself started again before filing the report.'))
+        messages.error(request, _('Please mark yourself as resumed before submitting the report.'))
         return redirect('tasks:my_task_detail', pk=task.pk)
 
     return _report_form(request, task, technician, reverse('tasks:my_task_detail', args=[task.pk]))
@@ -4298,7 +4313,7 @@ def ticket_open(request):
             send_ticket_confirmation_to_customer(request, ticket)
             send_new_ticket_email_to_staff(request, ticket)
         elif ticket.assigned_to != technician:
-            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket for you'))
+            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket assigned to you'))
         messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
         if not is_customer:
             return redirect('tasks:internal_ticket', pk=ticket.pk)
@@ -4394,11 +4409,11 @@ def internal_ticket(request, pk):
                 ticket.save(update_fields=['assigned_to', 'assigned_at'])
                 TicketInternalNote.objects.create(
                     ticket=ticket, author=request.user, created_at=timezone.now(),
-                    message=_('Handed to %(name)s.') % {'name': ticket.assigned_to.full_name},
+                    message=_('Reassigned to %(name)s.') % {'name': ticket.assigned_to.full_name},
                 )
                 if ticket.assigned_to != technician:
-                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket for you'))
-                messages.success(request, _('Handed over.'))
+                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket assigned to you'))
+                messages.success(request, _('Reassigned successfully.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'close':
             close_form = CloseTicketForm(request.POST)

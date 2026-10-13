@@ -34,7 +34,7 @@ export default function TicketsScreen() {
     } catch (err) {
       setError(
         err instanceof ApiRequestError && err.status === 403
-          ? "You don't have access to tickets."
+          ? "You do not have permission to view tickets."
           : 'Could not load tickets.',
       );
     }
@@ -58,7 +58,7 @@ export default function TicketsScreen() {
         <ThemedText type="title" style={styles.heading}>
           Tickets
         </ThemedText>
-        <SearchBox value={search} onChangeText={setSearch} placeholder="Search ticket, gym, contact, phone, PAK" />
+        <SearchBox value={search} onChangeText={setSearch} placeholder="Search by ticket, gym, contact, phone or PAK" />
         {error ? (
           <ThemedText themeColor="textSecondary" style={styles.message}>
             {error}
@@ -71,7 +71,7 @@ export default function TicketsScreen() {
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
             ListEmptyComponent={
               tickets !== null ? (
-                <ThemedText themeColor="textSecondary">{query ? 'No tickets match.' : 'No new tickets.'}</ThemedText>
+                <ThemedText themeColor="textSecondary">{query ? 'No tickets match your search.' : 'No new tickets.'}</ThemedText>
               ) : null
             }
             renderItem={({ item }) => (

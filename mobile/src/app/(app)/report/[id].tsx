@@ -54,7 +54,7 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
       const first = value.find((rowErrors) => rowErrors && Object.keys(rowErrors).length > 0);
       if (first) {
         const messages = Object.values(first as Record<string, string[]>).flat();
-        errors.parts = messages[0] ?? 'Check the parts rows.';
+        errors.parts = messages[0] ?? 'Please review the parts entries.';
       }
     } else if (Array.isArray(value)) {
       errors[field] = String(value[0]);
@@ -132,7 +132,7 @@ export default function ReportScreen() {
           ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
         })));
         if (pending.error) {
-          setErrors({ form: `This report couldn’t be sent: ${pending.error} Fix it and submit again.` });
+          setErrors({ form: `This report could not be sent: ${pending.error} Please correct it and submit again.` });
         }
       } else if (report) {
         setFindings(report.findings);
@@ -202,15 +202,15 @@ export default function ReportScreen() {
       if (isNetworkError(err) && task) {
         savePendingReport(Number(id), task.task_number, input);
         Alert.alert(
-          'Saved on this phone',
-          'No connection right now. The report will be sent automatically when you’re back online.',
+          'Saved on this device',
+          'No connection available. The report will be sent automatically when you are back online.',
         );
         router.back();
       } else if (err instanceof ApiRequestError && err.status === 400) {
         const fieldErrors = fieldErrorsFrom(err.body);
         setErrors(Object.keys(fieldErrors).length ? fieldErrors : { form: err.message });
       } else {
-        setErrors({ form: err instanceof ApiRequestError ? err.message : 'Could not save — try again.' });
+        setErrors({ form: err instanceof ApiRequestError ? err.message : 'Unable to save. Please try again.' });
       }
     } finally {
       setIsBusy(false);
@@ -244,11 +244,11 @@ export default function ReportScreen() {
             <ThemedText themeColor="textSecondary">{task.task_number} — {task.customer_name}</ThemedText>
 
             <ThemedView style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText type="smallBold">What we found</ThemedText>
+              <ThemedText type="smallBold">Findings</ThemedText>
               <ThemedText>{findings || '—'}</ThemedText>
               {actionTaken ? (
                 <>
-                  <ThemedText type="smallBold">What we did</ThemedText>
+                  <ThemedText type="smallBold">Work performed</ThemedText>
                   <ThemedText>{actionTaken}</ThemedText>
                 </>
               ) : null}
@@ -295,7 +295,7 @@ export default function ReportScreen() {
             </ThemedView>
 
             <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={finishSigning}>
-              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Done — hand back to the technician</ThemedText>
+              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Completed — return to the technician</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setSigning(false)} style={styles.centerLink}>
               <ThemedText themeColor="textSecondary">Cancel</ThemedText>
@@ -323,17 +323,17 @@ export default function ReportScreen() {
               </ThemedText>
             ) : null}
 
-            <Field label="What did you find?" error={errors.findings}>
+            <Field label="Findings" error={errors.findings}>
               <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />
             </Field>
 
-            <Field label="What did you do?" error={errors.action_taken}>
+            <Field label="Work performed" error={errors.action_taken}>
               <TextInput
                 style={[inputStyle, styles.multiline]} value={actionTaken} onChangeText={setActionTaken} multiline
               />
             </Field>
 
-            <Field label="Is the problem resolved?" error={errors.resolved}>
+            <Field label="Has the issue been resolved?" error={errors.resolved}>
               <ThemedView style={styles.toggleRow}>
                 {[true, false].map((value) => (
                   <TouchableOpacity
@@ -450,8 +450,8 @@ export default function ReportScreen() {
                 {newSignature
                   ? `Signed by ${customerName || 'the customer'} ✓`
                   : signatureOnFile
-                    ? `Signed by ${customerName || 'the customer'} — sign again only to replace it.`
-                    : 'The customer reviews the work and signs on their own screen — they won’t see hours or prices.'}
+                    ? `Signed by ${customerName || 'the customer'} — sign again only if you wish to replace it.`
+                    : 'The customer reviews the work and signs on their own screen. Hours and prices are not displayed.'}
               </ThemedText>
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
@@ -461,7 +461,7 @@ export default function ReportScreen() {
                 }}
               >
                 <ThemedText themeColor="primary">
-                  {newSignature || signatureOnFile ? 'Sign again' : 'Hand to customer to sign'}
+                  {newSignature || signatureOnFile ? 'Sign again' : 'Hand to customer for signature'}
                 </ThemedText>
               </TouchableOpacity>
               {errors.customer_name ? (
@@ -485,7 +485,7 @@ export default function ReportScreen() {
                 <ThemedText>Customer not available to sign</ThemedText>
               </TouchableOpacity>
               {notSigned ? (
-                <Field label="Why couldn’t they sign?" error={errors.signature_waived_reason}>
+                <Field label="Reason the customer could not sign" error={errors.signature_waived_reason}>
                   <TextInput
                     style={[inputStyle, styles.multiline]} value={waivedReason} onChangeText={setWaivedReason}
                     multiline

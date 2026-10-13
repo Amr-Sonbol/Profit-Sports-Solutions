@@ -73,11 +73,11 @@
         </table>
     </div>
     {% elif search %}
-    <p class="empty-state">{% translate "No customers match that search." %}</p>
+    <p class="empty-state">{% translate "No customers match your search." %}</p>
     {% elif show_inactive %}
     <p class="empty-state">{% translate "No deactivated customers in your country." %}</p>
     {% else %}
-    <p class="empty-state">{% translate "No customers in your country yet." %}</p>
+    <p class="empty-state">{% translate "There are no customers in your country." %}</p>
     {% endif %}
 </div>
 {% endblock %}

@@ -74,7 +74,7 @@
         </div>
     </dl>
     {% if teammates %}
-    <p class="field__help">{% translate "Also on this task" %}</p>
+    <p class="field__help">{% translate "Other team members on this task" %}</p>
     <ul class="plain-list">
         {% for assignment in teammates %}
         <li>
@@ -96,8 +96,8 @@
             <input type="hidden" name="action" value="{{ next_action }}">
             <button type="submit" class="button">
                 {% if next_action == 'accept' %}{% translate "Accept task" %}
-                {% elif next_action == 'en_route' %}{% translate "On my way" %}
-                {% elif next_action == 'arrive' %}{% translate "I've arrived" %}
+                {% elif next_action == 'en_route' %}{% translate "Heading to site" %}
+                {% elif next_action == 'arrive' %}{% translate "I have arrived" %}
                 {% elif next_action == 'start' %}{% translate "Start work" %}
                 {% endif %}
             </button>
@@ -107,7 +107,7 @@
         <form method="post" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="resume">
-            <button type="submit" class="button">{% translate "Started again" %}</button>
+            <button type="submit" class="button">{% translate "Work resumed" %}</button>
         </form>
         {% endif %}
         {% if undoable_tap %}
@@ -121,7 +121,7 @@
         {% endif %}
     </div>
     {% if undoable_tap %}
-    <p class="field__help">{% translate "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time." %}</p>
+    <p class="field__help">{% translate "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time." %}</p>
     {% endif %}
 
     {% if can_pause %}
@@ -176,7 +176,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No photos yet." %}</p>
+    <p class="empty-state">{% translate "No photos." %}</p>
     {% endif %}
 
     <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
@@ -233,7 +233,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No messages yet." %}</p>
+    <p class="empty-state">{% translate "No messages." %}</p>
     {% endif %}
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
@@ -265,7 +265,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No events yet." %}</p>
+    <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
 {% endblock %}

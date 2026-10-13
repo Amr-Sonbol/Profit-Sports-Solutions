@@ -60,7 +60,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No notes yet." %}</p>
+    <p class="empty-state">{% translate "No notes." %}</p>
     {% endif %}
 
     {% if is_open %}
@@ -81,14 +81,14 @@
 
 {% if can_convert %}
 <div class="section">
-    <h2>{% translate "Needs a job on site?" %}</h2>
+    <h2>{% translate "Convert to a field task" %}</h2>
     <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
 </div>
 {% endif %}
 
 {% if is_open %}
 <div class="section">
-    <h2>{% translate "Hand it to someone else" %}</h2>
+    <h2>{% translate "Reassign to another staff member" %}</h2>
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="reassign">
@@ -98,20 +98,20 @@
             {% for error in reassign_form.assigned_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">
-            <button type="submit" class="button button--secondary">{% translate "Hand over" %}</button>
+            <button type="submit" class="button button--secondary">{% translate "Confirm reassignment" %}</button>
         </div>
     </form>
 </div>
 
 <div class="section">
-    <h2>{% translate "Close with result" %}</h2>
+    <h2>{% translate "Close with resolution" %}</h2>
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="close">
         <div class="field {% if close_form.close_reason.errors %}field--error{% endif %}">
             <label for="{{ close_form.close_reason.id_for_label }}">{% translate "Result" %}</label>
             {{ close_form.close_reason }}
-            <p class="field__help">{% translate "What happened — stock ordered, vendor replied, sorted out, etc." %}</p>
+            <p class="field__help">{% translate "Resolution details, for example stock ordered, vendor responded or issue resolved." %}</p>
             {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">

@@ -60,7 +60,7 @@ export default function TeamTaskScreen() {
       setPicking(null);
       Alert.alert('Done', success);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? errorText(err) : 'That didn’t work — try again.');
+      setError(err instanceof ApiRequestError ? errorText(err) : 'The request could not be completed. Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -170,10 +170,10 @@ export default function TeamTaskScreen() {
           {picking?.kind === 'lead' || picking?.kind === 'helper' ? (
             <ThemedView style={[styles.section, styles.picker, { borderColor: theme.backgroundSelected }]}>
               <ThemedText type="smallBold">
-                {picking.kind === 'lead' ? 'Pick the lead technician' : 'Pick a helper'}
+                {picking.kind === 'lead' ? 'Select the lead technician' : 'Select a helper'}
               </ThemedText>
               {candidates.length === 0 ? (
-                <ThemedText themeColor="textSecondary">No other technicians in this country.</ThemedText>
+                <ThemedText themeColor="textSecondary">There are no other technicians in this country.</ThemedText>
               ) : null}
               {candidates.map((candidate) => (
                 <TouchableOpacity
@@ -193,7 +193,7 @@ export default function TeamTaskScreen() {
                       : candidate.next_task_number
                         ? `Next: ${candidate.next_task_number}${candidate.next_task_at
                           ? ` on ${new Date(candidate.next_task_at).toLocaleString()}` : ''}`
-                        : 'Nothing booked'}
+                        : 'No bookings'}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -204,7 +204,7 @@ export default function TeamTaskScreen() {
           {picking?.kind === 'lead_reason' || picking?.kind === 'remove_reason' ? (
             <ThemedView style={[styles.section, styles.picker, { borderColor: theme.backgroundSelected }]}>
               <ThemedText type="smallBold">
-                {picking.kind === 'lead_reason' ? 'Why is the current lead being replaced?' : 'Why is this helper coming off?'}
+                {picking.kind === 'lead_reason' ? 'Reason for replacing the current lead' : 'Reason for removing this helper'}
               </ThemedText>
               <ThemedView style={styles.reasonGrid}>
                 {END_REASONS.map(([value, label]) => (
@@ -255,7 +255,7 @@ export default function TeamTaskScreen() {
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
               onPress={() => run(
                 () => approveTaskReport(Number(id)),
-                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved — now awaiting manager approval.',
+                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Awaiting manager approval.',
               )}
               disabled={isBusy}
             >

@@ -32,7 +32,7 @@
         </select>
     </div>
     <div class="field">
-        <label for="filter-company">{% translate "Company (as typed)" %}</label>
+        <label for="filter-company">{% translate "Company (as entered)" %}</label>
         <input type="text" id="filter-company" name="company" value="{{ company }}">
     </div>
     <div class="field">
@@ -101,7 +101,7 @@
             {% empty %}
             <tr>
                 <td colspan="8">
-                    <p class="empty-state">{% translate "No tickets match this filter." %}</p>
+                    <p class="empty-state">{% translate "No tickets match the selected filters." %}</p>
                 </td>
             </tr>
             {% endfor %}

@@ -36,7 +36,7 @@ export default function TeamTasksScreen() {
     } catch (err) {
       setError(
         err instanceof ApiRequestError && err.status === 403
-          ? "You don't have access to the team task list."
+          ? "You do not have permission to view the team task list."
           : 'Could not load tasks.',
       );
     }
@@ -60,7 +60,7 @@ export default function TeamTasksScreen() {
         <ThemedText type="title" style={styles.heading}>
           Team
         </ThemedText>
-        <SearchBox value={search} onChangeText={setSearch} placeholder="Search task, customer, site, PAK, serial" />
+        <SearchBox value={search} onChangeText={setSearch} placeholder="Search by task, customer, site, PAK or serial number" />
         {error ? (
           <ThemedText themeColor="textSecondary" style={styles.message}>
             {error}
@@ -73,7 +73,7 @@ export default function TeamTasksScreen() {
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
             ListEmptyComponent={
               tasks !== null ? (
-                <ThemedText themeColor="textSecondary">{query ? 'No tasks match.' : 'No open tasks.'}</ThemedText>
+                <ThemedText themeColor="textSecondary">{query ? 'No tasks match your search.' : 'No open tasks.'}</ThemedText>
               ) : null
             }
             renderItem={({ item }) => (

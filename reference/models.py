@@ -10,9 +10,8 @@ class Country(models.Model):
     task_prefix = models.CharField(
         _('task number prefix'), max_length=5, blank=True,
         help_text=_(
-            'overrides the ISO code as the task-number prefix — e.g. KSA or UAE, since those are '
-            "how people here actually refer to the country, not the ISO code. Leave blank to just "
-            'use the ISO code.',
+            'overrides the ISO code as the task-number prefix, e.g. KSA or UAE, reflecting common local usage. '
+            'Leave blank to use the ISO code.',
         ),
     )
     timezone = models.CharField(
@@ -22,7 +21,7 @@ class Country(models.Model):
     currency_code = models.CharField(_('currency code'), max_length=3)
     weekend_days = models.CharField(
         _('weekend days'), max_length=13, default='4,5',
-        help_text=_('comma-separated weekday numbers, Monday = 0 — e.g. 4,5 for Friday–Saturday'),
+        help_text=_('comma-separated weekday numbers, where Monday = 0 (e.g. 4,5 for Friday–Saturday)'),
     )
     is_active = models.BooleanField(_('active'), default=True)
 
@@ -48,7 +47,7 @@ class Brand(models.Model):
     name = models.CharField(_('name'), max_length=100)
     portal_url = models.URLField(
         _('portal URL'), blank=True,
-        help_text=_('where the office requests spare parts'),
+        help_text=_('address used by the office to request spare parts'),
     )
     is_active = models.BooleanField(_('active'), default=True)
 
@@ -78,7 +77,7 @@ class Skill(models.Model):
     name_ar = models.CharField(_('name (Arabic)'), max_length=100, default='')
     category = models.CharField(
         _('category'), max_length=10, choices=Category.choices, default=Category.OTHER,
-        help_text=_("advanced skills don't count toward the technician certification bar"),
+        help_text=_('advanced skills do not count toward technician certification'),
     )
     is_active = models.BooleanField(_('active'), default=True)
 
@@ -124,7 +123,7 @@ class TaskType(models.Model):
 
     code = models.CharField(
         _('code'), max_length=50, unique=True,
-        help_text=_('stable key, never changes'),
+        help_text=_('stable key; never changes'),
     )
     name = models.CharField(_('name'), max_length=100)
     name_ar = models.CharField(_('name (Arabic)'), max_length=100)
@@ -135,7 +134,7 @@ class TaskType(models.Model):
     requires_signature = models.BooleanField(_('requires signature'), default=False)
     checklist_template = models.JSONField(
         _('checklist template'), default=dict, blank=True,
-        help_text=_('fields the report form shows for this type'),
+        help_text=_('fields displayed on the report form for this task type'),
     )
     is_active = models.BooleanField(_('active'), default=True)
 

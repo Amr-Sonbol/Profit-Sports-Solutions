@@ -184,22 +184,22 @@ class TaskCreateForm(forms.ModelForm):
         new_site_name = (cleaned.get('new_site_name') or '').strip()
         new_site_customer = cleaned.get('new_site_customer')
         if site and (new_site_name or new_site_customer):
-            self.add_error(None, _('Choose an existing site or add a new one below, not both.'))
+            self.add_error(None, _('Select an existing site or add a new one below, not both.'))
         elif not site and not (new_site_name and new_site_customer):
             if self.is_admin:
-                self.add_error('site', _('Choose a site, or add a new one below.'))
+                self.add_error('site', _('Select a site, or add a new one below.'))
             else:
-                self.add_error('site', _("Choose a site — an admin can add a new one if it isn't listed."))
+                self.add_error('site', _('Select a site. An administrator can add a new site if it is not listed.'))
         elif not site and Site.objects.filter(customer=new_site_customer, name__iexact=new_site_name).exists():
-            self.add_error('new_site_name', _('This customer already has a site with that name.'))
+            self.add_error('new_site_name', _('This customer already has a site with this name.'))
 
         brand = cleaned.get('brand')
         new_brand_name = (cleaned.get('new_brand_name') or '').strip()
         if brand and new_brand_name:
-            self.add_error(None, _('Choose an existing brand or add a new one below, not both.'))
+            self.add_error(None, _('Select an existing brand or add a new one below, not both.'))
         elif new_brand_name and Brand.objects.filter(name__iexact=new_brand_name).exists():
             self.add_error(
-                'new_brand_name', _('A brand with that name already exists — pick it from the list instead.'),
+                'new_brand_name', _('A brand with this name already exists. Please select it from the list.'),
             )
 
         task_type = cleaned.get('task_type')
@@ -208,18 +208,19 @@ class TaskCreateForm(forms.ModelForm):
             cleaned.get('new_task_type_name_ar'), cleaned.get('new_task_type_category'),
         )
         if task_type and any(new_task_type_fields):
-            self.add_error(None, _('Choose an existing task type or add a new one below, not both.'))
+            self.add_error(None, _('Select an existing task type or add a new one below, not both.'))
         elif any(new_task_type_fields) and not all(new_task_type_fields):
             self.add_error(
-                None, _('Fill in code, name, Arabic name, and category for the new task type, or leave them blank.'),
+                None, _('Please complete the code, name, Arabic name and category for the new task type, or leave '
+                        'them blank.'),
             )
         elif all(new_task_type_fields):
             if TaskType.objects.filter(code__iexact=cleaned['new_task_type_code'].strip()).exists():
-                self.add_error('new_task_type_code', _('A task type with that code already exists.'))
+                self.add_error('new_task_type_code', _('A task type with this code already exists.'))
             if TaskType.objects.filter(name__iexact=cleaned['new_task_type_name'].strip()).exists():
                 self.add_error(
                     'new_task_type_name',
-                    _('A task type with that name already exists — pick it from the list instead.'),
+                    _('A task type with this name already exists. Please select it from the list.'),
                 )
 
         return cleaned
@@ -259,7 +260,7 @@ class TaskEditForm(forms.ModelForm):
 
     class ScheduleMode(models.TextChoices):
         FULL = 'full', _('Day and exact time')
-        DAY_ONLY = 'day_only', _("Day only — let the supervisor pick the exact time")
+        DAY_ONLY = 'day_only', _('Day only — the supervisor will set the exact time')
 
     schedule_mode = forms.ChoiceField(
         choices=ScheduleMode.choices, required=False, widget=forms.RadioSelect,
@@ -267,7 +268,7 @@ class TaskEditForm(forms.ModelForm):
     )
     scheduled_date_only = forms.DateField(
         required=False, widget=forms.DateInput(attrs={'type': 'date'}), label=_('Scheduled date'),
-        help_text=_('used instead of the time below when scheduling day-only'),
+        help_text=_('used instead of the time below when scheduling by day only'),
     )
 
     class Meta:
@@ -371,14 +372,14 @@ class TaskEditForm(forms.ModelForm):
                 for field_name in LOCKED_AFTER_REPORT_FIELDS:
                     self.fields[field_name].disabled = True
                     self.fields[field_name].help_text = _(
-                        'Only a manager or admin can change this once the report is filed.',
+                        'Only a manager or administrator can change this once the report has been submitted.',
                     )
             # The promised date is what on-time arrival is measured
             # against, so it stops moving once work has actually started.
             if instance.pk and instance.events.filter(event_type=TaskEvent.EventType.STARTED).exists():
                 self.fields['promised_at'].disabled = True
                 self.fields['promised_at'].help_text = _(
-                    'Only a manager or admin can change this once work has started.',
+                    'Only a manager or administrator can change this once work has started.',
                 )
 
     def clean(self):
@@ -406,7 +407,7 @@ class TaskEditForm(forms.ModelForm):
     def _clean_document(self, field_name):
         document = self.cleaned_data[field_name]
         if document and document.size > MAX_TASK_DOCUMENT_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 10 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 10 MB.'))
         return document
 
     def clean_quotation(self):
@@ -461,8 +462,9 @@ class SetLeadForm(forms.Form):
     # Only when replacing a lead on a job already underway (ask_hours).
     hours_worked = forms.DecimalField(
         required=False, min_value=0, max_digits=5, decimal_places=2,
-        label=_('Hours the current lead already worked'),
-        help_text=_('Counted toward their hours, since the report will be filed by the new lead. Leave empty if unknown.'),
+        label=_('Hours already worked by the current lead'),
+        help_text=_('Counted toward their hours, as the report will be submitted by the new lead. Leave blank if '
+                    'unknown.'),
     )
 
     def __init__(self, *args, technicians, requires_reason, ask_hours=False, **kwargs):
@@ -513,7 +515,7 @@ class CreateTechnicianLoginForm(forms.Form):
     def clean_email(self):
         email = self.cleaned_data['email']
         if get_user_model().objects.filter(username__iexact=email).exists():
-            raise forms.ValidationError(_('A login with that email already exists.'))
+            raise forms.ValidationError(_('An account with this email address already exists.'))
         return email
 
 
@@ -542,7 +544,7 @@ class TechnicianFirstLoginForm(forms.Form):
         password1 = self.cleaned_data.get('new_password1')
         password2 = self.cleaned_data.get('new_password2')
         if password1 and password2 and password1 != password2:
-            raise forms.ValidationError(_("The two password fields didn't match."))
+            raise forms.ValidationError(_('The two password fields do not match.'))
         if password1:
             password_validation.validate_password(password1, self.user)
         return password2
@@ -563,7 +565,7 @@ class SelfRateSkillForm(SelfRateLevelForm):
     show, so they stay on the plain form above.
     """
     evidence = forms.FileField(
-        label=_('Photo or video of you doing this'),
+        label=_('Photo or video of you performing this task'),
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
     )
@@ -572,7 +574,7 @@ class SelfRateSkillForm(SelfRateLevelForm):
     def clean_evidence(self):
         evidence = self.cleaned_data['evidence']
         if evidence.size > MAX_SKILL_EVIDENCE_UPLOAD_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
         return evidence
 
 
@@ -616,13 +618,13 @@ class TaskAttachmentUploadForm(forms.Form):
             (TaskAttachment.Purpose.BEFORE, _('Before')),
             (TaskAttachment.Purpose.AFTER, _('After')),
         ],
-        label=_('What is this'),
+        label=_('What is this?'),
     )
 
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
         return file
 
 
@@ -645,13 +647,13 @@ class StaffAttachmentUploadForm(forms.Form):
             (TaskAttachment.Purpose.WRITTEN_REPORT, _('Written report')),
             (TaskAttachment.Purpose.OTHER, _('Other')),
         ],
-        label=_('What is this'),
+        label=_('What is this?'),
     )
 
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
         return file
 
 
@@ -659,7 +661,7 @@ class PhotoSizeMixin:
     def clean_photo(self):
         photo = self.cleaned_data['photo']
         if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
-            raise forms.ValidationError(_('Photo is too large — the limit is 5 MB.'))
+            raise forms.ValidationError(_('The photo is too large. The maximum size is 5 MB.'))
         return photo
 
 
@@ -829,7 +831,7 @@ class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
 class BlockTaskForm(forms.Form):
     note = forms.CharField(
         label=_('What happened'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('e.g. gym closed, no key, customer absent'),
+        help_text=_('e.g. gym closed, no key available, customer absent'),
     )
 
 
@@ -840,7 +842,7 @@ class PauseTaskForm(forms.Form):
     """
     note = forms.CharField(
         label=_('Note'), required=False, widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('Optional — any notes needed before work resumes.'),
+        help_text=_('Optional: any notes required before work resumes.'),
     )
 
 
@@ -851,7 +853,8 @@ class CloseTaskForm(forms.Form):
     """
     note = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('Why this is closing without a report — customer cancelled, resolved another way, etc.'),
+        help_text=_('Reason for closing without a report, for example a customer cancellation or resolution by '
+                    'other means.'),
     )
 
 
@@ -860,7 +863,7 @@ class CancelTaskForm(forms.Form):
     closing, the customer's ticket conversation stays open."""
     note = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('Why the task is cancelled — for example, the customer called it off.'),
+        help_text=_('Reason for cancellation, for example the customer cancelled the request.'),
     )
 
 
@@ -870,8 +873,9 @@ class NegligenceFlagForm(forms.Form):
     Feeds the lead's reliability record; never shown to the technician.
     """
     note = forms.CharField(
-        label=_('What went wrong'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('What the customer complained about, and why this counts as negligence rather than bad luck.'),
+        label=_('Description of the issue'), widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('Describe the customer complaint and explain why it constitutes negligence rather than an '
+                    'unforeseeable circumstance.'),
     )
 
 
@@ -900,7 +904,7 @@ class ExistingAssetOutcomeForm(forms.Form):
             return cleaned
         if not cleaned.get('asset') or not cleaned.get('outcome'):
             raise forms.ValidationError(
-                _('Choose the machine and an outcome, or leave this row blank.'),
+                _('Select the machine and an outcome, or leave this row blank.'),
             )
         return cleaned
 
@@ -912,7 +916,7 @@ class NewAssetForm(forms.Form):
         queryset=Brand.objects.filter(is_active=True), required=False, label=_('Brand'),
     )
     model_name = forms.CharField(
-        required=False, max_length=150, label=_('Model'), help_text=_('free text from the plate'),
+        required=False, max_length=150, label=_('Model'), help_text=_('free text as shown on the plate'),
     )
     serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     outcome = forms.ChoiceField(
@@ -945,7 +949,7 @@ class TaskProductForm(forms.Form):
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
     replacement = forms.CharField(
         required=False, max_length=150, label=_('Replacement'),
-        help_text=_('which machine this was swapped in for, if the one ordered wasn’t available'),
+        help_text=_('the item this replaced, if the ordered item was unavailable'),
     )
     frame = forms.CharField(required=False, max_length=100, label=_('Frame color'))
     arm = forms.CharField(required=False, max_length=100, label=_('Arm color'))
@@ -1001,7 +1005,7 @@ class TicketAttachmentsForm(forms.Form):
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number — up to %(count)d files, %(size)d MB each') % {
+        help_text=_('showing the issue and the serial number; up to %(count)d files, %(size)d MB each') % {
             'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
         },
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
@@ -1012,11 +1016,11 @@ class TicketAttachmentsForm(forms.Form):
         files = self.cleaned_data['attachments']
         if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('Attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be under 25 MB — “%(name)s” is too large.') % {
+                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
                     'name': file.name,
                 })
         return files
@@ -1090,7 +1094,7 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
         )
         for name in ('contact_name', 'contact_phone'):
             self.fields[name].required = False
-            self.fields[name].help_text = _('Leave empty to use the site’s own contact.')
+            self.fields[name].help_text = _("Leave blank to use the site's own contact details.")
         # On a phone call the serials often aren't known yet.
         self.fields['serial_numbers'].required = False
 
@@ -1103,7 +1107,8 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     assigned_to = forms.ModelChoiceField(
         queryset=Technician.objects.none(), label=_('For'),
-        help_text=_('Who should handle it — they’re notified and it shows in their internal tickets.'),
+        help_text=_('The person responsible for handling it. They will be notified, and it will appear in their '
+                    'internal tickets.'),
     )
 
     class Meta:
@@ -1134,7 +1139,7 @@ class InternalTicketNoteForm(forms.Form):
 
 
 class ReassignInternalTicketForm(forms.Form):
-    assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Hand it to'))
+    assigned_to = forms.ModelChoiceField(queryset=Technician.objects.none(), label=_('Reassign to'))
 
     def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1146,7 +1151,7 @@ class ReassignInternalTicketForm(forms.Form):
 class DismissTicketForm(forms.Form):
     dismissal_reason = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_('Why this ticket isn\'t becoming a task — spam, duplicate, not us, etc.'),
+        help_text=_('Reason this ticket will not become a task, for example spam, a duplicate or outside our scope.'),
     )
 
 
@@ -1156,7 +1161,7 @@ class CloseTicketForm(forms.Form):
     """
     close_reason = forms.CharField(
         label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_('How it was resolved without a task — advice given, handled by phone, etc.'),
+        help_text=_('How the matter was resolved without a task, for example advice given or resolved by phone.'),
     )
 
 
@@ -1175,7 +1180,7 @@ class TicketReplyForm(forms.Form):
     def clean_attachment(self):
         attachment = self.cleaned_data['attachment']
         if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
         return attachment
 
 
@@ -1193,7 +1198,7 @@ class TicketInternalNoteForm(forms.Form):
     def clean_attachment(self):
         attachment = self.cleaned_data['attachment']
         if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('File is too large — the limit is 25 MB.'))
+            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
         return attachment
 
 
@@ -1277,11 +1282,11 @@ class CorrectEventTimeForm(forms.Form):
     def clean_corrected_at(self):
         value = self.cleaned_data['corrected_at']
         if value > timezone.now():
-            raise forms.ValidationError(_('A corrected time can’t be in the future.'))
+            raise forms.ValidationError(_('A corrected time cannot be in the future.'))
         if self.earliest and value < self.earliest:
-            raise forms.ValidationError(_('That’s before the previous step on this task.'))
+            raise forms.ValidationError(_('This is earlier than the previous step on this task.'))
         if self.latest and value > self.latest:
-            raise forms.ValidationError(_('That’s after the next step on this task.'))
+            raise forms.ValidationError(_('This is later than the next step on this task.'))
         return value
 
 
@@ -1355,7 +1360,7 @@ class TechnicianTripForm(forms.ModelForm):
         cleaned = super().clean()
         start, end = cleaned.get('start_date'), cleaned.get('end_date')
         if start and end and end < start:
-            self.add_error('end_date', _('The trip can’t end before it starts.'))
+            self.add_error('end_date', _('The trip cannot end before it starts.'))
         return cleaned
 
 
@@ -1367,12 +1372,12 @@ class PartForm(forms.ModelForm):
     def clean_code(self):
         code = self.cleaned_data['code'].strip().upper()
         if Part.objects.filter(code=code).exclude(pk=self.instance.pk).exists():
-            raise forms.ValidationError(_('That code is already in the list.'))
+            raise forms.ValidationError(_('This code is already in the list.'))
         return code
 
 
 class PartImportForm(forms.Form):
     file = forms.FileField(
-        label=_('CSV file'), help_text=_('Two columns: code, description. A header row is fine.'),
+        label=_('CSV file'), help_text=_('Two columns: code and description. A header row is permitted.'),
         validators=[FileExtensionValidator(allowed_extensions=['csv'])],
     )

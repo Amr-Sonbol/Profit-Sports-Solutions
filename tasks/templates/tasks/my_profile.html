@@ -32,28 +32,28 @@
                 </span>
                 {% endif %}
                 {% if certification.cardio_ready %}
-                <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
+                <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
                 {% endif %}
             </dd>
         </div>
         {% if ninety_day %}
         <div>
-            <dt>{% translate "90-day track" %}</dt>
+            <dt>{% translate "90-day progress" %}</dt>
             <dd>
                 {% if ninety_day.on_track %}
                 <span class="badge badge--status-completed">
-                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                 </span>
                 {% else %}
                 <span class="badge badge--status-blocked">
-                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                 </span>
                 {% endif %}
             </dd>
         </div>
         {% endif %}
         <div>
-            <dt>{% translate "Standing in your country" %}</dt>
+            <dt>{% translate "Ranking in your country" %}</dt>
             <dd>{% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}</dd>
         </div>
     </dl>
@@ -69,7 +69,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No supervisor or manager set up in your country yet." %}</p>
+    <p class="empty-state">{% translate "No supervisor or manager has been set up in your country." %}</p>
     {% endif %}
 </div>
 

@@ -14,15 +14,15 @@
 {% if ticket %}
 <p class="flash flash--info">
     {% if ticket.kind != 'customer' %}
-        {% blocktranslate with number=ticket.ticket_number subject=ticket.subject %}Creating this task from internal ticket {{ number }} — {{ subject }}. Pick the site the job is for.{% endblocktranslate %}
+        {% blocktranslate with number=ticket.ticket_number subject=ticket.subject %}This task is being created from internal ticket {{ number }} — {{ subject }}. Please select the site for this job.{% endblocktranslate %}
     {% elif ticket.site %}
         {% if user.technician.role == 'admin' %}
-            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}Creating this task from a customer ticket — {{ company }}. The customer picked {{ site }} from their own registered sites — as admin, you can still change it below.{% endblocktranslate %}
+            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}This task is being created from a customer ticket — {{ company }}. The customer selected {{ site }} from their registered sites. As an administrator, you may still change it below.{% endblocktranslate %}
         {% else %}
-            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}Creating this task from a customer ticket — {{ company }}. The customer picked {{ site }} from their own registered sites, so it's locked in below — only an admin can change it.{% endblocktranslate %}
+            {% blocktranslate with company=ticket.company_name site=ticket.site.name %}This task is being created from a customer ticket — {{ company }}. The customer selected {{ site }} from their registered sites, so it is locked below. Only an administrator can change it.{% endblocktranslate %}
         {% endif %}
     {% else %}
-        {% blocktranslate with company=ticket.company_name %}Creating this task from a customer ticket — {{ company }}. The site fields below are hints from what they typed; pick or create the real site to match.{% endblocktranslate %}
+        {% blocktranslate with company=ticket.company_name %}This task is being created from a customer ticket — {{ company }}. The site fields below are suggestions based on the customer's entry; please select or create the correct site.{% endblocktranslate %}
     {% endif %}
 </p>
 {% endif %}
@@ -160,7 +160,7 @@
 
 <div class="section">
     <h2>{% translate "Team schedule" %}</h2>
-    <p class="field__help">{% translate "Who's already booked, so you can pick a time that doesn't collide. Open someone's week for the full day-by-day picture — how crowded each day is, not just what's next." %}</p>
+    <p class="field__help">{% translate "Existing bookings, so you can select a time without conflicts. Open a staff member's week for a full day-by-day overview of their workload." %}</p>
     {% if team_schedule %}
     <div class="table-wrap">
         <table>
@@ -193,7 +193,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No active supervisors or technicians in this country yet." %}</p>
+    <p class="empty-state">{% translate "There are no active supervisors or technicians in this country." %}</p>
     {% endif %}
 </div>
 {% endblock %}

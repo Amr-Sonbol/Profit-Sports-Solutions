@@ -17,7 +17,7 @@ import type { TaskDetail } from '@/types';
 
 const ACTION_LABELS: Record<string, string> = {
   accept: 'Accept task',
-  en_route: 'On my way',
+  en_route: 'Heading to site',
   arrive: 'I have arrived',
   start: 'Start work',
 };
@@ -54,7 +54,7 @@ export default function TaskDetailScreen() {
       await sendTaskAction(Number(id), action);
       await load();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'That action failed — try again.');
+      setError(err instanceof ApiRequestError ? err.message : 'The action could not be completed. Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -63,7 +63,7 @@ export default function TaskDetailScreen() {
   const handleAddPhoto = async (purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Photo library access is needed to attach a photo.');
+      Alert.alert('Permission required', 'Access to the photo library is required to attach a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -82,7 +82,7 @@ export default function TaskDetailScreen() {
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Upload failed — try again.');
+      setError(err instanceof ApiRequestError ? err.message : 'Upload failed. Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -123,7 +123,7 @@ export default function TaskDetailScreen() {
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
             {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
-            {task.required_skill_name ? <Row label="Skill needed" value={task.required_skill_name} /> : null}
+            {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
           </ThemedView>
 
           {task.description ? (
@@ -158,7 +158,7 @@ export default function TaskDetailScreen() {
               disabled={isBusy}
             >
               <ThemedText themeColor="primary">Undo “{task.undoable_step}”</ThemedText>
-              <ThemedText themeColor="textSecondary" type="small">Tapped by mistake? Undo within 10 minutes.</ThemedText>
+              <ThemedText themeColor="textSecondary" type="small">Recorded in error? You may undo within 10 minutes.</ThemedText>
             </TouchableOpacity>
           ) : null}
 
@@ -168,7 +168,7 @@ export default function TaskDetailScreen() {
               onPress={() => router.push(`/report/${task.id}`)}
             >
               <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
-                {task.status === 'in_progress' ? 'File work report' : 'Edit work report'}
+                {task.status === 'in_progress' ? 'Submit work report' : 'Edit work report'}
               </ThemedText>
             </TouchableOpacity>
           ) : null}

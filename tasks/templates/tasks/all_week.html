@@ -10,7 +10,7 @@
         <h1>{% translate "All countries — week view" %}</h1>
     </div>
 </div>
-<p class="field__help">{% translate "Every country's schedule at once. Doesn't follow the country switcher above." %}</p>
+<p class="field__help">{% translate "The schedule for all countries. This view is not affected by the country selector above." %}</p>
 
 <div class="week-nav">
     <a href="?start={{ prev_start|date:'Y-m-d' }}" class="back-link">{% translate "Previous week" %}</a>
@@ -62,7 +62,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "Every open task has a day." %}</p>
+    <p class="empty-state">{% translate "All open tasks have been scheduled." %}</p>
     {% endif %}
 </div>
 {% endblock %}

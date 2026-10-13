@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 22:18+0000\n"
+"POT-Creation-Date: 2026-10-13 22:30+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -20,77 +20,73 @@ msgstr "أُضيفت %(added)s قطع، وحُدّثت %(updated)s."
 
 #, python-format
 msgid ""
-"%(by)s decided the escalation on ticket %(number)s: %(decision)s.\n"
+"%(by)s has escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n"
 "\n"
-"%(note)s\n"
+"%(reason)s\n"
 "\n"
-"Carry on here:\n"
+"Please record your decision here:\n"
 "%(link)s\n"
 msgstr ""
-"قرر %(by)s بشأن تصعيد التذكرة %(number)s: %(decision)s.\n"
+"قام %(by)s بتصعيد التذكرة %(number)s (%(company)s — %(site)s) إليكم لاتخاذ قرار:\n"
 "\n"
-"%(note)s\n"
+"%(reason)s\n"
 "\n"
-"تابع من هنا:\n"
+"يرجى تسجيل قراركم من هنا:\n"
 "%(link)s\n"
 
 #, python-format
 msgid ""
-"%(by)s escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n"
+"%(by)s has issued a decision on the escalation of ticket %(number)s: %(decision)s.\n"
 "\n"
-"%(reason)s\n"
+"%(note)s\n"
 "\n"
-"Decide here:\n"
+"Please continue processing the ticket here:\n"
 "%(link)s\n"
 msgstr ""
-"صعّد %(by)s التذكرة %(number)s (%(company)s — %(site)s) إليك لاتخاذ قرار:\n"
+"أصدر %(by)s قراراً بشأن تصعيد التذكرة %(number)s: %(decision)s.\n"
 "\n"
-"%(reason)s\n"
+"%(note)s\n"
 "\n"
-"اتخذ القرار من هنا:\n"
+"يرجى متابعة معالجة التذكرة من هنا:\n"
 "%(link)s\n"
 
 #, python-format
-msgid "%(by)s escalated to %(to)s on %(when)s"
-msgstr "صعّدها %(by)s إلى %(to)s في %(when)s"
+msgid "%(count)s job with check-ins recorded away from the site"
+msgid_plural "%(count)s jobs with check-ins recorded away from the site"
+msgstr[0] "لا توجد أعمال سُجّلت فيها نقرات خارج الموقع"
+msgstr[1] "عمل واحد سُجّلت فيه نقرات خارج الموقع"
+msgstr[2] "عملان سُجّلت فيهما نقرات خارج الموقع"
+msgstr[3] "%(count)s أعمال سُجّلت فيها نقرات خارج الموقع"
+msgstr[4] "%(count)s عملاً سُجّلت فيه نقرات خارج الموقع"
+msgstr[5] "%(count)s عمل سُجّلت فيه نقرات خارج الموقع"
 
 #, python-format
-msgid "%(count)s job with taps away from the site"
-msgid_plural "%(count)s jobs with taps away from the site"
-msgstr[0] "لا توجد أعمال بضغطات بعيدة عن الموقع"
-msgstr[1] "عمل واحد بضغطات بعيدة عن الموقع"
-msgstr[2] "عملان بضغطات بعيدة عن الموقع"
-msgstr[3] "%(count)s أعمال بضغطات بعيدة عن الموقع"
-msgstr[4] "%(count)s عملاً بضغطات بعيدة عن الموقع"
-msgstr[5] "%(count)s عمل بضغطات بعيدة عن الموقع"
+msgid "%(count)s report exceeding the recorded time"
+msgid_plural "%(count)s reports exceeding the recorded time"
+msgstr[0] "لا توجد تقارير تتجاوز الوقت المسجَّل"
+msgstr[1] "تقرير واحد يتجاوز الوقت المسجَّل"
+msgstr[2] "تقريران يتجاوزان الوقت المسجَّل"
+msgstr[3] "%(count)s تقارير تتجاوز الوقت المسجَّل"
+msgstr[4] "%(count)s تقريراً يتجاوز الوقت المسجَّل"
+msgstr[5] "%(count)s تقرير يتجاوز الوقت المسجَّل"
 
 #, python-format
-msgid "%(count)s report above tapped time"
-msgid_plural "%(count)s reports above tapped time"
-msgstr[0] "لا توجد تقارير أعلى من الوقت المسجَّل"
-msgstr[1] "تقرير واحد أعلى من الوقت المسجَّل"
-msgstr[2] "تقريران أعلى من الوقت المسجَّل"
-msgstr[3] "%(count)s تقارير أعلى من الوقت المسجَّل"
-msgstr[4] "%(count)s تقريراً أعلى من الوقت المسجَّل"
-msgstr[5] "%(count)s تقرير أعلى من الوقت المسجَّل"
+msgid "%(count)s task significantly over estimate"
+msgid_plural "%(count)s tasks significantly over estimate"
+msgstr[0] "لا توجد مهام تجاوزت التقدير بشكل ملحوظ"
+msgstr[1] "مهمة واحدة تجاوزت التقدير بشكل ملحوظ"
+msgstr[2] "مهمتان تجاوزتا التقدير بشكل ملحوظ"
+msgstr[3] "%(count)s مهام تجاوزت التقدير بشكل ملحوظ"
+msgstr[4] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
+msgstr[5] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
 
 #, python-format
-msgid "%(count)s task well over estimate"
-msgid_plural "%(count)s tasks well over estimate"
-msgstr[0] "لا توجد مهام تجاوزت التقدير بكثير"
-msgstr[1] "مهمة واحدة تجاوزت التقدير بكثير"
-msgstr[2] "مهمتان تجاوزتا التقدير بكثير"
-msgstr[3] "%(count)s مهام تجاوزت التقدير بكثير"
-msgstr[4] "%(count)s مهمة تجاوزت التقدير بكثير"
-msgstr[5] "%(count)s مهمة تجاوزت التقدير بكثير"
-
-#, python-format
-msgid "%(days)sd left"
+msgid "%(days)s days remaining"
 msgstr "متبقٍ %(days)s يوم"
 
 #, python-format
-msgid "%(days)sd left — behind"
-msgstr "متبقٍ %(days)s يوم — متأخر"
+msgid "%(days)s days remaining — behind schedule"
+msgstr "متبقٍ %(days)s يوم — متأخر عن الجدول"
 
 #, python-format
 msgid "%(distance)s from the site"
@@ -101,14 +97,14 @@ msgid "%(hours)s h"
 msgstr "%(hours)s س"
 
 #, python-format
-msgid "%(hours)s labour hours across %(reports)s filed report."
-msgid_plural "%(hours)s labour hours across %(reports)s filed reports."
-msgstr[0] "%(hours)s ساعة عمل، ولا توجد تقارير مقدمة."
-msgstr[1] "%(hours)s ساعة عمل في تقرير واحد مقدم."
-msgstr[2] "%(hours)s ساعة عمل في تقريرين مقدمين."
-msgstr[3] "%(hours)s ساعة عمل في %(reports)s تقارير مقدمة."
-msgstr[4] "%(hours)s ساعة عمل في %(reports)s تقريرًا مقدمًا."
-msgstr[5] "%(hours)s ساعة عمل في %(reports)s تقرير مقدم."
+msgid "%(hours)s labour hours across %(reports)s submitted report."
+msgid_plural "%(hours)s labour hours across %(reports)s submitted reports."
+msgstr[0] "%(hours)s ساعة عمل، ولا توجد تقارير مقدَّمة."
+msgstr[1] "%(hours)s ساعة عمل في تقرير واحد مقدَّم."
+msgstr[2] "%(hours)s ساعة عمل في تقريرين مقدَّمين."
+msgstr[3] "%(hours)s ساعة عمل في %(reports)s تقارير مقدَّمة."
+msgstr[4] "%(hours)s ساعة عمل في %(reports)s تقريراً مقدَّماً."
+msgstr[5] "%(hours)s ساعة عمل في %(reports)s تقرير مقدَّم."
 
 #, python-format
 msgid "%(km)s km"
@@ -123,8 +119,8 @@ msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
 
 #, python-format
-msgid "%(name)s has no email address on file, so they were only alerted in the app. Add one on their profile."
-msgstr "لا يوجد بريد إلكتروني مسجّل لـ %(name)s، لذلك تم تنبيهه داخل التطبيق فقط. أضف بريداً في ملفه الشخصي."
+msgid "%(name)s has no email address on record and was therefore notified in the application only. Please add an email address to their profile."
+msgstr "لا يوجد بريد إلكتروني مسجَّل لـ %(name)s، لذا تم إشعاره داخل التطبيق فقط. يرجى إضافة بريد إلكتروني إلى ملفه الشخصي."
 
 #, python-format
 msgid "%(number)s — %(company)s"
@@ -135,12 +131,12 @@ msgid "%(number)s — %(site)s"
 msgstr "%(number)s — %(site)s"
 
 #, python-format
-msgid "%(number)s — %(site)s. You no longer need to go."
-msgstr "%(number)s — %(site)s. لم تعد بحاجة إلى الذهاب."
+msgid "%(number)s — %(site)s. Your attendance is no longer required."
+msgstr "%(number)s — %(site)s. لم يعد حضورك مطلوباً."
 
 #, python-format
-msgid "%(number)s — filed by %(name)s"
-msgstr "%(number)s — قدّمه %(name)s"
+msgid "%(number)s — submitted by %(name)s"
+msgstr "%(number)s — مقدَّم من %(name)s"
 
 #, python-format
 msgid "%(source)s — %(time)s"
@@ -159,30 +155,34 @@ msgstr "+ إضافة موقع جديد"
 msgid "+ Add new task type"
 msgstr "+ إضافة نوع مهمة جديد"
 
-msgid "90-day track"
-msgstr "مسار الـ٩٠ يومًا"
+msgid "90-day progress"
+msgstr "التقدم خلال 90 يوماً"
 
-msgid "A brand with that name already exists — pick it from the list instead."
-msgstr "توجد بالفعل علامة تجارية بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
+msgid "A brand with this name already exists. Please select it from the list."
+msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. يرجى اختيارها من القائمة."
 
-msgid "A corrected time can’t be in the future."
-msgstr "لا يمكن أن يكون الوقت المصحح في المستقبل."
+msgid "A corrected time cannot be in the future."
+msgstr "لا يمكن أن يكون الوقت المصحَّح في المستقبل."
 
-msgid "A helper can’t have more hours than the job itself."
-msgstr "لا يمكن أن تكون ساعات المساعد أكثر من ساعات العمل نفسه."
+msgid "A helper's hours cannot exceed the total duration of the job."
+msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
 
-msgid "A login with that email already exists."
-msgstr "يوجد حساب دخول بهذا البريد الإلكتروني بالفعل."
+#, python-format
+msgid "A maximum of %(count)d files may be attached."
+msgstr "يمكن إرفاق %(count)d ملفات كحد أقصى."
+
+msgid "A member of this task team has left the company."
+msgstr "غادر أحد أعضاء فريق هذه المهمة الشركة."
 
 #, python-format
 msgid ""
-"A new task was created.\n"
+"A new task has been created.\n"
 "\n"
 "Task: %(number)s\n"
 "Site: %(site)s\n"
 "Description: %(description)s\n"
 "\n"
-"View it here:\n"
+"View the task:\n"
 "%(link)s\n"
 msgstr ""
 "تم إنشاء مهمة جديدة.\n"
@@ -191,77 +191,59 @@ msgstr ""
 "الموقع: %(site)s\n"
 "الوصف: %(description)s\n"
 "\n"
-"اطّلع عليها من هنا:\n"
+"عرض المهمة:\n"
 "%(link)s\n"
 
 #, python-format
 msgid ""
-"A new ticket has come in.\n"
+"A new ticket has been received.\n"
 "\n"
 "Ticket: %(number)s\n"
 "Company: %(company)s\n"
 "Site: %(site)s\n"
 "Description: %(description)s\n"
 "\n"
-"Review it here:\n"
+"Review the ticket:\n"
 "%(link)s\n"
 msgstr ""
-"وردت تذكرة جديدة.\n"
+"تم استلام تذكرة جديدة.\n"
 "\n"
-"الطلب: %(number)s\n"
+"التذكرة: %(number)s\n"
 "الشركة: %(company)s\n"
 "الموقع: %(site)s\n"
 "الوصف: %(description)s\n"
 "\n"
-"راجعها من هنا:\n"
+"مراجعة التذكرة:\n"
 "%(link)s\n"
 
-msgid "A report’s hours count for everyone on the team — lead and helpers — unless the lead entered a helper’s own hours. Hours worked before a handover count too."
-msgstr "تُحتسب ساعات التقرير لكل أعضاء الفريق — الفني الرئيسي والمساعدين — إلا إذا أدخل الفني الرئيسي ساعات مختلفة لمساعد. وتُحتسب أيضاً الساعات المعمولة قبل التسليم."
+msgid "A signature is already on record. Sign again only if you wish to replace it."
+msgstr "يوجد توقيع مسجَّل مسبقاً. يرجى التوقيع مجدداً فقط إذا كنت ترغب في استبداله."
 
-#, python-format
-msgid ""
-"A shipment for %(task_number)s (%(site)s) now has a tracking number.\n"
-"\n"
-"%(tracking_line)s\n"
-"\n"
-"View the task here:\n"
-"%(link)s\n"
-msgstr ""
-"أصبح لشحنة %(task_number)s (%(site)s) الآن رقم تتبع.\n"
-"\n"
-"%(tracking_line)s\n"
-"\n"
-"اطّلع على المهمة من هنا:\n"
-"%(link)s\n"
+msgid "A task type with this code already exists."
+msgstr "يوجد نوع مهمة بهذا الرمز مسبقاً."
 
-#, python-format
-msgid "A short delay for your Profit Sports Solutions visit — %(number)s"
-msgstr "تأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
-
-msgid "A signature is already on file — sign again only to replace it."
-msgstr "يوجد توقيع محفوظ بالفعل — وقّع مرة أخرى فقط لاستبداله."
-
-msgid "A task type with that code already exists."
-msgstr "يوجد بالفعل نوع مهمة بهذا الرمز."
-
-msgid "A task type with that name already exists — pick it from the list instead."
-msgstr "يوجد بالفعل نوع مهمة بهذا الاسم — اخترها من القائمة بدلاً من ذلك."
+msgid "A task type with this name already exists. Please select it from the list."
+msgstr "يوجد نوع مهمة بهذا الاسم مسبقاً. يرجى اختياره من القائمة."
 
 #, python-format
 msgid "A technician is scheduled to visit on %(date)s."
 msgstr "من المقرر أن يزور فني الموقع بتاريخ %(date)s."
 
 #, python-format
-msgid "About visit %(number)s on %(date)s"
-msgstr "عن الزيارة %(number)s بتاريخ %(date)s"
-
-msgid "Above tapped time"
-msgstr "أعلى من الوقت المسجَّل بالضغطات"
-
-#, python-format
-msgid "Above tapped time (%(hours)s h)"
-msgstr "أعلى من الوقت المسجَّل بالضغطات (%(hours)s س)"
+msgid ""
+"A tracking number has been assigned to the shipment for %(task_number)s (%(site)s).\n"
+"\n"
+"%(tracking_line)s\n"
+"\n"
+"View the task:\n"
+"%(link)s\n"
+msgstr ""
+"تم تعيين رقم تتبع للشحنة الخاصة بالمهمة %(task_number)s (%(site)s).\n"
+"\n"
+"%(tracking_line)s\n"
+"\n"
+"عرض المهمة:\n"
+"%(link)s\n"
 
 msgid "Accept task"
 msgstr "قبول المهمة"
@@ -282,29 +264,23 @@ msgstr "الإجراء المتخذ"
 msgid "Action taken: %(text)s"
 msgstr "الإجراء المتخذ: %(text)s"
 
+msgid "Action undone."
+msgstr "تم التراجع عن الإجراء."
+
 msgid "Activate"
 msgstr "تفعيل"
 
 msgid "Active"
 msgstr "نشط"
 
-msgid "Add a contact email before notifying the customer."
-msgstr "أضف بريد التواصل الإلكتروني قبل إشعار العميل."
-
-msgid "Add a contact email for this site before notifying the customer."
-msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل إشعار العميل."
-
-msgid "Add a contact email for this site before requesting feedback."
-msgstr "أضف بريدًا إلكترونيًا لجهة الاتصال بهذا الموقع قبل طلب التقييم."
+msgid "Actual time of occurrence"
+msgstr "الوقت الفعلي للحدوث"
 
 msgid "Add a note"
 msgstr "أضف ملاحظة"
 
 msgid "Add a part"
 msgstr "إضافة قطعة"
-
-msgid "Add a shipping tracking number before notifying the customer."
-msgstr "أضف رقم تتبع الشحن قبل إشعار العميل."
 
 msgid "Add a site"
 msgstr "إضافة فرع"
@@ -354,6 +330,12 @@ msgstr "أُضفت كمساعد"
 msgid "Added to existing customer"
 msgstr "أُضيف إلى عميل موجود"
 
+msgid "Additional comments"
+msgstr "ملاحظات إضافية"
+
+msgid "Additional information"
+msgstr "معلومات إضافية"
+
 msgid "Address"
 msgstr "العنوان"
 
@@ -366,17 +348,26 @@ msgstr "متقدم"
 msgid "Advanced level"
 msgstr "المستوى المتقدم"
 
-msgid "Advanced-ready"
-msgstr "جاهز للمستوى المتقدم"
-
 msgid "After"
 msgstr "بعد"
 
 msgid "All"
 msgstr "الكل"
 
+msgid "All active customers across all countries, for search and management. This view is not affected by the country selector above."
+msgstr "جميع العملاء النشطين في جميع الدول، لأغراض البحث والإدارة. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
+msgid "All active technicians across all countries, for tracking, inspection and audit. This view is not affected by the country selector above."
+msgstr "جميع الفنيين النشطين في جميع الدول، لأغراض المتابعة والفحص والتدقيق. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
+msgid "All additions, changes and deletions made through Django admin, newest first. Actions performed on the application's own screens are not recorded here; a task's history is shown on its detail page."
+msgstr "جميع عمليات الإضافة والتعديل والحذف المنفَّذة عبر لوحة إدارة Django، مرتبة من الأحدث. لا تُسجَّل هنا الإجراءات المنفَّذة من شاشات التطبيق؛ ويظهر سجل كل مهمة في صفحة تفاصيلها."
+
 msgid "All countries"
 msgstr "كل الدول"
+
+msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
+msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
 
 msgid "All countries — week view"
 msgstr "كل الدول — عرض الأسبوع"
@@ -384,8 +375,8 @@ msgstr "كل الدول — عرض الأسبوع"
 msgid "All customers"
 msgstr "كل العملاء"
 
-msgid "All set — welcome!"
-msgstr "تم كل شيء — أهلاً بك!"
+msgid "All open tasks have been scheduled."
+msgstr "تمت جدولة جميع المهام المفتوحة."
 
 msgid "All shipping companies"
 msgstr "كل شركات الشحن"
@@ -396,17 +387,11 @@ msgstr "يتم إنشاء جميع حسابات الموظفين من هنا. ي
 msgid "All technicians"
 msgstr "كل الفنيين"
 
-msgid "All week"
-msgstr "الأسبوع بالكامل"
+msgid "Alternatively, upload a photo of a signed paper copy:"
+msgstr "أو ارفع صورة لنسخة ورقية موقَّعة:"
 
-msgid "Also on this task"
-msgstr "أيضًا في هذه المهمة"
-
-msgid "Anything else we should know"
-msgstr "أي شيء آخر تود إخبارنا به"
-
-msgid "Anything you'd like to add?"
-msgstr "هل تود إضافة أي شيء؟"
+msgid "An account with this email address already exists."
+msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
 
 msgid "Approve"
 msgstr "اعتماد"
@@ -423,8 +408,8 @@ msgstr "معتمد"
 msgid "Approved by supervisor"
 msgstr "اعتمده المشرف"
 
-msgid "Approved — now awaiting manager approval before the task closes."
-msgstr "تمت الموافقة — بانتظار موافقة المدير الآن قبل إغلاق المهمة."
+msgid "Approved. The task now awaits manager approval before closure."
+msgstr "تمت الموافقة. المهمة الآن بانتظار موافقة المدير قبل إغلاقها."
 
 msgid "Arabic"
 msgstr "العربية"
@@ -441,8 +426,8 @@ msgstr "لون الذراع"
 msgid "Arrived"
 msgstr "وصل"
 
-msgid "As the customer reported them — add anything else found on site to the work report instead."
-msgstr "كما أبلغ بها العميل — أي جهاز آخر يُعثر عليه في الموقع يُضاف إلى تقرير العمل بدلاً من هنا."
+msgid "As reported by the customer. Record any additional findings on site in the work report."
+msgstr "كما أبلغ عنها العميل. يرجى تسجيل أي ملاحظات إضافية في الموقع ضمن تقرير العمل."
 
 msgid "Assign"
 msgstr "التعيين"
@@ -465,12 +450,11 @@ msgstr "مُسندة إلى"
 msgid "Assignment"
 msgstr "التعيين"
 
+msgid "Assisted on"
+msgstr "شارك كمساعد في"
+
 msgid "At the site"
 msgstr "في الموقع"
-
-#, python-format
-msgid "Attach at most %(count)d files."
-msgstr "أرفق %(count)d ملفات كحد أقصى."
 
 msgid "Attachment"
 msgstr "مرفق"
@@ -503,11 +487,14 @@ msgstr "الفنيون المتاحون"
 msgid "Awaiting decision"
 msgstr "بانتظار القرار"
 
-msgid "Awaiting manager approval before this task closes."
+msgid "Awaiting manager approval before this task can be closed."
 msgstr "بانتظار موافقة المدير قبل إغلاق هذه المهمة."
 
-msgid "Awaiting the responsible supervisor's review before a manager can approve it."
-msgstr "بانتظار مراجعة المشرف المسؤول قبل أن يتمكن المدير من الموافقة عليه."
+msgid "Awaiting response."
+msgstr "بانتظار الرد."
+
+msgid "Awaiting review by the responsible supervisor before manager approval."
+msgstr "بانتظار مراجعة المشرف المسؤول قبل موافقة المدير."
 
 msgid "Back"
 msgstr "رجوع"
@@ -569,9 +556,6 @@ msgstr "المستوى الأساسي"
 msgid "Before"
 msgstr "قبل"
 
-msgid "Behind pace for the 90-day target — talk to your supervisor about what's next."
-msgstr "متأخر عن وتيرة هدف الـ٩٠ يومًا — تحدث مع مشرفك بشأن الخطوة التالية."
-
 msgid "Billing type"
 msgstr "نوع الفوترة"
 
@@ -599,9 +583,6 @@ msgstr "العلامات التجارية"
 msgid "CSV file"
 msgstr "ملف CSV"
 
-msgid "Calls the task off before any report is filed. Everyone on it is notified, and the customer's ticket conversation stays open."
-msgstr "يلغي المهمة قبل تقديم أي تقرير. يُبلَّغ كل من عليها، وتبقى محادثة تذكرة العميل مفتوحة."
-
 msgid "Cancel task"
 msgstr "إلغاء المهمة"
 
@@ -610,6 +591,9 @@ msgstr "إلغاء الرحلة"
 
 msgid "Cancelled"
 msgstr "ملغاة"
+
+msgid "Cancels the task before a report is submitted. All assigned staff will be notified, and the customer's ticket conversation will remain open."
+msgstr "يُلغي المهمة قبل تقديم أي تقرير. سيتم إشعار جميع الموظفين المكلَّفين بها، وستظل محادثة تذكرة العميل مفتوحة."
 
 #, python-format
 msgid "Carrier: %(company)s"
@@ -635,11 +619,11 @@ msgid "Change password"
 msgstr "تغيير كلمة المرور"
 
 #, python-format
-msgid "Change requested to %(time)s — awaiting manager review."
+msgid "Change requested to %(time)s — pending manager review."
 msgstr "طُلب التغيير إلى %(time)s — بانتظار مراجعة المدير."
 
-msgid "Change requested — a manager will review it."
-msgstr "تم إرسال طلب التغيير — سيراجعه أحد المديرين."
+msgid "Change requested. A manager will review it."
+msgstr "تم طلب التغيير. سيقوم المدير بمراجعته."
 
 msgid "Changed"
 msgstr "تم التعديل"
@@ -647,8 +631,8 @@ msgstr "تم التعديل"
 msgid "Chargeable"
 msgstr "مدفوعة"
 
-msgid "Check your email"
-msgstr "تحقق من بريدك الإلكتروني"
+msgid "Check-ins away from the site"
+msgstr "نقرات مسجَّلة خارج الموقع"
 
 msgid "Choose a new password"
 msgstr "اختر كلمة مرور جديدة"
@@ -656,44 +640,23 @@ msgstr "اختر كلمة مرور جديدة"
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
 
-msgid "Choose a site — an admin can add a new one if it isn't listed."
-msgstr "اختر موقعًا — يمكن لمسؤول النظام إضافة موقع جديد إذا لم يكن مدرجًا."
-
-msgid "Choose a site, or add a new one below."
-msgstr "اختر موقعًا، أو أضف موقعًا جديدًا أدناه."
-
-msgid "Choose an existing brand or add a new one below, not both."
-msgstr "اختر علامة تجارية موجودة أو أضف واحدة جديدة أدناه، وليس كلاهما."
-
-msgid "Choose an existing site or add a new one below, not both."
-msgstr "اختر موقعًا موجودًا أو أضف موقعًا جديدًا أدناه، وليس كلاهما."
-
-msgid "Choose an existing task type or add a new one below, not both."
-msgstr "اختر نوع مهمة موجودًا أو أضف نوعًا جديدًا أدناه، وليس كلاهما."
-
-msgid "Choose the machine and an outcome, or leave this row blank."
-msgstr "اختر الجهاز والنتيجة، أو اترك هذا الصف فارغًا."
-
 msgid "Clear signature"
 msgstr "مسح التوقيع"
 
 msgid "Close task"
 msgstr "إغلاق المهمة"
 
-msgid "Close the task (file its report) before requesting feedback."
-msgstr "أغلق المهمة (بتقديم تقريرها) قبل طلب التقييم."
-
 msgid "Close ticket"
 msgstr "إغلاق الطلب"
 
-msgid "Close with result"
-msgstr "إغلاق مع النتيجة"
+msgid "Close with resolution"
+msgstr "إغلاق مع بيان الحل"
 
 msgid "Closed"
 msgstr "مغلقة"
 
-msgid "Closes it regardless of its current status — converted or dismissed included."
-msgstr "يغلقه أيًا كانت حالته الحالية — بما في ذلك المحوَّل أو المرفوض."
+msgid "Closes the ticket regardless of its current status, including converted or dismissed tickets."
+msgstr "يُغلق التذكرة بصرف النظر عن حالتها الحالية، بما في ذلك التذاكر المحوَّلة أو المرفوضة."
 
 msgid "Club"
 msgstr "نادٍ"
@@ -710,11 +673,14 @@ msgstr "تعليقات (اختياري)"
 msgid "Company"
 msgstr "الشركة"
 
-msgid "Company (as typed)"
+msgid "Company (as entered)"
 msgstr "الشركة (كما أُدخلت)"
 
 msgid "Completed"
 msgstr "مكتملة"
+
+msgid "Completed — return to the technician"
+msgstr "مكتمل — إعادة إلى الفني"
 
 msgid "Conduct"
 msgstr "السلوك"
@@ -730,6 +696,9 @@ msgstr "اعتماد"
 
 msgid "Confirm new password"
 msgstr "تأكيد كلمة المرور الجديدة"
+
+msgid "Confirm reassignment"
+msgstr "تأكيد إعادة الإسناد"
 
 msgid "Confirm technician skill levels"
 msgstr "اعتماد مستويات مهارات الفنيين"
@@ -766,11 +735,17 @@ msgstr "عقد"
 msgid "Conversation"
 msgstr "المحادثة"
 
+msgid "Convert to a field task"
+msgstr "التحويل إلى مهمة ميدانية"
+
 msgid "Convert to task"
 msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
+
+msgid "Coordinates could not be found in the input. Please enter them as “latitude, longitude”, or paste the full Google Maps link (not a shortened maps.app.goo.gl link)."
+msgstr "تعذّر العثور على إحداثيات في المدخلات. يرجى إدخالها بالصيغة «خط العرض، خط الطول»، أو لصق رابط خرائط Google الكامل (وليس رابطاً مختصراً من maps.app.goo.gl)."
 
 msgid "Correct report"
 msgstr "تصحيح التقرير"
@@ -778,17 +753,11 @@ msgstr "تصحيح التقرير"
 msgid "Correct time"
 msgstr "تصحيح الوقت"
 
-msgid "Could not read the signature — please sign again."
-msgstr "تعذّرت قراءة التوقيع — يرجى التوقيع مرة أخرى."
-
-msgid "Couldn’t find coordinates in that. Paste them as “latitude, longitude”, or the full Google Maps link (not a short maps.app.goo.gl one)."
-msgstr "لم نجد إحداثيات في ذلك. الصقها بصيغة «خط العرض، خط الطول»، أو رابط خرائط جوجل الكامل (وليس الرابط المختصر maps.app.goo.gl)."
-
 msgid "Count"
 msgstr "العدد"
 
-msgid "Counted toward their hours, since the report will be filed by the new lead. Leave empty if unknown."
-msgstr "تُحتسب ضمن ساعاته، لأن التقرير سيقدمه الفني الرئيسي الجديد. اتركه فارغاً إن لم تكن تعرف."
+msgid "Counted toward their hours, as the report will be submitted by the new lead. Leave blank if unknown."
+msgstr "تُحتسب ضمن ساعاته، إذ سيقدّم القائد الجديد التقرير. يُترك فارغاً إذا كانت غير معروفة."
 
 msgid "Countries"
 msgstr "الدول"
@@ -808,8 +777,8 @@ msgstr "تم حذف الدولة."
 msgid "Country updated."
 msgstr "تم تحديث الدولة."
 
-msgid "Create login and email it"
-msgstr "إنشاء حساب دخول وإرساله بالبريد الإلكتروني"
+msgid "Create account and send login details"
+msgstr "إنشاء الحساب وإرسال بيانات الدخول"
 
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
@@ -822,22 +791,6 @@ msgstr "أُنشئت"
 
 msgid "Created by"
 msgstr "أنشأه"
-
-#, python-format
-msgid "Creating this task from a customer ticket — %(company)s. The customer picked %(site)s from their own registered sites — as admin, you can still change it below."
-msgstr "يتم إنشاء هذه المهمة من طلب عميل — %(company)s. اختار العميل %(site)s من مواقعه المسجّلة — بصفتك مسؤول النظام، لا يزال بإمكانك تغييره أدناه."
-
-#, python-format
-msgid "Creating this task from a customer ticket — %(company)s. The customer picked %(site)s from their own registered sites, so it's locked in below — only an admin can change it."
-msgstr "يتم إنشاء هذه المهمة من طلب عميل — %(company)s. اختار العميل %(site)s من مواقعه المسجّلة، لذا فهو مُقفل أدناه — لا يمكن لأحد تغييره سوى مسؤول النظام."
-
-#, python-format
-msgid "Creating this task from a customer ticket — %(company)s. The site fields below are hints from what they typed; pick or create the real site to match."
-msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. حقول الموقع أدناه هي تلميحات مما كتبوه؛ اختر الموقع الفعلي أو أنشئه ليطابقه."
-
-#, python-format
-msgid "Creating this task from internal ticket %(number)s — %(subject)s. Pick the site the job is for."
-msgstr "يتم إنشاء هذه المهمة من التذكرة الداخلية %(number)s — %(subject)s. اختر الموقع الذي يخصه العمل."
 
 msgid "Currency"
 msgstr "العملة"
@@ -874,18 +827,6 @@ msgstr "العميل غير متاح للتوقيع"
 
 msgid "Customer notification"
 msgstr "إشعار العميل"
-
-msgid "Customer notified automatically."
-msgstr "تم إخطار العميل تلقائيًا."
-
-msgid "Customer notified of the delay."
-msgstr "تم إخطار العميل بالتأخير."
-
-msgid "Customer notified of the scheduled visit."
-msgstr "تم إشعار العميل بالزيارة المجدولة."
-
-msgid "Customer notified of the tracking number."
-msgstr "تم إشعار العميل برقم التتبع."
 
 msgid "Customer portal"
 msgstr "بوابة العملاء"
@@ -926,8 +867,8 @@ msgstr "تاريخ الإرسال"
 msgid "Day and exact time"
 msgstr "اليوم والوقت المحدد"
 
-msgid "Day only — let the supervisor pick the exact time"
-msgstr "اليوم فقط — يختار المشرف الوقت المحدد لاحقًا"
+msgid "Day only — the supervisor will set the exact time"
+msgstr "اليوم فقط — سيحدد المشرف الوقت بدقة"
 
 msgid "Days left"
 msgstr "الأيام المتبقية"
@@ -944,45 +885,25 @@ msgstr "إيقاف الفني"
 msgid "Deactivated"
 msgstr "موقوف"
 
-msgid "Deactivated. Reassign their open tasks below."
-msgstr "تم الإيقاف. أعد إسناد مهامه المفتوحة أدناه."
+msgid "Deactivated. Please reassign their open tasks below."
+msgstr "تم إلغاء التفعيل. يرجى إعادة إسناد مهامه المفتوحة أدناه."
 
 #, python-format
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
-"Good news — your shipment for %(entity)s is on its way. You can track it using the details below.\n"
+"Please be advised that our technician for %(site)s is running behind schedule today: %(reason)s\n"
 "\n"
-"%(tracking_lines)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"عزيزي %(contact)s،\n"
-"\n"
-"خبر سار — شحنتك الخاصة بـ %(entity)s في الطريق إليك. يمكنك تتبعها باستخدام التفاصيل أدناه.\n"
-"\n"
-"%(tracking_lines)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Our technician for %(site)s is running behind schedule today: %(reason)s\n"
-"\n"
-"We're sorry for the inconvenience and will be there as soon as we can.\n"
+"We sincerely apologise for any inconvenience and will arrive as soon as possible.\n"
 "\n"
 "Best regards,\n"
 "Profit Sports Solutions\n"
 msgstr ""
-"عزيزي %(contact)s،\n"
+"السيد/السيدة %(contact)s المحترم/ة،\n"
 "\n"
-"فنيّنا الخاص بـ %(site)s متأخر عن الموعد اليوم: %(reason)s\n"
+"نود إحاطتكم علماً بأن الفني المكلَّف بزيارة %(site)s متأخر عن موعده اليوم: %(reason)s\n"
 "\n"
-"نعتذر عن الإزعاج، وسنكون هناك في أقرب وقت ممكن.\n"
+"نعتذر عن أي إزعاج، وسيصل في أقرب وقت ممكن.\n"
 "\n"
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
@@ -995,19 +916,19 @@ msgid ""
 "\n"
 "%(reply_message)s\n"
 "\n"
-"You can reply or check the full conversation here:\n"
+"You may reply or view the full conversation here:\n"
 "%(link)s\n"
 "\n"
 "Best regards,\n"
 "Profit Sports Solutions\n"
 msgstr ""
-"عزيزي %(contact)s،\n"
+"السيد/السيدة %(contact)s المحترم/ة،\n"
 "\n"
-"بخصوص الطلب %(number)s:\n"
+"بخصوص التذكرة %(number)s:\n"
 "\n"
 "%(reply_message)s\n"
 "\n"
-"يمكنك الرد أو الاطلاع على المحادثة كاملة من هنا:\n"
+"يمكنكم الرد أو الاطلاع على المحادثة كاملة من هنا:\n"
 "%(link)s\n"
 "\n"
 "مع أطيب التحيات،\n"
@@ -1041,18 +962,126 @@ msgstr ""
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
-"This confirms our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n"
+"Thank you for contacting us. We have received your request and created ticket #%(number)s.\n"
 "\n"
-"If this time doesn't work for you, please contact us to reschedule.\n"
+"Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there is an update.\n"
+"\n"
+"Please ensure that photos or videos are attached for each issue. This will help our team understand the problem and resolve your case promptly.\n"
 "\n"
 "Best regards,\n"
 "Profit Sports Solutions\n"
 msgstr ""
-"عزيزي %(contact)s،\n"
+"السيد/السيدة %(contact)s المحترم/ة،\n"
 "\n"
-"هذا تأكيد بأن فنيّنا مجدول لزيارة %(site)s بتاريخ %(date)s الساعة %(time)s.\n"
+"نشكركم على تواصلكم معنا. لقد استلمنا طلبكم وأنشأنا التذكرة رقم #%(number)s.\n"
 "\n"
-"إذا كان هذا الوقت غير مناسب لك، يُرجى التواصل معنا لإعادة الجدولة.\n"
+"يرد فريقنا خلال 24 ساعة، من الأحد إلى الجمعة. وستتلقون رسالة بريد إلكتروني فور توفر أي مستجدات.\n"
+"\n"
+"يرجى التأكد من إرفاق صور أو مقاطع فيديو لكل مشكلة، إذ يساعد ذلك فريقنا على فهم المشكلة وحل طلبكم بسرعة.\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track it using the details below.\n"
+"\n"
+"%(tracking_lines)s\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"السيد/السيدة %(contact)s المحترم/ة،\n"
+"\n"
+"يسعدنا إبلاغكم بأنه تم إرسال شحنتكم الخاصة بـ %(entity)s. يمكنكم تتبعها باستخدام البيانات أدناه.\n"
+"\n"
+"%(tracking_lines)s\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n"
+"\n"
+"Should this time be inconvenient, please contact us to arrange an alternative.\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"السيد/السيدة %(contact)s المحترم/ة،\n"
+"\n"
+"نؤكد لكم أن الفني لدينا مجدول لزيارة %(site)s بتاريخ %(date)s في تمام الساعة %(time)s.\n"
+"\n"
+"إذا كان هذا الموعد غير مناسب، يرجى التواصل معنا لتحديد موعد بديل.\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"Your Profit Sports Solutions account has been created.\n"
+"\n"
+"Username: %(username)s\n"
+"Temporary password: %(password)s\n"
+"\n"
+"You will be asked to set your own password when you first sign in.\n"
+"\n"
+"Sign in here:\n"
+"%(link)s\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"السيد/السيدة %(contact)s المحترم/ة،\n"
+"\n"
+"تم إنشاء حسابكم في Profit Sports Solutions.\n"
+"\n"
+"اسم المستخدم: %(username)s\n"
+"كلمة المرور المؤقتة: %(password)s\n"
+"\n"
+"سيُطلب منكم تعيين كلمة مرور خاصة بكم عند تسجيل الدخول لأول مرة.\n"
+"\n"
+"تسجيل الدخول من هنا:\n"
+"%(link)s\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"Your customer portal account has been created. Through the portal you may submit service requests and track their progress.\n"
+"\n"
+"Username: %(username)s\n"
+"Temporary password: %(password)s\n"
+"\n"
+"You will be asked to set your own password and confirm your details when you first sign in.\n"
+"\n"
+"Sign in here:\n"
+"%(link)s\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"السيد/السيدة %(contact)s المحترم/ة،\n"
+"\n"
+"تم إنشاء حسابكم في بوابة العملاء. يمكنكم من خلال البوابة تقديم طلبات الخدمة ومتابعة سيرها.\n"
+"\n"
+"اسم المستخدم: %(username)s\n"
+"كلمة المرور المؤقتة: %(password)s\n"
+"\n"
+"سيُطلب منكم تعيين كلمة مرور خاصة بكم وتأكيد بياناتكم عند تسجيل الدخول لأول مرة.\n"
+"\n"
+"تسجيل الدخول من هنا:\n"
+"%(link)s\n"
 "\n"
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
@@ -1066,9 +1095,6 @@ msgstr "القرار"
 #, python-format
 msgid "Decision (%(when)s):"
 msgstr "القرار (%(when)s):"
-
-msgid "Decision sent back to the support desk."
-msgstr "أُرسل القرار إلى فريق الدعم."
 
 msgid "Delay notice sent"
 msgstr "تم إرسال إشعار تأخير"
@@ -1088,8 +1114,14 @@ msgstr "مرفوض"
 msgid "Deny"
 msgstr "رفض"
 
+msgid "Describe the customer complaint and explain why it constitutes negligence rather than an unforeseeable circumstance."
+msgstr "صف شكوى العميل ووضّح لماذا تُعد إهمالاً وليست ظرفاً غير متوقع."
+
 msgid "Description"
 msgstr "الوصف"
+
+msgid "Description of the issue"
+msgstr "وصف المشكلة"
 
 msgid "Details"
 msgstr "التفاصيل"
@@ -1112,9 +1144,6 @@ msgstr "تمت إضافة المستند."
 msgid "Documents"
 msgstr "المستندات"
 
-msgid "Done — hand back to the technician"
-msgstr "تم — أعد الشاشة إلى الفني"
-
 msgid "Download"
 msgstr "تنزيل"
 
@@ -1125,11 +1154,11 @@ msgid "Download a template CSV"
 msgstr "تنزيل نموذج CSV"
 
 #, python-format
-msgid "Each file must be under 25 MB — “%(name)s” is too large."
-msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميجابايت — \"%(name)s\" كبير جدًا."
+msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
+msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. الملف «%(name)s» يتجاوز هذا الحد."
 
-msgid "Each helper gets the same hours as above. Fill one in only if it was different — for example, someone who left early."
-msgstr "يحصل كل مساعد على نفس الساعات أعلاه. املأ الخانة فقط إن كانت مختلفة — مثلاً لمن غادر مبكراً."
+msgid "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early."
+msgstr "يُحتسب لكل مساعد عدد الساعات أعلاه. يرجى إدخال قيمة فقط إذا كانت مختلفة، كأن يكون أحد أعضاء الفريق قد غادر مبكراً."
 
 msgid "Edit"
 msgstr "تعديل"
@@ -1151,9 +1180,6 @@ msgstr "تعديل بيانات الفني"
 
 msgid "Edit technicians' details and profile photos"
 msgstr "تعديل بيانات الفنيين وصورهم الشخصية"
-
-msgid "Edit these from the task's Edit screen."
-msgstr "عدّلها من شاشة تعديل المهمة."
 
 msgid "Email"
 msgstr "البريد الإلكتروني"
@@ -1194,8 +1220,8 @@ msgstr "أدخل العلامة التجارية والموديل والنتيج
 msgid "Enter the date and time you are requesting."
 msgstr "أدخل التاريخ والوقت اللذين تطلبهما."
 
-msgid "Enter the email on file for your account and we'll send you a link to set a new password."
-msgstr "أدخل البريد الإلكتروني المسجّل لحسابك وسنرسل لك رابطًا لتعيين كلمة مرور جديدة."
+msgid "Enter the email address associated with your account and we will send you a link to set a new password."
+msgstr "أدخل البريد الإلكتروني المرتبط بحسابك وسنرسل إليك رابطاً لتعيين كلمة مرور جديدة."
 
 msgid "Enter the exact date and time."
 msgstr "أدخل التاريخ والوقت المحددين."
@@ -1220,11 +1246,15 @@ msgid "Escalated"
 msgstr "مُصعّدة"
 
 #, python-format
+msgid "Escalated by %(by)s to %(to)s on %(when)s"
+msgstr "صعّدها %(by)s إلى %(to)s بتاريخ %(when)s"
+
+#, python-format
 msgid "Escalated to %(name)s."
 msgstr "تم التصعيد إلى %(name)s."
 
-msgid "Escalated to you — decision needed"
-msgstr "مُصعّدة إليك — مطلوب قرار"
+msgid "Escalated to you — decision required"
+msgstr "مصعَّدة إليك — يلزم اتخاذ قرار"
 
 #, python-format
 msgid "Escalated — awaiting a decision from %(name)s"
@@ -1246,32 +1276,24 @@ msgstr "الانتهاء المتوقع"
 msgid "Estimated hours"
 msgstr "الساعات المقدرة"
 
-msgid "Every active customer in every country — for search and management. Doesn't follow the country switcher above."
-msgstr "كل عميل نشط في كل دولة — للبحث والإدارة. لا يتبع مبدّل الدولة أعلاه."
-
-msgid "Every active technician in every country — for tracking, inspection, and audit. Doesn't follow the country switcher above."
-msgstr "كل فني نشط في كل دولة — للتتبع والفحص والتدقيق. لا يتبع مبدّل الدولة أعلاه."
-
-msgid "Every add, change, and delete made from Django admin, newest first. Actions taken from the app's own screens aren't recorded here — a task's own history is on its detail page."
-msgstr "كل عملية إضافة أو تعديل أو حذف تمت من لوحة إدارة Django، الأحدث أولاً. الإجراءات المتخذة من شاشات التطبيق نفسه لا تُسجَّل هنا — سجل كل مهمة موجود في صفحة تفاصيلها."
-
-msgid "Every country combined — this is the number leadership sees, not a per-country board."
-msgstr "كل الدول مجتمعة — هذا هو الرقم الذي تراه الإدارة العليا، وليس لوحة خاصة بكل دولة."
-
-msgid "Every country's schedule at once. Doesn't follow the country switcher above."
-msgstr "جدول كل الدول دفعة واحدة. لا يتبع مبدّل الدولة أعلاه."
-
-msgid "Every open task has a day."
-msgstr "كل مهمة مفتوحة لها يوم."
-
 msgid "Evidence"
 msgstr "الدليل"
+
+msgid "Exceeds recorded time"
+msgstr "يتجاوز الوقت المسجَّل"
+
+#, python-format
+msgid "Exceeds recorded time (%(hours)s h)"
+msgstr "يتجاوز الوقت المسجَّل (%(hours)s ساعة)"
 
 msgid "Excellent"
 msgstr "ممتاز"
 
-msgid "Explain the reason for the delay before notifying the customer."
-msgstr "اذكر سبب التأخير قبل إخطار العميل."
+msgid "Existing bookings, so you can select a time without conflicts. Open a staff member's week for a full day-by-day overview of their workload."
+msgstr "الحجوزات القائمة، لتتمكن من اختيار وقت دون تعارض. افتح أسبوع أي موظف للاطلاع على نظرة شاملة على عبء عمله يوماً بيوم."
+
+msgid "Expecting a delay?"
+msgstr "هل تتوقع تأخيراً؟"
 
 msgid "Factory offer"
 msgstr "عرض المصنع"
@@ -1285,29 +1307,11 @@ msgstr "معطل"
 msgid "FedEx"
 msgstr "FedEx"
 
-msgid "Feedback request sent."
-msgstr "تم إرسال طلب التقييم."
-
 msgid "File"
 msgstr "ملف"
 
-msgid "File is too large — the limit is 10 MB."
-msgstr "الملف كبير جدًا — الحد الأقصى 10 ميجابايت."
-
-msgid "File is too large — the limit is 25 MB."
-msgstr "الملف كبير جدًا — الحد الأقصى 25 ميغابايت."
-
-msgid "File is too large — the limit is 5 MB."
-msgstr "الملف كبير جدًا — الحد الأقصى 5 ميغابايت."
-
 msgid "File report"
 msgstr "تقديم التقرير"
-
-msgid "Fill in code, name, Arabic name, and category for the new task type, or leave them blank."
-msgstr "أدخل الرمز والاسم والاسم بالعربية والفئة لنوع المهمة الجديد، أو اتركها كلها فارغة."
-
-msgid "Fill in part code, quantity, unit cost and currency, or leave this row blank."
-msgstr "أدخل رمز القطعة والكمية وسعر الوحدة والعملة، أو اترك هذا الصف فارغًا."
 
 msgid "Findings"
 msgstr "النتائج"
@@ -1322,14 +1326,14 @@ msgstr "الإبلاغ عن إهمال"
 msgid "For"
 msgstr "إلى"
 
-msgid "For a customer who phoned, messaged or emailed. It becomes a normal ticket: the customer gets the usual confirmation and can follow it and reply in their portal."
-msgstr "لعميل اتصل أو راسل أو أرسل بريداً. تصبح تذكرة عادية: يتلقى العميل التأكيد المعتاد ويمكنه متابعتها والرد عليها من بوابته."
+msgid "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal."
+msgstr "لعميل تواصل معنا هاتفياً أو عبر رسالة أو بريد إلكتروني. تصبح هذه تذكرة اعتيادية: يتلقى العميل التأكيد المعتاد، ويمكنه متابعتها والرد عليها عبر بوابته."
 
-msgid "For exceptional cases only — customer cancelled, turned out not to need a visit, etc. Bypasses the normal report and approval."
-msgstr "للحالات الاستثنائية فقط — ألغى العميل الطلب، أو تبيّن أنه لا يحتاج زيارة، إلخ. يتجاوز هذا التقرير والموافقة المعتادين."
+msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
+msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
 
-msgid "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved. For an actual machine, fill in its own checklist: custom color per component, and what it got swapped for if the one ordered wasn't available."
-msgstr "للتركيبات والتحميلات — نفس العناصر الموجودة في إشعار التسليم، محفوظة كبيانات منظّمة. رمز المنتج مطلوب لحفظ أي صف. بالنسبة لجهاز فعلي، املأ قائمته الخاصة: لون مخصص لكل مكوّن، وما استُبدل به إذا لم يكن الجهاز المطلوب متاحًا."
+msgid "For installations and loadings: the same items listed on the delivery note, recorded as structured data. A product code is required for a row to be saved. For each machine, complete its checklist: the custom color of each component and any substitute supplied if the ordered item was unavailable."
+msgstr "لعمليات التركيب والتحميل: البنود ذاتها الواردة في مذكرة التسليم، مسجَّلة كبيانات منظَّمة. رمز المنتج مطلوب لحفظ أي صف. لكل جهاز، يرجى استكمال قائمة التحقق الخاصة به: اللون المخصص لكل مكوّن، وأي بديل تم توريده في حال عدم توفر الصنف المطلوب."
 
 msgid "Forgot your password?"
 msgstr "هل نسيت كلمة المرور؟"
@@ -1352,12 +1356,6 @@ msgstr "الجمعة"
 msgid "From customer"
 msgstr "من العميل"
 
-msgid "Go to home"
-msgstr "الذهاب إلى الصفحة الرئيسية"
-
-msgid "Go to the following page and choose a new password:"
-msgstr "انتقل إلى الصفحة التالية واختر كلمة مرور جديدة:"
-
 msgid "Goodwill"
 msgstr "مجاملة"
 
@@ -1367,33 +1365,14 @@ msgstr "صالة رياضية"
 msgid "Gym address"
 msgstr "عنوان النادي الرياضي"
 
-msgid "Hand it to"
-msgstr "سلّمها إلى"
-
-msgid "Hand it to someone else"
-msgstr "سلّمها لشخص آخر"
-
-msgid "Hand over"
-msgstr "تسليم"
-
-msgid "Hand the screen to the customer to review the work and sign — hours and prices are hidden while they do."
-msgstr "سلّم الشاشة للعميل لمراجعة العمل والتوقيع — تُخفى الساعات والأسعار أثناء ذلك."
-
-msgid "Hand to customer to sign"
-msgstr "سلّم للعميل للتوقيع"
-
-msgid "Handed over."
-msgstr "تم التسليم."
-
-#, python-format
-msgid "Handed to %(name)s."
-msgstr "سُلّمت إلى %(name)s."
+msgid "Hand to customer for signature"
+msgstr "تسليم إلى العميل للتوقيع"
 
 msgid "Handle tickets in all countries"
 msgstr "معالجة التذاكر في جميع الدول"
 
-msgid "Helped on"
-msgstr "ساعد في"
+msgid "Heading to site"
+msgstr "في الطريق إلى الموقع"
 
 msgid "Helper"
 msgstr "مساعد"
@@ -1410,94 +1389,6 @@ msgstr "المساعدون"
 msgid "Helpers' hours"
 msgstr "ساعات المساعدين"
 
-#, python-format
-msgid ""
-"Hi %(contact)s,\n"
-"\n"
-"Thanks for contacting us. We've received your request and created ticket #%(number)s.\n"
-"\n"
-"Our team responds within 24 hours, Sunday–Friday. You'll get an email as soon as there's an update.\n"
-"\n"
-"Please make sure you've attached photos or videos for each issue you're facing. This helps our team understand the problem and resolve your case faster.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"مرحبًا %(contact)s،\n"
-"\n"
-"شكرًا لتواصلك معنا. لقد استلمنا طلبك وأنشأنا التذكرة رقم #%(number)s.\n"
-"\n"
-"يستجيب فريقنا خلال 24 ساعة، من الأحد إلى الجمعة. ستصلك رسالة بريد إلكتروني بمجرد وجود تحديث.\n"
-"\n"
-"يُرجى التأكد من إرفاق صور أو مقاطع فيديو لكل مشكلة تواجهها. هذا يساعد فريقنا على فهم المشكلة وحل حالتك بشكل أسرع.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Hi %(contact)s,\n"
-"\n"
-"We've created your customer portal account — from here you can submit service requests and track their progress.\n"
-"\n"
-"Username: %(username)s\n"
-"Temporary password: %(password)s\n"
-"\n"
-"You'll be asked to set your own password and confirm your details the first time you sign in.\n"
-"\n"
-"Sign in here:\n"
-"%(link)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"مرحبًا %(contact)s،\n"
-"\n"
-"لقد أنشأنا حساب بوابة العملاء الخاص بك — يمكنك من هنا إرسال طلبات الصيانة ومتابعة حالتها.\n"
-"\n"
-"اسم المستخدم: %(username)s\n"
-"كلمة المرور المؤقتة: %(password)s\n"
-"\n"
-"سيُطلب منك تعيين كلمة مرور خاصة بك وتأكيد بياناتك عند تسجيل الدخول لأول مرة.\n"
-"\n"
-"سجّل الدخول من هنا:\n"
-"%(link)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Hi %(contact)s,\n"
-"\n"
-"Your Profit Sports Solutions account has been created.\n"
-"\n"
-"Username: %(username)s\n"
-"Temporary password: %(password)s\n"
-"\n"
-"You'll be asked to set your own password the first time you sign in.\n"
-"\n"
-"Sign in here:\n"
-"%(link)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"مرحبًا %(contact)s،\n"
-"\n"
-"تم إنشاء حسابك في Profit Sports Solutions.\n"
-"\n"
-"اسم المستخدم: %(username)s\n"
-"كلمة المرور المؤقتة: %(password)s\n"
-"\n"
-"سيُطلب منك تعيين كلمة مرور خاصة بك عند تسجيل الدخول لأول مرة.\n"
-"\n"
-"سجّل الدخول من هنا:\n"
-"%(link)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
 msgid "High"
 msgstr "مرتفعة"
 
@@ -1513,29 +1404,29 @@ msgstr "فندق"
 msgid "Hours"
 msgstr "الساعات"
 
-msgid "Hours the current lead already worked"
-msgstr "الساعات التي عملها الفني الرئيسي الحالي"
+msgid "Hours already worked by the current lead"
+msgstr "الساعات التي عملها القائد الحالي"
 
 #, python-format
 msgid "Hours worked: %(hours)s"
 msgstr "ساعات العمل: %(hours)s"
 
-msgid "How did we do?"
-msgstr "كيف كان أداؤنا؟"
-
-msgid "How it was resolved without a task — advice given, handled by phone, etc."
-msgstr "كيف حُل الأمر دون مهمة — نصيحة قُدّمت، عولج هاتفيًا، إلخ."
-
-msgid "How the customer hears about a rescheduled visit — a supervisor sending it deliberately from task detail, or the system sending it the moment the date or time changes."
-msgstr "كيف يعرف العميل بتغيير الموعد — إما بإرسال المشرف تنبيهًا يدويًا من تفاصيل المهمة، أو بإرسال النظام له تلقائيًا فور تغيير التاريخ أو الوقت."
+msgid "How the customer is informed of a rescheduled visit: sent deliberately by a supervisor from the task details, or sent automatically by the system as soon as the date or time changes."
+msgstr "طريقة إبلاغ العميل بإعادة جدولة الزيارة: يرسلها المشرف يدوياً من تفاصيل المهمة، أو يرسلها النظام تلقائياً فور تغيير التاريخ أو الوقت."
 
 msgid "How the customer reached us"
 msgstr "كيف تواصل معنا العميل"
 
+msgid "How the matter was resolved without a task, for example advice given or resolved by phone."
+msgstr "كيفية حل الطلب دون إنشاء مهمة، مثل تقديم المشورة أو الحل عبر الهاتف."
+
+msgid "How would you rate our service?"
+msgstr "كيف تقيّمون خدمتنا؟"
+
 msgid "How would you rate the visit?"
 msgstr "كيف تقيّم الزيارة؟"
 
-msgid "I've arrived"
+msgid "I have arrived"
 msgstr "لقد وصلت"
 
 msgid "IANA name, e.g. Asia/Riyadh"
@@ -1544,11 +1435,11 @@ msgstr "اسم IANA، مثال: Asia/Riyadh"
 msgid "ISO code"
 msgstr "رمز ISO"
 
-msgid "If that email matches an account, we've sent a link to set a new password. It may take a few minutes to arrive."
-msgstr "إذا كان هذا البريد الإلكتروني مطابقًا لحساب، فقد أرسلنا رابطًا لتعيين كلمة مرور جديدة. قد يستغرق وصوله بضع دقائق."
+msgid "If this email address matches an account, a link to set a new password has been sent. It may take a few minutes to arrive."
+msgstr "إذا كان هذا البريد الإلكتروني مطابقاً لحساب مسجَّل، فقد تم إرسال رابط لتعيين كلمة مرور جديدة. قد يستغرق وصوله بضع دقائق."
 
-msgid "If you didn't request this, you can safely ignore this email."
-msgstr "إذا لم تطلب هذا، يمكنك تجاهل هذه الرسالة بأمان."
+msgid "If you did not request this, please disregard this email."
+msgstr "إذا لم تطلب ذلك، يرجى تجاهل هذه الرسالة."
 
 msgid "Import"
 msgstr "استيراد"
@@ -1583,14 +1474,14 @@ msgstr "داخلي"
 msgid "Internal notes"
 msgstr "الملاحظات الداخلية"
 
-msgid "Internal only — nothing is sent to a customer. The person it's for is notified, and you both follow it up with notes until it's closed."
-msgstr "داخلية فقط — لا يُرسل شيء إلى العميل. يُبلَّغ الشخص المعني، وتتابعانها معاً بالملاحظات حتى إغلاقها."
+msgid "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the ticket is closed."
+msgstr "داخلية فقط؛ لا يُرسل أي شيء إلى العميل. يتم إشعار الموظف المكلَّف، ويتابع الطرفان بالملاحظات حتى إغلاق التذكرة."
+
+msgid "Internal ticket assigned to you"
+msgstr "تذكرة داخلية مسندة إليك"
 
 msgid "Internal ticket closed"
 msgstr "أُغلقت التذكرة الداخلية"
-
-msgid "Internal ticket for you"
-msgstr "تذكرة داخلية لك"
 
 msgid "Internal tickets"
 msgstr "التذاكر الداخلية"
@@ -1600,12 +1491,6 @@ msgstr "الفاتورة"
 
 msgid "Job"
 msgstr "المهمة"
-
-msgid "Just this once — set your own password and confirm how we should reach you. After this, signing in goes straight to your account."
-msgstr "لمرة واحدة فقط — عيّن كلمة المرور الخاصة بك وأكّد بيانات التواصل معك. بعد ذلك، سيأخذك تسجيل الدخول مباشرة إلى حسابك."
-
-msgid "Just this once — set your own password. After this, signing in goes straight to your dashboard."
-msgstr "لمرة واحدة فقط — عيّن كلمة المرور الخاصة بك. بعد ذلك، سيأخذك تسجيل الدخول مباشرة إلى لوحة التحكم."
 
 msgid "Labour hours"
 msgstr "ساعات العمل"
@@ -1622,11 +1507,11 @@ msgstr "تم تعيين الفني الرئيسي."
 msgid "Leave"
 msgstr "إجازة"
 
-msgid "Leave contact fields blank to use the customer's own contact instead."
-msgstr "اترك حقول التواصل فارغة لاستخدام بيانات تواصل العميل نفسه."
+msgid "Leave blank to use the site's own contact details."
+msgstr "اتركه فارغاً لاستخدام بيانات التواصل الخاصة بالموقع."
 
-msgid "Leave empty to use the site’s own contact."
-msgstr "اتركه فارغاً لاستخدام جهة اتصال الموقع."
+msgid "Leave the contact fields blank to use the customer's own contact details."
+msgstr "اترك حقول التواصل فارغة لاستخدام بيانات التواصل الخاصة بالعميل."
 
 msgid "Left the company"
 msgstr "غادر الشركة"
@@ -1663,8 +1548,8 @@ msgid "Login"
 msgstr "حساب الدخول"
 
 #, python-format
-msgid "Login created and emailed to %(email)s."
-msgstr "تم إنشاء حساب الدخول وإرساله بالبريد الإلكتروني إلى %(email)s."
+msgid "Login created and sent to %(email)s."
+msgstr "تم إنشاء بيانات الدخول وإرسالها إلى %(email)s."
 
 msgid "Logistics updated."
 msgstr "تم تحديث بيانات الشحن."
@@ -1714,20 +1599,17 @@ msgstr "وضع علامة متاح"
 msgid "Mark unavailable"
 msgstr "وضع علامة غير متاح"
 
-msgid "Mark yourself started again before filing the report."
-msgstr "ضع علامة استئناف العمل قبل تقديم التقرير."
+msgid "Marked as available."
+msgstr "تم التعيين كمتاح."
 
-msgid "Marked available."
-msgstr "تم وضع علامة متاح."
+msgid "Marked as resumed."
+msgstr "تم تسجيل استئناف العمل."
 
-msgid "Marked started again."
-msgstr "تم وضع علامة الاستئناف."
+msgid "Marked as stopped for today."
+msgstr "تم تسجيل التوقف لهذا اليوم."
 
-msgid "Marked stopped for today."
-msgstr "تم وضع علامة الإيقاف لليوم."
-
-msgid "Marked unavailable."
-msgstr "تم وضع علامة غير متاح."
+msgid "Marked as unavailable."
+msgstr "تم التعيين كغير متاح."
 
 msgid "Median time to accept a task"
 msgstr "الوسيط الزمني لقبول المهمة"
@@ -1737,6 +1619,9 @@ msgstr "القائمة"
 
 msgid "Message"
 msgstr "الرسالة"
+
+msgid "Message sent to the customer:"
+msgstr "الرسالة المرسلة إلى العميل:"
 
 msgid "Message sent."
 msgstr "تم إرسال الرسالة."
@@ -1781,9 +1666,6 @@ msgstr "الاسم"
 msgid "Name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
-msgid "Needs a job on site?"
-msgstr "هل تحتاج إلى عمل في الموقع؟"
-
 msgid "Negligence flags"
 msgstr "بلاغات الإهمال"
 
@@ -1806,8 +1688,8 @@ msgstr "تم إنشاء عميل جديد"
 msgid "New customer reply — ticket %(number)s"
 msgstr "رد جديد من العميل — الطلب %(number)s"
 
-msgid "New internal ticket for you"
-msgstr "تذكرة داخلية جديدة لك"
+msgid "New internal ticket assigned to you"
+msgstr "تذكرة داخلية جديدة مسندة إليك"
 
 msgid "New machines found"
 msgstr "أجهزة جديدة تم العثور عليها"
@@ -1877,11 +1759,8 @@ msgstr "لا يتوفر %(role)s نشط لاستلام التصعيدات. ير�
 msgid "No active customers."
 msgstr "لا يوجد عملاء نشطون."
 
-msgid "No active supervisors or technicians in this country yet."
-msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة بعد."
-
-msgid "No active technicians available in this country."
-msgstr "لا يوجد فنيون نشطون متاحون في هذه الدولة."
+msgid "No active technicians are available in this country."
+msgstr "لا يتوفر فنيون نشطون في هذه الدولة."
 
 msgid "No active technicians in this country."
 msgstr "لا يوجد فنيون نشطون في هذه الدولة."
@@ -1892,20 +1771,17 @@ msgstr "لا يوجد فنيون نشطون في دولتك."
 msgid "No active technicians."
 msgstr "لا يوجد فنيون نشطون."
 
-msgid "No attachments yet."
-msgstr "لا توجد مرفقات بعد."
+msgid "No attachments."
+msgstr "لا توجد مرفقات."
 
 msgid "No brand"
 msgstr "بدون علامة تجارية"
 
-msgid "No conduct areas set up yet."
-msgstr "لم يتم إعداد أي مجالات سلوك بعد."
+msgid "No conduct areas have been set up."
+msgstr "لم يتم إعداد أي مجالات سلوك."
 
-msgid "No customers in your country yet."
-msgstr "لا يوجد عملاء في دولتك بعد."
-
-msgid "No customers match that search."
-msgstr "لا يوجد عملاء مطابقون لهذا البحث."
+msgid "No customers match your search."
+msgstr "لا يوجد عملاء مطابقون لبحثك."
 
 msgid "No deactivated customers in your country."
 msgstr "لا يوجد عملاء موقوفون في دولتك."
@@ -1913,71 +1789,80 @@ msgstr "لا يوجد عملاء موقوفون في دولتك."
 msgid "No deactivated technicians in your country."
 msgstr "لا يوجد فنيون موقوفون في دولتك."
 
-msgid "No events yet."
-msgstr "لا توجد أحداث بعد."
+msgid "No entries recorded."
+msgstr "لا توجد سجلات."
+
+msgid "No events recorded."
+msgstr "لا توجد أحداث مسجَّلة."
 
 msgid "No helpers on this task."
 msgstr "لا يوجد مساعدون في هذه المهمة."
 
-msgid "No internal notes yet."
-msgstr "لا توجد ملاحظات داخلية بعد."
+msgid "No internal notes."
+msgstr "لا توجد ملاحظات داخلية."
 
-msgid "No internal tickets here."
-msgstr "لا توجد تذاكر داخلية هنا."
+msgid "No internal tickets found."
+msgstr "لا توجد تذاكر داخلية."
 
-msgid "No location sent"
-msgstr "لم يُرسل الموقع"
+msgid "No location provided"
+msgstr "لم يتم تحديد الموقع"
 
-msgid "No login yet — create one so they can sign in. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password the first time they sign in."
-msgstr "لا يوجد حساب دخول بعد — أنشئ واحدًا ليتمكن من تسجيل الدخول. تُولَّد كلمة مرور مؤقتة تلقائيًا وتُرسل له بالبريد الإلكتروني مع رابط تسجيل الدخول؛ وسيعيّن كلمة المرور الخاصة به عند أول تسجيل دخول."
+msgid "No login has been created yet. Create one to enable sign-in. A temporary password will be generated automatically and emailed with the sign-in link; the user will set their own password at first sign-in."
+msgstr "لم يتم إنشاء بيانات دخول بعد. يرجى إنشاؤها لتمكين تسجيل الدخول. سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني مع رابط تسجيل الدخول، وسيعيّن المستخدم كلمة مروره الخاصة عند تسجيل الدخول لأول مرة."
 
-msgid "No machines match that search."
-msgstr "لا توجد أجهزة مطابقة لهذا البحث."
+msgid "No machines match your search."
+msgstr "لا توجد أجهزة مطابقة لبحثك."
 
-msgid "No machines on file in your country yet — one gets added the first time a technician records it on a work report."
-msgstr "لا توجد أجهزة مسجّلة في دولتك بعد — يُضاف الجهاز أول مرة يسجّله فني في تقرير عمل."
-
-msgid "No messages yet."
-msgstr "لا توجد رسائل بعد."
+msgid "No messages."
+msgstr "لا توجد رسائل."
 
 msgid "No negligence flags on record."
 msgstr "لا توجد بلاغات إهمال مسجّلة."
 
-msgid "No notes yet."
-msgstr "لا توجد ملاحظات بعد."
+msgid "No new notifications."
+msgstr "لا توجد إشعارات جديدة."
 
-msgid "No one is assigned yet."
-msgstr "لم يتم تعيين أحد بعد."
+msgid "No notes."
+msgstr "لا توجد ملاحظات."
+
+msgid "No one has been assigned."
+msgstr "لم يتم إسناد أي شخص."
 
 msgid "No open tasks."
 msgstr "لا توجد مهام مفتوحة."
 
-msgid "No parts match that search."
-msgstr "لا توجد قطع تطابق هذا البحث."
+msgid "No outcome has been recorded for this machine."
+msgstr "لم تُسجَّل أي نتيجة لهذا الجهاز."
 
-msgid "No parts yet — add them above or upload a list."
-msgstr "لا توجد قطع بعد — أضفها أعلاه أو ارفع قائمة."
+msgid "No parts have been added. Add them above or upload a list."
+msgstr "لم تتم إضافة أي قطع. يرجى إضافتها أعلاه أو رفع قائمة."
 
-msgid "No photos yet."
-msgstr "لا توجد صور بعد."
+msgid "No parts match your search."
+msgstr "لا توجد قطع مطابقة لبحثك."
 
-msgid "No portal login yet — create one so this customer can track their own tickets and service history. A temporary password is generated automatically and emailed to them, along with the sign-in link; they'll set their own password and confirm their contact details the first time they sign in."
-msgstr "لا يوجد حساب دخول للبوابة بعد — أنشئ واحدًا ليتمكن هذا العميل من متابعة تذاكره وسجل الصيانة الخاص به. تُولَّد كلمة مرور مؤقتة تلقائيًا وتُرسل له بالبريد الإلكتروني مع رابط تسجيل الدخول؛ وسيعيّن كلمة المرور الخاصة به ويؤكد بيانات التواصل معه عند أول تسجيل دخول."
+msgid "No photos."
+msgstr "لا توجد صور."
+
+msgid "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in."
+msgstr "لم يتم إنشاء بيانات دخول إلى البوابة بعد. يرجى إنشاؤها لتمكين هذا العميل من متابعة تذاكره وسجل الخدمة. سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني مع رابط تسجيل الدخول، وسيعيّن العميل كلمة مروره الخاصة ويؤكد بيانات التواصل عند تسجيل الدخول لأول مرة."
 
 msgid "No products."
 msgstr "لا توجد منتجات."
 
-msgid "No sites yet."
-msgstr "لا توجد فروع بعد."
+msgid "No records to display."
+msgstr "لا توجد سجلات لعرضها."
 
-msgid "No skills set up yet."
-msgstr "لم يتم إعداد أي مهارات بعد."
+msgid "No sites have been added."
+msgstr "لم تتم إضافة أي مواقع."
 
-msgid "No supervisor or manager set up in your country yet."
-msgstr "لا يوجد مشرف أو مدير في دولتك بعد."
+msgid "No skills have been set up."
+msgstr "لم يتم إعداد أي مهارات."
 
-msgid "No task has recorded an outcome for this machine yet."
-msgstr "لم تسجّل أي مهمة نتيجة لهذا الجهاز بعد."
+msgid "No supervisor or manager has been set up in your country."
+msgstr "لم يتم تعيين مشرف أو مدير في دولتك."
+
+msgid "No tasks awaiting a date."
+msgstr "لا توجد مهام بانتظار تحديد موعد."
 
 msgid "No tasks match these filters."
 msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
@@ -1988,35 +1873,29 @@ msgstr "لا توجد مهام مجدولة."
 msgid "No tasks this month."
 msgstr "لا توجد مهام هذا الشهر."
 
-msgid "No technicians match that search."
-msgstr "لا يوجد فنيون مطابقون لهذا البحث."
+msgid "No technicians match your search."
+msgstr "لا يوجد فنيون مطابقون لبحثك."
 
-msgid "No tickets match this filter."
-msgstr "لا توجد تذاكر مطابقة لهذا الفلتر."
+msgid "No tickets match the selected filters."
+msgstr "لا توجد تذاكر مطابقة لعوامل التصفية المحددة."
 
 msgid "No tickets this month."
 msgstr "لا توجد طلبات هذا الشهر."
 
-msgid "No visits on record yet."
-msgstr "لا توجد زيارات مسجّلة بعد."
+msgid "No visits on record."
+msgstr "لا توجد زيارات مسجَّلة."
 
 msgid "None submitted"
 msgstr "لم يتم إرسال أي شيء"
 
-msgid "None — each site needs its own"
-msgstr "لا يوجد — كل موقع يحتاج حسابًا خاصًا به"
+msgid "None — each site requires its own"
+msgstr "لا شيء — يتطلب كل موقع جهة تواصل خاصة به"
 
 msgid "Normal"
 msgstr "عادية"
 
 msgid "Not allowed"
 msgstr "غير مسموح"
-
-msgid "Not answered yet."
-msgstr "لم يتم الرد بعد."
-
-msgid "Not assigned yet."
-msgstr "لم تُسند بعد."
 
 msgid "Not at the site"
 msgstr "ليس في الموقع"
@@ -2025,29 +1904,32 @@ msgstr "ليس في الموقع"
 msgid "Not at the site · %(distance)s"
 msgstr "ليس في الموقع · %(distance)s"
 
-msgid "Not notified yet."
-msgstr "لم يتم الإشعار بعد."
-
 msgid "Not rated"
 msgstr "غير مقيّم"
 
 msgid "Not repairable"
 msgstr "غير قابل للإصلاح"
 
-msgid "Not requested yet."
-msgstr "لم يتم الطلب بعد."
+msgid "Not required for certification; an additional advanced skill set."
+msgstr "غير مطلوب للاعتماد؛ مجموعة مهارات متقدمة إضافية."
 
-msgid "Not required for certification — an additional, advanced skill set."
-msgstr "غير مطلوب للاعتماد — مجموعة مهارات إضافية متقدمة."
-
-msgid "Not scheduled after 24 working hours"
-msgstr "لم تُجدول بعد 24 ساعة عمل"
+msgid "Not scheduled within 24 working hours"
+msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
 
 msgid "Not signed"
 msgstr "غير موقَّع"
 
+msgid "Not yet assigned."
+msgstr "لم يتم الإسناد بعد."
+
 msgid "Not yet certified"
 msgstr "غير معتمد بعد"
+
+msgid "Not yet notified."
+msgstr "لم يتم الإشعار بعد."
+
+msgid "Not yet requested."
+msgstr "لم يتم الطلب بعد."
 
 msgid "Note"
 msgstr "ملاحظة"
@@ -2064,17 +1946,9 @@ msgstr "ملاحظة لفريق الدعم (داخلية)"
 msgid "Notes"
 msgstr "الملاحظات"
 
-msgid "Nothing logged yet."
-msgstr "لا يوجد شيء مسجّل بعد."
-
-msgid "Nothing new."
-msgstr "لا جديد."
-
-msgid "Nothing to show."
-msgstr "لا يوجد شيء لعرضه."
-
-msgid "Nothing waiting on a day."
-msgstr "لا يوجد شيء بانتظار هذا اليوم."
+#, python-format
+msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
+msgstr "إشعار بتأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
 
 msgid "Notification settings"
 msgstr "إعدادات الإشعارات"
@@ -2098,18 +1972,11 @@ msgstr "إشعار العميل بالزيارة المجدولة"
 msgid "Notify customer of tracking number"
 msgstr "إشعار العميل برقم التتبع"
 
-#, python-format
-msgid "Now viewing %(country)s."
-msgstr "أنت الآن تعرض بيانات %(country)s."
-
 msgid "Object"
 msgstr "العنصر"
 
-msgid "On my way"
-msgstr "أنا في الطريق"
-
-msgid "On track to be fully certified within 90 days."
-msgstr "على المسار الصحيح لاعتماد كامل خلال ٩٠ يومًا."
+msgid "On track to achieve full certification within 90 days."
+msgstr "في المسار الصحيح لتحقيق الاعتماد الكامل خلال 90 يوماً."
 
 msgid "On-time"
 msgstr "في الموعد"
@@ -2117,20 +1984,23 @@ msgstr "في الموعد"
 msgid "On-time arrival"
 msgstr "الوصول في الموعد"
 
-msgid "One row per site — a chain with several branches is several rows sharing the same customer name. Re-uploading the same file is safe: an existing customer or site is matched by name and left alone, not duplicated."
-msgstr "صف واحد لكل موقع — السلسلة ذات الفروع المتعددة تكون عدة صفوف تشترك في نفس اسم العميل. إعادة رفع نفس الملف آمنة: يُطابَق العميل أو الموقع الموجود بالاسم ويُترك كما هو، ولا يتكرر."
+msgid "One row per site: a chain with several branches requires several rows sharing the same customer name. Re-uploading the same file is safe; existing customers and sites are matched by name and left unchanged, not duplicated."
+msgstr "صف واحد لكل موقع: تتطلب السلسلة ذات الفروع المتعددة عدة صفوف تحمل اسم العميل نفسه. إعادة رفع الملف نفسه آمنة؛ إذ تتم مطابقة العملاء والمواقع الموجودة بالاسم وتُترك دون تغيير ودون تكرار."
 
-msgid "Only a closed task can be flagged."
-msgstr "يمكن الإبلاغ فقط عن مهمة مغلقة."
+msgid "One-time setup: please set your own password and confirm your preferred contact details. Subsequent sign-ins will take you directly to your account."
+msgstr "إعداد لمرة واحدة: يرجى تعيين كلمة مرور خاصة بك وتأكيد بيانات التواصل المفضلة لديك. ستنتقل عند تسجيلات الدخول اللاحقة إلى حسابك مباشرة."
 
-msgid "Only a manager or admin can change this once the report is filed."
-msgstr "لا يمكن تغيير هذا بعد تقديم التقرير إلا من قِبل مدير أو مسؤول النظام."
+msgid "One-time setup: please set your own password. Subsequent sign-ins will take you directly to your dashboard."
+msgstr "إعداد لمرة واحدة: يرجى تعيين كلمة مرور خاصة بك. ستنتقل عند تسجيلات الدخول اللاحقة إلى لوحة التحكم مباشرة."
 
-msgid "Only a manager or admin can change this once work has started."
-msgstr "لا يمكن تغيير هذا بعد بدء العمل إلا من قِبل مدير أو مسؤول النظام."
+msgid "Only a manager or administrator can change this once the report has been submitted."
+msgstr "لا يمكن تغيير ذلك بعد تقديم التقرير إلا من قِبل مدير أو مسؤول النظام."
 
-msgid "Only if the customer later complained about this specific visit and it was the technician's own fault — not every complaint is negligence. Feeds their reliability record; they won't see this flag themselves."
-msgstr "فقط إذا اشتكى العميل لاحقًا من هذه الزيارة تحديدًا وكان الخطأ من الفني نفسه — ليست كل شكوى إهمالاً. يُضاف هذا إلى سجل موثوقيته، ولن يرى الفني هذه العلامة بنفسه."
+msgid "Only a manager or administrator can change this once work has started."
+msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من قِبل مدير أو مسؤول النظام."
+
+msgid "Only closed tasks can be flagged."
+msgstr "لا يمكن الإبلاغ إلا عن المهام المغلقة."
 
 msgid "Open"
 msgstr "مفتوحة"
@@ -2156,17 +2026,17 @@ msgstr "فتحها"
 msgid "Operations Manager"
 msgstr "مدير العمليات"
 
-msgid "Optional — any notes needed before work resumes."
-msgstr "اختياري — أي ملاحظات لازمة قبل استئناف العمل."
-
-msgid "Or upload a photo of a paper signature:"
-msgstr "أو ارفع صورة لتوقيع ورقي:"
+msgid "Optional: any notes required before work resumes."
+msgstr "اختياري: أي ملاحظات لازمة قبل استئناف العمل."
 
 msgid "Other"
 msgstr "أخرى"
 
 msgid "Other internal"
 msgstr "داخلية أخرى"
+
+msgid "Other team members on this task"
+msgstr "أعضاء الفريق الآخرون في هذه المهمة"
 
 #, python-format
 msgid "Our management team reviewed your request on %(when)s. We will follow up with you here."
@@ -2240,11 +2110,8 @@ msgstr "إعادة تعيين كلمة المرور لحساب Profit Sports Sol
 msgid "Password reset."
 msgstr "تمت إعادة تعيين كلمة المرور."
 
-msgid "Password set — welcome!"
-msgstr "تم تعيين كلمة المرور — أهلاً بك!"
-
-msgid "Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. Left empty, the first technician to tap “Arrived” here sets it."
-msgstr "الصق الإحداثيات (مثل 25.0772, 55.1306) أو رابط خرائط جوجل كاملاً. إن تُرك فارغاً، يحدده أول فني يضغط «وصلت» هنا."
+msgid "Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. If left blank, it will be set by the first technician to tap “Arrived” at this site."
+msgstr "الصق الإحداثيات (مثل 25.0772, 55.1306) أو رابط خرائط Google كاملاً. إذا تُرك فارغاً، فسيتم تحديده عند ضغط أول فني على «وصلت» في هذا الموقع."
 
 msgid "Paused for the day"
 msgstr "تم الإيقاف المؤقت لليوم"
@@ -2260,6 +2127,9 @@ msgstr "بانتظار مراجعة المشرف"
 
 msgid "Permission"
 msgstr "الصلاحية"
+
+msgid "Permissions for each role. Self-service technician screens (My week, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role."
+msgstr "صلاحيات كل دور. لا تُدرج هنا شاشات الخدمة الذاتية للفنيين (أسبوعي، مهاراتي، وغيرها)؛ إذ تظل متاحة لجميع الفنيين المسجلين بصرف النظر عن الدور."
 
 msgid "Permissions updated."
 msgstr "تم تحديث الصلاحيات."
@@ -2279,14 +2149,11 @@ msgstr "الصورة واللغة"
 msgid "Photo added."
 msgstr "تمت إضافة الصورة."
 
-msgid "Photo is too large — the limit is 5 MB."
-msgstr "الصورة كبيرة جدًا — الحد الأقصى 5 ميجابايت."
-
 msgid "Photo or video"
 msgstr "صورة أو فيديو"
 
-msgid "Photo or video of you doing this"
-msgstr "صورة أو فيديو لك وأنت تقوم بذلك"
+msgid "Photo or video of you performing this task"
+msgstr "صورة أو فيديو لك أثناء أداء هذه المهمة"
 
 msgid "Photo, video, or PDF"
 msgstr "صورة أو فيديو أو PDF"
@@ -2296,6 +2163,54 @@ msgstr "الصور"
 
 msgid "Photos and/or short video"
 msgstr "صور و/أو مقطع فيديو قصير"
+
+msgid "Please add a contact email address before notifying the customer."
+msgstr "يرجى إضافة بريد إلكتروني للتواصل قبل إشعار العميل."
+
+msgid "Please add a contact email address for this site before notifying the customer."
+msgstr "يرجى إضافة بريد إلكتروني للتواصل لهذا الموقع قبل إشعار العميل."
+
+msgid "Please add a contact email address for this site before requesting feedback."
+msgstr "يرجى إضافة بريد إلكتروني للتواصل لهذا الموقع قبل طلب التقييم."
+
+msgid "Please add a shipping tracking number before notifying the customer."
+msgstr "يرجى إضافة رقم تتبع الشحنة قبل إشعار العميل."
+
+msgid "Please check your email"
+msgstr "يرجى مراجعة بريدك الإلكتروني"
+
+msgid "Please close the task (submit its report) before requesting feedback."
+msgstr "يرجى إغلاق المهمة (تقديم تقريرها) قبل طلب التقييم."
+
+msgid "Please complete the code, name, Arabic name and category for the new task type, or leave them blank."
+msgstr "يرجى استكمال الرمز والاسم والاسم بالعربية والفئة لنوع المهمة الجديد، أو تركها فارغة."
+
+msgid "Please complete the part code, quantity, unit cost and currency, or leave this row blank."
+msgstr "يرجى استكمال رمز القطعة والكمية وتكلفة الوحدة والعملة، أو ترك هذا الصف فارغاً."
+
+msgid "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step."
+msgstr "يرجى تسليم الجهاز إلى العميل لمراجعة العمل والتوقيع. يتم إخفاء الساعات والأسعار خلال هذه الخطوة."
+
+msgid "Please mark yourself as resumed before submitting the report."
+msgstr "يرجى تسجيل استئناف العمل قبل تقديم التقرير."
+
+msgid "Please set a scheduled time before notifying the customer."
+msgstr "يرجى تحديد موعد مجدول قبل إشعار العميل."
+
+msgid "Please start work on this task before submitting a report."
+msgstr "يرجى بدء العمل على هذه المهمة قبل تقديم التقرير."
+
+msgid "Please state the reason for the delay before notifying the customer."
+msgstr "يرجى توضيح سبب التأخير قبل إشعار العميل."
+
+msgid "Please state why the customer could not sign."
+msgstr "يرجى توضيح سبب عدم تمكن العميل من التوقيع."
+
+msgid "Please upload a .csv file."
+msgstr "يرجى رفع ملف بصيغة CSV."
+
+msgid "Please visit the following page to choose a new password:"
+msgstr "يرجى زيارة الصفحة التالية لاختيار كلمة مرور جديدة:"
 
 msgid "Poor"
 msgstr "ضعيف"
@@ -2333,6 +2248,9 @@ msgstr "تم تحديث الملف الشخصي."
 msgid "Profit Sports Solutions"
 msgstr "Profit Sports Solutions"
 
+msgid "Progress is behind the 90-day target. Please discuss next steps with your supervisor."
+msgstr "التقدم متأخر عن هدف التسعين يوماً. يرجى مناقشة الخطوات التالية مع مشرفك."
+
 msgid "Promised"
 msgstr "الموعد الموعود"
 
@@ -2345,14 +2263,8 @@ msgstr "الكمية"
 msgid "Quotation"
 msgstr "عرض السعر"
 
-msgid "Rate yourself"
-msgstr "قيّم نفسك"
-
-msgid "Rate yourself on a skill or conduct area"
-msgstr "قيّم نفسك في مهارة أو مجال سلوك"
-
-msgid "Rate yourself once per skill by uploading a photo or short video of you performing the repair — smoothly and efficiently. Your supervisor reviews the evidence and confirms or adjusts the level; after that, only a supervisor can update it."
-msgstr "قيّم نفسك مرة واحدة لكل مهارة برفع صورة أو فيديو قصير لك وأنت تنفذ الإصلاح — بسلاسة وكفاءة. يراجع مشرفك الدليل ويؤكد المستوى أو يعدّله؛ وبعد ذلك، لا يمكن تحديثه إلا من قبل مشرف."
+msgid "Ranking in your country"
+msgstr "الترتيب في دولتك"
 
 #, python-format
 msgid "Rated %(rating)s/5"
@@ -2364,14 +2276,26 @@ msgstr "إعادة التفعيل"
 msgid "Reactivate customer"
 msgstr "إعادة تفعيل العميل"
 
+msgid "Ready for advanced level"
+msgstr "جاهز للمستوى المتقدم"
+
 msgid "Reason"
 msgstr "السبب"
 
 msgid "Reason (internal)"
 msgstr "السبب (داخلي)"
 
+msgid "Reason for cancellation, for example the customer cancelled the request."
+msgstr "سبب الإلغاء، كأن يكون العميل قد ألغى الطلب."
+
+msgid "Reason for closing without a report, for example a customer cancellation or resolution by other means."
+msgstr "سبب الإغلاق دون تقرير، كإلغاء العميل للطلب أو الحل بوسيلة أخرى."
+
 msgid "Reason for replacing the current lead"
 msgstr "سبب استبدال الفني الرئيسي الحالي"
+
+msgid "Reason this ticket will not become a task, for example spam, a duplicate or outside our scope."
+msgstr "سبب عدم تحويل هذه التذكرة إلى مهمة، كأن تكون رسالة مزعجة أو مكررة أو خارج نطاق عملنا."
 
 msgid "Reason:"
 msgstr "السبب:"
@@ -2379,11 +2303,31 @@ msgstr "السبب:"
 msgid "Reassign"
 msgstr "إعادة الإسناد"
 
+msgid "Reassign to"
+msgstr "إعادة الإسناد إلى"
+
+msgid "Reassign to another staff member"
+msgstr "إعادة الإسناد إلى موظف آخر"
+
 msgid "Reassigned"
 msgstr "أُعيد تعيينه"
 
+msgid "Reassigned successfully."
+msgstr "تمت إعادة الإسناد بنجاح."
+
+#, python-format
+msgid "Reassigned to %(name)s."
+msgstr "تمت إعادة الإسناد إلى %(name)s."
+
 msgid "Received"
 msgstr "تم الاستلام"
+
+msgid "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time."
+msgstr "هل سُجّل ذلك عن طريق الخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك، يمكن للمدير تصحيح الوقت."
+
+#, python-format
+msgid "Regarding visit %(number)s on %(date)s"
+msgstr "بخصوص الزيارة %(number)s بتاريخ %(date)s"
 
 msgid "Rejected"
 msgstr "مرفوض"
@@ -2394,11 +2338,14 @@ msgstr "الموثوقية"
 msgid "Remove"
 msgstr "إزالة"
 
-msgid "Removes them from the customer list and blocks their login (if they have one) — for a customer whose contract ended or business closed."
-msgstr "يزيله من قائمة العملاء، ويمنع تسجيل دخوله (إن وُجد) — لعميل انتهى تعاقده أو أغلق نشاطه."
+msgid "Removed from a task"
+msgstr "أُزيل من مهمة"
 
-msgid "Removes them from the roster, blocks assignment, and blocks their login (if they have one) — for someone who's resigned, been let go, or otherwise left the company."
-msgstr "يزيله من القائمة، ويمنع تكليفه، ويمنع تسجيل دخوله (إن وُجد) — لشخص استقال أو أُنهيت خدمته أو غادر الشركة بأي طريقة أخرى."
+msgid "Removes the customer from the customer list and disables their login, if any. Use this when a contract has ended or the business has closed."
+msgstr "يزيل العميل من قائمة العملاء ويعطّل بيانات دخوله إن وُجدت. يُستخدم عند انتهاء العقد أو إغلاق النشاط التجاري."
+
+msgid "Removes the staff member from the roster, prevents new assignments and disables their login, if any. Use this when a staff member has resigned, been dismissed or otherwise left the company."
+msgstr "يزيل الموظف من قائمة الفريق ويمنع إسناد مهام جديدة إليه ويعطّل بيانات دخوله إن وُجدت. يُستخدم عند استقالة الموظف أو إنهاء خدمته أو مغادرته الشركة لأي سبب آخر."
 
 msgid "Reopen"
 msgstr "إعادة الفتح"
@@ -2436,12 +2383,15 @@ msgstr "تم اعتماد التقرير"
 msgid "Report approved. Task closed."
 msgstr "تمت الموافقة على التقرير. أغلقت المهمة."
 
+msgid "Report awaiting your review"
+msgstr "تقرير بانتظار مراجعتك"
+
 msgid "Report blocked"
 msgstr "الإبلاغ عن عائق"
 
 #, python-format
-msgid "Report from %(name)s, sent after they were taken off this task:"
-msgstr "تقرير من %(name)s، أُرسل بعد إخراجه من هذه المهمة:"
+msgid "Report from %(name)s, submitted after they were removed from this task:"
+msgstr "تقرير من %(name)s، قُدِّم بعد إزالته من هذه المهمة:"
 
 msgid "Report rejected"
 msgstr "تم رفض التقرير"
@@ -2449,20 +2399,17 @@ msgstr "تم رفض التقرير"
 msgid "Report submitted"
 msgstr "تم تقديم التقرير"
 
-msgid "Report submitted — awaiting manager approval before the task closes."
-msgstr "تم إرسال التقرير — بانتظار موافقة المدير قبل إغلاق المهمة."
+msgid "Report submitted — awaiting manager approval before the task is closed."
+msgstr "تم تقديم التقرير — بانتظار موافقة المدير قبل إغلاق المهمة."
 
-msgid "Report submitted — awaiting your supervisor’s review."
-msgstr "تم إرسال التقرير — بانتظار مراجعة مشرفك."
+msgid "Report submitted — awaiting your supervisor's review."
+msgstr "تم تقديم التقرير — بانتظار مراجعة مشرفك."
 
-msgid "Report updated — still awaiting approval."
+msgid "Report updated — approval still pending."
 msgstr "تم تحديث التقرير — لا يزال بانتظار الموافقة."
 
 msgid "Report updated."
 msgstr "تم تحديث التقرير."
-
-msgid "Report waiting for your review"
-msgstr "تقرير بانتظار مراجعتك"
 
 msgid "Reported"
 msgstr "تاريخ الإبلاغ"
@@ -2511,6 +2458,9 @@ msgstr "أُعيد جدولته"
 msgid "Reset password"
 msgstr "إعادة تعيين كلمة المرور"
 
+msgid "Resolution details, for example stock ordered, vendor responded or issue resolved."
+msgstr "تفاصيل الحل، مثل طلب المخزون أو رد المورد أو حل المشكلة."
+
 msgid "Resolved"
 msgstr "تم الحل"
 
@@ -2536,6 +2486,12 @@ msgstr "تم الاستئناف"
 msgid "Retired"
 msgstr "خارج الخدمة"
 
+msgid "Return to home page"
+msgstr "العودة إلى الصفحة الرئيسية"
+
+msgid "Reverses the closure decision and returns the task to awaiting manager approval. The submitted report is not affected."
+msgstr "يتراجع عن قرار الإغلاق ويعيد المهمة إلى حالة انتظار موافقة المدير. لا يتأثر التقرير المقدَّم."
+
 msgid "Review customer-submitted tickets"
 msgstr "مراجعة التذاكر المرسلة من العملاء"
 
@@ -2554,9 +2510,6 @@ msgstr "الأدوار والصلاحيات"
 msgid "Row"
 msgstr "الصف"
 
-msgid "Running late?"
-msgstr "هل هناك تأخير؟"
-
 msgid "Same as the report"
 msgstr "نفس ساعات التقرير"
 
@@ -2574,9 +2527,6 @@ msgstr "حفظ التصحيح"
 
 msgid "Save report"
 msgstr "حفظ التقرير"
-
-msgid "Say why the customer could not sign."
-msgstr "اذكر سبب عدم تمكن العميل من التوقيع."
 
 msgid "Schedule change approved"
 msgstr "تمت الموافقة على تغيير الموعد"
@@ -2632,6 +2582,30 @@ msgstr "عرض التقدم الكامل"
 msgid "Segment"
 msgstr "الفئة"
 
+msgid "Select a site, or add a new one below."
+msgstr "يرجى اختيار موقع، أو إضافة موقع جديد أدناه."
+
+msgid "Select a site. An administrator can add a new site if it is not listed."
+msgstr "يرجى اختيار موقع. يمكن للمسؤول إضافة موقع جديد إذا لم يكن مدرجاً."
+
+msgid "Select an existing brand or add a new one below, not both."
+msgstr "يرجى اختيار علامة تجارية موجودة أو إضافة علامة جديدة أدناه، وليس كليهما."
+
+msgid "Select an existing site or add a new one below, not both."
+msgstr "يرجى اختيار موقع موجود أو إضافة موقع جديد أدناه، وليس كليهما."
+
+msgid "Select an existing task type or add a new one below, not both."
+msgstr "يرجى اختيار نوع مهمة موجود أو إضافة نوع جديد أدناه، وليس كليهما."
+
+msgid "Select the machine and an outcome, or leave this row blank."
+msgstr "يرجى اختيار الجهاز والنتيجة، أو ترك هذا الصف فارغاً."
+
+msgid "Self-assess a skill or conduct area"
+msgstr "التقييم الذاتي لمهارة أو مجال سلوك"
+
+msgid "Self-assessment"
+msgstr "التقييم الذاتي"
+
 msgid "Self-rated"
 msgstr "مقيّم ذاتيًا"
 
@@ -2644,8 +2618,8 @@ msgstr "تم حفظ التقييم الذاتي."
 msgid "Send"
 msgstr "إرسال"
 
-msgid "Send a short apology explaining why the team may arrive late — traffic, a longer previous job, and so on."
-msgstr "أرسل اعتذارًا مختصرًا يوضح سبب احتمال تأخر الفريق — الزحام المروري، أو تأخر مهمة سابقة، وما شابه."
+msgid "Send a brief apology explaining the reason for the expected delay, such as traffic or an extended previous job."
+msgstr "أرسل اعتذاراً موجزاً يوضح سبب التأخير المتوقع، كالازدحام المروري أو امتداد العمل السابق."
 
 msgid "Send decision"
 msgstr "إرسال القرار"
@@ -2674,20 +2648,17 @@ msgstr "لوحة الرقم التسلسلي"
 msgid "Service history"
 msgstr "سجل الصيانة"
 
-msgid "Set a scheduled time before notifying the customer."
-msgstr "حدد موعدًا قبل إشعار العميل."
-
 msgid "Set as lead"
 msgstr "تعيين كفني رئيسي"
 
-msgid "Set by a manager — a supervisor must request a change"
-msgstr "حدده مدير — يجب على المشرف طلب تغييره"
+msgid "Set by a manager — a supervisor must request any change"
+msgstr "حدده المدير — يجب على المشرف طلب أي تغيير"
 
 msgid "Set by the first arrival"
 msgstr "حُدد عند أول وصول"
 
-msgid "Set by the first technician to arrive — check it, and correct it if it’s off."
-msgstr "حدده أول فني وصل — تحقق منه وصححه إن كان غير دقيق."
+msgid "Set by the first technician to arrive. Please verify it and correct it if inaccurate."
+msgstr "حدده أول فني وصل إلى الموقع. يرجى التحقق منه وتصحيحه إذا كان غير دقيق."
 
 msgid "Set level"
 msgstr "تحديد المستوى"
@@ -2695,21 +2666,14 @@ msgstr "تحديد المستوى"
 msgid "Set new password"
 msgstr "تعيين كلمة مرور جديدة"
 
-msgid "Set these from the task's Edit screen."
-msgstr "حددهما من شاشة تعديل المهمة."
-
 msgid "Set time"
 msgstr "تحديد الوقت"
 
-msgid "Sets a new password for their login directly — they don't need to know the old one."
-msgstr "يحدد كلمة مرور جديدة لحسابهم مباشرة — لا حاجة لمعرفة كلمة المرور القديمة."
+msgid "Sets a new password for the account directly; the current password is not required."
+msgstr "يعيّن كلمة مرور جديدة للحساب مباشرة؛ ولا تلزم كلمة المرور الحالية."
 
-msgid "Share their own login page: "
-msgstr "شارك صفحة تسجيل الدخول الخاصة بهم: "
-
-#, python-format
-msgid "Shipment on the way — %(task_number)s"
-msgstr "الشحنة في الطريق — %(task_number)s"
+msgid "Share their login page: "
+msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
 
 msgid "Shipping"
 msgstr "الشحن"
@@ -2740,6 +2704,9 @@ msgstr "لوحة التوقيع"
 
 msgid "Signed by"
 msgstr "وقّعه"
+
+msgid "Significantly over estimate"
+msgstr "تجاوز التقدير بشكل ملحوظ"
 
 #, python-format
 msgid "Signs in as “%(username)s”."
@@ -2784,29 +2751,20 @@ msgstr "المهارات"
 msgid "Skipped"
 msgstr "تم التخطي"
 
-msgid "Someone on this task has left the company."
-msgstr "أحد العاملين على هذه المهمة غادر الشركة."
-
 msgid "Source"
 msgstr "المصدر"
 
 msgid "Staff"
 msgstr "موظف"
 
-msgid "Standing in your country"
-msgstr "الترتيب في دولتك"
+msgid "Staff currently available for work. This is independent of any single task, so marking someone as unavailable here applies across all assignments."
+msgstr "الموظفون المتاحون للعمل حالياً. هذا الإعداد مستقل عن أي مهمة بعينها، لذا فإن تعيين موظف كغير متاح هنا ينطبق على جميع المهام المسندة."
 
 msgid "Start work"
 msgstr "بدء العمل"
 
-msgid "Start work on this task before filing a report."
-msgstr "ابدأ العمل على هذه المهمة قبل تقديم تقرير."
-
 msgid "Started"
 msgstr "بدأت"
-
-msgid "Started again"
-msgstr "استُؤنف العمل"
 
 msgid "Status"
 msgstr "الحالة"
@@ -2822,6 +2780,9 @@ msgstr "الموضوع"
 
 msgid "Submit"
 msgstr "إرسال"
+
+msgid "Submit a self-assessment for each skill by uploading a photo or short video of yourself performing the repair smoothly and efficiently. Your supervisor will review the evidence and confirm or adjust the level; thereafter, only a supervisor can update it."
+msgstr "قدّم تقييماً ذاتياً لكل مهارة برفع صورة أو مقطع فيديو قصير لنفسك أثناء تنفيذ الإصلاح بسلاسة وكفاءة. سيراجع مشرفك الدليل ويؤكد المستوى أو يعدّله، وبعد ذلك لا يمكن تحديثه إلا من قِبل المشرف."
 
 msgid "Submit feedback"
 msgstr "إرسال التقييم"
@@ -2844,9 +2805,6 @@ msgstr "الأحد"
 msgid "Supervisor"
 msgstr "مشرف"
 
-msgid "Supervisor notified of the shipment."
-msgstr "تم إخطار المشرف بالشحنة."
-
 msgid "Supervisors"
 msgstr "المشرفون"
 
@@ -2864,15 +2822,6 @@ msgstr "موقوفة"
 
 msgid "TNT"
 msgstr "TNT"
-
-msgid "Taken off a task"
-msgstr "أُخرجت من مهمة"
-
-msgid "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can correct the time."
-msgstr "ضغطت بالخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك يمكن للمدير تصحيح الوقت."
-
-msgid "Taps away from the site"
-msgstr "ضغطات بعيدة عن الموقع"
 
 msgid "Task"
 msgstr "المهمة"
@@ -2899,8 +2848,8 @@ msgstr "تم الإبلاغ عن المهمة."
 msgid "Task history"
 msgstr "سجل المهام"
 
-msgid "Task marked blocked."
-msgstr "تم وضع علامة معطّلة على المهمة."
+msgid "Task marked as blocked."
+msgstr "تم تعيين المهمة كمتوقفة."
 
 msgid "Task number"
 msgstr "رقم المهمة"
@@ -2914,11 +2863,11 @@ msgstr "تم تحديث المهمة."
 msgid "Tasks"
 msgstr "المهام"
 
+msgid "Tasks assisted on"
+msgstr "المهام التي شارك فيها كمساعد"
+
 msgid "Tasks completed as lead"
 msgstr "المهام المُنجزة كفني رئيسي"
-
-msgid "Tasks helped on"
-msgstr "المهام التي ساعد فيها"
 
 #, python-format
 msgid "Tasks received (%(total)s)"
@@ -2954,95 +2903,167 @@ msgstr "تم تحديث بيانات الفني."
 msgid "Technicians"
 msgstr "الفنيون"
 
-msgid "Thank you!"
-msgstr "شكرًا لك!"
+msgid "Thank you for contacting us. Our team is now reviewing your ticket."
+msgstr "نشكركم على تواصلكم معنا. يقوم فريقنا حالياً بمراجعة تذكرتكم."
 
-msgid "That can no longer be undone — ask a manager to correct the time."
-msgstr "لم يعد بالإمكان التراجع عن ذلك — اطلب من المدير تصحيح الوقت."
+msgid "Thank you."
+msgstr "شكراً لكم."
 
-msgid "That code is already in the list."
-msgstr "هذا الرمز موجود في القائمة بالفعل."
+msgid "The assignment for this task can no longer be changed because work has started. Please close it and create a new task for a handover."
+msgstr "لم يعد بالإمكان تغيير إسناد هذه المهمة لأن العمل قد بدأ. يرجى إغلاقها وإنشاء مهمة جديدة للتسليم."
 
-msgid "That’s after the next step on this task."
-msgstr "هذا الوقت بعد الخطوة التالية في هذه المهمة."
+msgid "The customer has been notified automatically."
+msgstr "تم إشعار العميل تلقائياً."
 
-msgid "That’s before the previous step on this task."
-msgstr "هذا الوقت قبل الخطوة السابقة في هذه المهمة."
+msgid "The customer has been notified of the delay."
+msgstr "تم إشعار العميل بالتأخير."
+
+msgid "The customer has been notified of the scheduled visit."
+msgstr "تم إشعار العميل بموعد الزيارة."
+
+msgid "The customer has been notified of the tracking number."
+msgstr "تم إشعار العميل برقم التتبع."
 
 #, python-format
 msgid ""
-"The customer replied on ticket %(number)s (%(company)s — %(site)s):\n"
+"The customer has replied to ticket %(number)s (%(company)s — %(site)s):\n"
 "\n"
 "%(reply_message)s\n"
 "\n"
-"View and reply here:\n"
+"View and reply:\n"
 "%(link)s\n"
 msgstr ""
-"رد العميل على الطلب %(number)s (%(company)s — %(site)s):\n"
+"ردّ العميل على التذكرة %(number)s (%(company)s — %(site)s):\n"
 "\n"
 "%(reply_message)s\n"
 "\n"
-"اطّلع ورُدّ من هنا:\n"
+"العرض والرد:\n"
 "%(link)s\n"
 
 #, python-format
-msgid "The day is set for %(date)s — pick the exact time."
-msgstr "اليوم محدد بتاريخ %(date)s — اختر الوقت الدقيق."
+msgid "The day is set for %(date)s. Please select the exact time."
+msgstr "تم تحديد اليوم بتاريخ %(date)s. يرجى اختيار الوقت بدقة."
 
-msgid "The lead has left the company. Work has already started, so only they can be replaced — the new lead carries on from where the task is."
-msgstr "غادر الفني الرئيسي الشركة. بدأ العمل بالفعل، لذا يمكن استبداله هو فقط — يكمل الفني الجديد من حيث توقفت المهمة."
+msgid "The decision has been returned to the support desk."
+msgstr "تمت إعادة القرار إلى مكتب الدعم."
 
-msgid "The list technicians pick from when they record parts on a work report. Switch a part off instead of deleting it — past reports keep their codes."
-msgstr "القائمة التي يختار منها الفنيون عند تسجيل القطع في تقرير العمل. أوقف القطعة بدلًا من حذفها — تحتفظ التقارير السابقة برموزها."
+msgid "The feedback request has been sent."
+msgstr "تم إرسال طلب التقييم."
 
-msgid "The trip can’t end before it starts."
-msgstr "لا يمكن أن تنتهي الرحلة قبل أن تبدأ."
+msgid "The file is too large. The maximum size is 10 MB."
+msgstr "حجم الملف كبير جداً. الحد الأقصى هو 10 ميغابايت."
 
-msgid "The two password fields didn't match."
+msgid "The file is too large. The maximum size is 25 MB."
+msgstr "حجم الملف كبير جداً. الحد الأقصى هو 25 ميغابايت."
+
+msgid "The file is too large. The maximum size is 5 MB."
+msgstr "حجم الملف كبير جداً. الحد الأقصى هو 5 ميغابايت."
+
+msgid "The hours on a report are credited to every team member — the lead and all helpers — unless the lead has entered a helper's individual hours. Hours worked prior to a handover are also included."
+msgstr "تُحتسب ساعات التقرير لجميع أعضاء الفريق — القائد وجميع المساعدين — ما لم يُدخل القائد ساعات مستقلة لأحد المساعدين. وتُحتسب كذلك الساعات المنجزة قبل التسليم."
+
+msgid "The lead has left the company. As work has already started, only the lead can be replaced; the new lead will continue from the current stage of the task."
+msgstr "غادر قائد المهمة الشركة. وبما أن العمل قد بدأ، فلا يمكن إلا استبدال القائد؛ وسيتابع القائد الجديد من المرحلة الحالية للمهمة."
+
+msgid "The list from which technicians select parts when recording a work report. Deactivate a part rather than deleting it, so that past reports retain their codes."
+msgstr "القائمة التي يختار منها الفنيون القطع عند تسجيل تقرير العمل. يرجى إيقاف القطعة بدلاً من حذفها، لتحتفظ التقارير السابقة برموزها."
+
+msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tickets."
+msgstr "الشخص المسؤول عن معالجتها. سيتم إشعاره، وستظهر ضمن تذاكره الداخلية."
+
+msgid "The photo is too large. The maximum size is 5 MB."
+msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
+
+msgid "The schedule for all countries. This view is not affected by the country selector above."
+msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
+msgid "The signature could not be read. Please sign again."
+msgstr "تعذّرت قراءة التوقيع. يرجى التوقيع مجدداً."
+
+msgid "The supervisor has been notified of the shipment."
+msgstr "تم إشعار المشرف بالشحنة."
+
+msgid "The trip cannot end before it starts."
+msgstr "لا يمكن أن تنتهي الرحلة قبل بدايتها."
+
+msgid "The two password fields do not match."
 msgstr "حقلا كلمة المرور غير متطابقين."
+
+msgid "There are no active supervisors or technicians in this country."
+msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة."
+
+msgid "There are no customers in your country."
+msgstr "لا يوجد عملاء في دولتك."
+
+msgid "There are no machines on record in your country. A machine is added the first time a technician records it in a work report."
+msgstr "لا توجد أجهزة مسجَّلة في دولتك. تتم إضافة الجهاز عند تسجيله لأول مرة من قِبل فني في تقرير عمل."
 
 msgid "There is already a pending request for this task."
 msgstr "يوجد بالفعل طلب قيد الانتظار لهذه المهمة."
 
-msgid "There is no day-only schedule waiting for a time."
-msgstr "لا يوجد موعد بيوم فقط بانتظار تحديد وقت."
+msgid "There is no day-only schedule awaiting a time."
+msgstr "لا توجد جدولة باليوم فقط بانتظار تحديد الوقت."
 
-msgid "They've been deactivated but are still on these tasks. Open each one and pick someone else — as lead, choose the reason “Left the company”."
-msgstr "تم إيقافه لكنه ما زال على هذه المهام. افتح كل مهمة واختر شخصًا آخر — وعند تغيير الفني الرئيسي اختر السبب «غادر الشركة»."
+msgid "These can be edited from the task's Edit screen."
+msgstr "يمكن تعديل هذه البيانات من شاشة تعديل المهمة."
 
-msgid "This customer already has a site with that name"
-msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم"
+msgid "These can be set from the task's Edit screen."
+msgstr "يمكن تحديد هذه البيانات من شاشة تعديل المهمة."
 
-msgid "This customer already has a site with that name."
-msgstr "لدى هذا العميل بالفعل موقع بهذا الاسم."
+msgid "These can be uploaded from the task's Edit screen."
+msgstr "يمكن رفع هذه الملفات من شاشة تعديل المهمة."
+
+msgid "These staff members have been deactivated but remain assigned to the following tasks. Please open each task and select a replacement; for a lead, choose the reason “Left the company”."
+msgstr "تم إلغاء تفعيل هؤلاء الموظفين، لكنهم لا يزالون مسندين إلى المهام التالية. يرجى فتح كل مهمة واختيار بديل؛ وبالنسبة لقائد المهمة، اختر السبب «غادر الشركة»."
+
+msgid "This can no longer be undone. Please ask a manager to correct the time."
+msgstr "لم يعد بالإمكان التراجع عن ذلك. يرجى مطالبة المدير بتصحيح الوقت."
+
+msgid "This code is already in the list."
+msgstr "هذا الرمز موجود في القائمة مسبقاً."
+
+msgid "This customer already has a site with this name"
+msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً"
+
+msgid "This customer already has a site with this name."
+msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً."
 
 #, python-format
-msgid "This customer can sign in as “%(username)s” to see their tickets and service history."
-msgstr "يمكن لهذا العميل تسجيل الدخول باسم \"%(username)s\" لرؤية طلباته وسجل صيانته."
+msgid "This customer can sign in as “%(username)s” to view their tickets and service history."
+msgstr "يمكن لهذا العميل تسجيل الدخول باسم «%(username)s» للاطلاع على تذاكره وسجل الخدمة."
 
-msgid "This isn't a customer account."
+msgid "This is earlier than the previous step on this task."
+msgstr "هذا الوقت سابق للخطوة السابقة في هذه المهمة."
+
+msgid "This is later than the next step on this task."
+msgstr "هذا الوقت لاحق للخطوة التالية في هذه المهمة."
+
+msgid "This is not a customer account."
 msgstr "هذا ليس حساب عميل."
 
 msgid "This month"
 msgstr "هذا الشهر"
 
-msgid "This page doesn't exist, or you don't have access to it. Double-check the link, or go back to where you were."
-msgstr "هذه الصفحة غير موجودة، أو ليس لديك صلاحية الوصول إليها. تحقق من الرابط، أو عد إلى ما كنت عليه."
+msgid "This page does not exist, or you do not have permission to access it. Please verify the link or return to the previous page."
+msgstr "هذه الصفحة غير موجودة، أو ليست لديك صلاحية الوصول إليها. يرجى التحقق من الرابط أو العودة إلى الصفحة السابقة."
 
-msgid "This password reset link is no longer valid — it may have already been used. Request a new one."
-msgstr "رابط إعادة تعيين كلمة المرور هذا لم يعد صالحًا — ربما استُخدم بالفعل. اطلب رابطًا جديدًا."
+msgid "This password reset link is no longer valid and may have already been used. Please request a new one."
+msgstr "رابط إعادة تعيين كلمة المرور لم يعد صالحاً، وربما تم استخدامه مسبقاً. يرجى طلب رابط جديد."
 
-msgid "This schedule is locked. Request a change and a manager will review it."
-msgstr "هذا الموعد مُقفل. اطلب تغييرًا وسيراجعه أحد المديرين."
+msgid "This schedule is locked. Please request a change, and a manager will review it."
+msgstr "هذا الموعد مقفل. يرجى طلب التغيير، وسيقوم المدير بمراجعته."
 
-msgid "This schedule is not locked — edit it directly instead."
-msgstr "هذا الموعد غير مُقفل — عدّله مباشرة بدلاً من ذلك."
+msgid "This schedule is not locked. Please edit it directly."
+msgstr "هذا الموعد غير مقفل. يرجى تعديله مباشرة."
 
-msgid "This task already has a report — saving below updates it."
-msgstr "هذه المهمة لديها تقرير بالفعل — الحفظ أدناه يحدّثه."
+msgid "This task already has a report. Saving below will update it."
+msgstr "لهذه المهمة تقرير مسبق. سيؤدي الحفظ أدناه إلى تحديثه."
 
 msgid "This task can no longer be cancelled."
 msgstr "لم يعد من الممكن إلغاء هذه المهمة."
+
+msgid "This task has been completed, so its products can only be changed by a manager or administrator."
+msgstr "اكتملت هذه المهمة، لذا لا يمكن تغيير منتجاتها إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "This task has no filed report to correct."
 msgstr "لا يوجد بهذه المهمة تقرير مقدم لتصحيحه."
@@ -3056,31 +3077,44 @@ msgstr "لا يوجد بهذه المهمة تقرير بانتظار مراجع
 msgid "This task is already closed."
 msgstr "هذه المهمة مغلقة بالفعل."
 
-msgid "This task is closed — only a manager or admin can correct its report now."
-msgstr "هذه المهمة مغلقة — لا يمكن تصحيح تقريرها الآن إلا من قِبل مدير أو مسؤول النظام."
+#, python-format
+msgid "This task is being created from a customer ticket — %(company)s. The customer selected %(site)s from their registered sites, so it is locked below. Only an administrator can change it."
+msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. اختار العميل %(site)s من مواقعه المسجَّلة، لذا فهو مثبَّت أدناه. لا يمكن تغييره إلا من قِبل المسؤول."
 
-msgid "This task is finished, so its products can only be changed by a manager or admin."
-msgstr "هذه المهمة منتهية، لذا لا يمكن تعديل منتجاتها إلا من قِبل مدير أو مسؤول النظام."
+#, python-format
+msgid "This task is being created from a customer ticket — %(company)s. The customer selected %(site)s from their registered sites. As an administrator, you may still change it below."
+msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. اختار العميل %(site)s من مواقعه المسجَّلة. بصفتك مسؤولاً، يمكنك تغييره أدناه."
+
+#, python-format
+msgid "This task is being created from a customer ticket — %(company)s. The site fields below are suggestions based on the customer's entry; please select or create the correct site."
+msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. حقول الموقع أدناه مقترحة بناءً على ما أدخله العميل؛ يرجى اختيار الموقع الصحيح أو إنشاؤه."
+
+#, python-format
+msgid "This task is being created from internal ticket %(number)s — %(subject)s. Please select the site for this job."
+msgstr "يتم إنشاء هذه المهمة من التذكرة الداخلية %(number)s — %(subject)s. يرجى اختيار الموقع الخاص بهذا العمل."
+
+msgid "This task is closed. Only a manager or administrator can now correct its report."
+msgstr "هذه المهمة مغلقة. لا يمكن الآن تصحيح تقريرها إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "This task is not closed."
 msgstr "هذه المهمة غير مغلقة."
 
-msgid "This task's assignment can no longer be changed — work has started. Close it and raise a new task for a handover instead."
-msgstr "لم يعد بالإمكان تغيير تعيين هذه المهمة — بدأ العمل بالفعل. أغلقها وأنشئ مهمة جديدة للتسليم بدلاً من ذلك."
+msgid "This ticket has been assigned to you for review. Only authorised ticket reviewers can convert or dismiss it."
+msgstr "أُسندت إليك هذه التذكرة للمراجعة. لا يمكن تحويلها أو رفضها إلا من قِبل مراجعي التذاكر المخوَّلين."
 
-msgid "This ticket has been resolved. Contact us if you still need help."
-msgstr "تم حل هذا الطلب. تواصل معنا إذا كنت لا تزال بحاجة إلى مساعدة."
+msgid "This ticket has been resolved and the conversation is closed."
+msgstr "تم حل هذه التذكرة وأُغلقت المحادثة."
 
-msgid "This ticket has been reviewed and closed. Contact us if you still need help."
-msgstr "تمت مراجعة هذا الطلب وإغلاقه. تواصل معنا إذا كنت لا تزال بحاجة إلى مساعدة."
+msgid "This ticket has been resolved. Please contact us if you require further assistance."
+msgstr "تم حل هذه التذكرة. يرجى التواصل معنا إذا احتجتم إلى مزيد من المساعدة."
+
+msgid "This ticket has been reviewed and closed. Please contact us if you require further assistance."
+msgstr "تمت مراجعة هذه التذكرة وإغلاقها. يرجى التواصل معنا إذا احتجتم إلى مزيد من المساعدة."
 
 msgid "This ticket is not closed."
 msgstr "هذا الطلب غير مغلق."
 
-msgid "This ticket is resolved — the conversation is closed."
-msgstr "تم حل هذا الطلب — المحادثة مغلقة."
-
-msgid "This type of task needs the customer’s signature."
+msgid "This type of task requires the customer's signature."
 msgstr "يتطلب هذا النوع من المهام توقيع العميل."
 
 msgid "This week"
@@ -3149,27 +3183,24 @@ msgid "Time set."
 msgstr "تم تحديد الوقت."
 
 #, python-format
-msgid "To mark someone unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a> — it applies everywhere, not just this task."
-msgstr "لتحديد شخص كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a> — يُطبَّق هذا في كل مكان، وليس في هذه المهمة فقط."
+msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
+msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
 
 msgid "Today"
 msgstr "اليوم"
 
-msgid "Told the customer:"
-msgstr "ما قيل للعميل:"
+msgid "Too many failed sign-in attempts from this connection. Please wait before trying again, or reset your password if you have forgotten it."
+msgstr "محاولات تسجيل دخول فاشلة كثيرة جداً من هذا الاتصال. يرجى الانتظار قبل المحاولة مجدداً، أو إعادة تعيين كلمة المرور إذا نسيتها."
 
-msgid "Too many attempts"
-msgstr "محاولات كثيرة جدًا"
-
-msgid "Too many failed login attempts from this connection. Please wait a while before trying again, or reset your password if you've forgotten it."
-msgstr "محاولات تسجيل دخول فاشلة كثيرة جدًا من هذا الاتصال. يُرجى الانتظار قليلاً قبل المحاولة مرة أخرى، أو إعادة تعيين كلمة المرور إذا نسيتها."
-
-#, python-format
-msgid "Track it here: %(url)s"
-msgstr "تتبعها من هنا: %(url)s"
+msgid "Too many sign-in attempts"
+msgstr "محاولات تسجيل دخول كثيرة جداً"
 
 msgid "Track your reports and service history."
 msgstr "تابع تقاريرك وسجل الصيانة الخاص بك."
+
+#, python-format
+msgid "Track your shipment here: %(url)s"
+msgstr "تتبع شحنتكم من هنا: %(url)s"
 
 #, python-format
 msgid "Tracking number: %(tracking)s"
@@ -3193,8 +3224,8 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
-msgid "Two columns: code, description. A header row is fine."
-msgstr "عمودان: الرمز، الوصف. لا مانع من وجود صف عناوين."
+msgid "Two columns: code and description. A header row is permitted."
+msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
 
 msgid "Type"
 msgstr "النوع"
@@ -3218,18 +3249,12 @@ msgstr "غير متاح"
 msgid "Undo “%(step)s”"
 msgstr "التراجع عن «%(step)s»"
 
-msgid "Undoes the close decision, back to awaiting manager approval — the filed report itself is untouched."
-msgstr "يتراجع عن قرار الإغلاق، ليعود بانتظار موافقة المدير — التقرير المُقدَّم نفسه يبقى كما هو."
-
-msgid "Undone."
-msgstr "تم التراجع."
-
 msgid "Unit cost"
 msgstr "سعر الوحدة"
 
 #, python-format
-msgid "Unknown segment \"%(segment)s\" — use gym, hotel, club, or other"
-msgstr "فئة غير معروفة \"%(segment)s\" — استخدم gym أو hotel أو club أو other"
+msgid "Unknown segment \"%(segment)s\". Please use gym, hotel, club or other."
+msgstr "قطاع غير معروف \"%(segment)s\". يرجى استخدام gym أو hotel أو club أو other."
 
 msgid "Unscheduled"
 msgstr "غير مجدولة"
@@ -3240,14 +3265,11 @@ msgstr "تم التحديث."
 msgid "Upload"
 msgstr "رفع"
 
-msgid "Upload a .csv file."
-msgstr "ارفع ملف .csv."
-
 msgid "Upload a list"
 msgstr "رفع قائمة"
 
-msgid "Upload these from the task's Edit screen."
-msgstr "ارفعها من شاشة تعديل المهمة."
+msgid "Use only if the customer subsequently complained about this specific visit and the fault lies with the technician; not every complaint constitutes negligence. This is recorded in their reliability record and is not visible to the technician."
+msgstr "يُستخدم فقط إذا تقدّم العميل لاحقاً بشكوى بخصوص هذه الزيارة تحديداً وكان الخطأ من جانب الفني؛ فليست كل شكوى إهمالاً. يُسجَّل ذلك في سجل موثوقيته ولا يظهر للفني."
 
 msgid "User added."
 msgstr "تمت إضافة المستخدم."
@@ -3306,8 +3328,8 @@ msgstr "عرض الأسبوع"
 msgid "Viewing"
 msgstr "تعرض بيانات"
 
-msgid "Visible to managers and admins only — never shown to the customer or on the ticket's conversation."
-msgstr "مرئي للمديرين ومسؤولي النظام فقط — لا يظهر أبدًا للعميل أو في محادثة الطلب."
+msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
+msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
 
 #, python-format
 msgid "Visiting from %(country)s"
@@ -3322,11 +3344,8 @@ msgstr "ضمان"
 msgid "Warranty end"
 msgstr "نهاية الضمان"
 
-msgid "We'd love your feedback on your recent Profit Sports Solutions visit"
-msgstr "يسعدنا معرفة رأيك في زيارة Profit Sports Solutions الأخيرة"
-
-msgid "We're happy to help! Thank you for reaching out — our team is reviewing your ticket now."
-msgstr "يسعدنا مساعدتك! شكرًا لتواصلك معنا — فريقنا يراجع طلبك الآن."
+msgid "We would value your feedback on your recent Profit Sports Solutions visit"
+msgstr "نقدّر رأيكم في زيارة Profit Sports Solutions الأخيرة"
 
 msgid "Wednesday"
 msgstr "الأربعاء"
@@ -3334,42 +3353,33 @@ msgstr "الأربعاء"
 msgid "Week view"
 msgstr "عرض الأسبوع"
 
+msgid "Week view — all countries"
+msgstr "عرض الأسبوع — جميع الدول"
+
 msgid "Weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"
 
 msgid "Welcome"
 msgstr "أهلاً بك"
 
-msgid "Welcome — let's finish setting up your account"
-msgstr "أهلاً بك — لنكمل إعداد حسابك"
-
-msgid "Welcome — set your password"
-msgstr "أهلاً بك — عيّن كلمة المرور"
-
 #, python-format
 msgid "Welcome, %(name)s"
 msgstr "أهلاً بك، %(name)s"
 
-msgid "Well over estimate"
-msgstr "تجاوز التقدير بكثير"
+msgid "Welcome. Please complete your account setup."
+msgstr "مرحباً بك. يرجى استكمال إعداد حسابك."
+
+msgid "Welcome. Please set your password."
+msgstr "مرحباً بك. يرجى تعيين كلمة المرور."
 
 msgid "What happened"
 msgstr "ماذا حدث"
 
-msgid "What happened — stock ordered, vendor replied, sorted out, etc."
-msgstr "ما الذي حدث — طُلب المخزون، ردّ المورّد، حُلّت المسألة، إلخ."
-
-msgid "What is this"
-msgstr "ما هذا"
-
-msgid "What the customer complained about, and why this counts as negligence rather than bad luck."
-msgstr "ما الذي اشتكى منه العميل، ولماذا يُعد هذا إهمالاً وليس سوء حظ."
+msgid "What is this?"
+msgstr "ما هذا؟"
 
 msgid "What the customer reported"
 msgstr "ما أبلغ به العميل"
-
-msgid "What went wrong"
-msgstr "ما الذي حدث بالخطأ"
 
 msgid "WhatsApp"
 msgstr "واتساب"
@@ -3377,47 +3387,26 @@ msgstr "واتساب"
 msgid "When"
 msgstr "متى"
 
-msgid "When it really happened"
-msgstr "متى حدث فعلًا"
-
-msgid "Which role can do what. Self-service technician screens (My week, My skills, ...) aren't listed here — they stay open to any signed-in technician regardless of role."
-msgstr "أي دور يمكنه فعل ماذا. شاشات الفني الذاتية (أسبوعي، مهاراتي، ...) غير مدرجة هنا — تبقى متاحة لأي فني مسجل دخوله بغض النظر عن دوره."
-
 msgid "Who"
 msgstr "من"
-
-msgid "Who should handle it — they’re notified and it shows in their internal tickets."
-msgstr "من يجب أن يتولاها — يُبلَّغ وتظهر في تذاكره الداخلية."
-
-msgid "Who's already booked, so you can pick a time that doesn't collide. Open someone's week for the full day-by-day picture — how crowded each day is, not just what's next."
-msgstr "من هو مشغول بالفعل، حتى تختار وقتًا لا يتعارض. افتح أسبوع أي شخص للاطلاع على الصورة الكاملة يومًا بيوم — مدى ازدحام كل يوم، وليس المهمة القادمة فقط."
-
-msgid "Who's available for work right now — separate from any one task, so marking someone unavailable here applies everywhere, not just to a single assignment."
-msgstr "من هو متاح للعمل الآن — بمعزل عن أي مهمة واحدة، لذا فإن تحديد شخص كغير متاح هنا يُطبَّق في كل مكان، وليس في تكليف واحد فقط."
 
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
 
-msgid "Why the task is cancelled — for example, the customer called it off."
-msgstr "سبب إلغاء المهمة — مثلاً، ألغاها العميل."
+msgid "Work has already started. As a manager or administrator, you may still change the team; the new lead will continue from the current stage of the task."
+msgstr "لقد بدأ العمل بالفعل. بصفتك مديراً أو مسؤولاً للنظام، لا يزال بإمكانك تغيير الفريق؛ وسيتابع القائد الجديد من المرحلة الحالية للمهمة."
 
-msgid "Why this is closing without a report — customer cancelled, resolved another way, etc."
-msgstr "سبب الإغلاق دون تقرير — ألغى العميل الطلب، أو حُل بطريقة أخرى، إلخ."
-
-msgid "Why this ticket isn't becoming a task — spam, duplicate, not us, etc."
-msgstr "سبب عدم تحويل هذا الطلب إلى مهمة — رسالة مزعجة، تكرار، لا يخصنا، إلخ.سبب عدم تحويل هذه التذكرة إلى مهمة — رسالة مزعجة، تكرار، ليست من اختصاصنا، إلخ."
-
-msgid "Work has already started. As a manager or admin you can still change the team — the new lead carries on from where the task is."
-msgstr "بدأ العمل بالفعل. بصفتك مديرًا أو مسؤول النظام لا يزال بإمكانك تغيير الفريق — يكمل الفني الرئيسي الجديد من حيث توقفت المهمة."
-
-msgid "Work has started, so only a manager or admin can change the team now."
-msgstr "بدأ العمل، لذا لا يمكن تغيير الفريق الآن إلا من قِبل مدير أو مسؤول النظام."
+msgid "Work has started, so only a manager or administrator can now change the team."
+msgstr "لقد بدأ العمل، لذا لا يمكن الآن تغيير الفريق إلا من قِبل مدير أو مسؤول النظام."
 
 msgid "Work report"
 msgstr "تقرير العمل"
 
-msgid "Working in another country for set dates. During a trip they can be assigned tasks there; their own country, hours and figures stay here."
-msgstr "العمل في دولة أخرى لفترة محددة. خلال الرحلة يمكن إسناد مهام إليه هناك، بينما تبقى دولته وساعاته وأرقامه هنا."
+msgid "Work resumed"
+msgstr "تم استئناف العمل"
+
+msgid "Working in another country for specified dates. During a trip, they may be assigned tasks there; their home country, hours and figures remain unchanged."
+msgstr "يعمل في دولة أخرى خلال تواريخ محددة. يمكن إسناد مهام إليه هناك خلال الرحلة، بينما تظل دولته الأصلية وساعاته وأرقامه دون تغيير."
 
 msgid "Written report"
 msgstr "تقرير مكتوب"
@@ -3428,24 +3417,25 @@ msgstr "نعم"
 msgid "You"
 msgstr "أنت"
 
-msgid "You are no longer on this task, so your report was sent to the team as a message."
-msgstr "لم تعد ضمن هذه المهمة، لذلك أُرسل تقريرك إلى الفريق كرسالة."
+msgid "You are no longer assigned to this task, so your report has been sent to the team as a message."
+msgstr "لم تعد مسنداً إلى هذه المهمة، لذا أُرسل تقريرك إلى الفريق كرسالة."
 
-msgid "You don't have permission to do that. If you think this is wrong, check with a manager or admin."
-msgstr "ليس لديك صلاحية للقيام بذلك. إذا كنت تعتقد أن هذا خطأ، راجع مديرًا أو مسؤول النظام."
+#, python-format
+msgid "You are now viewing %(country)s."
+msgstr "أنت تستعرض الآن %(country)s."
 
-msgid "You haven't submitted any tickets yet."
-msgstr "لم تقدّم أي طلبات حتى الآن."
+msgid "You are receiving this email because a password reset was requested for your Profit Sports Solutions account."
+msgstr "تتلقى هذه الرسالة لأنه تم طلب إعادة تعيين كلمة المرور لحسابك في Profit Sports Solutions."
+
+msgid "You do not have permission to perform this action. If you believe this is an error, please contact a manager or administrator."
+msgstr "ليست لديك صلاحية لتنفيذ هذا الإجراء. إذا كنت تعتقد أن ذلك خطأ، يرجى التواصل مع مدير أو مسؤول النظام."
+
+msgid "You have not submitted any tickets."
+msgstr "لم تقدّم أي تذاكر."
 
 #, python-format
 msgid "You rated us %(rating)s/5"
 msgstr "قيّمتنا بـ %(rating)s/5"
-
-msgid "You're receiving this email because a password reset was requested for your account at Profit Sports Solutions."
-msgstr "تصلك هذه الرسالة لأنه تم طلب إعادة تعيين كلمة المرور لحسابك في Profit Sports Solutions."
-
-msgid "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it."
-msgstr "تم تكليفك بالنظر في هذه التذكرة — يمكن للمشرف فقط تحويلها إلى مهمة أو رفضها."
 
 msgid "Your Profit Sports Solutions account"
 msgstr "حسابك في Profit Sports Solutions"
@@ -3453,14 +3443,20 @@ msgstr "حسابك في Profit Sports Solutions"
 msgid "Your Profit Sports Solutions portal login"
 msgstr "حساب دخولك إلى بوابة Profit Sports Solutions"
 
-msgid "Your feedback has already been recorded — we appreciate you taking the time."
-msgstr "تم تسجيل تقييمك بالفعل — نقدّر وقتك."
+msgid "Your account is ready. Welcome."
+msgstr "حسابك جاهز. مرحباً بك."
+
+msgid "Your feedback has already been recorded. Thank you for your time."
+msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
 msgid "Your name"
 msgstr "اسمك"
 
-msgid "Your password has been set. You can log in now."
-msgstr "تم تعيين كلمة المرور. يمكنك تسجيل الدخول الآن."
+msgid "Your password has been set. Welcome."
+msgstr "تم تعيين كلمة المرور. مرحباً بك."
+
+msgid "Your password has been set. You may now sign in."
+msgstr "تم تعيين كلمة المرور. يمكنك الآن تسجيل الدخول."
 
 #, python-format
 msgid "Your request was escalated to our management team for review on %(when)s."
@@ -3470,23 +3466,21 @@ msgstr "تم تصعيد طلبكم إلى فريق الإدارة لدينا ل�
 msgid "Your shipment is on its way — %(reference)s"
 msgstr "شحنتك في الطريق إليك — %(reference)s"
 
-msgid "Your ticket has become a service task. We'll be in touch to schedule a visit."
-msgstr "تحوّل طلبك إلى مهمة صيانة. سنتواصل معك لتحديد موعد الزيارة."
+#, python-format
+msgid "Your shipment is on its way — %(task_number)s"
+msgstr "شحنتكم في الطريق — %(task_number)s"
+
+msgid "Your ticket has been converted into a service task. We will contact you to schedule a visit."
+msgstr "تم تحويل تذكرتكم إلى مهمة خدمة. سنتواصل معكم لتحديد موعد الزيارة."
 
 msgid "Your tickets"
 msgstr "طلباتك"
 
-msgid "Your username, in case you've forgotten:"
-msgstr "اسم المستخدم الخاص بك، في حال نسيته:"
+msgid "Your username, for your reference:"
+msgstr "اسم المستخدم الخاص بك، للرجوع إليه:"
 
-msgid "a manager creates this from the technician's Edit screen, same as a customer's portal login"
-msgstr "ينشئه المدير من شاشة تعديل بيانات الفني، تمامًا كحساب بوابة العميل"
-
-msgid "a manager's or admin's correction"
-msgstr "تصحيح من المدير أو مسؤول النظام"
-
-msgid "a self-rating is a starting guess — only a supervisor review counts toward certification"
-msgstr "التقييم الذاتي مجرد تخمين أولي — لا يُحتسب سوى مراجعة المشرف ضمن الاعتماد"
+msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
+msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"
 
 msgid "access notes"
 msgstr "ملاحظات الدخول"
@@ -3500,17 +3494,29 @@ msgstr "نشط"
 msgid "actor"
 msgstr "الفاعل"
 
+msgid "additional information"
+msgstr "معلومات إضافية"
+
 msgid "address"
 msgstr "العنوان"
 
-msgid "advanced skills don't count toward the technician certification bar"
-msgstr "المهارات المتقدمة لا تحتسب ضمن معيار اعتماد الفني"
+msgid "address used by the office to request spare parts"
+msgstr "العنوان الذي يستخدمه المكتب لطلب قطع الغيار"
+
+msgid "advanced skills do not count toward technician certification"
+msgstr "لا تُحتسب المهارات المتقدمة ضمن متطلبات اعتماد الفني"
 
 msgid "allowed"
 msgstr "مسموح"
 
-msgid "anything else we should know"
-msgstr "أي شيء آخر تود إخبارنا به"
+msgid "allows the customer to check this ticket's status without an account"
+msgstr "يتيح للعميل الاطلاع على حالة هذه التذكرة دون حساب"
+
+msgid "an amount must never be stored without its currency"
+msgstr "لا يجوز تخزين أي مبلغ دون عملته"
+
+msgid "approximate duration of the job; shown as an estimated finish time"
+msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتهاء متوقع"
 
 msgid "arm color"
 msgstr "لون الذراع"
@@ -3536,8 +3542,8 @@ msgstr "الكاتب"
 msgid "auto-generated per country, e.g. AE-0001"
 msgstr "يُنشأ تلقائيًا لكل دولة، مثال: AE-0001"
 
-msgid "auto-generated per country, e.g. AE-T0001 — the same prefix a task number uses, marked with a T so the two are never confused"
-msgstr "يُنشأ تلقائيًا لكل دولة، مثل AE-T0001 — نفس البادئة المستخدمة لرقم المهمة، مع علامة T حتى لا يختلط الأمر بينهما"
+msgid "auto-generated per country, e.g. AE-T0001; uses the same prefix as task numbers, with a T to distinguish the two"
+msgstr "يُنشأ تلقائياً لكل دولة، مثل AE-T0001؛ ويستخدم بادئة أرقام المهام نفسها مع الحرف T للتمييز بينهما"
 
 msgid "available"
 msgstr "متاح"
@@ -3545,14 +3551,17 @@ msgstr "متاح"
 msgid "billing type"
 msgstr "نوع الفوترة"
 
-msgid "branch name, as the customer describes it"
-msgstr "اسم الفرع، كما يذكره العميل"
+msgid "branch name, as described by the customer"
+msgstr "اسم الفرع كما وصفه العميل"
 
 msgid "brand"
 msgstr "العلامة التجارية"
 
 msgid "brands"
 msgstr "العلامات التجارية"
+
+msgid "calculated at check-in from the site location at that time"
+msgstr "يُحسب عند تسجيل النقرة استناداً إلى موقع الموقع في ذلك الوقت"
 
 msgid "can carry large equipment"
 msgstr "يستطيع حمل معدات كبيرة"
@@ -3572,11 +3581,14 @@ msgstr "سبب الإغلاق"
 msgid "code"
 msgstr "الرمز"
 
-msgid "comma-separated weekday numbers, Monday = 0 — e.g. 4,5 for Friday–Saturday"
-msgstr "أرقام أيام الأسبوع مفصولة بفواصل، الإثنين = 0 — مثلًا 4,5 للجمعة والسبت"
+msgid "comma-separated weekday numbers, where Monday = 0 (e.g. 4,5 for Friday–Saturday)"
+msgstr "أرقام أيام الأسبوع مفصولة بفواصل، حيث الاثنين = 0 (مثل 4,5 للجمعة والسبت)"
 
 msgid "comment"
 msgstr "تعليق"
+
+msgid "completed when the customer was not available to sign"
+msgstr "يُستكمل عند عدم توفر العميل للتوقيع"
 
 msgid "conduct area"
 msgstr "مجال سلوك"
@@ -3599,8 +3611,8 @@ msgstr "هاتف جهة الاتصال"
 msgid "contact phone number"
 msgstr "رقم هاتف التواصل"
 
-msgid "copied from the ticket at conversion, one per line — the machines the customer named before anyone visited. The team can find more on site; those go on the work report as usual, not here."
-msgstr "تُنسخ من الطلب عند التحويل، رقمًا في كل سطر — الأجهزة التي ذكرها العميل قبل أي زيارة. قد يجد الفريق أجهزة أخرى في الموقع؛ تلك تُذكر في تقرير العمل كالمعتاد، وليس هنا."
+msgid "copied from the ticket at conversion, one per line: the machines the customer identified before the visit. Additional machines found on site are recorded in the work report, not here."
+msgstr "تُنسخ من التذكرة عند التحويل، كل جهاز في سطر: الأجهزة التي حددها العميل قبل الزيارة. تُسجَّل الأجهزة الإضافية المكتشفة في الموقع ضمن تقرير العمل، وليس هنا."
 
 msgid "corrected at"
 msgstr "صُحح في"
@@ -3611,6 +3623,9 @@ msgstr "صححه"
 #, python-format
 msgid "corrected to %(time)s by %(by_name)s"
 msgstr "صُحح إلى %(time)s بواسطة %(by_name)s"
+
+msgid "correction by a manager or administrator"
+msgstr "تصحيح من قِبل مدير أو مسؤول النظام"
 
 msgid "correction reason"
 msgstr "سبب التصحيح"
@@ -3626,6 +3641,9 @@ msgstr "أُنشئ في"
 
 msgid "created by"
 msgstr "أنشأه"
+
+msgid "created by a manager from the technician's Edit screen, in the same way as a customer's portal login"
+msgstr "ينشئه المدير من شاشة تعديل الفني، بالطريقة نفسها المتبعة لبيانات دخول العميل إلى البوابة"
 
 msgid "currency code"
 msgstr "رمز العملة"
@@ -3648,7 +3666,7 @@ msgstr "تذكرة العميل"
 msgid "customer tickets"
 msgstr "تذاكر العملاء"
 
-msgid "customer_name, site_name, and site_address are required"
+msgid "customer_name, site_name and site_address are required"
 msgstr "الحقول customer_name وsite_name وsite_address مطلوبة"
 
 msgid "customers"
@@ -3666,6 +3684,12 @@ msgstr "القرار"
 msgid "decision note"
 msgstr "ملاحظة القرار"
 
+msgid "delivery address for replacement parts, if different from the site"
+msgstr "عنوان تسليم قطع الغيار، إذا كان مختلفاً عن الموقع"
+
+msgid "delivery address for replacement parts, if different from the site, such as a warehouse or head office"
+msgstr "عنوان تسليم قطع الغيار، إذا كان مختلفاً عن الموقع، كالمستودع أو المكتب الرئيسي"
+
 msgid "delivery note"
 msgstr "إشعار التسليم"
 
@@ -3681,14 +3705,14 @@ msgstr "سبب الرفض"
 msgid "distance from the site (m)"
 msgstr "المسافة من الموقع (م)"
 
-msgid "documents are manager-tier by default — turn this on for a specific task when a supervisor is the one collecting payment on site and needs to see the invoice"
-msgstr "المستندات مخصصة للمديرين افتراضيًا — فعّل هذا الخيار لمهمة معيّنة عندما يكون المشرف هو من يُحصّل الدفع في الموقع ويحتاج إلى رؤية الفاتورة"
+msgid "documents are restricted to managers by default; enable this for a specific task when a supervisor collects payment on site and requires access to the invoice"
+msgstr "المستندات مقصورة على المديرين افتراضياً؛ فعّل هذا الخيار لمهمة محددة عندما يتولى المشرف تحصيل الدفعة في الموقع ويحتاج إلى الاطلاع على الفاتورة"
 
-msgid "e.g. Heavy traffic on Sheikh Zayed Road, expect to arrive about 45 minutes late."
-msgstr "مثال: زحام مروري شديد على شارع الشيخ زايد، من المتوقع التأخر حوالي 45 دقيقة."
+msgid "e.g. Heavy traffic on Sheikh Zayed Road; expected arrival approximately 45 minutes late."
+msgstr "مثال: ازدحام مروري على شارع الشيخ زايد؛ يُتوقع الوصول متأخراً بنحو 45 دقيقة."
 
-msgid "e.g. gym closed, no key, customer absent"
-msgstr "مثال: الصالة الرياضية مغلقة، لا يوجد مفتاح، العميل غائب"
+msgid "e.g. gym closed, no key available, customer absent"
+msgstr "مثال: النادي مغلق، أو المفتاح غير متوفر، أو العميل غير موجود"
 
 msgid "email"
 msgstr "البريد الإلكتروني"
@@ -3736,17 +3760,11 @@ msgstr "عرض المصنع"
 msgid "factory offer uploaded at"
 msgstr "وقت رفع عرض المصنع"
 
-msgid "false once replaced"
-msgstr "يصبح خطأ بعد الاستبدال"
-
-msgid "fields the report form shows for this type"
-msgstr "الحقول التي يعرضها نموذج التقرير لهذا النوع"
+msgid "fields displayed on the report form for this task type"
+msgstr "الحقول المعروضة في نموذج التقرير لهذا النوع من المهام"
 
 msgid "file"
 msgstr "الملف"
-
-msgid "filled in when the customer was not available to sign"
-msgstr "يُملأ عندما لا يكون العميل متاحاً للتوقيع"
 
 msgid "findings"
 msgstr "النتائج"
@@ -3757,8 +3775,8 @@ msgstr "لتسجيل الدخول إلى البوابة، إن كان لهذا �
 msgid "frame color"
 msgstr "لون الإطار"
 
-msgid "free text from the plate"
-msgstr "نص حر من اللوحة"
+msgid "free text as shown on the plate"
+msgstr "نص حر كما يظهر على اللوحة"
 
 msgid "full contact name"
 msgstr "الاسم الكامل لجهة الاتصال"
@@ -3766,8 +3784,8 @@ msgstr "الاسم الكامل لجهة الاتصال"
 msgid "full name"
 msgstr "الاسم الكامل"
 
-msgid "gate codes, best hours"
-msgstr "رموز البوابات، أفضل الأوقات"
+msgid "gate codes, preferred visiting hours"
+msgstr "رموز البوابات، وأوقات الزيارة المفضلة"
 
 msgid "gym address"
 msgstr "عنوان النادي الرياضي"
@@ -3783,6 +3801,16 @@ msgstr "تاريخ التعيين"
 
 msgid "installed on"
 msgstr "تاريخ التركيب"
+
+msgid "insufficient completed tasks"
+msgstr "عدد المهام المكتملة غير كافٍ"
+
+#, python-format
+msgid "insufficient completed tasks (%(have)s of %(need)s required)"
+msgstr "عدد المهام المكتملة غير كافٍ (%(have)s من أصل %(need)s مطلوبة)"
+
+msgid "insufficient data"
+msgstr "البيانات غير كافية"
 
 msgid "internal tickets only"
 msgstr "للتذاكر الداخلية فقط"
@@ -3811,9 +3839,6 @@ msgstr "اللغة"
 msgid "latitude"
 msgstr "خط العرض"
 
-msgid "lets the customer check this ticket’s status without an account — see reports.CustomerFeedback"
-msgstr "يتيح للعميل التحقق من حالة هذا الطلب دون حساب — راجع reports.CustomerFeedback"
-
 msgid "level"
 msgstr "المستوى"
 
@@ -3832,7 +3857,7 @@ msgstr "حساب الدخول"
 msgid "longitude"
 msgstr "خط الطول"
 
-msgid "managers and admins only"
+msgid "managers and administrators only"
 msgstr "للمديرين ومسؤولي النظام فقط"
 
 msgid "media type"
@@ -3859,19 +3884,6 @@ msgstr "الاسم"
 msgid "name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
-msgid "never store an amount without its currency"
-msgstr "لا تُخزّن مبلغًا دون عملته أبدًا"
-
-msgid "not enough completed tasks yet"
-msgstr "لا توجد مهام مكتملة كافية بعد"
-
-#, python-format
-msgid "not enough completed tasks yet (%(have)s of %(need)s needed)"
-msgstr "لا توجد مهام مكتملة كافية بعد (%(have)s من أصل %(need)s مطلوبة)"
-
-msgid "not enough data"
-msgstr "لا توجد بيانات كافية"
-
 msgid "note"
 msgstr "ملاحظة"
 
@@ -3881,23 +3893,23 @@ msgstr "إعدادات الإشعارات"
 msgid "occurred at"
 msgstr "حدث في"
 
-msgid "off by default — a supervisor sends it deliberately from task detail instead"
-msgstr "معطّل افتراضيًا — يقوم المشرف بإرساله يدويًا من تفاصيل المهمة بدلاً من ذلك"
+msgid "off by default; a supervisor sends it manually from the task details instead"
+msgstr "معطَّل افتراضياً؛ ويرسله المشرف يدوياً من تفاصيل المهمة بدلاً من ذلك"
 
-msgid "one account covers every site under this customer — created by staff, never self-signup"
-msgstr "حساب واحد يغطي كل مواقع هذا العميل — ينشئه الموظفون، ولا يمكن للعميل التسجيل بنفسه"
+msgid "one account covers every site under this customer; created by staff only, no self-registration"
+msgstr "حساب واحد يشمل جميع مواقع هذا العميل؛ يُنشئه الموظفون فقط، ولا يتاح التسجيل الذاتي"
 
 msgid "opened by"
 msgstr "فتحها"
 
-msgid "optional — shown on the customer’s ticket page"
-msgstr "اختياري — يظهر في صفحة تذكرة العميل"
+msgid "optional; displayed on the customer's ticket page"
+msgstr "اختياري؛ يظهر في صفحة تذكرة العميل"
 
 msgid "outcome"
 msgstr "النتيجة"
 
-msgid "overrides the ISO code as the task-number prefix — e.g. KSA or UAE, since those are how people here actually refer to the country, not the ISO code. Leave blank to just use the ISO code."
-msgstr "يحل محل رمز ISO كبادئة لرقم المهمة — مثل KSA أو UAE، لأن هذه هي الطريقة التي يشير بها الناس هنا فعليًا إلى الدولة، وليس رمز ISO. اتركه فارغًا لاستخدام رمز ISO فقط."
+msgid "overrides the ISO code as the task-number prefix, e.g. KSA or UAE, reflecting common local usage. Leave blank to use the ISO code."
+msgstr "يحل محل رمز ISO كبادئة لأرقام المهام، مثل KSA أو UAE، وفقاً للاستخدام المحلي الشائع. اتركه فارغاً لاستخدام رمز ISO."
 
 msgid "padding color"
 msgstr "لون الحشوة"
@@ -3929,11 +3941,11 @@ msgstr "الهاتف"
 msgid "photo"
 msgstr "الصورة"
 
-msgid "photo or video of the technician actually performing this repair"
-msgstr "صورة أو فيديو للفني وهو ينفذ هذا الإصلاح فعليًا"
+msgid "photo or video of the technician performing this repair"
+msgstr "صورة أو فيديو للفني أثناء تنفيذ هذا الإصلاح"
 
-msgid "please describe the issue for each machine separately (mention the serial number for each one)"
-msgstr "يرجى وصف المشكلة لكل جهاز على حدة (مع ذكر الرقم التسلسلي لكل جهاز)"
+msgid "please describe the issue for each machine separately, including its serial number"
+msgstr "يرجى وصف المشكلة لكل جهاز على حدة، مع ذكر رقمه التسلسلي"
 
 msgid "please list each affected machine on a new line"
 msgstr "يرجى ذكر كل جهاز متأثر في سطر منفصل"
@@ -3977,6 +3989,15 @@ msgstr "التقييم"
 msgid "reason"
 msgstr "السبب"
 
+msgid "reason for deactivation, e.g. contract ended or business closed"
+msgstr "سبب إلغاء التفعيل، مثل انتهاء العقد أو إغلاق النشاط"
+
+msgid "reason for deactivation, e.g. resignation or termination"
+msgstr "سبب إلغاء التفعيل، مثل الاستقالة أو إنهاء الخدمة"
+
+msgid "recipient of feedback requests after a report is approved"
+msgstr "الجهة التي تُرسل إليها طلبات التقييم بعد اعتماد التقرير"
+
 msgid "recorded by"
 msgstr "سجّلها"
 
@@ -4001,8 +4022,8 @@ msgstr "طلبه"
 msgid "requested scheduled for"
 msgstr "الموعد المطلوب"
 
-msgid "required on reassignment — one tap, never free text"
-msgstr "مطلوب عند إعادة التعيين — نقرة واحدة، وليس نصًا حرًا أبدًا"
+msgid "required on reassignment; selected from a list, never free text"
+msgstr "مطلوب عند إعادة الإسناد؛ يُختار من قائمة، ولا يُكتب كنص حر"
 
 msgid "required skill"
 msgstr "المهارة المطلوبة"
@@ -4016,8 +4037,8 @@ msgstr "يتطلب توقيعًا"
 msgid "resolved"
 msgstr "تم الحل"
 
-msgid "resolved without needing a task — advice given, handled by phone, etc."
-msgstr "تم حله دون الحاجة لمهمة — نصيحة قُدّمت، عولج هاتفيًا، إلخ."
+msgid "resolved without a task, for example advice given or handled by phone"
+msgstr "تم الحل دون مهمة، مثل تقديم المشورة أو المعالجة عبر الهاتف"
 
 msgid "responsible supervisor"
 msgstr "المشرف المسؤول"
@@ -4039,9 +4060,6 @@ msgstr "صلاحية الدور"
 
 msgid "role permissions"
 msgstr "صلاحيات الدور"
-
-msgid "roughly how long the job should take — shown as an estimated finish time"
-msgstr "تقريبًا كم من الوقت ستستغرقه المهمة — يُعرض كوقت انتهاء متوقع"
 
 msgid "schedule change request"
 msgstr "طلب تغيير الموعد"
@@ -4085,32 +4103,35 @@ msgstr "الرقم التسلسلي"
 msgid "serial number(s)"
 msgstr "الرقم/الأرقام التسلسلية"
 
-msgid "set automatically at submission — every ticket is submitted by a logged-in customer"
-msgstr "تُضبط تلقائيًا عند الإرسال — كل طلب يُرسله عميل مسجّل الدخول"
+msgid "set automatically from the signed-in customer's account"
+msgstr "يُعيَّن تلقائياً من حساب العميل المسجَّل الدخول"
 
-msgid "set automatically for a logged-in customer, from their own account"
-msgstr "تُضبط تلقائيًا للعميل المسجّل دخوله، من حسابه الخاص"
+msgid "set automatically on submission; every ticket is submitted by a signed-in customer"
+msgstr "يُعيَّن تلقائياً عند التقديم؛ إذ يقدّم كل تذكرة عميل مسجَّل الدخول"
 
-msgid "set automatically — true whenever a manager is the one who last set scheduled_for; a supervisor doing so leaves it false. Locked means a supervisor can no longer change scheduled_for directly and must request a change"
-msgstr "تُضبط تلقائيًا — تكون صحيحة كلما كان المدير هو آخر من حدد scheduled_for؛ وتبقى خاطئة إذا فعل ذلك مشرف. القفل يعني أن المشرف لم يعد بإمكانه تغيير scheduled_for مباشرة، ويجب عليه طلب تغيير"
+msgid "set automatically: true whenever a manager last set the scheduled time; false when a supervisor did. When locked, a supervisor can no longer change the scheduled time directly and must request a change"
+msgstr "يُعيَّن تلقائياً: صحيح إذا كان المدير آخر من حدد الموعد المجدول؛ وخطأ إذا كان المشرف. عند القفل، لا يمكن للمشرف تغيير الموعد مباشرة ويجب عليه طلب التغيير"
 
 msgid "set by"
 msgstr "حدده"
 
-msgid "set by a manager scheduling day-only — the day is fixed while scheduled_for stays empty until a supervisor fills in the time"
-msgstr "يحدده المدير عند الجدولة بيوم فقط — يكون اليوم ثابتًا بينما يبقى موعد scheduled_for فارغًا حتى يحدد المشرف الوقت"
-
 msgid "set on"
 msgstr "تاريخ التحديد"
 
-msgid "set when a logged-in customer picked one of their own registered sites — carries straight through to the resulting task with no re-matching, and only an admin can change it once set"
-msgstr "تُضبط عندما يختار عميل مسجّل الدخول أحد مواقعه المسجّلة — تنتقل مباشرة إلى المهمة الناتجة دون إعادة مطابقة، ولا يمكن تغييرها بعد ضبطها سوى بواسطة مسؤول النظام"
+msgid "set to false once replaced"
+msgstr "تُعيَّن إلى خطأ عند الاستبدال"
 
-msgid "set when a manager creates the login with a temporary system-generated password — they must set their own the first time they sign in, before reaching anything else"
-msgstr "تُضبط عندما يُنشئ مدير حساب الدخول بكلمة مرور مؤقتة يولّدها النظام — يجب عليه تعيين كلمة مرور خاصة به عند أول تسجيل دخول، قبل الوصول إلى أي شيء آخر"
+msgid "set when a manager creates the login with a temporary system-generated password; the user must set their own password at first sign-in before accessing anything else"
+msgstr "يُعيَّن عندما ينشئ المدير بيانات الدخول بكلمة مرور مؤقتة يولدها النظام؛ ويجب على المستخدم تعيين كلمة مروره الخاصة عند تسجيل الدخول لأول مرة قبل الوصول إلى أي شيء آخر"
 
-msgid "set when staff creates the login with a temporary system-generated password — the customer is walked through setting their own password and confirming their contact details once, the first time they sign in, before reaching the rest of the portal"
-msgstr "تُضبط عندما يُنشئ أحد الموظفين حساب الدخول بكلمة مرور مؤقتة يولّدها النظام — يُطلب من العميل تعيين كلمة مرور خاصة به وتأكيد بيانات التواصل معه مرة واحدة، عند أول تسجيل دخول، قبل الوصول إلى بقية البوابة"
+msgid "set when a manager schedules by day only; the day is fixed and the time remains empty until a supervisor sets it"
+msgstr "يُعيَّن عندما يجدول المدير باليوم فقط؛ إذ يُثبَّت اليوم ويبقى الوقت فارغاً حتى يحدده المشرف"
+
+msgid "set when a signed-in customer selected one of their registered sites; carried directly to the resulting task without re-matching, and only an administrator can change it once set"
+msgstr "يُعيَّن عندما يختار عميل مسجَّل الدخول أحد مواقعه المسجَّلة؛ ويُنقل مباشرة إلى المهمة الناتجة دون إعادة مطابقة، ولا يمكن تغييره بعد تعيينه إلا من قِبل مسؤول النظام"
+
+msgid "set when staff create the login with a temporary system-generated password; at first sign-in, the customer is guided through setting their own password and confirming their contact details before accessing the rest of the portal"
+msgstr "يُعيَّن عندما ينشئ الموظفون بيانات الدخول بكلمة مرور مؤقتة يولدها النظام؛ وعند تسجيل الدخول لأول مرة يُرشَد العميل إلى تعيين كلمة مروره وتأكيد بيانات التواصل قبل الوصول إلى بقية البوابة"
 
 msgid "shipping address"
 msgstr "عنوان الشحن"
@@ -4125,11 +4146,11 @@ msgid "show invoice to the supervisor"
 msgstr "إظهار الفاتورة للمشرف"
 
 #, python-format
-msgid "showing the issue and the serial number — up to %(count)d files, %(size)d MB each"
-msgstr "توضّح المشكلة والرقم التسلسلي — حتى %(count)d ملفات، بحد أقصى %(size)d ميجابايت لكل ملف"
+msgid "showing the issue and the serial number; up to %(count)d files, %(size)d MB each"
+msgstr "تُظهر المشكلة والرقم التسلسلي؛ حتى %(count)d ملفات، بحد أقصى %(size)d ميغابايت لكل ملف"
 
-msgid "shown on the roster, boards, and task detail"
-msgstr "تظهر في قائمة الفنيين ولوحاتهم وتفاصيل المهمة"
+msgid "shown on the roster, boards and task details"
+msgstr "يظهر في قائمة الفريق واللوحات وتفاصيل المهمة"
 
 msgid "signature URL"
 msgstr "رابط التوقيع"
@@ -4156,8 +4177,8 @@ msgstr "المهارات"
 msgid "source"
 msgstr "المصدر"
 
-msgid "stable key, never changes"
-msgstr "مفتاح ثابت، لا يتغير أبدًا"
+msgid "stable key; never changes"
+msgstr "مفتاح ثابت؛ لا يتغير أبداً"
 
 msgid "start date"
 msgstr "تاريخ البدء"
@@ -4274,26 +4295,35 @@ msgstr "مهارات الفني"
 msgid "technicians"
 msgstr "الفنيون"
 
-msgid "the day the supervisor planned"
+msgid "the day planned by the supervisor"
 msgstr "اليوم الذي خطط له المشرف"
 
-msgid "the only certain field at creation"
-msgstr "الحقل الوحيد المؤكد عند الإنشاء"
+msgid "the item this replaced, if the ordered item was unavailable"
+msgstr "الصنف الذي حل محله، إذا لم يكن الصنف المطلوب متوفراً"
 
-msgid "the shipment paperwork — uploaded once the parts arrive"
-msgstr "مستندات الشحنة — تُرفع بمجرد وصول القطع"
+msgid "the only field known with certainty at creation"
+msgstr "الحقل الوحيد المعروف بيقين عند الإنشاء"
 
-msgid "the staff member who opened it — empty when the customer did"
-msgstr "الموظف الذي فتحها — فارغ إن فتحها العميل"
+msgid "the person accountable for staffing this task; not necessarily its creator, nor the technician assigned to perform the work"
+msgstr "الشخص المسؤول عن توفير الكادر لهذه المهمة؛ وليس بالضرورة منشئها، ولا الفني المكلَّف بتنفيذ العمل"
 
-msgid "the technician himself for a self-rating, the supervisor for a review"
-msgstr "الفني نفسه للتقييم الذاتي، والمشرف للمراجعة"
+msgid "the person handling this ticket: a supervisor or manager, not necessarily the person who converts it"
+msgstr "الشخص الذي يتولى هذه التذكرة: مشرف أو مدير، وليس بالضرورة من يحوّلها"
 
-msgid "this company’s account/reference code, if it has one"
-msgstr "رمز حساب/مرجع هذه الشركة، إن وُجد"
+msgid "the shipment paperwork; uploaded once the parts arrive"
+msgstr "مستندات الشحنة؛ تُرفع عند وصول القطع"
 
-msgid "this person’s own hours on the job, when not the report’s: a helper’s, or a lead’s before a handover"
-msgstr "ساعات هذا الشخص في العمل إن اختلفت عن ساعات التقرير: لمساعد، أو لفني رئيسي قبل التسليم"
+msgid "the staff member who opened it; empty if opened by the customer"
+msgstr "الموظف الذي فتحها؛ ويكون فارغاً إذا فتحها العميل"
+
+msgid "the technician for a self-assessment; the supervisor for a review"
+msgstr "الفني في حالة التقييم الذاتي؛ والمشرف في حالة المراجعة"
+
+msgid "this company's account or reference code, if any"
+msgstr "رمز الحساب أو المرجع الخاص بهذه الشركة، إن وُجد"
+
+msgid "this person's own hours on the job, where they differ from the report: a helper's hours, or a lead's hours before a handover"
+msgstr "ساعات هذا الشخص في العمل إذا اختلفت عن ساعات التقرير: ساعات المساعد، أو ساعات القائد قبل التسليم"
 
 msgid "ticket"
 msgstr "الطلب"
@@ -4331,8 +4361,8 @@ msgstr "ردود الطلب"
 msgid "ticket reply"
 msgstr "رد على الطلب"
 
-msgid "time not set yet"
-msgstr "لم يُحدد الوقت بعد"
+msgid "time not yet set"
+msgstr "لم يُحدَّد الوقت بعد"
 
 msgid "timezone"
 msgstr "المنطقة الزمنية"
@@ -4368,11 +4398,11 @@ msgstr "رُفع في"
 msgid "uploaded by"
 msgstr "رفعه"
 
-msgid "used for a site that has no contact of its own — the single-branch case, or a chain where every site shares the same one"
-msgstr "يُستخدم لموقع ليس له جهة اتصال خاصة به — حالة الفرع الواحد، أو سلسلة تشترك فيها كل المواقع بنفس جهة الاتصال"
+msgid "used for a site without its own contact: a single-branch customer, or a chain whose sites share one contact"
+msgstr "يُستخدم للموقع الذي ليست له جهة تواصل خاصة: عميل بفرع واحد، أو سلسلة تشترك مواقعها في جهة تواصل واحدة"
 
-msgid "used instead of the time below when scheduling day-only"
-msgstr "يُستخدم بدلاً من الوقت أدناه عند الجدولة بيوم فقط"
+msgid "used instead of the time below when scheduling by day only"
+msgstr "يُستخدم بدلاً من الوقت أدناه عند الجدولة باليوم فقط"
 
 msgid "user"
 msgstr "المستخدم"
@@ -4398,29 +4428,8 @@ msgstr "ما وجده الفني"
 msgid "when the customer was last emailed about the scheduled visit — never automatic"
 msgstr "آخر مرة أُرسل فيها بريد إلكتروني للعميل بشأن الزيارة المجدولة — ليس تلقائيًا أبدًا"
 
-msgid "where a feedback request goes after a report is approved"
-msgstr "أين يُرسل طلب التقييم بعد اعتماد التقرير"
-
-msgid "where replacement parts should be delivered, if different from the site itself"
-msgstr "المكان الذي يجب تسليم قطع الغيار إليه، إذا كان مختلفًا عن الموقع نفسه"
-
-msgid "where replacement parts should be delivered, if different from the site itself — a warehouse or head office"
-msgstr "المكان الذي يجب تسليم قطع الغيار إليه، إذا كان مختلفًا عن الموقع نفسه — مستودع أو المكتب الرئيسي"
-
-msgid "where the office requests spare parts"
-msgstr "أين يطلب المكتب قطع الغيار"
-
-msgid "whether this technician can currently be assigned work — separate from is_active"
-msgstr "ما إذا كان يمكن تكليف هذا الفني بعمل حاليًا — بشكل منفصل عن الحالة الوظيفية"
-
-msgid "which machine this was swapped in for, if the one ordered wasn’t available"
-msgstr "الجهاز الذي استُبدل به هذا، إذا لم يكن الجهاز المطلوب متاحًا"
-
-msgid "who is accountable for staffing this task — not necessarily who created it, and not the same as the technician actually assigned to do the work"
-msgstr "من المسؤول عن توفير فريق عمل لهذه المهمة — ليس بالضرورة من أنشأها، وليس هو ذاته الفني الذي تم تعيينه فعليًا للقيام بالعمل"
-
-msgid "who is handling this — a supervisor or manager, not necessarily who converts it"
-msgstr "من يتولى هذا الأمر — مشرف أو مدير، وليس بالضرورة من يحوّله إلى مهمة"
+msgid "whether this technician can currently be assigned work; separate from active status"
+msgstr "ما إذا كان يمكن حالياً إسناد العمل إلى هذا الفني؛ وهو مستقل عن حالة التفعيل"
 
 msgid "who signed"
 msgstr "من وقّع"
@@ -4428,38 +4437,29 @@ msgstr "من وقّع"
 msgid "why there is no signature"
 msgstr "سبب عدم وجود توقيع"
 
-msgid "why this customer was deactivated — contract ended, closed down, etc."
-msgstr "سبب إيقاف هذا العميل — انتهاء التعاقد، إغلاق النشاط، إلخ."
-
-msgid "why this technician was deactivated — resigned, terminated, etc."
-msgstr "سبب إيقاف هذا الفني — استقالة، إنهاء خدمة، إلخ."
-
 msgid "work report"
 msgstr "تقرير العمل"
 
 msgid "work reports"
 msgstr "تقارير العمل"
 
-msgid "worked out at the tap, from the site location at that time"
-msgstr "تُحسب عند الضغط، من موقع المكان في ذلك الوقت"
-
 msgid "— Report"
 msgstr "— التقرير"
 
 #, python-format
-msgid "“%(code)s” isn’t in the parts list — pick one from the list, or ask for it to be added."
-msgstr "«%(code)s» غير موجودة في قائمة القطع — اختر من القائمة أو اطلب إضافتها."
+msgid "“%(code)s” is not in the parts list. Please select one from the list or request that it be added."
+msgstr "«%(code)s» غير موجود في قائمة القطع. يرجى اختيار قطعة من القائمة أو طلب إضافتها."
 
 #, python-format
-msgid "“%(name)s” still has technicians, customers, or tickets attached to it — deactivate it instead of deleting."
-msgstr "\"%(name)s\" لا يزال مرتبطًا بفنيين أو عملاء أو طلبات — عطّله بدلاً من حذفه."
+msgid "“%(name)s” still has technicians, customers or tickets linked to it. Please deactivate it instead of deleting it."
+msgstr "لا يزال «%(name)s» مرتبطاً بفنيين أو عملاء أو تذاكر. يرجى إلغاء تفعيله بدلاً من حذفه."
 
-msgid "“Above tapped time” means the hours typed are well above the time between the Start tap and the report being filed, minus pauses — worth asking about."
-msgstr "«أعلى من الوقت المسجَّل بالضغطات» يعني أن الساعات المكتوبة أعلى بكثير من الوقت بين ضغطة «بدء العمل» وتقديم التقرير، بعد خصم فترات التوقف — ويستحق السؤال عنه."
+msgid "“Exceeds recorded time” means the hours entered are significantly higher than the time between the Start check-in and report submission, excluding pauses, and should be reviewed."
+msgstr "«يتجاوز الوقت المسجَّل» يعني أن الساعات المُدخلة أعلى بكثير من الوقت بين نقرة البدء وتقديم التقرير، مع استبعاد فترات التوقف، وينبغي مراجعتها."
 
 #, python-format
-msgid "“Well over estimate” means more than 50%% past the task’s estimated hours."
-msgstr "«تجاوز التقدير بكثير» يعني أكثر من 50%% فوق الساعات المقدرة للمهمة."
+msgid "“Significantly over estimate” means more than 50%% above the task's estimated hours."
+msgstr "«تجاوز التقدير بشكل ملحوظ» يعني تجاوز الساعات المقدَّرة للمهمة بأكثر من 50%%."
 
 msgid "← Back to active customers"
 msgstr "← العودة إلى العملاء النشطين"

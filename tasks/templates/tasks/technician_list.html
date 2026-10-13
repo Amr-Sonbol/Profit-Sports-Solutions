@@ -47,7 +47,7 @@
                     <th>{% translate "Reason" %}</th>
                     {% else %}
                     <th>{% translate "Professional skills" %}</th>
-                    <th>{% translate "90-day track" %}</th>
+                    <th>{% translate "90-day progress" %}</th>
                     {% endif %}
                     <th></th>
                 </tr>
@@ -74,18 +74,18 @@
                         </span>
                         {% endif %}
                         {% if row.certification.cardio_ready %}
-                        <span class="badge badge--muted">{% translate "Advanced-ready" %}</span>
+                        <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if row.ninety_day %}
                         {% if row.ninety_day.on_track %}
                         <span class="badge badge--status-completed">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                         </span>
                         {% else %}
                         <span class="badge badge--status-blocked">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                         </span>
                         {% endif %}
                         {% else %}
@@ -117,7 +117,7 @@
         </table>
     </div>
     {% elif search %}
-    <p class="empty-state">{% translate "No technicians match that search." %}</p>
+    <p class="empty-state">{% translate "No technicians match your search." %}</p>
     {% elif show_inactive %}
     <p class="empty-state">{% translate "No deactivated technicians in your country." %}</p>
     {% else %}

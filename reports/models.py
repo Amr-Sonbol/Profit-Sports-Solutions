@@ -34,7 +34,7 @@ class WorkReport(models.Model):
     signature_url = models.URLField(_('signature URL'), blank=True)
     signature_waived_reason = models.TextField(
         _('why there is no signature'), blank=True,
-        help_text=_('filled in when the customer was not available to sign'),
+        help_text=_('completed when the customer was not available to sign'),
     )
     submitted_at = models.DateTimeField(_('submitted at'))
 
@@ -113,7 +113,7 @@ class PartUsed(models.Model):
     unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2)
     currency_code = models.CharField(
         _('currency code'), max_length=3,
-        help_text=_('never store an amount without its currency'),
+        help_text=_('an amount must never be stored without its currency'),
     )
 
     class Meta:

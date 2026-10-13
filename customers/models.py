@@ -21,7 +21,7 @@ class Customer(models.Model):
     name = models.CharField(_('name'), max_length=150)
     code = models.CharField(
         _('customer code'), max_length=50, blank=True,
-        help_text=_('this company’s account/reference code, if it has one'),
+        help_text=_("this company's account or reference code, if any"),
     )
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
     language = models.CharField(
@@ -33,31 +33,32 @@ class Customer(models.Model):
     contact_email = models.EmailField(
         _('contact email'), blank=True,
         help_text=_(
-            'used for a site that has no contact of its own — the single-branch case, or a '
-            'chain where every site shares the same one'
+            'used for a site without its own contact: a single-branch customer, or a chain whose sites share one '
+            'contact'
         ),
     )
     shipping_address = models.TextField(
         _('shipping address'), blank=True,
-        help_text=_('where replacement parts should be delivered, if different from the site itself — a warehouse or head office'),
+        help_text=_('delivery address for replacement parts, if different from the site, such as a warehouse or '
+                    'head office'),
     )
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='customer', verbose_name=_('login account'),
-        help_text=_('one account covers every site under this customer — created by staff, never self-signup'),
+        help_text=_('one account covers every site under this customer; created by staff only, no self-registration'),
     )
     must_change_password = models.BooleanField(
         _('must change password'), default=False,
         help_text=_(
-            'set when staff creates the login with a temporary system-generated password — the '
-            'customer is walked through setting their own password and confirming their contact '
-            'details once, the first time they sign in, before reaching the rest of the portal',
+            'set when staff create the login with a temporary system-generated password; at first sign-in, the '
+            'customer is guided through setting their own password and confirming their contact details before '
+            'accessing the rest of the portal',
         ),
     )
     is_active = models.BooleanField(_('active'), default=True)
     deactivation_reason = models.CharField(
         _('deactivation reason'), max_length=255, blank=True,
-        help_text=_('why this customer was deactivated — contract ended, closed down, etc.'),
+        help_text=_('reason for deactivation, e.g. contract ended or business closed'),
     )
 
     class Meta:
@@ -95,11 +96,11 @@ class Site(models.Model):
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
     contact_email = models.EmailField(
         _('contact email'), blank=True,
-        help_text=_('where a feedback request goes after a report is approved'),
+        help_text=_('recipient of feedback requests after a report is approved'),
     )
     access_notes = models.TextField(
         _('access notes'), blank=True,
-        help_text=_('gate codes, best hours'),
+        help_text=_('gate codes, preferred visiting hours'),
     )
 
     class LocationSource(models.TextChoices):
@@ -168,7 +169,7 @@ class Asset(models.Model):
         verbose_name=_('brand'),
     )
     model_name = models.CharField(
-        _('model name'), max_length=150, help_text=_('free text from the plate'),
+        _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)

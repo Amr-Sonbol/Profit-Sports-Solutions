@@ -51,19 +51,19 @@
                         </a>
                         {% elif notification.kind == 'unscheduled_overdue' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
-                            {% translate "Not scheduled after 24 working hours" %}
+                            {% translate "Not scheduled within 24 working hours" %}
                             — {{ notification.task.site.name }}
                             <span class="muted">({{ notification.task.task_number }})</span>
                         </a>
                         {% elif notification.kind == 'escalation_pending' %}
                         <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
-                            {% translate "Escalated to you — decision needed" %}
+                            {% translate "Escalated to you — decision required" %}
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
                         {% elif notification.kind == 'internal_ticket' %}
                         <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
-                            {% translate "Internal ticket for you" %}
+                            {% translate "Internal ticket assigned to you" %}
                             — {{ notification.ticket.subject }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
@@ -85,7 +85,7 @@
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="empty-state">{% translate "Nothing new." %}</p>
+                <p class="empty-state">{% translate "No new notifications." %}</p>
                 {% endif %}
             </div>
         {% endif %}

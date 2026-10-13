@@ -30,7 +30,7 @@
 
         <h2>{% translate "Products" %}</h2>
         {% if products_locked %}
-        <p class="field__help">{% translate "This task is finished, so its products can only be changed by a manager or admin." %}</p>
+        <p class="field__help">{% translate "This task has been completed, so its products can only be changed by a manager or administrator." %}</p>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -56,7 +56,7 @@
             </table>
         </div>
         {% else %}
-        <p class="field__help">{% translate "For installations and loadings — the same items as on the delivery note, kept as structured data. Product code is required for a row to be saved. For an actual machine, fill in its own checklist: custom color per component, and what it got swapped for if the one ordered wasn't available." %}</p>
+        <p class="field__help">{% translate "For installations and loadings: the same items listed on the delivery note, recorded as structured data. A product code is required for a row to be saved. For each machine, complete its checklist: the custom color of each component and any substitute supplied if the ordered item was unavailable." %}</p>
         {{ product_formset.management_form }}
         {% if product_formset.non_form_errors %}
             <p class="flash flash--error">{{ product_formset.non_form_errors }}</p>

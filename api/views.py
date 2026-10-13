@@ -348,7 +348,7 @@ class MyTaskReportView(APIView):
             assignment.save(update_fields=['labour_hours'])
 
         lines = [
-            _('Report from %(name)s, sent after they were taken off this task:') % {
+            _('Report from %(name)s, submitted after they were removed from this task:') % {
                 'name': request.user.technician.full_name,
             },
             _('Findings: %(text)s') % {'text': request.data.get('findings') or '—'},
@@ -368,7 +368,8 @@ class MyTaskReportView(APIView):
 
         return Response({
             'status': task.status,
-            'message': _('You are no longer on this task, so your report was sent to the team as a message.'),
+            'message': _('You are no longer assigned to this task, so your report has been sent to the team as a '
+                         'message.'),
             'report': None,
         })
 

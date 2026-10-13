@@ -155,7 +155,7 @@ def customer_edit(request, pk):
             customer.must_change_password = True
             customer.save(update_fields=['user', 'must_change_password'])
             send_customer_login_email(request, customer, password)
-            messages.success(request, _('Login created and emailed to %(email)s.') % {'email': email})
+            messages.success(request, _('Login created and sent to %(email)s.') % {'email': email})
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
@@ -239,7 +239,7 @@ def _import_customers_csv(csv_file, country):
         if not customer_name or not site_name or not site_address:
             results.append({
                 **result, 'outcome': 'error',
-                'detail': _('customer_name, site_name, and site_address are required'),
+                'detail': _('customer_name, site_name and site_address are required'),
             })
             continue
 
@@ -247,7 +247,7 @@ def _import_customers_csv(csv_file, country):
         if segment not in valid_segments:
             results.append({
                 **result, 'outcome': 'error',
-                'detail': _('Unknown segment "%(segment)s" — use gym, hotel, club, or other') % {'segment': segment},
+                'detail': _('Unknown segment "%(segment)s". Please use gym, hotel, club or other.') % {'segment': segment},
             })
             continue
 
@@ -273,7 +273,7 @@ def _import_customers_csv(csv_file, country):
                 if Site.objects.filter(customer=customer, name__iexact=site_name).exists():
                     results.append({
                         **result, 'outcome': 'skipped',
-                        'detail': _('This customer already has a site with that name'),
+                        'detail': _('This customer already has a site with this name'),
                     })
                     continue
 
@@ -383,7 +383,7 @@ def portal_login(request):
             if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 return redirect(next_url)
             return redirect('customers:portal_home')
-        form.add_error(None, _("This isn't a customer account."))
+        form.add_error(None, _('This is not a customer account.'))
 
     return render(request, 'customers/portal_login.html', {'form': form, 'next': next_url})
 
@@ -413,7 +413,7 @@ def portal_first_login(request):
             request.user.set_password(form.cleaned_data['new_password1'])
             request.user.save(update_fields=['password'])
             update_session_auth_hash(request, request.user)
-            messages.success(request, _('All set — welcome!'))
+            messages.success(request, _('Your account is ready. Welcome.'))
             return redirect('customers:portal_home')
     else:
         form = CustomerFirstLoginForm(user=request.user, initial={
