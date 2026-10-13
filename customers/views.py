@@ -66,7 +66,7 @@ def customer_list(request):
 @login_required
 def all_customers(request):
     """Every customer in every country — a manager's combined roster, same
-    fixed floor as all_tasks/all_technicians. Reaching one from here opens
+    fixed floor as all_technicians. Reaching one from here opens
     the same customer_detail/edit screens, which allow manager-tier
     cross-country access for exactly this reason.
     """

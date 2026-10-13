@@ -41,6 +41,7 @@
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 <td>
                     {% if ticket.status == 'new' %}<span class="badge badge--status-new">{% translate "Open" %}</span>
+                    {% elif ticket.status == 'converted' %}<span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
                     {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
                 </td>
             </tr>

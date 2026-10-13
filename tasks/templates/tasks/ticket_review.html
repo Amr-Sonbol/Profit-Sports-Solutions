@@ -154,9 +154,9 @@
         </div>
     </form>
     {% if can_escalate %}
-    <p><a href="#escalation">{% translate "Getting complicated? Escalate to the Operations Manager" %}</a></p>
+    <p><a href="#escalation">{% blocktranslate with role=escalation_role %}Requires further attention? Escalate to the {{ role }}{% endblocktranslate %}</a></p>
     {% elif pending_escalation %}
-    <p class="field__help"><a href="#escalation">{% translate "Escalated — awaiting the Operations Manager’s decision" %}</a></p>
+    <p class="field__help"><a href="#escalation">{% blocktranslate with name=pending_escalation.escalated_to.full_name %}Escalated — awaiting a decision from {{ name }}{% endblocktranslate %}</a></p>
     {% endif %}
     {% elif can_manage %}
     <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
@@ -286,11 +286,11 @@
         </div>
         {% endfor %}
         <div class="field field--submit">
-            <button type="submit" class="button button--secondary">{% translate "Escalate to Operations Manager" %}</button>
+            <button type="submit" class="button button--secondary">{% blocktranslate with role=escalation_role %}Escalate to the {{ role }}{% endblocktranslate %}</button>
         </div>
     </form>
     {% else %}
-    <p class="empty-state">{% translate "No Operations Manager in this country yet — add one from Technicians to escalate tickets." %}</p>
+    <p class="empty-state">{% blocktranslate with role=escalation_role %}No active {{ role }} is available to receive escalations. Please add one from Technicians.{% endblocktranslate %}</p>
     {% endif %}
     {% endif %}
 </div>

@@ -464,9 +464,12 @@ class TicketNotification(models.Model):
 
 
 class TicketEscalation(models.Model):
-    """The support desk handing a ticket up to the Operations Manager, and
-    their decision (docs: ticket_escalation). `reason` and `decision_note`
-    are internal; only `customer_message` is ever shown to the customer.
+    """One step up the escalation chain (Country Support Manager ->
+    Technical Support Manager -> Operations Manager), and its outcome
+    (docs: ticket_escalation). A step passed on to the next level ends as
+    FORWARDED, with the next step as its own row. `reason` and
+    `decision_note` are internal; only `customer_message` is ever shown to
+    the customer.
     """
 
     class Decision(models.TextChoices):
@@ -474,6 +477,7 @@ class TicketEscalation(models.Model):
         APPROVED = 'approved', _('Approved')
         REJECTED = 'rejected', _('Rejected')
         INSTRUCTIONS = 'instructions', _('Instructions given')
+        FORWARDED = 'forwarded', _('Forwarded to the next level')
 
     ticket = models.ForeignKey(
         CustomerTicket, on_delete=models.CASCADE, related_name='escalations', verbose_name=_('ticket'),

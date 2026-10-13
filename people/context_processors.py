@@ -13,8 +13,8 @@ def notification_bell(request):
     addressed to this specific technician. The first two halves are a
     shared inbox, gated by capability and cleared for everyone the
     moment anyone with that same capability opens the thing: tickets on
-    manage_tickets (today, only Admin and Technical Support Manager),
-    tasks on is_manager_tier. Task messages are different — real
+    manage_tickets (today, Technical Support Manager, Operations Manager
+    and Admin), tasks on is_manager_tier. Task messages are different — real
     individuals are named (see TaskMessageRecipient), so every technician
     checks their own row regardless of role, and it only clears once
     they personally open that task. Country-scoped like everything else
@@ -53,7 +53,7 @@ def notification_bell(request):
     items += [
         {'kind': 'escalation_pending', 'created_at': escalation.escalated_at, 'ticket': escalation.ticket}
         for escalation in TicketEscalation.objects.filter(
-            escalated_to=technician, decision=TicketEscalation.Decision.PENDING, ticket__country=country,
+            escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
         ).select_related('ticket')
     ]
     from tasks.alarms import overdue_unscheduled_tasks
@@ -140,14 +140,12 @@ def nav_pages(technician, allowed):
         add('tasks:machine_list', _('Machines'), 'activity')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:
         add('tasks:ticket_list', _('Tickets'), 'inbox')
-        add('tasks:all_tickets', _('All tickets'), 'archive')
     if RolePermission.Permission.OPEN_TICKETS in allowed:
         add('tasks:ticket_open', _('New ticket'), 'file-plus')
     # Anyone in the office can be handed a stock request or vendor follow-up.
     if technician.role != technician.Role.TECHNICIAN:
         add('tasks:internal_tickets', _('Internal tickets'), 'list')
     if technician.is_manager_tier:
-        add('tasks:all_tasks', _('All tasks'), 'layers')
         add('tasks:all_week', _('All week'), 'calendar')
         add('tasks:all_technicians', _('All technicians'), 'users')
         add('tasks:monthly_report', _('Monthly report'), 'bar-chart')

@@ -1548,6 +1548,43 @@ class TaskListTests(TaskTestCase):
         self.assertNotIn('Cairo Gym', [c.name for c in response.context['customers']])
         self.assertNotIn('Nour Cairo', [t.full_name for t in response.context['technicians']])
 
+    def _make_other_country_task(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        return self._make_task('EG-0001', site=other_site)
+
+    def _login_manager(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+
+    def test_manager_can_list_every_country(self):
+        self._make_task('AE-0001')
+        self._make_other_country_task()
+        self._login_manager()
+
+        response = self.client.get('/tasks/', {'status': 'all'})
+        self.assertEqual([t.task_number for t in response.context['page_obj']], ['AE-0001'])
+
+        response = self.client.get('/tasks/', {'status': 'all', 'country': 'all'})
+        self.assertEqual(
+            sorted(t.task_number for t in response.context['page_obj']), ['AE-0001', 'EG-0001'],
+        )
+        self.assertContains(response, 'Egypt')
+
+    def test_supervisor_cannot_list_every_country(self):
+        self._make_other_country_task()
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/', {'status': 'all', 'country': 'all'})
+        self.assertNotContains(response, 'EG-0001')
+        self.assertNotContains(response, 'All countries')
+
 
 class TaskCreateTests(TaskTestCase):
     def setUp(self):
@@ -2037,6 +2074,22 @@ class TicketListTests(TaskTestCase):
         response = self.client.get('/tasks/tickets/', {'status': 'all'})
         self.assertNotContains(response, 'Cairo Gym')
 
+    def test_all_countries_shows_other_country_tickets(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        CustomerTicket.objects.create(
+            country=other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Nour', contact_phone='0100000000',
+            description='Something broke.', submitted_at=timezone.now(),
+        )
+
+        self.client.login(username='support1', password='pass12345')
+        response = self.client.get('/tasks/tickets/', {'status': 'all', 'country': 'all'})
+        self.assertContains(response, 'Cairo Gym')
+        self.assertContains(response, 'Fitness First')
+        self.assertContains(response, 'Egypt')
+
     def test_search_by_pak_reference_number(self):
         self.ticket.pak_reference_number = 'PAK-99001'
         self.ticket.save(update_fields=['pak_reference_number'])
@@ -2106,6 +2159,89 @@ class TicketReviewTests(TaskTestCase):
 
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(f'/tasks/tickets/{other_ticket.pk}/')
+        self.assertEqual(response.status_code, 404)
+
+    def _make_other_country_ticket(self):
+        other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        return CustomerTicket.objects.create(
+            country=other_country, ticket_number='EG-T0001', company_name='Cairo Gym', site_description='Zamalek',
+            contact_name='Nour', contact_phone='0100000000',
+            description='Something broke.', submitted_at=timezone.now(),
+        )
+
+    def _make_staff(self, username, role):
+        user = User.objects.create_user(username, password='pass12345')
+        Technician.objects.create(
+            user=user, country=self.country, full_name=username.title(),
+            language='en', role=role, employment_type='staff',
+        )
+        return user
+
+    def test_support_manager_opens_and_dismisses_other_country_ticket(self):
+        other_ticket = self._make_other_country_ticket()
+        self.client.login(username='support1', password='pass12345')
+
+        response = self.client.get(f'/tasks/tickets/{other_ticket.pk}/')
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            f'/tasks/tickets/{other_ticket.pk}/', {'action': 'dismiss', 'dismissal_reason': 'Duplicate report.'},
+        )
+        self.assertEqual(response.status_code, 302)
+        other_ticket.refresh_from_db()
+        self.assertEqual(other_ticket.status, CustomerTicket.Status.DISMISSED)
+
+    def test_operations_manager_has_the_whole_ticket_desk(self):
+        other_ticket = self._make_other_country_ticket()
+        self._make_staff('ops1', Technician.Role.OPERATIONS_MANAGER)
+        self.client.login(username='ops1', password='pass12345')
+
+        self.assertEqual(self.client.get('/tasks/tickets/').status_code, 200)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(self.client.get(f'/tasks/tickets/{other_ticket.pk}/').status_code, 200)
+
+    def test_plain_manager_cannot_open_tickets(self):
+        other_ticket = self._make_other_country_ticket()
+        self._make_staff('manager1', Technician.Role.MANAGER)
+        self.client.login(username='manager1', password='pass12345')
+
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.get(f'/tasks/tickets/{other_ticket.pk}/').status_code, 403)
+
+    def test_support_manager_converts_other_country_ticket_without_switching(self):
+        other_ticket = self._make_other_country_ticket()
+        other_customer = Customer.objects.create(country=other_ticket.country, name='Cairo Gym', segment='gym')
+        other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
+        # Converting needs only manage_tickets, whatever create_tasks says.
+        RolePermission.objects.filter(
+            role=Technician.Role.SUPPORT_MANAGER, permission=RolePermission.Permission.CREATE_TASKS,
+        ).update(allowed=False)
+        self.client.login(username='support1', password='pass12345')
+
+        create_url = f'/tasks/new/?ticket={other_ticket.pk}'
+        response = self.client.get(create_url)
+        self.assertEqual(response.status_code, 200)
+        sites = list(response.context['form'].fields['site'].queryset)
+        self.assertIn(other_site, sites)
+        self.assertNotIn(self.site, sites)
+
+        response = self.client.post(create_url, {
+            'site': other_site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Something broke.',
+        })
+        self.assertEqual(response.status_code, 302)
+        other_ticket.refresh_from_db()
+        self.assertEqual(other_ticket.status, CustomerTicket.Status.CONVERTED)
+        self.assertEqual(other_ticket.task.site, other_site)
+
+    def test_supervisor_still_cannot_convert_other_country_ticket(self):
+        other_ticket = self._make_other_country_ticket()
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(f'/tasks/new/?ticket={other_ticket.pk}')
         self.assertEqual(response.status_code, 404)
 
     def test_dismiss_requires_a_reason(self):
@@ -2737,19 +2873,6 @@ class NotificationBellTests(TaskTestCase):
         self.assertEqual(response.context['unseen_notification_count'], 2)
         kinds = {item['kind'] for item in response.context['unseen_notifications']}
         self.assertIn('new_task', kinds)
-
-    def test_plain_manager_does_not_see_an_all_tickets_link(self):
-        # Found live: this link used to sit under is_manager_tier instead
-        # of manage_tickets, so a plain manager saw a link to a screen
-        # that then 403'd them.
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.get('/tasks/')
-        self.assertNotContains(response, '/tasks/tickets/all/')
-
-    def test_support_manager_sees_the_all_tickets_link(self):
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.get('/tasks/tickets/')
-        self.assertContains(response, '/tasks/tickets/all/')
 
     def test_supervisor_gets_no_bell_context_at_all(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -4992,20 +5115,19 @@ class HomeRedirectTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         urls = self._tile_urls(self.client.get('/'))
         self.assertEqual(urls[:4], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/', '/tasks/dashboard/'])
-        for url in ('/tasks/all/', '/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
+        for url in ('/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
             self.assertNotIn(url, urls)
 
     def test_supervisor_sees_tasks_but_not_manager_pages(self):
         self.client.login(username='supervisor1', password='pass12345')
         urls = self._tile_urls(self.client.get('/'))
         self.assertIn('/tasks/', urls)
-        self.assertNotIn('/tasks/all/', urls)
+        self.assertNotIn('/tasks/countries/', urls)
         self.assertNotIn('/tasks/roles/', urls)
 
     def test_manager_sees_manager_pages_but_not_admin_ones(self):
         self._make_staff('manager1', Technician.Role.MANAGER)
         urls = self._tile_urls(self.client.get('/'))
-        self.assertIn('/tasks/all/', urls)
         self.assertIn('/tasks/countries/', urls)
         self.assertNotIn('/tasks/my-week/', urls)
         self.assertNotIn('/tasks/roles/', urls)
@@ -6292,37 +6414,52 @@ class TicketEscalationTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertFalse(response.context['can_decide'])
 
-    def test_ops_manager_cannot_open_tickets_not_escalated_to_them(self):
+    def test_ops_manager_opens_tickets_not_escalated_to_them(self):
+        # The support manager's own manager has the whole ticket desk, not
+        # only what's escalated to them.
         self.client.login(username='ops1', password='pass12345')
-        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
 
-    def test_ops_manager_cannot_use_the_desk_actions(self):
-        self._escalate()
+    def test_ops_manager_can_use_the_desk_actions(self):
         self.client.login(username='ops1', password='pass12345')
         self.client.post(self.url, {'action': 'dismiss', 'dismissal_reason': 'x'})
         self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.DISMISSED)
 
-    def test_cannot_escalate_to_someone_in_another_country_or_yourself(self):
+    def test_escalates_only_one_level_up_never_to_yourself(self):
+        other_support = Technician.objects.create(
+            user=User.objects.create_user('support2', password='pass12345'), country=self.country,
+            full_name='Other Support', language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self._escalate(escalated_to=self.support.pk)
+        self._escalate(escalated_to=other_support.pk)
+        self.assertFalse(TicketEscalation.objects.exists())
+
+    def test_operations_manager_in_another_country_can_still_be_reached(self):
+        # The Operations Manager covers every country, wherever they're based.
         from reference.models import Country
 
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
-        cairo_ops_user = User.objects.create_user('ops2', password='pass12345')
         cairo_ops = Technician.objects.create(
-            user=cairo_ops_user, country=other_country, full_name='Cairo Ops',
-            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+            user=User.objects.create_user('ops2', password='pass12345'), country=other_country,
+            full_name='Cairo Ops', language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
         )
         self._escalate(escalated_to=cairo_ops.pk)
-        self._escalate(escalated_to=self.support.pk)
-        self.assertFalse(TicketEscalation.objects.exists())
+        self.assertEqual(TicketEscalation.objects.get().escalated_to, cairo_ops)
+
+    def test_operations_manager_is_the_top_of_the_chain(self):
+        self.client.login(username='ops1', password='pass12345')
+        self.assertFalse(self.client.get(self.url).context['can_escalate'])
 
     def test_customer_sees_the_role_and_message_but_nothing_internal(self):
         self._escalate()
+        self.client.get(self.url)  # shows (and clears) the staff confirmation
         self.client.login(username='fitnessfirst_portal', password='pass12345')
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
-        self.assertContains(response, 'Operations Manager')
+        self.assertContains(response, 'management team')
+        self.assertNotContains(response, 'Operations Manager')
         self.assertContains(response, 'We are reviewing a replacement for you.')
         self.assertNotContains(response, 'Mohamed Fahmy')
         self.assertNotContains(response, 'free replacement outside warranty')
@@ -6351,6 +6488,133 @@ class TicketEscalationTests(TaskTestCase):
         self._escalate()
         response = self.client.get('/tasks/tickets/')
         self.assertTrue(response.context['tickets'][0].is_escalated)
+
+
+class CountrySupportManagerTests(TaskTestCase):
+    """A Country Support Manager runs one country's ticket desk, and the
+    strict escalation chain above them: Country Support Manager ->
+    Technical Support Manager -> Operations Manager."""
+
+    def setUp(self):
+        super().setUp()
+        self.other_country = Country.objects.create(
+            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
+        )
+        self.country_support = self._staff('csm1', Technician.Role.COUNTRY_SUPPORT, self.country)
+        self.support = self._staff('support1', Technician.Role.SUPPORT_MANAGER, self.other_country, 'tsm@example.com')
+        self.ops = self._staff('ops1', Technician.Role.OPERATIONS_MANAGER, self.other_country, 'ops@example.com')
+        self.ticket = self._ticket(self.country, 'AE-T0001', 'Fitness First')
+        self.other_ticket = self._ticket(self.other_country, 'EG-T0001', 'Cairo Gym')
+        self.url = f'/tasks/tickets/{self.ticket.pk}/'
+
+    def _staff(self, username, role, country, email=''):
+        return Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345', email=email), country=country,
+            full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+
+    def _ticket(self, country, number, company):
+        return CustomerTicket.objects.create(
+            country=country, ticket_number=number, company_name=company, site_description='Main Branch',
+            contact_name='Ali', contact_phone='0500000000', description='Treadmill belt slipping.',
+            submitted_at=timezone.now(),
+        )
+
+    def _escalate(self, username, to, **extra):
+        self.client.login(username=username, password='pass12345')
+        return self.client.post(self.url, {
+            'action': 'escalate', 'escalated_to': to.pk, 'reason': 'Out-of-warranty replacement requested',
+            'customer_message': 'We are reviewing this for you.', **extra,
+        })
+
+    def test_handles_own_country_tickets_only(self):
+        self.client.login(username='csm1', password='pass12345')
+        response = self.client.get('/tasks/tickets/', {'status': 'all', 'country': 'all'})
+        self.assertContains(response, 'Fitness First')
+        self.assertNotContains(response, 'Cairo Gym')
+        self.assertFalse(response.context['can_view_all_countries'])
+        self.assertEqual(self.client.get(f'/tasks/tickets/{self.other_ticket.pk}/').status_code, 404)
+        self.assertEqual(self.client.get(f'/tasks/new/?ticket={self.other_ticket.pk}').status_code, 404)
+
+    def test_converts_own_country_ticket_into_a_task(self):
+        self.client.login(username='csm1', password='pass12345')
+        create_url = f'/tasks/new/?ticket={self.ticket.pk}'
+        self.assertEqual(self.client.get(create_url).status_code, 200)
+        response = self.client.post(create_url, {
+            'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Replace the belt.',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CONVERTED)
+
+    def test_gets_the_new_ticket_alert_for_their_country(self):
+        self.client.login(username='csm1', password='pass12345')
+        TicketNotification.objects.create(ticket=self.ticket, kind='new_ticket', created_at=timezone.now())
+        TicketNotification.objects.create(ticket=self.other_ticket, kind='new_ticket', created_at=timezone.now())
+        tickets = [item['ticket'] for item in self.client.get('/tasks/tickets/').context['unseen_notifications']]
+        self.assertEqual(tickets, [self.ticket])
+
+    def test_escalates_only_to_the_technical_support_manager(self):
+        self._escalate('csm1', self.ops)
+        self.assertFalse(TicketEscalation.objects.exists())
+
+        response = self._escalate('csm1', self.support)
+        escalation = TicketEscalation.objects.get()
+        # Reachable even though they're based in another country.
+        self.assertEqual(escalation.escalated_to, self.support)
+        self.assertEqual(mail.outbox[-1].to, ['tsm@example.com'])
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+
+    def test_technical_support_manager_decides_it(self):
+        self._escalate('csm1', self.support)
+        self.client.login(username='support1', password='pass12345')
+        page = self.client.get(self.url)
+        self.assertTrue(page.context['can_decide'])
+        self.assertEqual(page.context['unseen_notifications'][0]['kind'], 'escalation_pending')
+        self.client.post(self.url, {
+            'action': 'decide_escalation', 'decision': 'approved', 'decision_note': 'Approve, goodwill.',
+        })
+        self.assertEqual(TicketEscalation.objects.get().decision, TicketEscalation.Decision.APPROVED)
+
+    def test_technical_support_manager_forwards_it_to_the_operations_manager(self):
+        self._escalate('csm1', self.support)
+        self._escalate('support1', self.ops, customer_message='')
+
+        first, second = TicketEscalation.objects.order_by('escalated_at', 'pk')
+        self.assertEqual(first.decision, TicketEscalation.Decision.FORWARDED)
+        self.assertIsNotNone(first.decided_at)
+        self.assertEqual(second.escalated_by, self.support)
+        self.assertEqual(second.escalated_to, self.ops)
+        self.assertEqual(second.decision, TicketEscalation.Decision.PENDING)
+        self.assertEqual(mail.outbox[-1].to, ['ops@example.com'])
+
+        self.client.login(username='ops1', password='pass12345')
+        page = self.client.get(self.url)
+        self.assertTrue(page.context['can_decide'])
+        self.assertFalse(page.context['can_escalate'])
+
+    def test_forwarded_is_not_a_choice_when_deciding(self):
+        from tasks.forms import DecideEscalationForm
+        choices = [value for value, label in DecideEscalationForm().fields['decision'].choices]
+        self.assertNotIn(TicketEscalation.Decision.FORWARDED, choices)
+
+    def test_customer_sees_both_messages_but_no_internal_titles(self):
+        self._escalate('csm1', self.support)
+        self._escalate('support1', self.ops, customer_message='A manager is reviewing your request.')
+        self.client.get(self.url)  # shows (and clears) the staff confirmation
+        self.customer.user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.ticket.customer = self.customer
+        self.ticket.save(update_fields=['customer'])
+        self.client.login(username='fitnessfirst_portal', password='pass12345')
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertContains(response, 'We are reviewing this for you.')
+        self.assertContains(response, 'A manager is reviewing your request.')
+        self.assertNotContains(response, 'reviewed your request')
+        self.assertNotContains(response, 'Technical Support Manager')
+        self.assertNotContains(response, 'Operations Manager')
 
 
 class TechnicianTripTests(TaskTestCase):
@@ -6862,8 +7126,10 @@ class StaffOpenedTicketTests(TaskTestCase):
     def test_operations_manager_can_open_one_too(self):
         self.client.login(username='ops1', password='pass12345')
         response = self._customer_ticket()
-        self.assertRedirects(response, '/', fetch_redirect_response=False)
-        self.assertEqual(CustomerTicket.objects.get().opened_by, self.ops.user)
+        ticket = CustomerTicket.objects.get()
+        # They're on the ticket desk too, so they land on its review page.
+        self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
+        self.assertEqual(ticket.opened_by, self.ops.user)
 
     def test_supervisor_cannot_open_tickets(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -6904,8 +7170,60 @@ class StaffOpenedTicketTests(TaskTestCase):
 
     def test_someone_not_involved_cannot_see_it(self):
         ticket = self._stock_request()
-        self.client.login(username='ops1', password='pass12345')
+        self.client.login(username='supervisor1', password='pass12345')
         self.assertEqual(self.client.get(f'/tasks/tickets/internal/{ticket.pk}/').status_code, 404)
+
+    def test_every_manager_sees_every_internal_ticket(self):
+        ticket = self._stock_request()
+        self._staff('manager1', Technician.Role.MANAGER)
+        for username in ('manager1', 'ops1'):
+            with self.subTest(username=username):
+                self.client.login(username=username, password='pass12345')
+                self.assertIn(ticket, self.client.get('/tasks/tickets/internal/?status=all').context['tickets'])
+                self.assertEqual(self.client.get(f'/tasks/tickets/internal/{ticket.pk}/').status_code, 200)
+
+    def test_warehouse_manager_opens_internal_but_not_customer_tickets(self):
+        self.client.login(username='warehouse1', password='pass12345')
+        response = self.client.get('/tasks/tickets/open/?kind=customer')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotEqual(response.context['kind'], 'customer')
+        self.assertNotIn('customer', [value for value, label in response.context['kinds']])
+
+        with patch('tasks.views.push_in_their_language'):
+            self.client.post('/tasks/tickets/open/?kind=stock', {
+                'subject': 'Belts for Marina', 'description': 'Ten of them', 'assigned_to': self.support.pk,
+            })
+        ticket = CustomerTicket.objects.get()
+        self.assertEqual(ticket.kind, 'stock')
+        self.assertEqual(ticket.opened_by, self.warehouse.user)
+
+    def test_any_manager_converts_an_internal_ticket_into_a_task(self):
+        ticket = self._stock_request()
+        self.client.login(username='warehouse1', password='pass12345')
+        page = self.client.get(f'/tasks/tickets/internal/{ticket.pk}/')
+        self.assertContains(page, f'/tasks/new/?ticket={ticket.pk}')
+
+        create_url = f'/tasks/new/?ticket={ticket.pk}'
+        form = self.client.get(create_url).context['form']
+        self.assertEqual(form['source'].initial, Task.Source.INTERNAL)
+        response = self.client.post(create_url, {
+            'site': self.site.pk,
+            'priority': Task.Priority.NORMAL, 'source': Task.Source.INTERNAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Fit the new belts.',
+        })
+        self.assertEqual(response.status_code, 302)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.status, CustomerTicket.Status.CONVERTED)
+        self.assertEqual(ticket.task.site, self.site)
+        # Stays internal — never linked to a customer's portal.
+        self.assertIsNone(ticket.customer)
+        self.assertNotContains(self.client.get(f'/tasks/tickets/internal/{ticket.pk}/'), 'Convert to task')
+
+    def test_supervisor_cannot_convert_an_internal_ticket(self):
+        ticket = self._stock_request()
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get(f'/tasks/new/?ticket={ticket.pk}').status_code, 404)
 
     def test_vendor_follow_up_needs_the_vendor(self):
         self.client.login(username='support1', password='pass12345')

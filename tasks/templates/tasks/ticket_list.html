@@ -47,6 +47,15 @@
         <label for="filter-date">{% translate "Date submitted" %}</label>
         <input type="date" id="filter-date" name="date" value="{{ date }}">
     </div>
+    {% if can_view_all_countries %}
+    <div class="field">
+        <label for="filter-country">{% translate "Country" %}</label>
+        <select id="filter-country" name="country">
+            <option value="">{{ active_country.display_name }}</option>
+            <option value="all" {% if all_countries %}selected{% endif %}>{% translate "All countries" %}</option>
+        </select>
+    </div>
+    {% endif %}
     <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
 
@@ -56,6 +65,7 @@
             <tr>
                 <th>{% translate "Ticket" %}</th>
                 <th>{% translate "Submitted" %}</th>
+                {% if all_countries %}<th>{% translate "Country" %}</th>{% endif %}
                 <th>{% translate "Company" %}</th>
                 <th>{% translate "Site / location" %}</th>
                 <th>{% translate "Contact" %}</th>
@@ -68,6 +78,7 @@
             <tr>
                 <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                {% if all_countries %}<td>{{ ticket.country.display_name }}</td>{% endif %}
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
@@ -89,7 +100,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="6">
+                <td colspan="8">
                     <p class="empty-state">{% translate "No tickets match this filter." %}</p>
                 </td>
             </tr>

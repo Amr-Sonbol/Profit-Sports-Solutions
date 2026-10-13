@@ -47,6 +47,7 @@ class Technician(models.Model):
         SUPERVISOR = 'supervisor', _('Supervisor')
         MANAGER = 'manager', _('Manager')
         SUPPORT_MANAGER = 'support_manager', _('Technical Support Manager')
+        COUNTRY_SUPPORT = 'country_support', _('Country Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
         OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
         ADMIN = 'admin', _('Admin')
@@ -149,6 +150,24 @@ class Technician(models.Model):
         """
         return self.role in (self.Role.MANAGER, self.Role.ADMIN)
 
+    @property
+    def is_any_manager(self):
+        """Every manager role, not just the manager tier — who can see,
+        open and convert any internal ticket in their country.
+        """
+        return self.role in (
+            self.Role.MANAGER, self.Role.SUPPORT_MANAGER, self.Role.COUNTRY_SUPPORT,
+            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+        )
+
+    @property
+    def escalates_to_role(self):
+        """The one role this person escalates a ticket to — a strict chain,
+        no skipping levels: Country Support Manager -> Technical Support
+        Manager -> Operations Manager, who decides. None at the top.
+        """
+        return ESCALATION_CHAIN.get(self.role)
+
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login
         account (if any) in lockstep, so a deactivated technician can't
@@ -161,6 +180,12 @@ class Technician(models.Model):
         if self.user_id is not None and self.user.is_active != is_active:
             self.user.is_active = is_active
             self.user.save(update_fields=['is_active'])
+
+
+ESCALATION_CHAIN = {
+    Technician.Role.COUNTRY_SUPPORT: Technician.Role.SUPPORT_MANAGER,
+    Technician.Role.SUPPORT_MANAGER: Technician.Role.OPERATIONS_MANAGER,
+}
 
 
 class RolePermission(models.Model):
@@ -187,6 +212,7 @@ class RolePermission(models.Model):
         DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
         MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')
         OPEN_TICKETS = 'open_tickets', _('Open tickets for a customer (phone, WhatsApp, email)')
+        TICKETS_ALL_COUNTRIES = 'tickets_all_countries', _('Handle tickets in all countries')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)

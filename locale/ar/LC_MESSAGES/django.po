@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-09 18:54+0000\n"
+"POT-Creation-Date: 2026-10-13 22:18+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -390,14 +390,11 @@ msgstr "تم كل شيء — أهلاً بك!"
 msgid "All shipping companies"
 msgstr "كل شركات الشحن"
 
-msgid "All tasks"
-msgstr "كل المهام"
+msgid "All staff accounts are created here. Please select the role first: technician, supervisor, manager, Country Support Manager, Technical Support Manager, Warehouse Manager, Operations Manager or administrator."
+msgstr "يتم إنشاء جميع حسابات الموظفين من هنا. يرجى اختيار الدور أولاً: فني، أو مشرف، أو مدير، أو مدير الدعم في الدولة، أو مدير الدعم الفني، أو مدير المستودع، أو مدير العمليات، أو مسؤول النظام."
 
 msgid "All technicians"
 msgstr "كل الفنيين"
-
-msgid "All tickets"
-msgstr "كل الطلبات"
 
 msgid "All week"
 msgstr "الأسبوع بالكامل"
@@ -799,6 +796,9 @@ msgstr "الدول"
 msgid "Country"
 msgstr "الدولة"
 
+msgid "Country Support Manager"
+msgstr "مدير الدعم في الدولة"
+
 msgid "Country added."
 msgstr "تمت إضافة الدولة."
 
@@ -834,6 +834,10 @@ msgstr "يتم إنشاء هذه المهمة من طلب عميل — %(company
 #, python-format
 msgid "Creating this task from a customer ticket — %(company)s. The site fields below are hints from what they typed; pick or create the real site to match."
 msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. حقول الموقع أدناه هي تلميحات مما كتبوه؛ اختر الموقع الفعلي أو أنشئه ليطابقه."
+
+#, python-format
+msgid "Creating this task from internal ticket %(number)s — %(subject)s. Pick the site the job is for."
+msgstr "يتم إنشاء هذه المهمة من التذكرة الداخلية %(number)s — %(subject)s. اختر الموقع الذي يخصه العمل."
 
 msgid "Currency"
 msgstr "العملة"
@@ -915,9 +919,6 @@ msgstr "لوحة التحكم"
 
 msgid "Date"
 msgstr "التاريخ"
-
-msgid "Date scheduled"
-msgstr "تاريخ الجدولة"
 
 msgid "Date submitted"
 msgstr "تاريخ الإرسال"
@@ -1099,6 +1100,9 @@ msgstr "رفض"
 msgid "Dismissed"
 msgstr "مرفوضة"
 
+msgid "Displayed on the customer's ticket page under “escalated to our management team”."
+msgstr "يظهر في صفحة تذكرة العميل تحت «مصعَّدة إلى فريق الإدارة لدينا»."
+
 msgid "Document"
 msgstr "مستند"
 
@@ -1208,20 +1212,23 @@ msgstr "خطأ"
 msgid "Escalate to"
 msgstr "التصعيد إلى"
 
-msgid "Escalate to Operations Manager"
-msgstr "التصعيد إلى مدير العمليات"
+#, python-format
+msgid "Escalate to the %(role)s"
+msgstr "التصعيد إلى %(role)s"
 
 msgid "Escalated"
 msgstr "مُصعّدة"
 
-msgid "Escalated to the Operations Manager."
-msgstr "تم التصعيد إلى مدير العمليات."
+#, python-format
+msgid "Escalated to %(name)s."
+msgstr "تم التصعيد إلى %(name)s."
 
 msgid "Escalated to you — decision needed"
 msgstr "مُصعّدة إليك — مطلوب قرار"
 
-msgid "Escalated — awaiting the Operations Manager’s decision"
-msgstr "مُصعّدة — بانتظار قرار مدير العمليات"
+#, python-format
+msgid "Escalated — awaiting a decision from %(name)s"
+msgstr "مصعَّدة — بانتظار قرار من %(name)s"
 
 msgid "Escalation"
 msgstr "التصعيد"
@@ -1254,17 +1261,8 @@ msgstr "كل الدول مجتمعة — هذا هو الرقم الذي ترا�
 msgid "Every country's schedule at once. Doesn't follow the country switcher above."
 msgstr "جدول كل الدول دفعة واحدة. لا يتبع مبدّل الدولة أعلاه."
 
-msgid "Every country's tickets at once. Doesn't follow the country switcher above."
-msgstr "طلبات كل الدول دفعة واحدة. لا يتبع مبدّل الدولة أعلاه."
-
 msgid "Every open task has a day."
 msgstr "كل مهمة مفتوحة لها يوم."
-
-msgid "Every staff account is added here — choose the role first: technician, supervisor, manager, Technical Support Manager, Warehouse Manager, Operations Manager or admin."
-msgstr "تُضاف جميع حسابات الموظفين من هنا — اختر الدور أولًا: فني، مشرف، مدير، مدير الدعم الفني، مدير المستودع، مدير العمليات أو مسؤول النظام."
-
-msgid "Every task in every country — for tracking, inspection, and audit. Doesn't follow the country switcher above."
-msgstr "كل مهمة في كل دولة — للتتبع والفحص والتدقيق. لا يتبع مبدّل الدولة أعلاه."
 
 msgid "Evidence"
 msgstr "الدليل"
@@ -1336,6 +1334,9 @@ msgstr "للتركيبات والتحميلات — نفس العناصر الم
 msgid "Forgot your password?"
 msgstr "هل نسيت كلمة المرور؟"
 
+msgid "Forwarded to the next level"
+msgstr "أُحيلت إلى المستوى الأعلى"
+
 msgid "Frame color"
 msgstr "لون الإطار"
 
@@ -1350,9 +1351,6 @@ msgstr "الجمعة"
 
 msgid "From customer"
 msgstr "من العميل"
-
-msgid "Getting complicated? Escalate to the Operations Manager"
-msgstr "أصبحت الحالة معقدة؟ صعّدها إلى مدير العمليات"
 
 msgid "Go to home"
 msgstr "الذهاب إلى الصفحة الرئيسية"
@@ -1390,6 +1388,9 @@ msgstr "تم التسليم."
 #, python-format
 msgid "Handed to %(name)s."
 msgstr "سُلّمت إلى %(name)s."
+
+msgid "Handle tickets in all countries"
+msgstr "معالجة التذاكر في جميع الدول"
 
 msgid "Helped on"
 msgstr "ساعد في"
@@ -1780,6 +1781,9 @@ msgstr "الاسم"
 msgid "Name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
+msgid "Needs a job on site?"
+msgstr "هل تحتاج إلى عمل في الموقع؟"
+
 msgid "Negligence flags"
 msgstr "بلاغات الإهمال"
 
@@ -1866,8 +1870,9 @@ msgstr "الأسبوع القادم"
 msgid "No"
 msgstr "لا"
 
-msgid "No Operations Manager in this country yet — add one from Technicians to escalate tickets."
-msgstr "لا يوجد مدير عمليات في هذه الدولة بعد — أضف واحدًا من صفحة الفنيين لتتمكن من تصعيد التذاكر."
+#, python-format
+msgid "No active %(role)s is available to receive escalations. Please add one from Technicians."
+msgstr "لا يتوفر %(role)s نشط لاستلام التصعيدات. يرجى إضافته من قسم الفنيين."
 
 msgid "No active customers."
 msgstr "لا يوجد عملاء نشطون."
@@ -2164,8 +2169,8 @@ msgid "Other internal"
 msgstr "داخلية أخرى"
 
 #, python-format
-msgid "Our Operations Manager reviewed your request on %(when)s. Our team will follow up with you here."
-msgstr "راجع مدير العمليات لدينا طلبك في %(when)s. سيتابع فريقنا معك هنا."
+msgid "Our management team reviewed your request on %(when)s. We will follow up with you here."
+msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(when)s، وسنتابع معكم من هنا."
 
 msgid "Outcome"
 msgstr "النتيجة"
@@ -2496,6 +2501,10 @@ msgstr "مطلوب لهذا النوع من المهام."
 msgid "Required skill"
 msgstr "المهارة المطلوبة"
 
+#, python-format
+msgid "Requires further attention? Escalate to the %(role)s"
+msgstr "هل يتطلب الأمر مزيداً من الاهتمام؟ صعِّد إلى %(role)s"
+
 msgid "Rescheduled"
 msgstr "أُعيد جدولته"
 
@@ -2723,9 +2732,6 @@ msgstr "عرض الفنيين الموقوفين"
 msgid "Show tasks"
 msgstr "عرض المهام"
 
-msgid "Shown on the customer’s ticket page, under “escalated to our Operations Manager”."
-msgstr "تظهر في صفحة تذكرة العميل، تحت «تم التصعيد إلى مدير العمليات»."
-
 msgid "Sick"
 msgstr "مرض"
 
@@ -2877,9 +2883,6 @@ msgstr "رقم المهمة"
 #, python-format
 msgid "Task %(number)s created."
 msgstr "تم إنشاء المهمة %(number)s."
-
-msgid "Task ID"
-msgstr "رقم المهمة"
 
 msgid "Task cancelled"
 msgstr "أُلغيت المهمة"
@@ -3460,8 +3463,8 @@ msgid "Your password has been set. You can log in now."
 msgstr "تم تعيين كلمة المرور. يمكنك تسجيل الدخول الآن."
 
 #, python-format
-msgid "Your request was escalated to our Operations Manager for review on %(when)s."
-msgstr "تم تصعيد طلبك إلى مدير العمليات لدينا للمراجعة في %(when)s."
+msgid "Your request was escalated to our management team for review on %(when)s."
+msgstr "تم تصعيد طلبكم إلى فريق الإدارة لدينا للمراجعة بتاريخ %(when)s."
 
 #, python-format
 msgid "Your shipment is on its way — %(reference)s"
@@ -4463,15 +4466,3 @@ msgstr "← العودة إلى العملاء النشطين"
 
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
-
-#~ msgid "A report’s hours count toward the lead technician who filed it."
-#~ msgstr "تُحتسب ساعات التقرير للفني الرئيسي الذي قدّمه."
-
-#~ msgid "Add technician"
-#~ msgstr "إضافة فني"
-
-#~ msgid "Technician added."
-#~ msgstr "تمت إضافة الفني."
-
-#~ msgid "supervisors only"
-#~ msgstr "للمشرفين فقط"

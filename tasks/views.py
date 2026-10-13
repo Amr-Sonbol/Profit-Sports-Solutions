@@ -1072,8 +1072,13 @@ def dashboard(request):
 
 @login_required
 def task_list(request):
-    require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    """Tasks in the active country, or — for the manager tier, with
+    ?country=all — every country at once, for tracking something without
+    switching countries first.
+    """
+    technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
     active_country = get_active_country(request)
+    all_countries = technician.is_manager_tier and request.GET.get('country') == 'all'
 
     status = request.GET.get('status', 'open')
     task_id = request.GET.get('task_id', '').strip()
@@ -1086,9 +1091,13 @@ def task_list(request):
     scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
     scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
 
-    tasks = _with_lead_prefetch(
-        Task.objects.filter(site__customer__country=active_country).select_related('site__customer', 'task_type'),
-    )
+    tasks = _with_lead_prefetch(Task.objects.select_related('site__customer__country', 'task_type'))
+    customers = Customer.objects.filter(is_active=True)
+    technicians = Technician.objects.filter(is_active=True)
+    if not all_countries:
+        tasks = tasks.filter(site__customer__country=active_country)
+        customers = customers.filter(country=active_country)
+        technicians = technicians.filter(country=active_country)
 
     if status == 'open':
         tasks = tasks.filter(status__in=OPEN_STATUSES)
@@ -1139,6 +1148,7 @@ def task_list(request):
             'shipping_company': shipping_company,
             'scheduled_from': request.GET.get('scheduled_from', ''),
             'scheduled_to': request.GET.get('scheduled_to', ''),
+            'country': 'all' if all_countries else '',
         }.items() if value
     }
 
@@ -1150,8 +1160,8 @@ def task_list(request):
         'pak_reference': pak_reference,
         'serial_number': serial_number,
         'status_choices': Task.Status.choices,
-        'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
-        'technicians': Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'),
+        'customers': customers.order_by('name'),
+        'technicians': technicians.order_by('full_name'),
         'shipping_company_choices': ShippingCompany.choices,
         'selected_customer': customer_id,
         'selected_technician': technician_id,
@@ -1159,88 +1169,10 @@ def task_list(request):
         'scheduled_from': request.GET.get('scheduled_from', ''),
         'scheduled_to': request.GET.get('scheduled_to', ''),
         'filter_qs': urlencode(filter_params),
+        'can_view_all_countries': technician.is_manager_tier,
+        'all_countries': all_countries,
     }
     return render(request, 'tasks/task_list.html', context)
-
-
-@login_required
-def all_tasks(request):
-    """Every task in every country, for a manager auditing or tracking
-    something that isn't scoped to whichever country they last switched
-    to — a separate, independent field for each thing you'd actually
-    search a task by (task ID, customer, site, PAK reference, date,
-    country), instead of one combined box guessing which of those you
-    meant. Manager-only:
-    this is a global, cross-country view, the same fixed floor as
-    skill_list and role_permissions.
-    """
-    require_manager(request)
-
-    status = request.GET.get('status', 'open')
-    task_id = request.GET.get('task_id', '').strip()
-    customer = request.GET.get('customer', '').strip()
-    site = request.GET.get('site', '').strip()
-    pak_reference = request.GET.get('pak_reference', '').strip()
-    serial_number = request.GET.get('serial_number', '').strip()
-    date = parse_date(request.GET.get('date', '') or '')
-    country_id = request.GET.get('country', '')
-
-    tasks = _with_lead_prefetch(
-        Task.objects.select_related('site__customer__country', 'task_type'),
-    )
-
-    if status == 'open':
-        tasks = tasks.filter(status__in=OPEN_STATUSES)
-    elif status != 'all':
-        tasks = tasks.filter(status=status)
-
-    if task_id:
-        tasks = tasks.filter(task_number__icontains=task_id)
-    if customer:
-        tasks = tasks.filter(site__customer__name__icontains=customer)
-    if site:
-        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
-    if pak_reference:
-        tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
-    if serial_number:
-        tasks = tasks.filter(
-            Q(task_assets__asset__serial_no__icontains=serial_number)
-            | Q(products__serial_number__icontains=serial_number)
-        ).distinct()
-    if date:
-        tasks = tasks.filter(scheduled_for__date=date)
-    if country_id:
-        tasks = tasks.filter(site__customer__country_id=country_id)
-
-    tasks = tasks.annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
-
-    paginator = Paginator(tasks, 25)
-    page_obj = paginator.get_page(request.GET.get('page'))
-    _attach_lead_technician(page_obj)
-
-    filter_params = {
-        key: value for key, value in {
-            'task_id': task_id, 'customer': customer, 'site': site,
-            'pak_reference': pak_reference, 'serial_number': serial_number,
-            'date': request.GET.get('date', ''), 'country': country_id,
-        }.items() if value
-    }
-
-    context = {
-        'page_obj': page_obj,
-        'status': status,
-        'task_id': task_id,
-        'customer': customer,
-        'site': site,
-        'pak_reference': pak_reference,
-        'serial_number': serial_number,
-        'date': request.GET.get('date', ''),
-        'status_choices': Task.Status.choices,
-        'countries': Country.objects.order_by('name'),
-        'selected_country': country_id,
-        'filter_qs': urlencode(filter_params),
-    }
-    return render(request, 'tasks/all_tasks.html', context)
 
 
 def can_supervisor_approve(technician, task):
@@ -1653,7 +1585,7 @@ def task_edit(request, pk):
     _require_task_owner(request, task)
     is_manager = requesting_technician.is_manager_tier
     # The task's own country, not necessarily the manager's active one —
-    # a cross-country edit (from the all_tasks board) must still scope
+    # a cross-country edit (from the all-countries task list) must still scope
     # responsible_supervisor to who's actually eligible there.
     task_country = task.site.customer.country
     previous_scheduled_for = task.scheduled_for
@@ -1727,20 +1659,41 @@ def task_edit(request, pk):
 
 @login_required
 def task_create(request):
-    requesting_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
-    active_country = get_active_country(request)
+    requesting_technician = require_technician(request)
+    can_create = _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS)
+    can_manage_tickets = _has_permission(requesting_technician, RolePermission.Permission.MANAGE_TICKETS)
+    all_countries = can_manage_tickets and _has_permission(
+        requesting_technician, RolePermission.Permission.TICKETS_ALL_COUNTRIES,
+    )
+    country = get_active_country(request)
 
     ticket = None
     ticket_id = request.GET.get('ticket')
+    # Converting a ticket doesn't need create_tasks of its own: the ticket
+    # desk converts customer tickets, and every manager converts internal
+    # ones.
+    if not (can_create or (ticket_id and (can_manage_tickets or requesting_technician.is_any_manager))):
+        raise PermissionDenied
     if ticket_id:
-        ticket = get_object_or_404(
-            CustomerTicket, pk=ticket_id, status=CustomerTicket.Status.NEW, country=active_country,
-        )
+        open_tickets = CustomerTicket.objects.filter(status=CustomerTicket.Status.NEW)
+        customer_tickets = open_tickets.filter(kind=CustomerTicket.Kind.CUSTOMER)
+        if not (can_manage_tickets or can_create):
+            customer_tickets = customer_tickets.none()
+        elif not all_countries:
+            customer_tickets = customer_tickets.filter(country=country)
+        internal = open_tickets.filter(kind__in=INTERNAL_TICKET_KINDS, country=country)
+        if not requesting_technician.is_any_manager:
+            internal = internal.none()
+        ticket = get_object_or_404(customer_tickets | internal, pk=ticket_id)
+        # Sites, brands and technicians all come from the ticket's own
+        # country, so whoever handles every country's tickets can convert
+        # one without switching to it first.
+        country = ticket.country
 
     is_admin = requesting_technician.role == Technician.Role.ADMIN
 
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST, country=active_country, ticket=ticket, is_admin=is_admin)
+        form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin)
         if form.is_valid():
             cleaned = form.cleaned_data
             with transaction.atomic():
@@ -1792,7 +1745,10 @@ def task_create(request):
                 TaskNotification.objects.create(task=task, created_at=timezone.now())
                 if ticket is not None:
                     ticket.task = task
-                    ticket.customer = site.customer
+                    # An internal ticket stays internal — linking a customer
+                    # would put it in their portal.
+                    if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+                        ticket.customer = site.customer
                     ticket.status = CustomerTicket.Status.CONVERTED
                     ticket.reviewed_by = request.user
                     ticket.reviewed_at = timezone.now()
@@ -1801,15 +1757,15 @@ def task_create(request):
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm(country=active_country, ticket=ticket, is_admin=is_admin)
+        form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin)
 
     # So whoever's creating this can see everyone's upcoming schedule
     # right here and pick a date that doesn't collide — no separate trip
     # to the week board just to check.
     team_schedule = _supervisors_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=active_country).exclude(role=Technician.Role.TECHNICIAN),
+        Technician.objects.filter(is_active=True, country=country).exclude(role=Technician.Role.TECHNICIAN),
     ) + _technicians_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=active_country, role=Technician.Role.TECHNICIAN),
+        Technician.objects.filter(is_active=True, country=country, role=Technician.Role.TECHNICIAN),
     )
 
     return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket, 'team_schedule': team_schedule})
@@ -1994,7 +1950,7 @@ def _send_reply_to_staff(request, reply):
 
 
 def _send_escalation_email(request, escalation):
-    """Best-effort email to the Operations Manager a ticket was escalated to."""
+    """Best-effort email to whoever a ticket was escalated to."""
     recipient = escalation.escalated_to
     if not recipient.user_id or not recipient.user.email:
         return
@@ -2179,10 +2135,15 @@ def ticket_status(request, token):
 def ticket_list(request):
     """Every customer-submitted ticket still needing a decision, plus
     what's already been resolved — country-scoped like everything else a
-    supervisor reviews. A separate, independent field for each thing
-    you'd actually search a ticket by, instead of one combined box.
+    supervisor reviews, or every country at once with ?country=all. A
+    separate, independent field for each thing you'd actually search a
+    ticket by, instead of one combined box. Opening, converting,
+    dismissing or assigning a ticket from another country works straight
+    from here — task_create builds around the ticket's own country.
     """
-    require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
+    technician = require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
+    can_view_all_countries = _has_permission(technician, RolePermission.Permission.TICKETS_ALL_COUNTRIES)
+    all_countries = can_view_all_countries and request.GET.get('country') == 'all'
 
     status = request.GET.get('status', 'new')
     ticket_id = request.GET.get('ticket_id', '').strip()
@@ -2193,13 +2154,17 @@ def ticket_list(request):
     date = parse_date(request.GET.get('date', '') or '')
     active_country = get_active_country(request)
 
-    tickets = CustomerTicket.objects.filter(
-        country=active_country, kind=CustomerTicket.Kind.CUSTOMER,
-    ).select_related('assigned_to', 'customer').annotate(
+    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER).select_related(
+        'assigned_to', 'country', 'customer',
+    ).annotate(
         is_escalated=Exists(
             TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
         ),
     )
+    customers = Customer.objects.filter(is_active=True)
+    if not all_countries:
+        tickets = tickets.filter(country=active_country)
+        customers = customers.filter(country=active_country)
     if status != 'all':
         tickets = tickets.filter(status=status)
     if ticket_id:
@@ -2216,7 +2181,7 @@ def ticket_list(request):
         # ticket has no link yet, also whatever name the customer typed
         # that matches one you already have, same case-insensitive match
         # task_create uses to find it.
-        customer = get_object_or_404(Customer, pk=customer_id, country=active_country)
+        customer = get_object_or_404(customers, pk=customer_id)
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
@@ -2225,7 +2190,7 @@ def ticket_list(request):
     filter_params = {
         key: value for key, value in {
             'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
-            'date': request.GET.get('date', ''),
+            'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '',
         }.items() if value
     }
 
@@ -2233,82 +2198,13 @@ def ticket_list(request):
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
-        'customers': Customer.objects.filter(is_active=True, country=active_country).order_by('name'),
+        'customers': customers.order_by('name'),
         'selected_customer': customer_id,
         'filter_qs': urlencode(filter_params),
+        'can_view_all_countries': can_view_all_countries,
+        'all_countries': all_countries,
     }
     return render(request, 'tasks/ticket_list.html', context)
-
-
-@login_required
-def all_tickets(request):
-    """Every customer-submitted ticket in every country — gated on
-    manage_tickets like the rest of ticket triage, not the is_manager_tier
-    fixed floor: tickets are their own, narrower permission now, not
-    something every manager gets for free. A separate, independent field
-    for each thing you'd actually search a ticket by, same as all_tasks.
-    Converting one into a task still requires switching to its own
-    country first (task_create's site/brand/technician choices are all
-    built around the active country); dismissing or assigning it works
-    from here regardless.
-    """
-    require_permission(request, RolePermission.Permission.MANAGE_TICKETS)
-
-    status = request.GET.get('status', 'new')
-    ticket_id = request.GET.get('ticket_id', '').strip()
-    company = request.GET.get('company', '').strip()
-    site = request.GET.get('site', '').strip()
-    pak = request.GET.get('pak', '').strip()
-    customer_id = request.GET.get('customer', '')
-    date = parse_date(request.GET.get('date', '') or '')
-    country_id = request.GET.get('country', '')
-
-    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER).select_related(
-        'assigned_to', 'country', 'customer',
-    ).annotate(
-        is_escalated=Exists(
-            TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
-        ),
-    )
-    if status != 'all':
-        tickets = tickets.filter(status=status)
-    if ticket_id:
-        tickets = tickets.filter(ticket_number__icontains=ticket_id)
-    if company:
-        tickets = tickets.filter(company_name__icontains=company)
-    if site:
-        tickets = tickets.filter(Q(site_description__icontains=site) | Q(site_address__icontains=site))
-    if pak:
-        tickets = tickets.filter(pak_reference_number__icontains=pak)
-    if customer_id:
-        # Same case-insensitive name match task_create uses, so a ticket
-        # not yet linked to a customer (nothing converted or logged in)
-        # still shows up under the one it's actually about.
-        customer = get_object_or_404(Customer, pk=customer_id)
-        tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
-    if date:
-        tickets = tickets.filter(submitted_at__date=date)
-    if country_id:
-        tickets = tickets.filter(country_id=country_id)
-    tickets = tickets.order_by('-submitted_at')
-
-    filter_params = {
-        key: value for key, value in {
-            'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
-            'date': request.GET.get('date', ''), 'country': country_id,
-        }.items() if value
-    }
-
-    context = {
-        'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
-        'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
-        'date': request.GET.get('date', ''),
-        'countries': Country.objects.order_by('name'), 'selected_country': country_id,
-        'customers': Customer.objects.filter(is_active=True).order_by('name'),
-        'selected_customer': customer_id,
-        'filter_qs': urlencode(filter_params),
-    }
-    return render(request, 'tasks/all_tickets.html', context)
 
 
 @login_required
@@ -2319,19 +2215,22 @@ def ticket_review(request, pk):
     what they've been asked to look into; they can't act on it themselves.
     """
     technician = require_technician(request)
-    # Country-scoped in the fetch itself, same as every other cross-country
-    # lookup in this app (technician_board, technician_skills, ...) — an
-    # assignee is always same-country by construction (AssignTicketForm
-    # only offers same-country technicians), so this costs it nothing. A
-    # manager reaches any ticket regardless, same as _scoped_or_404 gives
-    # them everywhere else — the point of the all_tickets board.
-    ticket = _scoped_or_404(CustomerTicket.objects, pk, technician, get_active_country(request), 'country')
+    can_manage = _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS)
+    # Whoever handles every country's tickets (tickets_all_countries)
+    # reaches any of them — the point of the all-countries ticket list — and
+    # so does anyone a ticket was escalated to, wherever they're based.
+    # Everyone else is country-scoped in the fetch itself, same as every
+    # other cross-country lookup in this app — an assignee is always
+    # same-country by construction (AssignTicketForm only offers
+    # same-country technicians), so this costs it nothing.
+    reaches_all = can_manage and _has_permission(technician, RolePermission.Permission.TICKETS_ALL_COUNTRIES)
+    if reaches_all or TicketEscalation.objects.filter(ticket_id=pk, escalated_to=technician).exists():
+        ticket = get_object_or_404(CustomerTicket, pk=pk)
+    else:
+        ticket = _scoped_or_404(CustomerTicket.objects, pk, technician, get_active_country(request), 'country')
     if ticket.kind != CustomerTicket.Kind.CUSTOMER:
         return redirect('tasks:internal_ticket', pk=ticket.pk)
 
-    can_manage = RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-    ).exists()
     is_assignee = ticket.assigned_to_id == technician.id
     escalations = list(ticket.escalations.select_related('escalated_by', 'escalated_to'))
     # Whoever a ticket was escalated to can open it (read-only, like an
@@ -2346,7 +2245,14 @@ def ticket_review(request, pk):
             role=technician.role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
         ).exists()
     )
-    can_escalate = can_manage and _ticket_is_open(ticket) and pending_escalation is None
+    # Strictly one level up (Technician.escalates_to_role). Whoever holds
+    # the pending escalation can pass it on to the level above them instead
+    # of deciding it themselves.
+    holds_pending = pending_escalation is not None and pending_escalation.escalated_to_id == technician.id
+    can_escalate = (
+        can_manage and _ticket_is_open(ticket) and technician.escalates_to_role is not None
+        and (pending_escalation is None or holds_pending)
+    )
 
     if can_manage:
         ticket.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
@@ -2382,12 +2288,24 @@ def ticket_review(request, pk):
         if action == 'escalate' and can_escalate:
             escalate_form = EscalateTicketForm(request.POST, country=ticket.country, escalated_by=technician)
             if escalate_form.is_valid():
+                now = timezone.now()
+                if pending_escalation is not None:
+                    # Passing it up: this step ends as forwarded, and the
+                    # one who raised it hears that it went further.
+                    pending_escalation.decision = TicketEscalation.Decision.FORWARDED
+                    pending_escalation.decision_note = escalate_form.cleaned_data['reason']
+                    pending_escalation.decided_at = now
+                    pending_escalation.save(update_fields=['decision', 'decision_note', 'decided_at'])
+                    TicketNotification.objects.create(
+                        ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=now,
+                    )
+                    _send_escalation_decided_email(request, pending_escalation)
                 escalation = TicketEscalation.objects.create(
                     ticket=ticket, escalated_by=technician,
                     escalated_to=escalate_form.cleaned_data['escalated_to'],
                     reason=escalate_form.cleaned_data['reason'],
                     customer_message=escalate_form.cleaned_data['customer_message'],
-                    escalated_at=timezone.now(),
+                    escalated_at=now,
                 )
                 _send_escalation_email(request, escalation)
                 recipient = escalation.escalated_to
@@ -2404,7 +2322,7 @@ def ticket_review(request, pk):
                     },
                     {'type': 'ticket', 'ticket_id': ticket.pk},
                 )
-                messages.success(request, _('Escalated to the Operations Manager.'))
+                messages.success(request, _('Escalated to %(name)s.') % {'name': escalation.escalated_to.full_name})
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
         if action == 'add_internal_note' and can_manage:
@@ -2512,6 +2430,7 @@ def ticket_review(request, pk):
         'replies': ticket.replies.select_related('sent_by'),
         'escalations': escalations, 'pending_escalation': pending_escalation,
         'can_escalate': can_escalate, 'escalate_form': escalate_form,
+        'escalation_role': Technician.Role(technician.escalates_to_role).label if technician.escalates_to_role else '',
         'can_decide': can_decide, 'decide_form': decide_form,
     }
     if can_manage:
@@ -3596,7 +3515,8 @@ def role_permissions(request):
 
     roles = [
         Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER,
-        Technician.Role.SUPPORT_MANAGER, Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
+        Technician.Role.COUNTRY_SUPPORT, Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER,
+        Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
     ]
     permissions = list(RolePermission.Permission)
     notification_settings = NotificationSettings.load()
@@ -4327,11 +4247,17 @@ def ticket_open(request):
     request, vendor follow-up, other) for whoever it's assigned to. Which
     kind comes from ?kind=, so each form is plain HTML, no script.
     """
-    technician = require_permission(request, RolePermission.Permission.OPEN_TICKETS)
+    technician = require_technician(request)
+    # open_tickets covers every kind; any other manager opens internal ones.
+    kinds = CustomerTicket.Kind.choices
+    if not _has_permission(technician, RolePermission.Permission.OPEN_TICKETS):
+        if not technician.is_any_manager:
+            raise PermissionDenied
+        kinds = [(value, label) for value, label in kinds if value != CustomerTicket.Kind.CUSTOMER]
     country = get_active_country(request)
-    kind = request.GET.get('kind', CustomerTicket.Kind.CUSTOMER)
-    if kind not in CustomerTicket.Kind.values:
-        kind = CustomerTicket.Kind.CUSTOMER
+    kind = request.GET.get('kind', kinds[0][0])
+    if kind not in [value for value, label in kinds]:
+        kind = kinds[0][0]
     is_customer = kind == CustomerTicket.Kind.CUSTOMER
 
     def make_form(*args):
@@ -4381,7 +4307,7 @@ def ticket_open(request):
         return redirect('home')
 
     return render(request, 'tasks/staff_ticket_new.html', {
-        'form': form, 'kind': kind, 'kinds': CustomerTicket.Kind.choices,
+        'form': form, 'kind': kind, 'kinds': kinds,
     })
 
 
@@ -4395,12 +4321,12 @@ def _push_internal_ticket(technician, ticket, title):
 
 
 def _visible_internal_tickets(technician, country):
-    """Internal tickets this person may see: all of them for a ticket
-    reviewer (manage_tickets), otherwise the ones assigned to them or that
-    they opened.
+    """Internal tickets this person may see: all of them for any manager
+    or ticket reviewer (manage_tickets), otherwise the ones assigned to
+    them or that they opened.
     """
     tickets = CustomerTicket.objects.filter(kind__in=INTERNAL_TICKET_KINDS, country=country)
-    if _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
+    if technician.is_any_manager or _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
         return tickets
     return tickets.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
 
@@ -4419,10 +4345,10 @@ def internal_tickets(request):
     if status == 'open':
         tickets = tickets.filter(status=CustomerTicket.Status.NEW)
     elif status == 'closed':
-        tickets = tickets.filter(status=CustomerTicket.Status.CLOSED)
+        tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
     return render(request, 'tasks/internal_tickets.html', {
         'tickets': tickets[:200], 'status': status,
-        'can_open': _has_permission(technician, RolePermission.Permission.OPEN_TICKETS),
+        'can_open': technician.is_any_manager or _has_permission(technician, RolePermission.Permission.OPEN_TICKETS),
     })
 
 
@@ -4495,4 +4421,5 @@ def internal_ticket(request, pk):
         'note_form': note_form,
         'reassign_form': reassign_form,
         'close_form': close_form,
+        'can_convert': is_open and technician.is_any_manager,
     })

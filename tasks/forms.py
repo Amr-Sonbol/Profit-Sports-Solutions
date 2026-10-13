@@ -127,7 +127,13 @@ class TaskCreateForm(forms.ModelForm):
             # Same values as Task.Source — a ticket staff opened from a
             # phone call keeps "Phone" on the task.
             self.fields['source'].initial = ticket.source
-            self.fields['description'].initial = ticket.description
+            if ticket.kind != CustomerTicket.Kind.CUSTOMER:
+                # A stock request or vendor follow-up came from inside the
+                # company, whatever the ticket's own default says.
+                self.fields['source'].initial = Task.Source.INTERNAL
+                self.fields['description'].initial = f'{ticket.subject}\n\n{ticket.description}'.strip()
+            else:
+                self.fields['description'].initial = ticket.description
             self.fields['reported_at'].initial = timezone.localtime(ticket.submitted_at).strftime(
                 DATETIME_INPUT_FORMAT,
             )
@@ -1279,17 +1285,22 @@ class CorrectEventTimeForm(forms.Form):
         return value
 
 
-def escalation_deciders(country, exclude=None):
-    """Who a ticket can be escalated to: active staff in its country whose
-    role has decide_escalated_tickets — driven by Roles & permissions, not
-    a hardcoded role, same as AssignTicketForm.
+def escalation_deciders(escalated_by, country):
+    """Who this person can escalate a ticket to: only the next role up the
+    chain (Technician.escalates_to_role), and only if that role can decide
+    escalations (Roles & permissions). A role that handles every country's
+    tickets is reachable wherever it's based; otherwise only someone in
+    the ticket's own country.
     """
-    roles = RolePermission.objects.filter(
-        permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
-    ).values_list('role', flat=True)
-    deciders = Technician.objects.filter(is_active=True, country=country, role__in=list(roles))
-    if exclude is not None:
-        deciders = deciders.exclude(pk=exclude.pk)
+    next_role = escalated_by.escalates_to_role
+    allowed = set(
+        RolePermission.objects.filter(role=next_role, allowed=True).values_list('permission', flat=True),
+    )
+    if next_role is None or RolePermission.Permission.DECIDE_ESCALATED_TICKETS not in allowed:
+        return Technician.objects.none()
+    deciders = Technician.objects.filter(is_active=True, role=next_role).exclude(pk=escalated_by.pk)
+    if RolePermission.Permission.TICKETS_ALL_COUNTRIES not in allowed:
+        deciders = deciders.filter(country=country)
     return deciders.order_by('full_name')
 
 
@@ -1301,19 +1312,19 @@ class EscalateTicketForm(forms.Form):
     )
     customer_message = forms.CharField(
         required=False, label=_('Message to the customer (optional)'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_('Shown on the customer’s ticket page, under “escalated to our Operations Manager”.'),
+        help_text=_("Displayed on the customer's ticket page under “escalated to our management team”."),
     )
 
     def __init__(self, *args, country=None, escalated_by=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['escalated_to'].queryset = escalation_deciders(country, exclude=escalated_by)
+        self.fields['escalated_to'].queryset = escalation_deciders(escalated_by, country)
 
 
 class DecideEscalationForm(forms.Form):
     decision = forms.ChoiceField(
         choices=[
             (value, label) for value, label in TicketEscalation.Decision.choices
-            if value != TicketEscalation.Decision.PENDING
+            if value not in (TicketEscalation.Decision.PENDING, TicketEscalation.Decision.FORWARDED)
         ],
         widget=forms.RadioSelect, label=_('Decision'),
     )

@@ -224,7 +224,7 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | full_name | varchar | |
 | phone | varchar | |
 | language | varchar | `ar` or `en` — per person, not per country |
-| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), admin |
+| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), country_support (Country Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), admin |
 | employment_type | varchar | staff, freelance |
 | has_transport | bool | |
 | can_carry_large | bool | can move a treadmill motor or locker bank |
@@ -255,15 +255,17 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| role | varchar | technician, supervisor, manager, support_manager, warehouse_manager, operations_manager, admin |
+| role | varchar | technician, supervisor, manager, support_manager, country_support, warehouse_manager, operations_manager, admin |
 | permission | varchar | see below |
 | allowed | bool | |
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — support_manager, operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default), `tickets_all_countries` (reach every country's customer tickets — the ticket list's "All countries" option, opening one, converting one — support_manager, operations_manager and admin by default; without it, `manage_tickets` covers the holder's own country only).
 
-**`operations_manager` is who the support desk escalates to.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines` and `decide_escalated_tickets` — not `manage_tickets`: it isn't a second ticket desk, it only opens the tickets escalated to it (read-only, plus the decision itself), the same way a ticket's assignee can open just that ticket.
+**`operations_manager` is who the support desk escalates to — and the Technical Support Manager's own manager.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines`, `decide_escalated_tickets` and, since `0041_grant_manage_tickets_to_operations_manager`, `manage_tickets` too: the whole ticket desk, not only the tickets escalated to it.
+
+**`country_support` (Country Support Manager) runs one country's ticket desk.** Seeded by `0043_seed_country_support_manager` with the Technical Support Manager's permissions minus `tickets_all_countries` and `decide_escalated_tickets`: it handles, converts and opens tickets in its own country (`technician.country`) and gets that country's new-ticket email and bell alerts, nothing more. Its own country is all it ever reaches — another country's ticket is a 404, same as any other country-scoped lookup.
 
 **`warehouse_manager` exists for exactly one job: receiving shipments.** It gets `view_dashboard` and `view_tasks` and nothing else — `view_tasks` alone is enough to search the task list by PAK reference number (already a filter there, for anyone who can reach it), open a task to read its shipping details (PAK, carrier, tracking number — never gated beyond `view_tasks` itself), and post a task message confirming a part arrived. No ticket, technician, or customer access, same narrow-by-design shape as `support_manager` before it. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
 
@@ -271,7 +273,7 @@ Unique on (role, permission).
 
 **Seeded to change nothing on its own.** The migration that creates this table reproduces exactly what used to be hardcoded — supervisor and manager allowed, technician not — for every permission. Nothing about who can do what actually changes until an admin edits the matrix.
 
-**`manage_tickets` has moved twice since it was first seeded** — supervisor and manager by default, then supervisor and technician dropped entirely (tickets became manager/admin-only), then manager itself dropped in favor of the narrower `support_manager` role (`0021_revoke_manage_tickets_from_supervisor`, `0023_seed_technical_support_manager`). Today only `support_manager` and `admin` have it. Every ticket-specific check reads this permission directly rather than `technician.is_manager_tier` — `AssignTicketForm`'s queryset, the new-ticket staff email, and the ticket half of the notification bell all derive the current role set from this table, so they never drift out of sync with whatever the matrix says today. `is_manager_tier` itself is unchanged (manager, admin) and still gates everything ticket-unrelated — the task half of the bell, cross-country reach, the fixed-floor reference screens.
+**`manage_tickets` has moved twice since it was first seeded** — supervisor and manager by default, then supervisor and technician dropped entirely (tickets became manager/admin-only), then manager itself dropped in favor of the narrower `support_manager` role (`0021_revoke_manage_tickets_from_supervisor`, `0023_seed_technical_support_manager`). Today `support_manager`, `country_support` (since `0043`), `operations_manager` (since `0041`) and `admin` have it; plain `manager` deliberately doesn't. Reaching *every* country's tickets is the separate `tickets_all_countries` — the ticket list's "All countries" option, `ticket_review` (fetched unscoped for them), and converting one into a task (`task_create` builds around the ticket's own country, no switching needed); a Country Support Manager has `manage_tickets` without it. Every ticket-specific check reads this permission directly rather than `technician.is_manager_tier` — `AssignTicketForm`'s queryset, the new-ticket staff email, and the ticket half of the notification bell all derive the current role set from this table, so they never drift out of sync with whatever the matrix says today. `is_manager_tier` itself is unchanged (manager, admin) and still gates everything ticket-unrelated — the task half of the bell, cross-country reach, the fixed-floor reference screens.
 
 **Every role has a row for every permission — `support_manager` needed a one-off backfill to catch up (`0025_backfill_support_manager_permission_rows`).** Adding the role (`0022`) only changed the `role` field's choices; `0023`/`0024` each created a row for one specific permission (`manage_tickets`, `view_dashboard`) via `update_or_create`, leaving the other seven permissions with no row for this role at all. A missing row already behaves exactly like `allowed=False` everywhere it's read (`require_permission`, the `role_permissions` screen's matrix), so nothing was ever actually broken — but the invariant is worth keeping intact so the matrix stays simple to audit, hence the backfill.
 
@@ -486,7 +488,7 @@ A complaint or request from a customer — or an internal matter staff need to f
 | subject | varchar | internal tickets only |
 | vendor_name | varchar | vendor follow-ups only (required there) |
 | status | varchar | new, converted, dismissed, closed |
-| assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager or admin), read from `role_permission` directly, not hardcoded |
+| assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager, operations manager or admin), read from `role_permission` directly, not hardcoded |
 | assigned_at | timestamptz | nullable |
 | pak_reference_number | varchar | blank — internal only, never emailed to the customer |
 | shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
@@ -502,7 +504,7 @@ A complaint or request from a customer — or an internal matter staff need to f
 
 **Assignment is ownership, not authorization.** `assigned_to` just says who's looking into a ticket — it can be any active supervisor or manager in the ticket's country (never a technician; tickets stay supervisor-side work, unlike tasks), set by anyone with `manage_tickets`. It doesn't grant the assignee the ability to convert or dismiss; they can open the ticket read-only (so they can see what they've been asked to check), but that decision still requires `manage_tickets` regardless of who it's assigned to. There's no technician-facing "My tickets" screen — a technician's work always shows up as a task once a ticket is converted, tracked the same way as everything else on My week.
 
-**Staff open tickets for customers, and internal ones (`open_tickets` — Technical Support Manager, Operations Manager and Admin by default).** "New ticket" has a type at the top. *Customer*: staff pick the customer's site and how they reached us; contact fields left empty use the site's own contact, and serials are optional (often unknown on a call). It's then an ordinary customer ticket — the same confirmation email, the same review, visible and answerable in the customer's portal — and the review page shows who opened it and how. *Stock request, vendor follow-up, other*: no customer, nothing ever sent to one, never converted into a task. Just a subject (and the vendor, for a vendor follow-up), details, files, and who it's for — any office staff in the country, not technicians. That person is pushed, and it sits in their bell and on "Internal tickets" until it's closed. The assignee, the opener and ticket reviewers (`manage_tickets`) can add notes (`ticket_internal_note`), hand it to someone else, or close it with the result (`close_reason`); each step pushes the other party. Internal tickets never appear in the customer ticket lists, the app's ticket screen, search or the monthly report.
+**Staff open tickets for customers, and internal ones (`open_tickets` — Technical Support Manager, Operations Manager and Admin by default).** "New ticket" has a type at the top. *Customer*: staff pick the customer's site and how they reached us; contact fields left empty use the site's own contact, and serials are optional (often unknown on a call). It's then an ordinary customer ticket — the same confirmation email, the same review, visible and answerable in the customer's portal — and the review page shows who opened it and how. *Stock request, vendor follow-up, other*: no customer, nothing ever sent to one. Just a subject (and the vendor, for a vendor follow-up), details, files, and who it's for — any office staff in the country, not technicians. That person is pushed, and it sits in their bell and on "Internal tickets" until it's closed. The assignee, the opener and ticket reviewers (`manage_tickets`) can add notes (`ticket_internal_note`), hand it to someone else, or close it with the result (`close_reason`); each step pushes the other party. Every manager role (manager, support_manager, warehouse_manager, operations_manager, admin — `Technician.is_any_manager`) sees every internal ticket in their country, can open one even without `open_tickets` (internal kinds only), and can convert one into a task: `task_create` picks the site, the task's source is `internal`, and the ticket goes to `converted` with `task` set but `customer` left empty, so it never reaches a portal. Converting a customer ticket likewise needs only `manage_tickets`, not `create_tasks`. Internal tickets never appear in the customer ticket lists, the app's ticket screen, search or the monthly report.
 
 **`site_id` is the customer's own pick from their registered sites** — authoritative, not a guess, so it carries straight through to the resulting task with no re-matching and no chance to swap it out mid-conversion; only an admin can change it on the create-task screen. The supervisor reviewing a ticket either converts it (that site, a different existing one they pick instead, or a new one — task creation's own choice), dismisses it with a reason, or closes it with a reason.
 
@@ -536,7 +538,7 @@ The back-and-forth on a ticket, either side, in order.
 **Each reply sends a best-effort email the other way**, same fail-silent pattern as every other notification here. A staff reply emails `customer_ticket.contact_email`, if one was given. A customer reply emails `assigned_to`'s login email, if the ticket is assigned to someone with one on file — there's no fixed office address to fall back to, so an unassigned ticket's customer replies simply don't email anyone until someone picks it up.
 
 ### ticket_internal_note
-A progress note on a ticket, visible only to whoever can manage it — separate from `ticket_reply`, which the customer sees too. Gated on `manage_tickets` directly (the same `can_manage` check `ticket_review` computes for everything else on the screen), not `is_manager_tier` — tickets are their own permission now, held by `support_manager` and `admin`, not every manager-tier person.
+A progress note on a ticket, visible only to whoever can manage it — separate from `ticket_reply`, which the customer sees too. Gated on `manage_tickets` directly (the same `can_manage` check `ticket_review` computes for everything else on the screen), not `is_manager_tier` — tickets are their own permission now, held by `support_manager`, `operations_manager` and `admin`, not every manager-tier person.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -556,31 +558,31 @@ A new ticket, or a new customer reply on an existing one — feeds the ticket ha
 |---|---|---|
 | id | PK | |
 | ticket_id | FK → customer_ticket | |
-| kind | varchar | `new_ticket`, `new_reply`, or `escalation_decided` (the Operations Manager has decided an escalation — back to the desk) |
+| kind | varchar | `new_ticket`, `new_reply`, or `escalation_decided` (an escalation was decided or forwarded — back to the desk) |
 | created_at | timestamptz | |
 | seen_at | timestamptz | nullable — set the moment any manager/admin opens the ticket (`ticket_review`) |
 
 **A shared team inbox, not per-user.** There's one row per event, not one per (event, viewer) pair — opening a ticket clears its notifications for every manager/admin at once, the same way any one of them acting on a ticket already handles it for the whole team. Created in `portal_ticket_new` (a new ticket) and `ticket_status` (a customer's own reply) — never for a staff reply, since staff already know they just sent one. Also fires a best-effort email to every manager/admin in the ticket's country (`send_new_ticket_email_to_staff`), separate from the bell.
 
 ### ticket_escalation
-The support desk handing a ticket up to the Operations Manager for a decision, and that decision. A separate record rather than a ticket status: escalation is a step *within* an open ticket, not a replacement for `new`, and this keeps who escalated, why, and what was decided.
+One step up the escalation chain, and its outcome. The chain is strict — no skipping levels — and lives in `people.models.ESCALATION_CHAIN`: **Country Support Manager → Technical Support Manager → Operations Manager**, who decides (nothing above them). A separate record rather than a ticket status: escalation is a step *within* an open ticket, not a replacement for `new`, and this keeps who escalated, why, and what was decided at every level.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | ticket_id | FK → customer_ticket | |
-| escalated_by_id | FK → technician | someone with `manage_tickets` |
-| escalated_to_id | FK → technician | someone in the ticket's country with `decide_escalated_tickets`; never the same person |
+| escalated_by_id | FK → technician | someone with `manage_tickets` whose role has a next level in the chain |
+| escalated_to_id | FK → technician | someone in exactly the next role up (`Technician.escalates_to_role`) whose role has `decide_escalated_tickets`; in the ticket's country unless that role has `tickets_all_countries` (the Technical Support and Operations Managers are reachable wherever they're based); never the same person |
 | reason | text | internal — never shown to the customer |
 | customer_message | text | optional — shown to the customer on their ticket page |
-| decision | varchar | `pending`, `approved`, `rejected`, `instructions` |
+| decision | varchar | `pending`, `approved`, `rejected`, `instructions`, or `forwarded` (passed to the next level — set only by escalating onward, never chosen as a decision) |
 | decision_note | text | internal — never shown to the customer |
 | escalated_at | timestamptz | |
 | decided_at | timestamptz | nullable |
 
-**Rules:** only an open ticket (`_ticket_is_open`) can be escalated, and only one escalation can be pending at a time. Once decided, the desk carries on as usual (reply, convert, dismiss) — the decision itself doesn't change the ticket's status. The response clock keeps running while it's escalated.
+**Rules:** only an open ticket (`_ticket_is_open`) can be escalated, and only one escalation can be pending at a time. Whoever holds the pending escalation either decides it or escalates it onward: their row ends `forwarded` (with their reason as `decision_note`, and the escalation-decided notification and email going back to whoever raised it) and the next level gets a new pending row. Once decided, the desk carries on as usual (reply, convert, dismiss) — the decision itself doesn't change the ticket's status. The response clock keeps running while it's escalated.
 
-**Who sees what.** The Operations Manager sees a pending escalation in their bell (worked out live, not a stored notification — it clears once decided) and gets an email. The decision comes back to the desk as a `ticket_notification` (`escalation_decided`) plus an email to whoever escalated. The customer sees only that their request was escalated to "our Operations Manager" — the role, never the person's name — with the date and the optional `customer_message`, then that a decision was made. `reason` and `decision_note` are internal.
+**Who sees what.** Whoever it's escalated to sees it in their bell whatever their active country (worked out live, not a stored notification — it clears once decided), can open that ticket wherever it is, and gets an email. The decision comes back to the desk as a `ticket_notification` (`escalation_decided`) plus an email to whoever escalated. The customer sees only that their request was escalated to "our management team" — never a title or a person's name — with the date and the optional `customer_message` of each step, then that a decision was made. `reason` and `decision_note` are internal.
 
 ### task_notification
 A newly created task, for the same header bell as `ticket_notification` — a separate model since a task and a ticket are different things to point a FK at, and there's only one kind of task notification so far (no `kind` column needed).
@@ -653,7 +655,7 @@ The delivery note's contents, structured — for installation and loading tasks,
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
-| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one. Searchable from `task_list`/`all_tasks`, same box as `asset.serial_no` — so a machine can be traced to the task (and its customer/site) it was installed or loaded under, not just its repair history |
+| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one. Searchable from `task_list`, same box as `asset.serial_no` — so a machine can be traced to the task (and its customer/site) it was installed or loaded under, not just its repair history |
 | quantity | int | default 1 |
 | replacement | varchar | blank — which machine this one was swapped in for, if the one ordered wasn't available |
 | frame | varchar | blank — custom frame color |

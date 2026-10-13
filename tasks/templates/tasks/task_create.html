@@ -13,7 +13,9 @@
 
 {% if ticket %}
 <p class="flash flash--info">
-    {% if ticket.site %}
+    {% if ticket.kind != 'customer' %}
+        {% blocktranslate with number=ticket.ticket_number subject=ticket.subject %}Creating this task from internal ticket {{ number }} — {{ subject }}. Pick the site the job is for.{% endblocktranslate %}
+    {% elif ticket.site %}
         {% if user.technician.role == 'admin' %}
             {% blocktranslate with company=ticket.company_name site=ticket.site.name %}Creating this task from a customer ticket — {{ company }}. The customer picked {{ site }} from their own registered sites — as admin, you can still change it below.{% endblocktranslate %}
         {% else %}

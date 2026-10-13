@@ -25,6 +25,7 @@ class SeedRolePermissionsTests(TestCase):
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
             RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
             RolePermission.Permission.MANAGE_PARTS, RolePermission.Permission.OPEN_TICKETS,
+            RolePermission.Permission.TICKETS_ALL_COUNTRIES,
         }
         for permission in other_permissions:
             allowed_roles = set(
@@ -48,15 +49,24 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.OPEN_TICKETS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'admin'})
 
-    def test_manage_tickets_is_support_manager_and_admin_only(self):
+    def test_manage_tickets_is_support_and_operations_managers_and_admin(self):
         allowed_roles = set(
             RolePermission.objects.filter(
                 permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'admin'})
+
+    def test_tickets_in_all_countries_is_support_and_operations_managers_and_admin(self):
+        # The Country Support Manager handles one country's tickets only.
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
     def test_view_dashboard_is_available_to_every_role(self):
         # The dashboard is now everyone's landing page after signing in
@@ -74,7 +84,9 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_MACHINES, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'support_manager', 'operations_manager', 'admin'})
+        self.assertEqual(
+            allowed_roles, {'supervisor', 'manager', 'support_manager', 'country_support', 'operations_manager', 'admin'},
+        )
 
     def test_view_technicians_also_includes_the_operations_manager(self):
         allowed_roles = set(
@@ -84,13 +96,15 @@ class SeedRolePermissionsTests(TestCase):
         )
         self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'admin'})
 
-    def test_decide_escalated_tickets_is_operations_manager_and_admin(self):
+    def test_decide_escalated_tickets_is_the_upper_chain_and_admin(self):
         allowed_roles = set(
             RolePermission.objects.filter(
                 permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'operations_manager', 'admin'})
+        # The Technical Support Manager decides what a Country Support
+        # Manager escalates; the Operations Manager what's forwarded on.
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
     def test_manage_parts_is_manager_warehouse_manager_and_admin(self):
         allowed_roles = set(

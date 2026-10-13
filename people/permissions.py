@@ -64,10 +64,10 @@ def require_manager(request):
 
 def scoped_or_404(queryset, pk, requesting_technician, active_country, country_lookup):
     """A manager can open any task, technician, or customer regardless of
-    their own active country — the point of the all_tasks/all_technicians/
-    all_customers boards is reaching across every country, so the detail/
-    edit screens those link into can't stay locked to whichever country
-    happens to be active. Every other role stays scoped to it, same as
+    their own active country — the point of the all-countries task list
+    and the all_technicians/all_customers boards is reaching across every
+    country, so the detail/edit screens those link into can't stay locked
+    to whichever country happens to be active. Every other role stays scoped to it, same as
     before. Shared across apps (tasks, customers) rather than duplicated,
     since the rule is identical regardless of what's being looked up.
     """

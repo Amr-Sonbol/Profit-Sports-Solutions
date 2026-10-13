@@ -12,6 +12,7 @@
     <div class="badge-row">
         <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
         {% if is_open %}<span class="badge badge--status-new">{% translate "Open" %}</span>
+        {% elif ticket.status == 'converted' %}<span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
         {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
     </div>
 </div>
@@ -36,7 +37,9 @@
         {% endfor %}
     </ul>
     {% endif %}
-    {% if not is_open %}
+    {% if ticket.task %}
+    <p><a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a></p>
+    {% elif not is_open %}
     <div class="description">
         <dt>{% translate "Result" %}</dt>
         <p>{{ ticket.close_reason }}</p>
@@ -75,6 +78,13 @@
     </form>
     {% endif %}
 </div>
+
+{% if can_convert %}
+<div class="section">
+    <h2>{% translate "Needs a job on site?" %}</h2>
+    <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
+</div>
+{% endif %}
 
 {% if is_open %}
 <div class="section">

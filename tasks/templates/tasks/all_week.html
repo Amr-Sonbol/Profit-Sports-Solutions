@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:all_tasks' %}" class="back-link">{% translate "Back to all tasks" %}</a>
+        <a href="{% url 'tasks:task_list' %}?country=all" class="back-link">{% translate "Back to all tasks" %}</a>
         <h1>{% translate "All countries — week view" %}</h1>
     </div>
 </div>

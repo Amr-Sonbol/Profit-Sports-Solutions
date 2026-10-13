@@ -6,7 +6,6 @@ app_name = 'tasks'
 
 urlpatterns = [
     path('', views.task_list, name='task_list'),
-    path('all/', views.all_tasks, name='all_tasks'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('week/', views.task_week, name='task_week'),
     path('week/all/', views.all_week, name='all_week'),
@@ -25,7 +24,6 @@ urlpatterns = [
     path('tickets/open/', views.ticket_open, name='ticket_open'),
     path('tickets/internal/', views.internal_tickets, name='internal_tickets'),
     path('tickets/internal/<int:pk>/', views.internal_ticket, name='internal_ticket'),
-    path('tickets/all/', views.all_tickets, name='all_tickets'),
     path('tickets/<int:pk>/', views.ticket_review, name='ticket_review'),
     path('technicians/', views.technician_list, name='technician_list'),
     path('technicians/all/', views.all_technicians, name='all_technicians'),
