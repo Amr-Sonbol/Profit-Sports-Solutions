@@ -68,10 +68,10 @@ export default function MyTasksScreen() {
             onPress={() => router.push(`/report/${report.taskId}`)}
           >
             <ThemedText type="smallBold">
-              {report.error ? 'Report not sent, tap to check' : 'Report waiting to send'} — {report.taskNumber}
+              {report.error ? 'Report not sent — tap to review' : 'Report pending submission'} — {report.taskNumber}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              {report.error ?? 'It sends automatically when you are back online. Pull down to retry.'}
+              {report.error ?? 'It will be sent automatically when you are back online. Pull down to retry.'}
             </ThemedText>
           </TouchableOpacity>
         ))}
@@ -81,7 +81,7 @@ export default function MyTasksScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
-            tasks !== null ? <ThemedText themeColor="textSecondary">No open tasks.</ThemedText> : null
+            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : null
           }
           renderItem={({ item }) => (
             <TouchableOpacity

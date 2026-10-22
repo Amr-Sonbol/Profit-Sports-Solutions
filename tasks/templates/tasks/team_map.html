@@ -8,10 +8,10 @@
     <h1>{% translate "Team map" %}</h1>
     <span class="muted">{{ today|date:"l j F" }}</span>
 </div>
-<p class="field__help">{% translate "Each technician's last tap today. Location is only taken when they tap, never in between." %}</p>
+<p class="field__help">{% translate "Each technician's most recent check-in today. Location is recorded only at each check-in and is never tracked in between." %}</p>
 
 <section class="section">
-    <h2>{% translate "Needs a follow-up" %}</h2>
+    <h2>{% translate "Requires follow-up" %}</h2>
     {% if attention %}
     <ul class="action-list">
         {% for item in attention %}
@@ -19,7 +19,7 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "Nothing to follow up on today." %}</p>
+    <p class="empty-state">{% translate "There is nothing requiring follow-up today." %}</p>
     {% endif %}
 </section>
 
@@ -28,7 +28,7 @@
     {# Map chrome stays left-to-right in both languages, like the header. #}
     <div id="team-map" class="team-map" dir="ltr"></div>
     {% else %}
-    <p class="empty-state">{% translate "No taps with a location yet today." %}</p>
+    <p class="empty-state">{% translate "No check-ins with a location have been recorded today." %}</p>
     {% endif %}
 </section>
 
@@ -40,7 +40,7 @@
             <thead>
                 <tr>
                     <th>{% translate "Name" %}</th>
-                    <th>{% translate "Last tap" %}</th>
+                    <th>{% translate "Last check-in" %}</th>
                     <th>{% translate "Where" %}</th>
                 </tr>
             </thead>
@@ -55,7 +55,7 @@
                         {% if technician.last_tap.location_status == 'away' %}<span class="badge badge--bad">{% blocktranslate with distance=technician.last_tap.distance_display %}{{ distance }} from the site{% endblocktranslate %}</span>{% endif %}
                     </td>
                     {% else %}
-                    <td colspan="2" class="muted">{% translate "No taps today" %}</td>
+                    <td colspan="2" class="muted">{% translate "No check-ins today" %}</td>
                     {% endif %}
                 </tr>
                 {% endfor %}

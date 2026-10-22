@@ -12,7 +12,7 @@
 
     {% if show_actions %}
     <section class="section">
-        <h2>{% translate "Needs your action" %}</h2>
+        <h2>{% translate "Awaiting your action" %}</h2>
         {% if actions %}
         <ul class="action-list">
             {% for action in actions %}
@@ -25,14 +25,14 @@
             {% endfor %}
         </ul>
         {% else %}
-        <p class="empty-state">{% translate "Nothing is waiting on you." %}</p>
+        <p class="empty-state">{% translate "There is nothing awaiting your action." %}</p>
         {% endif %}
     </section>
     {% endif %}
 
     {% if show_visits %}
     <section class="section">
-        <h2>{% translate "Your visits today" %}</h2>
+        <h2>{% translate "Today's visits" %}</h2>
         {% if visits %}
         <ul class="action-list">
             {% for task in visits %}
@@ -49,13 +49,13 @@
             {% endfor %}
         </ul>
         {% else %}
-        <p class="empty-state">{% translate "No visits today." %}</p>
+        <p class="empty-state">{% translate "No visits are scheduled for today." %}</p>
         {% endif %}
     </section>
     {% endif %}
 
     <nav class="section" aria-label="{% translate 'Pages' %}">
-        <h2>{% translate "Go to" %}</h2>
+        <h2>{% translate "Quick links" %}</h2>
         <div class="go-to">
             {% for page in nav_pages %}
             <a href="{{ page.url }}" class="go-to__link">

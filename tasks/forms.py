@@ -200,7 +200,7 @@ class TaskCreateForm(forms.ModelForm):
             self.add_error(None, _('Select an existing brand or add a new one below, not both.'))
         elif new_brand_name and Brand.objects.filter(name__iexact=new_brand_name).exists():
             self.add_error(
-                'new_brand_name', _('A brand with this name already exists. Choose it from the list.'),
+                'new_brand_name', _('A brand with this name already exists. Please select it from the list.'),
             )
 
         task_type = cleaned.get('task_type')
@@ -212,8 +212,8 @@ class TaskCreateForm(forms.ModelForm):
             self.add_error(None, _('Select an existing task type or add a new one below, not both.'))
         elif any(new_task_type_fields) and not all(new_task_type_fields):
             self.add_error(
-                None, _('Fill in the code, name, Arabic name and category for the new task type, or leave them '
-                        'all blank.'),
+                None, _('Please complete the code, name, Arabic name and category for the new task type, or '
+                        'leave them blank.'),
             )
         elif all(new_task_type_fields):
             if TaskType.objects.filter(code__iexact=cleaned['new_task_type_code'].strip()).exists():
@@ -221,7 +221,7 @@ class TaskCreateForm(forms.ModelForm):
             if TaskType.objects.filter(name__iexact=cleaned['new_task_type_name'].strip()).exists():
                 self.add_error(
                     'new_task_type_name',
-                    _('A task type with this name already exists. Choose it from the list.'),
+                    _('A task type with this name already exists. Please select it from the list.'),
                 )
 
         return cleaned
@@ -261,7 +261,7 @@ class TaskEditForm(forms.ModelForm):
 
     class ScheduleMode(models.TextChoices):
         FULL = 'full', _('Day and exact time')
-        DAY_ONLY = 'day_only', _('Day only (the supervisor sets the time)')
+        DAY_ONLY = 'day_only', _('Day only — the supervisor will set the exact time')
 
     schedule_mode = forms.ChoiceField(
         choices=ScheduleMode.choices, required=False, widget=forms.RadioSelect,
@@ -464,8 +464,8 @@ class SetLeadForm(forms.Form):
     hours_worked = forms.DecimalField(
         required=False, min_value=0, max_digits=5, decimal_places=2,
         label=_('Hours already worked by the current lead'),
-        help_text=_('Counted in their hours, since the new lead will submit the report. Leave blank if you '
-                    "don't know."),
+        help_text=_('Counted toward their hours, as the report will be submitted by the new lead. Leave blank '
+                    'if unknown.'),
     )
 
     def __init__(self, *args, technicians, requires_reason, ask_hours=False, **kwargs):
@@ -528,7 +528,8 @@ class DeactivateTechnicianForm(forms.Form):
 
 # One plain line for AUTH_PASSWORD_VALIDATORS, instead of Django's own
 # four-bullet list, on every screen where someone picks a password.
-PASSWORD_RULES = _('At least 8 characters, not all numbers, and not a common password or close to your name.')
+PASSWORD_RULES = _('At least 8 characters, not entirely numeric, and not a common password or one similar to '
+                   'your name.')
 
 
 def new_password_fields():
@@ -906,8 +907,8 @@ class NegligenceFlagForm(forms.Form):
     """
     note = forms.CharField(
         label=_('Description of the issue'), widget=forms.Textarea(attrs={'rows': 2}),
-        help_text=_("Describe the complaint and why it was negligence, not something the technician couldn't "
-                    'have foreseen.'),
+        help_text=_('Describe the customer complaint and explain why it constitutes negligence rather than an '
+                    'unforeseeable circumstance.'),
     )
 
 

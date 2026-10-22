@@ -9,13 +9,13 @@ import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 
 // Same wording as the website's password rules (tasks/forms.py PASSWORD_RULES).
-const PASSWORD_RULES = 'At least 8 characters, not all numbers, and not a common password or close to your name.';
+const PASSWORD_RULES = 'At least 8 characters, not entirely numeric, and not a common password or one similar to your name.';
 
 type FieldErrors = Partial<Record<'old_password' | 'new_password1' | 'new_password2' | 'form', string>>;
 
 function errorsFrom(err: unknown): FieldErrors {
   if (!(err instanceof ApiRequestError)) {
-    return { form: "Couldn't save. Check your connection and try again." };
+    return { form: 'Unable to save. Please check your connection and try again.' };
   }
   const body = err.body;
   if (!body || typeof body !== 'object' || 'detail' in body) {

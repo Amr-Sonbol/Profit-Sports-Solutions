@@ -34,7 +34,7 @@
 <div class="section">
     <h2>{% translate "Login" %}</h2>
     <p class="field__help">
-        {% translate "No login yet. Create one and they get a one-time link by email to set their own password. No password is emailed." %}
+        {% translate "No login has been created yet. Once created, a one-time link will be emailed so they can set their own password. No password is sent by email." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}
@@ -66,7 +66,7 @@
         <form method="post" class="disclosure__body" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="reset_password">
-            <p class="field__help">{% translate "Sets a temporary password. They choose their own the next time they sign in, and the mobile app signs them out." %}</p>
+            <p class="field__help">{% translate "Sets a temporary password. They will be asked to choose their own at their next sign-in and will be signed out of the mobile app." %}</p>
             {% include "_password_fields.html" with form=password_form %}
             <button type="submit" class="button">{% translate "Set temporary password" %}</button>
         </form>
@@ -77,7 +77,7 @@
 {% if tasks_to_reassign %}
 <div class="section">
     <h2>{% translate "Open tasks to reassign" %}</h2>
-    <p class="field__help">{% translate "These people are deactivated but still assigned to the tasks below. Open each task and pick a replacement. For a lead, choose the reason “Left the company”." %}</p>
+    <p class="field__help">{% translate "These staff members have been deactivated but remain assigned to the following tasks. Please open each task and select a replacement; for a lead, choose the reason “Left the company”." %}</p>
     <ul class="plain-list">
         {% for task in tasks_to_reassign %}
         <li>
@@ -93,7 +93,7 @@
 {% if is_manager %}
 <div class="section">
     <h2>{% translate "Trips" %}</h2>
-    <p class="field__help">{% translate "Working in another country on set dates. During the trip they can be given tasks there. Their home country, hours and figures don't change." %}</p>
+    <p class="field__help">{% translate "Working in another country for specified dates. During a trip, they may be assigned tasks there; their home country, hours and figures remain unchanged." %}</p>
     {% if trips %}
     <ul class="plain-list">
         {% for trip in trips %}
@@ -132,7 +132,7 @@
 <div class="section">
     <h2>{% translate "Deactivate" %}</h2>
     <p class="field__help">
-        {% translate "Removes them from the roster, stops new assignments and turns off their login. Use it when someone resigns, is dismissed or leaves the company." %}
+        {% translate "Removes the staff member from the roster, prevents new assignments and disables their login, if any. Use this when a staff member has resigned, been dismissed or otherwise left the company." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

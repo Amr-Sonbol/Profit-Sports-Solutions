@@ -12,7 +12,7 @@
 </div>
 
 <div class="section">
-    <p class="field__help">{% translate "Create every staff account here. Choose the role first." %}</p>
+    <p class="field__help">{% translate "All staff accounts are created here. Please select the role first: technician, supervisor, manager, Country Support Manager, Technical Support Manager, Warehouse Manager, Operations Manager or administrator." %}</p>
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}

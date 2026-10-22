@@ -60,7 +60,7 @@ export default function TeamTaskScreen() {
       setPicking(null);
       Alert.alert('Done', success);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? errorText(err) : "That didn't work. Try again.");
+      setError(err instanceof ApiRequestError ? errorText(err) : 'The request could not be completed. Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -255,7 +255,7 @@ export default function TeamTaskScreen() {
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
               onPress={() => run(
                 () => approveTaskReport(Number(id)),
-                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Waiting for manager approval.',
+                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Awaiting manager approval.',
               )}
               disabled={isBusy}
             >

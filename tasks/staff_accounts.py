@@ -38,7 +38,7 @@ class StaffAccountStatus(models.TextChoices):
     TEMPORARY = 'temporary', gettext_lazy('Temporary password')
     ACTIVE = 'active', gettext_lazy('Active')
     LOCKED = 'locked', gettext_lazy('Locked')
-    DISABLED = 'disabled', gettext_lazy('Login turned off')
+    DISABLED = 'disabled', gettext_lazy('Login disabled')
     LEFT = 'left', gettext_lazy('Left the company')
 
 
@@ -90,7 +90,7 @@ def staff_setup(request, token):
         person.must_change_password = False
         person.save(update_fields=['must_change_password'])
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-        messages.success(request, _('Your password is set. Welcome.'))
+        messages.success(request, _('Your password has been set. Welcome.'))
         return redirect('home')
     return render(request, 'tasks/staff_setup.html', {'form': form, 'person': person})
 
@@ -131,9 +131,9 @@ def staff_accounts(request):
         if action == 'send_setup_link' and user.is_active:
             if send_staff_setup_link(request, target):
                 log_account_action(request, target, f'Staff setup link emailed to {user.email}')
-                messages.success(request, _('A setup link was sent to %(email)s.') % {'email': user.email})
+                messages.success(request, _('A setup link has been sent to %(email)s.') % {'email': user.email})
             else:
-                messages.error(request, _('There is no email address for this login. Add one first.'))
+                messages.error(request, _('No email address is recorded for this login. Please add one first.'))
         elif action == 'unlock':
             unlock_login(user.username)
             log_account_action(request, target, 'Staff login unlocked')
@@ -141,25 +141,26 @@ def staff_accounts(request):
         elif action == 'sign_out_phones':
             sign_out_of_mobile_app(user)
             log_account_action(request, target, 'Staff signed out of the mobile app on every phone')
-            messages.success(request, _('%(name)s is signed out of the mobile app on every phone.') % {
+            messages.success(request, _('%(name)s has been signed out of the mobile app on all devices.') % {
                 'name': target.full_name,
             })
         elif action == 'disable' and user.is_active:
             if target.pk == actor.pk:
-                messages.error(request, _("You can't turn off your own login."))
+                messages.error(request, _('You cannot disable your own login.'))
             elif is_last_active_admin(target):
-                messages.error(request, _("This is the only admin who can sign in, so their login can't be turned off."))
+                messages.error(request, _('This is the only administrator able to sign in, so their login '
+                                          'cannot be disabled.'))
             else:
                 user.is_active = False
                 user.save(update_fields=['is_active'])
                 sign_out_of_mobile_app(user)
                 log_account_action(request, target, 'Staff login turned off')
-                messages.success(request, _('Login turned off for %(name)s.') % {'name': target.full_name})
+                messages.success(request, _('Login disabled for %(name)s.') % {'name': target.full_name})
         elif action == 'enable' and not user.is_active:
             user.is_active = True
             user.save(update_fields=['is_active'])
             log_account_action(request, target, 'Staff login turned on')
-            messages.success(request, _('Login turned on for %(name)s.') % {'name': target.full_name})
+            messages.success(request, _('Login enabled for %(name)s.') % {'name': target.full_name})
         elif action == 'change_email':
             form = ChangeLoginEmailForm(request.POST, user=user)
             if form.is_valid():
@@ -173,7 +174,7 @@ def staff_accounts(request):
                     fields.append('username')
                 user.save(update_fields=fields)
                 log_account_action(request, target, f'Staff email changed from {old_email or "(none)"} to {user.email}')
-                messages.success(request, _('Email changed to %(email)s.') % {'email': user.email})
+                messages.success(request, _('The email address has been changed to %(email)s.') % {'email': user.email})
             else:
                 messages.error(request, form.errors['email'][0])
         return _redirect_back(request)

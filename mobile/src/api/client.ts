@@ -47,7 +47,7 @@ export class ApiRequestError extends Error {
     const detail =
       body && typeof body === 'object' && 'detail' in body
         ? String((body as { detail: unknown }).detail)
-        : 'Something went wrong. Try again.';
+        : 'An unexpected error occurred.';
     super(detail);
     this.status = status;
     this.body = body;

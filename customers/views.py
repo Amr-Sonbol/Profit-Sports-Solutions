@@ -173,7 +173,8 @@ def customer_edit(request, pk):
             customer.must_change_password = True
             customer.save(update_fields=['must_change_password'])
             log_account_action(request, customer, 'Portal temporary password set')
-            messages.success(request, _('Password reset. They choose their own the next time they sign in.'))
+            messages.success(request, _('The password has been reset. They will be asked to choose their own '
+                                        'at their next sign-in.'))
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
@@ -262,7 +263,7 @@ def _import_customers_csv(csv_file, country):
         if segment not in valid_segments:
             results.append({
                 **result, 'outcome': 'error',
-                'detail': _('Unknown segment "%(segment)s". Use gym, hotel, club or other.') % {'segment': segment},
+                'detail': _('Unknown segment "%(segment)s". Please use gym, hotel, club or other.') % {'segment': segment},
             })
             continue
 

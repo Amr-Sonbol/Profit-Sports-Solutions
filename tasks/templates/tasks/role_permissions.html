@@ -9,7 +9,7 @@
 </div>
 
 <p class="muted">
-    {% translate "What each role can open. Technicians' own screens, like My week and My skills, aren't listed: every signed-in technician has them." %}
+    {% translate "Permissions for each role. Self-service technician screens (My week, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role." %}
 </p>
 
 <form method="post" novalidate>
@@ -47,7 +47,7 @@
 <div class="section">
     <h2>{% translate "Notifications" %}</h2>
     <p class="muted">
-        {% translate "How the customer hears about a new visit time: a supervisor sends it from the task page, or it's sent automatically when the date or time changes." %}
+        {% translate "How the customer is informed of a rescheduled visit: sent deliberately by a supervisor from the task details, or sent automatically by the system as soon as the date or time changes." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

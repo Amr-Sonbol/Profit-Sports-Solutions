@@ -23,7 +23,7 @@
     <div class="section__header">
         <h2>{% translate "Open tasks" %}</h2>
         {% if task_list_url and stats.open_task_count > tasks|length %}
-        <a href="{{ task_list_url }}?status=open" class="forward-link">{% blocktranslate with count=stats.open_task_count %}See all {{ count }}{% endblocktranslate %}</a>
+        <a href="{{ task_list_url }}?status=open" class="forward-link">{% blocktranslate with count=stats.open_task_count %}View all {{ count }}{% endblocktranslate %}</a>
         {% endif %}
     </div>
     {% if tasks %}

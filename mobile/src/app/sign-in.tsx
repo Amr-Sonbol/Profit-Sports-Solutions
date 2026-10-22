@@ -25,7 +25,7 @@ export default function SignInScreen() {
     } catch (err) {
       // Same generic wording the web login uses, on purpose — this isn't
       // the place to hint at which of the two was wrong.
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't sign in. Check your connection.");
+      setError(err instanceof ApiRequestError ? err.message : 'Unable to sign in. Please check your connection.');
     } finally {
       setIsSubmitting(false);
     }

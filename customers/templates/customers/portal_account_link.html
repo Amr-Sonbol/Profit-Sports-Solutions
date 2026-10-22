@@ -5,12 +5,12 @@
 
 {% block content %}
 <div class="page__header">
-    <h1>{% if first_time %}{% translate "Welcome. Finish setting up your account." %}{% else %}{% translate "Set a new password" %}{% endif %}</h1>
+    <h1>{% if first_time %}{% translate "Welcome. Please complete your account setup." %}{% else %}{% translate "Set a new password" %}{% endif %}</h1>
 </div>
 
 <div class="section">
     {% if first_time %}
-    <p class="field__help">{% translate "Set your password and complete your company details. Next time you'll go straight to your account." %}</p>
+    <p class="field__help">{% translate "Please set your password and complete your company details. Subsequent sign-ins will take you directly to your account." %}</p>
     {% endif %}
     <form method="post" novalidate>
         {% csrf_token %}

@@ -34,7 +34,7 @@ export default function TicketsScreen() {
     } catch (err) {
       setError(
         err instanceof ApiRequestError && err.status === 403
-          ? "You don't have access to tickets."
+          ? "You do not have permission to view tickets."
           : 'Could not load tickets.',
       );
     }

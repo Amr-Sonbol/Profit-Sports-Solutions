@@ -43,14 +43,14 @@
         <form method="post" class="disclosure__body" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="reset_password">
-            <p class="field__help">{% translate "Sets a temporary password. They choose their own the next time they sign in." %}</p>
+            <p class="field__help">{% translate "Sets a temporary password. They will be asked to choose their own at their next sign-in." %}</p>
             {% include "_password_fields.html" with form=password_form %}
             <button type="submit" class="button">{% translate "Set temporary password" %}</button>
         </form>
     </details>
     {% else %}
     <p class="field__help">
-        {% translate "No portal login yet. Create one so this customer can follow their tickets and service history. We'll email a temporary password with the sign-in link. They choose their own password and confirm their contact details the first time they sign in." %}
+        {% translate "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}
@@ -77,7 +77,7 @@
     {% if customer.is_active %}
     <h2>{% translate "Deactivate" %}</h2>
     <p class="field__help">
-        {% translate "Removes the customer from the list and turns off their login. Use it when a contract ends or the business closes." %}
+        {% translate "Removes the customer from the customer list and disables their login, if any. Use this when a contract has ended or the business has closed." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

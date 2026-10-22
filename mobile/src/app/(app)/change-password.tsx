@@ -37,7 +37,7 @@ export default function ChangePasswordScreen() {
 
             {saved ? (
               <>
-                <ThemedText>Password changed. You stay signed in.</ThemedText>
+                <ThemedText>Your password has been changed. You remain signed in.</ThemedText>
                 <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={backToProfile}>
                   <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Done</ThemedText>
                 </TouchableOpacity>

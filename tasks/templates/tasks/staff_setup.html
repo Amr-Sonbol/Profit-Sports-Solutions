@@ -9,7 +9,7 @@
 </div>
 
 <div class="section">
-    <p class="field__help">{% blocktranslate with name=person.full_name username=person.user.username %}Welcome, {{ name }}. You sign in as “{{ username }}”. Choose a password to finish setting up your account.{% endblocktranslate %}</p>
+    <p class="field__help">{% blocktranslate with name=person.full_name username=person.user.username %}Welcome, {{ name }}. Your username is “{{ username }}”. Please choose a password to complete your account setup.{% endblocktranslate %}</p>
     <form method="post" class="disclosure__body" novalidate>
         {% csrf_token %}
         {% include "_password_fields.html" with form=form %}

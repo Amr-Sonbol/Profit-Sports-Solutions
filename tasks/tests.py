@@ -197,7 +197,7 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'}, follow=True)
 
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Set a time before notifying')
+        self.assertContains(response, 'Please set a scheduled time')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_requires_a_contact_email(self):
@@ -209,7 +209,7 @@ class TaskDetailTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_sends_email_and_records_who_and_when(self):
@@ -240,7 +240,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': '  '}, follow=True,
         )
 
-        self.assertContains(response, 'Enter the reason for the delay')
+        self.assertContains(response, 'Please state the reason for the delay')
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
 
@@ -253,7 +253,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': 'Traffic'}, follow=True,
         )
 
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_delay_notice_sends_email_and_logs_an_event(self):
@@ -362,7 +362,7 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'send_feedback_request'}, follow=True)
 
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
 
     def test_requesting_feedback_creates_it_and_sends_an_email(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -892,7 +892,7 @@ class TaskScheduleLockingTests(TaskTestCase):
             'action': 'request_schedule_change', 'requested_scheduled_for': '2026-10-02T10:00',
         }, follow=True)
         self.assertFalse(ScheduleChangeRequest.objects.exists())
-        self.assertContains(response, 'Edit it directly')
+        self.assertContains(response, 'Please edit it directly')
 
     def test_cannot_file_a_second_pending_request(self):
         self.task.schedule_time_locked = True
@@ -1004,7 +1004,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a tracking number')
+        self.assertContains(response, 'Please add a shipping tracking number')
 
     def test_requires_a_contact_email(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -1014,7 +1014,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a contact email')
+        self.assertContains(response, 'Please add a contact email')
 
     def test_sends_the_tracking_number_only(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -2392,7 +2392,7 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Add a tracking number')
+        self.assertContains(response, 'Please add a shipping tracking number')
 
     def test_notify_shipping_sends_the_tracking_number_only(self):
         self.ticket.shipping_tracking_number = 'TRACK-99'
@@ -2472,7 +2472,7 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='admin1', password='pass12345')
         create_url = f'/tasks/new/?ticket={self.ticket.pk}'
         response = self.client.get(create_url)
-        self.assertContains(response, 'As an administrator, you can still change it')
+        self.assertContains(response, 'As an administrator, you may still change it')
 
         response = self.client.post(create_url, {
             'site': other_site.pk,
@@ -3988,7 +3988,7 @@ class MyProfileTests(TaskTestCase):
         self.assertFalse(response.context['is_field_staff'])
         self.assertNotIn('contacts', response.context)
         self.assertNotIn('certification', response.context)
-        self.assertNotContains(response, 'Who to contact')
+        self.assertNotContains(response, 'Your contacts')
         self.assertNotContains(response, 'Professional skills')
         self.assertContains(response, 'admin1')
 
@@ -7320,7 +7320,7 @@ class HomeSummaryTests(TodayTestsMixin, TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/')
         self.assertEqual(response.context['actions'], [])
-        self.assertContains(response, 'Nothing is waiting on you.')
+        self.assertContains(response, 'There is nothing awaiting your action.')
 
     def test_technician_sees_their_visit_today_and_no_action_box(self):
         task = self._make_task('UAE-0103', lead=self.technician, scheduled_for=timezone.now())
@@ -7362,7 +7362,7 @@ class TaskListQuickFilterTests(TodayTestsMixin, TaskTestCase):
 
     def test_quick_filter_is_named_above_the_list(self):
         response = self.client.get('/tasks/?lead=none')
-        self.assertContains(response, 'Showing only:')
+        self.assertContains(response, 'Filtered by:')
         self.assertContains(response, '<input type="hidden" name="lead" value="none">', html=True)
 
 
@@ -7422,15 +7422,15 @@ class TeamMapTests(TodayTestsMixin, TaskTestCase):
     def test_no_tap_today_means_no_pin(self):
         response = self.client.get('/tasks/technicians/map/')
         self.assertEqual(response.context['pins'], [])
-        self.assertContains(response, 'No taps today')
+        self.assertContains(response, 'No check-ins today')
 
     def test_a_late_arrival_is_flagged_until_they_arrive(self):
         task = self._make_task('UAE-0402', lead=self.technician, scheduled_for=timezone.now() - timedelta(hours=1))
         texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
-        self.assertTrue(any('has not arrived' in text for text in texts))
+        self.assertTrue(any('has not yet arrived' in text for text in texts))
         self._tap(task, TaskEvent.EventType.ARRIVED, '25.0801', '55.1401')
         texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
-        self.assertFalse(any('has not arrived' in text for text in texts))
+        self.assertFalse(any('has not yet arrived' in text for text in texts))
 
     def test_a_tap_far_from_the_site_is_flagged(self):
         task = self._make_task('UAE-0403', lead=self.technician, status=Task.Status.IN_PROGRESS)
@@ -7445,7 +7445,7 @@ class TeamMapTests(TodayTestsMixin, TaskTestCase):
         self._tap(task, TaskEvent.EventType.STARTED, '25.0801', '55.1401',
                   occurred_at=timezone.now() - timedelta(hours=2))
         texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
-        self.assertTrue(any('past its 1.0 h estimate' in text for text in texts))
+        self.assertTrue(any('exceeded its estimate of 1.0 hours' in text for text in texts))
 
     def test_technician_cannot_open_it(self):
         self.client.login(username='tech1', password='pass12345')
@@ -7847,4 +7847,4 @@ class SidebarPerUserTests(TaskTestCase):
         response = self.client.get('/tasks/roles/')
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'Page not found', status_code=403)
-        self.assertNotContains(response, 'permission', status_code=403)
+        self.assertNotContains(response, 'Not allowed', status_code=403)

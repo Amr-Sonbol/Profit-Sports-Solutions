@@ -25,7 +25,7 @@ export default function ChoosePasswordScreen() {
               Choose your password
             </ThemedText>
             <ThemedText themeColor="textSecondary">
-              {me?.full_name ? `${me.full_name}, you` : 'You'} signed in with a temporary password. Choose your own to continue.
+              {me?.full_name ? `${me.full_name}, you have` : 'You have'} signed in with a temporary password. Please choose your own password to continue.
             </ThemedText>
 
             <PasswordForm askCurrent={false} submitLabel="Save and continue" />

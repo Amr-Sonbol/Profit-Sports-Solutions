@@ -8,7 +8,7 @@
     <h1>{% translate "Too many sign-in attempts" %}</h1>
 </div>
 <p class="empty-state">
-    {% translate "Too many failed sign-in attempts. Wait a bit and try again, or reset your password if you've forgotten it." %}
+    {% translate "Too many failed sign-in attempts from this connection. Please wait before trying again, or reset your password if you have forgotten it." %}
 </p>
 <p><a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a></p>
 {% endblock %}

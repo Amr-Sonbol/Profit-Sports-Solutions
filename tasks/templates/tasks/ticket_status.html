@@ -40,12 +40,12 @@
             {% if ticket.task.scheduled_for %}
             <p>{% blocktranslate with date=ticket.task.scheduled_for|date:"SHORT_DATETIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}</p>
             {% else %}
-            <p>{% translate "Your ticket is now a service task. We'll contact you to book a visit." %}</p>
+            <p>{% translate "Your ticket has been converted into a service task. We will contact you to schedule a visit." %}</p>
             {% endif %}
         {% elif ticket.status == 'closed' %}
-        <p>{% translate "This ticket is resolved. Contact us if you need anything else." %}</p>
+        <p>{% translate "This ticket has been resolved. Please contact us if you require further assistance." %}</p>
         {% elif ticket.status == 'dismissed' %}
-        <p>{% translate "This ticket has been reviewed and closed. Contact us if you need anything else." %}</p>
+        <p>{% translate "This ticket has been reviewed and closed. Please contact us if you require further assistance." %}</p>
         {% endif %}
     </div>
     {% for escalation in escalations %}

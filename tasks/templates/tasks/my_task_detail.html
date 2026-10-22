@@ -121,7 +121,7 @@
         {% endif %}
     </div>
     {% if undoable_tap %}
-    <p class="field__help">{% translate "Tapped by mistake? You can undo your last step for 10 minutes. After that, a manager can fix the time." %}</p>
+    <p class="field__help">{% translate "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time." %}</p>
     {% endif %}
 
     {% if can_pause %}
@@ -203,11 +203,11 @@
     <h2>{% translate "Report" %}</h2>
     {% if report %}
         {% if task.status == 'closed' %}
-        <p class="empty-state">{% translate "Submitted. Task closed." %}</p>
+        <p class="empty-state">{% translate "Submitted — task closed." %}</p>
         {% elif task.status == 'pending_supervisor_review' %}
-        <p class="empty-state">{% translate "Submitted. Waiting for your supervisor's review." %}</p>
+        <p class="empty-state">{% translate "Submitted — awaiting your supervisor's review." %}</p>
         {% else %}
-        <p class="empty-state">{% translate "Submitted. Waiting for manager approval." %}</p>
+        <p class="empty-state">{% translate "Submitted — awaiting manager approval." %}</p>
         {% endif %}
         <a href="{% url 'tasks:my_report_form' task.pk %}" class="button button--secondary">{% translate "View or edit report" %}</a>
     {% elif can_file_report %}

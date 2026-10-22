@@ -28,7 +28,7 @@ ARAB_COUNTRY_CODES = {
 class AccountStatus(models.TextChoices):
     NO_EMAIL = 'no_email', gettext_lazy('No email')
     NOT_INVITED = 'not_invited', gettext_lazy('Not invited')
-    INVITED = 'invited', gettext_lazy('Invited, not set up yet')
+    INVITED = 'invited', gettext_lazy('Invited — awaiting setup')
     EXPIRED = 'expired', gettext_lazy('Invitation expired')
     ACTIVE = 'active', gettext_lazy('Active')
     LOCKED = 'locked', gettext_lazy('Locked')
@@ -130,10 +130,10 @@ def _send_link_email(request, customer, subject_msgid, body_msgid, button_msgid)
 WELCOME_SUBJECT = gettext_lazy('Welcome to the Profit Sports Solutions customer portal')
 WELCOME_BODY = gettext_lazy(
     'Dear %(contact)s,\n\n'
-    'Your Profit Sports Solutions customer portal account is ready. In the portal you can send service '
-    'requests, follow their progress and see your service history.\n\n'
-    'To get started, set your password and complete your company details using the link below. It works once '
-    'and expires in %(days)s days.\n\n'
+    'Your customer portal account with Profit Sports Solutions has been created. Through the portal you may '
+    'submit service requests, follow their progress and review your service history.\n\n'
+    'To activate your account, please set your password and complete your company details using the secure '
+    'link below. The link is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Your username: %(username)s\n\n'
     'Best regards,\n'
@@ -143,11 +143,11 @@ WELCOME_BUTTON = gettext_lazy('Activate my account')
 RESET_SUBJECT = gettext_lazy('Set a new password for your Profit Sports Solutions portal account')
 RESET_BODY = gettext_lazy(
     'Dear %(contact)s,\n\n'
-    'Use the link below to set a new password for your customer portal account. It works once and expires in '
-    '%(days)s days.\n\n'
+    'A link to set a new password for your customer portal account has been issued. Please use the secure link '
+    'below; it is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Your username: %(username)s\n\n'
-    "If you didn't ask for this, you can ignore this email.\n\n"
+    'If you did not request this, please disregard this email.\n\n'
     'Best regards,\n'
     'Profit Sports Solutions\n'
 )

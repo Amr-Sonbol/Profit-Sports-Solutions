@@ -7,7 +7,7 @@
 <div class="page__header">
     <h1>{% translate "Staff accounts" %}</h1>
 </div>
-<p class="field__help">{% translate "Every staff login, in every country. Select a name to fix their account. Every action here goes in the Audit log." %}</p>
+<p class="field__help">{% translate "All staff logins across all countries. Select a name to manage the account. Every action taken here is recorded in the Audit log." %}</p>
 
 <nav class="tabs">
     <a href="?{% if country_id %}country={{ country_id }}&{% endif %}{% if search %}q={{ search|urlencode }}{% endif %}" class="{% if not status %}is-active{% endif %}">{% translate "All" %} ({{ total }})</a>
@@ -51,11 +51,11 @@
     </dl>
 
     {% if not managed.can_manage %}
-    <p class="empty-state">{% translate "Only someone at their level or above can change this account." %}</p>
+    <p class="empty-state">{% translate "This account can only be changed by someone at the same level or above." %}</p>
     {% elif row.status == 'no_login' %}
-    <p class="field__help">{% translate "They have no login yet. Create one from their record and they get a setup link by email." %}</p>
+    <p class="field__help">{% translate "No login has been created yet. Create one from their record and a setup link will be sent by email." %}</p>
     {% elif row.status == 'left' %}
-    <p class="field__help">{% translate "They have left the company, so their login is off. Reactivate them from their record if they come back." %}</p>
+    <p class="field__help">{% translate "This person has left the company, so their login is disabled. Reactivate them from their record should they return." %}</p>
     {% else %}
     <div class="account-panel__actions">
         {% if row.status == 'locked' %}
@@ -67,11 +67,11 @@
         {% endif %}
         {% include "tasks/_staff_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
         {% if person.app_sessions %}
-        {% include "tasks/_staff_account_action.html" with action="sign_out_phones" label=_("Sign out of every phone") %}
+        {% include "tasks/_staff_account_action.html" with action="sign_out_phones" label=_("Sign out of all devices") %}
         {% endif %}
-        {% include "tasks/_staff_account_action.html" with action="disable" label=_("Turn off login") %}
+        {% include "tasks/_staff_account_action.html" with action="disable" label=_("Disable login") %}
         {% else %}
-        {% include "tasks/_staff_account_action.html" with action="enable" label=_("Turn on login") %}
+        {% include "tasks/_staff_account_action.html" with action="enable" label=_("Enable login") %}
         {% endif %}
         <form method="post" class="row-actions__inline">
             {% csrf_token %}
@@ -82,7 +82,7 @@
             <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
         </form>
     </div>
-    <p class="field__help">{% translate "Link not received or expired: send a new setup link (check the email first). Forgot their password: send a setup link, or set a temporary password and read it to them if email won't work. Lost or handed-on phone: sign them out of every phone. Locked out: unlock now. Away for a while: turn off their login." %}</p>
+    <p class="field__help">{% translate "Link not received or expired: send a new setup link (please verify the email address first). Forgotten password: send a setup link, or set a temporary password and read it to them if email is unavailable. Lost or reassigned phone: sign them out of all devices. Locked out: unlock the account. Extended absence: disable their login." %}</p>
     {% endif %}
 </div>
 {% endwith %}

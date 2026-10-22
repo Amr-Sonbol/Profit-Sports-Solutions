@@ -21,7 +21,7 @@
 
 {% if quick_filters %}
 <p class="quick-filter">
-    {% translate "Showing only:" %} <strong>{{ quick_filters|join:", " }}</strong>
+    {% translate "Filtered by:" %} <strong>{{ quick_filters|join:", " }}</strong>
     <a href="?status={{ status }}">{% translate "Show all" %}</a>
 </p>
 {% endif %}

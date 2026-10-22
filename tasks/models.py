@@ -127,8 +127,8 @@ class Task(models.Model):
     reported_serial_numbers = models.TextField(
         _('reported serial numbers'), blank=True,
         help_text=_(
-            'the machines the customer listed in the ticket, one per line. Machines found on site go in the '
-            'work report',
+            'copied from the ticket at conversion, one per line: the machines the customer identified before '
+            'the visit. Additional machines found on site are recorded in the work report, not here.',
         ),
     )
     priority = models.CharField(_('priority'), max_length=20, choices=Priority.choices)
@@ -146,14 +146,16 @@ class Task(models.Model):
     scheduled_date = models.DateField(
         _('scheduled date'), null=True, blank=True,
         help_text=_(
-            'set when a manager picks only the day. A supervisor sets the time later'
+            'set when a manager schedules by day only; the day is fixed and the time remains empty until a '
+            'supervisor sets it'
         ),
     )
     schedule_time_locked = models.BooleanField(
         _('schedule time locked'), default=False,
         help_text=_(
-            'on when a manager last set the time, off when a supervisor did. While locked, supervisors must '
-            'request a change'
+            'set automatically: true whenever a manager last set the scheduled time; false when a supervisor '
+            'did. When locked, a supervisor can no longer change the scheduled time directly and must request '
+            'a change'
         ),
     )
     estimated_hours = models.DecimalField(
@@ -169,7 +171,8 @@ class Task(models.Model):
         Technician, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tasks_responsible_for', verbose_name=_('responsible supervisor'),
         help_text=_(
-            'the person responsible for staffing this task, not necessarily who created it or who does the work'
+            'the person accountable for staffing this task; not necessarily its creator, nor the technician '
+            'assigned to perform the work'
         ),
     )
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
@@ -195,8 +198,8 @@ class Task(models.Model):
     invoice_visible_to_supervisor = models.BooleanField(
         _('show invoice to the supervisor'), default=False,
         help_text=_(
-            'only managers see documents by default. Turn this on when a supervisor collects payment on site '
-            'and needs the invoice',
+            'documents are restricted to managers by default; enable this for a specific task when a '
+            'supervisor collects payment on site and requires access to the invoice',
         ),
     )
     delivery_note = models.FileField(
@@ -207,7 +210,7 @@ class Task(models.Model):
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
-        help_text=_('when the customer was last emailed about the visit. Never sent automatically'),
+        help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
     )
     schedule_notified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
@@ -281,8 +284,8 @@ class CustomerTicket(models.Model):
 
     ticket_number = models.CharField(
         _('ticket number'), max_length=30, unique=True,
-        help_text=_("filled in automatically, e.g. AE-T0001: the country's task-number prefix plus T for "
-                    'tickets'),
+        help_text=_('auto-generated per country, e.g. AE-T0001; uses the same prefix as task numbers, with a T '
+                    'to distinguish the two'),
     )
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
@@ -291,14 +294,14 @@ class CustomerTicket(models.Model):
     customer = models.ForeignKey(
         Customer, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets', verbose_name=_('customer'),
-        help_text=_('filled in automatically: the signed-in customer who sent the ticket'),
+        help_text=_('set automatically on submission; every ticket is submitted by a signed-in customer'),
     )
     site = models.ForeignKey(
         Site, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets', verbose_name=_('site'),
         help_text=_(
-            'the registered site the customer chose. It carries over to the task, and only an administrator '
-            'can change it'
+            'set when a signed-in customer selected one of their registered sites; carried directly to the '
+            'resulting task without re-matching, and only an administrator can change it once set'
         ),
     )
     company_name = models.CharField(_('gym name'), max_length=150)
@@ -677,7 +680,7 @@ class TaskAssignment(models.Model):
     ended_at = models.DateTimeField(_('ended at'), null=True, blank=True)
     end_reason = models.CharField(
         _('end reason'), max_length=20, choices=EndReason.choices, blank=True,
-        help_text=_('required when reassigning, chosen from a list'),
+        help_text=_('required on reassignment; selected from a list, never free text'),
     )
     labour_hours = models.DecimalField(
         _('labour hours'), max_digits=5, decimal_places=2, null=True, blank=True,

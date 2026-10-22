@@ -36,7 +36,7 @@
 {% if is_field_staff %}
 <div class="section">
     <div class="section__header">
-        <h2>{% translate "Your standing" %}</h2>
+        <h2>{% translate "Performance overview" %}</h2>
         <a href="{% url 'tasks:my_progress' %}" class="forward-link">{% translate "See full progress" %}</a>
     </div>
     <dl class="detail-grid">
@@ -67,7 +67,7 @@
                 </span>
                 {% else %}
                 <span class="badge badge--bad">
-                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days left, behind schedule{% endblocktranslate %}
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                 </span>
                 {% endif %}
             </dd>
@@ -83,7 +83,7 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Who to contact" %}</h2>
+    <h2>{% translate "Your contacts" %}</h2>
     {% if contacts %}
     <ul class="contact-list">
         {% for person in contacts %}
