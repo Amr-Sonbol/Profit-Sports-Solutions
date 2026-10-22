@@ -168,6 +168,34 @@ class ActiveCountryContextTests(TestCase):
             self.client.logout()
 
 
+class SidebarGroupsTests(TestCase):
+    """The sidebar's sections and current-page marker (people.context_processors.nav_groups)."""
+
+    def setUp(self):
+        country = Country.objects.create(name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED')
+        user = User.objects.create_user('admin1', password='pass12345')
+        Technician.objects.create(
+            user=user, country=country, full_name='Admin', language='en',
+            role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin1', password='pass12345')
+
+    def _active_urls(self, response):
+        return [page['url'] for group in response.context['nav_groups'] for page in group['pages'] if page['active']]
+
+    def test_every_page_lands_in_exactly_one_section(self):
+        response = self.client.get('/tasks/dashboard/')
+        grouped = [page['url'] for group in response.context['nav_groups'] for page in group['pages']]
+        self.assertEqual(sorted(grouped), sorted(page['url'] for page in response.context['nav_pages']))
+        self.assertTrue(all(group['pages'] for group in response.context['nav_groups']))
+
+    def test_current_page_is_marked_by_longest_prefix(self):
+        # /tasks/ (Tasks) is a prefix of /tasks/dashboard/ — only Dashboard lights up.
+        response = self.client.get('/tasks/dashboard/')
+        self.assertEqual(self._active_urls(response), ['/tasks/dashboard/'])
+        self.assertContains(response, 'aria-current="page"', count=1)
+
+
 @override_settings(ALLOWED_HOSTS=['testserver'], AXES_ENABLED=True)
 class LoginLockoutTests(TestCase):
     """django-axes locks an IP out after repeated failed logins — every

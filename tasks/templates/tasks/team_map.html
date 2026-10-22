@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "Team map" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Team map" %}</h1>
+    <span class="muted">{{ today|date:"l j F" }}</span>
+</div>
+<p class="field__help">{% translate "Each technician's last tap today. Location is only taken when they tap, never in between." %}</p>
+
+<section class="section">
+    <h2>{% translate "Needs a follow-up" %}</h2>
+    {% if attention %}
+    <ul class="action-list">
+        {% for item in attention %}
+        <li><a href="{{ item.url }}" class="action-row action-row--{{ item.level }}"><span>{{ item.text }}</span></a></li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "Nothing to follow up on today." %}</p>
+    {% endif %}
+</section>
+
+<section class="section">
+    {% if pins %}
+    {# Map chrome stays left-to-right in both languages, like the header. #}
+    <div id="team-map" class="team-map" dir="ltr"></div>
+    {% else %}
+    <p class="empty-state">{% translate "No taps with a location yet today." %}</p>
+    {% endif %}
+</section>
+
+<section class="section">
+    <h2>{% translate "Technicians" %}</h2>
+    {% if technicians %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Last tap" %}</th>
+                    <th>{% translate "Where" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for technician in technicians %}
+                <tr>
+                    <td>{{ technician.full_name }}</td>
+                    {% if technician.last_tap %}
+                    <td>{{ technician.last_tap.get_event_type_display }}, {{ technician.last_tap.occurred_at|time:"TIME_FORMAT" }}</td>
+                    <td class="cell-wrap">
+                        <a href="{% url 'tasks:task_detail' technician.last_tap.task_id %}">{{ technician.last_tap.task.site.customer.name }}, {{ technician.last_tap.task.site.name }}</a>
+                        {% if technician.last_tap.location_status == 'away' %}<span class="badge badge--bad">{% blocktranslate with distance=technician.last_tap.distance_display %}{{ distance }} from the site{% endblocktranslate %}</span>{% endif %}
+                    </td>
+                    {% else %}
+                    <td colspan="2" class="muted">{% translate "No taps today" %}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No active technicians in your country." %}</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if pins %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{{ pins|json_script:"team-map-pins" }}
+<script src="{% static 'js/team-map.js' %}?v={{ css_version }}"></script>
+{% endif %}
+{% endblock %}

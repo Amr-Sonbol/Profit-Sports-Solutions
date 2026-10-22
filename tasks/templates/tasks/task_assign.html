@@ -47,7 +47,7 @@
         <li>
             <span class="badge badge--role-lead">{% translate "Lead" %}</span>
             {{ active_lead.technician.full_name }}
-            {% if not active_lead.technician.is_active %}<span class="badge badge--status-blocked">{% translate "Left the company" %}</span>{% endif %}
+            {% if not active_lead.technician.is_active %}<span class="badge badge--bad">{% translate "Left the company" %}</span>{% endif %}
             <span class="muted">{% blocktranslate with time=active_lead.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
         </li>
     </ul>
@@ -85,7 +85,7 @@
         <li>
             <span class="badge badge--role-helper">{% translate "Helper" %}</span>
             {{ helper.technician.full_name }}
-            {% if not helper.technician.is_active %}<span class="badge badge--status-blocked">{% translate "Left the company" %}</span>{% endif %}
+            {% if not helper.technician.is_active %}<span class="badge badge--bad">{% translate "Left the company" %}</span>{% endif %}
             <span class="muted">{% blocktranslate with time=helper.assigned_at|date:"SHORT_DATETIME_FORMAT" %}since {{ time }}{% endblocktranslate %}</span>
             {% if helper.removable %}
             <form method="post" class="inline-form" novalidate>
@@ -165,9 +165,9 @@
                     </td>
                     <td>
                         {% if technician.is_available %}
-                        <span class="badge badge--status-new">{% translate "Available" %}</span>
+                        <span class="badge badge--neutral">{% translate "Available" %}</span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {% translate "Unavailable" %} — {{ technician.get_unavailable_reason_display }}
                         </span>
                         {% endif %}

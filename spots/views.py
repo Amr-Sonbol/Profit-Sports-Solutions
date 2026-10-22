@@ -6,6 +6,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.shortcuts import redirect, render
 
+from tasks.views import home_summary
+
 
 @require_POST
 def set_language(request):
@@ -50,10 +52,11 @@ def set_language(request):
 
 @login_required
 def home(request):
-    """Land any staff login on the welcome page — an icon tile for every
-    page this person can open, drawn from the same list as the header
-    menu (people.context_processors.nav_pages), so each role sees only
-    its own pages. A customer login lands on their own portal instead.
+    """Land any staff login on the home page — what's waiting on them
+    and their visits today (tasks.views.home_summary), then a link to
+    every page they can open, from the same list as the header menu
+    (people.context_processors.nav_pages), so each role sees only its own
+    pages. A customer login lands on their own portal instead.
     One shared login page for every account type — this is the only
     place that has to know how to route each of them afterward. Either
     kind, still on a temporary system-generated password, is routed to
@@ -70,4 +73,4 @@ def home(request):
         return redirect('tasks:dashboard')
     if technician.must_change_password:
         return redirect('tasks:first_login')
-    return render(request, 'welcome.html')
+    return render(request, 'welcome.html', home_summary(request, technician))

@@ -40,9 +40,9 @@
                 <td>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 <td>
-                    {% if ticket.status == 'new' %}<span class="badge badge--status-new">{% translate "Open" %}</span>
-                    {% elif ticket.status == 'converted' %}<span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
-                    {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
+                    {% if ticket.status == 'new' %}<span class="badge badge--neutral">{% translate "Open" %}</span>
+                    {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Converted to task" %}</span>
+                    {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
                 </td>
             </tr>
             {% empty %}

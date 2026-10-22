@@ -1,6 +1,7 @@
 import tempfile
 from unittest.mock import patch
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,7 @@ from people.models import (
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
+from .location import record_tap
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
     TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
@@ -7231,3 +7233,161 @@ class StaffOpenedTicketTests(TaskTestCase):
             'subject': 'Chase the treadmill motor', 'description': 'Late', 'assigned_to': self.support.pk,
         })
         self.assertIn('vendor_name', response.context['form'].errors)
+
+
+class TodayTestsMixin:
+    def _make_task(self, number, *, lead=None, lead_active=True, priority=Task.Priority.NORMAL, **fields):
+        task = Task.objects.create(
+            task_number=number, site=self.site, task_type=self.task_type, description='Belt noise',
+            priority=priority, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
+            reported_at=timezone.now(), promised_at=timezone.now(), created_by=self.supervisor_user,
+            status=fields.pop('status', Task.Status.ASSIGNED), **fields,
+        )
+        if lead is not None:
+            TaskAssignment.objects.create(
+                task=task, technician=lead, role=TaskAssignment.Role.LEAD,
+                assigned_at=timezone.now(), is_active=lead_active,
+            )
+        return task
+
+
+class HomeSummaryTests(TodayTestsMixin, TaskTestCase):
+    # The home page (spots.views.home -> tasks.views.home_summary): counts
+    # of what's waiting on you, each linking to its list, then today's visits.
+
+    def test_supervisor_sees_unassigned_and_unscheduled_counts_with_links(self):
+        self._make_task('UAE-0101')
+        self._make_task('UAE-0102', lead=self.technician, scheduled_for=timezone.now())
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/')
+        actions = {action['url']: action['count'] for action in response.context['actions']}
+        self.assertEqual(actions['/tasks/?lead=none'], 1)
+        self.assertEqual(actions['/tasks/?scheduled=none'], 1)
+        self.assertContains(response, 'href="/tasks/?lead=none"')
+
+    def test_nothing_waiting_shows_an_empty_message(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/')
+        self.assertEqual(response.context['actions'], [])
+        self.assertContains(response, 'Nothing is waiting on you.')
+
+    def test_technician_sees_their_visit_today_and_no_action_box(self):
+        task = self._make_task('UAE-0103', lead=self.technician, scheduled_for=timezone.now())
+        self._make_task('UAE-0104', lead=self.technician, scheduled_for=timezone.now() + timedelta(days=3))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/')
+        self.assertEqual(response.context['visits'], [task])
+        self.assertFalse(response.context['show_actions'])
+        self.assertContains(response, f'/tasks/my/{task.pk}/')
+
+    def test_replaced_lead_does_not_count_as_a_visit(self):
+        self._make_task('UAE-0105', lead=self.technician, lead_active=False, scheduled_for=timezone.now())
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/').context['visits'], [])
+
+
+class TaskListQuickFilterTests(TodayTestsMixin, TaskTestCase):
+    # The ?priority= / ?lead=none / ?scheduled=none links from the dashboard.
+
+    def setUp(self):
+        super().setUp()
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def _numbers(self, query):
+        response = self.client.get(f'/tasks/?{query}')
+        return sorted(task.task_number for task in response.context['page_obj'])
+
+    def test_unassigned_includes_a_task_whose_only_lead_was_replaced(self):
+        self._make_task('UAE-0201')
+        self._make_task('UAE-0202', lead=self.technician)
+        self._make_task('UAE-0203', lead=self.technician, lead_active=False)
+        self.assertEqual(self._numbers('lead=none'), ['UAE-0201', 'UAE-0203'])
+
+    def test_priority_and_unscheduled_filters(self):
+        self._make_task('UAE-0204', priority=Task.Priority.EMERGENCY)
+        self._make_task('UAE-0205', scheduled_for=timezone.now())
+        self.assertEqual(self._numbers('priority=emergency'), ['UAE-0204'])
+        self.assertEqual(self._numbers('scheduled=none'), ['UAE-0204'])
+
+    def test_quick_filter_is_named_above_the_list(self):
+        response = self.client.get('/tasks/?lead=none')
+        self.assertContains(response, 'Showing only:')
+        self.assertContains(response, '<input type="hidden" name="lead" value="none">', html=True)
+
+
+class DashboardTileTests(TodayTestsMixin, TaskTestCase):
+    def test_tiles_link_to_the_filtered_lists_and_urgent_rows_come_first(self):
+        self._make_task('UAE-0301', lead=self.technician, scheduled_for=timezone.now())
+        self._make_task('UAE-0302', priority=Task.Priority.EMERGENCY, lead=self.technician,
+                        scheduled_for=timezone.now())
+        self._make_task('UAE-0303', scheduled_for=timezone.now())
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+        self.assertContains(response, 'href="/tasks/?priority=emergency"')
+        self.assertContains(response, 'href="/tasks/?lead=none"')
+        numbers = [task.task_number for task in response.context['tasks']]
+        self.assertEqual(numbers[:2], ['UAE-0302', 'UAE-0303'])
+
+    def test_technician_sees_numbers_but_no_links(self):
+        self._make_task('UAE-0304')
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'href="/tasks/?lead=none"')
+
+
+class TeamMapTests(TodayTestsMixin, TaskTestCase):
+    # Last tap per technician today, plus what needs a follow-up — built
+    # only from the location taken at each tap.
+
+    def setUp(self):
+        super().setUp()
+        self.site.latitude, self.site.longitude = Decimal('25.080000'), Decimal('55.140000')
+        self.site.save(update_fields=['latitude', 'longitude'])
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def _tap(self, task, event_type, latitude, longitude, **fields):
+        return record_tap(task, event_type, self.tech_user, {'latitude': latitude, 'longitude': longitude}, **fields)
+
+    def test_last_tap_today_is_the_pin(self):
+        task = self._make_task('UAE-0401', lead=self.technician, status=Task.Status.IN_PROGRESS)
+        self._tap(task, TaskEvent.EventType.ARRIVED, '25.0801', '55.1401',
+                  occurred_at=timezone.now() - timedelta(minutes=5))
+        self._tap(task, TaskEvent.EventType.STARTED, '25.0802', '55.1402')
+        response = self.client.get('/tasks/technicians/map/')
+        self.assertEqual(response.status_code, 200)
+        [pin] = response.context['pins']
+        self.assertEqual((pin['name'], pin['lat'], pin['away']), ('Tarek Tech', 25.0802, False))
+        self.assertIn('Started', pin['detail'])
+
+    def test_no_tap_today_means_no_pin(self):
+        response = self.client.get('/tasks/technicians/map/')
+        self.assertEqual(response.context['pins'], [])
+        self.assertContains(response, 'No taps today')
+
+    def test_a_late_arrival_is_flagged_until_they_arrive(self):
+        task = self._make_task('UAE-0402', lead=self.technician, scheduled_for=timezone.now() - timedelta(hours=1))
+        texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
+        self.assertTrue(any('has not arrived' in text for text in texts))
+        self._tap(task, TaskEvent.EventType.ARRIVED, '25.0801', '55.1401')
+        texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
+        self.assertFalse(any('has not arrived' in text for text in texts))
+
+    def test_a_tap_far_from_the_site_is_flagged(self):
+        task = self._make_task('UAE-0403', lead=self.technician, status=Task.Status.IN_PROGRESS)
+        self._tap(task, TaskEvent.EventType.STARTED, '25.2000', '55.3000')
+        response = self.client.get('/tasks/technicians/map/')
+        self.assertTrue(response.context['pins'][0]['away'])
+        self.assertTrue(any('from Marina Branch' in item['text'] for item in response.context['attention']))
+
+    def test_a_job_past_its_estimate_is_flagged(self):
+        task = self._make_task('UAE-0404', lead=self.technician, status=Task.Status.IN_PROGRESS,
+                               estimated_hours=Decimal('1.00'))
+        self._tap(task, TaskEvent.EventType.STARTED, '25.0801', '55.1401',
+                  occurred_at=timezone.now() - timedelta(hours=2))
+        texts = [item['text'] for item in self.client.get('/tasks/technicians/map/').context['attention']]
+        self.assertTrue(any('past its 1.0 h estimate' in text for text in texts))
+
+    def test_technician_cannot_open_it(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/technicians/map/').status_code, 403)

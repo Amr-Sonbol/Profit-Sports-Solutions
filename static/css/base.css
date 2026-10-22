@@ -9,11 +9,16 @@
     --color-text: #000000;
     --color-muted: #5c5c5c;
     --color-accent: #000000;
+    --color-neutral-bg: #ececec;
+    --color-hover: #ebebeb;
+    /* The only colours besides black and grey: red = blocked or urgent,
+       amber = waiting on someone, green = confirmed good. */
     --color-danger: #c0392b;
-    /* Same amber already used for high-priority/in-progress badges — named
-       here so the dashboard's stat tiles can reuse it as a real "needs
-       attention" status color instead of a second one-off hex value. */
+    --color-danger-bg: #fdecea;
     --color-warning: #b5760a;
+    --color-warning-bg: #fdf3e3;
+    --color-success: #1e8449;
+    --color-success-bg: #e9f7ef;
 }
 
 * {
@@ -180,9 +185,92 @@ html[dir="rtl"] .site-header__nav {
     display: block;
 }
 
-.site-header__nav a,
 .site-header__nav .link-button {
     padding-block: 0.5rem;
+}
+
+/* Sidebar sections (people.context_processors.NAV_GROUPS), a divider
+   between each. */
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.nav-group + .nav-group {
+    margin-block-start: 0.375rem;
+    padding-block-start: 0.625rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.nav-group__heading {
+    margin-block: 0 0.25rem;
+    padding-inline: 0.625rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.nav-link {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.625rem;
+    padding-block: 0.5rem;
+    padding-inline: 0.625rem;
+    border-radius: 6px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.nav-link .icon {
+    flex: none;
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+.nav-link:hover {
+    background: var(--color-bg);
+}
+
+.nav-link--active,
+.nav-link--active:hover {
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* Who's signed in and Log out, pushed to the bottom of the sidebar. */
+.site-header__nav-footer {
+    margin-block-start: auto;
+    padding-block-start: 0.75rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+/* Desktop: the sidebar stays open and the page sits beside it, so the
+   menu button and overlay go away. Same physical left side as the
+   slide-in panel above, for the same reason, so the page offset is a
+   physical padding-left too. */
+@media (min-width: 1024px) {
+    .site-header__nav,
+    .nav-toggle:checked ~ .site-header__nav {
+        left: 0;
+        width: 16rem;
+        box-shadow: none;
+        z-index: 20;
+        transition: none;
+    }
+
+    .nav-toggle-button,
+    .nav-toggle:checked ~ .nav-overlay {
+        display: none;
+    }
+
+    body:has(.site-header__nav) {
+        padding-left: 16rem;
+    }
 }
 
 /* The notification bell — pushed to the far end of the header (opposite
@@ -216,7 +304,7 @@ html[dir="rtl"] .site-header__nav {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #d64545;
+    background: var(--color-danger);
     color: #fff;
     font-size: 0.65rem;
     font-weight: 700;
@@ -354,12 +442,12 @@ html[dir="rtl"] .notif-dropdown > * {
 }
 
 .flash--error {
-    background: #fdecea;
+    background: var(--color-danger-bg);
     color: var(--color-danger);
 }
 
 .flash--info {
-    background: #ededed;
+    background: var(--color-neutral-bg);
     color: var(--color-accent);
 }
 
@@ -457,6 +545,21 @@ th {
     letter-spacing: 0.02em;
 }
 
+/* For a cell that holds a name or address, which may be long. */
+td.cell-wrap {
+    white-space: normal;
+    min-width: 12rem;
+}
+
+/* "Showing only: Unassigned" above a list opened from a dashboard tile. */
+.quick-filter {
+    margin-block: 0 1rem;
+}
+
+.quick-filter a {
+    margin-inline-start: 0.5rem;
+}
+
 tbody tr:last-child td {
     border-block-end: none;
 }
@@ -466,7 +569,7 @@ tbody tr:nth-child(even) {
 }
 
 tbody tr:hover {
-    background: #eaeef3;
+    background: var(--color-hover);
 }
 
 .task-number {
@@ -493,20 +596,27 @@ tbody tr:hover {
     border: 1px solid currentColor;
 }
 
-.badge--priority-emergency { color: #c0392b; }
-.badge--priority-high { color: #b5760a; }
-.badge--priority-normal { color: #2f6feb; }
+.badge--priority-emergency { color: var(--color-danger); }
+.badge--priority-high { color: var(--color-warning); }
+.badge--priority-normal { color: var(--color-text); }
 .badge--priority-low { color: var(--color-muted); }
 
-.badge--status-new { background: #eaf0fb; color: #2f6feb; }
-.badge--status-assigned { background: #f1eafb; color: #7048c7; }
-.badge--status-accepted { background: #f1eafb; color: #7048c7; }
-.badge--status-in_progress { background: #fdf3e3; color: #b5760a; }
-.badge--status-pending_supervisor_review { background: #fdf3e3; color: #b5760a; }
-.badge--status-completed { background: #e9f7ef; color: #1e8449; }
-.badge--status-closed { background: #eef1f3; color: var(--color-muted); }
-.badge--status-blocked { background: #fdecea; color: #c0392b; }
-.badge--status-cancelled { background: #eef1f3; color: var(--color-muted); }
+/* Task statuses by what they ask of you: amber is waiting on someone,
+   black is being worked on, grey needs nothing. */
+.badge--status-new,
+.badge--status-pending_supervisor_review,
+.badge--status-completed { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge--status-assigned,
+.badge--status-accepted { background: var(--color-neutral-bg); color: var(--color-text); }
+.badge--status-in_progress { background: var(--color-text); color: #fff; }
+.badge--status-blocked { background: var(--color-danger-bg); color: var(--color-danger); }
+.badge--status-closed,
+.badge--status-cancelled { background: var(--color-neutral-bg); color: var(--color-muted); }
+
+/* Fixed labels that aren't task statuses (Certified, Active, Error ...). */
+.badge--good { background: var(--color-success-bg); color: var(--color-success); }
+.badge--bad { background: var(--color-danger-bg); color: var(--color-danger); }
+.badge--neutral { background: var(--color-neutral-bg); color: var(--color-text); }
 
 /* Ticket conversation — each message spans the full width of the
    thread; "mine" (the current viewer's own side, whichever role that
@@ -553,8 +663,8 @@ tbody tr:hover {
 }
 
 .chat-message--mine .chat-bubble {
-    background: #ededed;
-    border-color: #ededed;
+    background: var(--color-neutral-bg);
+    border-color: var(--color-neutral-bg);
     border-end-start-radius: 0.9rem;
     border-end-end-radius: 0.2rem;
 }
@@ -658,9 +768,9 @@ tbody tr:hover {
     gap: 0.4rem;
 }
 
-.badge--muted { background: #eef1f3; color: var(--color-muted); }
-.badge--role-lead { background: #f1eafb; color: #7048c7; }
-.badge--role-helper { background: #eaf0fb; color: #2f6feb; }
+.badge--muted { background: var(--color-neutral-bg); color: var(--color-muted); }
+.badge--role-lead { background: var(--color-text); color: #fff; }
+.badge--role-helper { background: transparent; color: var(--color-text); border: 1px solid currentColor; }
 
 .section {
     background: var(--color-surface);
@@ -701,16 +811,23 @@ tbody tr:hover {
 }
 
 .stat-tile {
+    display: block;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 1rem;
     text-align: center;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+/* A tile that opens the list behind its number. */
+.stat-tile--link:hover {
+    border-color: var(--color-accent);
 }
 
 .stat-tile__value {
-    /* Proportional figures, not tabular-nums — this is a standalone
-       display number, not a column of numbers that must align. */
+    display: block;
     font-size: 2rem;
     font-weight: 600;
     line-height: 1.1;
@@ -718,6 +835,7 @@ tbody tr:hover {
 }
 
 .stat-tile__label {
+    display: block;
     margin-block-start: 0.3rem;
     color: var(--color-muted);
     font-size: 0.8rem;
@@ -726,70 +844,95 @@ tbody tr:hover {
 .stat-tile--warning .stat-tile__value { color: var(--color-warning); }
 .stat-tile--critical .stat-tile__value { color: var(--color-danger); }
 
-/* Welcome page: one icon tile per page the signed-in person can open
-   (people.context_processors.nav_pages), centered in the middle of the
-   page under the greeting. Fixed-width tiles in a centered flex row, so
-   a short last row (or a role with only a few pages) stays centered
-   instead of hugging one side. */
-.welcome {
-    max-width: 46rem;
-    margin-inline: auto;
-    padding-block-start: 2rem;
-}
-
-.welcome__title {
-    margin-block: 0 1.5rem;
-    text-align: center;
-}
-
-.welcome-tiles {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.75rem;
-}
-
-.welcome-tile {
-    /* Two per row on a phone, up to five on a wide screen. */
-    flex: 0 0 8.5rem;
+/* Home page (templates/welcome.html): rows that link to what's waiting
+   on you, then a compact list of every page you can open. */
+.action-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
+}
+
+.action-row {
+    display: flex;
+    flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    min-height: 7.5rem;
-    padding: 1rem 0.75rem;
-    background: var(--color-surface);
+    gap: 0.75rem;
+    padding-block: 0.65rem;
+    padding-inline: 0.9rem;
     border: 1px solid var(--color-border);
+    border-inline-start-width: 4px;
+    border-radius: 6px;
     color: var(--color-text);
-    text-align: center;
     text-decoration: none;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.welcome-tile:hover {
-    border-color: var(--color-accent);
-    box-shadow: inset 0 0 0 1px var(--color-accent);
+.action-row:hover {
+    background: var(--color-hover);
 }
 
-.welcome-tile .icon {
-    color: var(--color-accent);
+.action-row--warning { border-inline-start-color: var(--color-warning); }
+.action-row--critical { border-inline-start-color: var(--color-danger); }
+
+.action-row__count {
+    margin-inline-start: auto;
+    font-size: 1.25rem;
+    font-weight: 600;
 }
 
-.welcome-tile__label {
-    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
-    font-weight: 800;
-    font-size: 1.15rem;
-    line-height: 1.2;
-    text-transform: uppercase;
-    transform: skewX(-10deg);
+.action-row--warning .action-row__count { color: var(--color-warning); }
+.action-row--critical .action-row__count { color: var(--color-danger); }
+
+.visit-row__time {
+    flex: 0 0 4.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
-html[dir="rtl"] .welcome-tile__label {
-    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
-    text-transform: none;
-    transform: skewX(10deg);
+.visit-row__place {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.go-to {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.5rem;
+}
+
+.go-to__link {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    padding-block: 0.6rem;
+    padding-inline: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.go-to__link:hover {
+    background: var(--color-hover);
+}
+
+.go-to__link .icon {
+    flex: none;
+}
+
+/* Team map (static/js/team-map.js). */
+.team-map {
+    block-size: 26rem;
+    border-radius: 6px;
+}
+
+@media (max-width: 480px) {
+    .team-map {
+        block-size: 20rem;
+    }
 }
 
 .detail-grid {
@@ -1311,7 +1454,7 @@ html[dir="rtl"] .welcome-tile__label {
 .signature-pad__canvas {
     inline-size: 100%;
     block-size: 180px;
-    border: 1px solid #d0d4da;
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     background: #ffffff;
     /* Lets a finger draw instead of scrolling the page. */
@@ -1320,7 +1463,7 @@ html[dir="rtl"] .welcome-tile__label {
 
 /* Bell item for a task still unscheduled after 24 working hours. */
 .notif-alarm {
-    color: #c0392b;
+    color: var(--color-danger);
     font-weight: 600;
 }
 

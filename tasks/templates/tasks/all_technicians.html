@@ -41,9 +41,9 @@
                     <td>{{ row.technician.get_role_display }}</td>
                     <td>
                         {% if row.certification.is_certified %}
-                        <span class="badge badge--status-completed">{% translate "Certified" %}</span>
+                        <span class="badge badge--good">{% translate "Certified" %}</span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {{ row.certification.non_cardio_certified|add:row.certification.conduct_certified }}
                             /
                             {{ row.certification.non_cardio_total|add:row.certification.conduct_total }}
@@ -56,11 +56,11 @@
                     <td>
                         {% if row.ninety_day %}
                         {% if row.ninety_day.on_track %}
-                        <span class="badge badge--status-completed">
+                        <span class="badge badge--good">
                             {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                         </span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                         </span>
                         {% endif %}

@@ -32,7 +32,7 @@
                     <td>{{ entry.user }}</td>
                     <td>
                         {% if entry.is_addition %}
-                        <span class="badge badge--status-new">{% translate "Added" %}</span>
+                        <span class="badge badge--neutral">{% translate "Added" %}</span>
                         {% elif entry.is_change %}
                         <span class="badge badge--muted">{% translate "Changed" %}</span>
                         {% elif entry.is_deletion %}

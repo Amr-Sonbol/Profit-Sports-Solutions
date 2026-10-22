@@ -56,7 +56,7 @@
                     <td>{{ customer.sites.all|length }}</td>
                     <td>
                         {% if customer.is_active %}
-                        <span class="badge badge--status-completed">{% translate "Active" %}</span>
+                        <span class="badge badge--good">{% translate "Active" %}</span>
                         {% else %}
                         <span class="badge badge--muted">{% translate "Inactive" %}</span>
                         {% endif %}

@@ -19,8 +19,18 @@
     </div>
 </div>
 
+{% if quick_filters %}
+<p class="quick-filter">
+    {% translate "Showing only:" %} <strong>{{ quick_filters|join:", " }}</strong>
+    <a href="?status={{ status }}">{% translate "Show all" %}</a>
+</p>
+{% endif %}
+
 <form method="get" class="filters">
     <input type="hidden" name="status" value="{{ status }}">
+    {% for key, value in quick_filter_params.items %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
     <div class="field">
         <label for="filter-task-id">{% translate "Task number" %}</label>
         <input type="text" id="filter-task-id" name="task_id" value="{{ task_id }}">

@@ -11,9 +11,9 @@
     </div>
     <div class="badge-row">
         {% if certification.is_certified %}
-        <span class="badge badge--status-completed">{% translate "Certified technician" %}</span>
+        <span class="badge badge--good">{% translate "Certified technician" %}</span>
         {% else %}
-        <span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span>
+        <span class="badge badge--bad">{% translate "Not yet certified" %}</span>
         {% endif %}
         {% if certification.cardio_ready %}
         <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
@@ -54,9 +54,9 @@
                         {% if skill.current %}
                         {{ skill.current.level }} —
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
@@ -106,9 +106,9 @@
                         {% if skill.current %}
                         {{ skill.current.level }} —
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
@@ -157,9 +157,9 @@
                         {% if area.current %}
                         {{ area.current.level }} —
                         {% if area.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% endif %}
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
@@ -249,7 +249,7 @@
     <ul class="plain-list">
         {% for event in negligence_events %}
         <li>
-            <span class="badge badge--status-blocked">{% translate "Negligence reported" %}</span>
+            <span class="badge badge--bad">{% translate "Negligence reported" %}</span>
             <span class="muted">{{ event.occurred_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             <a class="task-number" href="{% url 'tasks:task_detail' event.task.pk %}">{{ event.task.task_number }}</a>
             {% if event.note %}<p>{{ event.note }}</p>{% endif %}

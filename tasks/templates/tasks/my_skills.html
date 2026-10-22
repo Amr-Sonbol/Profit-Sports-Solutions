@@ -34,9 +34,9 @@
                     <td>{{ skill.current.level }}</td>
                     <td>
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">
+                        <span class="badge badge--good">
                             {% blocktranslate with name=skill.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
                         </span>
                         {% endif %}
@@ -95,9 +95,9 @@
                     <td>{{ skill.current.level }}</td>
                     <td>
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">
+                        <span class="badge badge--good">
                             {% blocktranslate with name=skill.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
                         </span>
                         {% endif %}
@@ -155,9 +155,9 @@
                     <td>{{ area.current.level }}</td>
                     <td>
                         {% if area.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% else %}
-                        <span class="badge badge--status-completed">
+                        <span class="badge badge--good">
                             {% blocktranslate with name=area.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}
                         </span>
                         {% endif %}

@@ -122,59 +122,90 @@ def role_permissions(request):
     allowed = set(
         RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
     )
-    return {'role_permissions': allowed, 'nav_pages': nav_pages(technician, allowed)}
+    pages = nav_pages(technician, allowed)
+    return {'role_permissions': allowed, 'nav_pages': pages, 'nav_groups': nav_groups(pages, request.path)}
+
+
+# Sidebar sections, in order. A heading of None is a section without a
+# title (your own pages at the top, setup pages at the bottom), set off by
+# a divider instead.
+NAV_GROUPS = [
+    ('mine', None),
+    ('tasks', _('Tasks')),
+    ('team', _('Team')),
+    ('customers', _('Customers')),
+    ('setup', None),
+]
 
 
 def nav_pages(technician, allowed):
     """Every page this technician can open, in header-menu order, as
-    (url, label, icon) dicts — the one list both the header menu and the
-    welcome page's icon tiles are drawn from, so the two can't disagree.
+    (url, label, icon, group) dicts — the one list both the sidebar and
+    the welcome page's icon tiles are drawn from, so the two can't disagree.
     Each gate here mirrors the check the page's own view enforces
     (require_permission / require_technician / require_manager /
-    require_admin); `icon` names a symbol in templates/_icon.html.
+    require_admin); `icon` names a symbol in templates/_icon.html, `group`
+    a NAV_GROUPS key.
     """
     pages = []
 
-    def add(url_name, label, icon):
-        pages.append({'url': reverse(url_name), 'label': label, 'icon': icon})
+    def add(url_name, label, icon, group):
+        pages.append({'url': reverse(url_name), 'label': label, 'icon': icon, 'group': group})
 
     if not technician.is_manager_tier:
-        add('tasks:my_week', _('My week'), 'calendar')
-        add('tasks:my_progress', _('My progress'), 'trending-up')
-        add('tasks:my_skills', _('My skills'), 'award')
+        add('tasks:my_week', _('My week'), 'calendar', 'mine')
+        add('tasks:my_progress', _('My progress'), 'trending-up', 'mine')
+        add('tasks:my_skills', _('My skills'), 'award', 'mine')
     if RolePermission.Permission.VIEW_DASHBOARD in allowed:
-        add('tasks:dashboard', _('Dashboard'), 'grid')
+        add('tasks:dashboard', _('Dashboard'), 'grid', 'tasks')
     if RolePermission.Permission.VIEW_TASKS in allowed:
-        add('tasks:task_list', _('Tasks'), 'clipboard')
+        add('tasks:task_list', _('Tasks'), 'clipboard', 'tasks')
     if RolePermission.Permission.VIEW_TECHNICIANS in allowed:
-        add('tasks:technician_list', _('Technicians'), 'users')
-        add('tasks:technician_hours', _('Hours'), 'clock')
+        add('tasks:technician_list', _('Technicians'), 'users', 'team')
+        add('tasks:technician_hours', _('Hours'), 'clock', 'team')
+        add('tasks:team_map', _('Team map'), 'map-pin', 'team')
     if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
-        add('customers:customer_list', _('Customers'), 'building')
+        add('customers:customer_list', _('Customers'), 'building', 'customers')
     if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:
-        add('customers:customer_accounts', _('Customer accounts'), 'user-check')
+        add('customers:customer_accounts', _('Customer accounts'), 'user-check', 'customers')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
-        add('tasks:part_list', _('Parts'), 'package')
+        add('tasks:part_list', _('Parts'), 'package', 'customers')
     if RolePermission.Permission.VIEW_MACHINES in allowed:
-        add('tasks:machine_list', _('Machines'), 'dumbbell')
+        add('tasks:machine_list', _('Machines'), 'dumbbell', 'customers')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:
-        add('tasks:ticket_list', _('Tickets'), 'ticket')
+        add('tasks:ticket_list', _('Tickets'), 'ticket', 'tasks')
     if RolePermission.Permission.OPEN_TICKETS in allowed:
-        add('tasks:ticket_open', _('New ticket'), 'ticket-plus')
+        add('tasks:ticket_open', _('New ticket'), 'ticket-plus', 'tasks')
     # Anyone in the office can be handed a stock request or vendor follow-up.
     if technician.role != technician.Role.TECHNICIAN:
-        add('tasks:internal_tickets', _('Internal tickets'), 'inbox')
+        add('tasks:internal_tickets', _('Internal tickets'), 'inbox', 'tasks')
     if technician.is_manager_tier:
-        add('tasks:all_week', _('Week view — all countries'), 'calendar-range')
-        add('tasks:all_technicians', _('All technicians'), 'id-card')
-        add('tasks:monthly_report', _('Monthly report'), 'bar-chart')
-        add('tasks:skill_list', _('Skills'), 'graduation-cap')
-        add('tasks:brand_list', _('Brands'), 'tag')
-        add('tasks:country_list', _('Countries'), 'globe')
+        add('tasks:all_week', _('Week view — all countries'), 'calendar-range', 'tasks')
+        add('tasks:all_technicians', _('All technicians'), 'id-card', 'team')
+        add('tasks:monthly_report', _('Monthly report'), 'bar-chart', 'team')
+        add('tasks:skill_list', _('Skills'), 'graduation-cap', 'team')
+        add('tasks:brand_list', _('Brands'), 'tag', 'setup')
+        add('tasks:country_list', _('Countries'), 'globe', 'setup')
     if technician.role == technician.Role.ADMIN:
-        add('tasks:role_permissions', _('Roles'), 'shield')
-        add('tasks:audit_log', _('Audit log'), 'file-clock')
+        add('tasks:role_permissions', _('Roles'), 'shield', 'setup')
+        add('tasks:audit_log', _('Audit log'), 'file-clock', 'setup')
     return pages
+
+
+def nav_groups(pages, path):
+    """The same pages split into the sidebar's NAV_GROUPS sections (empty
+    ones dropped), with the current page marked `active`: the page whose
+    URL is the longest prefix of this path, so a task's own page still
+    lights up Tasks and the dashboard isn't mistaken for it.
+    """
+    matches = [page['url'] for page in pages if path.startswith(page['url'])]
+    current = max(matches, key=len) if matches else None
+    groups = []
+    for key, heading in NAV_GROUPS:
+        group_pages = [dict(page, active=page['url'] == current) for page in pages if page['group'] == key]
+        if group_pages:
+            groups.append({'heading': heading, 'pages': group_pages})
+    return groups
 
 
 def active_country(request):

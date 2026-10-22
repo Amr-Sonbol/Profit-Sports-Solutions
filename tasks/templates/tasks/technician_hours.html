@@ -56,7 +56,7 @@
                         </span>
                         {% endif %}
                         {% if row.away_count %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {% blocktranslate count count=row.away_count %}{{ count }} job with check-ins recorded away from the site{% plural %}{{ count }} jobs with check-ins recorded away from the site{% endblocktranslate %}
                         </span>
                         {% endif %}
@@ -64,7 +64,7 @@
                     <td>
                         {% if row.estimated %}{{ row.estimated }}{% else %}<span class="muted">—</span>{% endif %}
                         {% if row.overrun_count %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {% blocktranslate count count=row.overrun_count %}{{ count }} task significantly over estimate{% plural %}{{ count }} tasks significantly over estimate{% endblocktranslate %}
                         </span>
                         {% endif %}
@@ -83,9 +83,9 @@
                                     {% if report.task.estimated_hours %}
                                     <span class="muted">({% blocktranslate with hours=report.task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>
                                     {% endif %}
-                                    {% if report.is_overrun %}<span class="badge badge--status-blocked">{% translate "Significantly over estimate" %}</span>{% endif %}
+                                    {% if report.is_overrun %}<span class="badge badge--bad">{% translate "Significantly over estimate" %}</span>{% endif %}
                                     {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% blocktranslate with hours=report.tapped_hours %}Exceeds recorded time ({{ hours }} h){% endblocktranslate %}</span>{% endif %}
-                                    {% if report.has_taps_away_from_site %}<span class="badge badge--status-blocked">{% translate "Check-ins away from the site" %}</span>{% endif %}
+                                    {% if report.has_taps_away_from_site %}<span class="badge badge--bad">{% translate "Check-ins away from the site" %}</span>{% endif %}
                                 </li>
                                 {% endfor %}
                             </ul>

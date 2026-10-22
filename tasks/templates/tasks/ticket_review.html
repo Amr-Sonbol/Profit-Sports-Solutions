@@ -11,13 +11,13 @@
     </div>
     <div class="badge-row">
         {% if ticket.status == 'new' %}
-        <span class="badge badge--status-new">{% translate "New" %}</span>
+        <span class="badge badge--neutral">{% translate "New" %}</span>
         {% elif ticket.status == 'converted' %}
-        <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+        <span class="badge badge--good">{% translate "Converted to task" %}</span>
         {% elif ticket.status == 'closed' %}
-        <span class="badge badge--status-completed">{% translate "Closed" %}</span>
+        <span class="badge badge--good">{% translate "Closed" %}</span>
         {% else %}
-        <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+        <span class="badge badge--bad">{% translate "Dismissed" %}</span>
         {% endif %}
     </div>
 </div>
@@ -238,9 +238,9 @@
     <div class="escalation">
         <p>
             {% if escalation.decision == 'pending' %}
-            <span class="badge badge--status-blocked">{{ escalation.get_decision_display }}</span>
+            <span class="badge badge--bad">{{ escalation.get_decision_display }}</span>
             {% else %}
-            <span class="badge badge--status-completed">{{ escalation.get_decision_display }}</span>
+            <span class="badge badge--good">{{ escalation.get_decision_display }}</span>
             {% endif %}
             {% blocktranslate with by=escalation.escalated_by.full_name to=escalation.escalated_to.full_name when=escalation.escalated_at|date:"SHORT_DATETIME_FORMAT" %}Escalated by {{ by }} to {{ to }} on {{ when }}{% endblocktranslate %}
         </p>

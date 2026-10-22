@@ -85,16 +85,16 @@
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>
                     {% if ticket.is_escalated %}
-                    <span class="badge badge--status-blocked">{% translate "Escalated" %}</span>
+                    <span class="badge badge--bad">{% translate "Escalated" %}</span>
                     {% endif %}
                     {% if ticket.status == 'new' %}
-                    <span class="badge badge--status-new">{% translate "New" %}</span>
+                    <span class="badge badge--neutral">{% translate "New" %}</span>
                     {% elif ticket.status == 'converted' %}
-                    <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+                    <span class="badge badge--good">{% translate "Converted to task" %}</span>
                     {% elif ticket.status == 'closed' %}
-                    <span class="badge badge--status-completed">{% translate "Closed" %}</span>
+                    <span class="badge badge--good">{% translate "Closed" %}</span>
                     {% else %}
-                    <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+                    <span class="badge badge--bad">{% translate "Dismissed" %}</span>
                     {% endif %}
                 </td>
             </tr>

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 14:17+0000\n"
+"POT-Creation-Date: 2026-10-22 14:51+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -21,6 +21,10 @@ msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في ا
 #, python-format
 msgid "%(added)s parts added, %(updated)s updated."
 msgstr "أُضيفت %(added)s قطع، وحُدّثت %(updated)s."
+
+#, python-format
+msgid "%(available)s of %(total)s"
+msgstr "%(available)s من %(total)s"
 
 #, python-format
 msgid ""
@@ -97,6 +101,10 @@ msgid "%(distance)s from the site"
 msgstr "%(distance)s من الموقع"
 
 #, python-format
+msgid "%(event)s at %(time)s"
+msgstr "%(event)s الساعة %(time)s"
+
+#, python-format
 msgid "%(hours)s h"
 msgstr "%(hours)s س"
 
@@ -131,6 +139,14 @@ msgid "%(name)s has no email address, so they were only notified in the app. Add
 msgstr "لا يوجد بريد إلكتروني لـ %(name)s، لذا وصله الإشعار داخل التطبيق فقط. أضف بريدًا إلكترونيًا إلى ملفه."
 
 #, python-format
+msgid "%(name)s has not arrived at %(site)s (due %(time)s)"
+msgstr "لم يصل %(name)s إلى %(site)s بعد (الموعد %(time)s)"
+
+#, python-format
+msgid "%(name)s tapped “%(event)s” %(distance)s from %(site)s"
+msgstr "ضغط %(name)s “%(event)s” على بُعد %(distance)s من %(site)s"
+
+#, python-format
 msgid "%(number)s — %(company)s"
 msgstr "%(number)s — %(company)s"
 
@@ -145,6 +161,10 @@ msgstr "%(number)s — %(site)s. لم يعد حضورك مطلوبًا."
 #, python-format
 msgid "%(number)s — submitted by %(name)s"
 msgstr "%(number)s — مقدَّم من %(name)s"
+
+#, python-format
+msgid "%(site)s is running past its %(hours)s h estimate"
+msgstr "العمل في %(site)s تجاوز التقدير المحدد بـ %(hours)s ساعة"
 
 #, python-format
 msgid "%(source)s — %(time)s"
@@ -516,9 +536,6 @@ msgstr "التوفر"
 
 msgid "Available"
 msgstr "متاح"
-
-msgid "Available now"
-msgstr "متاح الآن"
 
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
@@ -1297,6 +1314,9 @@ msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. ال�
 msgid "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early."
 msgstr "يُحتسب لكل مساعد عدد الساعات أعلاه. يرجى إدخال قيمة فقط إذا كانت مختلفة، كأن يكون أحد أعضاء الفريق قد غادر مبكراً."
 
+msgid "Each technician's last tap today. Location is only taken when they tap, never in between."
+msgstr "آخر ضغطة لكل فني اليوم. يُسجَّل الموقع عند الضغط فقط، ولا يُتتبَّع بين الضغطات."
+
 msgid "Edit"
 msgstr "تعديل"
 
@@ -1401,6 +1421,10 @@ msgstr "تم التصعيد إلى %(name)s."
 
 msgid "Escalated to you, needs your decision"
 msgstr "مصعَّدة إليك وتحتاج إلى قرارك"
+
+#, python-format
+msgid "Escalated to you: %(company)s"
+msgstr "مصعَّدة إليك: %(company)s"
 
 #, python-format
 msgid "Escalated, waiting for %(name)s to decide"
@@ -1508,6 +1532,9 @@ msgstr "الجمعة"
 msgid "From customer"
 msgstr "من العميل"
 
+msgid "Go to"
+msgstr "انتقل إلى"
+
 msgid "Goodwill"
 msgstr "مجاملة"
 
@@ -1552,6 +1579,9 @@ msgstr "السجل الزمني"
 
 msgid "Holiday"
 msgstr "إجازة رسمية"
+
+msgid "Home"
+msgstr "الرئيسية"
 
 msgid "Hotel"
 msgstr "فندق"
@@ -1644,6 +1674,9 @@ msgstr "أُغلقت التذكرة الداخلية"
 msgid "Internal tickets"
 msgstr "التذاكر الداخلية"
 
+msgid "Internal tickets for you"
+msgstr "تذاكر داخلية مسندة إليك"
+
 msgid "Invitation expired"
 msgstr "انتهت صلاحية الدعوة"
 
@@ -1676,6 +1709,9 @@ msgstr "معدات كبيرة"
 
 msgid "Last sign-in"
 msgstr "آخر تسجيل دخول"
+
+msgid "Last tap"
+msgstr "آخر ضغطة"
 
 msgid "Lead"
 msgstr "الفني الرئيسي"
@@ -1862,9 +1898,15 @@ msgstr "الاسم"
 msgid "Name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
+msgid "Needs a follow-up"
+msgstr "يحتاج إلى متابعة"
+
 #, python-format
 msgid "Needs more attention? Escalate to the %(role)s"
 msgstr "تحتاج إلى متابعة إضافية؟ صعّدها إلى %(role)s"
+
+msgid "Needs your action"
+msgstr "بانتظار إجراء منك"
 
 msgid "Negligence flags"
 msgstr "بلاغات الإهمال"
@@ -1887,6 +1929,9 @@ msgstr "تم إنشاء عميل جديد"
 #, python-format
 msgid "New customer reply — ticket %(number)s"
 msgstr "رد جديد من العميل — الطلب %(number)s"
+
+msgid "New customer tickets"
+msgstr "تذاكر عملاء جديدة"
 
 msgid "New internal ticket assigned to you"
 msgstr "تذكرة داخلية جديدة مسندة إليك"
@@ -2073,6 +2118,12 @@ msgstr "لم يتم إعداد أي مهارات."
 msgid "No supervisor or manager has been set up in your country."
 msgstr "لم يتم تعيين مشرف أو مدير في دولتك."
 
+msgid "No taps today"
+msgstr "لا توجد ضغطات اليوم"
+
+msgid "No taps with a location yet today."
+msgstr "لا توجد ضغطات بموقع اليوم بعد."
+
 msgid "No tasks awaiting a date."
 msgstr "لا توجد مهام بانتظار تحديد موعد."
 
@@ -2096,6 +2147,12 @@ msgstr "لا توجد طلبات هذا الشهر."
 
 msgid "No visits on record."
 msgstr "لا توجد زيارات مسجَّلة."
+
+msgid "No visits today."
+msgstr "لا توجد زيارات اليوم."
+
+msgid "Nobody"
+msgstr "لا أحد"
 
 msgid "None (each site has its own contact)"
 msgstr "لا شيء (لكل موقع جهة تواصل خاصة به)"
@@ -2124,6 +2181,9 @@ msgstr "غير مقيّم"
 
 msgid "Not repairable"
 msgstr "غير قابل للإصلاح"
+
+msgid "Not scheduled"
+msgstr "غير مجدولة"
 
 msgid "Not scheduled within 24 working hours"
 msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
@@ -2157,6 +2217,12 @@ msgstr "ملاحظة لفريق الدعم (داخلية)"
 
 msgid "Notes"
 msgstr "الملاحظات"
+
+msgid "Nothing is waiting on you."
+msgstr "لا يوجد ما ينتظرك."
+
+msgid "Nothing to follow up on today."
+msgstr "لا يوجد ما يحتاج إلى متابعة اليوم."
 
 msgid "Notification settings"
 msgstr "إعدادات الإشعارات"
@@ -2595,6 +2661,12 @@ msgstr "الأرقام التسلسلية المُبلَّغ عنها"
 msgid "Reports filed"
 msgstr "التقارير المقدمة"
 
+msgid "Reports waiting for your approval"
+msgstr "تقارير بانتظار موافقتك"
+
+msgid "Reports waiting for your review"
+msgstr "تقارير بانتظار مراجعتك"
+
 msgid "Request a new link"
 msgstr "طلب رابط جديد"
 
@@ -2753,6 +2825,10 @@ msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلا
 msgid "Security"
 msgstr "الأمان"
 
+#, python-format
+msgid "See all %(count)s"
+msgstr "عرض الكل (%(count)s)"
+
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
 
@@ -2900,6 +2976,9 @@ msgstr "شركة الشحن"
 msgid "Shipping tracking number"
 msgstr "رقم تتبع الشحن"
 
+msgid "Show all"
+msgstr "عرض الكل"
+
 msgid "Show deactivated customers"
 msgstr "عرض العملاء الموقوفين"
 
@@ -2908,6 +2987,9 @@ msgstr "عرض الفنيين الموقوفين"
 
 msgid "Show tasks"
 msgstr "عرض المهام"
+
+msgid "Showing only:"
+msgstr "المعروض فقط:"
 
 msgid "Sick"
 msgstr "مرض"
@@ -3085,12 +3167,21 @@ msgstr "المهام التي شارك فيها كمساعد"
 msgid "Tasks completed as lead"
 msgstr "المهام المُنجزة كفني رئيسي"
 
+msgid "Tasks not scheduled"
+msgstr "مهام غير مجدولة"
+
 #, python-format
 msgid "Tasks received (%(total)s)"
 msgstr "المهام الواردة (%(total)s)"
 
+msgid "Tasks with no lead"
+msgstr "مهام بلا فني رئيسي"
+
 msgid "Team"
 msgstr "الفريق"
+
+msgid "Team map"
+msgstr "خريطة الفريق"
 
 msgid "Team schedule"
 msgstr "جدول الفريق"
@@ -3118,6 +3209,9 @@ msgstr "تم تحديث بيانات الفني."
 
 msgid "Technicians"
 msgstr "الفنيون"
+
+msgid "Technicians available"
+msgstr "الفنيون المتاحون"
 
 msgid "Temporary password"
 msgstr "كلمة المرور المؤقتة"
@@ -3618,6 +3712,9 @@ msgstr "واتساب"
 msgid "When"
 msgstr "متى"
 
+msgid "Where"
+msgstr "المكان"
+
 msgid "Where spare and replacement parts should be delivered."
 msgstr "المكان الذي تُسلَّم إليه قطع الغيار والاستبدال."
 
@@ -3711,6 +3808,9 @@ msgstr "شحنتك في الطريق إليك — %(reference)s"
 msgid "Your shipment is on its way — %(task_number)s"
 msgstr "شحنتكم في الطريق — %(task_number)s"
 
+msgid "Your tasks"
+msgstr "مهامك"
+
 msgid "Your ticket is now a service task. We'll contact you to book a visit."
 msgstr "أصبحت تذكرتك مهمة صيانة. سنتواصل معك لتحديد موعد الزيارة."
 
@@ -3719,6 +3819,9 @@ msgstr "طلباتك"
 
 msgid "Your username, for your reference:"
 msgstr "اسم المستخدم الخاص بك، للرجوع إليه:"
+
+msgid "Your visits today"
+msgstr "زياراتك اليوم"
 
 msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"

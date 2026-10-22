@@ -32,9 +32,9 @@
 <div class="section">
     <h2>{% translate "Professional skills" %}</h2>
     {% if certification.is_certified %}
-    <p><span class="badge badge--status-completed">{% translate "Certified technician" %}</span></p>
+    <p><span class="badge badge--good">{% translate "Certified technician" %}</span></p>
     {% else %}
-    <p><span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span></p>
+    <p><span class="badge badge--bad">{% translate "Not yet certified" %}</span></p>
     {% endif %}
     <dl class="detail-grid">
         <div>
@@ -176,9 +176,9 @@
                     <td>{{ skill.current.level|default:"—" }}</td>
                     <td>
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% elif skill.current.source == 'supervisor' %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}
@@ -212,9 +212,9 @@
                     <td>{{ area.current.level|default:"—" }}</td>
                     <td>
                         {% if area.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% elif area.current.source == 'supervisor' %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}

@@ -57,11 +57,11 @@
                     <td>{{ result.site_name }}</td>
                     <td>
                         {% if result.outcome == 'created' %}
-                        <span class="badge badge--status-completed">{% translate "Created" %}</span>
+                        <span class="badge badge--good">{% translate "Created" %}</span>
                         {% elif result.outcome == 'skipped' %}
                         <span class="badge badge--muted">{% translate "Skipped" %}</span>
                         {% else %}
-                        <span class="badge badge--status-blocked">{% translate "Error" %}</span>
+                        <span class="badge badge--bad">{% translate "Error" %}</span>
                         {% endif %}
                         {{ result.detail }}
                     </td>

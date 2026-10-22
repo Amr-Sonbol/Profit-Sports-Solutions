@@ -30,9 +30,9 @@
                     <td>{{ ticket.site_description }}</td>
                     <td>
                         {% if ticket.status == 'new' %}
-                        <span class="badge badge--status-new">{% translate "Received" %}</span>
+                        <span class="badge badge--neutral">{% translate "Received" %}</span>
                         {% elif ticket.status == 'converted' %}
-                        <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+                        <span class="badge badge--good">{% translate "Scheduled" %}</span>
                         {% else %}
                         <span class="badge badge--muted">{% translate "Closed" %}</span>
                         {% endif %}

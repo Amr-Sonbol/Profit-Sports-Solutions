@@ -11,9 +11,9 @@
     </div>
     <div class="badge-row">
         <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
-        {% if is_open %}<span class="badge badge--status-new">{% translate "Open" %}</span>
-        {% elif ticket.status == 'converted' %}<span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
-        {% else %}<span class="badge badge--status-completed">{% translate "Closed" %}</span>{% endif %}
+        {% if is_open %}<span class="badge badge--neutral">{% translate "Open" %}</span>
+        {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Converted to task" %}</span>
+        {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
     </div>
 </div>
 

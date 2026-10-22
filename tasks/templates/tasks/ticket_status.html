@@ -11,11 +11,11 @@
     </div>
     <div class="badge-row">
         {% if ticket.status == 'new' %}
-        <span class="badge badge--status-new">{% translate "Received" %}</span>
+        <span class="badge badge--neutral">{% translate "Received" %}</span>
         {% elif ticket.status == 'converted' %}
-        <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+        <span class="badge badge--good">{% translate "Scheduled" %}</span>
         {% elif ticket.status == 'closed' %}
-        <span class="badge badge--status-completed">{% translate "Resolved" %}</span>
+        <span class="badge badge--good">{% translate "Resolved" %}</span>
         {% elif ticket.status == 'dismissed' %}
         <span class="badge badge--muted">{% translate "Closed" %}</span>
         {% endif %}

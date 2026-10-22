@@ -19,14 +19,14 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import (
-    Case, Count, Exists, IntegerField, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
+    Case, Count, Exists, IntegerField, Max, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
 from django.forms import formset_factory
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils import timezone, translation
+from django.utils import formats, timezone, translation
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -1021,6 +1021,86 @@ def _send_feedback_email(request, feedback):
     )
 
 
+# Open tasks shown on the dashboard before "See all".
+DASHBOARD_TASK_LIMIT = 10
+# Escalations listed one by one on the home page.
+HOME_ESCALATION_LIMIT = 5
+
+# A single Exists, not exclude(assignments__role=..., assignments__is_active=...):
+# exclude() lets those two match different assignments.
+HAS_ACTIVE_LEAD = Exists(
+    TaskAssignment.objects.filter(task=OuterRef('pk'), role=TaskAssignment.Role.LEAD, is_active=True),
+)
+
+
+def home_summary(request, technician):
+    """The home page: what's waiting on this person, each count linking to
+    the list behind it, and their own visits today. Each count is gated
+    by the same permission as the page it links to.
+    """
+    country = get_active_country(request)
+    allowed = set(
+        RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+    )
+    task_list_url = reverse('tasks:task_list')
+    open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country)
+    actions = []
+
+    def add(label, count, url, level='warning'):
+        if count:
+            actions.append({'label': label, 'count': count, 'url': url, 'level': level})
+
+    if RolePermission.Permission.VIEW_TASKS in allowed:
+        add(_('Emergencies'), open_tasks.filter(priority=Task.Priority.EMERGENCY).count(),
+            f'{task_list_url}?priority=emergency', 'critical')
+    if RolePermission.Permission.ASSIGN_TASKS in allowed:
+        add(_('Tasks with no lead'), open_tasks.exclude(HAS_ACTIVE_LEAD).count(), f'{task_list_url}?lead=none')
+        add(_('Tasks not scheduled'), open_tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True).count(),
+            f'{task_list_url}?scheduled=none')
+    if RolePermission.Permission.VIEW_TASKS in allowed:
+        if technician.is_manager_tier:
+            add(_('Reports waiting for your approval'), open_tasks.filter(status=Task.Status.COMPLETED).count(),
+                f'{task_list_url}?status=completed')
+        else:
+            add(_('Reports waiting for your review'),
+                open_tasks.filter(status=Task.Status.PENDING_SUPERVISOR_REVIEW, responsible_supervisor=technician).count(),
+                f'{task_list_url}?status=pending_supervisor_review&supervisor={technician.pk}')
+    if RolePermission.Permission.MANAGE_TICKETS in allowed:
+        add(_('New customer tickets'), CustomerTicket.objects.filter(
+            kind=CustomerTicket.Kind.CUSTOMER, status=CustomerTicket.Status.NEW, country=country,
+        ).count(), reverse('tasks:ticket_list'))
+    if technician.role != Technician.Role.TECHNICIAN:
+        add(_('Internal tickets for you'), CustomerTicket.objects.filter(
+            assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
+        ).exclude(kind=CustomerTicket.Kind.CUSTOMER).count(), reverse('tasks:internal_tickets'))
+    escalations = TicketEscalation.objects.filter(
+        escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
+    ).select_related('ticket').order_by('escalated_at')[:HOME_ESCALATION_LIMIT]
+    for escalation in escalations:
+        actions.append({
+            'label': _('Escalated to you: %(company)s') % {'company': escalation.ticket.company_name},
+            'count': None, 'url': reverse('tasks:ticket_review', args=[escalation.ticket_id]), 'level': 'critical',
+        })
+
+    today = timezone.localdate()
+    visits = list(
+        Task.objects.filter(
+            assignments__technician=technician, assignments__is_active=True, status__in=OPEN_STATUSES,
+        ).filter(Q(scheduled_for__date=today) | Q(scheduled_date=today) | Q(status=Task.Status.IN_PROGRESS))
+        .select_related('site__customer').distinct().order_by('scheduled_for', 'task_number'),
+    )
+    return {
+        'actions': actions,
+        # A field technician has nothing to approve or assign; an empty
+        # "needs your action" box would only push their visits down.
+        'show_actions': bool(actions) or technician.role != Technician.Role.TECHNICIAN,
+        'visits': visits,
+        # The manager tier doesn't go on visits, so no empty "today" box for them.
+        'show_visits': bool(visits) or not technician.is_manager_tier,
+        'today': today,
+    }
+
+
 @login_required
 def dashboard(request):
     """At a glance: who's available today, and every open task with its
@@ -1049,21 +1129,25 @@ def dashboard(request):
     ))
     _attach_lead_technician(tasks)
 
-    # The numbers a supervisor actually opens this screen to see, before
-    # the two full lists below: who's deployable right now, and which
-    # open tasks need attention first.
-    available_count = sum(1 for t in technicians if t.is_available)
+    for task in tasks:
+        task.is_unscheduled = task.scheduled_for is None and task.scheduled_date is None
     stats = {
-        'available_count': available_count,
-        'unavailable_count': len(technicians) - available_count,
+        'available_count': sum(1 for t in technicians if t.is_available),
+        'technician_count': len(technicians),
         'open_task_count': len(tasks),
         'unassigned_count': sum(1 for t in tasks if t.lead_technician is None),
+        'unscheduled_count': sum(1 for t in tasks if t.is_unscheduled),
         'emergency_count': sum(1 for t in tasks if t.priority == Task.Priority.EMERGENCY),
     }
+    # What needs someone first: emergencies, then no lead, then no date.
+    # sorted() is stable, so the priority/schedule order holds within each.
+    tasks.sort(key=lambda t: (
+        t.priority != Task.Priority.EMERGENCY, t.lead_technician is not None, not t.is_unscheduled,
+    ))
 
     context = {
         'technicians': technicians,
-        'tasks': tasks,
+        'tasks': tasks[:DASHBOARD_TASK_LIMIT],
         'stats': stats,
     }
     return render(request, 'tasks/dashboard.html', context)
@@ -1089,6 +1173,15 @@ def task_list(request):
     shipping_company = request.GET.get('shipping_company', '')
     scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
     scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
+    # The dashboard and home page tiles link here with one of these.
+    priority = request.GET.get('priority', '')
+    if priority not in Task.Priority.values:
+        priority = ''
+    unassigned = request.GET.get('lead') == 'none'
+    unscheduled = request.GET.get('scheduled') == 'none'
+    supervisor_id = request.GET.get('supervisor', '')
+    if not supervisor_id.isdigit():
+        supervisor_id = ''
 
     tasks = _with_lead_prefetch(Task.objects.select_related('site__customer__country', 'task_type'))
     customers = Customer.objects.filter(is_active=True)
@@ -1131,6 +1224,15 @@ def task_list(request):
     if scheduled_to:
         tasks = tasks.filter(scheduled_for__date__lte=scheduled_to)
 
+    if priority:
+        tasks = tasks.filter(priority=priority)
+    if unassigned:
+        tasks = tasks.exclude(HAS_ACTIVE_LEAD)
+    if unscheduled:
+        tasks = tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True)
+    if supervisor_id:
+        tasks = tasks.filter(responsible_supervisor_id=supervisor_id)
+
     tasks = tasks.annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
 
     paginator = Paginator(tasks, 25)
@@ -1148,11 +1250,28 @@ def task_list(request):
             'scheduled_from': request.GET.get('scheduled_from', ''),
             'scheduled_to': request.GET.get('scheduled_to', ''),
             'country': 'all' if all_countries else '',
+            'priority': priority, 'lead': 'none' if unassigned else '',
+            'scheduled': 'none' if unscheduled else '', 'supervisor': supervisor_id,
         }.items() if value
     }
+    # Shown above the list with a link to clear them, since the filter
+    # form below has no field for these.
+    quick_filters = []
+    if priority:
+        quick_filters.append(Task.Priority(priority).label)
+    if unassigned:
+        quick_filters.append(_('Unassigned'))
+    if unscheduled:
+        quick_filters.append(_('Not scheduled'))
+    if supervisor_id:
+        quick_filters.append(_('Your tasks'))
 
     context = {
         'page_obj': page_obj,
+        'quick_filters': quick_filters,
+        'quick_filter_params': {
+            key: filter_params[key] for key in ('priority', 'lead', 'scheduled', 'supervisor') if key in filter_params
+        },
         'status': status,
         'task_id': task_id,
         'site': site,
@@ -3087,6 +3206,102 @@ def _technician_hours_rows(active_country, period_start_date):
             'away_count': sum(1 for report in own_reports if report.has_taps_away_from_site),
         })
     return rows
+
+
+# A scheduled visit with no "Arrived" this long after its time is flagged
+# on the team map.
+NO_ARRIVAL_GRACE = timedelta(minutes=30)
+
+
+@login_required
+def team_map(request):
+    """Where each technician last tapped today, on a map, and what needs a
+    follow-up: a late arrival, a tap far from the site, a job running past
+    its estimate. Built only from the location taken at each tap
+    (tasks.location) — nobody is tracked between taps.
+    """
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    country = get_active_country(request)
+    now = timezone.now()
+    today = timezone.localdate()
+
+    technicians = list(Technician.objects.filter(
+        is_active=True, country=country, role=Technician.Role.TECHNICIAN, user__isnull=False,
+    ).order_by('full_name'))
+    names = {technician.user_id: technician.full_name for technician in technicians}
+    last_taps = {}
+    for tap in (
+        TaskEvent.objects.filter(actor_id__in=names, occurred_at__date=today, latitude__isnull=False)
+        .select_related('task__site__customer').order_by('-occurred_at')
+    ):
+        last_taps.setdefault(tap.actor_id, tap)
+
+    pins = []
+    for technician in technicians:
+        tap = last_taps.get(technician.user_id)
+        technician.last_tap = tap
+        if tap is None:
+            continue
+        place = f'{tap.task.site.customer.name}, {tap.task.site.name}'
+        detail = _('%(event)s at %(time)s') % {
+            'event': tap.get_event_type_display(), 'time': formats.time_format(timezone.localtime(tap.occurred_at)),
+        }
+        pins.append({
+            'name': technician.full_name, 'detail': detail, 'place': place,
+            'lat': float(tap.latitude), 'lng': float(tap.longitude),
+            'away': tap.location_status == TaskEvent.LocationStatus.AWAY,
+            'url': reverse('tasks:task_detail', args=[tap.task_id]),
+        })
+
+    open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country)
+    attention = []
+    late = _with_lead_prefetch(
+        open_tasks.filter(
+            status__in=[Task.Status.ASSIGNED, Task.Status.ACCEPTED],
+            scheduled_for__date=today, scheduled_for__lte=now - NO_ARRIVAL_GRACE,
+        ).exclude(Exists(TaskEvent.objects.filter(
+            task=OuterRef('pk'), event_type=TaskEvent.EventType.ARRIVED, occurred_at__date=today,
+        )))
+        .select_related('site__customer').order_by('scheduled_for'),
+    )
+    _attach_lead_technician(late)
+    for task in late:
+        attention.append({
+            'text': _('%(name)s has not arrived at %(site)s (due %(time)s)') % {
+                'name': task.lead_technician.full_name if task.lead_technician else _('Nobody'),
+                'site': task.site.name, 'time': formats.time_format(timezone.localtime(task.scheduled_for)),
+            },
+            'url': reverse('tasks:task_detail', args=[task.pk]), 'level': 'critical',
+        })
+    for tap in (
+        TaskEvent.objects.filter(
+            occurred_at__date=today, location_status=TaskEvent.LocationStatus.AWAY,
+            task__site__customer__country=country,
+        ).select_related('task__site', 'actor__technician').order_by('-occurred_at')
+    ):
+        attention.append({
+            'text': _('%(name)s tapped “%(event)s” %(distance)s from %(site)s') % {
+                'name': tap.actor.technician.full_name if hasattr(tap.actor, 'technician') else tap.actor.get_username(),
+                'event': tap.get_event_type_display(), 'distance': tap.distance_display, 'site': tap.task.site.name,
+            },
+            'url': reverse('tasks:task_detail', args=[tap.task_id]), 'level': 'warning',
+        })
+    running = open_tasks.filter(status=Task.Status.IN_PROGRESS, estimated_hours__isnull=False).annotate(
+        working_since=Max('events__occurred_at', filter=Q(
+            events__event_type__in=[TaskEvent.EventType.STARTED, TaskEvent.EventType.RESUMED],
+        )),
+    ).select_related('site')
+    for task in running:
+        if task.working_since and now - task.working_since > timedelta(hours=float(task.estimated_hours)):
+            attention.append({
+                'text': _('%(site)s is running past its %(hours)s h estimate') % {
+                    'site': task.site.name, 'hours': formats.number_format(task.estimated_hours, decimal_pos=1),
+                },
+                'url': reverse('tasks:task_detail', args=[task.pk]), 'level': 'warning',
+            })
+
+    context = {'technicians': technicians, 'pins': pins, 'attention': attention, 'today': today}
+    return render(request, 'tasks/team_map.html', context)
 
 
 @login_required

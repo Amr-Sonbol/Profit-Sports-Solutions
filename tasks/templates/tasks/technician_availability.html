@@ -34,7 +34,7 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="mark_unavailable">
                             <input type="hidden" name="technician_id" value="{{ technician.pk }}">
-                            <span class="badge badge--status-new">{% translate "Available" %}</span>
+                            <span class="badge badge--neutral">{% translate "Available" %}</span>
                             {{ mark_unavailable_form.reason }}
                             <button type="submit" class="button button--secondary">{% translate "Mark unavailable" %}</button>
                         </form>
@@ -43,7 +43,7 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="mark_available">
                             <input type="hidden" name="technician_id" value="{{ technician.pk }}">
-                            <span class="badge badge--status-blocked">
+                            <span class="badge badge--bad">
                                 {% translate "Unavailable" %} — {{ technician.get_unavailable_reason_display }}
                             </span>
                             <button type="submit" class="button">{% translate "Mark available" %}</button>

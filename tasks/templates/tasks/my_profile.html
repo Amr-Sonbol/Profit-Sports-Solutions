@@ -23,9 +23,9 @@
             <dt>{% translate "Professional skills" %}</dt>
             <dd>
                 {% if certification.is_certified %}
-                <span class="badge badge--status-completed">{% translate "Certified technician" %}</span>
+                <span class="badge badge--good">{% translate "Certified technician" %}</span>
                 {% else %}
-                <span class="badge badge--status-blocked">
+                <span class="badge badge--bad">
                     {{ certification.non_cardio_certified|add:certification.conduct_certified }}
                     /
                     {{ certification.non_cardio_total|add:certification.conduct_total }}
@@ -41,11 +41,11 @@
             <dt>{% translate "90-day progress" %}</dt>
             <dd>
                 {% if ninety_day.on_track %}
-                <span class="badge badge--status-completed">
+                <span class="badge badge--good">
                     {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                 </span>
                 {% else %}
-                <span class="badge badge--status-blocked">
+                <span class="badge badge--bad">
                     {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                 </span>
                 {% endif %}
