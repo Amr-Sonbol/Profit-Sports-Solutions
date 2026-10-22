@@ -23,7 +23,7 @@
         {% endfor %}
         <button type="submit" class="button">{% translate "Create and send welcome email" %}</button>
     </form>
-    <p class="field__help">{% translate "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link." %}</p>
+    <p class="field__help">{% translate "The customer fills in their password, contact details, invoice and delivery addresses, and sites from the link." %}</p>
 </div>
 
 <nav class="tabs">
@@ -108,7 +108,7 @@
     <div class="button-row">
         <button type="submit" form="bulk-invite" class="button">{% translate "Send welcome email to selected" %}</button>
     </div>
-    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %} {% translate "Select a customer's name to manage their account." %}</p>
+    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is in English, plus Arabic for customers in Arab countries. Its link expires in {{ days }} days.{% endblocktranslate %} {% translate "Select a customer's name to manage their account." %}</p>
 
     <div class="table-wrap">
         <table>

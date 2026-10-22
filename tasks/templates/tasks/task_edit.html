@@ -56,7 +56,7 @@
             </table>
         </div>
         {% else %}
-        <p class="field__help">{% translate "For installations and loadings: the same items listed on the delivery note, recorded as structured data. A product code is required for a row to be saved. For each machine, complete its checklist: the custom color of each component and any substitute supplied if the ordered item was unavailable." %}</p>
+        <p class="field__help">{% translate "For installations and loadings: the items on the delivery note. Each row needs a product code. For each machine, fill in its checklist: the custom color of each part, and any substitute used if the ordered item wasn't available." %}</p>
         {{ product_formset.management_form }}
         {% if product_formset.non_form_errors %}
             <p class="flash flash--error">{{ product_formset.non_form_errors }}</p>

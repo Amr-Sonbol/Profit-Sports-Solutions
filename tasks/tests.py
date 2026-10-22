@@ -194,7 +194,7 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'notify_schedule'}, follow=True)
 
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Please set a scheduled time')
+        self.assertContains(response, 'Set a time before notifying')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_requires_a_contact_email(self):
@@ -206,7 +206,7 @@ class TaskDetailTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertIsNone(self.task.schedule_notified_at)
-        self.assertContains(response, 'Please add a contact email')
+        self.assertContains(response, 'Add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_notify_sends_email_and_records_who_and_when(self):
@@ -237,7 +237,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': '  '}, follow=True,
         )
 
-        self.assertContains(response, 'Please state the reason for the delay')
+        self.assertContains(response, 'Enter the reason for the delay')
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
 
@@ -250,7 +250,7 @@ class TaskDetailTests(TaskTestCase):
             f'/tasks/{self.task.pk}/', {'action': 'notify_delay', 'delay_reason': 'Traffic'}, follow=True,
         )
 
-        self.assertContains(response, 'Please add a contact email')
+        self.assertContains(response, 'Add a contact email')
         self.assertEqual(len(mail.outbox), 0)
 
     def test_delay_notice_sends_email_and_logs_an_event(self):
@@ -359,7 +359,7 @@ class TaskDetailFeedbackRequestTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'send_feedback_request'}, follow=True)
 
         self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
-        self.assertContains(response, 'Please add a contact email')
+        self.assertContains(response, 'Add a contact email')
 
     def test_requesting_feedback_creates_it_and_sends_an_email(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -889,7 +889,7 @@ class TaskScheduleLockingTests(TaskTestCase):
             'action': 'request_schedule_change', 'requested_scheduled_for': '2026-10-02T10:00',
         }, follow=True)
         self.assertFalse(ScheduleChangeRequest.objects.exists())
-        self.assertContains(response, 'not locked')
+        self.assertContains(response, 'Edit it directly')
 
     def test_cannot_file_a_second_pending_request(self):
         self.task.schedule_time_locked = True
@@ -1001,7 +1001,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Please add a shipping tracking number')
+        self.assertContains(response, 'Add a tracking number')
 
     def test_requires_a_contact_email(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -1011,7 +1011,7 @@ class TaskShippingNoticeTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Please add a contact email')
+        self.assertContains(response, 'Add a contact email')
 
     def test_sends_the_tracking_number_only(self):
         self.task.shipping_tracking_number = 'TRACK-99'
@@ -2389,7 +2389,7 @@ class TicketReviewTests(TaskTestCase):
         response = self.client.post(self.url, {'action': 'notify_shipping'}, follow=True)
 
         self.assertEqual(len(mail.outbox), 0)
-        self.assertContains(response, 'Please add a shipping tracking number')
+        self.assertContains(response, 'Add a tracking number')
 
     def test_notify_shipping_sends_the_tracking_number_only(self):
         self.ticket.shipping_tracking_number = 'TRACK-99'
@@ -2469,7 +2469,7 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='admin1', password='pass12345')
         create_url = f'/tasks/new/?ticket={self.ticket.pk}'
         response = self.client.get(create_url)
-        self.assertContains(response, 'As an administrator, you may still change it')
+        self.assertContains(response, 'As an administrator, you can still change it')
 
         response = self.client.post(create_url, {
             'site': other_site.pk,

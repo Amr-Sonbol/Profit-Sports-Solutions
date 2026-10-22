@@ -131,8 +131,8 @@ class SiteEditForm(forms.ModelForm):
     # against. Coordinates or a full Google Maps link; empty clears it.
     map_location = forms.CharField(
         required=False, label=_('Map location'),
-        help_text=_('Paste the coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. If left blank, it '
-                    'will be set by the first technician to tap “Arrived” at this site.'),
+        help_text=_('Paste coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. If you leave it '
+                    "blank, it's set when the first technician taps “Arrived” here."),
     )
 
     class Meta:
@@ -149,7 +149,7 @@ class SiteEditForm(forms.ModelForm):
             self.fields['map_location'].initial = f'{self.instance.latitude}, {self.instance.longitude}'
             if self.instance.location_source == Site.LocationSource.ARRIVAL:
                 self.fields['map_location'].help_text = _(
-                    'Set by the first technician to arrive. Please verify it and correct it if inaccurate.',
+                    "Set by the first technician to arrive. Check it and fix it if it's wrong.",
                 )
 
     def clean_name(self):
@@ -167,8 +167,8 @@ class SiteEditForm(forms.ModelForm):
         coordinates = parse_coordinates(text)
         if coordinates is None:
             raise forms.ValidationError(_(
-                'Coordinates could not be found in the input. Please enter them as “latitude, longitude”, or paste '
-                'the full Google Maps link (not a shortened maps.app.goo.gl link).',
+                "Couldn't find coordinates. Enter them as “latitude, longitude” or paste a full Google Maps "
+                'link (not a maps.app.goo.gl short link).',
             ))
         return coordinates
 
@@ -197,7 +197,7 @@ class CustomerImportForm(forms.Form):
     def clean_csv_file(self):
         csv_file = self.cleaned_data['csv_file']
         if not csv_file.name.lower().endswith('.csv'):
-            raise forms.ValidationError(_('Please upload a .csv file.'))
+            raise forms.ValidationError(_('Upload a .csv file.'))
         return csv_file
 
 
@@ -249,7 +249,7 @@ class QuickInviteForm(forms.Form):
         name, country = cleaned.get('name'), cleaned.get('country')
         if name and country and Customer.objects.filter(name__iexact=name.strip(), country=country).exists():
             raise forms.ValidationError(_(
-                'A customer named %(name)s already exists in this country. Please send the invitation from their '
-                'row instead.',
+                'A customer named %(name)s already exists in this country. Send the invitation from their row '
+                'instead.',
             ) % {'name': name.strip()})
         return cleaned

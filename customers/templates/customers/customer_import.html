@@ -13,10 +13,10 @@
 
 <div class="section">
     <p>
-        {% translate "One row per site: a chain with several branches requires several rows sharing the same customer name. Re-uploading the same file is safe; existing customers and sites are matched by name and left unchanged, not duplicated." %}
+        {% translate "One row per site. A chain with several branches uses several rows with the same customer name. Uploading the same file again is safe: existing customers and sites are matched by name and left as they are." %}
     </p>
     <p class="field__help">
-        {% translate "Only customer_name is required. A file with just customer_name and customer_contact_email is enough: each customer then completes their details after receiving the welcome email from Customer accounts. Save the file from Excel as “CSV UTF-8” so Arabic names are kept." %}
+        {% translate "Only the customer_name column is required. A file with just customer_name and customer_contact_email is enough: each customer fills in the rest after they get the welcome email from Customer accounts. In Excel, save as “CSV UTF-8” so Arabic names come through." %}
     </p>
     <p><a href="{% url 'customers:customer_import_template' %}">{% translate "Download a template CSV" %}</a></p>
 

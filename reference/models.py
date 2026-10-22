@@ -10,8 +10,7 @@ class Country(models.Model):
     task_prefix = models.CharField(
         _('task number prefix'), max_length=5, blank=True,
         help_text=_(
-            'overrides the ISO code as the task-number prefix, e.g. KSA or UAE, reflecting common local usage. '
-            'Leave blank to use the ISO code.',
+            'used instead of the ISO code in task numbers, e.g. KSA or UAE. Leave blank to use the ISO code',
         ),
     )
     timezone = models.CharField(

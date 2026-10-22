@@ -5,12 +5,12 @@
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "Welcome. Please complete your account setup." %}</h1>
+    <h1>{% translate "Welcome. Finish setting up your account." %}</h1>
 </div>
 
 <div class="section">
     <p class="field__help">
-        {% translate "One-time setup: please set your own password and confirm your preferred contact details. Subsequent sign-ins will take you directly to your account." %}
+        {% translate "One-time setup: choose your password and confirm your contact details. Next time you'll go straight to your account." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

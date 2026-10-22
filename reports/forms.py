@@ -102,7 +102,7 @@ class WorkReportForm(forms.ModelForm):
                 )
         waived = cleaned.get('signature_waived')
         if waived and not (cleaned.get('signature_waived_reason') or '').strip():
-            self.add_error('signature_waived_reason', _('Please state why the customer could not sign.'))
+            self.add_error('signature_waived_reason', _("Say why the customer couldn't sign."))
         if not waived:
             cleaned['signature_waived_reason'] = ''
         if signature and signature.size > MAX_SIGNATURE_UPLOAD_BYTES:
@@ -160,7 +160,7 @@ class PartUsedItemForm(forms.Form):
         part = catalogue.filter(code__iexact=code).first()
         if part is None:
             raise forms.ValidationError(
-                _('“%(code)s” is not in the parts list. Please select one from the list or request that it be added.'),
+                _("“%(code)s” isn't in the parts list. Choose one from the list or ask for it to be added."),
                 params={'code': code},
             )
         self.catalogue_part = part
@@ -176,6 +176,6 @@ class PartUsedItemForm(forms.Form):
         missing = [f for f in ('part_code', 'quantity', 'unit_cost', 'currency_code') if not cleaned.get(f)]
         if missing:
             raise forms.ValidationError(
-                _('Please complete the part code, quantity, unit cost and currency, or leave this row blank.'),
+                _('Fill in the part code, quantity, unit cost and currency, or leave the row blank.'),
             )
         return cleaned

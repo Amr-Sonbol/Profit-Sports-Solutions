@@ -36,7 +36,7 @@ export default function TeamTasksScreen() {
     } catch (err) {
       setError(
         err instanceof ApiRequestError && err.status === 403
-          ? "You do not have permission to view the team task list."
+          ? "You don't have access to the team task list."
           : 'Could not load tasks.',
       );
     }

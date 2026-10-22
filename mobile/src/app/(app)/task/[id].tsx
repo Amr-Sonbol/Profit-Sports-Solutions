@@ -54,7 +54,7 @@ export default function TaskDetailScreen() {
       await sendTaskAction(Number(id), action);
       await load();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'The action could not be completed. Please try again.');
+      setError(err instanceof ApiRequestError ? err.message : "That didn't work. Try again.");
     } finally {
       setIsBusy(false);
     }
@@ -63,7 +63,7 @@ export default function TaskDetailScreen() {
   const handleAddPhoto = async (purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Access to the photo library is required to attach a photo.');
+      Alert.alert('Photo access needed', 'Allow photo access to attach a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -82,7 +82,7 @@ export default function TaskDetailScreen() {
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Upload failed. Please try again.');
+      setError(err instanceof ApiRequestError ? err.message : 'Upload failed. Try again.');
     } finally {
       setIsBusy(false);
     }
@@ -158,7 +158,7 @@ export default function TaskDetailScreen() {
               disabled={isBusy}
             >
               <ThemedText themeColor="primary">Undo “{task.undoable_step}”</ThemedText>
-              <ThemedText themeColor="textSecondary" type="small">Recorded in error? You may undo within 10 minutes.</ThemedText>
+              <ThemedText themeColor="textSecondary" type="small">Tapped by mistake? You can undo for 10 minutes.</ThemedText>
             </TouchableOpacity>
           ) : null}
 

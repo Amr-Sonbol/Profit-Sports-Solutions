@@ -49,14 +49,13 @@ class Customer(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='customer', verbose_name=_('login account'),
-        help_text=_('one account covers every site under this customer; created by staff only, no self-registration'),
+        help_text=_("one login covers all of this customer's sites. Only staff can create it"),
     )
     must_change_password = models.BooleanField(
         _('must change password'), default=False,
         help_text=_(
-            'set when staff create the login with a temporary system-generated password; at first sign-in, the '
-            'customer is guided through setting their own password and confirming their contact details before '
-            'accessing the rest of the portal',
+            'set when staff create the login with a temporary password. At first sign-in the customer chooses '
+            'a password and confirms their contact details',
         ),
     )
     invited_at = models.DateTimeField(

@@ -76,8 +76,8 @@ class Technician(models.Model):
     must_change_password = models.BooleanField(
         _('must change password'), default=False,
         help_text=_(
-            'set when a manager creates the login with a temporary system-generated password; the user must set '
-            'their own password at first sign-in before accessing anything else',
+            'set when a manager creates the login with a temporary password. The user chooses their own '
+            'password at first sign-in',
         ),
     )
     country = models.ForeignKey(

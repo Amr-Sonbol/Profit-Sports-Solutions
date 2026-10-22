@@ -154,9 +154,9 @@
         </div>
     </form>
     {% if can_escalate %}
-    <p><a href="#escalation">{% blocktranslate with role=escalation_role %}Requires further attention? Escalate to the {{ role }}{% endblocktranslate %}</a></p>
+    <p><a href="#escalation">{% blocktranslate with role=escalation_role %}Needs more attention? Escalate to the {{ role }}{% endblocktranslate %}</a></p>
     {% elif pending_escalation %}
-    <p class="field__help"><a href="#escalation">{% blocktranslate with name=pending_escalation.escalated_to.full_name %}Escalated — awaiting a decision from {{ name }}{% endblocktranslate %}</a></p>
+    <p class="field__help"><a href="#escalation">{% blocktranslate with name=pending_escalation.escalated_to.full_name %}Escalated, waiting for {{ name }} to decide{% endblocktranslate %}</a></p>
     {% endif %}
     {% elif can_manage %}
     <p class="field__help">{% translate "This ticket has been resolved and the conversation is closed." %}</p>
@@ -166,7 +166,7 @@
 {% if internal_note_form %}
 <div class="section">
     <h2>{% translate "Internal notes" %}</h2>
-    <p class="field__help">{% translate "Visible to managers and administrators only; never shown to the customer or in the ticket conversation." %}</p>
+    <p class="field__help">{% translate "Only managers and administrators can see this. Never shown to the customer." %}</p>
     {% if internal_notes %}
     <ul class="plain-list">
         {% for note in internal_notes %}
@@ -290,7 +290,7 @@
         </div>
     </form>
     {% else %}
-    <p class="empty-state">{% blocktranslate with role=escalation_role %}No active {{ role }} is available to receive escalations. Please add one from Technicians.{% endblocktranslate %}</p>
+    <p class="empty-state">{% blocktranslate with role=escalation_role %}No active {{ role }} to receive escalations. Add one under Technicians.{% endblocktranslate %}</p>
     {% endif %}
     {% endif %}
 </div>
@@ -354,15 +354,15 @@
         <button type="submit" class="button button--secondary">{% translate "Notify customer of tracking number" %}</button>
     </form>
     {% elif not ticket.shipping_tracking_number %}
-    <p class="field__help">{% translate "Please add a shipping tracking number before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Add a tracking number before notifying the customer." %}</p>
     {% else %}
-    <p class="field__help">{% translate "Please add a contact email address before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Add a contact email before notifying the customer." %}</p>
     {% endif %}
 </div>
 {% endif %}
 
 {% if not can_manage %}
-<p class="empty-state">{% translate "This ticket has been assigned to you for review. Only authorised ticket reviewers can convert or dismiss it." %}</p>
+<p class="empty-state">{% translate "This ticket is assigned to you for review. Only ticket reviewers can convert or dismiss it." %}</p>
 {% else %}
 
 {% if ticket.status == 'new' %}

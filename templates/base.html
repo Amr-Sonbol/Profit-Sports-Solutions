@@ -57,7 +57,7 @@
                         </a>
                         {% elif notification.kind == 'escalation_pending' %}
                         <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
-                            {% translate "Escalated to you — decision required" %}
+                            {% translate "Escalated to you, needs your decision" %}
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>

@@ -258,7 +258,7 @@ def _import_customers_csv(csv_file, country):
         if segment not in valid_segments:
             results.append({
                 **result, 'outcome': 'error',
-                'detail': _('Unknown segment "%(segment)s". Please use gym, hotel, club or other.') % {'segment': segment},
+                'detail': _('Unknown segment "%(segment)s". Use gym, hotel, club or other.') % {'segment': segment},
             })
             continue
 

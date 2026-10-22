@@ -21,9 +21,9 @@
 <h2>{{ period_start|date:"F Y" }}</h2>
 <p class="muted">
     {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} submitted report.{% plural %}{{ hours }} labour hours across {{ reports }} submitted reports.{% endblocktranslate %}
-    {% translate "The hours on a report are credited to every team member — the lead and all helpers — unless the lead has entered a helper's individual hours. Hours worked prior to a handover are also included." %}
+    {% translate "Report hours count for everyone on the team, lead and helpers, unless the lead entered a helper's own hours. Hours worked before a handover are included too." %}
     {% translate "“Significantly over estimate” means more than 50% above the task's estimated hours." %}
-    {% translate "“Exceeds recorded time” means the hours entered are significantly higher than the time between the Start check-in and report submission, excluding pauses, and should be reviewed." %}
+    {% translate "“Exceeds recorded time” means the hours entered are well above the time from Start to report submission, not counting pauses. Worth a check." %}
 </p>
 
 <div class="section">

@@ -54,7 +54,7 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
       const first = value.find((rowErrors) => rowErrors && Object.keys(rowErrors).length > 0);
       if (first) {
         const messages = Object.values(first as Record<string, string[]>).flat();
-        errors.parts = messages[0] ?? 'Please review the parts entries.';
+        errors.parts = messages[0] ?? 'Check the parts rows.';
       }
     } else if (Array.isArray(value)) {
       errors[field] = String(value[0]);
@@ -132,7 +132,7 @@ export default function ReportScreen() {
           ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
         })));
         if (pending.error) {
-          setErrors({ form: `This report could not be sent: ${pending.error} Please correct it and submit again.` });
+          setErrors({ form: `This report wasn't sent: ${pending.error} Fix it and submit again.` });
         }
       } else if (report) {
         setFindings(report.findings);
@@ -203,14 +203,14 @@ export default function ReportScreen() {
         savePendingReport(Number(id), task.task_number, input);
         Alert.alert(
           'Saved on this device',
-          'No connection available. The report will be sent automatically when you are back online.',
+          'No connection. The report sends automatically when you are back online.',
         );
         router.back();
       } else if (err instanceof ApiRequestError && err.status === 400) {
         const fieldErrors = fieldErrorsFrom(err.body);
         setErrors(Object.keys(fieldErrors).length ? fieldErrors : { form: err.message });
       } else {
-        setErrors({ form: err instanceof ApiRequestError ? err.message : 'Unable to save. Please try again.' });
+        setErrors({ form: err instanceof ApiRequestError ? err.message : "Couldn't save. Try again." });
       }
     } finally {
       setIsBusy(false);
@@ -240,7 +240,7 @@ export default function ReportScreen() {
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <ScrollView contentContainerStyle={styles.content} scrollEnabled={scrollEnabled}>
-            <ThemedText type="title" style={styles.title}>Please review and sign</ThemedText>
+            <ThemedText type="title" style={styles.title}>Check the work and sign</ThemedText>
             <ThemedText themeColor="textSecondary">{task.task_number} — {task.customer_name}</ThemedText>
 
             <ThemedView style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
@@ -285,7 +285,7 @@ export default function ReportScreen() {
                     setNewSignature(signature);
                     setSigning(false);
                   }}
-                  onEmpty={() => setSignError('Please sign in the box above.')}
+                  onEmpty={() => setSignError('Sign in the box above.')}
                 />
               </ThemedView>
               <TouchableOpacity onPress={() => signatureRef.current?.clearSignature()}>
@@ -295,7 +295,7 @@ export default function ReportScreen() {
             </ThemedView>
 
             <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={finishSigning}>
-              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Completed — return to the technician</ThemedText>
+              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Done, hand back to the technician</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setSigning(false)} style={styles.centerLink}>
               <ThemedText themeColor="textSecondary">Cancel</ThemedText>
@@ -450,8 +450,8 @@ export default function ReportScreen() {
                 {newSignature
                   ? `Signed by ${customerName || 'the customer'} ✓`
                   : signatureOnFile
-                    ? `Signed by ${customerName || 'the customer'} — sign again only if you wish to replace it.`
-                    : 'The customer reviews the work and signs on their own screen. Hours and prices are not displayed.'}
+                    ? `Signed by ${customerName || 'the customer'}. Sign again only to replace it.`
+                    : 'The customer checks the work and signs on their own screen. Hours and prices are hidden.'}
               </ThemedText>
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
@@ -485,7 +485,7 @@ export default function ReportScreen() {
                 <ThemedText>Customer not available to sign</ThemedText>
               </TouchableOpacity>
               {notSigned ? (
-                <Field label="Reason the customer could not sign" error={errors.signature_waived_reason}>
+                <Field label="Why the customer couldn't sign" error={errors.signature_waived_reason}>
                   <TextInput
                     style={[inputStyle, styles.multiline]} value={waivedReason} onChangeText={setWaivedReason}
                     multiline

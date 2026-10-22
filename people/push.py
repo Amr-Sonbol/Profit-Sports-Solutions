@@ -77,7 +77,7 @@ def push_removed(technician, task):
     push_in_their_language(
         technician,
         lambda: _('Removed from a task'),
-        lambda: _('%(number)s — %(site)s. Your attendance is no longer required.') % {
+        lambda: _('%(number)s — %(site)s. You no longer need to attend.') % {
             'number': task.task_number, 'site': task.site.name,
         },
         {'type': 'task_removed', 'task_id': task.pk},
@@ -89,7 +89,7 @@ def push_cancelled(technician, task):
     push_in_their_language(
         technician,
         lambda: _('Task cancelled'),
-        lambda: _('%(number)s — %(site)s. Your attendance is no longer required.') % {
+        lambda: _('%(number)s — %(site)s. You no longer need to attend.') % {
             'number': task.task_number, 'site': task.site.name,
         },
         {'type': 'task_cancelled', 'task_id': task.pk},
