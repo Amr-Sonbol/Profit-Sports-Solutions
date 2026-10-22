@@ -67,6 +67,11 @@
                             — {{ notification.ticket.subject }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
+                        {% elif notification.kind == 'customer_locked' %}
+                        <a href="{% url 'customers:customer_accounts' %}?status=locked" class="notif-alarm">
+                            {% translate "Customer account locked" %}
+                            — {{ notification.customer.name }}
+                        </a>
                         {% elif notification.kind == 'task_message' %}
                         <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
                             {% translate "New message" %}
@@ -140,6 +145,10 @@
         {% endif %}
     </header>
     <main class="page">
+        {% if request.path != '/' %}
+        {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
+        <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
+        {% endif %}
         {% for message in messages %}
             <p class="flash flash--{{ message.tags }}">{{ message }}</p>
         {% endfor %}

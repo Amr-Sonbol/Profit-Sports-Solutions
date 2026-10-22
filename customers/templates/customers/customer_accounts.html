@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Customer accounts" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Customer accounts" %}</h1>
+</div>
+<p class="field__help">{% blocktranslate with active=active_count total=total %}{{ active }} of {{ total }} customers have an active portal account.{% endblocktranslate %}</p>
+
+<div class="section">
+    <h2>{% translate "Invite a new customer" %}</h2>
+    <form method="post" class="filters">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="quick_invite">
+        <input type="hidden" name="return_query" value="{{ return_query }}">
+        {% for field in quick_invite_form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Create and send welcome email" %}</button>
+    </form>
+    <p class="field__help">{% translate "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link." %}</p>
+</div>
+
+<nav class="tabs">
+    <a href="?{% if country_id %}country={{ country_id }}&{% endif %}{% if search %}q={{ search|urlencode }}{% endif %}" class="{% if not status %}is-active{% endif %}">{% translate "All" %} ({{ total }})</a>
+    {% for value, label, count in status_counts %}
+    <a href="?status={{ value }}{% if country_id %}&country={{ country_id }}{% endif %}{% if search %}&q={{ search|urlencode }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }} ({{ count }})</a>
+    {% endfor %}
+</nav>
+
+<form method="get" class="filters">
+    <input type="hidden" name="status" value="{{ status }}">
+    <div class="filters__search">
+        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name or email' %}">
+    </div>
+    <select name="country">
+        <option value="">{% translate "All countries" %}</option>
+        {% for country in countries %}
+        <option value="{{ country.pk }}" {% if country_id == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.display_name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="button">{% translate "Search" %}</button>
+</form>
+
+{% if managed %}
+{% with row=managed customer=managed.customer account=managed.customer.user %}
+<div class="section" id="manage">
+    <div class="page__header">
+        <h2>{% blocktranslate with name=customer.name %}Manage account — {{ name }}{% endblocktranslate %}</h2>
+        <div class="button-row">
+            <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Open customer record" %}</a>
+            <a href="?{{ list_query }}" class="button button--secondary">{% translate "Close" %}</a>
+        </div>
+    </div>
+    <dl class="detail-grid">
+        <div><dt>{% translate "Status" %}</dt><dd>{% include "customers/_account_status.html" with status=row.status %}</dd></div>
+        <div><dt>{% translate "Login email" %}</dt><dd>{{ account.email|default:customer.contact_email|default:"—" }}</dd></div>
+        <div><dt>{% translate "Country" %}</dt><dd>{{ customer.country.display_name }}</dd></div>
+        <div><dt>{% translate "Invited" %}</dt><dd>{{ customer.invited_at|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd></div>
+        <div><dt>{% translate "Last sign-in" %}</dt><dd>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd></div>
+    </dl>
+    <div class="account-panel__actions">
+        {% if row.status in inviteable %}
+        {% include "customers/_account_action.html" with action="invite" label=_("Send welcome email") %}
+        {% endif %}
+        {% if row.status == 'active' or row.status == 'locked' %}
+        {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
+        {% endif %}
+        {% if row.status == 'locked' %}
+        {% include "customers/_account_action.html" with action="unlock" label=_("Unlock now") %}
+        {% endif %}
+        {% if account %}
+        {% if account.is_active %}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% include "customers/_account_action.html" with action="disable" label=_("Disable portal access") %}
+        {% else %}
+        {% include "customers/_account_action.html" with action="enable" label=_("Enable portal access") %}
+        {% endif %}
+        <form method="post" class="row-actions__inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_email">
+            <input type="hidden" name="customer" value="{{ customer.pk }}">
+            <input type="hidden" name="return_query" value="{{ return_query }}">
+            <input type="email" name="email" required placeholder="{% translate 'New login email' %}" aria-label="{% translate 'New login email' %}">
+            <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+        </form>
+        {% endif %}
+        {% if row.status == 'no_email' %}
+        <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Add a contact email" %}</a>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}
+{% endif %}
+
+<form method="post" id="bulk-invite">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="invite_selected">
+    <input type="hidden" name="return_query" value="{{ return_query }}">
+</form>
+
+<div class="section">
+    <div class="button-row">
+        <button type="submit" form="bulk-invite" class="button">{% translate "Send welcome email to selected" %}</button>
+    </div>
+    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %} {% translate "Select a customer's name to manage their account." %}</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>{% translate "Customer" %}</th>
+                    <th>{% translate "Country" %}</th>
+                    <th>{% translate "Login email" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Last sign-in" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in page_obj %}
+                {% with customer=row.customer account=row.customer.user %}
+                <tr>
+                    <td>
+                        {% if row.status in inviteable %}
+                        <input type="checkbox" name="customers" value="{{ customer.pk }}" form="bulk-invite" aria-label="{{ customer.name }}">
+                        {% endif %}
+                    </td>
+                    <td><a href="?{% if list_query %}{{ list_query }}&{% endif %}manage={{ customer.pk }}#manage">{{ customer.name }}</a></td>
+                    <td>{{ customer.country.display_name }}</td>
+                    <td>{{ account.email|default:customer.contact_email|default:"—" }}</td>
+                    <td>
+                        {% include "customers/_account_status.html" with status=row.status %}
+                    </td>
+                    <td>{{ account.last_login|date:"SHORT_DATE_FORMAT"|default:"—" }}</td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="6"><p class="empty-state">{% translate "No customers match the selected filters." %}</p></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?{% if status %}status={{ status }}&{% endif %}{% if country_id %}country={{ country_id }}&{% endif %}{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+    {% endif %}
+    <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+    {% if page_obj.has_next %}
+        <a href="?{% if status %}status={{ status }}&{% endif %}{% if country_id %}country={{ country_id }}&{% endif %}{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

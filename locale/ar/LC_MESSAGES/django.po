@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-13 22:30+0000\n"
+"POT-Creation-Date: 2026-10-13 23:03+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,6 +13,10 @@ msgstr ""
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
+
+#, python-format
+msgid "%(active)s of %(total)s customers have an active portal account."
+msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في البوابة."
 
 #, python-format
 msgid "%(added)s parts added, %(updated)s updated."
@@ -119,6 +123,10 @@ msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
 
 #, python-format
+msgid "%(name)s has been unlocked."
+msgstr "تم إلغاء قفل حساب %(name)s."
+
+#, python-format
 msgid "%(name)s has no email address on record and was therefore notified in the application only. Please add an email address to their profile."
 msgstr "لا يوجد بريد إلكتروني مسجَّل لـ %(name)s، لذا تم إشعاره داخل التطبيق فقط. يرجى إضافة بريد إلكتروني إلى ملفه الشخصي."
 
@@ -163,6 +171,10 @@ msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. ير�
 
 msgid "A corrected time cannot be in the future."
 msgstr "لا يمكن أن يكون الوقت المصحَّح في المستقبل."
+
+#, python-format
+msgid "A customer named %(name)s already exists in this country. Please send the invitation from their row instead."
+msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقاً. يرجى إرسال الدعوة من الصف الخاص به."
 
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
@@ -216,6 +228,10 @@ msgstr ""
 "مراجعة التذكرة:\n"
 "%(link)s\n"
 
+#, python-format
+msgid "A password link has been sent to %(email)s."
+msgstr "تم إرسال رابط كلمة المرور إلى %(email)s."
+
 msgid "A signature is already on record. Sign again only if you wish to replace it."
 msgstr "يوجد توقيع مسجَّل مسبقاً. يرجى التوقيع مجدداً فقط إذا كنت ترغب في استبداله."
 
@@ -228,6 +244,10 @@ msgstr "يوجد نوع مهمة بهذا الاسم مسبقاً. يرجى اخ
 #, python-format
 msgid "A technician is scheduled to visit on %(date)s."
 msgstr "من المقرر أن يزور فني الموقع بتاريخ %(date)s."
+
+#, python-format
+msgid "A temporary password has been set for %(name)s (username: %(username)s)."
+msgstr "تم تعيين كلمة مرور مؤقتة لـ %(name)s (اسم المستخدم: %(username)s)."
 
 #, python-format
 msgid ""
@@ -244,6 +264,10 @@ msgstr ""
 "\n"
 "عرض المهمة:\n"
 "%(link)s\n"
+
+#, python-format
+msgid "A welcome email with a secure activation link has been sent to %(email)s."
+msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آمناً إلى %(email)s."
 
 msgid "Accept task"
 msgstr "قبول المهمة"
@@ -270,11 +294,20 @@ msgstr "تم التراجع عن الإجراء."
 msgid "Activate"
 msgstr "تفعيل"
 
+msgid "Activate my account"
+msgstr "تفعيل حسابي"
+
+msgid "Activate your account"
+msgstr "تفعيل حسابك"
+
 msgid "Active"
 msgstr "نشط"
 
 msgid "Actual time of occurrence"
 msgstr "الوقت الفعلي للحدوث"
+
+msgid "Add a contact email"
+msgstr "إضافة بريد إلكتروني للتواصل"
 
 msgid "Add a note"
 msgstr "أضف ملاحظة"
@@ -529,6 +562,9 @@ msgstr "العودة إلى تقدّمي"
 msgid "Back to my week"
 msgstr "العودة إلى أسبوعي"
 
+msgid "Back to sign-in"
+msgstr "العودة إلى تسجيل الدخول"
+
 msgid "Back to skills"
 msgstr "العودة إلى المهارات"
 
@@ -615,6 +651,9 @@ msgstr "معتمَد في المهارات المتقدمة."
 msgid "Certified technician"
 msgstr "فني معتمد"
 
+msgid "Change email"
+msgstr "تغيير البريد الإلكتروني"
+
 msgid "Change password"
 msgstr "تغيير كلمة المرور"
 
@@ -642,6 +681,9 @@ msgstr "اختر سببًا لاستبدال الفني الرئيسي الحا�
 
 msgid "Clear signature"
 msgstr "مسح التوقيع"
+
+msgid "Close"
+msgstr "إغلاق"
 
 msgid "Close task"
 msgstr "إغلاق المهمة"
@@ -720,11 +762,17 @@ msgstr "جهة الاتصال"
 msgid "Contact email"
 msgstr "البريد الإلكتروني لجهة الاتصال"
 
+msgid "Contact email added to existing customer"
+msgstr "تمت إضافة البريد الإلكتروني إلى عميل موجود"
+
 msgid "Contact name"
 msgstr "اسم جهة الاتصال"
 
 msgid "Contact phone"
 msgstr "هاتف جهة الاتصال"
+
+msgid "Contact phone number"
+msgstr "رقم هاتف التواصل"
 
 msgid "Continue"
 msgstr "متابعة"
@@ -780,6 +828,9 @@ msgstr "تم تحديث الدولة."
 msgid "Create account and send login details"
 msgstr "إنشاء الحساب وإرسال بيانات الدخول"
 
+msgid "Create and send welcome email"
+msgstr "إنشاء العميل وإرسال رسالة الترحيب"
+
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
 
@@ -804,11 +855,24 @@ msgstr "المهام الحالية"
 msgid "Customer"
 msgstr "العميل"
 
+#, python-format
+msgid "Customer %(name)s created and welcome email sent to %(email)s."
+msgstr "تم إنشاء العميل %(name)s وإرسال رسالة الترحيب إلى %(email)s."
+
 msgid "Customer / Site"
 msgstr "العميل / الموقع"
 
+msgid "Customer account locked"
+msgstr "حساب عميل مقفل"
+
+msgid "Customer accounts"
+msgstr "حسابات العملاء"
+
 msgid "Customer added."
 msgstr "تمت إضافة العميل."
+
+msgid "Customer already exists"
+msgstr "العميل موجود مسبقاً"
 
 msgid "Customer and site"
 msgstr "العميل والموقع"
@@ -821,6 +885,9 @@ msgstr "تم إيقاف العميل."
 
 msgid "Customer feedback"
 msgstr "تقييم العميل"
+
+msgid "Customer name"
+msgstr "اسم العميل"
 
 msgid "Customer not available to sign"
 msgstr "العميل غير متاح للتوقيع"
@@ -887,6 +954,34 @@ msgstr "موقوف"
 
 msgid "Deactivated. Please reassign their open tasks below."
 msgstr "تم إلغاء التفعيل. يرجى إعادة إسناد مهامه المفتوحة أدناه."
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"A link to set a new password for your customer portal account has been issued. Please use the secure link below; it is valid for %(days)s days and can be used once.\n"
+"\n"
+"%(link)s\n"
+"\n"
+"Your username: %(username)s\n"
+"\n"
+"If you did not request this, please disregard this email.\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"السيد/السيدة %(contact)s المحترم/ة،\n"
+"\n"
+"تم إصدار رابط لتعيين كلمة مرور جديدة لحسابكم في بوابة العملاء. يرجى استخدام الرابط الآمن أدناه؛ وهو صالح لمدة %(days)s أيام ويمكن استخدامه مرة واحدة.\n"
+"\n"
+"%(link)s\n"
+"\n"
+"اسم المستخدم: %(username)s\n"
+"\n"
+"إذا لم تطلبوا ذلك، يرجى تجاهل هذه الرسالة.\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
 
 #, python-format
 msgid ""
@@ -1058,30 +1153,26 @@ msgstr ""
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
-"Your customer portal account has been created. Through the portal you may submit service requests and track their progress.\n"
+"Your customer portal account with Profit Sports Solutions has been created. Through the portal you may submit service requests, follow their progress and review your service history.\n"
 "\n"
-"Username: %(username)s\n"
-"Temporary password: %(password)s\n"
+"To activate your account, please set your password and complete your company details using the secure link below. The link is valid for %(days)s days and can be used once.\n"
 "\n"
-"You will be asked to set your own password and confirm your details when you first sign in.\n"
-"\n"
-"Sign in here:\n"
 "%(link)s\n"
+"\n"
+"Your username: %(username)s\n"
 "\n"
 "Best regards,\n"
 "Profit Sports Solutions\n"
 msgstr ""
 "السيد/السيدة %(contact)s المحترم/ة،\n"
 "\n"
-"تم إنشاء حسابكم في بوابة العملاء. يمكنكم من خلال البوابة تقديم طلبات الخدمة ومتابعة سيرها.\n"
+"تم إنشاء حسابكم في بوابة عملاء Profit Sports Solutions. يمكنكم من خلال البوابة تقديم طلبات الخدمة ومتابعة سيرها والاطلاع على سجل الخدمة.\n"
+"\n"
+"لتفعيل حسابكم، يرجى تعيين كلمة المرور واستكمال بيانات شركتكم عبر الرابط الآمن أدناه. الرابط صالح لمدة %(days)s أيام ويمكن استخدامه مرة واحدة.\n"
+"\n"
+"%(link)s\n"
 "\n"
 "اسم المستخدم: %(username)s\n"
-"كلمة المرور المؤقتة: %(password)s\n"
-"\n"
-"سيُطلب منكم تعيين كلمة مرور خاصة بكم وتأكيد بياناتكم عند تسجيل الدخول لأول مرة.\n"
-"\n"
-"تسجيل الدخول من هنا:\n"
-"%(link)s\n"
 "\n"
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
@@ -1105,6 +1196,9 @@ msgstr "حذف"
 msgid "Deleted"
 msgstr "تم الحذف"
 
+msgid "Delivery address"
+msgstr "عنوان التسليم"
+
 msgid "Delivery note"
 msgstr "إشعار التسليم"
 
@@ -1125,6 +1219,12 @@ msgstr "وصف المشكلة"
 
 msgid "Details"
 msgstr "التفاصيل"
+
+msgid "Disable portal access"
+msgstr "تعطيل الوصول إلى البوابة"
+
+msgid "Disabled"
+msgstr "معطَّل"
 
 msgid "Dismiss"
 msgstr "رفض"
@@ -1199,6 +1299,9 @@ msgstr "نوع التوظيف"
 msgid "En route"
 msgstr "في الطريق"
 
+msgid "Enable portal access"
+msgstr "تفعيل الوصول إلى البوابة"
+
 msgid "English"
 msgstr "الإنجليزية"
 
@@ -1225,6 +1328,9 @@ msgstr "أدخل البريد الإلكتروني المرتبط بحسابك �
 
 msgid "Enter the exact date and time."
 msgstr "أدخل التاريخ والوقت المحددين."
+
+msgid "Enter your login email and we will send you a secure link to set a new password."
+msgstr "أدخل البريد الإلكتروني الخاص بتسجيل الدخول وسنرسل إليك رابطاً آمناً لتعيين كلمة مرور جديدة."
 
 msgid "Entered by the office"
 msgstr "أدخله المكتب"
@@ -1435,6 +1541,9 @@ msgstr "اسم IANA، مثال: Asia/Riyadh"
 msgid "ISO code"
 msgstr "رمز ISO"
 
+msgid "If this email address belongs to a customer account, a secure link has been sent to it. Please check your inbox; it may take a few minutes to arrive."
+msgstr "إذا كان هذا البريد الإلكتروني مرتبطاً بحساب عميل، فقد تم إرسال رابط آمن إليه. يرجى مراجعة بريدك الوارد؛ فقد يستغرق وصوله بضع دقائق."
+
 msgid "If this email address matches an account, a link to set a new password has been sent. It may take a few minutes to arrive."
 msgstr "إذا كان هذا البريد الإلكتروني مطابقاً لحساب مسجَّل، فقد تم إرسال رابط لتعيين كلمة مرور جديدة. قد يستغرق وصوله بضع دقائق."
 
@@ -1486,8 +1595,23 @@ msgstr "أُغلقت التذكرة الداخلية"
 msgid "Internal tickets"
 msgstr "التذاكر الداخلية"
 
+msgid "Invitation expired"
+msgstr "انتهت صلاحية الدعوة"
+
+msgid "Invite a new customer"
+msgstr "دعوة عميل جديد"
+
+msgid "Invited"
+msgstr "تاريخ الدعوة"
+
+msgid "Invited — awaiting setup"
+msgstr "مدعو — بانتظار الإعداد"
+
 msgid "Invoice"
 msgstr "الفاتورة"
+
+msgid "Invoice address"
+msgstr "عنوان الفاتورة"
 
 msgid "Job"
 msgstr "المهمة"
@@ -1497,6 +1621,9 @@ msgstr "ساعات العمل"
 
 msgid "Large equipment"
 msgstr "معدات كبيرة"
+
+msgid "Last sign-in"
+msgstr "آخر تسجيل دخول"
 
 msgid "Lead"
 msgstr "الفني الرئيسي"
@@ -1532,6 +1659,9 @@ msgstr "رابط"
 msgid "Link expired"
 msgstr "انتهت صلاحية الرابط"
 
+msgid "Link no longer valid"
+msgstr "الرابط لم يعد صالحاً"
+
 msgid "Local courier"
 msgstr "شركة توصيل محلية"
 
@@ -1550,6 +1680,13 @@ msgstr "حساب الدخول"
 #, python-format
 msgid "Login created and sent to %(email)s."
 msgstr "تم إنشاء بيانات الدخول وإرسالها إلى %(email)s."
+
+msgid "Login email"
+msgstr "البريد الإلكتروني لتسجيل الدخول"
+
+#, python-format
+msgid "Login email changed to %(email)s."
+msgstr "تم تغيير البريد الإلكتروني لتسجيل الدخول إلى %(email)s."
 
 msgid "Logistics updated."
 msgstr "تم تحديث بيانات الشحن."
@@ -1581,8 +1718,15 @@ msgstr "صيانة"
 msgid "Manage"
 msgstr "إدارة"
 
+#, python-format
+msgid "Manage account — %(name)s"
+msgstr "إدارة الحساب — %(name)s"
+
 msgid "Manage assignment"
 msgstr "إدارة التعيين"
+
+msgid "Manage customer portal accounts"
+msgstr "إدارة حسابات بوابة العملاء"
 
 msgid "Manager"
 msgstr "مدير"
@@ -1691,6 +1835,9 @@ msgstr "رد جديد من العميل — الطلب %(number)s"
 msgid "New internal ticket assigned to you"
 msgstr "تذكرة داخلية جديدة مسندة إليك"
 
+msgid "New login email"
+msgstr "البريد الإلكتروني الجديد لتسجيل الدخول"
+
 msgid "New machines found"
 msgstr "أجهزة جديدة تم العثور عليها"
 
@@ -1780,6 +1927,9 @@ msgstr "بدون علامة تجارية"
 msgid "No conduct areas have been set up."
 msgstr "لم يتم إعداد أي مجالات سلوك."
 
+msgid "No customers match the selected filters."
+msgstr "لا يوجد عملاء مطابقون لعوامل التصفية المحددة."
+
 msgid "No customers match your search."
 msgstr "لا يوجد عملاء مطابقون لبحثك."
 
@@ -1788,6 +1938,9 @@ msgstr "لا يوجد عملاء موقوفون في دولتك."
 
 msgid "No deactivated technicians in your country."
 msgstr "لا يوجد فنيون موقوفون في دولتك."
+
+msgid "No email"
+msgstr "لا يوجد بريد إلكتروني"
 
 msgid "No entries recorded."
 msgstr "لا توجد سجلات."
@@ -1904,6 +2057,9 @@ msgstr "ليس في الموقع"
 msgid "Not at the site · %(distance)s"
 msgstr "ليس في الموقع · %(distance)s"
 
+msgid "Not invited"
+msgstr "غير مدعو"
+
 msgid "Not rated"
 msgstr "غير مقيّم"
 
@@ -2002,8 +2158,14 @@ msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من ق�
 msgid "Only closed tasks can be flagged."
 msgstr "لا يمكن الإبلاغ إلا عن المهام المغلقة."
 
+msgid "Only customer_name is required. A file with just customer_name and customer_contact_email is enough: each customer then completes their details after receiving the welcome email from Customer accounts. Save the file from Excel as “CSV UTF-8” so Arabic names are kept."
+msgstr "الحقل customer_name هو الوحيد المطلوب. يكفي ملف يتضمن customer_name وcustomer_contact_email فقط: إذ يستكمل كل عميل بياناته بعد استلام رسالة الترحيب من شاشة حسابات العملاء. يرجى حفظ الملف من Excel بصيغة «CSV UTF-8» للحفاظ على الأسماء العربية."
+
 msgid "Open"
 msgstr "مفتوحة"
+
+msgid "Open customer record"
+msgstr "فتح سجل العميل"
 
 msgid "Open tasks"
 msgstr "المهام المفتوحة"
@@ -2137,9 +2299,6 @@ msgstr "تم تحديث الصلاحيات."
 msgid "Phone"
 msgstr "هاتف"
 
-msgid "Phone number"
-msgstr "رقم الهاتف"
-
 msgid "Photo"
 msgstr "صورة"
 
@@ -2197,6 +2356,9 @@ msgstr "يرجى تسجيل استئناف العمل قبل تقديم التق
 msgid "Please set a scheduled time before notifying the customer."
 msgstr "يرجى تحديد موعد مجدول قبل إشعار العميل."
 
+msgid "Please set your password and complete your company details. Subsequent sign-ins will take you directly to your account."
+msgstr "يرجى تعيين كلمة المرور واستكمال بيانات شركتك. ستنتقل عند تسجيلات الدخول اللاحقة إلى حسابك مباشرة."
+
 msgid "Please start work on this task before submitting a report."
 msgstr "يرجى بدء العمل على هذه المهمة قبل تقديم التقرير."
 
@@ -2217,6 +2379,12 @@ msgstr "ضعيف"
 
 msgid "Portal URL"
 msgstr "رابط البوابة"
+
+msgid "Portal access disabled."
+msgstr "تم تعطيل الوصول إلى البوابة."
+
+msgid "Portal access enabled."
+msgstr "تم تفعيل الوصول إلى البوابة."
 
 msgid "Portal login"
 msgstr "حساب البوابة"
@@ -2420,6 +2588,9 @@ msgstr "الأرقام التسلسلية المُبلَّغ عنها"
 msgid "Reports filed"
 msgstr "التقارير المقدمة"
 
+msgid "Request a new link"
+msgstr "طلب رابط جديد"
+
 msgid "Request again"
 msgstr "طلب مرة أخرى"
 
@@ -2570,6 +2741,9 @@ msgstr "ابحث بالرمز أو الوصف"
 msgid "Search by name"
 msgstr "البحث بالاسم"
 
+msgid "Search by name or email"
+msgstr "البحث بالاسم أو البريد الإلكتروني"
+
 msgid "Search by serial, model, brand, site, or customer"
 msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلامة التجارية أو الموقع أو العميل"
 
@@ -2581,6 +2755,15 @@ msgstr "عرض التقدم الكامل"
 
 msgid "Segment"
 msgstr "الفئة"
+
+msgid "Select a country"
+msgstr "اختر الدولة"
+
+msgid "Select a customer's name to manage their account."
+msgstr "اختر اسم العميل لإدارة حسابه."
+
+msgid "Select a segment"
+msgstr "اختر القطاع"
 
 msgid "Select a site, or add a new one below."
 msgstr "يرجى اختيار موقع، أو إضافة موقع جديد أدناه."
@@ -2627,14 +2810,26 @@ msgstr "إرسال القرار"
 msgid "Send delay notice"
 msgstr "إرسال إشعار التأخير"
 
+msgid "Send link"
+msgstr "إرسال الرابط"
+
 msgid "Send message"
 msgstr "إرسال الرسالة"
+
+msgid "Send password link"
+msgstr "إرسال رابط كلمة المرور"
 
 msgid "Send reply"
 msgstr "إرسال الرد"
 
 msgid "Send reset link"
 msgstr "إرسال رابط إعادة التعيين"
+
+msgid "Send welcome email"
+msgstr "إرسال رسالة الترحيب"
+
+msgid "Send welcome email to selected"
+msgstr "إرسال رسالة الترحيب إلى المحددين"
 
 msgid "Serial number"
 msgstr "الرقم التسلسلي"
@@ -2647,6 +2842,15 @@ msgstr "لوحة الرقم التسلسلي"
 
 msgid "Service history"
 msgstr "سجل الصيانة"
+
+msgid "Set a new password"
+msgstr "تعيين كلمة مرور جديدة"
+
+msgid "Set a new password for your Profit Sports Solutions portal account"
+msgstr "تعيين كلمة مرور جديدة لحسابكم في بوابة Profit Sports Solutions"
+
+msgid "Set a temporary password"
+msgstr "تعيين كلمة مرور مؤقتة"
 
 msgid "Set as lead"
 msgstr "تعيين كفني رئيسي"
@@ -2903,14 +3107,23 @@ msgstr "تم تحديث بيانات الفني."
 msgid "Technicians"
 msgstr "الفنيون"
 
+msgid "Temporary password"
+msgstr "كلمة المرور المؤقتة"
+
 msgid "Thank you for contacting us. Our team is now reviewing your ticket."
 msgstr "نشكركم على تواصلكم معنا. يقوم فريقنا حالياً بمراجعة تذكرتكم."
 
 msgid "Thank you."
 msgstr "شكراً لكم."
 
+msgid "The address invoices should be issued to."
+msgstr "العنوان الذي تُصدر إليه الفواتير."
+
 msgid "The assignment for this task can no longer be changed because work has started. Please close it and create a new task for a handover."
 msgstr "لم يعد بالإمكان تغيير إسناد هذه المهمة لأن العمل قد بدأ. يرجى إغلاقها وإنشاء مهمة جديدة للتسليم."
+
+msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
+msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
 
 msgid "The customer has been notified automatically."
 msgstr "تم إشعار العميل تلقائياً."
@@ -2946,6 +3159,10 @@ msgstr "تم تحديد اليوم بتاريخ %(date)s. يرجى اختيار 
 
 msgid "The decision has been returned to the support desk."
 msgstr "تمت إعادة القرار إلى مكتب الدعم."
+
+#, python-format
+msgid "The email address %(email)s already belongs to another account."
+msgstr "البريد الإلكتروني %(email)s مرتبط بحساب آخر."
 
 msgid "The feedback request has been sent."
 msgstr "تم إرسال طلب التقييم."
@@ -2988,6 +3205,10 @@ msgstr "لا يمكن أن تنتهي الرحلة قبل بدايتها."
 
 msgid "The two password fields do not match."
 msgstr "حقلا كلمة المرور غير متطابقين."
+
+#, python-format
+msgid "The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for %(days)s days."
+msgstr "تُرسل رسالة الترحيب باللغة الإنجليزية، وباللغة العربية أيضاً للعملاء في الدول العربية، ورابط التفعيل الآمن فيها صالح لمدة %(days)s أيام."
 
 msgid "There are no active supervisors or technicians in this country."
 msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة."
@@ -3041,11 +3262,17 @@ msgstr "هذا الوقت لاحق للخطوة التالية في هذه ال�
 msgid "This is not a customer account."
 msgstr "هذا ليس حساب عميل."
 
+msgid "This link has expired or has already been used. Please request a new one below, or contact us if you require assistance."
+msgstr "انتهت صلاحية هذا الرابط أو تم استخدامه مسبقاً. يرجى طلب رابط جديد أدناه، أو التواصل معنا إذا احتجتم إلى المساعدة."
+
 msgid "This month"
 msgstr "هذا الشهر"
 
 msgid "This page does not exist, or you do not have permission to access it. Please verify the link or return to the previous page."
 msgstr "هذه الصفحة غير موجودة، أو ليست لديك صلاحية الوصول إليها. يرجى التحقق من الرابط أو العودة إلى الصفحة السابقة."
+
+msgid "This password is shown only once. Read it to the customer by phone; they will be asked to set their own password and complete their details when they next sign in."
+msgstr "تُعرض كلمة المرور هذه مرة واحدة فقط. يرجى إبلاغ العميل بها هاتفياً؛ وسيُطلب منه تعيين كلمة مروره الخاصة واستكمال بياناته عند تسجيل الدخول التالي."
 
 msgid "This password reset link is no longer valid and may have already been used. Please request a new one."
 msgstr "رابط إعادة تعيين كلمة المرور لم يعد صالحاً، وربما تم استخدامه مسبقاً. يرجى طلب رابط جديد."
@@ -3256,6 +3483,9 @@ msgstr "سعر الوحدة"
 msgid "Unknown segment \"%(segment)s\". Please use gym, hotel, club or other."
 msgstr "قطاع غير معروف \"%(segment)s\". يرجى استخدام gym أو hotel أو club أو other."
 
+msgid "Unlock now"
+msgstr "إلغاء القفل الآن"
+
 msgid "Unscheduled"
 msgstr "غير مجدولة"
 
@@ -3363,6 +3593,17 @@ msgid "Welcome"
 msgstr "أهلاً بك"
 
 #, python-format
+msgid "Welcome email sent to %(email)s."
+msgstr "تم إرسال رسالة الترحيب إلى %(email)s."
+
+#, python-format
+msgid "Welcome emails sent: %(sent)s. Skipped: %(skipped)s."
+msgstr "رسائل الترحيب المرسلة: %(sent)s. المتجاوزة: %(skipped)s."
+
+msgid "Welcome to the Profit Sports Solutions customer portal"
+msgstr "مرحباً بكم في بوابة عملاء Profit Sports Solutions"
+
+#, python-format
 msgid "Welcome, %(name)s"
 msgstr "أهلاً بك، %(name)s"
 
@@ -3386,6 +3627,9 @@ msgstr "واتساب"
 
 msgid "When"
 msgstr "متى"
+
+msgid "Where spare and replacement parts should be delivered."
+msgstr "المكان الذي تُسلَّم إليه قطع الغيار والاستبدال."
 
 msgid "Who"
 msgstr "من"
@@ -3440,17 +3684,14 @@ msgstr "قيّمتنا بـ %(rating)s/5"
 msgid "Your Profit Sports Solutions account"
 msgstr "حسابك في Profit Sports Solutions"
 
-msgid "Your Profit Sports Solutions portal login"
-msgstr "حساب دخولك إلى بوابة Profit Sports Solutions"
-
 msgid "Your account is ready. Welcome."
 msgstr "حسابك جاهز. مرحباً بك."
 
 msgid "Your feedback has already been recorded. Thank you for your time."
 msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
-msgid "Your name"
-msgstr "اسمك"
+msgid "Your login email"
+msgstr "البريد الإلكتروني لتسجيل الدخول"
 
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحباً بك."
@@ -3666,8 +3907,8 @@ msgstr "تذكرة العميل"
 msgid "customer tickets"
 msgstr "تذاكر العملاء"
 
-msgid "customer_name, site_name and site_address are required"
-msgstr "الحقول customer_name وsite_name وsite_address مطلوبة"
+msgid "customer_name is required"
+msgstr "الحقل customer_name مطلوب"
 
 msgid "customers"
 msgstr "العملاء"
@@ -3818,8 +4059,14 @@ msgstr "للتذاكر الداخلية فقط"
 msgid "internal — never shown to the customer"
 msgstr "داخلي — لا يظهر للعميل أبدًا"
 
+msgid "invited at"
+msgstr "تاريخ الدعوة"
+
 msgid "invoice"
 msgstr "الفاتورة"
+
+msgid "invoice address"
+msgstr "عنوان الفاتورة"
 
 msgid "invoice uploaded at"
 msgstr "وقت رفع الفاتورة"
@@ -4165,6 +4412,9 @@ msgstr "الموقع"
 msgid "site / location"
 msgstr "الموقع"
 
+msgid "site_address is required when site_name is given"
+msgstr "الحقل site_address مطلوب عند إدخال site_name"
+
 msgid "sites"
 msgstr "المواقع"
 
@@ -4427,6 +4677,12 @@ msgstr "ما وجده الفني"
 
 msgid "when the customer was last emailed about the scheduled visit — never automatic"
 msgstr "آخر مرة أُرسل فيها بريد إلكتروني للعميل بشأن الزيارة المجدولة — ليس تلقائيًا أبدًا"
+
+msgid "when the portal welcome email was last sent; its link is valid for 7 days"
+msgstr "تاريخ آخر إرسال لرسالة الترحيب بالبوابة؛ ورابطها صالح لمدة 7 أيام"
+
+msgid "where invoices are addressed; confirmed by the customer at first sign-in"
+msgstr "العنوان الذي تُوجَّه إليه الفواتير؛ ويؤكده العميل عند تسجيل الدخول لأول مرة"
 
 msgid "whether this technician can currently be assigned work; separate from active status"
 msgstr "ما إذا كان يمكن حالياً إسناد العمل إلى هذا الفني؛ وهو مستقل عن حالة التفعيل"

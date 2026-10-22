@@ -70,6 +70,23 @@ def notification_bell(request):
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
         ).exclude(kind=CustomerTicket.Kind.CUSTOMER)
     ]
+    # Customer logins locked out right now — live, so they clear the moment
+    # someone unlocks them (or the lockout times out on its own).
+    if RolePermission.objects.filter(
+        role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+    ).exists():
+        from django.db.models.functions import Lower
+
+        from customers.accounts import locked_usernames
+        from customers.models import Customer
+        locked = locked_usernames()
+        if locked:
+            items += [
+                {'kind': 'customer_locked', 'created_at': locked[customer.login], 'customer': customer}
+                for customer in Customer.objects.annotate(login=Lower('user__username')).filter(
+                    login__in=list(locked), is_active=True,
+                )
+            ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
     ).select_related('message__task')
@@ -133,28 +150,30 @@ def nav_pages(technician, allowed):
         add('tasks:technician_list', _('Technicians'), 'users')
         add('tasks:technician_hours', _('Hours'), 'clock')
     if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
-        add('customers:customer_list', _('Customers'), 'briefcase')
+        add('customers:customer_list', _('Customers'), 'building')
+    if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:
+        add('customers:customer_accounts', _('Customer accounts'), 'user-check')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
         add('tasks:part_list', _('Parts'), 'package')
     if RolePermission.Permission.VIEW_MACHINES in allowed:
-        add('tasks:machine_list', _('Machines'), 'activity')
+        add('tasks:machine_list', _('Machines'), 'dumbbell')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:
-        add('tasks:ticket_list', _('Tickets'), 'inbox')
+        add('tasks:ticket_list', _('Tickets'), 'ticket')
     if RolePermission.Permission.OPEN_TICKETS in allowed:
-        add('tasks:ticket_open', _('New ticket'), 'file-plus')
+        add('tasks:ticket_open', _('New ticket'), 'ticket-plus')
     # Anyone in the office can be handed a stock request or vendor follow-up.
     if technician.role != technician.Role.TECHNICIAN:
-        add('tasks:internal_tickets', _('Internal tickets'), 'list')
+        add('tasks:internal_tickets', _('Internal tickets'), 'inbox')
     if technician.is_manager_tier:
-        add('tasks:all_week', _('Week view — all countries'), 'calendar')
-        add('tasks:all_technicians', _('All technicians'), 'users')
+        add('tasks:all_week', _('Week view — all countries'), 'calendar-range')
+        add('tasks:all_technicians', _('All technicians'), 'id-card')
         add('tasks:monthly_report', _('Monthly report'), 'bar-chart')
-        add('tasks:skill_list', _('Skills'), 'award')
+        add('tasks:skill_list', _('Skills'), 'graduation-cap')
         add('tasks:brand_list', _('Brands'), 'tag')
         add('tasks:country_list', _('Countries'), 'globe')
     if technician.role == technician.Role.ADMIN:
         add('tasks:role_permissions', _('Roles'), 'shield')
-        add('tasks:audit_log', _('Audit log'), 'file-text')
+        add('tasks:audit_log', _('Audit log'), 'file-clock')
     return pages
 
 

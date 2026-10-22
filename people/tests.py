@@ -25,7 +25,7 @@ class SeedRolePermissionsTests(TestCase):
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
             RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
             RolePermission.Permission.MANAGE_PARTS, RolePermission.Permission.OPEN_TICKETS,
-            RolePermission.Permission.TICKETS_ALL_COUNTRIES,
+            RolePermission.Permission.TICKETS_ALL_COUNTRIES, RolePermission.Permission.CUSTOMER_ACCOUNTS,
         }
         for permission in other_permissions:
             allowed_roles = set(
@@ -58,6 +58,14 @@ class SeedRolePermissionsTests(TestCase):
             ).values_list('role', flat=True),
         )
         self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'admin'})
+
+    def test_customer_accounts_is_support_and_operations_managers_and_admin(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
     def test_tickets_in_all_countries_is_support_and_operations_managers_and_admin(self):
         # The Country Support Manager handles one country's tickets only.

@@ -1,14 +1,18 @@
 import csv
 import io
 
+from axes.utils import reset as axes_reset
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login, update_session_auth_hash
+from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -16,23 +20,28 @@ from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
 from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
+from reference.models import Country
 from tasks.forms import CustomerPortalTicketForm
 from tasks.models import CustomerTicketAttachment, Task, TicketNotification
-from tasks.views import (
-    save_new_ticket, send_customer_login_email, send_new_ticket_email_to_staff,
-    send_ticket_confirmation_to_customer,
-)
+from tasks.views import save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer
 
+from .accounts import (
+    LINK_VALID_DAYS, AccountStatus, account_status, locked_usernames, log_account_action, send_password_link,
+    send_welcome, user_for_link_token,
+)
 from .forms import (
-    CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm, CustomerImportForm,
-    DeactivateCustomerForm, SiteCreateForm, SiteEditForm,
+    ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
+    CustomerImportForm, DeactivateCustomerForm, PortalPasswordHelpForm, QuickInviteForm, SiteCreateForm, SiteEditForm,
 )
 from .models import Customer, Site
 
-CUSTOMER_IMPORT_REQUIRED_COLUMNS = ['customer_name', 'site_name', 'site_address']
+# Only the name is required: a file of just customer_name and
+# customer_contact_email is enough to invite everyone, and each customer
+# completes the rest themselves at first sign-in.
+CUSTOMER_IMPORT_REQUIRED_COLUMNS = ['customer_name']
 CUSTOMER_IMPORT_COLUMNS = CUSTOMER_IMPORT_REQUIRED_COLUMNS + [
-    'segment', 'customer_contact_name', 'customer_contact_phone', 'customer_contact_email',
-    'site_contact_name', 'site_contact_phone', 'site_contact_email', 'access_notes',
+    'customer_contact_email', 'segment', 'customer_contact_name', 'customer_contact_phone',
+    'site_name', 'site_address', 'site_contact_name', 'site_contact_phone', 'site_contact_email', 'access_notes',
 ]
 
 # Avoids characters easy to mis-type or mis-read out loud/over chat: 0/O, 1/l/I.
@@ -149,13 +158,11 @@ def customer_edit(request, pk):
         login_form = CreateLoginForm(request.POST)
         if login_form.is_valid():
             email = login_form.cleaned_data['email']
-            password = _generate_temporary_password()
-            user = get_user_model().objects.create_user(username=email, email=email, password=password)
-            customer.user = user
-            customer.must_change_password = True
-            customer.save(update_fields=['user', 'must_change_password'])
-            send_customer_login_email(request, customer, password)
-            messages.success(request, _('Login created and sent to %(email)s.') % {'email': email})
+            send_welcome(request, customer, email=email)
+            log_account_action(request, customer, 'Portal account created; welcome email sent')
+            messages.success(request, _(
+                'A welcome email with a secure activation link has been sent to %(email)s.',
+            ) % {'email': email})
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
@@ -217,9 +224,11 @@ def site_edit(request, pk):
 def _import_customers_csv(csv_file, country):
     """One row per site; rows sharing the same customer_name (case-
     insensitive) share one Customer, so a chain's several branches fit
-    in one file. Matches an existing customer/site by name instead of
-    duplicating it, so the same file can be re-run to add new branches
-    without recreating what's already there.
+    in one file. A row without a site just adds the customer — name and
+    email are enough to send the welcome email; the customer completes
+    the rest. Matches an existing customer/site by name instead of
+    duplicating it, so the same file can be re-run safely — and an
+    existing customer with no email yet picks one up from the file.
     """
     reader = csv.DictReader(io.TextIOWrapper(csv_file, encoding='utf-8-sig'))
     missing_columns = [col for col in CUSTOMER_IMPORT_REQUIRED_COLUMNS if col not in (reader.fieldnames or [])]
@@ -236,10 +245,12 @@ def _import_customers_csv(csv_file, country):
         site_address = (row.get('site_address') or '').strip()
         result = {'row': row_number, 'customer_name': customer_name or '—', 'site_name': site_name or '—'}
 
-        if not customer_name or not site_name or not site_address:
+        if not customer_name:
+            results.append({**result, 'outcome': 'error', 'detail': _('customer_name is required')})
+            continue
+        if site_name and not site_address:
             results.append({
-                **result, 'outcome': 'error',
-                'detail': _('customer_name, site_name and site_address are required'),
+                **result, 'outcome': 'error', 'detail': _('site_address is required when site_name is given'),
             })
             continue
 
@@ -269,6 +280,20 @@ def _import_customers_csv(csv_file, country):
                         customer.save()
                         created_customer = True
                     customers_by_name[key] = customer
+
+                if not site_name:
+                    email = (row.get('customer_contact_email') or '').strip()
+                    if created_customer:
+                        detail, outcome = _('New customer created'), 'created'
+                    elif email and not customer.contact_email:
+                        customer.contact_email = email
+                        customer.full_clean()
+                        customer.save(update_fields=['contact_email'])
+                        detail, outcome = _('Contact email added to existing customer'), 'created'
+                    else:
+                        detail, outcome = _('Customer already exists'), 'skipped'
+                    results.append({**result, 'outcome': outcome, 'detail': detail})
+                    continue
 
                 if Site.objects.filter(customer=customer, name__iexact=site_name).exists():
                     results.append({
@@ -332,14 +357,14 @@ def customer_import_template(request):
     response['Content-Disposition'] = 'attachment; filename="customers_template.csv"'
     writer = csv.writer(response)
     writer.writerow(CUSTOMER_IMPORT_COLUMNS)
+    # Name and email only — the customer completes the rest after the welcome email.
+    writer.writerow(['Gold Gym', 'info@goldgym.example', '', '', '', '', '', '', '', '', ''])
+    # Or with sites: one row per branch, sharing the customer name.
     writer.writerow([
-        'Fitness First', 'gym', 'Ali Manager', '0501234567', 'ali@example.com',
+        'Fitness First', 'ali@example.com', 'gym', 'Ali Manager', '0501234567',
         'Marina Branch', 'Dubai Marina, near the mall', '', '', '', 'Gate code 1234',
     ])
-    writer.writerow([
-        'Fitness First', 'gym', '', '', '',
-        'JBR Branch', 'JBR, near the beach', '', '', '', '',
-    ])
+    writer.writerow(['Fitness First', '', 'gym', '', '', 'JBR Branch', 'JBR, near the beach', '', '', '', ''])
     return response
 
 
@@ -388,6 +413,26 @@ def portal_login(request):
     return render(request, 'customers/portal_login.html', {'form': form, 'next': next_url})
 
 
+SETUP_FIELDS = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address']
+
+
+def _setup_initial(customer):
+    return {field: getattr(customer, field) for field in SETUP_FIELDS}
+
+
+def _complete_setup(customer, user, form):
+    """Save what the customer filled in at first sign-in and their new
+    password; the portal opens normally from then on. `user` is the very
+    object the session holds, so its new password hash is the one the
+    session is re-keyed to."""
+    for field in SETUP_FIELDS:
+        setattr(customer, field, form.cleaned_data[field])
+    customer.must_change_password = False
+    customer.save(update_fields=SETUP_FIELDS + ['must_change_password'])
+    user.set_password(form.cleaned_data['new_password1'])
+    user.save(update_fields=['password'])
+
+
 @login_required(login_url='customers:portal_login')
 def portal_first_login(request):
     """A one-time stop between signing in on a temporary password and
@@ -403,23 +448,12 @@ def portal_first_login(request):
     if request.method == 'POST':
         form = CustomerFirstLoginForm(request.POST, user=request.user)
         if form.is_valid():
-            customer.contact_name = form.cleaned_data['contact_name']
-            customer.contact_phone = form.cleaned_data['contact_phone']
-            customer.contact_email = form.cleaned_data['contact_email']
-            customer.must_change_password = False
-            customer.save(update_fields=[
-                'contact_name', 'contact_phone', 'contact_email', 'must_change_password',
-            ])
-            request.user.set_password(form.cleaned_data['new_password1'])
-            request.user.save(update_fields=['password'])
+            _complete_setup(customer, request.user, form)
             update_session_auth_hash(request, request.user)
             messages.success(request, _('Your account is ready. Welcome.'))
             return redirect('customers:portal_home')
     else:
-        form = CustomerFirstLoginForm(user=request.user, initial={
-            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
-            'contact_email': customer.contact_email,
-        })
+        form = CustomerFirstLoginForm(user=request.user, initial=_setup_initial(customer))
 
     return render(request, 'customers/portal_first_login.html', {'form': form})
 
@@ -483,3 +517,193 @@ def portal_ticket_new(request):
         })
 
     return render(request, 'customers/portal_ticket_new.html', {'form': form})
+
+
+def _account_redirect(request):
+    """Back to the Customer accounts screen with the same filters."""
+    query = request.POST.get('return_query', '')
+    url = reverse('customers:customer_accounts')
+    return redirect(f'{url}?{query}' if query else url)
+
+
+INVITEABLE = (AccountStatus.NOT_INVITED, AccountStatus.INVITED, AccountStatus.EXPIRED)
+
+
+@login_required
+def customer_accounts(request):
+    """Every customer's portal account in one place, for whoever manages
+    them (customer_accounts — Admin, the Technical Support Manager and the
+    Operations Manager by default): who has an account, who's been invited
+    and hasn't finished setting up, who's locked out or disabled — and the
+    actions to fix each case. Every country; a country filter narrows it.
+    Each action is recorded in the Audit log.
+    """
+    require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
+    locked = locked_usernames()
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'invite_selected':
+            sent, skipped = 0, 0
+            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True)
+            for customer in selected.select_related('user'):
+                if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
+                    log_account_action(request, customer, 'Portal welcome email sent')
+                    sent += 1
+                else:
+                    skipped += 1
+            messages.success(request, _('Welcome emails sent: %(sent)s. Skipped: %(skipped)s.') % {
+                'sent': sent, 'skipped': skipped,
+            })
+            return _account_redirect(request)
+
+        if action == 'quick_invite':
+            form = QuickInviteForm(request.POST)
+            if form.is_valid():
+                data = form.cleaned_data
+                with transaction.atomic():
+                    customer = Customer.objects.create(
+                        name=data['name'].strip(), country=data['country'], segment=data['segment'],
+                        contact_email=data['email'],
+                    )
+                    send_welcome(request, customer, email=data['email'])
+                log_account_action(request, customer, 'Customer created and portal welcome email sent')
+                messages.success(request, _('Customer %(name)s created and welcome email sent to %(email)s.') % {
+                    'name': customer.name, 'email': data['email'],
+                })
+            else:
+                for errors in form.errors.values():
+                    messages.error(request, errors[0])
+            return _account_redirect(request)
+
+        customer = get_object_or_404(
+            Customer.objects.select_related('user'), pk=request.POST.get('customer'), is_active=True,
+        )
+        user = customer.user
+        status = account_status(customer, locked)
+        if action == 'invite' and status in INVITEABLE:
+            if send_welcome(request, customer):
+                log_account_action(request, customer, 'Portal welcome email sent')
+                messages.success(request, _('Welcome email sent to %(email)s.') % {'email': customer.user.email})
+            else:
+                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                    'email': customer.contact_email,
+                })
+        elif action == 'password_link' and status in (AccountStatus.ACTIVE, AccountStatus.LOCKED):
+            send_password_link(request, customer)
+            log_account_action(request, customer, 'Portal password link sent')
+            messages.success(request, _('A password link has been sent to %(email)s.') % {'email': user.email})
+        elif action == 'unlock' and user is not None:
+            axes_reset(username=user.username)
+            log_account_action(request, customer, 'Portal account unlocked')
+            messages.success(request, _('%(name)s has been unlocked.') % {'name': customer.name})
+        elif action in ('disable', 'enable') and user is not None:
+            user.is_active = action == 'enable'
+            user.save(update_fields=['is_active'])
+            log_account_action(
+                request, customer, 'Portal access enabled' if user.is_active else 'Portal access disabled',
+            )
+            messages.success(request, _('Portal access enabled.') if user.is_active else _('Portal access disabled.'))
+        elif action == 'change_email' and user is not None:
+            form = ChangeLoginEmailForm(request.POST, user=user)
+            if form.is_valid():
+                old_email = user.email
+                user.username = user.email = form.cleaned_data['email']
+                user.save(update_fields=['username', 'email'])
+                log_account_action(request, customer, f'Portal login email changed from {old_email} to {user.email}')
+                messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
+            else:
+                messages.error(request, form.errors['email'][0])
+        elif action == 'temporary_password' and user is not None and user.is_active:
+            # Shown once, right here, for reading out over the phone — never
+            # emailed, never stored anywhere readable.
+            password = _generate_temporary_password()
+            user.set_password(password)
+            user.save(update_fields=['password'])
+            customer.must_change_password = True
+            customer.save(update_fields=['must_change_password'])
+            log_account_action(request, customer, 'Portal temporary password set')
+            return render(request, 'customers/customer_account_password.html', {
+                'customer': customer, 'password': password, 'return_query': request.POST.get('return_query', ''),
+            })
+        return _account_redirect(request)
+
+    customers = Customer.objects.filter(is_active=True).select_related('user', 'country').order_by('name')
+    country_id = request.GET.get('country', '')
+    if country_id:
+        customers = customers.filter(country_id=country_id)
+    search = request.GET.get('q', '').strip()
+    if search:
+        customers = customers.filter(
+            Q(name__icontains=search) | Q(contact_email__icontains=search) | Q(user__username__icontains=search),
+        )
+    now = timezone.now()
+    rows = [{'customer': c, 'status': account_status(c, locked, now)} for c in customers]
+    counts = {value: 0 for value in AccountStatus.values}
+    for row in rows:
+        counts[row['status']] += 1
+    status = request.GET.get('status', '')
+    if status in AccountStatus.values:
+        rows = [row for row in rows if row['status'] == status]
+
+    managed = next((row for row in rows if str(row['customer'].pk) == request.GET.get('manage')), None)
+    query = request.GET.copy()
+    query.pop('manage', None)
+    return render(request, 'customers/customer_accounts.html', {
+        'managed': managed, 'list_query': query.urlencode(),
+        'page_obj': Paginator(rows, 50).get_page(request.GET.get('page')),
+        'status_counts': [(value, label, counts[value]) for value, label in AccountStatus.choices],
+        'active_count': counts[AccountStatus.ACTIVE], 'total': len(customers),
+        'status': status, 'search': search, 'country_id': country_id,
+        'countries': Country.objects.filter(is_active=True).order_by('name'),
+        'return_query': request.GET.urlencode(), 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
+        'quick_invite_form': QuickInviteForm(),
+    })
+
+
+def portal_account_link(request, token):
+    """Where the welcome and password emails' secure link lands. A first
+    visit completes the account (password plus company details); later it
+    just sets a new password. Signs the customer in afterwards. An expired
+    or already-used link explains itself and offers a fresh one.
+    """
+    user = user_for_link_token(token)
+    if user is None:
+        return render(request, 'customers/portal_link_invalid.html', status=400)
+    if request.user.is_authenticated and request.user != user:
+        logout(request)
+    customer = user.customer
+    first_time = customer.must_change_password
+
+    if first_time:
+        form = CustomerFirstLoginForm(request.POST or None, user=user, initial=_setup_initial(customer))
+    else:
+        form = SetPasswordForm(user=user, data=request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        if first_time:
+            _complete_setup(customer, user, form)
+        else:
+            form.save()
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+        messages.success(request, _('Your account is ready. Welcome.') if first_time else _('Password changed.'))
+        return redirect('customers:portal_home')
+
+    return render(request, 'customers/portal_account_link.html', {'form': form, 'first_time': first_time})
+
+
+def portal_password_help(request):
+    """Forgot-your-password for customers. Always the same answer, whether
+    or not the email belongs to a customer, so the form can't be used to
+    find out who our customers are."""
+    form = PortalPasswordHelpForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        customer = Customer.objects.filter(
+            is_active=True, user__is_active=True, user__username__iexact=form.cleaned_data['email'],
+        ).select_related('user').first()
+        if customer is not None:
+            if customer.must_change_password:
+                send_welcome(request, customer)
+            else:
+                send_password_link(request, customer)
+        return render(request, 'customers/portal_password_help.html', {'sent': True})
+    return render(request, 'customers/portal_password_help.html', {'form': form})

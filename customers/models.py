@@ -37,6 +37,10 @@ class Customer(models.Model):
             'contact'
         ),
     )
+    billing_address = models.TextField(
+        _('invoice address'), blank=True,
+        help_text=_('where invoices are addressed; confirmed by the customer at first sign-in'),
+    )
     shipping_address = models.TextField(
         _('shipping address'), blank=True,
         help_text=_('delivery address for replacement parts, if different from the site, such as a warehouse or '
@@ -54,6 +58,10 @@ class Customer(models.Model):
             'customer is guided through setting their own password and confirming their contact details before '
             'accessing the rest of the portal',
         ),
+    )
+    invited_at = models.DateTimeField(
+        _('invited at'), null=True, blank=True,
+        help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
     )
     is_active = models.BooleanField(_('active'), default=True)
     deactivation_reason = models.CharField(

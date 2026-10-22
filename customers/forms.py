@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.utils.translation import gettext_lazy as _
 
+from reference.models import Country
 from tasks.location import parse_coordinates
 
 from .models import Customer, Site
@@ -9,11 +10,9 @@ from .models import Customer, Site
 
 class CreateLoginForm(forms.Form):
     """Just an email — it becomes both the login username and the address
-    the temporary password is emailed to (views.send_customer_login_email),
-    one thing for the customer to remember instead of a separate invented
-    username. The password itself is system-generated
-    (views._generate_temporary_password); the customer sets their own
-    real one the first time they sign in.
+    the welcome link is sent to (accounts.send_welcome), one thing for the
+    customer to remember instead of a separate invented username. The
+    customer sets their own password through that link.
     """
     email = forms.EmailField(label=_('Email'))
 
@@ -25,14 +24,23 @@ class CreateLoginForm(forms.Form):
 
 
 class CustomerFirstLoginForm(forms.Form):
-    """Shown once, the first time a customer signs in on a temporary
-    password — they set their own password and confirm the contact
-    details staff may not have had when the account was created (a bulk
-    import, say). Prefilled with whatever's already on file.
+    """Shown once, when a customer first opens their account (the welcome
+    link, or a temporary password) — they set their own password and
+    complete the company details staff may not have had when the account
+    was created (a bulk import, say). Prefilled with whatever's already
+    on file.
     """
-    contact_name = forms.CharField(max_length=150, label=_('Your name'))
-    contact_phone = forms.CharField(max_length=30, label=_('Phone number'))
-    contact_email = forms.EmailField(required=False, label=_('Email'))
+    contact_name = forms.CharField(max_length=150, label=_('Contact name'))
+    contact_phone = forms.CharField(max_length=30, label=_('Contact phone number'))
+    contact_email = forms.EmailField(label=_('Contact email'))
+    billing_address = forms.CharField(
+        label=_('Invoice address'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('The address invoices should be issued to.'),
+    )
+    shipping_address = forms.CharField(
+        label=_('Delivery address'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_('Where spare and replacement parts should be delivered.'),
+    )
     new_password1 = forms.CharField(widget=forms.PasswordInput, label=_('New password'))
     new_password2 = forms.CharField(widget=forms.PasswordInput, label=_('Confirm new password'))
 
@@ -70,9 +78,10 @@ class CustomerEditForm(forms.ModelForm):
         model = Customer
         fields = [
             'name', 'code', 'segment', 'language',
-            'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
+            'contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address',
         ]
         widgets = {
+            'billing_address': forms.Textarea(attrs={'rows': 2}),
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
         }
 
@@ -190,3 +199,57 @@ class CustomerImportForm(forms.Form):
         if not csv_file.name.lower().endswith('.csv'):
             raise forms.ValidationError(_('Please upload a .csv file.'))
         return csv_file
+
+
+class ChangeLoginEmailForm(forms.Form):
+    email = forms.EmailField(label=_('New login email'))
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        taken = get_user_model().objects.filter(username__iexact=email)
+        if self.user is not None:
+            taken = taken.exclude(pk=self.user.pk)
+        if taken.exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
+
+
+class PortalPasswordHelpForm(forms.Form):
+    email = forms.EmailField(label=_('Your login email'))
+
+
+class QuickInviteForm(forms.Form):
+    """A new customer from just a name and an email, invited straight
+    away; they complete everything else through the welcome link. Country
+    and segment are chosen every time — never pre-filled — so nobody
+    files a customer under the wrong country by leaving a default alone.
+    """
+    name = forms.CharField(max_length=150, label=_('Customer name'))
+    email = forms.EmailField(label=_('Email'))
+    country = forms.ModelChoiceField(
+        queryset=Country.objects.filter(is_active=True).order_by('name'), label=_('Country'),
+        empty_label=_('Select a country'),
+    )
+    segment = forms.ChoiceField(
+        choices=[('', _('Select a segment'))] + list(Customer.Segment.choices), label=_('Segment'),
+    )
+
+    def clean_email(self):
+        email = self.cleaned_data['email']
+        if get_user_model().objects.filter(username__iexact=email).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
+
+    def clean(self):
+        cleaned = super().clean()
+        name, country = cleaned.get('name'), cleaned.get('country')
+        if name and country and Customer.objects.filter(name__iexact=name.strip(), country=country).exists():
+            raise forms.ValidationError(_(
+                'A customer named %(name)s already exists in this country. Please send the invitation from their '
+                'row instead.',
+            ) % {'name': name.strip()})
+        return cleaned

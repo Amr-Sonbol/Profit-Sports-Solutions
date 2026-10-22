@@ -574,12 +574,30 @@ tbody tr:hover {
     color: var(--color-muted);
 }
 
+/* Every way back looks the same and is easy to hit: an outlined pill
+   at the start of the page, arrow pointing the reading direction. */
 .back-link {
-    display: inline-block;
-    color: var(--color-muted);
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text);
     text-decoration: none;
-    font-size: 0.85rem;
-    margin-block-end: 0.35rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding-block: 0.35rem;
+    padding-inline: 0.8rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    margin-block-end: 0.75rem;
+}
+
+.back-link:hover {
+    background: var(--color-bg);
+}
+
+/* A page with its own "Back to ..." link in its header keeps only that one. */
+.page:has(.page__header .back-link) .page-back {
+    display: none;
 }
 
 .back-link::before {
@@ -592,10 +610,21 @@ tbody tr:hover {
 }
 
 .forward-link {
-    display: inline-block;
-    color: var(--color-muted);
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text);
     text-decoration: none;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding-block: 0.35rem;
+    padding-inline: 0.8rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+}
+
+.forward-link:hover {
+    background: var(--color-bg);
 }
 
 .forward-link::after {
@@ -1308,4 +1337,31 @@ html[dir="rtl"] .welcome-tile__label {
 
 .report-form.is-signing [data-staff-only] {
     display: none;
+}
+
+/* Customer accounts: the selected customer's actions, above the table. */
+.account-panel__actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block-start: 0.75rem;
+}
+
+.account-panel__actions form {
+    margin: 0;
+}
+
+.row-actions__inline {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* Shown once, to be read out to the customer. */
+.temporary-password {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 1.5rem;
+    letter-spacing: 0.1em;
 }

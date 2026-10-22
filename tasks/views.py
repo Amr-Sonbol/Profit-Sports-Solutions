@@ -1831,41 +1831,9 @@ def send_ticket_confirmation_to_customer(request, ticket):
     )
 
 
-def send_customer_login_email(request, customer, password):
-    """The one email that actually delivers a new portal login — the
-    temporary password plus a link to sign in. Public: customers.views
-    calls this right after creating the login, a different app, same
-    reasoning as send_ticket_confirmation_to_customer. Best-effort and
-    forced to English, same as every other outbound customer email here;
-    if it fails to send, the password is still shown once on screen to
-    whoever created the login, so nothing is lost.
-    """
-    link = request.build_absolute_uri(reverse('customers:portal_login'))
-    contact = customer.contact_name or customer.name
-    with translation.override('en'):
-        subject = _('Your Profit Sports Solutions portal login')
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Your customer portal account has been created. Through the portal you may submit service requests and '
-            'track their progress.\n\n'
-            'Username: %(username)s\n'
-            'Temporary password: %(password)s\n\n'
-            'You will be asked to set your own password and confirm your details when you first sign in.\n\n'
-            'Sign in here:\n'
-            '%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'username': customer.user.username, 'password': password, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/customer_login_credentials.html',
-        {'contact': contact, 'username': customer.user.username, 'password': password, 'link': link},
-        [customer.user.email],
-    )
-
-
 def send_technician_login_email(request, technician, password):
-    """The one email that actually delivers a new staff login — same
-    shape as send_customer_login_email, just the staff-side login page.
+    """The one email that actually delivers a new staff login — the
+    temporary password plus a link to the staff-side login page.
     Best-effort; if it fails, the password is still shown once on screen
     to whoever created the login.
     """

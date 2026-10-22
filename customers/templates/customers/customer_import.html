@@ -15,6 +15,9 @@
     <p>
         {% translate "One row per site: a chain with several branches requires several rows sharing the same customer name. Re-uploading the same file is safe; existing customers and sites are matched by name and left unchanged, not duplicated." %}
     </p>
+    <p class="field__help">
+        {% translate "Only customer_name is required. A file with just customer_name and customer_contact_email is enough: each customer then completes their details after receiving the welcome email from Customer accounts. Save the file from Excel as “CSV UTF-8” so Arabic names are kept." %}
+    </p>
     <p><a href="{% url 'customers:customer_import_template' %}">{% translate "Download a template CSV" %}</a></p>
 
     <form method="post" enctype="multipart/form-data" novalidate>

@@ -214,6 +214,7 @@ class RolePermission(models.Model):
         MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')
         OPEN_TICKETS = 'open_tickets', _('Open tickets for a customer (phone, WhatsApp, email)')
         TICKETS_ALL_COUNTRIES = 'tickets_all_countries', _('Handle tickets in all countries')
+        CUSTOMER_ACCOUNTS = 'customer_accounts', _('Manage customer portal accounts')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)

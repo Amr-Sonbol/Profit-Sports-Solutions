@@ -1,0 +1,15 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+{% for section in sections %}
+<div lang="{{ section.lang }}" dir="{{ section.dir }}">
+    {% for paragraph in section.paragraphs %}
+    {% if paragraph == link %}
+    {% include "tasks/email/_button.html" with url=link label=section.button %}
+    {% else %}
+    <p style="margin:0 0 16px;">{{ paragraph|linebreaksbr }}</p>
+    {% endif %}
+    {% endfor %}
+</div>
+{% if not forloop.last %}<hr style="border:0;border-top:1px solid #e3e6ea;margin:28px 0;">{% endif %}
+{% endfor %}
+{% endblock %}
