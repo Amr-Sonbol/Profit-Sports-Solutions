@@ -2755,78 +2755,98 @@ def technician_availability(request):
     })
 
 
-@login_required
-def task_week(request):
-    require_permission(request, RolePermission.Permission.VIEW_TASKS)
-    active_country = get_active_country(request)
-
-    today, start, end = _week_window(request)
-
-    scheduled = _with_lead_prefetch(
-        Task.objects.filter(
-            scheduled_for__date__range=(start, end), site__customer__country=active_country,
-        )
-        .select_related('site__customer', 'task_type').order_by('scheduled_for'),
-    )
-    _attach_lead_technician(scheduled)
-
-    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
-    tasks_by_date = {day['date']: day['tasks'] for day in days}
-    for task in scheduled:
-        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
-
-    unscheduled = _with_lead_prefetch(
-        Task.objects.filter(
-            scheduled_for__isnull=True, status__in=OPEN_STATUSES, site__customer__country=active_country,
-        )
-        .select_related('site__customer', 'task_type')
-        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'),
-    )
-    _attach_lead_technician(unscheduled)
-
-    context = {
-        'days': days,
-        'unscheduled': unscheduled,
-        **_week_nav_context(today, start),
-    }
-    return render(request, 'tasks/task_week.html', context)
+# Tasks listed in one day of the month view before "+N more".
+MONTH_DAY_LIMIT = 3
 
 
-@login_required
-def all_week(request):
-    """Every country's week board at once — the same day/unscheduled
-    shape as task_week, minus the country boundary, with a country label
-    per task since a day's list can now mix countries. Manager-only,
-    same fixed floor as the other "all ..." boards.
+def _calendar_day(task):
+    """The local day a task is booked for: its time if set, else its day-only date."""
+    return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
+
+
+def _calendar_context(request, tasks):
+    """A week (default, ?start=) or month (?view=month&month=YYYY-MM) of
+    `tasks` laid out by local day, plus the open tasks with no day at all.
+    A task booked by day only (scheduled_date) shows on its day too, after
+    the timed ones. Shared by the country and all-countries calendars.
     """
-    require_manager(request)
+    today = timezone.localdate()
+    if request.GET.get('view') == 'month':
+        month = parse_date(f"{request.GET.get('month', '')}-01") or today.replace(day=1)
+        next_month = (month + timedelta(days=32)).replace(day=1)
+        last_day = next_month - timedelta(days=1)
+        start = month - timedelta(days=month.weekday())
+        end = last_day + timedelta(days=6 - last_day.weekday())
+        nav = {
+            'view': 'month', 'today': today, 'month': month, 'start': start,
+            'prev_month': (month - timedelta(days=1)).replace(day=1), 'next_month': next_month,
+            'this_month': today.replace(day=1),
+        }
+    else:
+        today, start, end = _week_window(request)
+        nav = {'view': 'week', 'end': end, **_week_nav_context(today, start)}
 
-    today, start, end = _week_window(request)
+    booked = list(_with_lead_prefetch(
+        tasks.filter(
+            Q(scheduled_for__date__range=(start, end))
+            | Q(scheduled_for__isnull=True, scheduled_date__range=(start, end)),
+        ).select_related('site__customer__country', 'task_type'),
+    ))
+    _attach_lead_technician(booked)
+    latest = datetime.max.time()
+    booked.sort(key=lambda task: (
+        _calendar_day(task),
+        timezone.localtime(task.scheduled_for).time() if task.scheduled_for else latest,
+        task.task_number,
+    ))
 
-    scheduled = _with_lead_prefetch(
-        Task.objects.filter(scheduled_for__date__range=(start, end))
-        .select_related('site__customer__country', 'task_type').order_by('scheduled_for'),
-    )
-    _attach_lead_technician(scheduled)
-
-    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
-    tasks_by_date = {day['date']: day['tasks'] for day in days}
-    for task in scheduled:
-        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
+    days = []
+    by_date = {}
+    for offset in range((end - start).days + 1):
+        day = start + timedelta(days=offset)
+        entry = {
+            'date': day, 'tasks': [], 'is_today': day == today,
+            'in_month': nav['view'] == 'week' or day.month == nav['month'].month,
+            'week_start': day - timedelta(days=day.weekday()),
+        }
+        days.append(entry)
+        by_date[day] = entry['tasks']
+    for task in booked:
+        by_date[_calendar_day(task)].append(task)
+    for entry in days:
+        entry['shown'] = entry['tasks'][:MONTH_DAY_LIMIT]
+        entry['more'] = len(entry['tasks']) - len(entry['shown'])
 
     unscheduled = _with_lead_prefetch(
-        Task.objects.filter(scheduled_for__isnull=True, status__in=OPEN_STATUSES)
+        tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True, status__in=OPEN_STATUSES)
         .select_related('site__customer__country', 'task_type')
         .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'),
     )
     _attach_lead_technician(unscheduled)
 
-    context = {
+    return {
+        **nav,
         'days': days,
+        'weeks': [days[i:i + WEEK_LENGTH] for i in range(0, len(days), WEEK_LENGTH)],
         'unscheduled': unscheduled,
-        **_week_nav_context(today, start),
     }
-    return render(request, 'tasks/all_week.html', context)
+
+
+@login_required
+def task_week(request):
+    """The schedule calendar for the active country, by week or by month."""
+    require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    tasks = Task.objects.filter(site__customer__country=get_active_country(request))
+    return render(request, 'tasks/task_week.html', _calendar_context(request, tasks))
+
+
+@login_required
+def all_week(request):
+    """The same calendar for every country at once, each card naming its
+    country. Manager-only, same fixed floor as the other "all ..." boards.
+    """
+    require_manager(request)
+    return render(request, 'tasks/all_week.html', {**_calendar_context(request, Task.objects.all()), 'show_country': True})
 
 
 def _week_board(technician, request):

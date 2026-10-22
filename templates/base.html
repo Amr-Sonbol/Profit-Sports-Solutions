@@ -150,6 +150,11 @@
                     <noscript><button type="submit" class="button button--secondary">{% translate "Switch" %}</button></noscript>
                 </form>
                 {% endif %}
+                {% url 'home' as home_url %}
+                <a href="{{ home_url }}" class="nav-link{% if request.path == home_url %} nav-link--active{% endif %}"{% if request.path == home_url %} aria-current="page"{% endif %}>
+                    {% include "_icon.html" with name='home' %}
+                    <span>{% translate "Home" %}</span>
+                </a>
                 {% for group in nav_groups %}
                 <div class="nav-group">
                     {% if group.heading %}<h2 class="nav-group__heading">{{ group.heading }}</h2>{% endif %}

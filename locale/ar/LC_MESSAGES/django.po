@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 20:56+0000\n"
+"POT-Creation-Date: 2026-10-22 21:20+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -182,6 +182,10 @@ msgstr "+ إضافة موقع جديد"
 
 msgid "+ Add new task type"
 msgstr "+ إضافة نوع مهمة جديد"
+
+#, python-format
+msgid "+%(count)s more"
+msgstr "+%(count)s أخرى"
 
 msgid "90-day progress"
 msgstr "التقدم خلال 90 يوماً"
@@ -433,8 +437,8 @@ msgstr "كل الدول"
 msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
 
-msgid "All countries — week view"
-msgstr "كل الدول — عرض الأسبوع"
+msgid "All countries — schedule"
+msgstr "كل الدول — الجدول الزمني"
 
 msgid "All customers"
 msgstr "كل العملاء"
@@ -554,6 +558,9 @@ msgstr "متاح"
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
 
+msgid "Awaiting action"
+msgstr "بانتظار إجراء"
+
 msgid "Awaiting decision"
 msgstr "بانتظار القرار"
 
@@ -659,6 +666,9 @@ msgstr "العلامات التجارية"
 msgid "CSV file"
 msgstr "ملف CSV"
 
+msgid "Calendar view"
+msgstr "عرض التقويم"
+
 msgid "Cancel task"
 msgstr "إلغاء المهمة"
 
@@ -745,6 +755,9 @@ msgstr "نادٍ"
 
 msgid "Code"
 msgstr "الرمز"
+
+msgid "Colour key"
+msgstr "دليل الألوان"
 
 msgid "Comment"
 msgstr "تعليق"
@@ -1573,6 +1586,9 @@ msgstr "ساعات المساعدين"
 msgid "High"
 msgstr "مرتفعة"
 
+msgid "High priority"
+msgstr "أولوية عالية"
+
 msgid "History"
 msgstr "السجل الزمني"
 
@@ -1890,6 +1906,9 @@ msgstr "الموديل"
 msgid "Monday"
 msgstr "الإثنين"
 
+msgid "Month"
+msgstr "شهر"
+
 msgid "Monthly report"
 msgstr "التقرير الشهري"
 
@@ -2076,6 +2095,9 @@ msgstr "لا توجد ملاحظات داخلية."
 msgid "No internal tickets found."
 msgstr "لا توجد تذاكر داخلية."
 
+msgid "No lead technician"
+msgstr "لا يوجد فني رئيسي"
+
 msgid "No location provided"
 msgstr "لم يتم تحديد الموقع"
 
@@ -2166,6 +2188,9 @@ msgstr "لا توجد تذاكر مطابقة لعوامل التصفية الم
 msgid "No tickets this month."
 msgstr "لا توجد طلبات هذا الشهر."
 
+msgid "No visits"
+msgstr "لا توجد زيارات"
+
 msgid "No visits are scheduled for today."
 msgstr "لا توجد زيارات مجدولة لليوم."
 
@@ -2223,6 +2248,9 @@ msgstr "لم يتم الإشعار بعد."
 
 msgid "Not yet requested."
 msgstr "لم يتم الطلب بعد."
+
+msgid "Not yet scheduled"
+msgstr "لم تُجدول بعد"
 
 msgid "Note"
 msgstr "ملاحظة"
@@ -2853,6 +2881,9 @@ msgstr "حفظ كلمة المرور الجديدة"
 
 msgid "Save report"
 msgstr "حفظ التقرير"
+
+msgid "Schedule"
+msgstr "الجدول الزمني"
 
 msgid "Schedule change approved"
 msgstr "تمت الموافقة على تغيير الموعد"
@@ -3661,6 +3692,9 @@ msgstr "تم تصحيح الوقت."
 msgid "Time set."
 msgstr "تم تحديد الوقت."
 
+msgid "Time to be confirmed"
+msgstr "الوقت سيُحدَّد لاحقًا"
+
 #, python-format
 msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
 msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
@@ -3839,11 +3873,8 @@ msgstr "نقدّر رأيكم في زيارة Profit Sports Solutions الأخي
 msgid "Wednesday"
 msgstr "الأربعاء"
 
-msgid "Week view"
-msgstr "عرض الأسبوع"
-
-msgid "Week view — all countries"
-msgstr "عرض الأسبوع — جميع الدول"
+msgid "Week"
+msgstr "أسبوع"
 
 msgid "Weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"

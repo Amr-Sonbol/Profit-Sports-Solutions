@@ -11,7 +11,7 @@
     --color-accent: #000000;
     --color-neutral-bg: #ececec;
     /* The header bar's height on desktop, where the sidebar starts below it. */
-    --header-height: 3.75rem;
+    --header-height: 3.25rem;
     --color-hover: #ebebeb;
     /* The only colours besides black and grey: red = blocked or urgent,
        amber = waiting on someone, green = confirmed good. */
@@ -33,11 +33,24 @@ body {
     color: var(--color-text);
     /* One body face for both scripts (loaded in base.html). */
     font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-    /* 16px, not 15 — below that, iOS Safari zooms the whole page in when a
-       technician taps into a form field, which is disorienting on a phone
-       and the single most common mobile form complaint. */
-    font-size: 16px;
+    /* Compact 14px text; form fields go back to 16px on phones (below),
+       since iOS Safari zooms the whole page into any field smaller than
+       that when a technician taps it. */
+    font-size: 14px;
     line-height: 1.5;
+}
+
+/* Desktop: a compact scale. Every rem size (headings, buttons, spacing,
+   the sidebar and header) is measured from this, so they all shrink
+   together; phones keep the browser's 16px for touch-sized controls. */
+@media (min-width: 1024px) {
+    html {
+        font-size: 13px;
+    }
+
+    body {
+        font-size: 12px;
+    }
 }
 
 /* One visible focus ring for every interactive element, instead of
@@ -92,8 +105,8 @@ html[dir="rtl"] h1 {
     flex-direction: row;
     align-items: center;
     gap: 0.75rem;
-    padding-block: 0.75rem;
-    padding-inline: 1rem;
+    padding-block: 0.5rem;
+    padding-inline: 0.75rem;
     background: var(--color-surface);
     border-block-end: 1px solid var(--color-border);
 }
@@ -220,8 +233,8 @@ html[dir="rtl"] .site-header__nav {
     flex-direction: row;
     align-items: center;
     gap: 0.625rem;
-    padding-block: 0.5rem;
-    padding-inline: 0.625rem;
+    padding-block: 0.35rem;
+    padding-inline: 0.5rem;
     border-radius: 6px;
     color: var(--color-text);
     text-decoration: none;
@@ -268,7 +281,7 @@ html[dir="rtl"] .site-header__nav {
     .nav-toggle:checked ~ .site-header__nav {
         top: var(--header-height);
         left: 0;
-        width: 16rem;
+        width: 14rem;
         box-shadow: none;
         z-index: 20;
         transition: none;
@@ -281,7 +294,7 @@ html[dir="rtl"] .site-header__nav {
     }
 
     body:has(.site-header__nav) .page {
-        margin-left: calc(16rem + max(0px, (100% - 16rem - 72rem) / 2));
+        margin-left: calc(14rem + max(0px, (100% - 14rem - 72rem) / 2));
         margin-right: auto;
     }
 
@@ -459,7 +472,7 @@ html[dir="rtl"] .notif-dropdown > * {
 }
 
 .page {
-    padding: 1.5rem;
+    padding: 1rem;
     max-width: 72rem;
     margin-inline: auto;
 }
@@ -471,12 +484,12 @@ html[dir="rtl"] .notif-dropdown > * {
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.75rem;
-    margin-block-end: 1rem;
+    margin-block-end: 0.75rem;
 }
 
 .page__header h1 {
     margin: 0;
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     line-height: 1.15;
 }
 
@@ -556,7 +569,7 @@ html[dir="rtl"] .notif-dropdown > * {
     overflow-x: auto;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 table {
@@ -566,8 +579,8 @@ table {
 
 th, td {
     text-align: start;
-    padding-block: 0.6rem;
-    padding-inline: 0.9rem;
+    padding-block: 0.3rem;
+    padding-inline: 0.6rem;
     border-block-end: 1px solid var(--color-border);
     white-space: nowrap;
 }
@@ -585,9 +598,8 @@ th, td {
 th {
     color: var(--color-muted);
     font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    font-size: 0.78rem;
+
 }
 
 /* For a cell that holds a name or address, which may be long. */
@@ -627,10 +639,10 @@ tbody tr:hover {
 
 .badge {
     display: inline-block;
-    padding-block: 0.15rem;
-    padding-inline: 0.6rem;
+    padding-block: 0.1rem;
+    padding-inline: 0.5rem;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 600;
 }
 
@@ -657,6 +669,18 @@ tbody tr:hover {
 .badge--status-blocked { background: var(--color-danger-bg); color: var(--color-danger); }
 .badge--status-closed,
 .badge--status-cancelled { background: var(--color-neutral-bg); color: var(--color-muted); }
+
+/* A small dot before the text of a task-status badge, in its own colour. */
+.badge[class*="badge--status-"]::before {
+    content: "";
+    display: inline-block;
+    inline-size: 0.4em;
+    block-size: 0.4em;
+    margin-inline-end: 0.35em;
+    border-radius: 50%;
+    background: currentColor;
+    vertical-align: middle;
+}
 
 /* Fixed labels that aren't task statuses (Certified, Active, Error ...). */
 .badge--good { background: var(--color-success-bg); color: var(--color-success); }
@@ -736,12 +760,12 @@ tbody tr:hover {
     align-items: center;
     color: var(--color-text);
     text-decoration: none;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    padding-block: 0.35rem;
-    padding-inline: 0.8rem;
+    padding-block: 0.25rem;
+    padding-inline: 0.65rem;
     border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border-radius: 6px;
     background: var(--color-surface);
     margin-block-end: 0.75rem;
 }
@@ -769,12 +793,12 @@ tbody tr:hover {
     align-items: center;
     color: var(--color-text);
     text-decoration: none;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    padding-block: 0.35rem;
-    padding-inline: 0.8rem;
+    padding-block: 0.25rem;
+    padding-inline: 0.65rem;
     border: 1px solid var(--color-border);
-    border-radius: 999px;
+    border-radius: 6px;
     background: var(--color-surface);
 }
 
@@ -820,14 +844,14 @@ tbody tr:hover {
 .section {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 1.25rem;
-    margin-block-end: 1rem;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-block-end: 0.5rem;
 }
 
 .section h2 {
-    margin-block: 0 1rem;
-    font-size: 1rem;
+    margin-block: 0 0.5rem;
+    font-size: 0.95rem;
 }
 
 .section__header {
@@ -851,16 +875,16 @@ tbody tr:hover {
 .stat-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-    gap: 0.75rem;
-    margin-block-end: 1.25rem;
+    gap: 0.5rem;
+    margin-block-end: 0.75rem;
 }
 
 .stat-tile {
     display: block;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 1rem;
+    border-radius: 6px;
+    padding: 0.5rem;
     text-align: center;
     color: var(--color-text);
     text-decoration: none;
@@ -873,7 +897,7 @@ tbody tr:hover {
 
 .stat-tile__value {
     display: block;
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 600;
     line-height: 1.1;
     color: var(--color-text);
@@ -905,8 +929,8 @@ tbody tr:hover {
     flex-direction: row;
     align-items: center;
     gap: 0.75rem;
-    padding-block: 0.65rem;
-    padding-inline: 0.9rem;
+    padding-block: 0.45rem;
+    padding-inline: 0.7rem;
     border: 1px solid var(--color-border);
     border-inline-start-width: 4px;
     border-radius: 6px;
@@ -952,8 +976,8 @@ tbody tr:hover {
     flex-direction: row;
     align-items: center;
     gap: 0.6rem;
-    padding-block: 0.6rem;
-    padding-inline: 0.75rem;
+    padding-block: 0.4rem;
+    padding-inline: 0.6rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
     color: var(--color-text);
@@ -1009,6 +1033,292 @@ tbody tr:hover {
     display: flex;
     flex-direction: row;
     gap: 0.5rem;
+}
+
+/* Text for screen readers only. */
+.visually-hidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Schedule calendar (tasks/_calendar.html): a week of day columns or a
+   month grid. Each task's status is the colour of its card's edge
+   (--cal-status), set per status below; a dot marks high or emergency
+   priority. */
+.cal-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-block-end: 0.5rem;
+}
+
+.cal-toolbar__title {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.cal-legend {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+    font-size: 0.78rem;
+    color: var(--color-muted);
+}
+
+.cal-legend li {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.cal-swatch {
+    display: inline-block;
+    inline-size: 0.8rem;
+    block-size: 0.8rem;
+    border-radius: 2px;
+    background: var(--cal-status);
+}
+
+.cal-card--new,
+.cal-card--pending_supervisor_review,
+.cal-card--completed { --cal-status: var(--color-warning); }
+.cal-card--assigned,
+.cal-card--accepted { --cal-status: #9a9a9a; }
+.cal-card--in_progress { --cal-status: var(--color-text); }
+.cal-card--blocked { --cal-status: var(--color-danger); }
+.cal-card--closed,
+.cal-card--cancelled { --cal-status: #d0d0d0; }
+
+.cal-dot {
+    display: inline-block;
+    flex: none;
+    inline-size: 0.5rem;
+    block-size: 0.5rem;
+    border-radius: 50%;
+}
+
+.cal-dot--emergency { background: var(--color-danger); }
+.cal-dot--high { background: var(--color-warning); }
+
+.cal-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-block-end: 0.75rem;
+}
+
+.cal-day {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-block-size: 7rem;
+    padding: 0.4rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+}
+
+.cal-day--today {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.cal-day__head {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin: 0 0 0.15rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-muted);
+}
+
+.cal-day--today .cal-day__head {
+    color: var(--color-text);
+}
+
+.cal-day__empty {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+}
+
+.cal-card {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    padding-block: 0.25rem;
+    padding-inline: 0.4rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-inline-start: 4px solid var(--cal-status);
+    border-radius: 4px;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    text-decoration: none;
+}
+
+.cal-card:hover {
+    background: var(--color-hover);
+}
+
+.cal-card--closed,
+.cal-card--cancelled {
+    color: var(--color-muted);
+}
+
+.cal-card__time {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.cal-card__customer,
+.cal-card__detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cal-card__customer {
+    font-weight: 600;
+}
+
+.cal-card__detail {
+    color: var(--color-muted);
+}
+
+.cal-month {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    margin-block-end: 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.cal-month__weekday {
+    padding: 0.35rem 0.5rem;
+    border-block-end: 1px solid var(--color-border);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-muted);
+}
+
+.cal-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-block-size: 6.5rem;
+    min-inline-size: 0;
+    padding: 0.3rem 0.4rem;
+    border-block-end: 1px solid var(--color-border);
+    border-inline-end: 1px solid var(--color-border);
+}
+
+.cal-cell:nth-child(7n) {
+    border-inline-end: none;
+}
+
+.cal-cell--other-month {
+    background: var(--color-bg);
+}
+
+.cal-cell--other-month .cal-cell__date {
+    color: var(--color-muted);
+}
+
+.cal-cell__date {
+    align-self: flex-start;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-cell--today .cal-cell__date {
+    padding-inline: 0.35rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: #fff;
+}
+
+.cal-line {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+    padding-inline-start: 0.35rem;
+    border-inline-start: 3px solid var(--cal-status);
+    color: var(--color-text);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    text-decoration: none;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.cal-line:hover {
+    background: var(--color-hover);
+}
+
+.cal-more {
+    font-size: 0.72rem;
+    color: var(--color-muted);
+}
+
+.cal-cell__count {
+    display: none;
+}
+
+.cal-unscheduled {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.5rem;
+}
+
+/* Phones: the week becomes a list of days, and a month day shows just
+   how many tasks it has. */
+@media (max-width: 767px) {
+    .cal-week {
+        grid-template-columns: 1fr;
+    }
+
+    .cal-day {
+        min-block-size: 0;
+    }
+
+    .cal-cell {
+        min-block-size: 3rem;
+    }
+
+    .cal-line,
+    .cal-more {
+        display: none;
+    }
+
+    .cal-cell__count {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
 }
 
 /* Team map (static/js/team-map.js). */
@@ -1113,7 +1423,7 @@ tbody tr:hover {
 }
 
 .empty-state {
-    padding: 3rem 1rem;
+    padding: 1.5rem 1rem;
     text-align: center;
     color: var(--color-muted);
 }
@@ -1278,14 +1588,15 @@ tbody tr:hover {
 }
 
 .field {
-    margin-block-end: 1rem;
+    margin-block-end: 0.6rem;
 }
 
 .field label {
     display: block;
     margin-block-end: 0.3rem;
-    color: var(--color-muted);
+    color: #3a3a3a;
     font-size: 0.85rem;
+    font-weight: 500;
 }
 
 .field input,
@@ -1530,26 +1841,54 @@ tbody tr:hover {
     display: inline-block;
     background: var(--color-accent);
     color: #fff;
-    border: none;
-    /* Square, like the logo's letterforms. */
-    border-radius: 0;
-    /* ~44px tall at the 16px base font — a comfortable tap target, not
-       just a comfortable click target. */
-    padding-block: 0.7rem;
-    padding-inline: 1.1rem;
+    border: 1px solid var(--color-accent);
+    border-radius: 6px;
+    padding-block: 0.35rem;
+    padding-inline: 0.75rem;
     font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.3;
     text-decoration: none;
     cursor: pointer;
+}
+
+.button:hover {
+    background: #2b2b2b;
 }
 
 .button--secondary {
     background: var(--color-surface);
     color: var(--color-text);
-    border: 1px solid var(--color-text);
+    border-color: var(--color-border);
+}
+
+.button--secondary:hover {
+    background: var(--color-hover);
 }
 
 .button--danger {
     background: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+.button--danger:hover {
+    background: #a5311f;
+}
+
+/* Phones: finger-sized buttons (~44px tall) and 16px form fields, so
+   iOS doesn't zoom in when a field is tapped. */
+@media (max-width: 1023px) {
+    .button {
+        padding-block: 0.7rem;
+        padding-inline: 1.1rem;
+    }
+
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
 }
 
 /* "Customer not available to sign": the reason box shows once ticked. */

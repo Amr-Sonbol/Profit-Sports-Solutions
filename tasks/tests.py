@@ -3387,6 +3387,33 @@ class TaskWeekTests(TaskTestCase):
         self.assertEqual(all_tasks, [])
 
 
+    def test_a_task_booked_by_day_only_shows_on_its_day_after_timed_ones(self):
+        timed = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 8, 9, 0))
+        day_only = self._make_task('AE-0002', scheduled_for=None, scheduled_date=date(2026, 9, 8))
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'start': '2026-09-07'})
+        days = {day['date']: day['tasks'] for day in response.context['days']}
+        self.assertEqual(days[date(2026, 9, 8)], [timed, day_only])
+        self.assertNotIn(day_only, list(response.context['unscheduled']))
+        self.assertContains(response, 'Time to be confirmed')
+
+    def test_month_view_covers_whole_weeks_and_folds_extra_tasks(self):
+        for number in range(5):
+            self._make_task(f'AE-01{number}', scheduled_for=dubai_time(2026, 9, 15, 8 + number, 0))
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'view': 'month', 'month': '2026-09'})
+        self.assertEqual(response.context['view'], 'month')
+        days = response.context['days']
+        # September 2026 starts on a Tuesday and ends on a Wednesday.
+        self.assertEqual((days[0]['date'], days[-1]['date']), (date(2026, 8, 31), date(2026, 10, 4)))
+        self.assertTrue(all(len(week) == 7 for week in response.context['weeks']))
+        day = next(day for day in days if day['date'] == date(2026, 9, 15))
+        self.assertEqual((len(day['shown']), day['more']), (3, 2))
+        self.assertContains(response, '+2 more')
+        self.assertEqual(response.context['prev_month'], date(2026, 8, 1))
+        self.assertEqual(response.context['next_month'], date(2026, 10, 1))
+
+
 class MyWeekTests(TaskTestCase):
     WEEK_START = date(2026, 9, 7)
 
