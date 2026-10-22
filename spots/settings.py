@@ -101,13 +101,13 @@ MIDDLEWARE = [
     'axes.middleware.AxesMiddleware',
 ]
 
-# django-axes: locks an IP address out after repeated failed logins
-# (the library's own default key, left as-is deliberately) — since
-# every username in this app is predictable (supervisor1, manager1,
-# ...) an attacker isn't limited to guessing one account's password,
-# they can just as easily spray one guess across many usernames, which
-# a per-username-only limit wouldn't catch. Nothing else in the
-# codebase throttles login attempts. AxesStandaloneBackend must come
+# django-axes: locks an account (by username) after repeated failed
+# logins — the account, not the connection, so one person's wrong
+# passwords never lock out everyone else on the same office Wi-Fi or
+# mobile network. Known trade-off: one guess sprayed across many
+# usernames isn't slowed down by this; every account still locks after
+# AXES_FAILURE_LIMIT wrong guesses at its own password. Nothing else in
+# the codebase throttles login attempts. AxesStandaloneBackend must come
 # first, ahead of Django's own ModelBackend, so a locked-out attempt
 # is rejected before password checking even runs.
 AUTHENTICATION_BACKENDS = [
@@ -115,6 +115,10 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 AXES_FAILURE_LIMIT = 5
+AXES_LOCKOUT_PARAMETERS = ['username']
+# axes warns that this leaves out the connection; leaving it out is the
+# point (see above), so the warning is silenced rather than acted on.
+SILENCED_SYSTEM_CHECKS = ['axes.W006']
 AXES_COOLOFF_TIME = 1  # hour
 AXES_LOCKOUT_TEMPLATE = 'axes_lockout.html'
 AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False

@@ -60,9 +60,8 @@ def user_for_link_token(token):
 
 def locked_usernames():
     """Logins currently locked out by django-axes, lower-cased, mapped to
-    when the lockout happened. Axes locks by IP address, but every attempt
-    records the username typed, so this is the account a lockout is
-    actually about."""
+    when the lockout happened. Axes locks by account (username; see
+    settings.AXES_LOCKOUT_PARAMETERS)."""
     from axes.models import AccessAttempt
 
     since = timezone.now() - timedelta(hours=settings.AXES_COOLOFF_TIME)

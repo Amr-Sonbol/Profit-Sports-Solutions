@@ -80,6 +80,10 @@ class Technician(models.Model):
             'password at first sign-in',
         ),
     )
+    setup_link_sent_at = models.DateTimeField(
+        _('setup link sent at'), null=True, blank=True,
+        help_text=_('when the last setup link was emailed; it works once and expires after 7 days'),
+    )
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='technicians',
         verbose_name=_('country'),

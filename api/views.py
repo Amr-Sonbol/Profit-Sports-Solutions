@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import update_last_login
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -29,7 +30,8 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report, search_tasks, search_tickets, sign_out_of_mobile_app, undo_last_tap,
+    report_saved_message, save_work_report, search_tasks, search_tickets, send_password_changed_email,
+    undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
 
@@ -60,6 +62,8 @@ class LoginView(APIView):
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
 
         token, _created = Token.objects.get_or_create(user=user)
+        # So Staff accounts' "Last sign-in" counts the app, not only the website.
+        update_last_login(None, user)
         return Response({'token': token.key, **_me_payload(user)})
 
 
@@ -87,8 +91,8 @@ class MeView(APIView):
 class MyPasswordView(APIView):
     """Set a password from the app: on a temporary one, just the new
     password (like the web's first sign-in); otherwise a change that needs
-    the current one (like My profile). Either way every other phone is
-    signed out, and this one gets a fresh token back so it stays in.
+    the current one (like My profile). Their own change, so no phone is
+    signed out; a change they didn't make shows up in the email.
     """
 
     permission_classes = [IsTechnician]
@@ -114,8 +118,11 @@ class MyPasswordView(APIView):
             technician.save(update_fields=['must_change_password'])
         else:
             form.save()
-        sign_out_of_mobile_app(user)
-        token = Token.objects.create(user=user)
+            # Not on first setup: choosing your own over a temporary one isn't news.
+            send_password_changed_email(user)
+        # Their own change, so this phone and any other stay signed in;
+        # the token is sent back so the app's flow doesn't depend on that.
+        token, _created = Token.objects.get_or_create(user=user)
         return Response({'token': token.key, **_me_payload(user)})
 
 

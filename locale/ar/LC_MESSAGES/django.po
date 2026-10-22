@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 19:41+0000\n"
+"POT-Creation-Date: 2026-10-22 20:15+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -147,6 +147,10 @@ msgid "%(name)s has not arrived at %(site)s (due %(time)s)"
 msgstr "لم يصل %(name)s إلى %(site)s بعد (الموعد %(time)s)"
 
 #, python-format
+msgid "%(name)s is signed out of the mobile app on every phone."
+msgstr "تم تسجيل خروج %(name)s من تطبيق الجوال على كل الأجهزة."
+
+#, python-format
 msgid "%(name)s tapped “%(event)s” %(distance)s from %(site)s"
 msgstr "ضغط %(name)s “%(event)s” على بُعد %(distance)s من %(site)s"
 
@@ -204,6 +208,10 @@ msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
 
 #, python-format
+msgid "A manager set a temporary password for your Profit Sports Solutions account (username: %(username)s). You choose your own the next time you sign in, and the mobile app has signed out."
+msgstr "عيّن أحد المديرين كلمة مرور مؤقتة لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s). ستختار كلمة مرورك عند تسجيل الدخول التالي، وسُجّل خروج تطبيق الجوال."
+
+#, python-format
 msgid "A maximum of %(count)d files may be attached."
 msgstr "يمكن إرفاق %(count)d ملفات كحد أقصى."
 
@@ -255,6 +263,10 @@ msgstr ""
 #, python-format
 msgid "A password link has been sent to %(email)s."
 msgstr "تم إرسال رابط كلمة المرور إلى %(email)s."
+
+#, python-format
+msgid "A setup link was sent to %(email)s."
+msgstr "أُرسل رابط الإعداد إلى %(email)s."
 
 msgid "A signature is already saved. Sign again only to replace it."
 msgstr "يوجد توقيع محفوظ. وقّع مجددًا فقط لاستبداله."
@@ -429,9 +441,6 @@ msgstr "المستوى المتقدم"
 msgid "After"
 msgstr "بعد"
 
-msgid "Afterwards, sign in to the mobile app again with the new password."
-msgstr "بعد ذلك، سجّل الدخول إلى تطبيق الجوال مرة أخرى بكلمة المرور الجديدة."
-
 msgid "All"
 msgstr "الكل"
 
@@ -497,6 +506,9 @@ msgstr "وصل"
 
 msgid "As reported by the customer. Record any additional findings on site in the work report."
 msgstr "كما أبلغ عنها العميل. يرجى تسجيل أي ملاحظات إضافية في الموقع ضمن تقرير العمل."
+
+msgid "Ask your manager to send you a new one. If you already set your password, just sign in."
+msgstr "اطلب من مديرك إرسال رابط جديد. إذا كنت قد عيّنت كلمة مرورك بالفعل، فسجّل الدخول فقط."
 
 msgid "Assign"
 msgstr "التعيين"
@@ -703,8 +715,8 @@ msgstr "طُلب التغيير إلى %(time)s، بانتظار المدير."
 msgid "Changed"
 msgstr "تم التعديل"
 
-msgid "Changes made in the admin, newest first. Changes made on the app's own pages aren't listed here. A task's history is on its own page."
-msgstr "التغييرات التي تمت من لوحة الإدارة، الأحدث أولًا. التغييرات من صفحات التطبيق نفسها لا تظهر هنا. سجل المهمة موجود في صفحتها."
+msgid "Changes made in the admin, plus every account action (logins created, passwords reset, unlocks, phones signed out, logins turned on or off), newest first. A task's history is on its own page."
+msgstr "التغييرات التي تمت من لوحة الإدارة، وكل إجراءات الحسابات (إنشاء حسابات الدخول، إعادة تعيين كلمات المرور، فتح الأقفال، تسجيل الخروج من الأجهزة، إيقاف الدخول أو تفعيله)، الأحدث أولًا. سجل المهمة موجود في صفحتها."
 
 msgid "Chargeable"
 msgstr "مدفوعة"
@@ -1026,6 +1038,26 @@ msgstr "تم الإيقاف. أعد إسناد مهامه المفتوحة أد�
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
+"%(what)s\n"
+"\n"
+"If this wasn't you, contact your manager straight away.\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"عزيزي %(contact)s،\n"
+"\n"
+"%(what)s\n"
+"\n"
+"إذا لم تكن أنت من فعل ذلك، تواصل مع مديرك فورًا.\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
 "Our technician for %(site)s is running late today: %(reason)s\n"
 "\n"
 "Sorry for the wait. We'll be there as soon as we can.\n"
@@ -1168,30 +1200,26 @@ msgstr ""
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
-"Your Profit Sports Solutions account has been created.\n"
+"Your Profit Sports Solutions account is ready. Set your password with the link below. It works once and expires in %(days)s days.\n"
 "\n"
-"Username: %(username)s\n"
-"Temporary password: %(password)s\n"
-"\n"
-"You will be asked to set your own password when you first sign in.\n"
-"\n"
-"Sign in here:\n"
 "%(link)s\n"
+"\n"
+"Your username: %(username)s\n"
+"\n"
+"If the link has expired, ask your manager for a new one.\n"
 "\n"
 "Best regards,\n"
 "Profit Sports Solutions\n"
 msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
+"عزيزي %(contact)s،\n"
 "\n"
-"تم إنشاء حسابكم في Profit Sports Solutions.\n"
+"حسابك في Profit Sports Solutions جاهز. عيّن كلمة مرورك من خلال الرابط أدناه. يعمل الرابط مرة واحدة وتنتهي صلاحيته خلال %(days)s أيام.\n"
+"\n"
+"%(link)s\n"
 "\n"
 "اسم المستخدم: %(username)s\n"
-"كلمة المرور المؤقتة: %(password)s\n"
 "\n"
-"سيُطلب منكم تعيين كلمة مرور خاصة بكم عند تسجيل الدخول لأول مرة.\n"
-"\n"
-"تسجيل الدخول من هنا:\n"
-"%(link)s\n"
+"إذا انتهت صلاحية الرابط، اطلب من مديرك رابطًا جديدًا.\n"
 "\n"
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
@@ -1357,6 +1385,10 @@ msgstr "تعديل بيانات الفنيين وصورهم الشخصية"
 msgid "Email"
 msgstr "البريد الإلكتروني"
 
+#, python-format
+msgid "Email changed to %(email)s."
+msgstr "تم تغيير البريد الإلكتروني إلى %(email)s."
+
 msgid "Email the customer automatically when a task is rescheduled"
 msgstr "إرسال بريد إلكتروني للعميل تلقائيًا عند تغيير موعد المهمة"
 
@@ -1461,6 +1493,9 @@ msgstr "الانتهاء المتوقع"
 
 msgid "Estimated hours"
 msgstr "الساعات المقدرة"
+
+msgid "Every staff login, in every country. Select a name to fix their account. Every action here goes in the Audit log."
+msgstr "كل حسابات دخول الموظفين في كل الدول. اختر اسمًا لإصلاح حسابه. يُسجَّل كل إجراء هنا في سجل التدقيق."
 
 msgid "Evidence"
 msgstr "الدليل"
@@ -1766,6 +1801,12 @@ msgstr "انتهت صلاحية الرابط"
 msgid "Link no longer valid"
 msgstr "الرابط لم يعد صالحاً"
 
+msgid "Link no longer works"
+msgstr "الرابط لم يعد يعمل"
+
+msgid "Link not received or expired: send a new setup link (check the email first). Forgot their password: send a setup link, or set a temporary password and read it to them if email won't work. Lost or handed-on phone: sign them out of every phone. Locked out: unlock now. Away for a while: turn off their login."
+msgstr "لم يصله الرابط أو انتهت صلاحيته: أرسل رابط إعداد جديدًا (تحقق من البريد أولًا). نسي كلمة المرور: أرسل رابط إعداد، أو عيّن كلمة مؤقتة واقرأها له إن لم يعمل البريد. فقد هاتفه أو سلّمه لغيره: سجّل خروجه من كل الأجهزة. حسابه مقفل: افتح القفل الآن. غائب لفترة: أوقف حساب دخوله."
+
 msgid "Local courier"
 msgstr "شركة توصيل محلية"
 
@@ -1782,8 +1823,8 @@ msgid "Login"
 msgstr "حساب الدخول"
 
 #, python-format
-msgid "Login created and sent to %(email)s."
-msgstr "تم إنشاء بيانات الدخول وإرسالها إلى %(email)s."
+msgid "Login created. A setup link was sent to %(email)s."
+msgstr "تم إنشاء حساب الدخول. أُرسل رابط الإعداد إلى %(email)s."
 
 msgid "Login email"
 msgstr "البريد الإلكتروني لتسجيل الدخول"
@@ -1791,6 +1832,17 @@ msgstr "البريد الإلكتروني لتسجيل الدخول"
 #, python-format
 msgid "Login email changed to %(email)s."
 msgstr "تم تغيير البريد الإلكتروني لتسجيل الدخول إلى %(email)s."
+
+msgid "Login turned off"
+msgstr "الدخول موقوف"
+
+#, python-format
+msgid "Login turned off for %(name)s."
+msgstr "تم إيقاف دخول %(name)s."
+
+#, python-format
+msgid "Login turned on for %(name)s."
+msgstr "تم تفعيل دخول %(name)s."
 
 msgid "Logistics updated."
 msgstr "تم تحديث بيانات الشحن."
@@ -1884,6 +1936,9 @@ msgstr "الرسائل"
 msgid "Missing required column(s): %(columns)s"
 msgstr "أعمدة مطلوبة مفقودة: %(columns)s"
 
+msgid "Mobile app"
+msgstr "تطبيق الجوال"
+
 msgid "Model"
 msgstr "الموديل"
 
@@ -1948,6 +2003,9 @@ msgstr "رد جديد من العميل — الطلب %(number)s"
 
 msgid "New customer tickets"
 msgstr "تذاكر عملاء جديدة"
+
+msgid "New email"
+msgstr "البريد الإلكتروني الجديد"
 
 msgid "New internal ticket assigned to you"
 msgstr "تذكرة داخلية جديدة مسندة إليك"
@@ -2077,8 +2135,11 @@ msgstr "لا توجد تذاكر داخلية."
 msgid "No location provided"
 msgstr "لم يتم تحديد الموقع"
 
-msgid "No login yet. Create one and we'll email a temporary password with the sign-in link. They choose their own password the first time they sign in."
-msgstr "لا يوجد حساب دخول بعد. أنشئ واحدًا وسنرسل كلمة مرور مؤقتة مع رابط تسجيل الدخول. يختار المستخدم كلمة مروره عند أول تسجيل دخول."
+msgid "No login"
+msgstr "بلا حساب دخول"
+
+msgid "No login yet. Create one and they get a one-time link by email to set their own password. No password is emailed."
+msgstr "لا يوجد حساب دخول بعد. أنشئ واحدًا وسيصله رابط لمرة واحدة بالبريد لتعيين كلمة مروره. لا تُرسل أي كلمة مرور بالبريد."
 
 msgid "No machines match your search."
 msgstr "لا توجد أجهزة مطابقة لبحثك."
@@ -2130,6 +2191,9 @@ msgstr "لم تتم إضافة أي مواقع."
 
 msgid "No skills have been set up."
 msgstr "لم يتم إعداد أي مهارات."
+
+msgid "No staff match the selected filters."
+msgstr "لا يوجد موظفون يطابقون عوامل التصفية المحددة."
 
 msgid "No supervisor or manager has been set up in your country."
 msgstr "لم يتم تعيين مشرف أو مدير في دولتك."
@@ -2206,6 +2270,9 @@ msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
 
 msgid "Not signed"
 msgstr "غير موقَّع"
+
+msgid "Not signed in"
+msgstr "غير مسجّل الدخول"
 
 msgid "Not yet assigned."
 msgstr "لم يتم الإسناد بعد."
@@ -2301,6 +2368,9 @@ msgstr "فقط إذا اشتكى العميل من هذه الزيارة وكا�
 msgid "Only managers and administrators can see this. Never shown to the customer."
 msgstr "يراه المديرون ومسؤولو النظام فقط، ولا يظهر للعميل أبدًا."
 
+msgid "Only someone at their level or above can change this account."
+msgstr "لا يمكن تغيير هذا الحساب إلا لمن هو في مستواه أو أعلى."
+
 msgid "Only the customer_name column is required. A file with just customer_name and customer_contact_email is enough: each customer fills in the rest after they get the welcome email from Customer accounts. In Excel, save as “CSV UTF-8” so Arabic names come through."
 msgstr "عمود customer_name فقط هو المطلوب. يكفي ملف يحتوي على customer_name وcustomer_contact_email: يكمل كل عميل بقية بياناته بعد استلام رسالة الترحيب من حسابات العملاء. في Excel، احفظ الملف بصيغة “CSV UTF-8” لتظهر الأسماء العربية بشكل صحيح."
 
@@ -2315,6 +2385,9 @@ msgstr "المهام المفتوحة"
 
 msgid "Open tasks to reassign"
 msgstr "مهام مفتوحة لإعادة الإسناد"
+
+msgid "Open their record"
+msgstr "فتح سجله"
 
 msgid "Open ticket"
 msgstr "فتح التذكرة"
@@ -2405,9 +2478,6 @@ msgstr "تم تغيير كلمة المرور"
 
 msgid "Password changed."
 msgstr "تم تغيير كلمة المرور."
-
-msgid "Password changed. Sign in to the mobile app again with the new one."
-msgstr "تم تغيير كلمة المرور. سجّل الدخول إلى تطبيق الجوال مرة أخرى بالكلمة الجديدة."
 
 msgid "Password reset"
 msgstr "إعادة تعيين كلمة المرور"
@@ -2775,6 +2845,9 @@ msgstr "السبت"
 msgid "Save"
 msgstr "حفظ"
 
+msgid "Save and sign in"
+msgstr "حفظ وتسجيل الدخول"
+
 msgid "Save changes"
 msgstr "حفظ التغييرات"
 
@@ -2834,6 +2907,9 @@ msgstr "البحث بالاسم"
 
 msgid "Search by name or email"
 msgstr "البحث بالاسم أو البريد الإلكتروني"
+
+msgid "Search by name, sign-in name or email"
+msgstr "البحث بالاسم أو اسم الدخول أو البريد الإلكتروني"
 
 msgid "Search by serial, model, brand, site, or customer"
 msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلامة التجارية أو الموقع أو العميل"
@@ -2917,6 +2993,9 @@ msgstr "إرسال الرد"
 msgid "Send reset link"
 msgstr "إرسال رابط إعادة التعيين"
 
+msgid "Send setup link"
+msgstr "إرسال رابط الإعداد"
+
 msgid "Send welcome email"
 msgstr "إرسال رسالة الترحيب"
 
@@ -2971,6 +3050,12 @@ msgstr "تعيين كلمة مرور مؤقتة"
 msgid "Set time"
 msgstr "تحديد الوقت"
 
+msgid "Set up your Profit Sports Solutions account"
+msgstr "أكمل إعداد حسابك في Profit Sports Solutions"
+
+msgid "Set your password"
+msgstr "عيّن كلمة المرور"
+
 msgid "Set your password and complete your company details. Next time you'll go straight to your account."
 msgstr "عيّن كلمة المرور وأكمل بيانات شركتك. في المرة القادمة ستنتقل مباشرة إلى حسابك."
 
@@ -2979,6 +3064,12 @@ msgstr "يعيّن كلمة مرور مؤقتة. سيختار كلمة مرور�
 
 msgid "Sets a temporary password. They choose their own the next time they sign in."
 msgstr "يعيّن كلمة مرور مؤقتة. سيختار كلمة مروره عند تسجيل الدخول التالي."
+
+msgid "Setup link expired"
+msgstr "انتهت صلاحية رابط الإعداد"
+
+msgid "Setup link sent"
+msgstr "أُرسل رابط الإعداد"
 
 msgid "Share their login page: "
 msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
@@ -3013,8 +3104,17 @@ msgstr "عرض المهام"
 msgid "Showing only:"
 msgstr "المعروض فقط:"
 
+msgid "Shown only once. Read it to them over the phone. They choose their own the next time they sign in, on the website or the app. Any lockout on their login is cleared, and every phone signed in as them has been signed out."
+msgstr "تظهر مرة واحدة فقط. اقرأها له عبر الهاتف. سيختار كلمة مروره عند تسجيل الدخول التالي على الموقع أو التطبيق. أُزيل أي قفل عن حسابه، وسُجّل خروجه من كل الأجهزة."
+
 msgid "Sick"
 msgstr "مرض"
+
+msgid "Sign in"
+msgstr "تسجيل الدخول"
+
+msgid "Sign out of every phone"
+msgstr "تسجيل الخروج من كل الأجهزة"
 
 msgid "Sign-in name"
 msgstr "اسم الدخول"
@@ -3024,6 +3124,9 @@ msgstr "لوحة التوقيع"
 
 msgid "Signed by"
 msgstr "وقّعه"
+
+msgid "Signed in"
+msgstr "مسجّل الدخول"
 
 msgid "Significantly over estimate"
 msgstr "تجاوز التقدير بشكل ملحوظ"
@@ -3076,6 +3179,12 @@ msgstr "المصدر"
 
 msgid "Staff"
 msgstr "موظف"
+
+msgid "Staff accounts"
+msgstr "حسابات الموظفين"
+
+msgid "Staff login locked"
+msgstr "حساب موظف مقفل"
 
 msgid "Start work"
 msgstr "بدء العمل"
@@ -3307,6 +3416,10 @@ msgstr "غادر الفني الرئيسي الشركة. بما أن العمل 
 msgid "The parts technicians pick from in a work report. Deactivate a part instead of deleting it, so old reports keep their codes."
 msgstr "القطع التي يختار منها الفنيون في تقرير العمل. أوقف القطعة بدلًا من حذفها، لتحتفظ التقارير السابقة برموزها."
 
+#, python-format
+msgid "The password for your Profit Sports Solutions account (username: %(username)s) was just changed."
+msgstr "تم تغيير كلمة مرور حسابك في Profit Sports Solutions (اسم المستخدم: %(username)s) للتو."
+
 msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tickets."
 msgstr "الشخص المسؤول عن معالجتها. سيتم إشعاره، وستظهر ضمن تذاكره الداخلية."
 
@@ -3347,6 +3460,9 @@ msgstr "يوجد بالفعل طلب قيد الانتظار لهذه المهم
 msgid "There is no day-only schedule awaiting a time."
 msgstr "لا توجد جدولة باليوم فقط بانتظار تحديد الوقت."
 
+msgid "There is no email address for this login. Add one first."
+msgstr "لا يوجد بريد إلكتروني لحساب الدخول هذا. أضف واحدًا أولًا."
+
 msgid "These can be edited from the task's Edit screen."
 msgstr "يمكن تعديل هذه البيانات من شاشة تعديل المهمة."
 
@@ -3358,6 +3474,12 @@ msgstr "يمكن رفع هذه الملفات من شاشة تعديل المه�
 
 msgid "These people are deactivated but still assigned to the tasks below. Open each task and pick a replacement. For a lead, choose the reason “Left the company”."
 msgstr "هؤلاء الموظفون موقوفون لكنهم لا يزالون مكلّفين بالمهام أدناه. افتح كل مهمة واختر بديلًا. للفني الرئيسي، اختر السبب “غادر الشركة”."
+
+msgid "They have left the company, so their login is off. Reactivate them from their record if they come back."
+msgstr "غادر الشركة، لذا حساب دخوله موقوف. أعد تفعيله من سجله إذا عاد."
+
+msgid "They have no login yet. Create one from their record and they get a setup link by email."
+msgstr "ليس لديه حساب دخول بعد. أنشئ واحدًا من سجله وسيصله رابط الإعداد بالبريد."
 
 msgid "This code is already in the list."
 msgstr "هذا الرمز موجود في القائمة مسبقاً."
@@ -3380,6 +3502,19 @@ msgstr "هذا الوقت لاحق للخطوة التالية في هذه ال�
 
 msgid "This is not a customer account."
 msgstr "هذا ليس حساب عميل."
+
+msgid "This is the only admin who can sign in, so their login can't be turned off."
+msgstr "هذا هو مسؤول النظام الوحيد القادر على تسجيل الدخول، لذا لا يمكن إيقاف حساب دخوله."
+
+msgid "This is the only admin who can sign in, so they can't be deactivated."
+msgstr "هذا هو مسؤول النظام الوحيد القادر على تسجيل الدخول، لذا لا يمكن إيقافه."
+
+msgid "This is the only admin who can sign in. Make someone else an admin first."
+msgstr "هذا هو مسؤول النظام الوحيد القادر على تسجيل الدخول. اجعل شخصًا آخر مسؤول نظام أولًا."
+
+#, python-format
+msgid "This link has expired or was already used. Each link works once, for %(days)s days."
+msgstr "انتهت صلاحية هذا الرابط أو سبق استخدامه. كل رابط يعمل مرة واحدة، لمدة %(days)s أيام."
 
 msgid "This link has expired or was already used. Request a new one below, or contact us if you need help."
 msgstr "انتهت صلاحية هذا الرابط أو سبق استخدامه. اطلب رابطًا جديدًا أدناه، أو تواصل معنا إذا احتجت إلى مساعدة."
@@ -3554,6 +3689,12 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
+msgid "Turn off login"
+msgstr "إيقاف الدخول"
+
+msgid "Turn on login"
+msgstr "تفعيل الدخول"
+
 msgid "Two columns: code and description. A header row is permitted."
 msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
 
@@ -3710,6 +3851,10 @@ msgstr "مرحباً بكم في بوابة عملاء Profit Sports Solutions"
 msgid "Welcome, %(name)s"
 msgstr "أهلاً بك، %(name)s"
 
+#, python-format
+msgid "Welcome, %(name)s. You sign in as “%(username)s”. Choose a password to finish setting up your account."
+msgstr "مرحبًا %(name)s. تسجّل الدخول باسم “%(username)s”. اختر كلمة مرور لإكمال إعداد حسابك."
+
 msgid "Welcome. Finish setting up your account."
 msgstr "مرحبًا. أكمل إعداد حسابك."
 
@@ -3786,6 +3931,9 @@ msgstr "أنت تستعرض الآن %(country)s."
 msgid "You are receiving this email because a password reset was requested for your Profit Sports Solutions account."
 msgstr "تتلقى هذه الرسالة لأنه تم طلب إعادة تعيين كلمة المرور لحسابك في Profit Sports Solutions."
 
+msgid "You can't turn off your own login."
+msgstr "لا يمكنك إيقاف حساب دخولك."
+
 msgid "You don't have permission to do this. If that seems wrong, ask a manager or administrator."
 msgstr "لا تملك صلاحية القيام بذلك. إذا بدا لك هذا خطأ، تواصل مع مدير أو مسؤول النظام."
 
@@ -3799,8 +3947,8 @@ msgstr "قيّمتنا بـ %(rating)s/5"
 msgid "You're behind the 90-day target. Talk to your supervisor about next steps."
 msgstr "أنت متأخر عن هدف الـ 90 يومًا. تحدث مع مشرفك بشأن الخطوات التالية."
 
-msgid "Your Profit Sports Solutions account"
-msgstr "حسابك في Profit Sports Solutions"
+msgid "Your Profit Sports Solutions password was changed"
+msgstr "تم تغيير كلمة مرورك في Profit Sports Solutions"
 
 #, python-format
 msgid "Your Profit Sports Solutions technician is running late — %(number)s"
@@ -3820,6 +3968,9 @@ msgstr "البريد الإلكتروني لتسجيل الدخول"
 
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحباً بك."
+
+msgid "Your password is set. Welcome."
+msgstr "تم تعيين كلمة المرور. مرحبًا بك."
 
 msgid "Your password is set. You can sign in now."
 msgstr "تم تعيين كلمة المرور. يمكنك تسجيل الدخول الآن."
@@ -4505,6 +4656,9 @@ msgstr "يُحدَّد عندما يختار المدير اليوم فقط. ي�
 msgid "set when staff create the login with a temporary password. At first sign-in the customer chooses a password and confirms their contact details"
 msgstr "يُحدَّد عندما ينشئ الموظفون حساب الدخول بكلمة مرور مؤقتة. عند أول تسجيل دخول يختار العميل كلمة مروره ويؤكد بيانات التواصل"
 
+msgid "setup link sent at"
+msgstr "وقت إرسال رابط الإعداد"
+
 msgid "shipping address"
 msgstr "عنوان الشحن"
 
@@ -4811,6 +4965,9 @@ msgstr "ما وجده الفني"
 
 msgid "when the customer was last emailed about the visit. Never sent automatically"
 msgstr "آخر مرة راسلنا فيها العميل بشأن الزيارة. لا يُرسل تلقائيًا أبدًا"
+
+msgid "when the last setup link was emailed; it works once and expires after 7 days"
+msgstr "وقت إرسال آخر رابط إعداد بالبريد؛ يعمل مرة واحدة وتنتهي صلاحيته بعد 7 أيام"
 
 msgid "when the portal welcome email was last sent; its link is valid for 7 days"
 msgstr "تاريخ آخر إرسال لرسالة الترحيب بالبوابة؛ ورابطها صالح لمدة 7 أيام"

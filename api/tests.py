@@ -953,16 +953,14 @@ class MyPasswordApiTests(ApiTestCase):
         self.assertEqual(response.json()['detail'], 'Choose your own password first.')
         self.assertEqual(self.client.get('/api/me/', **self.auth(token)).status_code, 200)
 
-    def test_choosing_a_password_needs_no_current_one_and_returns_a_fresh_token(self):
+    def test_choosing_a_password_needs_no_current_one_and_keeps_the_phone_signed_in(self):
         self._put_on_a_temporary_password()
         token = self.token_for('tech1')
         response = self._post(token, {'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'})
         self.assertEqual(response.status_code, 200)
-        new_token = response.json()['token']
-        self.assertNotEqual(new_token, token)
+        self.assertEqual(response.json()['token'], token)
         self.assertFalse(response.json()['must_change_password'])
-        self.assertEqual(self.client.get('/api/my-tasks/', **self.auth(new_token)).status_code, 200)
-        self.assertEqual(self.client.get('/api/my-tasks/', **self.auth(token)).status_code, 401)
+        self.assertEqual(self.client.get('/api/my-tasks/', **self.auth(token)).status_code, 200)
         self.tech_user.refresh_from_db()
         self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
 

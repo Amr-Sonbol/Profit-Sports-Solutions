@@ -9,7 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-/** Profile > Change password: needs the current one, signs out other phones. */
+/** Profile > Change password: needs the current one. Phones stay signed in. */
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -37,14 +37,13 @@ export default function ChangePasswordScreen() {
 
             {saved ? (
               <>
-                <ThemedText>Password changed. Any other phone signed in as you has been signed out.</ThemedText>
+                <ThemedText>Password changed. You stay signed in.</ThemedText>
                 <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={backToProfile}>
                   <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Done</ThemedText>
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <ThemedText themeColor="textSecondary">This also signs out any other phone signed in as you.</ThemedText>
                 <PasswordForm key={formKey} askCurrent submitLabel="Save new password" onSaved={() => setSaved(true)} />
               </>
             )}

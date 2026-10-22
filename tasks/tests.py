@@ -4059,9 +4059,9 @@ class MyProfileTests(TaskTestCase):
         response = self.client.get('/tasks/my-profile/')
         self.assertEqual(response.status_code, 200)
 
-        # The old phone is signed out of the app and stops getting pushes.
-        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
-        self.assertFalse(PushDevice.objects.filter(technician=self.technician).exists())
+        # Their own change: their phone stays signed in and keeps getting pushes.
+        self.assertTrue(Token.objects.filter(user=self.tech_user).exists())
+        self.assertTrue(PushDevice.objects.filter(technician=self.technician).exists())
 
         self.client.logout()
         self.assertTrue(self.client.login(username='tech1', password='new-pass-98765'))
@@ -4759,11 +4759,13 @@ class TechnicianLoginTests(TaskTestCase):
         self.assertEqual(self.helper.user.username, 'hani@example.com')
         self.assertEqual(self.helper.user.email, 'hani@example.com')
         self.assertTrue(self.helper.must_change_password)
-        # A real, unguessable password was set — not left blank/unusable.
-        self.assertTrue(self.helper.user.has_usable_password())
+        # No password at all until they use the setup link, and none emailed.
+        self.assertFalse(self.helper.user.has_usable_password())
+        self.assertIsNotNone(self.helper.setup_link_sent_at)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ['hani@example.com'])
-        self.assertIn('hani@example.com', mail.outbox[0].body)
+        self.assertIn('/tasks/setup/', mail.outbox[0].body)
+        self.assertNotIn('password:', mail.outbox[0].body.lower())
 
     def test_supervisor_cannot_create_a_login(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -7385,11 +7387,19 @@ class DashboardTileTests(TodayTestsMixin, TaskTestCase):
         self.assertNotContains(response, 'href="/tasks/?lead=none"')
 
 
+# Midday in Dubai, so "an hour ago" is still today in the test country
+# whatever time the tests run (the page uses the user's country's day).
+TEAM_MAP_NOW = datetime(2026, 10, 22, 8, 0, tzinfo=ZoneInfo('UTC'))
+
+
 class TeamMapTests(TodayTestsMixin, TaskTestCase):
     # Last tap per technician today, plus what needs a follow-up — built
     # only from the location taken at each tap.
 
     def setUp(self):
+        clock = patch('django.utils.timezone.now', return_value=TEAM_MAP_NOW)
+        clock.start()
+        self.addCleanup(clock.stop)
         super().setUp()
         self.site.latitude, self.site.longitude = Decimal('25.080000'), Decimal('55.140000')
         self.site.save(update_fields=['latitude', 'longitude'])
@@ -7445,7 +7455,7 @@ class TeamMapTests(TodayTestsMixin, TaskTestCase):
 class StaffPasswordResetLinkTests(TaskTestCase):
     # Django's emailed "forgot password" link (spots.views.PasswordResetConfirmView).
 
-    def test_new_password_from_the_link_signs_the_app_out(self):
+    def test_new_password_from_the_link_keeps_the_app_signed_in(self):
         from django.contrib.auth.tokens import default_token_generator
         from django.utils.encoding import force_bytes
         from django.utils.http import urlsafe_base64_encode
@@ -7462,4 +7472,242 @@ class StaffPasswordResetLinkTests(TaskTestCase):
         self.assertRedirects(response, '/accounts/reset/done/')
         self.tech_user.refresh_from_db()
         self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
+        self.assertTrue(Token.objects.filter(user=self.tech_user).exists())
+
+
+class StaffAccountsTests(TaskTestCase):
+    # Staff accounts (tasks.staff_accounts): every staff login and the fix
+    # for each problem, for the manager tier, every action in the Audit log.
+
+    url = '/tasks/technicians/accounts/'
+
+    def setUp(self):
+        super().setUp()
+        self.manager = self._staff('manager1', Technician.Role.MANAGER)
+        self.admin = self._staff('admin1', Technician.Role.ADMIN)
+
+    def _staff(self, username, role):
+        return Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345', email=f'{username}@example.com'),
+            country=self.country, full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+
+    def _act(self, action, person, **extra):
+        return self.client.post(self.url, {'action': action, 'technician': person.pk, **extra})
+
+    def _lock(self, username, ip='10.0.0.7'):
+        from axes.models import AccessAttempt
+        return AccessAttempt.objects.create(
+            username=username, ip_address=ip, user_agent='test', http_accept='', path_info='/accounts/login/',
+            get_data='', post_data='', failures_since_start=5, attempt_time=timezone.now(),
+        )
+
+    def _statuses(self):
+        return {row['person'].full_name: row['status'] for row in self.client.get(self.url).context['page_obj']}
+
+    def test_only_the_manager_tier_can_open_it(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._statuses()['Tarek Tech'], 'active')
+
+    def test_temporary_password_is_shown_once_signs_out_phones_and_is_logged(self):
+        from django.contrib.admin.models import LogEntry
+        Token.objects.create(user=self.tech_user)
+        self.client.login(username='manager1', password='pass12345')
+        response = self._act('temporary_password', self.technician)
+        self.assertTemplateUsed(response, 'tasks/staff_account_password.html')
+        self.tech_user.refresh_from_db()
+        self.assertTrue(self.tech_user.check_password(response.context['password']))
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.must_change_password)
         self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertTrue(LogEntry.objects.filter(
+            object_id=str(self.technician.pk), change_message__icontains='temporary password',
+        ).exists())
+
+    def test_unlock_clears_only_that_login(self):
+        from axes.models import AccessAttempt
+        self._lock('tech1')
+        self._lock('someone-else')
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._statuses()['Tarek Tech'], 'locked')
+        self._act('unlock', self.technician)
+        self.assertEqual(list(AccessAttempt.objects.values_list('username', flat=True)), ['someone-else'])
+
+    def test_locked_staff_show_in_the_managers_bell(self):
+        self._lock('tech1')
+        self.client.login(username='manager1', password='pass12345')
+        kinds = [item['kind'] for item in self.client.get(self.url).context['unseen_notifications']]
+        self.assertIn('staff_locked', kinds)
+
+    def test_turn_a_login_off_and_on(self):
+        self.client.login(username='manager1', password='pass12345')
+        self._act('disable', self.technician)
+        self.tech_user.refresh_from_db()
+        self.assertFalse(self.tech_user.is_active)
+        self._act('enable', self.technician)
+        self.tech_user.refresh_from_db()
+        self.assertTrue(self.tech_user.is_active)
+
+    def test_the_last_admin_cannot_turn_off_their_own_login(self):
+        self.client.login(username='admin1', password='pass12345')
+        self._act('disable', self.admin)
+        self.admin.user.refresh_from_db()
+        self.assertTrue(self.admin.user.is_active)
+
+    def test_a_manager_cannot_touch_an_admin_account(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._act('temporary_password', self.admin).status_code, 403)
+        self.assertEqual(self._act('change_email', self.admin, email='other@example.com').status_code, 403)
+
+    def test_change_email_keeps_a_sign_in_name_that_is_not_an_email(self):
+        self.client.login(username='manager1', password='pass12345')
+        self._act('change_email', self.technician, email='tarek.new@example.com')
+        self.tech_user.refresh_from_db()
+        self.assertEqual((self.tech_user.username, self.tech_user.email), ('tech1', 'tarek.new@example.com'))
+
+
+class AccountTakeoverGuardTests(TaskTestCase):
+    # On a technician's edit page nobody below someone can change their
+    # account, and the last admin stays.
+
+    def setUp(self):
+        super().setUp()
+        self.manager = Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.admin = Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
+            full_name='Adam Admin', language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+
+    def test_a_supervisor_cannot_change_a_managers_record(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(f'/tasks/technicians/{self.manager.pk}/edit/', {
+            'full_name': 'Mona Manager', 'email': 'attacker@example.com', 'language': 'en',
+        })
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_manager_gets_no_password_reset_for_an_admin(self):
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.get(f'/tasks/technicians/{self.admin.pk}/edit/')
+        self.assertIsNone(response.context['password_form'])
+        response = self.client.post(f'/tasks/technicians/{self.admin.pk}/edit/', {
+            'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertEqual(response.status_code, 403)
+
+    def test_the_last_admin_cannot_be_deactivated(self):
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(f'/tasks/technicians/{self.admin.pk}/edit/', {'action': 'deactivate', 'reason': 'left_company'})
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+
+
+class PasswordChangedEmailTests(TaskTestCase):
+    # tasks.views.send_password_changed_email: so someone notices a change
+    # they did not make.
+
+    def setUp(self):
+        super().setUp()
+        self.tech_user.email = 'tarek@example.com'
+        self.tech_user.save(update_fields=['email'])
+        Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def test_changing_your_own_password_emails_you(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.client.post('/tasks/my-profile/', {
+            'action': 'change_password', 'old_password': 'pass12345',
+            'new_password1': 'new-pass-98765', 'new_password2': 'new-pass-98765',
+        })
+        self.assertEqual([message.to for message in mail.outbox], [['tarek@example.com']])
+        self.assertIn('contact your manager', mail.outbox[0].body)
+
+    def test_a_temporary_password_from_staff_accounts_emails_them(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.technician.pk})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('temporary password', mail.outbox[0].body)
+        # The password itself is never in the email.
+        self.tech_user.refresh_from_db()
+        self.assertNotIn('Temporary password:', mail.outbox[0].body)
+
+    def test_first_setup_in_the_app_sends_nothing(self):
+        import json
+        self.technician.must_change_password = True
+        self.technician.save(update_fields=['must_change_password'])
+        token = self.client.post(
+            '/api/login/', json.dumps({'username': 'tech1', 'password': 'pass12345'}), content_type='application/json',
+        ).json()['token']
+        self.client.post(
+            '/api/me/password/', json.dumps({'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'}),
+            content_type='application/json', HTTP_AUTHORIZATION=f'Token {token}',
+        )
+        self.assertEqual(mail.outbox, [])
+
+
+class StaffSetupLinkTests(TaskTestCase):
+    # One-time setup links for staff logins (tasks.views.send_staff_setup_link,
+    # tasks.staff_accounts.staff_setup) and resending them from Staff accounts.
+
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.newcomer = Technician.objects.create(
+            country=self.country, full_name='Hani Helper', language='en',
+            role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(f'/tasks/technicians/{self.newcomer.pk}/edit/', {'action': 'create_login', 'email': 'hani@example.com'})
+        self.newcomer.refresh_from_db()
+        self.client.logout()
+
+    def _link(self, message=None):
+        import re
+        body = (message or mail.outbox[-1]).body
+        return re.search(r'http://testserver(/tasks/setup/[^/\s]+/)', body).group(1)
+
+    def _statuses(self):
+        response = self.client.get('/tasks/technicians/accounts/')
+        return {row['person'].full_name: row['status'] for row in response.context['page_obj']}
+
+    def test_the_link_sets_a_password_signs_them_in_and_works_once(self):
+        link = self._link()
+        self.assertContains(self.client.get(link), 'Set your password')
+        response = self.client.post(link, {'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'})
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+        self.newcomer.refresh_from_db()
+        self.assertTrue(self.newcomer.user.check_password('br4nd-New-Pass!'))
+        self.assertFalse(self.newcomer.must_change_password)
+        self.client.logout()
+        self.assertEqual(self.client.get(link).status_code, 400)
+
+    def test_shows_as_sent_then_expired_and_a_resend_gives_a_fresh_link(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._statuses()['Hani Helper'], 'invited')
+        Technician.objects.filter(pk=self.newcomer.pk).update(setup_link_sent_at=timezone.now() - timedelta(days=8))
+        self.assertEqual(self._statuses()['Hani Helper'], 'expired')
+        self.client.post('/tasks/technicians/accounts/', {'action': 'send_setup_link', 'technician': self.newcomer.pk})
+        self.assertEqual(self._statuses()['Hani Helper'], 'invited')
+        self.assertEqual(len(mail.outbox), 2)
+        self.client.logout()
+        self.assertEqual(self.client.get(self._link()).status_code, 200)
+
+    def test_a_temporary_password_kills_any_earlier_link(self):
+        link = self._link()
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.newcomer.pk})
+        self.assertEqual(self._statuses()['Hani Helper'], 'temporary')
+        self.client.logout()
+        self.assertEqual(self.client.get(link).status_code, 400)
+
+    def test_a_tampered_link_does_nothing(self):
+        self.assertEqual(self.client.get('/tasks/setup/not-a-real-token/').status_code, 400)

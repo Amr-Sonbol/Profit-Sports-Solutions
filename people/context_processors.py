@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 
 from reference.models import Country
 
-from .models import RolePermission
+from .models import RolePermission, Technician
 from .permissions import get_active_country
 
 
@@ -84,6 +84,20 @@ def notification_bell(request):
             items += [
                 {'kind': 'customer_locked', 'created_at': locked[customer.login], 'customer': customer}
                 for customer in Customer.objects.annotate(login=Lower('user__username')).filter(
+                    login__in=list(locked), is_active=True,
+                )
+            ]
+    # Staff logins locked out right now, for the manager tier to unlock
+    # from Staff accounts — live, like the customer lockouts above.
+    if technician.is_manager_tier:
+        from customers.accounts import locked_usernames
+        locked = locked_usernames()
+        if locked:
+            from django.db.models.functions import Lower
+
+            items += [
+                {'kind': 'staff_locked', 'created_at': locked[person.login], 'person': person}
+                for person in Technician.objects.annotate(login=Lower('user__username')).filter(
                     login__in=list(locked), is_active=True,
                 )
             ]
@@ -182,6 +196,7 @@ def nav_pages(technician, allowed):
     if technician.is_manager_tier:
         add('tasks:all_week', _('Week view — all countries'), 'calendar-range', 'tasks')
         add('tasks:all_technicians', _('All technicians'), 'id-card', 'team')
+        add('tasks:staff_accounts', _('Staff accounts'), 'key', 'team')
         add('tasks:monthly_report', _('Monthly report'), 'bar-chart', 'team')
         add('tasks:skill_list', _('Skills'), 'graduation-cap', 'team')
         add('tasks:brand_list', _('Brands'), 'tag', 'setup')

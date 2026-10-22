@@ -172,6 +172,7 @@ def customer_edit(request, pk):
             # Temporary, same as a technician's: they choose their own next time.
             customer.must_change_password = True
             customer.save(update_fields=['must_change_password'])
+            log_account_action(request, customer, 'Portal temporary password set')
             messages.success(request, _('Password reset. They choose their own the next time they sign in.'))
             return redirect('customers:customer_edit', pk=customer.pk)
 

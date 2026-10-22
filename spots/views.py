@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import redirect, render
 
 from tasks.forms import NewPasswordForm
-from tasks.views import home_summary, sign_out_of_mobile_app
+from tasks.views import home_summary, send_password_changed_email
 
 
 @require_POST
@@ -55,13 +55,13 @@ def set_language(request):
 class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     """Django's emailed "forgot password" link, with the same plain
     password form as everywhere else — and, like any password change,
-    it signs the mobile app out.
+    it emails them that it changed. Their phones stay signed in.
     """
     form_class = NewPasswordForm
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        sign_out_of_mobile_app(form.user)
+        send_password_changed_email(form.user)
         return response
 
 

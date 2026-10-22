@@ -86,3 +86,25 @@ def require_admin(request):
     if technician is None or technician.role != Technician.Role.ADMIN:
         raise PermissionDenied
     return technician
+
+
+def can_manage_account(actor, target):
+    """Only an admin can change an admin's account, and only the manager
+    tier a manager's — otherwise someone below could reset a password or
+    change an email and sign in as the person above them.
+    """
+    if target.role == Technician.Role.ADMIN:
+        return actor.role == Technician.Role.ADMIN
+    if target.is_manager_tier:
+        return actor.is_manager_tier
+    return True
+
+
+def is_last_active_admin(technician):
+    """The one admin left who can still sign in — never turned off,
+    deactivated or moved to another role, or nobody could reach Roles &
+    permissions or this screen's admin rows again.
+    """
+    return technician.role == Technician.Role.ADMIN and not Technician.objects.filter(
+        role=Technician.Role.ADMIN, is_active=True, user__is_active=True,
+    ).exclude(pk=technician.pk).exists()

@@ -12,6 +12,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.staticfiles.finders import find as find_static_file
+from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
@@ -26,19 +27,21 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import formats, timezone, translation
-from django.utils.crypto import get_random_string
+from django.utils.crypto import get_random_string, salted_hmac
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from rest_framework.authtoken.models import Token
 
+from customers.accounts import log_account_action
 from customers.models import Asset, Customer, Site
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_admin, require_manager, require_permission,
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_admin,
+    require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_removed
@@ -1944,31 +1947,65 @@ def send_ticket_confirmation_to_customer(request, ticket):
     )
 
 
-def send_technician_login_email(request, technician, password):
-    """The one email that actually delivers a new staff login — the
-    temporary password plus a link to the staff-side login page.
-    Best-effort; if it fails, the password is still shown once on screen
-    to whoever created the login.
+# Staff setup links: the same kind of signed, one-time link as the
+# customer portal's (customers.accounts), with their own salt so a link
+# made for one can never open the other.
+STAFF_LINK_SALT = 'tasks.staff-setup-link'
+STAFF_LINK_VALID_DAYS = 7
+
+
+def _staff_link_fingerprint(user):
+    # Changes the moment the password does, so each link works only once.
+    return salted_hmac(STAFF_LINK_SALT, f'{user.pk}:{user.password}').hexdigest()[:20]
+
+
+def make_staff_link_token(user):
+    return signing.dumps({'u': user.pk, 'f': _staff_link_fingerprint(user)}, salt=STAFF_LINK_SALT)
+
+
+def staff_user_for_link_token(token):
+    """The staff login a setup link belongs to, or None if it's tampered
+    with, older than STAFF_LINK_VALID_DAYS, already used, or the login or
+    the person is no longer active."""
+    try:
+        data = signing.loads(token, salt=STAFF_LINK_SALT, max_age=timedelta(days=STAFF_LINK_VALID_DAYS))
+    except signing.BadSignature:
+        return None
+    user = get_user_model().objects.filter(
+        pk=data.get('u'), is_active=True, technician__is_active=True,
+    ).select_related('technician').first()
+    if user is None or data.get('f') != _staff_link_fingerprint(user):
+        return None
+    return user
+
+
+def send_staff_setup_link(request, technician):
+    """Emails a one-time link to set a password: for a new login, or for
+    anyone who can't sign in. No password ever goes by email. False if
+    there's no email address to send it to.
     """
-    link = request.build_absolute_uri(reverse('login'))
+    user = technician.user
+    if not user.email:
+        return False
+    link = request.build_absolute_uri(reverse('tasks:staff_setup', args=[make_staff_link_token(user)]))
+    context = {'contact': technician.full_name, 'username': user.get_username(), 'link': link,
+               'days': STAFF_LINK_VALID_DAYS}
     with translation.override('en'):
-        subject = _('Your Profit Sports Solutions account')
+        subject = _('Set up your Profit Sports Solutions account')
         message = _(
             'Dear %(contact)s,\n\n'
-            'Your Profit Sports Solutions account has been created.\n\n'
-            'Username: %(username)s\n'
-            'Temporary password: %(password)s\n\n'
-            'You will be asked to set your own password when you first sign in.\n\n'
-            'Sign in here:\n'
+            'Your Profit Sports Solutions account is ready. Set your password with the link below. It works '
+            'once and expires in %(days)s days.\n\n'
             '%(link)s\n\n'
+            'Your username: %(username)s\n\n'
+            'If the link has expired, ask your manager for a new one.\n\n'
             'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': technician.full_name, 'username': technician.user.username, 'password': password, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/technician_login_credentials.html',
-        {'contact': technician.full_name, 'username': technician.user.username, 'password': password, 'link': link},
-        [technician.user.email],
-    )
+            'Profit Sports Solutions\n'
+        ) % context
+    _send_notification_email(subject, message, 'tasks/email/staff_setup_link.html', context, [user.email])
+    technician.setup_link_sent_at = timezone.now()
+    technician.save(update_fields=['setup_link_sent_at'])
+    return True
 
 
 def _send_reply_to_customer(request, reply):
@@ -2987,9 +3024,11 @@ def my_skills(request):
 
 
 def sign_out_of_mobile_app(user):
-    """After a password change or reset: the app's sign-in token stops
-    working and that phone stops getting push notifications, so a lost or
-    handed-on phone can't stay signed in on the old password.
+    """When a manager steps in (a temporary password, "Sign out of every
+    phone", a login turned off): the app's sign-in token stops working and
+    that phone stops getting push notifications, so a lost or handed-on
+    phone can't stay signed in. Not when someone changes their own
+    password — that would sign them out of their own phone for nothing.
     """
     Token.objects.filter(user=user).delete()
     PushDevice.objects.filter(technician__user=user).delete()
@@ -3010,6 +3049,36 @@ def _who_to_contact(technician):
     return sorted(people, key=lambda person: (roles.index(person.role), person.full_name))
 
 
+def send_password_changed_email(user, temporary=False):
+    """Tells someone their password changed, so they notice if it wasn't
+    them. In English, like the staff login email. Nothing to send without
+    an email address.
+    """
+    if not user.email:
+        return
+    technician = getattr(user, 'technician', None)
+    contact = technician.full_name if technician else user.get_username()
+    context = {'contact': contact, 'username': user.get_username(), 'temporary': temporary}
+    with translation.override('en'):
+        subject = _('Your Profit Sports Solutions password was changed')
+        if temporary:
+            what = _(
+                'A manager set a temporary password for your Profit Sports Solutions account (username: '
+                '%(username)s). You choose your own the next time you sign in, and the mobile app has signed out.'
+            )
+        else:
+            what = _(
+                'The password for your Profit Sports Solutions account (username: %(username)s) was just '
+                'changed.'
+            )
+        message = _(
+            'Dear %(contact)s,\n\n%(what)s\n\n'
+            "If this wasn't you, contact your manager straight away.\n\n"
+            'Best regards,\nProfit Sports Solutions\n'
+        ) % {'contact': contact, 'what': what % {'username': user.get_username()}}
+    _send_notification_email(subject, message, 'tasks/email/password_changed.html', context, [user.email])
+
+
 @login_required
 def my_profile(request):
     """Everyone's own account screen: photo, language, email and password.
@@ -3026,8 +3095,11 @@ def my_profile(request):
         if password_form.is_valid():
             password_form.save()
             update_session_auth_hash(request, request.user)
-            sign_out_of_mobile_app(request.user)
-            messages.success(request, _('Password changed. Sign in to the mobile app again with the new one.'))
+            # Their own change: phones stay signed in. The email is how a
+            # change they didn't make gets noticed (then a manager signs
+            # every phone out from Staff accounts).
+            send_password_changed_email(request.user)
+            messages.success(request, _('Password changed.'))
             return redirect('tasks:my_profile')
     elif request.method == 'POST':
         password_form = ChangePasswordForm(request.user)
@@ -3595,6 +3667,11 @@ def technician_edit(request, pk):
     technician = _scoped_or_404(
         Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
     )
+    # Someone below this person can look, but not change anything — an
+    # email or password change would let them sign in as them.
+    if request.method == 'POST' and not can_manage_account(requesting_technician, technician):
+        raise PermissionDenied
+    was_last_admin = is_last_active_admin(technician) if technician.is_active else False
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager, is_admin=is_admin)
     deactivate_form = DeactivateTechnicianForm()
@@ -3619,13 +3696,18 @@ def technician_edit(request, pk):
         messages.success(request, _('Trip cancelled.'))
         return redirect('tasks:technician_edit', pk=technician.pk)
 
-    login_form = CreateTechnicianLoginForm() if is_manager and technician.user_id is None else None
-    password_form = NewPasswordForm(user=technician.user) if is_manager and technician.user_id else None
+    can_manage = is_manager and can_manage_account(requesting_technician, technician)
+    login_form = CreateTechnicianLoginForm() if can_manage and technician.user_id is None else None
+    password_form = NewPasswordForm(user=technician.user) if can_manage and technician.user_id else None
 
     if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
         deactivate_form = DeactivateTechnicianForm(request.POST)
+        if was_last_admin:
+            messages.error(request, _("This is the only admin who can sign in, so they can't be deactivated."))
+            return redirect('tasks:technician_edit', pk=technician.pk)
         if deactivate_form.is_valid():
             technician.set_active(False, reason=deactivate_form.cleaned_data['reason'])
+            log_account_action(request, technician, f'Deactivated: {deactivate_form.cleaned_data["reason"]}')
             if _tasks_to_reassign(technician):
                 messages.success(request, _('Deactivated. Reassign their open tasks below.'))
                 return redirect('tasks:technician_edit', pk=technician.pk)
@@ -3636,13 +3718,14 @@ def technician_edit(request, pk):
         login_form = CreateTechnicianLoginForm(request.POST)
         if login_form.is_valid():
             email = login_form.cleaned_data['email']
-            password = _generate_temporary_password()
-            user = get_user_model().objects.create_user(username=email, email=email, password=password)
+            # No password at all until they set one from the emailed link.
+            user = get_user_model().objects.create_user(username=email, email=email)
             technician.user = user
             technician.must_change_password = True
             technician.save(update_fields=['user', 'must_change_password'])
-            send_technician_login_email(request, technician, password)
-            messages.success(request, _('Login created and sent to %(email)s.') % {'email': email})
+            send_staff_setup_link(request, technician)
+            log_account_action(request, technician, f'Staff login created; setup link emailed to {email}')
+            messages.success(request, _('Login created. A setup link was sent to %(email)s.') % {'email': email})
             return redirect('tasks:technician_edit', pk=technician.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
@@ -3654,6 +3737,8 @@ def technician_edit(request, pk):
             technician.must_change_password = True
             technician.save(update_fields=['must_change_password'])
             sign_out_of_mobile_app(technician.user)
+            send_password_changed_email(technician.user, temporary=True)
+            log_account_action(request, technician, 'Staff temporary password set; signed out of the mobile app')
             messages.success(request, _('Password reset. They choose their own the next time they sign in.'))
             return redirect('tasks:technician_edit', pk=technician.pk)
 
@@ -3661,6 +3746,8 @@ def technician_edit(request, pk):
         form = TechnicianEditForm(
             request.POST, request.FILES, instance=technician, is_manager=is_manager, is_admin=is_admin,
         )
+        if form.is_valid() and was_last_admin and form.cleaned_data.get('role', Technician.Role.ADMIN) != Technician.Role.ADMIN:
+            form.add_error('role', _("This is the only admin who can sign in. Make someone else an admin first."))
         if form.is_valid():
             form.save()
             messages.success(request, _('Technician updated.'))
@@ -3782,8 +3869,9 @@ def audit_log(request):
     the actor and a timestamp, for free from Django's own LogEntry.
     Admin-only, same reasoning as Roles & permissions: this is oversight
     of everyone, including other admins, so it stays off the manager-tier
-    floor. Covers /admin/ actions only — the in-app screens' own actions
-    already have their own trail on each task (see TaskEvent).
+    floor. Covers /admin/ actions, plus every account action from Staff
+    and Customer accounts and the edit pages (customers.accounts.
+    log_account_action); task actions have their own trail (TaskEvent).
     """
     require_admin(request)
 

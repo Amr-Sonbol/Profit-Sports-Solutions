@@ -34,7 +34,7 @@
 <div class="section">
     <h2>{% translate "Login" %}</h2>
     <p class="field__help">
-        {% translate "No login yet. Create one and we'll email a temporary password with the sign-in link. They choose their own password the first time they sign in." %}
+        {% translate "No login yet. Create one and they get a one-time link by email to set their own password. No password is emailed." %}
     </p>
     <form method="post" novalidate>
         {% csrf_token %}

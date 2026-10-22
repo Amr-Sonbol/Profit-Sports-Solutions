@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Link no longer works" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Link no longer works" %}</h1>
+</div>
+
+<div class="section">
+    <p>{% blocktranslate with days=days %}This link has expired or was already used. Each link works once, for {{ days }} days.{% endblocktranslate %}</p>
+    <p>{% translate "Ask your manager to send you a new one. If you already set your password, just sign in." %}</p>
+    <p><a href="{% url 'login' %}" class="button">{% translate "Sign in" %}</a></p>
+</div>
+{% endblock %}

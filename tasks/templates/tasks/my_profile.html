@@ -134,7 +134,6 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="change_password">
             {% include "_password_fields.html" with form=password_form %}
-            <p class="field__help">{% translate "Afterwards, sign in to the mobile app again with the new password." %}</p>
             <button type="submit" class="button">{% translate "Save new password" %}</button>
         </form>
     </details>

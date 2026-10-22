@@ -72,6 +72,11 @@
                             {% translate "Customer account locked" %}
                             — {{ notification.customer.name }}
                         </a>
+                        {% elif notification.kind == 'staff_locked' %}
+                        <a href="{% url 'tasks:staff_accounts' %}?status=locked" class="notif-alarm">
+                            {% translate "Staff login locked" %}
+                            — {{ notification.person.full_name }}
+                        </a>
                         {% elif notification.kind == 'task_message' %}
                         <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
                             {% translate "New message" %}

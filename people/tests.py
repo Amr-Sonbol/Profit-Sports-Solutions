@@ -198,9 +198,9 @@ class SidebarGroupsTests(TestCase):
 
 @override_settings(ALLOWED_HOSTS=['testserver'], AXES_ENABLED=True)
 class LoginLockoutTests(TestCase):
-    """django-axes locks an IP out after repeated failed logins — every
-    username here is predictable (supervisor1, manager1, ...), so
-    nothing else in the app throttles guessing. AXES_ENABLED is off by
+    """django-axes locks an account out after repeated failed logins —
+    the account only, never the connection, so co-workers on the same
+    network keep signing in. AXES_ENABLED is off by
     default under the test runner (see settings.py) since Client.login()
     doesn't supply the request object AxesStandaloneBackend requires —
     turned back on here so this class can actually exercise it.
@@ -225,20 +225,29 @@ class LoginLockoutTests(TestCase):
             self.client.post('/accounts/login/', {'username': 'locktest', 'password': 'wrong'})
 
         # Even the correct password is now rejected — the account itself
-        # was never compromised, but this IP is locked out regardless.
+        # was never compromised, but it's locked until the cool-off ends.
         response = self.client.post(
             '/accounts/login/', {'username': 'locktest', 'password': 'correct-horse-battery'},
         )
         self.assertEqual(response.status_code, 429)
 
-    def test_a_different_ip_is_not_affected_by_another_ips_lockout(self):
+    def test_a_colleague_on_the_same_connection_can_still_sign_in(self):
+        User.objects.create_user('colleague', password='another-good-pass')
         for _ in range(5):
             self.client.post(
-                '/accounts/login/', {'username': 'locktest', 'password': 'wrong'},
-                REMOTE_ADDR='10.0.0.1',
+                '/accounts/login/', {'username': 'locktest', 'password': 'wrong'}, REMOTE_ADDR='10.0.0.1',
             )
         response = self.client.post(
-            '/accounts/login/', {'username': 'locktest', 'password': 'correct-horse-battery'},
-            REMOTE_ADDR='10.0.0.2',
+            '/accounts/login/', {'username': 'colleague', 'password': 'another-good-pass'}, REMOTE_ADDR='10.0.0.1',
         )
         self.assertEqual(response.status_code, 302)
+
+    def test_the_locked_account_stays_locked_from_another_connection(self):
+        for _ in range(5):
+            self.client.post(
+                '/accounts/login/', {'username': 'locktest', 'password': 'wrong'}, REMOTE_ADDR='10.0.0.1',
+            )
+        response = self.client.post(
+            '/accounts/login/', {'username': 'locktest', 'password': 'correct-horse-battery'}, REMOTE_ADDR='10.0.0.2',
+        )
+        self.assertEqual(response.status_code, 429)

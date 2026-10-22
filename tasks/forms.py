@@ -506,10 +506,8 @@ class MarkUnavailableForm(forms.Form):
 
 class CreateTechnicianLoginForm(forms.Form):
     """Just an email — it becomes both the login username and the address
-    the temporary password is emailed to (views.send_technician_login_email),
-    same pattern as a customer's own portal login. The password itself is
-    system-generated; the technician sets their own real one the first
-    time they sign in (tasks:first_login).
+    the one-time setup link goes to (views.send_staff_setup_link), where
+    the technician sets their own password. No password is ever emailed.
     """
     email = forms.EmailField(label=_('Email'))
 
