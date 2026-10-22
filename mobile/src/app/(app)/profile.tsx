@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 export default function ProfileScreen() {
   const { me, signOut } = useSession();
   const theme = useTheme();
+  const router = useRouter();
 
   return (
     <ThemedView style={styles.container}>
@@ -23,6 +25,13 @@ export default function ProfileScreen() {
           {me?.role_display ? <ThemedText themeColor="textSecondary">{me.role_display}</ThemedText> : null}
           {me?.country ? <ThemedText themeColor="textSecondary">{me.country}</ThemedText> : null}
         </ThemedView>
+
+        <TouchableOpacity
+          style={[styles.button, { borderColor: theme.backgroundSelected }]}
+          onPress={() => router.push('/change-password')}
+        >
+          <ThemedText>Change password</ThemedText>
+        </TouchableOpacity>
 
         <TouchableOpacity style={[styles.button, { borderColor: theme.danger }]} onPress={signOut}>
           <ThemedText themeColor="danger">Sign out</ThemedText>

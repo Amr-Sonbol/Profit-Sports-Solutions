@@ -18,7 +18,8 @@ from people.push import push_assigned, push_removed
 from reference.models import Part
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm,
+    AddHelperForm, BlockTaskForm, ChangePasswordForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm,
+    TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
@@ -28,8 +29,8 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report, search_tasks, search_tickets, undo_last_tap, undoable_tap,
-    SEARCH_RESULT_LIMIT,
+    report_saved_message, save_work_report, search_tasks, search_tickets, sign_out_of_mobile_app, undo_last_tap,
+    undoable_tap, SEARCH_RESULT_LIMIT,
 )
 
 from .permissions import IsTechnician, has_role_permission, require_role_permission
@@ -72,12 +73,50 @@ def _me_payload(user):
         'role_display': technician.get_role_display(),
         'country': technician.country.display_name,
         'language': technician.language,
+        # Still on a temporary password: the app shows only its "choose
+        # your password" screen until this is false.
+        'must_change_password': technician.must_change_password,
     }
 
 
 class MeView(APIView):
     def get(self, request):
         return Response(_me_payload(request.user))
+
+
+class MyPasswordView(APIView):
+    """Set a password from the app: on a temporary one, just the new
+    password (like the web's first sign-in); otherwise a change that needs
+    the current one (like My profile). Either way every other phone is
+    signed out, and this one gets a fresh token back so it stays in.
+    """
+
+    permission_classes = [IsTechnician]
+    allow_temporary_password = True
+
+    def post(self, request):
+        user = request.user
+        technician = user.technician
+        if technician.must_change_password:
+            form = TechnicianFirstLoginForm(request.data, user=user)
+        else:
+            form = ChangePasswordForm(user, request.data)
+        if not form.is_valid():
+            return Response(
+                {field: [str(error) for error in errors] for field, errors in form.errors.items()},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if technician.must_change_password:
+            user.set_password(form.cleaned_data['new_password1'])
+            user.save(update_fields=['password'])
+            technician.must_change_password = False
+            technician.save(update_fields=['must_change_password'])
+        else:
+            form.save()
+        sign_out_of_mobile_app(user)
+        token = Token.objects.create(user=user)
+        return Response({'token': token.key, **_me_payload(user)})
 
 
 class MyTaskListView(APIView):
@@ -567,6 +606,9 @@ class PushDeviceView(APIView):
     """
 
     permission_classes = [IsTechnician]
+    # The app registers for pushes right after sign-in, before the
+    # "choose your password" screen is done.
+    allow_temporary_password = True
 
     def post(self, request):
         token = str(request.data.get('token', '')).strip()

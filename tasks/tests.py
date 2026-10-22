@@ -3962,8 +3962,35 @@ class MyProfileTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-profile/')
 
-        names = {s.full_name for s in response.context['supervisors']}
-        self.assertEqual(names, {'Sara Super', 'Mona Manager'})
+        # Nearest first: the supervisor, then the manager.
+        names = [person.full_name for person in response.context['contacts']]
+        self.assertEqual(names, ['Sara Super', 'Mona Manager'])
+
+    def test_a_supervisor_sees_only_people_above_them(self):
+        Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+            phone='+971500000000',
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual([person.full_name for person in response.context['contacts']], ['Mona Manager'])
+        self.assertContains(response, 'href="tel:+971500000000"')
+
+    def test_an_admin_sees_their_account_without_field_staff_sections(self):
+        Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
+            full_name='Adam Admin', language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['is_field_staff'])
+        self.assertNotIn('contacts', response.context)
+        self.assertNotIn('certification', response.context)
+        self.assertNotContains(response, 'Who to contact')
+        self.assertNotContains(response, 'Professional skills')
+        self.assertContains(response, 'admin1')
 
     def test_confirmed_skill_shows_up_in_the_overview(self):
         TechnicianSkill.objects.create(

@@ -7,6 +7,14 @@ export interface Me {
   role_display?: string;
   country?: string;
   language?: string;
+  /** Still on a temporary password: only the "choose your password" screen shows. */
+  must_change_password?: boolean;
+}
+
+export interface PasswordInput {
+  old_password?: string;
+  new_password1: string;
+  new_password2: string;
 }
 
 export interface TaskListItem {

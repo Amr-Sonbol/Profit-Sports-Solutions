@@ -842,7 +842,7 @@ class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
     manually in save().
     """
 
-    email = forms.EmailField(required=False, label=_('email'))
+    email = forms.EmailField(required=False, label=_('Email'))
 
     class Meta:
         model = Technician

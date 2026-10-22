@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 
 import { ApiRequestError, clearToken, getToken, setToken as persistToken } from '@/api/client';
 import { fetchMe, login as loginRequest } from '@/api/endpoints';
-import { withOfflineCopy } from '@/offline';
+import { cacheScreenData, withOfflineCopy } from '@/offline';
 import { registerForPush, unregisterForPush } from '@/push';
 import type { Me } from '@/types';
 
@@ -11,6 +11,8 @@ interface AuthContextValue {
   isLoading: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** After a password is set: the server signed out every phone and sent this one a fresh token. */
+  passwordSet: (response: { token: string } & Me) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,7 +76,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setMe(null);
   };
 
-  const value = useMemo(() => ({ me, isLoading, signIn, signOut }), [me, isLoading]);
+  const passwordSet = async (response: { token: string } & Me) => {
+    await persistToken(response.token);
+    const { token: _token, ...profile } = response;
+    // Offline copy too, or a restart with no signal would show the
+    // "choose your password" screen again.
+    cacheScreenData('me', profile);
+    setMe(profile);
+    registerForPush();
+  };
+
+  const value = useMemo(() => ({ me, isLoading, signIn, signOut, passwordSet }), [me, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

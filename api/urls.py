@@ -7,6 +7,7 @@ app_name = 'api'
 urlpatterns = [
     path('login/', views.LoginView.as_view(), name='login'),
     path('me/', views.MeView.as_view(), name='me'),
+    path('me/password/', views.MyPasswordView.as_view(), name='my_password'),
     path('my-tasks/', views.MyTaskListView.as_view(), name='my_task_list'),
     path('my-tasks/<int:pk>/', views.MyTaskDetailView.as_view(), name='my_task_detail'),
     path('my-tasks/<int:pk>/action/', views.MyTaskActionView.as_view(), name='my_task_action'),

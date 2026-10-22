@@ -2995,12 +2995,28 @@ def sign_out_of_mobile_app(user):
     PushDevice.objects.filter(technician__user=user).delete()
 
 
+def _who_to_contact(technician):
+    """The people above this person in their country, nearest first: a
+    technician's supervisors, then managers, then admins; anyone else's
+    managers, then admins. No single supervisor is assigned, so it's
+    everyone in that role. Never the person themselves.
+    """
+    roles = [Technician.Role.MANAGER, Technician.Role.ADMIN]
+    if technician.role == Technician.Role.TECHNICIAN:
+        roles.insert(0, Technician.Role.SUPERVISOR)
+    people = Technician.objects.filter(country=technician.country, is_active=True, role__in=roles).exclude(
+        pk=technician.pk,
+    ).select_related('user')
+    return sorted(people, key=lambda person: (roles.index(person.role), person.full_name))
+
+
 @login_required
 def my_profile(request):
-    """A technician's own account screen — the two fields of their own
-    record that are genuinely theirs to set (photo, language), a password
-    change, and a quick-glance snapshot of standing (certification,
-    90-day track, country) that My progress covers in full detail.
+    """Everyone's own account screen: photo, language, email and password.
+    Field staff also get a snapshot of their standing (certification,
+    90-day track, ranking) that My progress covers in full, and who to go
+    to above them. Managers and admins have neither, so they don't see
+    those sections.
     """
     technician = require_technician(request)
 
@@ -3024,28 +3040,25 @@ def my_profile(request):
         profile_form = MyProfileForm(instance=technician)
         password_form = ChangePasswordForm(request.user)
 
-    certification = _certification_status(technician)
-    leaderboard = _leaderboard(technician.country)
-    rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
-
-    # No single assigned supervisor is tracked — just everyone in this
-    # country a technician can actually go to, same country-scoping as
-    # every other roster in the app.
-    supervisors = Technician.objects.filter(
-        country=technician.country, is_active=True,
-        role__in=[Technician.Role.SUPERVISOR, Technician.Role.MANAGER, Technician.Role.ADMIN],
-    ).order_by('role', 'full_name')
-
     context = {
         'technician': technician,
         'profile_form': profile_form,
         'password_form': password_form,
-        'certification': certification,
-        'ninety_day': _ninety_day_progress(technician, certification),
-        'rank': rank,
-        'leaderboard_size': len(leaderboard),
-        'supervisors': supervisors,
+        'is_field_staff': not technician.is_manager_tier,
     }
+    if not technician.is_manager_tier:
+        certification = _certification_status(technician)
+        leaderboard = _leaderboard(technician.country)
+        context.update({
+            'certification': certification,
+            'ninety_day': _ninety_day_progress(technician, certification),
+            'rank': next(
+                (position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk),
+                None,
+            ),
+            'leaderboard_size': len(leaderboard),
+            'contacts': _who_to_contact(technician),
+        })
     return render(request, 'tasks/my_profile.html', context)
 
 

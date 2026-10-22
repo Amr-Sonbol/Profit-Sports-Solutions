@@ -925,3 +925,61 @@ class ListSearchApiTests(ApiTestCase):
         for text in ('T0042', 'iron temple', '1112233', 'huda'):
             with self.subTest(text=text):
                 self.assertEqual(self._numbers(f'/api/tickets/?q={text}'), ['AE-T0042'])
+
+
+class MyPasswordApiTests(ApiTestCase):
+    # The app's "choose your password" screen and Profile > Change password
+    # (POST /api/me/password/).
+
+    def _post(self, token, body):
+        return self.client.post('/api/me/password/', json.dumps(body), content_type='application/json', **self.auth(token))
+
+    def _put_on_a_temporary_password(self):
+        self.technician.must_change_password = True
+        self.technician.save(update_fields=['must_change_password'])
+
+    def test_sign_in_says_when_the_password_is_temporary(self):
+        self._put_on_a_temporary_password()
+        response = self.client.post(
+            '/api/login/', json.dumps({'username': 'tech1', 'password': 'pass12345'}), content_type='application/json',
+        )
+        self.assertTrue(response.json()['must_change_password'])
+
+    def test_nothing_else_works_until_they_choose_their_own(self):
+        self._put_on_a_temporary_password()
+        token = self.token_for('tech1')
+        response = self.client.get('/api/my-tasks/', **self.auth(token))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['detail'], 'Choose your own password first.')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).status_code, 200)
+
+    def test_choosing_a_password_needs_no_current_one_and_returns_a_fresh_token(self):
+        self._put_on_a_temporary_password()
+        token = self.token_for('tech1')
+        response = self._post(token, {'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'})
+        self.assertEqual(response.status_code, 200)
+        new_token = response.json()['token']
+        self.assertNotEqual(new_token, token)
+        self.assertFalse(response.json()['must_change_password'])
+        self.assertEqual(self.client.get('/api/my-tasks/', **self.auth(new_token)).status_code, 200)
+        self.assertEqual(self.client.get('/api/my-tasks/', **self.auth(token)).status_code, 401)
+        self.tech_user.refresh_from_db()
+        self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
+
+    def test_changing_it_later_needs_the_current_password(self):
+        token = self.token_for('tech1')
+        response = self._post(token, {
+            'old_password': 'wrong', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('old_password', response.json())
+        response = self._post(token, {
+            'old_password': 'pass12345', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertEqual(response.status_code, 200)
+
+    def test_a_weak_password_comes_back_as_a_field_error(self):
+        token = self.token_for('tech1')
+        response = self._post(token, {'old_password': 'pass12345', 'new_password1': '1234', 'new_password2': '1234'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('new_password2', response.json())

@@ -2,7 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
-  Candidate, CataloguePart, Me, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Candidate, CataloguePart, Me, PasswordInput, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -14,6 +14,11 @@ export function login(username: string, password: string) {
 
 export function fetchMe() {
   return apiRequest<Me>('/api/me/');
+}
+
+/** Signs out every other phone; the fresh token returned keeps this one in. */
+export function setMyPassword(input: PasswordInput) {
+  return apiRequest<{ token: string } & Me>('/api/me/password/', { method: 'POST', body: input });
 }
 
 export function fetchMyTasks() {

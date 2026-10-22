@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 19:31+0000\n"
+"POT-Creation-Date: 2026-10-22 19:41+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -87,6 +87,10 @@ msgstr[2] "مهمتان تجاوزتا التقدير بشكل ملحوظ"
 msgstr[3] "%(count)s مهام تجاوزت التقدير بشكل ملحوظ"
 msgstr[4] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
 msgstr[5] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
+
+#, python-format
+msgid "%(days)s days left, behind schedule"
+msgstr "متبقٍ %(days)s يوم، متأخر عن الخطة"
 
 #, python-format
 msgid "%(days)s days remaining"
@@ -297,6 +301,9 @@ msgstr "مقبولة"
 
 msgid "Access notes"
 msgstr "ملاحظات الدخول"
+
+msgid "Account"
+msgstr "الحساب"
 
 msgid "Action"
 msgstr "الإجراء"
@@ -2349,9 +2356,6 @@ msgstr "النتيجة"
 msgid "Overloaded"
 msgstr "محمّل بالعمل أكثر من اللازم"
 
-msgid "Overview"
-msgstr "نظرة عامة"
-
 msgid "PAK reference"
 msgstr "الرقم المرجعي PAK"
 
@@ -2440,9 +2444,6 @@ msgstr "هاتف"
 
 msgid "Photo"
 msgstr "صورة"
-
-msgid "Photo & language"
-msgstr "الصورة واللغة"
 
 msgid "Photo added."
 msgstr "تمت إضافة الصورة."
@@ -3015,6 +3016,9 @@ msgstr "المعروض فقط:"
 msgid "Sick"
 msgstr "مرض"
 
+msgid "Sign-in name"
+msgstr "اسم الدخول"
+
 msgid "Signature pad"
 msgstr "لوحة التوقيع"
 
@@ -3117,9 +3121,6 @@ msgstr "الأحد"
 
 msgid "Supervisor"
 msgstr "مشرف"
-
-msgid "Supervisors"
-msgstr "المشرفون"
 
 msgid "Switch"
 msgstr "تبديل"
@@ -3742,6 +3743,9 @@ msgstr "المكان الذي تُسلَّم إليه قطع الغيار وال
 msgid "Who"
 msgstr "من"
 
+msgid "Who to contact"
+msgstr "جهات التواصل"
+
 msgid "Who's available for work. This covers all tasks, so marking someone unavailable here applies to every assignment."
 msgstr "المتاحون للعمل. يشمل ذلك جميع المهام، لذا فإن تحديد شخص كغير متاح هنا ينطبق على كل مهامه."
 
@@ -3805,6 +3809,9 @@ msgstr "فني Profit Sports Solutions متأخر قليلًا — %(number)s"
 msgid "Your account is ready. Welcome."
 msgstr "حسابك جاهز. مرحباً بك."
 
+msgid "Your details"
+msgstr "بياناتك"
+
 msgid "Your feedback has already been recorded. Thank you for your time."
 msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
@@ -3828,6 +3835,9 @@ msgstr "شحنتك في الطريق إليك — %(reference)s"
 #, python-format
 msgid "Your shipment is on its way — %(task_number)s"
 msgstr "شحنتكم في الطريق — %(task_number)s"
+
+msgid "Your standing"
+msgstr "مستواك"
 
 msgid "Your tasks"
 msgstr "مهامك"
