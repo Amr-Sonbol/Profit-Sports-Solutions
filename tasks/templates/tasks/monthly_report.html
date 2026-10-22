@@ -70,7 +70,7 @@
                 {% for ticket in tickets %}
                 <tr>
                     <td>{{ ticket.country.display_name }}</td>
-                    <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }}</a></td>
+                    <td>{% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }}</a>{% else %}{{ ticket.company_name }}{% endif %}</td>
                     <td>{{ ticket.get_status_display }}</td>
                     <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 </tr>

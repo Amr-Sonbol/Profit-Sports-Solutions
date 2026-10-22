@@ -7711,3 +7711,140 @@ class StaffSetupLinkTests(TaskTestCase):
 
     def test_a_tampered_link_does_nothing(self):
         self.assertEqual(self.client.get('/tasks/setup/not-a-real-token/').status_code, 400)
+
+
+class VisibleLinksTests(TaskTestCase):
+    # Nobody is shown a link they can't use: for every role (and a
+    # customer), follow every link reachable from the home page and fail
+    # on any that's refused, missing, or bounces to sign-in.
+
+    MAX_PAGES = 150
+    SKIP_PREFIXES = ('/static/', '/media/', '/accounts/logout/', '/i18n/')
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='UAE-0901', site=self.site, task_type=self.task_type, description='Belt noise',
+            priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
+            reported_at=timezone.now(), promised_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.IN_PROGRESS, scheduled_for=timezone.now(),
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0901', company_name='Fitness First',
+            site_description='Marina Branch', contact_name='Ali Manager', contact_phone='0501234567',
+            description='Treadmill belt squeaking.', submitted_at=timezone.now(),
+        )
+
+    def _staff(self, username, role):
+        Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345'), country=self.country,
+            full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+        return username
+
+    def _links(self, html):
+        from html.parser import HTMLParser
+
+        found = []
+
+        class Parser(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                href = dict(attrs).get('href')
+                if tag == 'a' and href:
+                    found.append(href)
+
+        Parser().feed(html)
+        return found
+
+    def _crawl(self, username):
+        from urllib.parse import urldefrag
+
+        self.client.logout()
+        self.client.login(username=username, password='pass12345')
+        seen, queue, problems = set(), [('/', None)], []
+        while queue and len(seen) < self.MAX_PAGES:
+            url, found_on = queue.pop(0)
+            if url in seen:
+                continue
+            seen.add(url)
+            response = self.client.get(url)
+            if response.status_code in (403, 404):
+                problems.append(f'{url} -> {response.status_code} (linked from {found_on})')
+                continue
+            if response.status_code == 302:
+                target = response['Location']
+                if '/login' in target:
+                    problems.append(f'{url} -> sign-in (linked from {found_on})')
+                elif target.startswith('/'):
+                    queue.append((target, found_on))
+                continue
+            if 'text/html' not in response.get('Content-Type', ''):
+                continue
+            for href in self._links(response.content.decode()):
+                href = urldefrag(href)[0]
+                if href.startswith('/') and not href.startswith(self.SKIP_PREFIXES) and href not in seen:
+                    queue.append((href, url))
+        return problems
+
+    def test_every_visible_link_opens_for_every_role(self):
+        users = ['tech1', 'supervisor1'] + [
+            self._staff(f'{role}1', role) for role in (
+                Technician.Role.SUPPORT_MANAGER, Technician.Role.COUNTRY_SUPPORT,
+                Technician.Role.WAREHOUSE_MANAGER, Technician.Role.OPERATIONS_MANAGER,
+                Technician.Role.MANAGER, Technician.Role.ADMIN,
+            )
+        ]
+        portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+        users.append('fitnessfirst')
+
+        problems = {username: self._crawl(username) for username in users}
+        problems = {username: found for username, found in problems.items() if found}
+        self.assertEqual(problems, {}, '\n' + '\n'.join(
+            f'{username}: {item}' for username, found in problems.items() for item in found
+        ))
+
+
+class SidebarPerUserTests(TaskTestCase):
+    # The sidebar shows only someone's own pages, marks where they are, and
+    # isn't there at all for customers; a forbidden page looks like a
+    # missing one.
+
+    def test_my_profile_lights_up_the_profile_row_not_tasks(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertTrue(response.context['profile_active'])
+        active = [page['label'] for group in response.context['nav_groups'] for page in group['pages'] if page['active']]
+        self.assertEqual(active, [])
+        self.assertContains(response, 'site-header__profile-link--active')
+
+    def test_a_task_page_still_lights_up_tasks(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/')
+        active = [page['url'] for group in response.context['nav_groups'] for page in group['pages'] if page['active']]
+        self.assertEqual(active, ['/tasks/'])
+
+    def test_customers_get_header_links_and_no_sidebar(self):
+        portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.get('/customers/portal/')
+        self.assertNotContains(response, 'site-header__nav"')
+        self.assertNotContains(response, 'nav-toggle')
+        self.assertContains(response, 'site-header__links')
+        self.assertContains(response, 'aria-current="page"')
+
+    def test_a_forbidden_page_looks_like_a_missing_one(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+        response = self.client.get('/tasks/roles/')
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'Page not found', status_code=403)
+        self.assertNotContains(response, 'permission', status_code=403)

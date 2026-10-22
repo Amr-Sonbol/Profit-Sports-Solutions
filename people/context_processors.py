@@ -137,7 +137,13 @@ def role_permissions(request):
         RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
     )
     pages = nav_pages(technician, allowed)
-    return {'role_permissions': allowed, 'nav_pages': pages, 'nav_groups': nav_groups(pages, request.path)}
+    # My profile is the row at the top of the sidebar, not a menu page; on
+    # it, that row lights up rather than whichever page shares its /tasks/.
+    on_profile = request.path.startswith(reverse('tasks:my_profile'))
+    return {
+        'role_permissions': allowed, 'nav_pages': pages,
+        'nav_groups': nav_groups(pages, '' if on_profile else request.path), 'profile_active': on_profile,
+    }
 
 
 # Sidebar sections, in order. A heading of None is a section without a

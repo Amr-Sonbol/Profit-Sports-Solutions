@@ -24,7 +24,7 @@
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Details" %}</h2>
-        <a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+        {% if 'create_tasks' in role_permissions %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
     </div>
     <dl class="detail-grid">
         <div>
@@ -181,7 +181,7 @@
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Assignment" %}</h2>
-        <a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>
+        {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>{% endif %}
     </div>
     {% if active_lead or active_helpers %}
     <ul class="plain-list">

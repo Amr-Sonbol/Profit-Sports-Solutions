@@ -6,7 +6,7 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:task_list' %}" class="back-link">{% translate "Back to tasks" %}</a>
+        {% if 'view_tasks' in role_permissions %}<a href="{% url 'tasks:task_list' %}" class="back-link">{% translate "Back to tasks" %}</a>{% endif %}
         <h1>{% translate "New task" %}</h1>
     </div>
 </div>
@@ -186,7 +186,7 @@
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
                     </td>
-                    <td><a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a></td>
+                    <td>{% if 'view_technicians' in role_permissions %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -105,7 +105,7 @@
                         {% endif %}
                         {% else %}
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
-                        <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
+                        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>{% endif %}
                         {% if 'manage_technicians' in role_permissions %}
                         <a href="{% url 'tasks:technician_edit' row.technician.pk %}">{% translate "Edit photo" %}</a>
                         {% endif %}

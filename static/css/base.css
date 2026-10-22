@@ -10,6 +10,8 @@
     --color-muted: #5c5c5c;
     --color-accent: #000000;
     --color-neutral-bg: #ececec;
+    /* The header bar's height on desktop, where the sidebar starts below it. */
+    --header-height: 3.75rem;
     --color-hover: #ebebeb;
     /* The only colours besides black and grey: red = blocked or urgent,
        amber = waiting on someone, green = confirmed good. */
@@ -249,13 +251,22 @@ html[dir="rtl"] .site-header__nav {
     border-block-start: 1px solid var(--color-border);
 }
 
-/* Desktop: the sidebar stays open and the page sits beside it, so the
-   menu button and overlay go away. Same physical left side as the
-   slide-in panel above, for the same reason, so the page offset is a
-   physical padding-left too. */
+/* Desktop: the header runs across the full width and stays at the top;
+   the sidebar stays open below it, and only the page content moves aside
+   (centred in the space that's left). The menu button and overlay go
+   away. Same physical left side as the slide-in panel above, for the
+   same reason, so the page offset is a physical margin-left too. */
 @media (min-width: 1024px) {
+    .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 25;
+        block-size: var(--header-height);
+    }
+
     .site-header__nav,
     .nav-toggle:checked ~ .site-header__nav {
+        top: var(--header-height);
         left: 0;
         width: 16rem;
         box-shadow: none;
@@ -263,14 +274,48 @@ html[dir="rtl"] .site-header__nav {
         transition: none;
     }
 
-    .nav-toggle-button,
+    /* The three-line button stays: here it hides or shows the sidebar
+       (static/js/sidebar.js) instead of opening the slide-in menu. */
     .nav-toggle:checked ~ .nav-overlay {
         display: none;
     }
 
-    body:has(.site-header__nav) {
-        padding-left: 16rem;
+    body:has(.site-header__nav) .page {
+        margin-left: calc(16rem + max(0px, (100% - 16rem - 72rem) / 2));
+        margin-right: auto;
     }
+
+    .sidebar-collapsed .site-header__nav,
+    .sidebar-collapsed .nav-toggle:checked ~ .site-header__nav {
+        left: -18rem;
+    }
+
+    .sidebar-collapsed body:has(.site-header__nav) .page {
+        margin-left: auto;
+    }
+}
+
+/* My profile open: the profile row at the top of the sidebar is the
+   current page, marked like an active menu link. */
+.site-header__profile-link--active {
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: 6px;
+    padding-inline: 0.625rem;
+}
+
+/* Customers and other logins without a menu: their links in the header,
+   right after the language switch (which already sits at the far end). */
+.site-header__links {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    margin-inline-start: 0.5rem;
+}
+
+.site-header__links form {
+    margin: 0;
 }
 
 /* The notification bell — pushed to the far end of the header (opposite

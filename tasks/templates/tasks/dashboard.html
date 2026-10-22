@@ -42,7 +42,7 @@
             <tbody>
                 {% for task in tasks %}
                 <tr>
-                    <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
+                    <td>{% if task_list_url %}<a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>{% else %}<span class="task-number">{{ task.task_number }}</span>{% endif %}</td>
                     <td class="cell-wrap">{{ task.site.customer.name }}<br><span class="muted">{{ task.site.name }}</span></td>
                     <td>{% if task.lead_technician %}{{ task.lead_technician.full_name }}{% else %}<span class="badge badge--status-new">{% translate "Unassigned" %}</span>{% endif %}</td>
                     <td>

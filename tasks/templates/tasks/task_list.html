@@ -15,7 +15,7 @@
     </nav>
     <div class="button-row">
         <a href="{% url 'tasks:task_week' %}" class="button button--secondary">{% translate "Week view" %}</a>
-        <a href="{% url 'tasks:task_create' %}" class="button">{% translate "New task" %}</a>
+        {% if 'create_tasks' in role_permissions %}<a href="{% url 'tasks:task_create' %}" class="button">{% translate "New task" %}</a>{% endif %}
     </div>
 </div>
 

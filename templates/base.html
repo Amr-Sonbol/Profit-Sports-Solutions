@@ -8,12 +8,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@800&family=Cairo:wght@800&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v={{ css_version }}">
+    {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
+    <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
 <body>
     <header class="site-header">
-        {% if user.is_authenticated %}
+        {% if user.technician %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
-            <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}">
+            <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}" role="button" tabindex="0" aria-expanded="false">
                 <span></span><span></span><span></span>
             </label>
         {% endif %}
@@ -111,11 +113,26 @@
                 <button type="submit" name="language" value="ar" class="lang-switch__option {% if LANGUAGE_CODE == 'ar' %}lang-switch__option--active{% endif %}">AR</button>
             </form>
         </div>
-        {% if user.is_authenticated %}
+        {% if user.is_authenticated and not user.technician %}
+            {# Customers (and any login without a staff record) have a page or two, not a menu: their links sit in the header. #}
+            <nav class="site-header__links">
+                {% if user.customer %}
+                {% url 'customers:portal_home' as portal_url %}
+                <a href="{{ portal_url }}" class="nav-link{% if request.path == portal_url %} nav-link--active{% endif %}"{% if request.path == portal_url %} aria-current="page"{% endif %}>{% translate "My account" %}</a>
+                {% else %}
+                <span class="site-header__user">{{ user.get_username }}</span>
+                {% endif %}
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="link-button">{% translate "Log out" %}</button>
+                </form>
+            </nav>
+        {% endif %}
+        {% if user.technician %}
             <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
                 {% if user.technician %}
-                <a href="{% url 'tasks:my_profile' %}" class="site-header__profile-link">
+                <a href="{% url 'tasks:my_profile' %}" class="site-header__profile-link{% if profile_active %} site-header__profile-link--active{% endif %}"{% if profile_active %} aria-current="page"{% endif %}>
                     {% include "_avatar.html" with technician=user.technician %}
                     {{ user.technician.full_name }}
                 </a>
@@ -144,13 +161,7 @@
                     {% endfor %}
                 </div>
                 {% endfor %}
-                {% if user.customer %}
-                    <a href="{% url 'customers:portal_home' %}" class="nav-link">{% translate "My account" %}</a>
-                {% endif %}
                 <div class="site-header__nav-footer">
-                    {% if not user.technician %}
-                    <span class="site-header__user">{{ user.get_username }}</span>
-                    {% endif %}
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
                         <button type="submit" class="link-button">{% translate "Log out" %}</button>
@@ -170,6 +181,7 @@
         {% block content %}{% endblock %}
     </main>
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
+{% if user.technician %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 20:15+0000\n"
+"POT-Creation-Date: 2026-10-22 20:40+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2243,9 +2243,6 @@ msgstr "لم يتم إرسال أي شيء"
 msgid "Normal"
 msgstr "عادية"
 
-msgid "Not allowed"
-msgstr "غير مسموح"
-
 msgid "Not at the site"
 msgstr "ليس في الموقع"
 
@@ -3933,9 +3930,6 @@ msgstr "تتلقى هذه الرسالة لأنه تم طلب إعادة تعي�
 
 msgid "You can't turn off your own login."
 msgstr "لا يمكنك إيقاف حساب دخولك."
-
-msgid "You don't have permission to do this. If that seems wrong, ask a manager or administrator."
-msgstr "لا تملك صلاحية القيام بذلك. إذا بدا لك هذا خطأ، تواصل مع مدير أو مسؤول النظام."
 
 msgid "You have not submitted any tickets."
 msgstr "لم تقدّم أي تذاكر."
