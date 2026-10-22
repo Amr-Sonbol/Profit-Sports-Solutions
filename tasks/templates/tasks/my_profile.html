@@ -95,27 +95,16 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Security" %}</h2>
-    <input type="checkbox" id="toggle-change-password" class="toggle-checkbox" hidden {% if password_form.errors %}checked{% endif %}>
-    <label for="toggle-change-password" class="add-new-toggle">{% translate "Change password" %}</label>
-    <fieldset class="new-item-fieldset">
-        <legend>{% translate "Change password" %}</legend>
-        <form method="post" novalidate>
+    <h2>{% translate "Password" %}</h2>
+    <details class="disclosure"{% if password_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "Change password" %}</summary>
+        <form method="post" class="disclosure__body" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="change_password">
-            {% if password_form.non_field_errors %}
-                <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
-            {% endif %}
-            {% for field in password_form %}
-            <div class="field {% if field.errors %}field--error{% endif %}">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<div class="field__help">{{ field.help_text }}</div>{% endif %}
-                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
-            {% endfor %}
-            <button type="submit" class="button">{% translate "Change password" %}</button>
+            {% include "_password_fields.html" with form=password_form %}
+            <p class="field__help">{% translate "Afterwards, sign in to the mobile app again with the new password." %}</p>
+            <button type="submit" class="button">{% translate "Save new password" %}</button>
         </form>
-    </fieldset>
+    </details>
 </div>
 {% endblock %}

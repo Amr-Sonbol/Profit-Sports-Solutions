@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model, password_validation
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import Country
+from tasks.forms import new_password_fields
 from tasks.location import parse_coordinates
 
 from .models import Customer, Site
@@ -41,8 +42,7 @@ class CustomerFirstLoginForm(forms.Form):
         label=_('Delivery address'), widget=forms.Textarea(attrs={'rows': 3}),
         help_text=_('Where spare and replacement parts should be delivered.'),
     )
-    new_password1 = forms.CharField(widget=forms.PasswordInput, label=_('New password'))
-    new_password2 = forms.CharField(widget=forms.PasswordInput, label=_('Confirm new password'))
+    new_password1, new_password2 = new_password_fields()
 
     def __init__(self, *args, user, **kwargs):
         self.user = user

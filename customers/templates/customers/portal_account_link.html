@@ -25,6 +25,7 @@
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
+        {% include "_show_password.html" %}
         <button type="submit" class="button">{% if first_time %}{% translate "Activate my account" %}{% else %}{% translate "Set a new password" %}{% endif %}</button>
     </form>
 </div>

@@ -1327,6 +1327,37 @@ tbody tr:hover {
     margin-block: 0.15rem;
 }
 
+/* A button that opens a form below it (<details>/<summary>), for actions
+   like changing a password that shouldn't sit open on the page. Works
+   from the keyboard with no script. */
+.disclosure > summary {
+    list-style: none;
+    display: inline-flex;
+    cursor: pointer;
+}
+
+.disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+.disclosure[open] > summary {
+    margin-block-end: 1rem;
+}
+
+.disclosure__body {
+    max-width: 28rem;
+}
+
+.show-password {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    margin-block: 0 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
 .field__error {
     margin: 0.3rem 0 0;
     color: var(--color-danger);

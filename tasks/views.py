@@ -11,7 +11,6 @@ from django.contrib import messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.contrib.staticfiles.finders import find as find_static_file
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import default_storage
@@ -31,10 +30,11 @@ from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from rest_framework.authtoken.models import Token
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
+    RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
@@ -47,7 +47,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    AddHelperForm, AssignTicketForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
+    AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
@@ -2986,6 +2986,15 @@ def my_skills(request):
     return render(request, 'tasks/my_skills.html', context)
 
 
+def sign_out_of_mobile_app(user):
+    """After a password change or reset: the app's sign-in token stops
+    working and that phone stops getting push notifications, so a lost or
+    handed-on phone can't stay signed in on the old password.
+    """
+    Token.objects.filter(user=user).delete()
+    PushDevice.objects.filter(technician__user=user).delete()
+
+
 @login_required
 def my_profile(request):
     """A technician's own account screen — the two fields of their own
@@ -2997,14 +3006,15 @@ def my_profile(request):
 
     if request.method == 'POST' and request.POST.get('action') == 'change_password':
         profile_form = MyProfileForm(instance=technician)
-        password_form = PasswordChangeForm(request.user, request.POST)
+        password_form = ChangePasswordForm(request.user, request.POST)
         if password_form.is_valid():
             password_form.save()
             update_session_auth_hash(request, request.user)
-            messages.success(request, _('Password changed.'))
+            sign_out_of_mobile_app(request.user)
+            messages.success(request, _('Password changed. Sign in to the mobile app again with the new one.'))
             return redirect('tasks:my_profile')
     elif request.method == 'POST':
-        password_form = PasswordChangeForm(request.user)
+        password_form = ChangePasswordForm(request.user)
         profile_form = MyProfileForm(request.POST, request.FILES, instance=technician)
         if profile_form.is_valid():
             profile_form.save()
@@ -3012,7 +3022,7 @@ def my_profile(request):
             return redirect('tasks:my_profile')
     else:
         profile_form = MyProfileForm(instance=technician)
-        password_form = PasswordChangeForm(request.user)
+        password_form = ChangePasswordForm(request.user)
 
     certification = _certification_status(technician)
     leaderboard = _leaderboard(technician.country)
@@ -3597,7 +3607,7 @@ def technician_edit(request, pk):
         return redirect('tasks:technician_edit', pk=technician.pk)
 
     login_form = CreateTechnicianLoginForm() if is_manager and technician.user_id is None else None
-    password_form = SetPasswordForm(user=technician.user) if is_manager and technician.user_id else None
+    password_form = NewPasswordForm(user=technician.user) if is_manager and technician.user_id else None
 
     if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
         deactivate_form = DeactivateTechnicianForm(request.POST)
@@ -3623,10 +3633,15 @@ def technician_edit(request, pk):
             return redirect('tasks:technician_edit', pk=technician.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
-        password_form = SetPasswordForm(user=technician.user, data=request.POST)
+        password_form = NewPasswordForm(user=technician.user, data=request.POST)
         if password_form.is_valid():
             password_form.save()
-            messages.success(request, _('Password reset.'))
+            # Temporary: they choose their own at their next sign-in, so
+            # the manager who typed it doesn't keep knowing it.
+            technician.must_change_password = True
+            technician.save(update_fields=['must_change_password'])
+            sign_out_of_mobile_app(technician.user)
+            messages.success(request, _('Password reset. They choose their own the next time they sign in.'))
             return redirect('tasks:technician_edit', pk=technician.pk)
 
     elif request.method == 'POST':

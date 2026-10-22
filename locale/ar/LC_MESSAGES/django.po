@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 14:51+0000\n"
+"POT-Creation-Date: 2026-10-22 19:31+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -422,6 +422,9 @@ msgstr "المستوى المتقدم"
 msgid "After"
 msgstr "بعد"
 
+msgid "Afterwards, sign in to the mobile app again with the new password."
+msgstr "بعد ذلك، سجّل الدخول إلى تطبيق الجوال مرة أخرى بكلمة المرور الجديدة."
+
 msgid "All"
 msgstr "الكل"
 
@@ -511,6 +514,9 @@ msgstr "التعيين"
 
 msgid "Assisted on"
 msgstr "شارك كمساعد في"
+
+msgid "At least 8 characters, not all numbers, and not a common password or close to your name."
+msgstr "8 أحرف على الأقل، وليست أرقامًا فقط، وليست كلمة مرور شائعة أو قريبة من اسمك."
 
 msgid "At the site"
 msgstr "في الموقع"
@@ -899,6 +905,9 @@ msgstr "العملة"
 
 msgid "Current"
 msgstr "الحالي"
+
+msgid "Current password"
+msgstr "كلمة المرور الحالية"
 
 msgid "Current tasks"
 msgstr "المهام الحالية"
@@ -2393,14 +2402,17 @@ msgstr "تم تغيير كلمة المرور"
 msgid "Password changed."
 msgstr "تم تغيير كلمة المرور."
 
+msgid "Password changed. Sign in to the mobile app again with the new one."
+msgstr "تم تغيير كلمة المرور. سجّل الدخول إلى تطبيق الجوال مرة أخرى بالكلمة الجديدة."
+
 msgid "Password reset"
 msgstr "إعادة تعيين كلمة المرور"
 
 msgid "Password reset for your Profit Sports Solutions account"
 msgstr "إعادة تعيين كلمة المرور لحساب Profit Sports Solutions الخاص بك"
 
-msgid "Password reset."
-msgstr "تمت إعادة تعيين كلمة المرور."
+msgid "Password reset. They choose their own the next time they sign in."
+msgstr "تمت إعادة تعيين كلمة المرور. سيختار كلمة مروره عند تسجيل الدخول التالي."
 
 msgid "Paste coordinates (e.g. 25.0772, 55.1306) or a full Google Maps link. If you leave it blank, it's set when the first technician taps “Arrived” here."
 msgstr "الصق الإحداثيات (مثل 25.0772, 55.1306) أو رابط خرائط Google كاملًا. إذا تركته فارغًا، يُحدَّد عندما يضغط أول فني على “وصل” في هذا الموقع."
@@ -2768,6 +2780,9 @@ msgstr "حفظ التغييرات"
 msgid "Save correction"
 msgstr "حفظ التصحيح"
 
+msgid "Save new password"
+msgstr "حفظ كلمة المرور الجديدة"
+
 msgid "Save report"
 msgstr "حفظ التقرير"
 
@@ -2821,9 +2836,6 @@ msgstr "البحث بالاسم أو البريد الإلكتروني"
 
 msgid "Search by serial, model, brand, site, or customer"
 msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلامة التجارية أو الموقع أو العميل"
-
-msgid "Security"
-msgstr "الأمان"
 
 #, python-format
 msgid "See all %(count)s"
@@ -2952,14 +2964,20 @@ msgstr "تحديد المستوى"
 msgid "Set new password"
 msgstr "تعيين كلمة مرور جديدة"
 
+msgid "Set temporary password"
+msgstr "تعيين كلمة مرور مؤقتة"
+
 msgid "Set time"
 msgstr "تحديد الوقت"
 
 msgid "Set your password and complete your company details. Next time you'll go straight to your account."
 msgstr "عيّن كلمة المرور وأكمل بيانات شركتك. في المرة القادمة ستنتقل مباشرة إلى حسابك."
 
-msgid "Sets a new password straight away. The current password isn't needed."
-msgstr "يعيّن كلمة مرور جديدة مباشرة، دون الحاجة إلى كلمة المرور الحالية."
+msgid "Sets a temporary password. They choose their own the next time they sign in, and the mobile app signs them out."
+msgstr "يعيّن كلمة مرور مؤقتة. سيختار كلمة مروره عند تسجيل الدخول التالي، ويُسجَّل خروجه من تطبيق الجوال."
+
+msgid "Sets a temporary password. They choose their own the next time they sign in."
+msgstr "يعيّن كلمة مرور مؤقتة. سيختار كلمة مروره عند تسجيل الدخول التالي."
 
 msgid "Share their login page: "
 msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
@@ -2984,6 +3002,9 @@ msgstr "عرض العملاء الموقوفين"
 
 msgid "Show deactivated technicians"
 msgstr "عرض الفنيين الموقوفين"
+
+msgid "Show passwords"
+msgstr "إظهار كلمات المرور"
 
 msgid "Show tasks"
 msgstr "عرض المهام"

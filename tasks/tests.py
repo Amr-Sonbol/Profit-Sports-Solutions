@@ -15,9 +15,10 @@ from django.utils import timezone
 
 from customers.models import Asset, Customer, Site
 from people.models import (
-    RELIABLE_LEVEL, NotificationSettings, RolePermission, Technician, TechnicianConduct,
+    RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
 )
+from rest_framework.authtoken.models import Token
 from reference.models import Brand, ConductArea, Country, Skill, TaskType
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
@@ -4017,6 +4018,8 @@ class MyProfileTests(TaskTestCase):
         self.assertEqual(response.context['profile_form'].fields['email'].initial, 'tarek@example.com')
 
     def test_technician_changes_own_password(self):
+        Token.objects.create(user=self.tech_user)
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[old]', created_at=timezone.now())
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post('/tasks/my-profile/', {
             'action': 'change_password', 'old_password': 'pass12345',
@@ -4029,8 +4032,21 @@ class MyProfileTests(TaskTestCase):
         response = self.client.get('/tasks/my-profile/')
         self.assertEqual(response.status_code, 200)
 
+        # The old phone is signed out of the app and stops getting pushes.
+        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertFalse(PushDevice.objects.filter(technician=self.technician).exists())
+
         self.client.logout()
         self.assertTrue(self.client.login(username='tech1', password='new-pass-98765'))
+
+    def test_password_form_shows_plain_rules_and_a_show_passwords_switch(self):
+        self.technician.language = 'en'  # tech1's fixture language is Arabic
+        self.technician.save(update_fields=['language'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-profile/')
+        self.assertContains(response, 'At least 8 characters')
+        self.assertContains(response, 'data-show-password')
+        self.assertNotContains(response, 'can’t be too similar')
 
     def test_wrong_old_password_is_rejected(self):
         self.client.login(username='tech1', password='pass12345')
@@ -4746,6 +4762,7 @@ class TechnicianLoginTests(TaskTestCase):
 
     def test_manager_can_reset_an_existing_password(self):
         # self.technician (tech1) already has a login, from TaskTestCase.
+        Token.objects.create(user=self.tech_user)
         self.client.login(username='manager1', password='pass12345')
         response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
             'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
@@ -4753,6 +4770,11 @@ class TechnicianLoginTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
         self.tech_user.refresh_from_db()
         self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
+        # Temporary: the technician picks their own next time, and the
+        # app on their phone has to sign in again.
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.must_change_password)
+        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
 
     def test_no_login_form_once_one_exists(self):
         self.client.login(username='manager1', password='pass12345')
@@ -7391,3 +7413,26 @@ class TeamMapTests(TodayTestsMixin, TaskTestCase):
     def test_technician_cannot_open_it(self):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/technicians/map/').status_code, 403)
+
+
+class StaffPasswordResetLinkTests(TaskTestCase):
+    # Django's emailed "forgot password" link (spots.views.PasswordResetConfirmView).
+
+    def test_new_password_from_the_link_signs_the_app_out(self):
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        Token.objects.create(user=self.tech_user)
+        uid = urlsafe_base64_encode(force_bytes(self.tech_user.pk))
+        token = default_token_generator.make_token(self.tech_user)
+        # Django swaps the token for "set-password" in the URL on the first visit.
+        response = self.client.get(f'/accounts/reset/{uid}/{token}/', follow=True)
+        self.assertContains(response, 'At least 8 characters')
+        response = self.client.post(response.redirect_chain[-1][0], {
+            'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        self.assertRedirects(response, '/accounts/reset/done/')
+        self.tech_user.refresh_from_db()
+        self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
+        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())

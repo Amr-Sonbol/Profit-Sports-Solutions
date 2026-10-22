@@ -5,7 +5,7 @@ from axes.utils import reset as axes_reset
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
+from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -21,7 +21,7 @@ from django.utils.translation import gettext as _
 from people.models import RolePermission, Technician
 from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
 from reference.models import Country
-from tasks.forms import CustomerPortalTicketForm
+from tasks.forms import CustomerPortalTicketForm, NewPasswordForm
 from tasks.models import CustomerTicketAttachment, Task, TicketNotification
 from tasks.views import save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer
 
@@ -151,7 +151,7 @@ def customer_edit(request, pk):
 
     form = CustomerEditForm(instance=customer)
     login_form = CreateLoginForm() if is_manager and customer.user_id is None else None
-    password_form = SetPasswordForm(user=customer.user) if is_manager and customer.user_id else None
+    password_form = NewPasswordForm(user=customer.user) if is_manager and customer.user_id else None
     deactivate_form = DeactivateCustomerForm()
 
     if request.method == 'POST' and request.POST.get('action') == 'create_login' and login_form is not None:
@@ -166,10 +166,13 @@ def customer_edit(request, pk):
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
-        password_form = SetPasswordForm(user=customer.user, data=request.POST)
+        password_form = NewPasswordForm(user=customer.user, data=request.POST)
         if password_form.is_valid():
             password_form.save()
-            messages.success(request, _('Password reset.'))
+            # Temporary, same as a technician's: they choose their own next time.
+            customer.must_change_password = True
+            customer.save(update_fields=['must_change_password'])
+            messages.success(request, _('Password reset. They choose their own the next time they sign in.'))
             return redirect('customers:customer_edit', pk=customer.pk)
 
     elif request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
@@ -678,7 +681,7 @@ def portal_account_link(request, token):
     if first_time:
         form = CustomerFirstLoginForm(request.POST or None, user=user, initial=_setup_initial(customer))
     else:
-        form = SetPasswordForm(user=user, data=request.POST or None)
+        form = NewPasswordForm(user=user, data=request.POST or None)
     if request.method == 'POST' and form.is_valid():
         if first_time:
             _complete_setup(customer, user, form)

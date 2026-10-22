@@ -317,6 +317,8 @@ class CustomerEditTests(CustomerTestCase):
         self.assertEqual(response.status_code, 302)
         portal_user.refresh_from_db()
         self.assertTrue(portal_user.check_password('br4nd-New-Pass!'))
+        self.customer.refresh_from_db()
+        self.assertTrue(self.customer.must_change_password)
 
     def test_manager_can_reach_a_customer_in_another_country(self):
         other_country = Country.objects.create(

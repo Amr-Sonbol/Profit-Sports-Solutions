@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseRedirect
 from django.utils import translation
@@ -6,7 +7,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.shortcuts import redirect, render
 
-from tasks.views import home_summary
+from tasks.forms import NewPasswordForm
+from tasks.views import home_summary, sign_out_of_mobile_app
 
 
 @require_POST
@@ -48,6 +50,19 @@ def set_language(request):
             httponly=settings.LANGUAGE_COOKIE_HTTPONLY, samesite=settings.LANGUAGE_COOKIE_SAMESITE,
         )
     return response
+
+
+class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
+    """Django's emailed "forgot password" link, with the same plain
+    password form as everywhere else — and, like any password change,
+    it signs the mobile app out.
+    """
+    form_class = NewPasswordForm
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        sign_out_of_mobile_app(form.user)
+        return response
 
 
 @login_required

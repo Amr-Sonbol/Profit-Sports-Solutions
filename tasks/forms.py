@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import forms as auth_forms
 from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
@@ -527,14 +528,47 @@ class DeactivateTechnicianForm(forms.Form):
     reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
 
 
+# One plain line for AUTH_PASSWORD_VALIDATORS, instead of Django's own
+# four-bullet list, on every screen where someone picks a password.
+PASSWORD_RULES = _('At least 8 characters, not all numbers, and not a common password or close to your name.')
+
+
+def new_password_fields():
+    """The (new_password1, new_password2) pair every set-a-password form uses."""
+    return (
+        forms.CharField(
+            label=_('New password'), help_text=PASSWORD_RULES, strip=False,
+            widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+        ),
+        forms.CharField(
+            label=_('Confirm new password'), strip=False,
+            widget=forms.PasswordInput(attrs={'autocomplete': 'new-password'}),
+        ),
+    )
+
+
+class ChangePasswordForm(auth_forms.PasswordChangeForm):
+    """My profile: change your own password, with plain labels."""
+    new_password1, new_password2 = new_password_fields()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['old_password'].label = _('Current password')
+
+
+class NewPasswordForm(auth_forms.SetPasswordForm):
+    """Set a password without the current one: a manager's reset, or a
+    customer's emailed link."""
+    new_password1, new_password2 = new_password_fields()
+
+
 class TechnicianFirstLoginForm(forms.Form):
     """Shown once, the first time a technician signs in on a temporary
     password — just the password itself; everything else about their own
     record (photo, language) is already editable any time from My profile,
     not a one-time gate the way a customer's contact details are.
     """
-    new_password1 = forms.CharField(widget=forms.PasswordInput, label=_('New password'))
-    new_password2 = forms.CharField(widget=forms.PasswordInput, label=_('Confirm new password'))
+    new_password1, new_password2 = new_password_fields()
 
     def __init__(self, *args, user, **kwargs):
         self.user = user

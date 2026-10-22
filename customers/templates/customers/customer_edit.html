@@ -38,21 +38,16 @@
         {% blocktranslate %}Share their login page: {% endblocktranslate %}
         <a href="{% url 'customers:portal_login' %}">{% url 'customers:portal_login' %}</a>
     </p>
-    <form method="post" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="reset_password">
-        {% if password_form.non_field_errors %}
-            <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
-        {% endif %}
-        {% for field in password_form %}
-        <div class="field {% if field.errors %}field--error{% endif %}">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        {% endfor %}
-        <button type="submit" class="button button--secondary">{% translate "Reset password" %}</button>
-    </form>
+    <details class="disclosure"{% if password_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "Reset password" %}</summary>
+        <form method="post" class="disclosure__body" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reset_password">
+            <p class="field__help">{% translate "Sets a temporary password. They choose their own the next time they sign in." %}</p>
+            {% include "_password_fields.html" with form=password_form %}
+            <button type="submit" class="button">{% translate "Set temporary password" %}</button>
+        </form>
+    </details>
     {% else %}
     <p class="field__help">
         {% translate "No portal login yet. Create one so this customer can follow their tickets and service history. We'll email a temporary password with the sign-in link. They choose their own password and confirm their contact details the first time they sign in." %}
