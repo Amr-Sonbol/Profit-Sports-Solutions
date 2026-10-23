@@ -3649,6 +3649,27 @@ class MyProgressTests(TaskTestCase):
 
         self.assertEqual(response.context['completed_count'], 1)
 
+    def test_my_progress_charts_my_own_tasks_per_month(self):
+        now = timezone.now()
+        mine, other = [
+            Task.objects.create(
+                task_number=number, site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=now, created_by=self.supervisor_user,
+            )
+            for number in ('AE-0901', 'AE-0902')
+        ]
+        TaskAssignment.objects.create(
+            task=mine, technician=self.technician, role=TaskAssignment.Role.LEAD, assigned_at=now, is_active=True,
+        )
+        for task in (mine, other):  # someone else's task doesn't count
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=now, actor=self.tech_user,
+            )
+        self.client.login(username='tech1', password='pass12345')
+        chart = self.client.get('/tasks/my-progress/').context['tasks_chart']
+        self.assertEqual(len(chart['periods']), 12)
+        self.assertEqual((chart['periods'][-1]['opened'], chart['periods'][-1]['completed']), (1, 1))
+
     def test_my_progress_shows_a_chosen_past_month_but_never_a_future_one(self):
         self.client.login(username='tech1', password='pass12345')
         this_month = timezone.localdate().replace(day=1)

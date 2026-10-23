@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 19:37+0000\n"
+"POT-Creation-Date: 2026-10-23 19:47+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -4413,6 +4413,9 @@ msgstr "شحنتك في الطريق إليك — %(reference)s"
 #, python-format
 msgid "Your shipment is on its way — %(task_number)s"
 msgstr "شحنتكم في الطريق — %(task_number)s"
+
+msgid "Your tasks per month"
+msgstr "مهامك شهريًا"
 
 msgid "Your ticket has been converted into a service task. We will contact you to schedule a visit."
 msgstr "تم تحويل تذكرتكم إلى مهمة خدمة. سنتواصل معكم لتحديد موعد الزيارة."

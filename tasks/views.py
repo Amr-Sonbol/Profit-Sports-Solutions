@@ -1205,6 +1205,22 @@ def _tasks_chart(country, period):
     return _period_chart(opened, completed, period)
 
 
+def _my_tasks_chart(technician):
+    """One person's own tasks per month (My progress): the tasks they were
+    put on (first assignment, lead or helper) vs those tasks' first work
+    report. Same chart and months as the dashboard's tasks chart.
+    """
+    since = _period_starts('month')[0]
+    mine = TaskAssignment.objects.filter(technician=technician)
+    assigned = mine.values('task_id').annotate(first=Min('assigned_at')).filter(
+        first__date__gte=since,
+    ).values_list('first', flat=True)
+    completed = TaskEvent.objects.filter(
+        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine.values('task_id'),
+    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
+    return _period_chart(assigned, completed, 'month')
+
+
 def _tickets_chart(country, period):
     """Customer tickets received vs resolved (converted, dismissed or closed: reviewed_at), per period."""
     since = _period_starts(period)[0]
@@ -3275,6 +3291,7 @@ def my_progress(request):
     )
 
     context = {
+        'tasks_chart': _my_tasks_chart(technician),
         'month_first': month_first,
         'prev_month': _shift_month(month_first, -1),
         'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
