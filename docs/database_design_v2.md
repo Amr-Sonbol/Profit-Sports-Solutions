@@ -437,7 +437,7 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 **`responsible_supervisor` is who owns getting the task staffed — separate from, and set independently of, who's actually assigned to do the work.** Optional at creation, and picked from the same pool `customer_ticket.assigned_to` draws from (any active supervisor or manager in the country, never a technician). It has real teeth: once set, only that supervisor or a manager can edit the task, open its assign screen, or act on it from task detail (notify the customer) — see `role_permission` above for the rest of the access model this sits alongside. Requesting feedback is a separate, narrower restriction on top of this one: manager-only regardless of ownership, see `customer_feedback` below. An unowned task (still the default for anything created before this existed) stays open to whoever the usual permission already let in, and any supervisor can claim it from the edit screen — the same screen a manager uses to reassign an owned one. No history is kept on it, unlike the lead, which the `task_event` log already tracks.
 
-**Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`.** Off (the default): a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On: the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
+**Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`, on the Notifications page.** Off: a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On (the default): the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
 
 **A delay notice is a different message, always manual.** When the team is running behind — traffic, a previous job overrunning — a supervisor sends a short apology from task detail with a required reason, logged as a `delay_notice` task_event (the reason lives in the event's own `note`, so no extra columns on `task` are needed; a task can have any number of these over time, unlike the single schedule-confirmation email).
 
@@ -458,12 +458,24 @@ A phone that can receive push notifications for a technician (any role) — regi
 Sent through Expo's push service (`people/push.py`), best-effort and fail-silent like email — a failed push never blocks the action behind it; a token Expo reports as no longer registered is deleted. **Sent when:** a technician is made lead or helper on a task; a technician's report is waiting on the task's responsible supervisor; a ticket is escalated to someone; a task message names someone. Never for their own actions. Off entirely unless `EXPO_PUSH_ENABLED` is on (it is by default; tests and local runs without phones simply have no devices registered).
 
 ### notification_settings
-A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
+A single row (`pk=1`, created on first use), set by an admin on its own **Notifications** page (`/tasks/notifications/`, admin-only like Roles) — not per-country, one set of switches for the whole app. The page lists every message the system sends, when and how; the automatic ones have a switch here. Messages someone sends with a button (visit confirmed, running late, parts shipped, feedback request, the visit report copy) and the security emails (password changed, staff set-up link, customer welcome/password link) are listed with no switch — they're always available or always sent. The 🔔 bell is not affected by any of this.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | always `1` |
-| auto_notify_on_reschedule | bool | default `false` |
+| ticket_received_email | bool | default `true` — the customer's "ticket received" email |
+| reply_to_customer_email | bool | default `true` — the office's reply to their ticket, by email |
+| auto_notify_on_reschedule | bool | default `true` — off, a supervisor sends it by hand instead (below) |
+| new_ticket_email | bool | default `true` |
+| new_ticket_roles | varchar[] | who gets it, in the ticket's country; default the roles that can `manage_tickets` |
+| new_task_email | bool | default `true` |
+| new_task_roles | varchar[] | who gets it, in the task's country; default `manager`, `admin` |
+| reply_to_staff_email | bool | default `true` — a customer's reply, to the person the ticket is assigned to |
+| escalation_emails | bool | default `true` — to whom a ticket is escalated, and back with the decision |
+| shipment_to_supervisor_email | bool | default `true` — a task's tracking number, to its responsible supervisor |
+| push_assigned / push_removed / push_cancelled | bool | default `true` — the technician's phone notifications |
+
+An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off.
 
 ### customer_ticket
 A complaint or request from a customer — or an internal matter staff need to follow up (see `kind`). A customer ticket is submitted either by a signed-in customer picking one of their own registered sites, or by staff on the customer's behalf when they phoned, messaged or emailed (`open_tickets`, "New ticket"). There's no anonymous path: a brand-new customer reaches the company outside the app and staff registers them — `/tasks/tickets/new/`, the old public no-login form, now just redirects to the portal login. `customer_id`/`site_id` are still nullable columns rather than required ones, so any ticket already in the database from before this changed stays valid as-is; every ticket submitted from now on always has both set.

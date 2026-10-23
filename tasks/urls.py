@@ -40,6 +40,7 @@ urlpatterns = [
     path('machines/', views.machine_list, name='machine_list'),
     path('machines/<int:pk>/', views.machine_detail, name='machine_detail'),
     path('roles/', views.role_permissions, name='role_permissions'),
+    path('notifications/', views.notification_settings, name='notification_settings'),
     path('audit-log/', views.audit_log, name='audit_log'),
     path('reports/monthly/', views.monthly_report, name='monthly_report'),
     path('reports/monthly/export/', views.monthly_report_export, name='monthly_report_export'),

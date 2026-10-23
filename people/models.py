@@ -1,6 +1,7 @@
 import secrets
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -236,18 +237,58 @@ class RolePermission(models.Model):
         return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
 
 
+def _default_new_ticket_roles():
+    # Whoever handles tickets by default (manage_tickets).
+    return ['support_manager', 'country_support', 'operations_manager', 'admin']
+
+
+def _default_new_task_roles():
+    return ['manager', 'admin']
+
+
 class NotificationSettings(models.Model):
-    """A single row, manager-controlled from the same Roles & permissions
-    screen — whether a schedule-change email to the customer happens
-    automatically or waits for a supervisor to send it deliberately.
-    Off by default: rescheduling never notified anyone by itself before
-    this setting existed, and that stays true until a manager turns it on.
+    """A single row: which automatic messages the system sends, and to
+    whom — set by an admin on the Notifications page (tasks.views.
+    notification_settings). Everything is on by default. Messages a person
+    sends with a button (running late, feedback request, ...) and the
+    security emails (password changed, set-up links) have no switch.
     """
 
-    auto_notify_on_reschedule = models.BooleanField(
-        _('email the customer automatically when a task is rescheduled'), default=False,
-        help_text=_('off by default; a supervisor sends it manually from the task details instead'),
+    # To customers.
+    ticket_received_email = models.BooleanField(
+        _('email the customer when their ticket is received'), default=True,
     )
+    reply_to_customer_email = models.BooleanField(
+        _('email the customer when the office replies to their ticket'), default=True,
+    )
+    auto_notify_on_reschedule = models.BooleanField(
+        _('email the customer automatically when a task is rescheduled'), default=True,
+        help_text=_('when off, a supervisor sends it by hand from the task details instead'),
+    )
+    # To staff.
+    new_ticket_email = models.BooleanField(_('email staff about a new customer ticket'), default=True)
+    new_ticket_roles = ArrayField(
+        models.CharField(max_length=20), default=_default_new_ticket_roles, blank=True,
+        verbose_name=_('roles emailed about a new customer ticket'),
+    )
+    new_task_email = models.BooleanField(_('email staff about a new task'), default=True)
+    new_task_roles = ArrayField(
+        models.CharField(max_length=20), default=_default_new_task_roles, blank=True,
+        verbose_name=_('roles emailed about a new task'),
+    )
+    reply_to_staff_email = models.BooleanField(
+        _('email the assigned person when a customer replies to a ticket'), default=True,
+    )
+    escalation_emails = models.BooleanField(
+        _('email about ticket escalations and their decisions'), default=True,
+    )
+    shipment_to_supervisor_email = models.BooleanField(
+        _("email the task's supervisor when parts are shipped"), default=True,
+    )
+    # To technicians' phones.
+    push_assigned = models.BooleanField(_('phone notification when assigned to a task'), default=True)
+    push_removed = models.BooleanField(_('phone notification when taken off a task'), default=True)
+    push_cancelled = models.BooleanField(_('phone notification when a task is cancelled'), default=True)
 
     class Meta:
         verbose_name = _('notification settings')

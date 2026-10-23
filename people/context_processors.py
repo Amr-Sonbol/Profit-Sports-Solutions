@@ -209,6 +209,7 @@ def nav_pages(technician, allowed):
         add('tasks:country_list', _('Countries'), 'globe', 'setup')
     if technician.role == technician.Role.ADMIN:
         add('tasks:role_permissions', _('Roles'), 'shield', 'setup')
+        add('tasks:notification_settings', _('Notifications'), 'bell', 'setup')
         add('tasks:audit_log', _('Audit log'), 'file-clock', 'setup')
     return pages
 

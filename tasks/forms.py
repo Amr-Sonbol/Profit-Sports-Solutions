@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
-    SKILL_LEVEL_CHOICES, RolePermission, Technician, TechnicianTrip,
+    SKILL_LEVEL_CHOICES, NotificationSettings, RolePermission, Technician, TechnicianTrip,
 )
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 
@@ -1549,3 +1549,34 @@ class PartImportForm(forms.Form):
         label=_('CSV file'), help_text=_('Two columns: code and description. A header row is permitted.'),
         validators=[FileExtensionValidator(allowed_extensions=['csv'])],
     )
+
+
+class NotificationSettingsForm(forms.ModelForm):
+    """The admin's Notifications page: one switch per automatic message,
+    and which roles get the new-ticket and new-task emails.
+    """
+
+    new_ticket_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+    new_task_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+
+    class Meta:
+        model = NotificationSettings
+        fields = [
+            'ticket_received_email', 'reply_to_customer_email', 'auto_notify_on_reschedule',
+            'new_ticket_email', 'new_ticket_roles', 'new_task_email', 'new_task_roles',
+            'reply_to_staff_email', 'escalation_emails', 'shipment_to_supervisor_email',
+            'push_assigned', 'push_removed', 'push_cancelled',
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        for switch, roles in (('new_ticket_email', 'new_ticket_roles'), ('new_task_email', 'new_task_roles')):
+            if cleaned.get(switch) and not cleaned.get(roles):
+                self.add_error(roles, _('Choose at least one role, or turn this email off.'))
+        return cleaned

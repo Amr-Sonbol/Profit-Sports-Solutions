@@ -1012,6 +1012,65 @@ tbody tr:hover {
     flex: 1 1 18rem;
 }
 
+/* Notifications page: the same column widths in all three tables. */
+.notification-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.notification-table__message {
+    inline-size: 50%;
+}
+
+.notification-table__channel {
+    inline-size: 18%;
+}
+
+.role-choices {
+    margin-block: 0.5rem 0;
+    padding: 0;
+    border: none;
+}
+
+.role-choices legend {
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+/* Inputs in a table are stretched to the full width (.table-wrap input);
+   here a tick box sits right next to its words. */
+.notification-table input[type="checkbox"] {
+    inline-size: 1.15rem;
+    min-inline-size: 0;
+    block-size: 1.15rem;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.notification-table .checkbox-label {
+    display: inline-flex;
+    padding-block: 0;
+}
+
+.role-choices > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.15rem 0.75rem;
+}
+
+.role-choices label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
 /* My skills: the four level sentences, and the "Rate" button that opens
    one row's form at a time (a <details>, so no JavaScript). */
 .level-rubric {

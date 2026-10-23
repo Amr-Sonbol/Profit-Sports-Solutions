@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 19:53+0000\n"
+"POT-Creation-Date: 2026-10-23 21:52+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -279,6 +279,15 @@ msgstr "تم إرسال رابط الإعداد إلى %(email)s."
 msgid "A signature is already on record. Sign again only if you wish to replace it."
 msgstr "يوجد توقيع مسجَّل مسبقاً. يرجى التوقيع مجدداً فقط إذا كنت ترغب في استبداله."
 
+msgid "A supervisor apologises for a delay, with the reason."
+msgstr "يعتذر المشرف عن التأخير مع ذكر السبب."
+
+msgid "A supervisor asks the customer to rate the visit."
+msgstr "يطلب المشرف من العميل تقييم الزيارة."
+
+msgid "A supervisor confirms the visit's date and time."
+msgstr "يؤكد المشرف تاريخ الزيارة ووقتها."
+
 msgid "A supervisor has reviewed this area, so only a supervisor can change it now."
 msgstr "راجع المشرف هذا الجانب، لذا لا يمكن تغييره الآن إلا من قِبل مشرف."
 
@@ -494,6 +503,9 @@ msgstr "بمفرده، دون إعادة زيارات"
 msgid "Alternatively, upload a photo of a signed paper copy:"
 msgstr "أو ارفع صورة لنسخة ورقية موقَّعة:"
 
+msgid "Always sent, for account security"
+msgstr "تُرسل دائمًا، لحماية الحساب"
+
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
 
@@ -536,6 +548,9 @@ msgstr "وصل"
 msgid "As reported by the customer. Record any additional findings on site in the work report."
 msgstr "كما أبلغ عنها العميل. يرجى تسجيل أي ملاحظات إضافية في الموقع ضمن تقرير العمل."
 
+msgid "As soon as they send a ticket from the portal."
+msgstr "فور إرسال العميل بلاغًا من البوابة."
+
 msgid "Assign"
 msgstr "التعيين"
 
@@ -553,6 +568,9 @@ msgstr "المهام المسندة"
 
 msgid "Assigned to"
 msgstr "مُسندة إلى"
+
+msgid "Assigned to a task"
+msgstr "التكليف بمهمة"
 
 msgid "Assigned to you"
 msgstr "المسندة إليك"
@@ -787,6 +805,9 @@ msgstr "اختر كلمة مرور جديدة"
 
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
+
+msgid "Choose at least one role, or turn this email off."
+msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
 
 msgid "Clear signature"
 msgstr "مسح التوقيع"
@@ -1037,6 +1058,9 @@ msgstr "بوابة العملاء"
 
 msgid "Customer reactivated."
 msgstr "تمت إعادة تفعيل العميل."
+
+msgid "Customer replied"
+msgstr "رد العميل"
 
 msgid "Customer request"
 msgstr "طلب العميل"
@@ -1498,9 +1522,6 @@ msgstr "تعديل بيانات الفنيين وصورهم الشخصية"
 msgid "Email"
 msgstr "البريد الإلكتروني"
 
-msgid "Email the customer automatically when a task is rescheduled"
-msgstr "إرسال بريد إلكتروني للعميل تلقائيًا عند تغيير موعد المهمة"
-
 msgid "Emergencies"
 msgstr "الحالات الطارئة"
 
@@ -1609,6 +1630,9 @@ msgstr "الساعات المقدرة"
 msgid "Every machine was resolved without a visit."
 msgstr "تمت معالجة جميع الأجهزة دون الحاجة إلى زيارة."
 
+msgid "Every message the system sends, when, and to whom. Automatic messages can be switched off here. Messages someone sends with a button are listed for reference, and the security emails are always sent."
+msgstr "جميع الرسائل التي يرسلها النظام، ومتى، ولمن. يمكن إيقاف الرسائل التلقائية من هنا. أما الرسائل التي تُرسل بزر فمدرجة للاطلاع، ورسائل الأمان تُرسل دائمًا."
+
 msgid "Evidence"
 msgstr "الدليل"
 
@@ -1639,6 +1663,9 @@ msgstr "معطل"
 
 msgid "FedEx"
 msgstr "FedEx"
+
+msgid "Feedback request"
+msgstr "طلب التقييم"
 
 msgid "File"
 msgstr "ملف"
@@ -1775,8 +1802,8 @@ msgstr "لا يتضمن هذا التقرير الساعات أو الأسعار
 msgid "Hours worked: %(hours)s"
 msgstr "ساعات العمل: %(hours)s"
 
-msgid "How the customer is informed of a rescheduled visit: sent deliberately by a supervisor from the task details, or sent automatically by the system as soon as the date or time changes."
-msgstr "طريقة إبلاغ العميل بإعادة جدولة الزيارة: يرسلها المشرف يدوياً من تفاصيل المهمة، أو يرسلها النظام تلقائياً فور تغيير التاريخ أو الوقت."
+msgid "How"
+msgstr "الوسيلة"
 
 msgid "How the customer reached us"
 msgstr "كيف تواصل معنا العميل"
@@ -2145,6 +2172,9 @@ msgstr "تم إنشاء عميل جديد"
 msgid "New customer reply — ticket %(number)s"
 msgstr "رد جديد من العميل — الطلب %(number)s"
 
+msgid "New customer ticket"
+msgstr "بلاغ جديد من عميل"
+
 msgid "New customer tickets"
 msgstr "تذاكر عملاء جديدة"
 
@@ -2507,6 +2537,9 @@ msgstr "إشعار العميل برقم التتبع"
 msgid "Object"
 msgstr "العنصر"
 
+msgid "On"
+msgstr "مُفعّلة"
+
 msgid "On track to achieve full certification within 90 days."
 msgstr "في المسار الصحيح لتحقيق الاعتماد الكامل خلال 90 يوماً."
 
@@ -2638,6 +2671,12 @@ msgstr "قطع الغيار"
 msgid "Parts Used"
 msgstr "القطع المستخدمة"
 
+msgid "Parts on the way"
+msgstr "القطع في الطريق"
+
+msgid "Parts shipped"
+msgstr "شحن القطع"
+
 msgid "Parts used"
 msgstr "القطع المستخدمة"
 
@@ -2650,6 +2689,9 @@ msgstr "كلمة المرور"
 
 msgid "Password changed"
 msgstr "تم تغيير كلمة المرور"
+
+msgid "Password changed and account set-up link"
+msgstr "تغيير كلمة المرور ورابط إعداد الحساب"
 
 msgid "Password changed."
 msgstr "تم تغيير كلمة المرور."
@@ -2692,6 +2734,9 @@ msgstr "تم تحديث الصلاحيات."
 
 msgid "Phone"
 msgstr "هاتف"
+
+msgid "Phone notification"
+msgstr "إشعار على الهاتف"
 
 msgid "Photo"
 msgstr "صورة"
@@ -2800,6 +2845,9 @@ msgstr "تم تفعيل الوصول إلى البوابة."
 
 msgid "Portal login"
 msgstr "حساب البوابة"
+
+msgid "Portal welcome and password link"
+msgstr "الترحيب في البوابة ورابط كلمة المرور"
 
 msgid "Previous"
 msgstr "السابق"
@@ -2966,6 +3014,9 @@ msgstr "الرد"
 msgid "Reply sent."
 msgstr "تم إرسال الرد."
 
+msgid "Reply to their ticket"
+msgstr "الرد على بلاغه"
+
 msgid "Report"
 msgstr "التقرير"
 
@@ -3113,6 +3164,9 @@ msgstr "الأدوار والصلاحيات"
 
 msgid "Row"
 msgstr "الصف"
+
+msgid "Running late"
+msgstr "التأخر عن الموعد"
 
 msgid "Same as the report"
 msgstr "نفس ساعات التقرير"
@@ -3288,6 +3342,9 @@ msgstr "إرسال رسالة الترحيب"
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
 
+msgid "Sent by hand, with a button"
+msgstr "تُرسل يدويًا بزر"
+
 #, python-format
 msgid "Sent to %(email)s on %(date)s"
 msgstr "أُرسلت إلى %(email)s بتاريخ %(date)s"
@@ -3354,6 +3411,9 @@ msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيا�
 
 msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in."
 msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
+
+msgid "Setting"
+msgstr "الإعداد"
 
 msgid "Setup link expired"
 msgstr "انتهت صلاحية رابط الإعداد"
@@ -3473,6 +3533,9 @@ msgstr "المهارات"
 msgid "Skipped"
 msgstr "تم التخطي"
 
+msgid "So they don't still head to the site."
+msgstr "حتى لا يتوجه إلى الموقع دون داعٍ."
+
 msgid "Source"
 msgstr "المصدر"
 
@@ -3550,6 +3613,9 @@ msgstr "موقوفة"
 
 msgid "TNT"
 msgstr "TNT"
+
+msgid "Taken off a task"
+msgstr "الإبعاد عن مهمة"
 
 msgid "Task"
 msgstr "المهمة"
@@ -3666,6 +3732,12 @@ msgstr "العنوان الذي تُصدر إليه الفواتير."
 
 msgid "The assignment for this task can no longer be changed because work has started. Please close it and create a new task for a handover."
 msgstr "لم يعد بالإمكان تغيير إسناد هذه المهمة لأن العمل قد بدأ. يرجى إغلاقها وإنشاء مهمة جديدة للتسليم."
+
+msgid "The bell at the top of the page shows new tickets and tasks to the office whatever is set here."
+msgstr "يعرض الجرس أعلى الصفحة البلاغات والمهام الجديدة لموظفي المكتب بغض النظر عن هذه الإعدادات."
+
+msgid "The carrier and tracking number, from the task or the ticket."
+msgstr "شركة الشحن ورقم التتبع، من المهمة أو البلاغ."
 
 msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
 msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
@@ -4019,8 +4091,14 @@ msgstr "تذكرة مُصعّدة إليك"
 msgid "Ticket escalated to you — %(number)s"
 msgstr "تذكرة مُصعّدة إليك — %(number)s"
 
+msgid "Ticket escalated, and its decision"
+msgstr "تصعيد البلاغ، وقراره"
+
 msgid "Ticket number"
 msgstr "رقم الطلب"
+
+msgid "Ticket received"
+msgstr "استلام البلاغ"
 
 msgid "Ticket reopened."
 msgstr "أُعيد فتح الطلب."
@@ -4053,9 +4131,21 @@ msgstr "تم تحديد الوقت."
 msgid "Time to be confirmed"
 msgstr "الوقت سيُحدَّد لاحقًا"
 
+msgid "To customers"
+msgstr "إلى العملاء"
+
 #, python-format
 msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
 msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
+
+msgid "To staff"
+msgstr "إلى الموظفين"
+
+msgid "To technicians' phones"
+msgstr "إلى هواتف الفنيين"
+
+msgid "To the person a ticket is escalated to, and back once they decide."
+msgstr "إلى الشخص الذي صُعِّد إليه البلاغ، ثم إلى المُصعِّد بعد اتخاذ القرار."
 
 msgid "Today"
 msgstr "اليوم"
@@ -4230,12 +4320,21 @@ msgstr "تقرير الزيارة"
 msgid "Visit being scheduled"
 msgstr "جارٍ تحديد موعد الزيارة"
 
+msgid "Visit confirmed"
+msgstr "تأكيد الزيارة"
+
 msgid "Visit date"
 msgstr "تاريخ الزيارة"
+
+msgid "Visit report (PDF)"
+msgstr "تقرير الزيارة (PDF)"
 
 #, python-format
 msgid "Visit report — %(number)s — Profit Sports Solutions"
 msgstr "تقرير الزيارة — %(number)s — Profit Sports Solutions"
+
+msgid "Visit rescheduled"
+msgstr "تغيير موعد الزيارة"
 
 #, python-format
 msgid "Visit scheduled for %(date)s"
@@ -4327,14 +4426,53 @@ msgstr "واتساب"
 msgid "When"
 msgstr "متى"
 
+msgid "When a customer account is created or a new password link is sent."
+msgstr "عند إنشاء حساب العميل أو إرسال رابط كلمة مرور جديد."
+
+msgid "When a customer replies to a ticket; to the person it is assigned to."
+msgstr "عند رد العميل على بلاغ؛ إلى الشخص المكلّف به."
+
+msgid "When a customer sends a ticket; to the chosen roles in that country."
+msgstr "عند إرسال العميل بلاغًا؛ إلى الأدوار المختارة في تلك الدولة."
+
+msgid "When a password changes, or a new login is set up."
+msgstr "عند تغيير كلمة المرور، أو إعداد حساب دخول جديد."
+
+msgid "When a scheduled visit's date or time changes. When off, a supervisor sends it from the task."
+msgstr "عند تغيير تاريخ الزيارة المجدولة أو وقتها. عند إيقافها، يرسلها المشرف من صفحة المهمة."
+
+msgid "When a task gets a shipping tracking number; to its responsible supervisor."
+msgstr "عند إضافة رقم تتبع شحنة للمهمة؛ إلى مشرفها المسؤول."
+
+msgid "When a task is created; to the chosen roles in that country."
+msgstr "عند إنشاء مهمة؛ إلى الأدوار المختارة في تلك الدولة."
+
+msgid "When a task they are on is cancelled."
+msgstr "عند إلغاء مهمة مكلّف بها."
+
+msgid "When the office replies to their ticket; any attached file goes with it."
+msgstr "عند رد المكتب على بلاغه؛ وتُرفق معها أي ملفات مرفقة بالرد."
+
+msgid "When the report is filed, to the address in its \"Send a copy to\" box; left blank, nothing is sent."
+msgstr "عند تقديم التقرير، إلى العنوان المدوّن في خانة \"إرسال نسخة إلى\"؛ وإذا تُركت فارغة فلا يُرسل شيء."
+
+msgid "When they are made lead or added as a helper."
+msgstr "عند تعيينه قائدًا أو إضافته مساعدًا."
+
 msgid "Where"
 msgstr "المكان"
 
 msgid "Where spare and replacement parts should be delivered."
 msgstr "المكان الذي تُسلَّم إليه قطع الغيار والاستبدال."
 
+msgid "Which emails and phone notifications the system sends, and to whom, is set on its own page."
+msgstr "تُضبط رسائل البريد الإلكتروني وإشعارات الهاتف التي يرسلها النظام، ومستلموها، من صفحة مستقلة."
+
 msgid "Who"
 msgstr "من"
+
+msgid "Who receives it"
+msgstr "من يستلمها"
 
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
@@ -4687,8 +4825,29 @@ msgstr "مثال: النادي مغلق، أو المفتاح غير متوفر�
 msgid "email"
 msgstr "البريد الإلكتروني"
 
+msgid "email about ticket escalations and their decisions"
+msgstr "إرسال بريد عند تصعيد البلاغات وعند البت فيها"
+
+msgid "email staff about a new customer ticket"
+msgstr "إرسال بريد للموظفين عند ورود بلاغ جديد من عميل"
+
+msgid "email staff about a new task"
+msgstr "إرسال بريد للموظفين عند إنشاء مهمة جديدة"
+
+msgid "email the assigned person when a customer replies to a ticket"
+msgstr "إرسال بريد للشخص المكلّف عند رد العميل على البلاغ"
+
 msgid "email the customer automatically when a task is rescheduled"
 msgstr "إرسال بريد إلكتروني للعميل تلقائيًا عند إعادة جدولة المهمة"
+
+msgid "email the customer when the office replies to their ticket"
+msgstr "إرسال بريد للعميل عند رد المكتب على بلاغه"
+
+msgid "email the customer when their ticket is received"
+msgstr "إرسال بريد للعميل عند استلام بلاغه"
+
+msgid "email the task's supervisor when parts are shipped"
+msgstr "إرسال بريد لمشرف المهمة عند شحن القطع"
 
 msgid "employment type"
 msgstr "نوع التوظيف"
@@ -4884,9 +5043,6 @@ msgstr "إعدادات الإشعارات"
 msgid "occurred at"
 msgstr "حدث في"
 
-msgid "off by default; a supervisor sends it manually from the task details instead"
-msgstr "معطَّل افتراضياً؛ ويرسله المشرف يدوياً من تفاصيل المهمة بدلاً من ذلك"
-
 msgid "one account covers every site under this customer; created by staff only, no self-registration"
 msgstr "حساب واحد يشمل جميع مواقع هذا العميل؛ يُنشئه الموظفون فقط، ولا يتاح التسجيل الذاتي"
 
@@ -4931,6 +5087,15 @@ msgstr "الصلاحية"
 
 msgid "phone"
 msgstr "الهاتف"
+
+msgid "phone notification when a task is cancelled"
+msgstr "إشعار على الهاتف عند إلغاء المهمة"
+
+msgid "phone notification when assigned to a task"
+msgstr "إشعار على الهاتف عند التكليف بمهمة"
+
+msgid "phone notification when taken off a task"
+msgstr "إشعار على الهاتف عند الإبعاد عن مهمة"
 
 msgid "photo"
 msgstr "الصورة"
@@ -5060,6 +5225,12 @@ msgstr "صلاحية الدور"
 
 msgid "role permissions"
 msgstr "صلاحيات الدور"
+
+msgid "roles emailed about a new customer ticket"
+msgstr "الأدوار التي تتلقى بريدًا عن بلاغات العملاء الجديدة"
+
+msgid "roles emailed about a new task"
+msgstr "الأدوار التي تتلقى بريدًا عن المهام الجديدة"
 
 msgid "schedule change request"
 msgstr "طلب تغيير الموعد"
@@ -5475,6 +5646,9 @@ msgstr "ما وجده الفني"
 
 msgid "what was found and done on this machine"
 msgstr "ما تم العثور عليه وما تم إنجازه على هذا الجهاز"
+
+msgid "when off, a supervisor sends it by hand from the task details instead"
+msgstr "عند إيقافها، يرسلها المشرف يدويًا من تفاصيل المهمة"
 
 msgid "when the customer was last emailed about the scheduled visit — never automatic"
 msgstr "آخر مرة أُرسل فيها بريد إلكتروني للعميل بشأن الزيارة المجدولة — ليس تلقائيًا أبدًا"

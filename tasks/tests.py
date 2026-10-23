@@ -532,6 +532,7 @@ class TaskEditTests(TaskTestCase):
     def test_rescheduling_does_not_auto_notify_when_setting_is_off(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
         self.site.save()
+        NotificationSettings.objects.update_or_create(pk=1, defaults={'auto_notify_on_reschedule': False})
 
         self.client.login(username='supervisor1', password='pass12345')
         self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
@@ -5049,50 +5050,103 @@ class RolePermissionsTests(TaskTestCase):
             ).exists(),
         )
 
-    def test_notification_setting_defaults_to_off(self):
+    def test_the_roles_page_links_to_notifications(self):
         self.client.login(username='admin1', password='pass12345')
         response = self.client.get('/tasks/roles/')
-        self.assertFalse(response.context['notification_settings'].auto_notify_on_reschedule)
+        self.assertContains(response, 'href="/tasks/notifications/"')
 
-    def test_admin_can_turn_on_auto_notify(self):
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {
-            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(NotificationSettings.load().auto_notify_on_reschedule)
 
-    def test_admin_can_turn_off_auto_notify(self):
-        settings = NotificationSettings.load()
-        settings.auto_notify_on_reschedule = True
-        settings.save()
+class NotificationSettingsPageTests(TaskTestCase):
+    # The admin's Notifications page (tasks.views.notification_settings):
+    # a switch per automatic message, and who gets the staff emails.
 
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {'action': 'save_notifications'})
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
-
-    def test_saving_notifications_does_not_touch_the_permission_matrix(self):
-        RolePermission.objects.filter(
-            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
-        ).update(allowed=True)
-
-        self.client.login(username='admin1', password='pass12345')
-        self.client.post('/tasks/roles/', {'action': 'save_notifications', 'auto_notify_on_reschedule': 'on'})
-
-        self.assertTrue(
-            RolePermission.objects.filter(
-                role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
-            ).exists(),
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345', email='admin@example.com'),
+            country=self.country, full_name='Adam Admin', language='en', role=Technician.Role.ADMIN,
+            employment_type='staff',
         )
 
-    def test_technician_cannot_change_notification_setting(self):
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {
-            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
-        })
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
+    def _post(self, **changes):
+        data = {
+            'ticket_received_email': 'on', 'reply_to_customer_email': 'on', 'auto_notify_on_reschedule': 'on',
+            'new_ticket_email': 'on', 'new_ticket_roles': ['support_manager', 'admin'],
+            'new_task_email': 'on', 'new_task_roles': ['manager', 'admin'],
+            'reply_to_staff_email': 'on', 'escalation_emails': 'on', 'shipment_to_supervisor_email': 'on',
+            'push_assigned': 'on', 'push_removed': 'on', 'push_cancelled': 'on',
+        }
+        data.update(changes)
+        return self.client.post('/tasks/notifications/', {key: value for key, value in data.items() if value})
+
+    def test_only_an_admin_opens_it(self):
+        for username in ('tech1', 'supervisor1'):
+            self.client.login(username=username, password='pass12345')
+            self.assertEqual(self.client.get('/tasks/notifications/').status_code, 403, username)
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/notifications/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Always sent, for account security')
+        self.assertIn('/tasks/notifications/', [page['url'] for page in response.context['nav_pages']])
+
+    def test_everything_is_on_by_default_including_reschedule(self):
+        settings = NotificationSettings.load()
+        self.assertTrue(settings.auto_notify_on_reschedule)
+        self.assertTrue(settings.ticket_received_email and settings.push_assigned)
+        self.assertEqual(settings.new_task_roles, ['manager', 'admin'])
+
+    def test_saving_switches_and_recipients(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self._post(ticket_received_email='', new_task_roles=['supervisor'])
+        self.assertRedirects(response, '/tasks/notifications/')
+        settings = NotificationSettings.load()
+        self.assertFalse(settings.ticket_received_email)
+        self.assertEqual(settings.new_task_roles, ['supervisor'])
+
+    def test_an_email_that_is_on_needs_someone_to_receive_it(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self._post(new_ticket_roles=[])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors['new_ticket_roles'])
+        # Off, it may have no one.
+        self.assertEqual(self._post(new_ticket_email='', new_ticket_roles=[]).status_code, 302)
+
+    def test_a_switched_off_message_is_not_sent(self):
+        from tasks.views import send_ticket_confirmation_to_customer
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0901', company_name='Fitness First', site_description='Marina',
+            contact_name='Ali', contact_phone='0501234567', contact_email='ali@example.com',
+            description='Squeak', submitted_at=timezone.now(),
+        )
+        NotificationSettings.objects.filter(pk=NotificationSettings.load().pk).update(ticket_received_email=False)
+        send_ticket_confirmation_to_customer(None, ticket)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_the_new_task_email_goes_to_the_chosen_roles(self):
+        from tasks.views import _send_new_task_email_to_staff
+        self.supervisor_user.email = 'sup@example.com'
+        self.supervisor_user.save(update_fields=['email'])
+        settings = NotificationSettings.load()
+        settings.new_task_roles = ['supervisor']
+        settings.save()
+        task = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        request = self.client.request().wsgi_request
+        _send_new_task_email_to_staff(request, task)
+        self.assertEqual([message.to for message in mail.outbox], [['sup@example.com']])
+
+    def test_a_switched_off_phone_notification_is_not_sent(self):
+        from people.push import push_assigned
+        task = Task.objects.create(
+            task_number='AE-0951', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        NotificationSettings.objects.filter(pk=NotificationSettings.load().pk).update(push_assigned=False)
+        with patch('people.push.send_push') as send_push:
+            push_assigned(self.technician, task, is_lead=True)
+        send_push.assert_not_called()
 
 
 class MonthlyReportTests(TaskTestCase):

@@ -56,7 +56,7 @@ from .forms import (
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
-    SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT,
+    SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT, NotificationSettingsForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
     TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
@@ -2044,6 +2044,7 @@ def task_edit(request, pk):
             if (
                 'shipping_tracking_number' in form.changed_data and updated_task.shipping_tracking_number
                 and updated_task.responsible_supervisor_id
+                and NotificationSettings.load().shipment_to_supervisor_email
             ):
                 _send_shipment_notice_to_supervisor(request, updated_task)
                 notices.append(_('The supervisor has been notified of the shipment.'))
@@ -2233,6 +2234,8 @@ def send_ticket_confirmation_to_customer(request, ticket):
     customers.views.portal_ticket_new, a different app, calls this
     directly, the same way it already calls save_new_ticket.
     """
+    if not NotificationSettings.load().ticket_received_email:  # the admin's Notifications page
+        return
     if not ticket.contact_email:
         return
     link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
@@ -2323,6 +2326,8 @@ def _send_reply_to_customer(request, reply):
     staff chose to include) rides along on the email itself, not just
     linked from the portal.
     """
+    if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
+        return
     ticket = reply.ticket
     if not ticket.contact_email:
         return
@@ -2358,6 +2363,8 @@ def _send_reply_to_staff(request, reply):
     a login and an email on file — there's no fixed office address to
     fall back to.
     """
+    if not NotificationSettings.load().reply_to_staff_email:  # the admin's Notifications page
+        return
     ticket = reply.ticket
     assignee = ticket.assigned_to
     if not assignee or not assignee.user_id or not assignee.user.email:
@@ -2386,6 +2393,8 @@ def _send_reply_to_staff(request, reply):
 
 def _send_escalation_email(request, escalation):
     """Best-effort email to whoever a ticket was escalated to."""
+    if not NotificationSettings.load().escalation_emails:  # the admin's Notifications page
+        return
     recipient = escalation.escalated_to
     if not recipient.user_id or not recipient.user.email:
         return
@@ -2416,6 +2425,8 @@ def _send_escalation_email(request, escalation):
 
 def _send_escalation_decided_email(request, escalation):
     """Best-effort email back to whoever escalated, once it's decided."""
+    if not NotificationSettings.load().escalation_emails:  # the admin's Notifications page
+        return
     recipient = escalation.escalated_by
     if not recipient.user_id or not recipient.user.email:
         return
@@ -2455,26 +2466,17 @@ def _staff_notification_recipients(country, roles):
     )
 
 
-def _ticket_manager_roles():
-    """Whichever role(s) RolePermission.MANAGE_TICKETS currently allows —
-    the same set AssignTicketForm offers, so a new ticket's email goes to
-    whoever can actually act on it, not a hardcoded Manager/Admin pair.
-    """
-    return list(
-        RolePermission.objects.filter(
-            permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-        ).values_list('role', flat=True),
-    )
-
-
 def send_new_ticket_email_to_staff(request, ticket):
     """Best-effort, same fail-silent pattern as every other notification
-    here — everyone whose role can manage_tickets, in the ticket's
-    country, alongside the bell (people.context_processors.notification_
+    here — the roles chosen on the admin's Notifications page (by default
+    whoever can manage_tickets), in the ticket's country, alongside the bell (people.context_processors.notification_
     bell). Public (no leading underscore): customers.views.portal_ticket_
     new calls this directly, the same way it already calls save_new_ticket.
     """
-    recipients = _staff_notification_recipients(ticket.country, _ticket_manager_roles())
+    switches = NotificationSettings.load()
+    if not switches.new_ticket_email:
+        return
+    recipients = _staff_notification_recipients(ticket.country, switches.new_ticket_roles)
     if not recipients:
         return
     link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
@@ -2506,11 +2508,13 @@ def send_new_ticket_email_to_staff(request, ticket):
 
 def _send_new_task_email_to_staff(request, task):
     """Best-effort, same fail-silent pattern as every other notification
-    here — every manager/admin in the task's country, alongside the bell.
+    here — the roles chosen on the admin's Notifications page (by default
+    managers and admins), in the task's country, alongside the bell.
     """
-    recipients = _staff_notification_recipients(
-        task.site.customer.country, [Technician.Role.MANAGER, Technician.Role.ADMIN],
-    )
+    switches = NotificationSettings.load()
+    if not switches.new_task_email:
+        return
+    recipients = _staff_notification_recipients(task.site.customer.country, switches.new_task_roles)
     if not recipients:
         return
     link = request.build_absolute_uri(reverse('tasks:task_detail', args=[task.pk]))
@@ -4205,9 +4209,25 @@ def set_active_country(request):
 
 
 @login_required
+def notification_settings(request):
+    """Admin-only, like Roles: every message the system sends, and the
+    switches for the automatic ones (people.models.NotificationSettings).
+    Messages someone sends with a button, and the security emails, are
+    listed with no switch.
+    """
+    require_admin(request)
+    form = NotificationSettingsForm(request.POST or None, instance=NotificationSettings.load())
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, _('Notification settings updated.'))
+        return redirect('tasks:notification_settings')
+    return render(request, 'tasks/notification_settings.html', {'form': form})
+
+
+@login_required
 def role_permissions(request):
-    """Admin-only: which role can do what, plus global notification
-    behavior. Deliberately not gated by the configurable system it
+    """Admin-only: which role can do what. (Notifications have their own
+    page, notification_settings.) Deliberately not gated by the configurable system it
     manages (require_admin, not require_permission) — otherwise a bad
     edit here could lock every role out of ever fixing it again. Also
     the one screen a manager doesn't get, unlike every other manager-tier
@@ -4221,15 +4241,8 @@ def role_permissions(request):
         Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
     ]
     permissions = list(RolePermission.Permission)
-    notification_settings = NotificationSettings.load()
 
     if request.method == 'POST':
-        if request.POST.get('action') == 'save_notifications':
-            notification_settings.auto_notify_on_reschedule = 'auto_notify_on_reschedule' in request.POST
-            notification_settings.save(update_fields=['auto_notify_on_reschedule'])
-            messages.success(request, _('Notification settings updated.'))
-            return redirect('tasks:role_permissions')
-
         for permission in permissions:
             for role in roles:
                 RolePermission.objects.update_or_create(
@@ -4254,7 +4267,7 @@ def role_permissions(request):
         for permission in permissions
     ]
 
-    context = {'roles': roles, 'matrix': matrix, 'notification_settings': notification_settings}
+    context = {'roles': roles, 'matrix': matrix}
     return render(request, 'tasks/role_permissions.html', context)
 
 
