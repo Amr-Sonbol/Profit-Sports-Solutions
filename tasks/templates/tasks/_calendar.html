@@ -48,13 +48,13 @@ and `today_tab` adds My schedule's Today tab.
 {% endif %}
 
 {% if view == 'year' %}
-<p class="field__help">{% translate "Each marked day has visits; the number is how many. Click a day for its week, or a month for its month." %}</p>
+<p class="field__help">{% translate "Each marked day has tasks; the number is how many. Click a day for its week, or a month for its month." %}</p>
 <div class="cal-year">
     {% for month in year_months %}
     <section class="cal-mini" aria-label="{{ month.first|date:'F Y' }}">
         <h3 class="cal-mini__head">
             <a href="?view=month&month={{ month.first|date:'Y-m' }}">{{ month.first|date:"F" }}</a>
-            {% if month.count %}<span class="muted">{% blocktranslate count count=month.count %}{{ count }} visit{% plural %}{{ count }} visits{% endblocktranslate %}</span>{% endif %}
+            {% if month.count %}<span class="muted">{% blocktranslate count count=month.count %}{{ count }} task{% plural %}{{ count }} tasks{% endblocktranslate %}</span>{% endif %}
         </h3>
         <div class="cal-mini__grid">
             {# The second week is always whole, so it names all seven days. #}
@@ -96,7 +96,7 @@ and `today_tab` adds My schedule's Today tab.
         {% for task in day.tasks %}
         {% include "tasks/_calendar_card.html" %}
         {% empty %}
-        <p class="cal-day__empty">{% translate "No visits" %}</p>
+        <p class="cal-day__empty">{% translate "No tasks" %}</p>
         {% endfor %}
     </section>
     {% endfor %}

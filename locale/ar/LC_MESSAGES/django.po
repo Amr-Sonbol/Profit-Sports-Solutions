@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:50+0000\n"
+"POT-Creation-Date: 2026-10-23 23:11+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -107,6 +107,16 @@ msgstr[4] "%(count)s تقريراً يتجاوز الوقت المسجَّل"
 msgstr[5] "%(count)s تقرير يتجاوز الوقت المسجَّل"
 
 #, python-format
+msgid "%(count)s task"
+msgid_plural "%(count)s tasks"
+msgstr[0] "لا مهام"
+msgstr[1] "مهمة واحدة"
+msgstr[2] "مهمتان"
+msgstr[3] "%(count)s مهام"
+msgstr[4] "%(count)s مهمة"
+msgstr[5] "%(count)s مهمة"
+
+#, python-format
 msgid "%(count)s task significantly over estimate"
 msgid_plural "%(count)s tasks significantly over estimate"
 msgstr[0] "لا توجد مهام تجاوزت التقدير بشكل ملحوظ"
@@ -125,16 +135,6 @@ msgstr[2] "مهمتان اليوم"
 msgstr[3] "%(count)s مهام اليوم"
 msgstr[4] "%(count)s مهمة اليوم"
 msgstr[5] "%(count)s مهمة اليوم"
-
-#, python-format
-msgid "%(count)s visit"
-msgid_plural "%(count)s visits"
-msgstr[0] "لا زيارات"
-msgstr[1] "زيارة واحدة"
-msgstr[2] "زيارتان"
-msgstr[3] "%(count)s زيارات"
-msgstr[4] "%(count)s زيارة"
-msgstr[5] "%(count)s زيارة"
 
 #, python-format
 msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
@@ -1563,8 +1563,8 @@ msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. ال�
 msgid "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early."
 msgstr "يُحتسب لكل مساعد عدد الساعات أعلاه. يرجى إدخال قيمة فقط إذا كانت مختلفة، كأن يكون أحد أعضاء الفريق قد غادر مبكراً."
 
-msgid "Each marked day has visits; the number is how many. Click a day for its week, or a month for its month."
-msgstr "الأيام المميزة فيها زيارات، والرقم يبيّن عددها. اضغط على يوم لعرض أسبوعه، أو على شهر لعرضه."
+msgid "Each marked day has tasks; the number is how many. Click a day for its week, or a month for its month."
+msgstr "الأيام المميزة فيها مهام، والرقم يبيّن عددها. اضغط على يوم لعرض أسبوعه، أو على شهر لعرضه."
 
 msgid "Each technician's most recent check-in today. Location is recorded only at each check-in and is never tracked in between."
 msgstr "آخر تسجيل لكل فني اليوم. يُسجَّل الموقع عند كل تسجيل فقط، ولا يُتتبَّع بينها أبدًا."
@@ -2464,6 +2464,12 @@ msgstr "لم يتم إعداد أي مهارات."
 msgid "No staff match the selected filters."
 msgstr "لا يوجد موظفون يطابقون عوامل التصفية المحددة."
 
+msgid "No tasks"
+msgstr "لا مهام"
+
+msgid "No tasks are scheduled for today."
+msgstr "لا توجد مهام مجدولة لليوم."
+
 msgid "No tasks awaiting a date."
 msgstr "لا توجد مهام بانتظار تحديد موعد."
 
@@ -2484,12 +2490,6 @@ msgstr "لا توجد تذاكر مطابقة لعوامل التصفية الم
 
 msgid "No tickets this month."
 msgstr "لا توجد طلبات هذا الشهر."
-
-msgid "No visits"
-msgstr "لا توجد زيارات"
-
-msgid "No visits are scheduled for today."
-msgstr "لا توجد زيارات مجدولة لليوم."
 
 msgid "No visits on record."
 msgstr "لا توجد زيارات مسجَّلة."
@@ -4264,8 +4264,8 @@ msgstr "إلى الشخص الذي صُعِّد إليه البلاغ، ثم إ�
 msgid "Today"
 msgstr "اليوم"
 
-msgid "Today's visits"
-msgstr "زيارات اليوم"
+msgid "Today's tasks"
+msgstr "مهام اليوم"
 
 msgid "Too many failed sign-in attempts from this connection. Please wait before trying again, or reset your password if you have forgotten it."
 msgstr "محاولات تسجيل دخول فاشلة كثيرة جداً من هذا الاتصال. يرجى الانتظار قبل المحاولة مجدداً، أو إعادة تعيين كلمة المرور إذا نسيتها."
