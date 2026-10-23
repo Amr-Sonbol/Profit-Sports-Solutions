@@ -1,21 +1,23 @@
 {% extends "base.html" %}
 {% load i18n static %}
 
-{% block title %}{% translate "My week" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "My schedule" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "My week" %}</h1>
+    <h1>{% translate "My schedule" %}</h1>
 </div>
 
-<nav class="tabs" aria-label="{% translate 'My week' %}">
-    <a href="?" class="{% if view == 'today' %}is-active{% endif %}"{% if view == 'today' %} aria-current="page"{% endif %}>{% translate "Today" %}</a>
-    <a href="?view=week" class="{% if view == 'week' %}is-active{% endif %}"{% if view == 'week' %} aria-current="page"{% endif %}>{% translate "Week" %}</a>
+{% if view != 'today' %}
+{% include "tasks/_calendar.html" with task_url="tasks:my_task_detail" today_tab=True %}
+{% else %}
+<nav class="tabs" aria-label="{% translate 'Calendar view' %}">
+    <a href="?" class="is-active" aria-current="page">{% translate "Today" %}</a>
+    <a href="?view=week">{% translate "Week" %}</a>
+    <a href="?view=month">{% translate "Month" %}</a>
+    <a href="?view=year">{% translate "Year" %}</a>
 </nav>
 
-{% if view == 'week' %}
-{% include "tasks/_week_board.html" with task_url="tasks:my_task_detail" %}
-{% else %}
 <p class="today-summary">
     <strong>{{ today|date:"l j F" }}</strong> ·
     {% blocktranslate count count=today_count %}{{ count }} task today{% plural %}{{ count }} tasks today{% endblocktranslate %}

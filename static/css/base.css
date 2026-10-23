@@ -1630,7 +1630,7 @@ tbody tr:hover {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    min-block-size: 6.5rem;
+    min-block-size: 4.75rem;  /* six weeks fit one screen */
     min-inline-size: 0;
     padding: 0.3rem 0.4rem;
     border-block-end: 1px solid var(--color-border);
@@ -1647,6 +1647,101 @@ tbody tr:hover {
 
 .cal-cell--other-month .cal-cell__date {
     color: var(--color-muted);
+}
+
+/* A country's days off, shaded on the week and the month. */
+.cal-day--weekend,
+.cal-cell--weekend {
+    background: var(--color-neutral-bg);
+}
+
+/* The year: twelve small months on one screen, a day with visits filled
+   in (and its count when more than one). */
+.cal-year {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-block-end: 0.75rem;
+}
+
+@media (min-width: 700px) {
+    .cal-year {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* The whole year on one screen. */
+@media (min-width: 1100px) {
+    .cal-year {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+.cal-mini {
+    padding: 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.cal-mini__head {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-block: 0 0.35rem;
+    font-size: 0.85rem;
+}
+
+.cal-mini__head a {
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__head .muted {
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.cal-mini__grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.cal-mini__weekday {
+    color: var(--color-muted);
+}
+
+.cal-mini__day {
+    position: relative;
+    display: block;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__day--weekend {
+    color: var(--color-muted);
+    background: var(--color-neutral-bg);
+}
+
+.cal-mini__day--busy {
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.cal-mini__day--busy sup {
+    font-size: 0.6rem;
+    margin-inline-start: 1px;
+}
+
+.cal-mini__day--today {
+    box-shadow: inset 0 0 0 2px var(--color-danger);
 }
 
 .cal-cell__date {

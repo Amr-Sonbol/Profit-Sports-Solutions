@@ -1402,7 +1402,7 @@ def dashboard(request):
     """At a glance: who's available today, and every open task with its
     lead and schedule. Every role but technician has view_dashboard by
     default (people migrations 0024 and 0050): a field technician has
-    My week and My progress instead.
+    My schedule and My progress instead.
     """
     viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
     chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
@@ -3210,13 +3210,21 @@ def _weekend_warning(task):
 
 
 def _calendar_context(request, tasks, country=None):
-    """A week (default, ?start=) or month (?view=month&month=YYYY-MM) of
-    `tasks` laid out by local day, plus the open tasks with no day at all.
-    A task booked by day only (scheduled_date) shows on its day too, after
-    the timed ones. Shared by the country and all-countries calendars.
+    """A week (default, ?start=), month (?view=month&month=YYYY-MM) or year
+    (?view=year&year=YYYY) of `tasks` laid out by local day, plus the open
+    tasks with no day at all. A task booked by day only (scheduled_date)
+    shows on its day too, after the timed ones. Weeks start on the
+    country's first working day and its days off are marked. Shared by the
+    country and all-countries calendars and My schedule.
     """
     today = timezone.localdate()
-    if request.GET.get('view') == 'month':
+    if request.GET.get('view') == 'year':
+        year = request.GET.get('year', '')
+        year = int(year) if year.isdigit() and 2000 <= int(year) <= 2100 else today.year
+        start = _week_start(date(year, 1, 1), country)
+        end = _week_start(date(year, 12, 31), country) + timedelta(days=WEEK_LENGTH - 1)
+        nav = {'view': 'year', 'today': today, 'year': year, 'start': start, 'month': date(year, 1, 1)}
+    elif request.GET.get('view') == 'month':
         month = parse_date(f"{request.GET.get('month', '')}-01") or today.replace(day=1)
         next_month = (month + timedelta(days=32)).replace(day=1)
         last_day = next_month - timedelta(days=1)
@@ -3245,12 +3253,13 @@ def _calendar_context(request, tasks, country=None):
         task.task_number,
     ))
 
+    weekend = country.weekend_weekdays if country else set()
     days = []
     by_date = {}
     for offset in range((end - start).days + 1):
         day = start + timedelta(days=offset)
         entry = {
-            'date': day, 'tasks': [], 'is_today': day == today,
+            'date': day, 'tasks': [], 'is_today': day == today, 'is_weekend': day.weekday() in weekend,
             'in_month': nav['view'] == 'week' or day.month == nav['month'].month,
             'week_start': _week_start(day, country),
         }
@@ -3269,12 +3278,38 @@ def _calendar_context(request, tasks, country=None):
     )
     _attach_lead_technician(unscheduled)
 
-    return {
+    context = {
         **nav,
         'days': days,
         'weeks': [days[i:i + WEEK_LENGTH] for i in range(0, len(days), WEEK_LENGTH)],
         'unscheduled': unscheduled,
     }
+    if nav['view'] == 'year':
+        context['year_months'] = _year_months(nav['year'], days, country)
+    return context
+
+
+def _year_months(year, days, country):
+    """The year view's twelve small months: each its own whole weeks of
+    the day entries above (a day outside the month left blank), and its
+    count of visits."""
+    by_date = {entry['date']: entry for entry in days}
+    months = []
+    for number in range(1, 13):
+        first = date(year, number, 1)
+        last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        start = _week_start(first, country)
+        span = (_week_start(last, country) - start).days + WEEK_LENGTH
+        cells = [
+            by_date[start + timedelta(days=offset)] if (start + timedelta(days=offset)).month == number else None
+            for offset in range(span)
+        ]
+        months.append({
+            'first': first,
+            'cells': cells,
+            'count': sum(len(cell['tasks']) for cell in cells if cell),
+        })
+    return months
 
 
 @login_required
@@ -3345,7 +3380,7 @@ def _overdue(mine, with_role, today):
 
 
 def _today_plan(technician):
-    """My week's Today view: today's tasks split into the next job (one
+    """My schedule's Today view: today's tasks split into the next job (one
     already under way first, else the earliest still to do), the rest
     still to do, and those done — plus overdue. The next job carries the
     lead's next tap (`next_action`) and its site's map link.
@@ -3416,12 +3451,19 @@ def _week_board(technician, request):
 
 @login_required
 def my_week(request):
-    """Someone's own schedule: Today (the default — the next job first)
-    or the Week (?view=week, or any ?start=)."""
+    """My schedule: Today (the default — the next job first), or the same
+    calendar as the Schedule page — week, month or year (?view=) — of
+    just this person's own tasks, each marked with their role. Overdue
+    jobs show above whichever is open.
+    """
     technician = require_technician(request)
-    if request.GET.get('view') == 'week' or 'start' in request.GET:
-        days, overdue, unscheduled, nav_context = _week_board(technician, request)
-        context = {'view': 'week', 'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context}
+    if request.GET.get('view') in ('week', 'month', 'year') or 'start' in request.GET:
+        mine, with_role = _my_tasks(technician)
+        context = _calendar_context(request, mine, technician.country)
+        for entry in context['days']:
+            with_role(entry['tasks'])
+        context['unscheduled'] = with_role(context['unscheduled'])
+        context['overdue'] = _overdue(mine, with_role, timezone.localtime().date())
     else:
         context = {'view': 'today', **_today_plan(technician)}
     return render(request, 'tasks/my_week.html', context)
@@ -4819,7 +4861,7 @@ def my_task_detail(request, pk):
                     task.status = new_status
                     task.save(update_fields=['status'])
             messages.success(request, _('Updated.'))
-            if request.POST.get('next') == 'today':  # tapped on My week's Today card
+            if request.POST.get('next') == 'today':  # tapped on My schedule's Today card
                 return redirect('tasks:my_week')
             return redirect('tasks:my_task_detail', pk=task.pk)
 

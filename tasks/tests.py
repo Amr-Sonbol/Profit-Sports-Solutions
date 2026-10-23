@@ -3387,6 +3387,12 @@ class TaskOwnershipTests(TaskTestCase):
 
 
 class TaskWeekTests(TaskTestCase):
+    def test_the_schedule_has_a_year_view(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'view': 'year', 'year': '2026'})
+        self.assertEqual(response.context['view'], 'year')
+        self.assertEqual(len(response.context['year_months']), 12)
+
     # 2026-09-07 is a Monday.
     WEEK_START = date(2026, 9, 7)
 
@@ -3727,6 +3733,29 @@ class MyWeekTests(TaskTestCase):
         response = self.client.get('/tasks/my-week/')
         self.assertIsNone(response.context['next_job'])
         self.assertContains(response, 'Nothing left to do today.')
+
+    def test_the_year_shows_every_visit_like_a_quarterly_maintenance(self):
+        # A preventive maintenance visit every 3 months.
+        for number, month in (('AE-0901', 1), ('AE-0902', 4), ('AE-0903', 7), ('AE-0904', 10)):
+            self._lead(self._make_task(number, scheduled_for=dubai_time(2027, month, 12, 9), status=Task.Status.ASSIGNED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'view': 'year', 'year': '2027'})
+        months = response.context['year_months']
+        self.assertEqual(len(months), 12)
+        self.assertEqual([month['count'] for month in months], [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
+        busy_day = next(cell for cell in months[3]['cells'] if cell and cell['tasks'])
+        self.assertEqual(busy_day['date'], date(2027, 4, 12))
+        self.assertEqual(busy_day['tasks'][0].my_role, 'lead')
+        self.assertContains(response, 'My schedule')
+
+    def test_the_month_shows_my_tasks_only(self):
+        mine = self._lead(self._make_task('AE-0905', scheduled_for=dubai_time(2026, 9, 9, 9)))
+        self._make_task('AE-0906', scheduled_for=dubai_time(2026, 9, 10, 9))  # not mine
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'view': 'month', 'month': '2026-09'})
+        booked = [task for day in response.context['days'] for task in day['tasks']]
+        self.assertEqual(booked, [mine])
+        self.assertContains(response, f'href="/tasks/my/{mine.pk}/"')
 
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')

@@ -1,14 +1,26 @@
-{% load i18n %}{% comment %}The schedule calendar shared by the country and all-countries views (views._calendar_context): a week of day columns or a month grid, then the open tasks with no day yet.{% endcomment %}
+{% load i18n %}{% comment %}
+The schedule calendar (views._calendar_context): a week of day columns,
+a month grid or a year of small months, then the open tasks with no day
+yet. Shared by the country and all-countries Schedule and My schedule —
+`task_url` is the page a task opens (the office's task page by default)
+and `today_tab` adds My schedule's Today tab.
+{% endcomment %}
 <div class="cal-toolbar">
     <nav class="tabs" aria-label="{% translate 'Calendar view' %}">
-        <a href="?view=week&start={{ start|date:'Y-m-d' }}" class="{% if view == 'week' %}is-active{% endif %}">{% translate "Week" %}</a>
-        <a href="?view=month&month={% if view == 'month' %}{{ month|date:'Y-m' }}{% else %}{{ start|date:'Y-m' }}{% endif %}" class="{% if view == 'month' %}is-active{% endif %}">{% translate "Month" %}</a>
+        {% if today_tab %}<a href="?">{% translate "Today" %}</a>{% endif %}
+        <a href="?view=week&start={% if view == 'week' %}{{ start|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" class="{% if view == 'week' %}is-active{% endif %}">{% translate "Week" %}</a>
+        <a href="?view=month&month={% if view == 'month' %}{{ month|date:'Y-m' }}{% elif view == 'week' %}{{ start|date:'Y-m' }}{% else %}{{ today|date:'Y-m' }}{% endif %}" class="{% if view == 'month' %}is-active{% endif %}">{% translate "Month" %}</a>
+        <a href="?view=year&year={% if view == 'year' %}{{ year }}{% elif view == 'month' %}{{ month|date:'Y' }}{% else %}{{ start|date:'Y' }}{% endif %}" class="{% if view == 'year' %}is-active{% endif %}">{% translate "Year" %}</a>
     </nav>
     <h2 class="cal-toolbar__title">
-        {% if view == 'month' %}{{ month|date:"F Y" }}{% else %}{{ start|date:"j M" }} – {{ end|date:"j M Y" }}{% endif %}
+        {% if view == 'year' %}{{ year }}{% elif view == 'month' %}{{ month|date:"F Y" }}{% else %}{{ start|date:"j M" }} – {{ end|date:"j M Y" }}{% endif %}
     </h2>
     <div class="button-row">
-        {% if view == 'month' %}
+        {% if view == 'year' %}
+        <a href="?view=year&year={{ year|add:'-1' }}" class="button button--secondary" aria-label="{% translate 'Previous year' %}">‹</a>
+        <a href="?view=year&year={{ today|date:'Y' }}" class="button button--secondary">{% translate "This year" %}</a>
+        <a href="?view=year&year={{ year|add:'1' }}" class="button button--secondary" aria-label="{% translate 'Next year' %}">›</a>
+        {% elif view == 'month' %}
         <a href="?view=month&month={{ prev_month|date:'Y-m' }}" class="button button--secondary" aria-label="{% translate 'Previous month' %}">‹</a>
         <a href="?view=month&month={{ this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
         <a href="?view=month&month={{ next_month|date:'Y-m' }}" class="button button--secondary" aria-label="{% translate 'Next month' %}">›</a>
@@ -20,6 +32,10 @@
     </div>
 </div>
 
+{# My schedule's missed jobs, under the toolbar like on its Today view. #}
+{% if overdue %}{% include "tasks/_week_overdue.html" %}{% endif %}
+
+{% if view != 'year' %}
 <ul class="cal-legend" aria-label="{% translate 'Colour key' %}">
     <li><span class="cal-swatch cal-card--new"></span>{% translate "Awaiting action" %}</li>
     <li><span class="cal-swatch cal-card--assigned"></span>{% translate "Assigned" %}</li>
@@ -29,15 +45,37 @@
     <li><span class="cal-dot cal-dot--emergency"></span>{% translate "Emergency" %}</li>
     <li><span class="cal-dot cal-dot--high"></span>{% translate "High priority" %}</li>
 </ul>
+{% endif %}
 
-{% if view == 'month' %}
+{% if view == 'year' %}
+<p class="field__help">{% translate "Each marked day has visits; the number is how many. Click a day for its week, or a month for its month." %}</p>
+<div class="cal-year">
+    {% for month in year_months %}
+    <section class="cal-mini" aria-label="{{ month.first|date:'F Y' }}">
+        <h3 class="cal-mini__head">
+            <a href="?view=month&month={{ month.first|date:'Y-m' }}">{{ month.first|date:"F" }}</a>
+            {% if month.count %}<span class="muted">{% blocktranslate count count=month.count %}{{ count }} visit{% plural %}{{ count }} visits{% endblocktranslate %}</span>{% endif %}
+        </h3>
+        <div class="cal-mini__grid">
+            {# The second week is always whole, so it names all seven days. #}
+            {% for cell in month.cells|slice:"7:14" %}<span class="cal-mini__weekday">{{ cell.date|date:"D"|slice:":2" }}</span>{% endfor %}
+            {% for cell in month.cells %}
+            {% if not cell %}<span></span>
+            {% elif cell.tasks %}<a href="?view=week&start={{ cell.week_start|date:'Y-m-d' }}" class="cal-mini__day cal-mini__day--busy{% if cell.is_today %} cal-mini__day--today{% endif %}" title="{% for task in cell.tasks %}{{ task.task_number }} · {{ task.site.customer.name }}{% if not forloop.last %}, {% endif %}{% endfor %}">{{ cell.date|date:"j" }}{% if cell.tasks|length > 1 %}<sup>{{ cell.tasks|length }}</sup>{% endif %}</a>
+            {% else %}<span class="cal-mini__day{% if cell.is_weekend %} cal-mini__day--weekend{% endif %}{% if cell.is_today %} cal-mini__day--today{% endif %}">{{ cell.date|date:"j" }}</span>{% endif %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+{% elif view == 'month' %}
 <div class="cal-month">
     {% for day in weeks.0 %}<div class="cal-month__weekday">{{ day.date|date:"D" }}</div>{% endfor %}
     {% for day in days %}
-    <div class="cal-cell{% if not day.in_month %} cal-cell--other-month{% endif %}{% if day.is_today %} cal-cell--today{% endif %}">
+    <div class="cal-cell{% if not day.in_month %} cal-cell--other-month{% endif %}{% if day.is_today %} cal-cell--today{% endif %}{% if day.is_weekend %} cal-cell--weekend{% endif %}">
         <a href="?view=week&start={{ day.week_start|date:'Y-m-d' }}" class="cal-cell__date">{{ day.date|date:"j" }}</a>
         {% for task in day.shown %}
-        <a href="{% url 'tasks:task_detail' task.pk %}" class="cal-line cal-card--{{ task.status }}" title="{{ task.task_number }} · {{ task.get_status_display }}">
+        <a href="{% url task_url|default:'tasks:task_detail' task.pk %}" class="cal-line cal-card--{{ task.status }}" title="{{ task.task_number }} · {{ task.get_status_display }}">
             {% if task.priority == 'emergency' or task.priority == 'high' %}<span class="cal-dot cal-dot--{{ task.priority }}" aria-hidden="true"></span>{% endif %}
             {% if task.scheduled_for %}{{ task.scheduled_for|time:"H:i" }} {% endif %}{{ task.site.customer.name }}
         </a>
@@ -50,10 +88,10 @@
 {% else %}
 <div class="cal-week">
     {% for day in days %}
-    <section class="cal-day{% if day.is_today %} cal-day--today{% endif %}" aria-label="{{ day.date|date:'l j F' }}">
+    <section class="cal-day{% if day.is_today %} cal-day--today{% endif %}{% if day.is_weekend %} cal-day--weekend{% endif %}" aria-label="{{ day.date|date:'l j F' }}">
         <h3 class="cal-day__head">
             <span>{{ day.date|date:"D j" }}</span>
-            {% if day.is_today %}<span>{% translate "Today" %}</span>{% endif %}
+            {% if day.is_today %}<span>{% translate "Today" %}</span>{% elif day.is_weekend %}<span>{% translate "Weekend" %}</span>{% endif %}
         </h3>
         {% for task in day.tasks %}
         {% include "tasks/_calendar_card.html" %}

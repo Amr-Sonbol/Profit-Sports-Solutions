@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:46+0000\n"
+"POT-Creation-Date: 2026-10-23 22:50+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -125,6 +125,16 @@ msgstr[2] "مهمتان اليوم"
 msgstr[3] "%(count)s مهام اليوم"
 msgstr[4] "%(count)s مهمة اليوم"
 msgstr[5] "%(count)s مهمة اليوم"
+
+#, python-format
+msgid "%(count)s visit"
+msgid_plural "%(count)s visits"
+msgstr[0] "لا زيارات"
+msgstr[1] "زيارة واحدة"
+msgstr[2] "زيارتان"
+msgstr[3] "%(count)s زيارات"
+msgstr[4] "%(count)s زيارة"
+msgstr[5] "%(count)s زيارة"
 
 #, python-format
 msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
@@ -1553,6 +1563,9 @@ msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. ال�
 msgid "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early."
 msgstr "يُحتسب لكل مساعد عدد الساعات أعلاه. يرجى إدخال قيمة فقط إذا كانت مختلفة، كأن يكون أحد أعضاء الفريق قد غادر مبكراً."
 
+msgid "Each marked day has visits; the number is how many. Click a day for its week, or a month for its month."
+msgstr "الأيام المميزة فيها زيارات، والرقم يبيّن عددها. اضغط على يوم لعرض أسبوعه، أو على شهر لعرضه."
+
 msgid "Each technician's most recent check-in today. Location is recorded only at each check-in and is never tracked in between."
 msgstr "آخر تسجيل لكل فني اليوم. يُسجَّل الموقع عند كل تسجيل فقط، ولا يُتتبَّع بينها أبدًا."
 
@@ -2196,11 +2209,11 @@ msgstr "ملفي الشخصي"
 msgid "My progress"
 msgstr "تقدّمي"
 
+msgid "My schedule"
+msgstr "جدولي"
+
 msgid "My skills"
 msgstr "مهاراتي"
-
-msgid "My week"
-msgstr "أسبوعي"
 
 msgid "Name"
 msgstr "الاسم"
@@ -2308,6 +2321,9 @@ msgstr "الموعد القادم"
 
 msgid "Next week"
 msgstr "الأسبوع القادم"
+
+msgid "Next year"
+msgstr "السنة التالية"
 
 msgid "No"
 msgstr "لا"
@@ -2802,8 +2818,8 @@ msgstr "نُفّذت بواسطة"
 msgid "Permission"
 msgstr "الصلاحية"
 
-msgid "Permissions for each role. Self-service technician screens (My week, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role."
-msgstr "صلاحيات كل دور. لا تُدرج هنا شاشات الخدمة الذاتية للفنيين (أسبوعي، مهاراتي، وغيرها)؛ إذ تظل متاحة لجميع الفنيين المسجلين بصرف النظر عن الدور."
+msgid "Permissions for each role. Self-service technician screens (My schedule, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role."
+msgstr "صلاحيات كل دور. لا تُدرج هنا شاشات الخدمة الذاتية للفنيين (جدولي، مهاراتي، وغيرها)؛ فهي متاحة لجميع الفنيين المسجّلين بغض النظر عن الدور."
 
 msgid "Permissions updated."
 msgstr "تم تحديث الصلاحيات."
@@ -2936,6 +2952,9 @@ msgstr "الشهر السابق"
 
 msgid "Previous week"
 msgstr "الأسبوع الماضي"
+
+msgid "Previous year"
+msgstr "السنة السابقة"
 
 msgid "Priority"
 msgstr "الأولوية"
@@ -4146,6 +4165,9 @@ msgstr "يتطلب هذا النوع من المهام توقيع العميل."
 msgid "This week"
 msgstr "هذا الأسبوع"
 
+msgid "This year"
+msgstr "هذه السنة"
+
 msgid "Thursday"
 msgstr "الخميس"
 
@@ -4595,6 +4617,9 @@ msgstr "يعمل في دولة أخرى خلال تواريخ محددة. يمك
 
 msgid "Written report"
 msgstr "تقرير مكتوب"
+
+msgid "Year"
+msgstr "السنة"
 
 msgid "Yes"
 msgstr "نعم"

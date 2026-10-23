@@ -199,7 +199,7 @@ class RolePermission(models.Model):
     one (role, permission) pair; `allowed` is the only thing an admin
     changes. Deliberately narrow: it only covers the supervisor-side
     actions that plausibly differ by role (dashboard, tasks, technicians,
-    reports). Self-service technician screens (My week, My skills, ...)
+    reports). Self-service technician screens (My schedule, My skills, ...)
     stay open to any signed-in technician regardless of role — there's no
     real case yet for excluding a role from their own record.
     """

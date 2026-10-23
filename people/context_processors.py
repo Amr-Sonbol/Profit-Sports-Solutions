@@ -173,7 +173,7 @@ def nav_pages(technician, allowed):
         pages.append({'url': reverse(url_name), 'label': label, 'icon': icon, 'group': group})
 
     if not technician.is_manager_tier:
-        add('tasks:my_week', _('My week'), 'calendar', 'mine')
+        add('tasks:my_week', _('My schedule'), 'calendar', 'mine')
         add('tasks:my_progress', _('My progress'), 'trending-up', 'mine')
         add('tasks:my_skills', _('My skills'), 'award', 'mine')
     if RolePermission.Permission.VIEW_DASHBOARD in allowed:
