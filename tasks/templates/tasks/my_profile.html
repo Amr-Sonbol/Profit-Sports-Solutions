@@ -82,28 +82,6 @@
     </dl>
 </div>
 
-<div class="section">
-    <h2>{% translate "Your contacts" %}</h2>
-    {% if contacts %}
-    <ul class="contact-list">
-        {% for person in contacts %}
-        <li class="contact-row">
-            {% include "_avatar.html" with technician=person %}
-            <span class="contact-row__name">
-                {{ person.full_name }}<br>
-                <span class="muted">{{ person.get_role_display }}</span>
-            </span>
-            <span class="contact-row__actions">
-                {% if person.phone %}<a href="tel:{{ person.phone }}" class="button button--secondary" dir="ltr">{{ person.phone }}</a>{% endif %}
-                {% if person.user.email %}<a href="mailto:{{ person.user.email }}" class="button button--secondary">{% translate "Email" %}</a>{% endif %}
-            </span>
-        </li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p class="empty-state">{% translate "No supervisor or manager has been set up in your country." %}</p>
-    {% endif %}
-</div>
 {% endif %}
 
 <div class="section">

@@ -72,8 +72,22 @@
     </dl>
 </div>
 
-<div class="section">
-    <h2>{% translate "This month" %}</h2>
+<div class="section" id="month">
+    {# Same three buttons in the same places as the Hours page; one that can't be used is greyed out, not hidden. #}
+    <nav class="week-nav">
+        <a href="?month={{ prev_month|date:'Y-m' }}#month" class="back-link">{% translate "Previous month" %}</a>
+        {% if is_this_month %}
+        <span class="button button--secondary" aria-disabled="true">{% translate "This month" %}</span>
+        {% else %}
+        <a href="?#month" class="button button--secondary">{% translate "This month" %}</a>
+        {% endif %}
+        {% if next_month %}
+        <a href="?month={{ next_month|date:'Y-m' }}#month" class="forward-link">{% translate "Next month" %}</a>
+        {% else %}
+        <span class="forward-link" aria-disabled="true">{% translate "Next month" %}</span>
+        {% endif %}
+    </nav>
+    <h2>{{ month_first|date:"F Y" }}</h2>
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Labour hours" %}</dt>

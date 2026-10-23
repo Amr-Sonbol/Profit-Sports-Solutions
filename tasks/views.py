@@ -56,6 +56,7 @@ from .forms import (
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
+    SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
     TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
@@ -1296,9 +1297,9 @@ def home_summary(request, technician):
 @login_required
 def dashboard(request):
     """At a glance: who's available today, and every open task with its
-    lead and schedule. Every role has view_dashboard (see migration
-    0024_dashboard_is_the_default_landing_page) since every role's
-    welcome page (spots.views.home) links to it.
+    lead and schedule. Every role but technician has view_dashboard by
+    default (people migrations 0024 and 0050): a field technician has
+    My week and My progress instead.
     """
     viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
     chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
@@ -3256,8 +3257,10 @@ def my_progress(request):
     ).count()
 
     # Same rule and figure as the supervisors' Hours page — lead, helper
-    # and handover hours alike.
-    month_first = timezone.localtime().date().replace(day=1)
+    # and handover hours alike. Any past month (?month=YYYY-MM), this one
+    # by default; never a future one, which has nothing yet.
+    this_month = timezone.localtime().date().replace(day=1)
+    month_first = min(_resolve_report_month(request), this_month)
     month_start, month_end = _month_window(month_first)
     month_reports = list(
         WorkReport.objects.filter(
@@ -3272,6 +3275,10 @@ def my_progress(request):
     )
 
     context = {
+        'month_first': month_first,
+        'prev_month': _shift_month(month_first, -1),
+        'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
+        'is_this_month': month_first == this_month,
         'month_hours': own_row['hours'] if own_row else 0,
         'month_report_count': len(month_reports),
         'month_overrun_count': sum(1 for report in month_reports if report.is_overrun),
@@ -3296,6 +3303,9 @@ def my_skills(request):
     and once set it can only be changed by a supervisor from here on.
     """
     technician = require_technician(request)
+    # A submission that didn't save, shown again open with its errors:
+    # ('skill' or 'conduct', its id, the bound form).
+    failed = None
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -3304,14 +3314,21 @@ def my_skills(request):
         if action == 'rate_skill':
             skill = get_object_or_404(Skill, pk=request.POST.get('skill_id'), is_active=True)
             form = SelfRateSkillForm(request.POST, request.FILES)
-            if not TechnicianSkill.objects.filter(technician=technician, skill=skill).exists() and form.is_valid():
+            current = TechnicianSkill.objects.filter(technician=technician, skill=skill).first()
+            # Their own rating can be replaced until a supervisor reviews it.
+            if current is not None and current.source != TechnicianSkill.Source.SELF:
+                messages.error(request, _('A supervisor has reviewed this skill, so only a supervisor can change it now.'))
+                return redirect('tasks:my_skills')
+            if form.is_valid():
                 level = int(form.cleaned_data['level'])
                 evidence = form.cleaned_data['evidence']
                 note = form.cleaned_data['note']
                 with transaction.atomic():
-                    TechnicianSkill.objects.create(
-                        technician=technician, skill=skill, level=level, evidence=evidence,
-                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
+                    TechnicianSkill.objects.update_or_create(
+                        technician=technician, skill=skill, defaults=dict(
+                            level=level, evidence=evidence, source=TechnicianSkill.Source.SELF,
+                            set_by=technician, set_on=today, note=note,
+                        ),
                     )
                     # The same uploaded file gets saved twice (current
                     # snapshot + history log) — its read pointer is at EOF
@@ -3323,32 +3340,59 @@ def my_skills(request):
                         source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
                     )
                 messages.success(request, _('Self-rating saved.'))
-                return redirect('tasks:my_skills')
+                return redirect(f"{reverse('tasks:my_skills')}#skill-{skill.pk}")
+            failed = ('skill', skill.pk, form)
 
         elif action == 'rate_conduct':
             area = get_object_or_404(ConductArea, pk=request.POST.get('conduct_area_id'), is_active=True)
             form = SelfRateLevelForm(request.POST)
-            if not TechnicianConduct.objects.filter(technician=technician, conduct_area=area).exists() and form.is_valid():
+            current = TechnicianConduct.objects.filter(technician=technician, conduct_area=area).first()
+            if current is not None and current.source != TechnicianConduct.Source.SELF:
+                messages.error(request, _('A supervisor has reviewed this area, so only a supervisor can change it now.'))
+                return redirect('tasks:my_skills')
+            if form.is_valid():
                 level = int(form.cleaned_data['level'])
                 with transaction.atomic():
-                    TechnicianConduct.objects.create(
-                        technician=technician, conduct_area=area, level=level,
-                        source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+                    TechnicianConduct.objects.update_or_create(
+                        technician=technician, conduct_area=area, defaults=dict(
+                            level=level, source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+                        ),
                     )
                     TechnicianConductAssessment.objects.create(
                         technician=technician, conduct_area=area, level=level,
                         source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
                     )
                 messages.success(request, _('Self-rating saved.'))
-                return redirect('tasks:my_skills')
+                return redirect(f"{reverse('tasks:my_skills')}#conduct-{area.pk}")
+            failed = ('conduct', area.pk, form)
+        if failed:
+            messages.error(request, _('Your self-rating was not saved. Please correct the form below.'))
 
-    basic_skills, cardio_skills = _split_by_category(_skills_with_current_rating(technician))
+    skills = _skills_with_current_rating(technician)
+    conduct_areas = _conduct_areas_with_current_rating(technician)
+    for kind, items in (('skill', skills), ('conduct', conduct_areas)):
+        for item in items:
+            item.level_label = SKILL_LEVEL_SHORT[item.current.level] if item.current else ''
+            item.failed_form = failed[2] if failed and failed[:2] == (kind, item.pk) else None
+    basic_skills, cardio_skills = _split_by_category(skills)
+    certification = _certification_status(technician)
+    confirmed = TechnicianSkill.Source.SUPERVISOR
     context = {
         'basic_skills': basic_skills,
         'cardio_skills': cardio_skills,
-        'conduct_areas': _conduct_areas_with_current_rating(technician),
+        'conduct_areas': conduct_areas,
         'self_rate_skill_form': SelfRateSkillForm(),
         'self_rate_form': SelfRateLevelForm(),
+        'rubric': sorted(SKILL_LEVEL_RUBRIC.items()),
+        'reliable_level': RELIABLE_LEVEL,
+        'certification': certification,
+        'cardio_confirmed': sum(
+            1 for skill in cardio_skills
+            if skill.current and skill.current.source == confirmed and skill.current.level >= RELIABLE_LEVEL
+        ),
+        'waiting_count': sum(
+            1 for item in skills + conduct_areas if item.current and item.current.source != confirmed
+        ),
     }
     return render(request, 'tasks/my_skills.html', context)
 
@@ -3362,21 +3406,6 @@ def sign_out_of_mobile_app(user):
     """
     Token.objects.filter(user=user).delete()
     PushDevice.objects.filter(technician__user=user).delete()
-
-
-def _who_to_contact(technician):
-    """The people above this person in their country, nearest first: a
-    technician's supervisors, then managers, then admins; anyone else's
-    managers, then admins. No single supervisor is assigned, so it's
-    everyone in that role. Never the person themselves.
-    """
-    roles = [Technician.Role.MANAGER, Technician.Role.ADMIN]
-    if technician.role == Technician.Role.TECHNICIAN:
-        roles.insert(0, Technician.Role.SUPERVISOR)
-    people = Technician.objects.filter(country=technician.country, is_active=True, role__in=roles).exclude(
-        pk=technician.pk,
-    ).select_related('user')
-    return sorted(people, key=lambda person: (roles.index(person.role), person.full_name))
 
 
 def send_password_changed_email(user, temporary=False):
@@ -3462,7 +3491,6 @@ def my_profile(request):
                 None,
             ),
             'leaderboard_size': len(leaderboard),
-            'contacts': _who_to_contact(technician),
         })
     return render(request, 'tasks/my_profile.html', context)
 
@@ -4102,13 +4130,14 @@ def technician_edit(request, pk):
 @login_required
 def first_login(request):
     """A one-time stop between signing in on a temporary password and
-    reaching the dashboard — just setting a real password. Everything
+    reaching the home page — just setting a real password. Everything
     else about a technician's own record stays editable any time from
     My profile, not gated here.
     """
     technician = require_technician(request)
+    # Home, not the dashboard: a technician can't open the dashboard.
     if not technician.must_change_password:
-        return redirect('tasks:dashboard')
+        return redirect('home')
 
     if request.method == 'POST':
         form = TechnicianFirstLoginForm(request.POST, user=request.user)
@@ -4119,7 +4148,7 @@ def first_login(request):
             request.user.save(update_fields=['password'])
             update_session_auth_hash(request, request.user)
             messages.success(request, _('Your password has been set. Welcome.'))
-            return redirect('tasks:dashboard')
+            return redirect('home')
     else:
         form = TechnicianFirstLoginForm(user=request.user)
 

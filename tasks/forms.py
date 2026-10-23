@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
@@ -584,11 +585,31 @@ class TechnicianFirstLoginForm(forms.Form):
         return password2
 
 
+# The four sentences every level is judged by, for a skill or a conduct
+# area alike (docs/database_design_v2.md, "How a level gets set"): the
+# full sentence on My skills, the short form in the level choices.
+SKILL_LEVEL_RUBRIC = {
+    1: _('Has never done this repair alone, or has not been observed yet. Helper only.'),
+    2: _('Has done it under supervision and it went fine. Leads simple jobs, calls for help on faults.'),
+    3: _('Has led this work alone, repeatedly, with no callbacks.'),
+    4: _('Others call on them when they are stuck. Can train others.'),
+}
+SKILL_LEVEL_SHORT = {
+    1: _('Helper only'),
+    2: _('Under supervision'),
+    3: _('Alone, no callbacks'),
+    4: _('Can train others'),
+}
+LABELLED_LEVEL_CHOICES = [('', '---------')] + [
+    (level, format_lazy('{} — {}', level, SKILL_LEVEL_SHORT[level])) for level, _label in SKILL_LEVEL_CHOICES
+]
+
+
 class SelfRateLevelForm(forms.Form):
     """A technician's own first guess at a conduct-area level — for a
     skill, see SelfRateSkillForm below, which also requires evidence.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
 
 
 class SelfRateSkillForm(SelfRateLevelForm):
@@ -616,7 +637,7 @@ class ReviewLevelForm(forms.Form):
     """A supervisor's confirmed level — always overwrites whatever was
     there, self-rated or previously supervisor-set.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
     note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
 

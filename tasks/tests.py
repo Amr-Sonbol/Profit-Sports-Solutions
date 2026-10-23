@@ -3649,6 +3649,20 @@ class MyProgressTests(TaskTestCase):
 
         self.assertEqual(response.context['completed_count'], 1)
 
+    def test_my_progress_shows_a_chosen_past_month_but_never_a_future_one(self):
+        self.client.login(username='tech1', password='pass12345')
+        this_month = timezone.localdate().replace(day=1)
+        last_month = (this_month - timedelta(days=1)).replace(day=1)
+
+        response = self.client.get('/tasks/my-progress/', {'month': last_month.strftime('%Y-%m')})
+        self.assertEqual(response.context['month_first'], last_month)
+        self.assertEqual(response.context['next_month'], this_month)
+        self.assertFalse(response.context['is_this_month'])
+
+        response = self.client.get('/tasks/my-progress/', {'month': '2999-01'})
+        self.assertEqual(response.context['month_first'], this_month)
+        self.assertIsNone(response.context['next_month'])
+
     def test_supervisor_can_view_their_own_progress_too(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/my-progress/')
@@ -3908,19 +3922,53 @@ class MySkillsTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(TechnicianSkill.objects.filter(technician=self.technician, skill=self.skill).exists())
 
-    def test_cannot_self_rate_a_skill_twice(self):
+    def test_a_self_rating_can_be_replaced_until_a_supervisor_reviews_it(self):
         TechnicianSkill.objects.create(
             technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
             set_by=self.technician, set_on=timezone.now().date(),
         )
-
         self.client.login(username='tech1', password='pass12345')
         self.client.post('/tasks/my-skills/', {
-            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 4,
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'evidence': self._evidence('better.mp4'),
         })
-
         rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
-        self.assertEqual(rating.level, 2)
+        self.assertEqual(rating.level, 3)
+        self.assertTrue(rating.evidence.name.endswith('.mp4'))
+        # Both stay in the history.
+        self.assertEqual(TechnicianSkillAssessment.objects.filter(skill=self.skill).count(), 1)
+
+    def test_a_supervisor_confirmed_level_cannot_be_changed_by_the_technician(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SUPERVISOR,
+            set_by=self.supervisor_user.technician, set_on=timezone.now().date(), note='Watch the torque.',
+        )
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 4, 'evidence': self._evidence(),
+        }, follow=True)
+        self.assertEqual(TechnicianSkill.objects.get(technician=self.technician, skill=self.skill).level, 2)
+        self.assertContains(response, 'only a supervisor can change it now')
+        # The supervisor's note is shown with the confirmed level.
+        self.assertContains(response, 'Watch the torque.')
+
+    def test_a_failed_submission_says_so_and_keeps_the_chosen_level(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'note': 'Took 10 minutes',
+        })
+        self.assertContains(response, 'Your self-rating was not saved')
+        self.assertContains(response, f'id="skill-{self.skill.pk}"')
+        self.assertContains(response, '<details class="rate-form" open>')
+        self.assertContains(response, '<option value="3" selected>', html=False)
+        self.assertContains(response, 'value="Took 10 minutes"')
+
+    def test_the_page_explains_the_levels_and_shows_progress(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-skills/')
+        self.assertContains(response, 'Has led this work alone, repeatedly, with no callbacks.')
+        self.assertContains(response, 'Needed for certification')
+        self.assertIn('non_cardio_total', response.context['certification'])
+        self.assertEqual(response.context['waiting_count'], 0)
 
     def test_self_rate_conduct_area_creates_self_sourced_rating(self):
         area = ConductArea.objects.filter(is_active=True).first()
@@ -3971,39 +4019,6 @@ class MyProfileTests(TaskTestCase):
         self.assertEqual(response.context['rank'], 1)
         self.assertEqual(response.context['leaderboard_size'], 1)
 
-    def test_shows_supervisors_and_managers_in_the_country(self):
-        manager_user = User.objects.create_user('manager1', password='pass12345')
-        Technician.objects.create(
-            user=manager_user, country=self.country, full_name='Mona Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
-        )
-        other_country = Country.objects.create(
-            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
-        )
-        other_supervisor_user = User.objects.create_user('egypt_sup', password='pass12345')
-        Technician.objects.create(
-            user=other_supervisor_user, country=other_country, full_name='Nour Cairo',
-            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-profile/')
-
-        # Nearest first: the supervisor, then the manager.
-        names = [person.full_name for person in response.context['contacts']]
-        self.assertEqual(names, ['Sara Super', 'Mona Manager'])
-
-    def test_a_supervisor_sees_only_people_above_them(self):
-        Technician.objects.create(
-            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
-            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
-            phone='+971500000000',
-        )
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/my-profile/')
-        self.assertEqual([person.full_name for person in response.context['contacts']], ['Mona Manager'])
-        self.assertContains(response, 'href="tel:+971500000000"')
-
     def test_an_admin_sees_their_account_without_field_staff_sections(self):
         Technician.objects.create(
             user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
@@ -4013,9 +4028,7 @@ class MyProfileTests(TaskTestCase):
         response = self.client.get('/tasks/my-profile/')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['is_field_staff'])
-        self.assertNotIn('contacts', response.context)
         self.assertNotIn('certification', response.context)
-        self.assertNotContains(response, 'Your contacts')
         self.assertNotContains(response, 'Professional skills')
         self.assertContains(response, 'admin1')
 
@@ -4164,7 +4177,20 @@ class TechnicianListTests(TaskTestCase):
         self.assertContains(response, 'No technicians match your search.')
 
 
-class DashboardTests(TaskTestCase):
+class DashboardManagerMixin:
+    # The dashboard is for managers and above (people migration 0050);
+    # a plain manager has it without handling tickets.
+
+    def _login_manager(self):
+        user = User.objects.create_user('dash_manager', password='pass12345')
+        self.manager = Technician.objects.create(
+            user=user, country=self.country, full_name='Maya Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='dash_manager', password='pass12345')
+
+
+class DashboardTests(DashboardManagerMixin, TaskTestCase):
     def _make_task(self, number, **overrides):
         fields = dict(
             task_number=number, site=self.site, priority=Task.Priority.NORMAL,
@@ -4174,20 +4200,18 @@ class DashboardTests(TaskTestCase):
         fields.update(overrides)
         return Task.objects.create(**fields)
 
-    def test_technician_can_view_it_too(self):
-        # Every role has view_dashboard now — it's the universal landing
-        # page (spots.views.home) — so a technician gets a normal 200,
-        # not the 403 this used to be.
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/dashboard/')
-        self.assertEqual(response.status_code, 200)
+    def test_only_managers_and_above_can_view_it(self):
+        # Technicians and supervisors have My week and My progress instead.
+        for username in ('tech1', 'supervisor1'):
+            self.client.login(username=username, password='pass12345')
+            self.assertEqual(self.client.get('/tasks/dashboard/').status_code, 403, username)
 
     def test_shows_technician_availability(self):
         self.technician.is_available = False
         self.technician.unavailable_reason = Technician.UnavailableReason.SICK
         self.technician.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(response.status_code, 200)
@@ -4205,7 +4229,7 @@ class DashboardTests(TaskTestCase):
             language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['technicians']), [self.technician])
@@ -4222,7 +4246,7 @@ class DashboardTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         technician = response.context['technicians'][0]
@@ -4235,7 +4259,7 @@ class DashboardTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         tasks = list(response.context['tasks'])
@@ -4245,7 +4269,7 @@ class DashboardTests(TaskTestCase):
     def test_closed_task_excluded(self):
         self._make_task('AE-0001', status=Task.Status.CLOSED)
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['tasks']), [])
@@ -4258,7 +4282,7 @@ class DashboardTests(TaskTestCase):
         other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
         self._make_task('EG-0001', site=other_site, status=Task.Status.NEW)
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['tasks']), [])
@@ -5194,8 +5218,8 @@ class HomeRedirectTests(TaskTestCase):
     def test_technician_sees_only_their_own_pages(self):
         self.client.login(username='tech1', password='pass12345')
         urls = self._tile_urls(self.client.get('/'))
-        self.assertEqual(urls[:4], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/', '/tasks/dashboard/'])
-        for url in ('/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
+        self.assertEqual(urls[:3], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/'])
+        for url in ('/tasks/dashboard/', '/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
             self.assertNotIn(url, urls)
 
     def test_supervisor_sees_tasks_but_not_manager_pages(self):
@@ -5278,13 +5302,13 @@ class TechnicianFirstLoginTests(TaskTestCase):
         self.technician.must_change_password = False
         self.technician.save(update_fields=['must_change_password'])
         response = self.client.get('/tasks/first-login/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
 
     def test_submitting_sets_the_password_and_clears_the_flag(self):
         response = self.client.post('/tasks/first-login/', {
             'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertRedirects(response, '/tasks/dashboard/')
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
 
         self.technician.refresh_from_db()
         self.assertFalse(self.technician.must_change_password)
@@ -7489,22 +7513,23 @@ class TaskListQuickFilterTests(TodayTestsMixin, TaskTestCase):
         self.assertContains(response, '<input type="hidden" name="lead" value="none">', html=True)
 
 
-class DashboardTileTests(TodayTestsMixin, TaskTestCase):
+class DashboardTileTests(DashboardManagerMixin, TodayTestsMixin, TaskTestCase):
     def test_tiles_link_to_the_filtered_lists_and_urgent_rows_come_first(self):
         self._make_task('UAE-0301', lead=self.technician, scheduled_for=timezone.now())
         self._make_task('UAE-0302', priority=Task.Priority.EMERGENCY, lead=self.technician,
                         scheduled_for=timezone.now())
         self._make_task('UAE-0303', scheduled_for=timezone.now())
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
         self.assertContains(response, 'href="/tasks/?priority=emergency"')
         self.assertContains(response, 'href="/tasks/?lead=none"')
         numbers = [task.task_number for task in response.context['tasks']]
         self.assertEqual(numbers[:2], ['UAE-0302', 'UAE-0303'])
 
-    def test_technician_sees_numbers_but_no_links(self):
+    def test_a_role_without_the_task_list_sees_numbers_but_no_links(self):
         self._make_task('UAE-0304')
-        self.client.login(username='tech1', password='pass12345')
+        self._login_manager()
+        RolePermission.objects.filter(role=Technician.Role.MANAGER, permission='view_tasks').update(allowed=False)
         response = self.client.get('/tasks/dashboard/')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'href="/tasks/?lead=none"')
@@ -7973,7 +7998,7 @@ class SidebarPerUserTests(TaskTestCase):
         self.assertNotContains(response, 'Not allowed', status_code=403)
 
 
-class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
+class DashboardWeeklyChartTests(DashboardManagerMixin, TodayTestsMixin, TaskTestCase):
     # The dashboard's opened-vs-completed chart: tasks reported per local
     # week, and tasks whose first work report was submitted that week.
 
@@ -7991,7 +8016,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
             TaskEvent.objects.create(
                 task=older, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=when, actor=self.tech_user,
             )
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         weekly = self.client.get('/tasks/dashboard/', {'period': 'week'}).context['tasks_chart']
         weeks = weekly['periods']
         self.assertEqual(len(weeks), 8)
@@ -8004,7 +8029,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
         self.assertIsNotNone(this_week)
 
     def test_tickets_chart_only_for_people_who_handle_tickets(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         self.assertIsNone(self.client.get('/tasks/dashboard/').context['tickets_chart'])
 
         Technician.objects.create(
@@ -8025,7 +8050,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
     def test_monthly_is_the_default_and_covers_twelve_months(self):
         self._make_task('UAE-0601', reported_at=TEAM_MAP_NOW)
         self._make_task('UAE-0602', reported_at=TEAM_MAP_NOW - timedelta(days=40))
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         chart = self.client.get('/tasks/dashboard/').context['tasks_chart']
         self.assertEqual(chart['period'], 'month')
         months = chart['periods']
@@ -8034,9 +8059,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
         self.assertEqual((months[-1]['opened'], months[-2]['opened']), (1, 1))
 
     def test_chart_has_a_legend_and_a_table_view(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        self.supervisor_user.technician.language = 'en'
-        self.supervisor_user.technician.save(update_fields=['language'])
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
         self.assertContains(response, 'chart-legend')
         self.assertContains(response, 'Show as table')

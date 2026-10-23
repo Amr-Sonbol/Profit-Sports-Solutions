@@ -815,6 +815,13 @@ tbody tr:hover {
     content: "←";
 }
 
+/* A month/week button that can't be used right now (e.g. "Next month"
+   on the current month): kept in place so the others don't move. */
+.week-nav [aria-disabled="true"] {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
 .button-row {
     display: flex;
     flex-direction: row;
@@ -1005,34 +1012,37 @@ tbody tr:hover {
     flex: 1 1 18rem;
 }
 
-.contact-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.contact-row {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-    padding-block: 0.6rem;
-    border-block-end: 1px solid var(--color-border);
-}
-
-.contact-row:last-child {
-    border-block-end: none;
-}
-
-.contact-row__name {
-    flex: 1 1 10rem;
-}
-
-.contact-row__actions {
-    display: flex;
-    flex-direction: row;
+/* My skills: the four level sentences, and the "Rate" button that opens
+   one row's form at a time (a <details>, so no JavaScript). */
+.level-rubric {
+    display: grid;
     gap: 0.5rem;
+    margin: 0;
+}
+
+.level-rubric dt {
+    font-weight: 600;
+}
+
+.level-rubric dd {
+    margin: 0;
+}
+
+.rate-form {
+    margin-block-start: 0.4rem;
+}
+
+.rate-form summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.rate-form summary::-webkit-details-marker {
+    display: none;
+}
+
+.rate-form[open] summary {
+    margin-block-end: 0.5rem;
 }
 
 /* Dashboard chart: tasks opened vs completed per week (dashboard.html).

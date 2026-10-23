@@ -1,0 +1,59 @@
+{% load i18n %}{% comment %}
+One row on My skills, for a skill (kind="skill", with evidence) or a
+conduct area (kind="conduct"). Unrated, or self-rated and still waiting
+for a supervisor: a "Rate" / "Change my rating" opens the form. A
+submission that failed comes back open, with its errors (item.failed_form).
+{% endcomment %}
+<tr id="{{ kind }}-{{ item.pk }}">
+    <td class="cell-wrap">{{ item.display_name }}</td>
+    <td>{% if item.current %}{{ item.current.level }} — {{ item.level_label }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="cell-wrap">
+        {% if not item.current %}
+        <span class="muted">{% translate "Not rated yet" %}</span>
+        {% elif item.current.source == 'self' %}
+        <span class="badge badge--neutral">{% translate "Waiting for supervisor review" %}</span>
+        {% else %}
+        <span class="badge badge--good">{% blocktranslate with name=item.current.set_by.full_name %}Confirmed by {{ name }}{% endblocktranslate %}</span>
+        {% if item.current.note %}<br><span class="muted">{{ item.current.note }}</span>{% endif %}
+        {% endif %}
+        {% if item.current.evidence %}<br><a href="{{ item.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>{% endif %}
+
+        {% if not item.current or item.current.source == 'self' %}
+        {% with form=item.failed_form|default:default_form %}
+        <details class="rate-form"{% if item.failed_form %} open{% endif %}>
+            <summary class="button button--secondary">{% if item.current %}{% translate "Change my rating" %}{% else %}{% translate "Rate" %}{% endif %}</summary>
+            <form method="post" action="#{{ kind }}-{{ item.pk }}"{% if kind == 'skill' %} enctype="multipart/form-data"{% endif %} class="form-grid" novalidate>
+                {% csrf_token %}
+                {% if kind == 'skill' %}
+                <input type="hidden" name="action" value="rate_skill">
+                <input type="hidden" name="skill_id" value="{{ item.pk }}">
+                {% else %}
+                <input type="hidden" name="action" value="rate_conduct">
+                <input type="hidden" name="conduct_area_id" value="{{ item.pk }}">
+                {% endif %}
+                {% for field in form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ kind }}-{{ item.pk }}-{{ field.name }}">{{ field.label }}</label>
+                    {% if field.name == 'level' %}
+                    <select name="level" id="{{ kind }}-{{ item.pk }}-level">
+                        {% for value, label in field.field.choices %}
+                        <option value="{{ value }}"{% if field.value|stringformat:'s' == value|stringformat:'s' %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% elif field.name == 'evidence' %}
+                    <input type="file" name="evidence" id="{{ kind }}-{{ item.pk }}-evidence" accept="image/*,video/*">
+                    {% else %}
+                    <input type="text" name="{{ field.name }}" id="{{ kind }}-{{ item.pk }}-{{ field.name }}" maxlength="255" value="{{ field.value|default:'' }}">
+                    {% endif %}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+                <div class="field field--submit">
+                    <button type="submit" class="button">{% translate "Send for review" %}</button>
+                </div>
+            </form>
+        </details>
+        {% endwith %}
+        {% endif %}
+    </td>
+</tr>

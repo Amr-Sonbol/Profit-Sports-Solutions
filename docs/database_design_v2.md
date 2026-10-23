@@ -325,7 +325,7 @@ The same two tables, minus `evidence` — a conduct area (cleanliness, punctuali
 
 ### How a level gets set
 
-**Step one: the technician does the repair and shows it.** The first time a skill has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later — but only alongside a photo or short video of himself actually performing that repair. This is proof to review, not a claim to take on trust. Conduct areas skip the evidence — there's nothing to film for punctuality or cleanliness — and use the same four sentences on their own.
+**Step one: the technician does the repair and shows it.** The first time a skill has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later — but only alongside a photo or short video of himself actually performing that repair. This is proof to review, not a claim to take on trust. Until a supervisor reviews it, the technician can replace their own self-rating (a better video, a corrected level); each one is kept in the assessment history. Once a supervisor has reviewed it, only a supervisor changes it. Conduct areas skip the evidence — there's nothing to film for punctuality or cleanliness — and use the same four sentences on their own.
 
 **Step two: the supervisor confirms it against the evidence, not opinion.** For a skill, they watch or view what was uploaded and judge it against the same rubric below. For a conduct area, it's whatever's observable for that area — cleanliness of the last few jobs, whether procedure was followed, and so on.
 
