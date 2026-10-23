@@ -3888,6 +3888,12 @@ class ReliabilityStatsTests(TaskTestCase):
 
 
 class MySkillsTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        # The page text is checked in English.
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+
     def test_anonymous_is_redirected_to_login(self):
         response = self.client.get('/tasks/my-skills/')
         self.assertEqual(response.status_code, 302)
