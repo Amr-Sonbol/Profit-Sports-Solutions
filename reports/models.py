@@ -37,6 +37,10 @@ class WorkReport(models.Model):
         help_text=_('completed when the customer was not available to sign'),
     )
     submitted_at = models.DateTimeField(_('submitted at'))
+    copy_sent_to = models.EmailField(
+        _('copy sent to'), blank=True, help_text=_('where the PDF copy was emailed when the report was first submitted'),
+    )
+    copy_sent_at = models.DateTimeField(_('copy sent at'), null=True, blank=True)
 
     class Meta:
         verbose_name = _('work report')

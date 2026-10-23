@@ -813,8 +813,12 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | signature_url | varchar | |
 | signature_waived_reason | text | blank — filled in when the customer wasn't available to sign |
 | submitted_at | timestamptz | |
+| copy_sent_to | varchar | blank — where the PDF copy was emailed when the report was first submitted |
+| copy_sent_at | timestamptz | null until the copy has been sent |
 
 **The lead submits one report for the whole task**, with helpers listed. The customer signs once.
+
+**The customer gets a PDF copy by email.** On the report form (web and app) "Send a copy to" starts as the site's contact email; on the first submission, once it's saved, the visit report PDF (on the company letterhead, in the customer's language) is emailed there and `copy_sent_to`/`copy_sent_at` record it. Blank means no email. A failed send never blocks the report; the office can still download the PDF from the task page.
 
 **No signature needs a reason.** On a task type that requires a signature, the lead can still file when the customer isn't there by ticking "Customer not available to sign" and saying why. The task page shows "Not signed" with the reason, so the office can follow up.
 

@@ -801,7 +801,9 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     instead of vanishing.
 
     attachment, when given, is a real file on the ticket/task itself
-    (e.g. a quotation) — attached as-is, not just linked.
+    (e.g. a quotation) — attached as-is, not just linked — or a
+    (filename, bytes, mimetype) tuple for a generated one (the visit
+    report PDF). Returns whether the email went out.
 
     The logo is embedded inline (a cid: reference, not a plain URL) —
     this renders outside any request, and an email client fetches remote
@@ -822,7 +824,9 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
         logo_image.add_header('Content-ID', '<logo>')
         logo_image.add_header('Content-Disposition', 'inline', filename='email_header.png')
         email.attach(logo_image)
-    if attachment:
+    if isinstance(attachment, tuple):
+        email.attach(*attachment)
+    elif attachment:
         attachment.open('rb')
         try:
             email.attach(attachment.name.rsplit('/', 1)[-1], attachment.read())
@@ -832,6 +836,51 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
         email.send()
     except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
         logger.exception('Notification email failed: %s', subject)
+        return False
+    return True
+
+
+def send_visit_report_copy(report, email_address):
+    """Email the customer the visit report PDF (reports.pdf) in their own
+    language, and record where and when on the report. Best-effort: a
+    failure is logged, never raised, and the PDF stays downloadable from
+    the task page. The email itself is in English, like every other
+    outbound customer email here.
+    """
+    from reports.pdf import render_visit_report_pdf
+
+    task = report.task
+    customer = task.site.customer
+    try:
+        pdf = render_visit_report_pdf(report, customer.language or settings.LANGUAGE_CODE)
+    except Exception:  # noqa: BLE001 — same as a failed send: log it, don't break the report
+        logger.exception('Visit report PDF failed: %s', task.task_number)
+        return False
+    contact = task.site.contact_name or customer.contact_name or customer.name
+    context = {
+        'contact': contact, 'site': task.site.name, 'number': task.task_number,
+        'date': formats.date_format(
+            timezone.localtime(report.submitted_at, ZoneInfo(customer.country.timezone)).date(), 'j F Y',
+        ),
+    }
+    with translation.override('en'):
+        subject = _('Visit report — %(number)s — Profit Sports Solutions') % context
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'Please find attached the visit report for %(site)s, dated %(date)s.\n\n'
+            'Should you have any questions about the work carried out, please do not hesitate to contact us.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % context
+    sent = _send_notification_email(
+        subject, message, 'tasks/email/visit_report.html', context, [email_address],
+        attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'),
+    )
+    if sent:
+        report.copy_sent_to = email_address
+        report.copy_sent_at = timezone.now()
+        report.save(update_fields=['copy_sent_to', 'copy_sent_at'])
+    return sent
 
 
 def _send_schedule_notification(task):
@@ -4531,6 +4580,11 @@ def save_work_report(request, task, technician, report_form, part_rows):
     saved_report.first_submission = task.status not in (
         Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
     )
+    copy_to = report_form.cleaned_data.get('send_copy_to')
+    if saved_report.first_submission and copy_to:
+        # Only once the report is safely saved, so a rollback never sends a
+        # copy of something that isn't there.
+        transaction.on_commit(lambda: send_visit_report_copy(saved_report, copy_to))
     if saved_report.first_submission:
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
@@ -4675,7 +4729,10 @@ def _report_form(request, task, technician, back_url):
             messages.success(request, report_saved_message(saved_report.first_submission, task))
             return redirect(back_url)
     else:
-        report_form = WorkReportForm(instance=report, require_signature=_requires_signature(task), helpers=helpers)
+        report_form = WorkReportForm(
+            instance=report, require_signature=_requires_signature(task), helpers=helpers,
+            copy_to_default=task.site.effective_contact_email or '',
+        )
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )

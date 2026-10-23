@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 07:09+0000\n"
+"POT-Creation-Date: 2026-10-23 07:28+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -192,6 +192,10 @@ msgstr "التقدم خلال 90 يوماً"
 
 msgid "A brand with this name already exists. Please select it from the list."
 msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. يرجى اختيارها من القائمة."
+
+#, python-format
+msgid "A copy was sent to %(email)s on %(date)s."
+msgstr "أُرسلت نسخة إلى %(email)s بتاريخ %(date)s."
 
 msgid "A corrected time cannot be in the future."
 msgstr "لا يمكن أن يكون الوقت المصحَّح في المستقبل."
@@ -945,6 +949,9 @@ msgstr "العميل والموقع"
 msgid "Customer code"
 msgstr "رمز العميل"
 
+msgid "Customer copy"
+msgstr "نسخة العميل"
+
 msgid "Customer deactivated."
 msgstr "تم إيقاف العميل."
 
@@ -1107,6 +1114,26 @@ msgstr ""
 "نود إحاطتكم علماً بأن الفني المكلَّف بزيارة %(site)s متأخر عن موعده اليوم: %(reason)s\n"
 "\n"
 "نعتذر عن أي إزعاج، وسيصل في أقرب وقت ممكن.\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
+"Please find attached the visit report for %(site)s, dated %(date)s.\n"
+"\n"
+"Should you have any questions about the work carried out, please do not hesitate to contact us.\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"عزيزي %(contact)s،\n"
+"\n"
+"مرفق تقرير الزيارة الخاص بـ %(site)s بتاريخ %(date)s.\n"
+"\n"
+"إذا كانت لديكم أي استفسارات حول الأعمال المنفّذة، فلا تترددوا في التواصل معنا.\n"
 "\n"
 "مع أطيب التحيات،\n"
 "Profit Sports Solutions\n"
@@ -2278,6 +2305,9 @@ msgstr "غير مجدولة"
 msgid "Not scheduled within 24 working hours"
 msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
 
+msgid "Not sent"
+msgstr "لم تُرسل"
+
 msgid "Not signed"
 msgstr "غير موقَّع"
 
@@ -3052,6 +3082,9 @@ msgstr "إرسال"
 msgid "Send a brief apology explaining the reason for the expected delay, such as traffic or an extended previous job."
 msgstr "أرسل اعتذاراً موجزاً يوضح سبب التأخير المتوقع، كالازدحام المروري أو امتداد العمل السابق."
 
+msgid "Send a copy to"
+msgstr "إرسال نسخة إلى"
+
 msgid "Send decision"
 msgstr "إرسال القرار"
 
@@ -3081,6 +3114,10 @@ msgstr "إرسال رسالة الترحيب"
 
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
+
+#, python-format
+msgid "Sent to %(email)s on %(date)s"
+msgstr "أُرسلت إلى %(email)s بتاريخ %(date)s"
 
 msgid "Serial No."
 msgstr "الرقم التسلسلي"
@@ -3469,6 +3506,9 @@ msgstr ""
 "\n"
 "العرض والرد:\n"
 "%(link)s\n"
+
+msgid "The customer receives this report as a PDF by email. Leave blank to send nothing."
+msgstr "يتلقى العميل هذا التقرير بصيغة PDF عبر البريد الإلكتروني. اتركه فارغًا لعدم الإرسال."
 
 #, python-format
 msgid "The day is set for %(date)s. Please select the exact time."
@@ -3972,6 +4012,10 @@ msgstr "تقرير الزيارة"
 msgid "Visit date"
 msgstr "تاريخ الزيارة"
 
+#, python-format
+msgid "Visit report — %(number)s — Profit Sports Solutions"
+msgstr "تقرير الزيارة — %(number)s — Profit Sports Solutions"
+
 msgid "Visit type"
 msgstr "نوع الزيارة"
 
@@ -4287,6 +4331,12 @@ msgstr "رقم هاتف التواصل"
 
 msgid "copied from the ticket at conversion, one per line: the machines the customer identified before the visit. Additional machines found on site are recorded in the work report, not here."
 msgstr "تُنسخ من التذكرة عند التحويل، كل جهاز في سطر: الأجهزة التي حددها العميل قبل الزيارة. تُسجَّل الأجهزة الإضافية المكتشفة في الموقع ضمن تقرير العمل، وليس هنا."
+
+msgid "copy sent at"
+msgstr "وقت إرسال النسخة"
+
+msgid "copy sent to"
+msgstr "أُرسلت النسخة إلى"
 
 msgid "corrected at"
 msgstr "صُحح في"
@@ -5122,6 +5172,9 @@ msgstr "تاريخ آخر إرسال لرسالة الترحيب بالبواب�
 
 msgid "where invoices are addressed; confirmed by the customer at first sign-in"
 msgstr "العنوان الذي تُوجَّه إليه الفواتير؛ ويؤكده العميل عند تسجيل الدخول لأول مرة"
+
+msgid "where the PDF copy was emailed when the report was first submitted"
+msgstr "البريد الذي أُرسلت إليه نسخة PDF عند رفع التقرير لأول مرة"
 
 msgid "whether this technician can currently be assigned work; separate from active status"
 msgstr "ما إذا كان يمكن حالياً إسناد العمل إلى هذا الفني؛ وهو مستقل عن حالة التفعيل"

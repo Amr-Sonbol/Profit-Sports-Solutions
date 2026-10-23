@@ -195,6 +195,13 @@
                 {{ report_form.signature_waived_reason }}
                 {% for error in report_form.signature_waived_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+            {# Left visible while the customer signs, so they can check where their copy goes. #}
+            <div class="field {% if report_form.send_copy_to.errors %}field--error{% endif %}">
+                <label for="{{ report_form.send_copy_to.id_for_label }}">{{ report_form.send_copy_to.label }}</label>
+                {{ report_form.send_copy_to }}
+                <div class="field__help">{{ report_form.send_copy_to.help_text }}{% if report.copy_sent_at %} {% blocktranslate with email=report.copy_sent_to date=report.copy_sent_at|date:"j F Y, H:i" %}A copy was sent to {{ email }} on {{ date }}.{% endblocktranslate %}{% endif %}</div>
+                {% for error in report_form.send_copy_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
         </div>
         <p data-signing-only>
             <button type="button" class="button" data-signoff-done>{% translate "Completed — return to the technician" %}</button>

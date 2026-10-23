@@ -308,6 +308,8 @@ class MyTaskReportView(APIView):
         report = getattr(task, 'report', None)
         return Response({
             'report': WorkReportSerializer(report).data if report else None,
+            # "Send a copy to" starts as wherever the last copy went, else the site's contact.
+            'send_copy_to': (report.copy_sent_to if report else '') or task.site.effective_contact_email or '',
             # Each helper's hours box: empty = same as the report's.
             'helpers': [
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
@@ -345,7 +347,7 @@ class MyTaskReportView(APIView):
 
         data = {
             field: request.data.get(field, '')
-            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name')
+            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name', 'send_copy_to')
         }
         data['resolved'] = str(bool(request.data.get('resolved')))
         data['signature_drawn'] = request.data.get('signature') or ''

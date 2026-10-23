@@ -525,6 +525,10 @@
             <dt>{% translate "Submitted" %}</dt>
             <dd>{{ report.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
         </div>
+        <div>
+            <dt>{% translate "Customer copy" %}</dt>
+            <dd>{% if report.copy_sent_at %}{% blocktranslate with email=report.copy_sent_to date=report.copy_sent_at|date:"SHORT_DATETIME_FORMAT" %}Sent to {{ email }} on {{ date }}{% endblocktranslate %}{% else %}<span class="muted">{% translate "Not sent" %}</span>{% endif %}</dd>
+        </div>
     </dl>
     <div class="description">
         <dt>{% translate "Findings" %}</dt>

@@ -45,6 +45,12 @@ class WorkReportForm(forms.ModelForm):
     # The customer wasn't there to sign — files the report anyway, with
     # the reason on record instead of a signature.
     signature_waived = forms.BooleanField(required=False, label=_('Customer not available to sign'))
+    # Where the customer's PDF copy goes on the first submission (see
+    # tasks.views.send_visit_report_copy). Blank sends nothing.
+    send_copy_to = forms.EmailField(
+        required=False, label=_('Send a copy to'),
+        help_text=_('The customer receives this report as a PDF by email. Leave blank to send nothing.'),
+    )
 
     class Meta:
         model = WorkReport
@@ -56,8 +62,9 @@ class WorkReportForm(forms.ModelForm):
         }
         labels = {'signature_waived_reason': _('Why the customer could not sign')}
 
-    def __init__(self, *args, require_signature=False, helpers=(), **kwargs):
+    def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['send_copy_to'].initial = (self.instance.copy_sent_to if self.instance.pk else '') or copy_to_default
         # The task type's requires_signature — met by a new upload or one
         # already on file from an earlier filing of this same report.
         self.require_signature = require_signature

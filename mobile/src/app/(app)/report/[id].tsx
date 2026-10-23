@@ -95,6 +95,7 @@ export default function ReportScreen() {
   const [helperHours, setHelperHours] = useState<Record<string, string>>({});
   const [notSigned, setNotSigned] = useState(false);
   const [waivedReason, setWaivedReason] = useState('');
+  const [sendCopyTo, setSendCopyTo] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -112,6 +113,7 @@ export default function ReportScreen() {
       const reportHelpers = reportResult.data.helpers ?? [];
       setHelpers(reportHelpers);
       setHelperHours(Object.fromEntries(reportHelpers.map((helper) => [String(helper.id), helper.labour_hours ?? ''])));
+      setSendCopyTo(reportResult.data.send_copy_to ?? '');
       const pending = pendingReportFor(Number(id));
       if (pending) {
         // A report already filled in here but not sent yet — carry on from it.
@@ -125,6 +127,9 @@ export default function ReportScreen() {
         setSignatureOnFile(Boolean(report?.signature_url));
         setNotSigned(Boolean(input.signature_waived_reason));
         setWaivedReason(input.signature_waived_reason ?? '');
+        if (input.send_copy_to !== undefined) {
+          setSendCopyTo(input.send_copy_to);
+        }
         if (input.helper_hours) {
           setHelperHours((current) => ({ ...current, ...input.helper_hours }));
         }
@@ -191,6 +196,7 @@ export default function ReportScreen() {
       signature: notSigned ? null : newSignature,
       signature_waived_reason: notSigned ? waivedReason : '',
       helper_hours: helperHours,
+      send_copy_to: sendCopyTo.trim(),
       ...(location ?? {}),
     };
     try {
@@ -492,6 +498,15 @@ export default function ReportScreen() {
                   />
                 </Field>
               ) : null}
+              <Field label="Send a copy to" error={errors.send_copy_to}>
+                <TextInput
+                  style={inputStyle} value={sendCopyTo} onChangeText={setSendCopyTo}
+                  keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+                />
+              </Field>
+              <ThemedText themeColor="textSecondary" type="small">
+                The customer receives this report as a PDF by email. Leave blank to send nothing.
+              </ThemedText>
             </ThemedView>
 
             {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}

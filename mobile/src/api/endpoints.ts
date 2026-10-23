@@ -52,7 +52,9 @@ export function uploadTaskAttachment(id: number, fileUri: string, fileName: stri
 }
 
 export function fetchMyReport(id: number) {
-  return apiRequest<{ report: WorkReport | null; helpers?: ReportHelper[] }>(`/api/my-tasks/${id}/report/`);
+  return apiRequest<{ report: WorkReport | null; helpers?: ReportHelper[]; send_copy_to?: string }>(
+    `/api/my-tasks/${id}/report/`,
+  );
 }
 
 export function submitMyReport(id: number, report: WorkReportInput) {

@@ -223,6 +223,16 @@ class MyTaskReportTests(ApiTestCase):
         self.assertTrue(report.signature_url.startswith('http'))
         self.assertEqual(list(report.parts_used.values_list('part_code', flat=True)), ['BELT-01'])
 
+    def test_the_app_can_email_the_customer_a_copy(self):
+        from django.core import mail
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['send_copy_to'], '')
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._file(token, send_copy_to='ali@example.com')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual([m.to for m in mail.outbox], [['ali@example.com']])
+        self.assertEqual(WorkReport.objects.get(task=self.task).copy_sent_to, 'ali@example.com')
+
     def test_technicians_report_goes_to_supervisor_review(self):
         token = self.token_for('tech1')
         response = self._file(token)

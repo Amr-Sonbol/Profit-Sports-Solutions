@@ -103,6 +103,8 @@ export interface WorkReport {
   signature_waived_reason: string;
   submitted_at: string;
   parts_used: PartUsed[];
+  copy_sent_to?: string;
+  copy_sent_at?: string | null;
 }
 
 /** A helper on the job — their hours default to the report's own. */
@@ -125,6 +127,8 @@ export interface WorkReportInput {
   signature_waived_reason?: string;
   // Helper assignment id -> hours; empty means the same as labour_hours.
   helper_hours?: Record<string, string>;
+  // Where the customer's PDF copy is emailed on the first submission; blank sends nothing.
+  send_copy_to?: string;
   // Where the phone was when Submit was pressed (src/location.ts) — kept
   // with a report waiting offline, so it's where it was filled in.
   latitude?: number;

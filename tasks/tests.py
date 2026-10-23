@@ -5593,6 +5593,44 @@ class MyReportFormTests(TaskTestCase):
         payload.update(self._management_form('parts', total=self.PART_ROWS))
         return payload
 
+    def test_first_submission_emails_the_customer_a_pdf_copy(self):
+        self.client.login(username='tech1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, ['ali@example.com'])
+        self.assertIn('AE-0001', email.subject)
+        [(filename, content, mimetype)] = [a for a in email.attachments if isinstance(a, tuple)]
+        self.assertEqual((filename, mimetype), ('AE-0001-visit-report.pdf', 'application/pdf'))
+        self.assertTrue(content.startswith(b'%PDF'))
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(report.copy_sent_to, 'ali@example.com')
+        self.assertIsNotNone(report.copy_sent_at)
+
+    def test_a_correction_does_not_send_another_copy(self):
+        self.client.login(username='tech1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com', labour_hours='2.00'))
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_a_blank_address_sends_nothing(self):
+        self.client.login(username='tech1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self._base_payload(send_copy_to=''))
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(WorkReport.objects.get(task=self.task).copy_sent_to, '')
+
+    def test_the_address_starts_as_the_site_contact(self):
+        self.site.contact_email = 'marina@example.com'
+        self.site.save(update_fields=['contact_email'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['report_form']['send_copy_to'].value(), 'marina@example.com')
+
     def test_helper_gets_404(self):
         self.client.login(username='helper1', password='pass12345')
         response = self.client.get(self.url)
