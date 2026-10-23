@@ -3186,73 +3186,84 @@ def all_week(request):
     return render(request, 'tasks/all_week.html', {**_calendar_context(request, Task.objects.all()), 'show_country': True})
 
 
-def _week_board(technician, request):
-    """(days, unscheduled, nav_context) for one technician's week — the
-    start time and estimated finish (Task.estimated_finish) travel with
-    each task automatically, since that's a model property. Shared by
-    my_week (self) and technician_board (a supervisor viewing someone else).
+# Still to be done: what makes a past-dated task overdue (a task whose
+# report is in, or waiting for review, isn't).
+NOT_DONE_STATUSES = [
+    Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED,
+]
 
-    Covers both ways a task can belong to someone: assigned as lead/helper
-    (TaskAssignment — how a technician gets work), and set as
-    responsible_supervisor (how a supervisor/manager is on the hook for
-    one) — a task where both are true only appears once, under whichever
-    role. Without the second half, this board was blank for anyone whose
-    only stake in a task was being its responsible_supervisor, which is
-    exactly the case someone scheduling a new task most needs to see.
+
+def _task_day(task):
+    """The day a task is planned for: its scheduled_for, in local time, or
+    its scheduled_date when only the day is set; None when neither is."""
+    return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
+
+
+def _week_board(technician, request):
+    """(days, overdue, unscheduled, nav_context) for one technician's week.
+    Shared by my_week (self) and technician_board (a supervisor viewing
+    someone else).
+
+    Their tasks are those they're assigned to (lead or helper) and those
+    they're the responsible supervisor for — a task where both are true
+    appears once, under its assignment. Cancelled tasks never show.
+    - days: the week's 7 days. A task lands on its day by scheduled_for,
+      or by scheduled_date when only the day is set ("any time that day",
+      after the timed ones).
+    - overdue: not yet done, planned before today — whatever week is
+      shown, so a missed job never disappears.
+    - unscheduled: open, with no day at all.
     """
     today, start, end = _week_window(request)
 
-    scheduled_assignments = TaskAssignment.objects.filter(
-        technician=technician, is_active=True, task__scheduled_for__date__range=(start, end),
-    ).select_related('task__site__customer', 'task__task_type').order_by('task__scheduled_for')
+    roles = dict(
+        TaskAssignment.objects.filter(technician=technician, is_active=True).values_list('task_id', 'role'),
+    )
+    for task_id in Task.objects.filter(responsible_supervisor=technician).exclude(pk__in=roles).values_list(
+        'pk', flat=True,
+    ):
+        roles[task_id] = 'responsible'
+    mine = Task.objects.filter(pk__in=roles).exclude(status=Task.Status.CANCELLED).select_related(
+        'site__customer', 'task_type',
+    )
+
+    def with_role(tasks):
+        tasks = list(tasks)
+        for task in tasks:
+            task.my_role = roles[task.pk]
+        return tasks
 
     days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
     tasks_by_date = {day['date']: day['tasks'] for day in days}
-    assigned_task_ids = set()
-    for assignment in scheduled_assignments:
-        task = assignment.task
-        task.my_role = assignment.role
-        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
-        assigned_task_ids.add(task.pk)
-
-    responsible_scheduled = Task.objects.filter(
-        responsible_supervisor=technician, scheduled_for__date__range=(start, end),
-    ).exclude(pk__in=assigned_task_ids).select_related('site__customer', 'task_type')
-    for task in responsible_scheduled:
-        task.my_role = 'responsible'
-        tasks_by_date[timezone.localtime(task.scheduled_for).date()].append(task)
-
+    for task in with_role(mine.filter(
+        Q(scheduled_for__date__range=(start, end))
+        | Q(scheduled_for__isnull=True, scheduled_date__range=(start, end)),
+    )):
+        tasks_by_date[_task_day(task)].append(task)
     for day in days:
-        day['tasks'].sort(key=lambda t: t.scheduled_for)
+        # Timed tasks by time, then the day-only ones.
+        day['tasks'].sort(key=lambda task: (
+            task.scheduled_for is None,
+            timezone.localtime(task.scheduled_for).time() if task.scheduled_for else datetime.min.time(),
+            task.task_number,
+        ))
 
-    unscheduled_assignments = TaskAssignment.objects.filter(
-        technician=technician, is_active=True, task__scheduled_for__isnull=True,
-        task__status__in=OPEN_STATUSES,
-    )
-    role_by_task_id = {a.task_id: a.role for a in unscheduled_assignments}
-    unscheduled = list(Task.objects.filter(pk__in=role_by_task_id).select_related(
-        'site__customer', 'task_type',
+    overdue = sorted(with_role(mine.filter(status__in=NOT_DONE_STATUSES).filter(
+        Q(scheduled_for__date__lt=today) | Q(scheduled_for__isnull=True, scheduled_date__lt=today),
+    )), key=lambda task: (_task_day(task), task.task_number))
+
+    unscheduled = with_role(mine.filter(
+        status__in=OPEN_STATUSES, scheduled_for__isnull=True, scheduled_date__isnull=True,
     ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'))
-    for task in unscheduled:
-        task.my_role = role_by_task_id[task.pk]
 
-    unscheduled_responsible = list(Task.objects.filter(
-        responsible_supervisor=technician, scheduled_for__isnull=True, status__in=OPEN_STATUSES,
-    ).exclude(pk__in=role_by_task_id).select_related('site__customer', 'task_type').annotate(
-        priority_rank=PRIORITY_RANK,
-    ).order_by('priority_rank', 'promised_at'))
-    for task in unscheduled_responsible:
-        task.my_role = 'responsible'
-    unscheduled += unscheduled_responsible
-
-    return days, unscheduled, _week_nav_context(today, start)
+    return days, overdue, unscheduled, _week_nav_context(today, start)
 
 
 @login_required
 def my_week(request):
     technician = require_technician(request)
-    days, unscheduled, nav_context = _week_board(technician, request)
-    context = {'days': days, 'unscheduled': unscheduled, **nav_context}
+    days, overdue, unscheduled, nav_context = _week_board(technician, request)
+    context = {'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context}
     return render(request, 'tasks/my_week.html', context)
 
 
@@ -3899,8 +3910,10 @@ def technician_board(request, pk):
         Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
     )
 
-    days, unscheduled, nav_context = _week_board(technician, request)
-    context = {'technician': technician, 'days': days, 'unscheduled': unscheduled, **nav_context}
+    days, overdue, unscheduled, nav_context = _week_board(technician, request)
+    context = {
+        'technician': technician, 'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context,
+    }
     return render(request, 'tasks/technician_board.html', context)
 
 

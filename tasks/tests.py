@@ -3554,6 +3554,43 @@ class MyWeekTests(TaskTestCase):
 
         self.assertEqual(list(response.context['unscheduled']), [task])
 
+    def _lead(self, task):
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        return task
+
+    def test_a_task_with_only_a_day_shows_on_that_day(self):
+        task = self._lead(self._make_task('AE-0701', scheduled_date=date(2026, 9, 9), status=Task.Status.ASSIGNED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+        wednesday = next(day for day in response.context['days'] if day['date'] == date(2026, 9, 9))
+        self.assertEqual(wednesday['tasks'], [task])
+        self.assertNotIn(task, response.context['unscheduled'])
+        self.assertContains(response, 'Any time that day')
+
+    def test_a_missed_job_shows_as_overdue_whatever_the_week(self):
+        missed = self._lead(self._make_task(
+            'AE-0702', scheduled_for=timezone.now() - timedelta(days=10), status=Task.Status.ACCEPTED,
+        ))
+        self._lead(self._make_task(  # done, waiting for review: not overdue
+            'AE-0703', scheduled_for=timezone.now() - timedelta(days=10), status=Task.Status.COMPLETED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        for week in ({}, {'start': '2030-01-07'}):
+            response = self.client.get('/tasks/my-week/', week)
+            self.assertEqual(response.context['overdue'], [missed])
+        self.assertContains(response, 'Overdue')
+
+    def test_a_cancelled_task_does_not_show(self):
+        self._lead(self._make_task(
+            'AE-0704', scheduled_for=dubai_time(2026, 9, 9, 9, 0), status=Task.Status.CANCELLED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+        self.assertEqual(sum(len(day['tasks']) for day in response.context['days']), 0)
+
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/my-week/')

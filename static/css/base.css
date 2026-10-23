@@ -1012,6 +1012,11 @@ tbody tr:hover {
     flex: 1 1 18rem;
 }
 
+/* A week board's missed jobs, above the days. */
+.week-overdue {
+    border-inline-start: 4px solid var(--color-danger);
+}
+
 /* Notifications page: the same column widths in all three tables. */
 .notification-table {
     table-layout: fixed;

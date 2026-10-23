@@ -1,0 +1,56 @@
+{% load i18n %}{% comment %}
+A technician's week (views._week_board), shared by My week and a
+supervisor's view of someone's board — `task_url` is the page each task
+opens. Overdue first, whichever week is shown; then the week's days;
+then the open tasks with no day yet.
+{% endcomment %}
+<div class="week-nav">
+    <a href="?start={{ prev_start|date:'Y-m-d' }}" class="back-link">{% translate "Previous week" %}</a>
+    <a href="?start={{ this_week_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "This week" %}</a>
+    <a href="?start={{ next_start|date:'Y-m-d' }}" class="forward-link">{% translate "Next week" %}</a>
+</div>
+
+{% if overdue %}
+<div class="section week-overdue">
+    <h2>{% translate "Overdue" %}</h2>
+    <p class="field__help">{% translate "Planned for an earlier day and not done yet." %}</p>
+    <ul class="plain-list">
+        {% for task in overdue %}
+        {% include "tasks/_week_task.html" with show_day=True %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% for day in days %}
+<div class="section">
+    <div class="section__header">
+        <h2>
+            {{ day.date|date:"l, j F" }}
+            {% if day.date == today %}<span class="badge badge--muted">{% translate "Today" %}</span>{% endif %}
+        </h2>
+    </div>
+    {% if day.tasks %}
+    <ul class="plain-list">
+        {% for task in day.tasks %}
+        {% include "tasks/_week_task.html" %}
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No tasks scheduled." %}</p>
+    {% endif %}
+</div>
+{% endfor %}
+
+<div class="section">
+    <h2>{% translate "Unscheduled" %}</h2>
+    {% if unscheduled %}
+    <ul class="plain-list">
+        {% for task in unscheduled %}
+        {% include "tasks/_week_task.html" with no_time=True %}
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">{% translate "No tasks awaiting a date." %}</p>
+    {% endif %}
+</div>
