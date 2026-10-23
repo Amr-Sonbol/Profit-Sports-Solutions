@@ -8,7 +8,7 @@ mirrored to match. "Show as table" lists every month.
 <section class="section">
     <div class="section__header">
         <div>
-            <h2>{% translate "Tasks you completed per month" %}</h2>
+            <h2>{% if viewing_other %}{% translate "Tasks completed per month" %}{% else %}{% translate "Tasks you completed per month" %}{% endif %}</h2>
             <p class="field__help">{% blocktranslate count months=chart.periods|length %}The last {{ months }} month. Completed means the work report was submitted.{% plural %}The last {{ months }} months. Completed means the work report was submitted.{% endblocktranslate %}</p>
         </div>
         <p class="trend-summary">

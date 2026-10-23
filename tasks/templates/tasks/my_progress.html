@@ -1,11 +1,22 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "My progress" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% if viewing_other %}{% blocktranslate with name=technician.full_name %}Progress — {{ name }}{% endblocktranslate %}{% else %}{% translate "My progress" %}{% endif %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
+    {% if viewing_other %}
+    <div>
+        <a href="{% url 'tasks:team_progress' %}" class="back-link">{% translate "Team progress" %}</a>
+        <h1>{% include "_avatar.html" with technician=technician %} {{ technician.full_name }}</h1>
+    </div>
+    <div class="badge-row">
+        <a href="{% url 'tasks:technician_board' technician.pk %}" class="button button--secondary">{% translate "View schedule" %}</a>
+        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' technician.pk %}" class="button button--secondary">{% translate "Review skills" %}</a>{% endif %}
+    </div>
+    {% else %}
     <h1>{% translate "My progress" %}</h1>
+    {% endif %}
 </div>
 
 {% if ninety_day %}
@@ -24,7 +35,7 @@
     {% if ninety_day.on_track %}
     <p class="muted">{% translate "On track to achieve full certification within 90 days." %}</p>
     {% else %}
-    <p class="muted">{% translate "Progress is behind the 90-day target. Please discuss next steps with your supervisor." %}</p>
+    <p class="muted">{% if viewing_other %}{% translate "Progress is behind the 90-day target." %}{% else %}{% translate "Progress is behind the 90-day target. Please discuss next steps with your supervisor." %}{% endif %}</p>
     {% endif %}
 </div>
 {% endif %}
@@ -46,7 +57,7 @@
             <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
         <div>
-            <dt>{% translate "Ranking in your country" %}</dt>
+            <dt>{% if viewing_other %}{% translate "Ranking in the country" %}{% else %}{% translate "Ranking in your country" %}{% endif %}</dt>
             <dd>
                 {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
             </dd>
@@ -55,7 +66,7 @@
     {% if certification.cardio_ready %}
     <p class="muted">{% translate "Certified in advanced skills." %}</p>
     {% endif %}
-    <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>
+    {% if not viewing_other %}<p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>{% endif %}
 </div>
 
 <div class="section">

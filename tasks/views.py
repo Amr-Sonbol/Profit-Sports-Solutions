@@ -3409,46 +3409,6 @@ def _today_plan(technician):
     }
 
 
-def _week_board(technician, request):
-    """(days, overdue, unscheduled, nav_context) for one technician's week.
-    Shared by my_week (self) and technician_board (a supervisor viewing
-    someone else).
-
-    Their tasks are those they're assigned to (lead or helper) and those
-    they're the responsible supervisor for — a task where both are true
-    appears once, under its assignment. Cancelled tasks never show.
-    - days: the week's 7 days. A task lands on its day by scheduled_for,
-      or by scheduled_date when only the day is set ("any time that day",
-      after the timed ones).
-    - overdue: not yet done, planned before today — whatever week is
-      shown, so a missed job never disappears.
-    - unscheduled: open, with no day at all.
-    """
-    today, start, end = _week_window(request, technician.country)
-    mine, with_role = _my_tasks(technician)
-
-    weekend = technician.country.weekend_weekdays
-    days = [
-        {'date': day, 'tasks': [], 'is_weekend': day.weekday() in weekend}
-        for day in (start + timedelta(days=offset) for offset in range(WEEK_LENGTH))
-    ]
-    tasks_by_date = {day['date']: day['tasks'] for day in days}
-    for task in with_role(mine.filter(
-        Q(scheduled_for__date__range=(start, end))
-        | Q(scheduled_for__isnull=True, scheduled_date__range=(start, end)),
-    )):
-        tasks_by_date[_calendar_day(task)].append(task)
-    for day in days:
-        day['tasks'].sort(key=_time_of_day)
-    overdue = _overdue(mine, with_role, today)
-
-    unscheduled = with_role(mine.filter(
-        status__in=OPEN_STATUSES, scheduled_for__isnull=True, scheduled_date__isnull=True,
-    ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'))
-
-    return days, overdue, unscheduled, _week_nav_context(today, start, technician.country)
-
-
 @login_required
 def my_week(request):
     """My schedule: Today (the default — the next job first), or the same
@@ -3479,7 +3439,24 @@ def my_progress(request):
     months of real event data, not just a query.
     """
     technician = require_technician(request)
+    return render(request, 'tasks/my_progress.html', _progress_context(request, technician))
 
+
+@login_required
+def technician_progress(request, pk):
+    """The same page as My progress, for one technician — opened by whoever
+    can view technicians, in their country (Technicians, Team progress)."""
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    technician = _scoped_or_404(
+        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+    )
+    return render(request, 'tasks/my_progress.html', {
+        **_progress_context(request, technician), 'viewing_other': True, 'technician': technician,
+    })
+
+
+def _progress_context(request, technician):
+    """Everything My progress shows, for `technician`."""
     skills = _skills_with_current_rating(technician)
     conduct_areas = _conduct_areas_with_current_rating(technician)
     certification = _certification_status(technician)
@@ -3498,9 +3475,10 @@ def my_progress(request):
         | (Q(scheduled_for__isnull=True) & Q(status__in=OPEN_STATUSES)),
     ).count()
 
+    # Their own taps — none for someone without a login.
     completed_count = TaskEvent.objects.filter(
-        actor=request.user, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
-    ).count()
+        actor_id=technician.user_id, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
+    ).count() if technician.user_id else 0
 
     # Same rule and figure as the supervisors' Hours page — lead, helper
     # and handover hours alike. Any past month (?month=YYYY-MM), this one
@@ -3539,7 +3517,60 @@ def my_progress(request):
         'completed_count': completed_count,
         'reliability': reliability,
     }
-    return render(request, 'tasks/my_progress.html', context)
+    return context
+
+
+def _completed_in_month(technician, month_first):
+    """How many tasks someone was on (lead or helper) had their first work
+    report in that month — the figure My progress's line counts."""
+    start, end = _month_window(month_first)
+    mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
+    return TaskEvent.objects.filter(
+        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
+    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__gte=start, first__lt=end).count()
+
+
+@login_required
+def team_progress(request):
+    """Every technician in the country side by side, for a month
+    (?month=YYYY-MM): rank, tasks completed (against the month before),
+    hours, certification, and a small line of their year. Each opens
+    their Progress page.
+    """
+    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    country = get_active_country(request)
+    this_month = timezone.localtime().date().replace(day=1)
+    month_first = min(_resolve_report_month(request), this_month)
+    previous = _shift_month(month_first, -1)
+    ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
+    hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
+    rows = []
+    for technician in Technician.objects.filter(
+        country=country, is_active=True, role=Technician.Role.TECHNICIAN,
+    ).select_related('user').order_by('full_name'):
+        completed = _completed_in_month(technician, month_first)
+        certification = _certification_status(technician)
+        rows.append({
+            'technician': technician,
+            'rank': ranks.get(technician.pk),
+            'completed': completed,
+            'change': completed - _completed_in_month(technician, previous),
+            'hours': hours.get(technician.pk, 0),
+            'certified': certification['non_cardio_certified'] + certification['conduct_certified'],
+            'required': certification['non_cardio_total'] + certification['conduct_total'],
+            'is_certified': certification['is_certified'],
+            'trend': _my_trend_chart(technician),
+        })
+    rows.sort(key=lambda row: (row['rank'] is None, row['rank'] or 0, row['technician'].full_name))
+    for row in rows:
+        row['change_size'] = abs(row['change'])
+    return render(request, 'tasks/team_progress.html', {
+        'rows': rows,
+        'month_first': month_first,
+        'prev_month': previous,
+        'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
+        'is_this_month': month_first == this_month,
+    })
 
 
 @login_required
@@ -4103,19 +4134,22 @@ def technician_hours_export(request):
 
 @login_required
 def technician_board(request, pk):
-    """A supervisor's view of one technician's week — same shape as
-    my_week, just for someone else, with the same country scoping used
-    everywhere else a supervisor looks at a specific technician.
+    """A supervisor's or manager's view of one person's schedule — the
+    same calendar as My schedule (week, month or year) of their own tasks,
+    with their overdue jobs; scoped to the viewer's country as everywhere
+    else a technician is looked at.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     technician = _scoped_or_404(
         Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
     )
-
-    days, overdue, unscheduled, nav_context = _week_board(technician, request)
-    context = {
-        'technician': technician, 'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context,
-    }
+    mine, with_role = _my_tasks(technician)
+    context = _calendar_context(request, mine, technician.country)
+    for entry in context['days']:
+        with_role(entry['tasks'])
+    context['unscheduled'] = with_role(context['unscheduled'])
+    context['overdue'] = _overdue(mine, with_role, timezone.localtime().date())
+    context['technician'] = technician
     return render(request, 'tasks/technician_board.html', context)
 
 

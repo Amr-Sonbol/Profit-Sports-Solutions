@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 23:11+0000\n"
+"POT-Creation-Date: 2026-10-23 23:18+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -135,6 +135,10 @@ msgstr[2] "مهمتان اليوم"
 msgstr[3] "%(count)s مهام اليوم"
 msgstr[4] "%(count)s مهمة اليوم"
 msgstr[5] "%(count)s مهمة اليوم"
+
+#, python-format
+msgid "%(count)s this month"
+msgstr "%(count)s هذا الشهر"
 
 #, python-format
 msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
@@ -816,6 +820,9 @@ msgstr "شركة الشحن: %(company)s — رقم التتبع %(tracking)s"
 
 msgid "Category"
 msgstr "الفئة"
+
+msgid "Certification"
+msgstr "الاعتماد"
 
 #, python-format
 msgid "Certification needs every basic skill and every conduct area confirmed by a supervisor at level %(reliable_level)s or higher."
@@ -1704,6 +1711,9 @@ msgstr "تمت معالجة جميع الأجهزة دون الحاجة إلى �
 msgid "Every message the system sends, when, and to whom. Automatic messages can be switched off here. Messages someone sends with a button are listed for reference, and the security emails are always sent."
 msgstr "جميع الرسائل التي يرسلها النظام، ومتى، ولمن. يمكن إيقاف الرسائل التلقائية من هنا. أما الرسائل التي تُرسل بزر فمدرجة للاطلاع، ورسائل الأمان تُرسل دائمًا."
 
+msgid "Every technician in the country, by rank. Completed means the work report was submitted; the line is their last year, month by month."
+msgstr "جميع الفنيين في الدولة حسب الترتيب. المنجزة تعني أنه تم تقديم تقرير العمل؛ والخط يمثّل سنتهم الماضية شهرًا بشهر."
+
 msgid "Evidence"
 msgstr "الدليل"
 
@@ -2470,14 +2480,8 @@ msgstr "لا مهام"
 msgid "No tasks are scheduled for today."
 msgstr "لا توجد مهام مجدولة لليوم."
 
-msgid "No tasks awaiting a date."
-msgstr "لا توجد مهام بانتظار تحديد موعد."
-
 msgid "No tasks match these filters."
 msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
-
-msgid "No tasks scheduled."
-msgstr "لا توجد مهام مجدولة."
 
 msgid "No tasks this month."
 msgstr "لا توجد مهام هذا الشهر."
@@ -2980,8 +2984,18 @@ msgstr "Profit Sports Solutions"
 msgid "Profit Sports Solutions technical team"
 msgstr "الفريق الفني لـ Profit Sports Solutions"
 
+msgid "Progress"
+msgstr "التقدّم"
+
+msgid "Progress is behind the 90-day target."
+msgstr "التقدّم متأخر عن هدف التسعين يومًا."
+
 msgid "Progress is behind the 90-day target. Please discuss next steps with your supervisor."
 msgstr "التقدم متأخر عن هدف التسعين يوماً. يرجى مناقشة الخطوات التالية مع مشرفك."
+
+#, python-format
+msgid "Progress — %(name)s"
+msgstr "التقدّم — %(name)s"
 
 msgid "Promised"
 msgstr "الموعد الموعود"
@@ -2997,6 +3011,12 @@ msgstr "روابط سريعة"
 
 msgid "Quotation"
 msgstr "عرض السعر"
+
+msgid "Rank"
+msgstr "الترتيب"
+
+msgid "Ranking in the country"
+msgstr "الترتيب في الدولة"
 
 msgid "Ranking in your country"
 msgstr "الترتيب في دولتك"
@@ -3767,6 +3787,9 @@ msgstr "المهام التي شارك فيها كمساعد"
 msgid "Tasks completed as lead"
 msgstr "المهام المُنجزة كفني رئيسي"
 
+msgid "Tasks completed per month"
+msgstr "المهام المنجزة شهريًا"
+
 msgid "Tasks not scheduled"
 msgstr "مهام غير مجدولة"
 
@@ -3791,6 +3814,9 @@ msgstr "الفريق"
 
 msgid "Team map"
 msgstr "خريطة الفريق"
+
+msgid "Team progress"
+msgstr "تقدّم الفريق"
 
 msgid "Team schedule"
 msgstr "جدول الفريق"
@@ -3988,6 +4014,9 @@ msgstr "حقلا كلمة المرور غير متطابقين."
 #, python-format
 msgid "The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for %(days)s days."
 msgstr "تُرسل رسالة الترحيب باللغة الإنجليزية، وباللغة العربية أيضاً للعملاء في الدول العربية، ورابط التفعيل الآمن فيها صالح لمدة %(days)s أيام."
+
+msgid "The year"
+msgstr "السنة"
 
 msgid "There are no active supervisors or technicians in this country."
 msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة."
@@ -4346,9 +4375,6 @@ msgstr "قطاع غير معروف \"%(segment)s\". يرجى استخدام gym 
 msgid "Unlock now"
 msgstr "إلغاء القفل الآن"
 
-msgid "Unscheduled"
-msgstr "غير مجدولة"
-
 msgid "Updated."
 msgstr "تم التحديث."
 
@@ -4406,6 +4432,9 @@ msgstr "عرض الأجهزة وسجل مهامها وطلباتها"
 
 msgid "View or edit report"
 msgstr "عرض أو تعديل التقرير"
+
+msgid "View schedule"
+msgstr "عرض الجدول"
 
 msgid "View sites"
 msgstr "عرض الفروع"

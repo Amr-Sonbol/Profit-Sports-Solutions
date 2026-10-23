@@ -172,8 +172,10 @@ def nav_pages(technician, allowed):
     def add(url_name, label, icon, group):
         pages.append({'url': reverse(url_name), 'label': label, 'icon': icon, 'group': group})
 
+    # Everyone has their own schedule (a manager's: tasks they're on or
+    # responsible for); progress and skills are the field team's.
+    add('tasks:my_week', _('My schedule'), 'calendar', 'mine')
     if not technician.is_manager_tier:
-        add('tasks:my_week', _('My schedule'), 'calendar', 'mine')
         add('tasks:my_progress', _('My progress'), 'trending-up', 'mine')
         add('tasks:my_skills', _('My skills'), 'award', 'mine')
     if RolePermission.Permission.VIEW_DASHBOARD in allowed:
@@ -182,6 +184,7 @@ def nav_pages(technician, allowed):
         add('tasks:task_list', _('Tasks'), 'clipboard', 'tasks')
     if RolePermission.Permission.VIEW_TECHNICIANS in allowed:
         add('tasks:technician_list', _('Technicians'), 'users', 'team')
+        add('tasks:team_progress', _('Team progress'), 'bar-chart', 'team')
         add('tasks:technician_hours', _('Hours'), 'clock', 'team')
         add('tasks:team_map', _('Team map'), 'map-pin', 'team')
     if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:

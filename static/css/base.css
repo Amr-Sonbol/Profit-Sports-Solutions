@@ -1406,6 +1406,27 @@ tbody tr:hover {
     transform: translateX(50%);
 }
 
+/* Team progress: each technician's year as a small line, months
+   running right to left in Arabic like the big chart. */
+.sparkline {
+    display: block;
+    inline-size: 7rem;
+    block-size: 1.75rem;
+    overflow: visible;
+}
+
+[dir="rtl"] .sparkline {
+    transform: scaleX(-1);
+}
+
+.sparkline polyline {
+    fill: none;
+    stroke: var(--chart-completed, #eb6834);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
 .trend-summary {
     margin: 0;
     font-size: 0.85rem;

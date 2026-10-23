@@ -3853,6 +3853,41 @@ class MyProgressTests(TaskTestCase):
 
         self.assertEqual(response.context['completed_count'], 1)
 
+    def test_a_manager_sees_a_technicians_progress_and_the_team(self):
+        Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Maya Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        task = Task.objects.create(
+            task_number='AE-0960', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=timezone.now(), actor=self.tech_user,
+        )
+        self.client.login(username='manager1', password='pass12345')
+
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/progress/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['viewing_other'])
+        self.assertEqual(response.context['trend_chart']['this_month'], 1)
+        self.assertContains(response, 'Tasks completed per month')
+        self.assertNotContains(response, 'Self-assess a skill')
+
+        team = self.client.get('/tasks/technicians/progress/').context['rows']
+        row = next(row for row in team if row['technician'] == self.technician)
+        self.assertEqual((row['completed'], row['change']), (1, 1))
+        self.assertEqual(len(row['trend']['line_points'].split()), len(row['trend']['periods']))
+
+    def test_a_technician_cannot_see_someone_elses_progress(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/technicians/progress/').status_code, 403)
+        self.assertEqual(self.client.get(f'/tasks/technicians/{self.technician.pk}/progress/').status_code, 403)
+
     def test_my_progress_charts_my_own_tasks_per_month(self):
         now = timezone.now()
         mine, other = [
@@ -5544,7 +5579,10 @@ class HomeRedirectTests(TaskTestCase):
         self._make_staff('manager1', Technician.Role.MANAGER)
         urls = self._tile_urls(self.client.get('/'))
         self.assertIn('/tasks/countries/', urls)
-        self.assertNotIn('/tasks/my-week/', urls)
+        # Their own schedule and the team's progress; not the field team's own progress page.
+        self.assertIn('/tasks/my-week/', urls)
+        self.assertIn('/tasks/technicians/progress/', urls)
+        self.assertNotIn('/tasks/my-progress/', urls)
         self.assertNotIn('/tasks/roles/', urls)
 
     def test_admin_sees_roles_and_audit_log(self):
