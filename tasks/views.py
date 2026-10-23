@@ -1205,20 +1205,28 @@ def _tasks_chart(country, period):
     return _period_chart(opened, completed, period)
 
 
-def _my_tasks_chart(technician):
-    """One person's own tasks per month (My progress): the tasks they were
-    put on (first assignment, lead or helper) vs those tasks' first work
-    report. Same chart and months as the dashboard's tasks chart.
+def _my_trend_chart(technician):
+    """One person's tasks completed per month over the last year, as a
+    line (My progress): the tasks they were on (lead or helper) by their
+    first work report. Each month's `completed_pct` places its point;
+    `line_points` is the SVG polyline through them (x at each month's
+    centre, 0-100 both ways); `change` is this month against last.
     """
     since = _period_starts('month')[0]
-    mine = TaskAssignment.objects.filter(technician=technician)
-    assigned = mine.values('task_id').annotate(first=Min('assigned_at')).filter(
-        first__date__gte=since,
-    ).values_list('first', flat=True)
+    mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
     completed = TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine.values('task_id'),
+        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
     ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
-    return _period_chart(assigned, completed, 'month')
+    chart = _period_chart([], completed, 'month')
+    periods = chart['periods']
+    chart['line_points'] = ' '.join(
+        f"{(index + 0.5) * 100 / len(periods):.2f},{100 - period['completed_pct']}"
+        for index, period in enumerate(periods)
+    )
+    chart['this_month'] = periods[-1]['completed']
+    chart['change'] = periods[-1]['completed'] - periods[-2]['completed']
+    chart['change_size'] = abs(chart['change'])
+    return chart
 
 
 def _tickets_chart(country, period):
@@ -3291,7 +3299,7 @@ def my_progress(request):
     )
 
     context = {
-        'tasks_chart': _my_tasks_chart(technician),
+        'trend_chart': _my_trend_chart(technician),
         'month_first': month_first,
         'prev_month': _shift_month(month_first, -1),
         'next_month': _shift_month(month_first, 1) if month_first < this_month else None,

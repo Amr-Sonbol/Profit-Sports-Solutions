@@ -3666,9 +3666,14 @@ class MyProgressTests(TaskTestCase):
                 task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=now, actor=self.tech_user,
             )
         self.client.login(username='tech1', password='pass12345')
-        chart = self.client.get('/tasks/my-progress/').context['tasks_chart']
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
         self.assertEqual(len(chart['periods']), 12)
-        self.assertEqual((chart['periods'][-1]['opened'], chart['periods'][-1]['completed']), (1, 1))
+        self.assertEqual(chart['periods'][-1]['completed'], 1)
+        self.assertEqual((chart['this_month'], chart['change']), (1, 1))
+        # Twelve points, the last at the top of the scale.
+        points = chart['line_points'].split()
+        self.assertEqual(len(points), 12)
+        self.assertEqual(points[-1].split(',')[1], str(100 - chart['periods'][-1]['completed_pct']))
 
     def test_my_progress_shows_a_chosen_past_month_but_never_a_future_one(self):
         self.client.login(username='tech1', password='pass12345')

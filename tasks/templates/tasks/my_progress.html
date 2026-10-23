@@ -106,9 +106,7 @@
     </dl>
 </div>
 
-{% translate "Your tasks per month" as title %}{% blocktranslate count months=tasks_chart.periods|length asvar subtitle %}The last {{ months }} month. Completed means the work report was submitted.{% plural %}The last {{ months }} months. Completed means the work report was submitted.{% endblocktranslate %}
-{% translate "Assigned to you" as opened_label %}{% translate "Completed" as completed_label %}
-{% include "tasks/_period_chart.html" with chart=tasks_chart %}
+{% include "tasks/_trend_chart.html" with chart=trend_chart %}
 
 <div class="section">
     <h2>{% translate "Reliability" %}</h2>
