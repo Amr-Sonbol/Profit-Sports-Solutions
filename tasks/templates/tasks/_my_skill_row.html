@@ -8,6 +8,8 @@ submission that failed comes back open, with its errors (item.failed_form).
     <td class="cell-wrap">{{ item.display_name }}</td>
     <td>{% if item.current %}{{ item.current.level }} — {{ item.level_label }}{% else %}<span class="muted">—</span>{% endif %}</td>
     <td class="cell-wrap">
+        <div class="skill-status">
+        <div class="skill-status__state">
         {% if not item.current %}
         <span class="muted">{% translate "Not rated yet" %}</span>
         {% elif item.current.source == 'self' %}
@@ -17,6 +19,7 @@ submission that failed comes back open, with its errors (item.failed_form).
         {% if item.current.note %}<br><span class="muted">{{ item.current.note }}</span>{% endif %}
         {% endif %}
         {% if item.current.evidence %}<br><a href="{{ item.current.evidence.url }}" target="_blank" rel="noopener">{% translate "View evidence" %}</a>{% endif %}
+        </div>
 
         {% if not item.current or item.current.source == 'self' %}
         {% with form=item.failed_form|default:default_form %}
@@ -55,5 +58,6 @@ submission that failed comes back open, with its errors (item.failed_form).
         </details>
         {% endwith %}
         {% endif %}
+        </div>
     </td>
 </tr>

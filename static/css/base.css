@@ -1036,11 +1036,36 @@ tbody tr:hover {
 }
 
 .skills-table__name {
-    inline-size: 38%;
+    inline-size: 42%;
 }
 
 .skills-table__level {
-    inline-size: 22%;
+    inline-size: 20%;
+}
+
+/* Status at the start, the Rate button at the row's end; an open form
+   drops below both, across the whole cell. */
+.skill-status {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.skill-status .rate-form {
+    margin-block-start: 0;
+}
+
+.skill-status .rate-form[open] {
+    flex-basis: 100%;
+}
+
+.skill-status .rate-form[open] summary {
+    margin-inline-start: auto;
+    inline-size: fit-content;
+    display: block;
 }
 
 .rate-form {
