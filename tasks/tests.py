@@ -26,7 +26,7 @@ from .location import record_tap
 from .models import (
     CustomerTicket, ScheduleChangeRequest, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
     TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
-    TicketNotification, TicketReply,
+    TicketMachine, TicketNotification, TicketReply,
 )
 
 User = get_user_model()
@@ -8078,3 +8078,97 @@ class TaskReportPdfTests(TodayTestsMixin, TaskTestCase):
         self.assertIsNone(_local_file('http://example.com/evil.png'))
         self.assertIsNone(_local_file('http://localhost/media/../../etc/passwd'))
         self.assertIsNotNone(_local_file('/static/reports/letterhead-header.png'))
+
+
+class TicketMachineDecisionTests(TaskTestCase):
+    # The manager decides each machine on a portal ticket: a visit or a
+    # part shipment task for some, advice or "not covered" for others, and
+    # can split one ticket into several tasks.
+
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('support1', password='pass12345'), country=self.country,
+            full_name='Dana Support', language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0601', customer=self.customer, site=self.site,
+            company_name='Fitness First', site_description='Marina Branch', contact_name='Ali',
+            contact_phone='0501234567', description='(written from the machines)', submitted_at=timezone.now(),
+        )
+        self.treadmill, self.bike, self.rower = [
+            TicketMachine.objects.create(
+                ticket=self.ticket, model_name=name, serial_no=serial, problem=TicketMachine.Problem.NOISE, position=i,
+            )
+            for i, (name, serial) in enumerate([('Treadmill', 'T-1'), ('Bike', 'B-1'), ('Rower', 'R-1')])
+        ]
+        self.review_url = f'/tasks/tickets/{self.ticket.pk}/'
+        self.client.login(username='support1', password='pass12345')
+
+    def _decide(self, machines, do, note=''):
+        return self.client.post(self.review_url, {
+            'action': 'machines', 'machines': [str(m.pk) for m in machines], 'do': do, 'decision_note': note,
+        })
+
+    def _create_task(self, url):
+        return self.client.post(url, {
+            'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
+            'billing_type': Task.BillingType.CHARGEABLE, 'reported_at': '2026-09-06T10:00',
+            'is_warranty': '', 'description': 'Noisy machines',
+        })
+
+    def test_split_a_ticket_into_a_visit_and_advice(self):
+        response = self._decide([self.treadmill, self.bike], 'visit')
+        create_url = response['Location']
+        self.assertIn('decision=visit', create_url)
+        page = self.client.get(create_url)
+        self.assertIn('Treadmill (T-1)', page.context['form'].fields['description'].initial)
+        self.assertNotIn('Rower', page.context['form'].fields['description'].initial)
+
+        self.assertEqual(self._create_task(create_url).status_code, 302)
+        self.treadmill.refresh_from_db()
+        task = self.treadmill.task
+        self.assertEqual(self.treadmill.decision, TicketMachine.Decision.VISIT)
+        self.assertEqual(task.reported_serial_numbers, 'T-1' + chr(10) + 'B-1')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)  # the rower is still undecided
+
+        self._decide([self.rower], 'advice', note='Tighten the seat bolt.')
+        self.ticket.refresh_from_db()
+        self.rower.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CONVERTED)
+        self.assertEqual(self.ticket.task, task)
+        self.assertEqual((self.rower.decision, self.rower.decision_note), ('advice', 'Tighten the seat bolt.'))
+
+    def test_two_tasks_from_one_ticket(self):
+        self._create_task(self._decide([self.treadmill], 'visit')['Location'])
+        self._create_task(self._decide([self.bike, self.rower], 'ship_part')['Location'])
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CONVERTED)
+        tasks = Task.objects.filter(ticket_machines__ticket=self.ticket).distinct()
+        self.assertEqual(tasks.count(), 2)
+        self.bike.refresh_from_db()
+        self.assertEqual(self.bike.decision, TicketMachine.Decision.SHIP_PART)
+        review = self.client.get(self.review_url)
+        self.assertEqual(len(review.context['ticket_tasks']), 2)
+
+    def test_no_task_needed_closes_the_ticket(self):
+        self._decide([self.treadmill, self.bike], 'advice')
+        self._decide([self.rower], 'not_covered', note='Under the gym supplier warranty.')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+        self.assertFalse(Task.objects.exists())
+
+    def test_a_decided_machine_cannot_be_picked_again(self):
+        self._decide([self.treadmill], 'advice')
+        response = self.client.get(f'/tasks/new/?ticket={self.ticket.pk}&machines={self.treadmill.pk}&decision=visit')
+        self.assertRedirects(response, self.review_url, fetch_redirect_response=False)
+
+    def test_the_customer_sees_each_machines_status(self):
+        self._decide([self.rower], 'not_covered', note='Under the gym supplier warranty.')
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')  # the customer, not staff
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertContains(response, 'Under review')
+        self.assertContains(response, 'Under the gym supplier warranty.')

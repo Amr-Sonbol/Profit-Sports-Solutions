@@ -656,6 +656,13 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | description | text | blank |
 | out_of_service | bool | "cannot be used" — the customer's own flag, for the office to prioritise |
 | position | smallint | order the customer added them |
+| decision | varchar | blank until decided — visit, ship_part (both handled by a task), advice, not_covered (no task) |
+| task_id | FK → task | null — the task handling this machine, for visit / ship_part |
+| decision_note | varchar | blank — optional note to the customer with advice / not_covered |
+| decided_by | FK → auth_user | null |
+| decided_at | timestamptz | null |
+
+**The manager decides each machine, and can split a ticket into several tasks.** On the ticket review, the manager ticks machines and creates a visit task (or a task to ship a part) for just those, then does the same for the rest — each group its own task, its `reported_serial_numbers` from those machines only. A machine that needs no task gets "advice given" or "not covered" with an optional note to the customer. The ticket stays in the review queue while any machine is undecided; once the last is decided it becomes `converted` if any task was created (`ticket.task` stays the first one, for everything that reads it), otherwise `closed`. The customer's ticket page shows each machine's own status. Older tickets and staff-opened ones, with no machines, convert to one task as before.
 
 **Up to 10 machines per ticket, never stated on screen** — the portal simply stops offering "Add another machine". There is deliberately no "select all machines" or bulk option anywhere, so nothing in the product suggests a site-wide failure.
 

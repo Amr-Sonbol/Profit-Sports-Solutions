@@ -646,6 +646,16 @@ class TicketMachine(models.Model):
         CABLES = 'cables', _('Cables, belts or pulleys')
         OTHER = 'other', _('Other')
 
+    class Decision(models.TextChoices):
+        # Both of these are handled through a task (task below).
+        VISIT = 'visit', _('Visit')
+        SHIP_PART = 'ship_part', _('Ship part')
+        # These two resolve the machine without a task.
+        ADVICE = 'advice', _('Advice given')
+        NOT_COVERED = 'not_covered', _('Not covered')
+
+    TASK_DECISIONS = (Decision.VISIT, Decision.SHIP_PART)
+
     ticket = models.ForeignKey(
         CustomerTicket, on_delete=models.CASCADE, related_name='machines', verbose_name=_('ticket'),
     )
@@ -666,6 +676,23 @@ class TicketMachine(models.Model):
     description = models.TextField(_('description'), blank=True)
     out_of_service = models.BooleanField(_('cannot be used'), default=False)
     position = models.PositiveSmallIntegerField(_('position'), default=0)
+    decision = models.CharField(
+        _('decision'), max_length=20, choices=Decision.choices, blank=True,
+        help_text=_("the manager's decision for this machine; blank until decided"),
+    )
+    task = models.ForeignKey(
+        'Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket_machines',
+        verbose_name=_('task'), help_text=_('the task handling this machine (a visit or a part shipment)'),
+    )
+    decision_note = models.CharField(
+        _('note to the customer'), max_length=255, blank=True,
+        help_text=_('optional, shown to the customer with an "advice given" or "not covered" decision'),
+    )
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name=_('decided by'),
+    )
+    decided_at = models.DateTimeField(_('decided at'), null=True, blank=True)
 
     class Meta:
         verbose_name = _('ticket machine')

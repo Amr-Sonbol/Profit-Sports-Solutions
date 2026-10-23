@@ -65,7 +65,7 @@ from .location import record_tap
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
-    TaskProduct, TicketEscalation, TicketInternalNote, TicketNotification, TicketReply,
+    TaskProduct, TicketEscalation, TicketInternalNote, TicketMachine, TicketNotification, TicketReply,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,6 +226,52 @@ def _next_ticket_number(country):
     prefix = f'{country.task_prefix or country.iso_code}-T'
     count = CustomerTicket.objects.filter(ticket_number__startswith=prefix).count()
     return f'{prefix}{count + 1:04d}'
+
+
+def ticket_machines_text(machines):
+    """(serial_numbers, description) text written from ticket machines:
+    what staff emails, ticket lists, the mobile app and a task's
+    reported_serial_numbers read. In English, like everything else written
+    to a ticket for staff. Public: customers.views writes a portal ticket's
+    text with it, and task_create a split task's.
+    """
+    serials, described = [], []
+    with translation.override('en'):
+        for machine in machines:
+            serial = machine.serial
+            if not serial and machine.serial_photo:
+                serial = _('serial number on the sticker photo')
+            if serial:
+                serials.append(serial)
+            entry = f"{machine.machine_name}{f' ({serial})' if serial else ''}: {machine.get_problem_display()}"
+            if machine.out_of_service:
+                entry += f" — {_('cannot be used')}"
+            if machine.description:
+                entry += f"\n  {machine.description}"
+            described.append(entry)
+    return '\n'.join(serials), '\n'.join(described)
+
+
+def settle_ticket_machines(ticket, user):
+    """Once every machine on a portal ticket has a decision, the ticket
+    leaves the review queue: converted if any machine went to a task,
+    otherwise closed. Until then it stays new, so what's left is visible.
+    """
+    machines = list(ticket.machines.all())
+    if not machines or any(not machine.decision for machine in machines):
+        return
+    first_task = next((machine.task for machine in machines if machine.task_id), None)
+    ticket.reviewed_by = user
+    ticket.reviewed_at = timezone.now()
+    if first_task is not None:
+        ticket.task = ticket.task or first_task
+        ticket.status = CustomerTicket.Status.CONVERTED
+        ticket.save(update_fields=['task', 'status', 'reviewed_by', 'reviewed_at'])
+    else:
+        ticket.status = CustomerTicket.Status.CLOSED
+        with translation.override('en'):
+            ticket.close_reason = _('Every machine was resolved without a visit.')
+        ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
 
 
 def save_new_ticket(ticket):
@@ -1843,7 +1889,11 @@ def task_detail(request, pk):
         # viewing the same task.
         events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
 
-    source_ticket = getattr(task, 'ticket', None)
+    # The ticket's main task links back directly; another task split from
+    # the same ticket finds it through its machines.
+    source_ticket = getattr(task, 'ticket', None) or next(
+        (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
+    )
     pending_schedule_request = task.schedule_change_requests.filter(
         status=ScheduleChangeRequest.Status.PENDING,
     ).select_related('requested_by').first()
@@ -1858,7 +1908,13 @@ def task_detail(request, pk):
             is_active=True, technician__is_active=False,
         ).exists(),
         'attachments': task.attachments.select_related('uploaded_by'),
-        'ticket_attachments': source_ticket.attachments.all() if source_ticket else [],
+        # A split ticket's task shows its own machines' photos (and any not
+        # tied to a machine), not those of machines handled elsewhere.
+        'ticket_attachments': (
+            source_ticket.attachments.filter(Q(machine__task=task) | Q(machine__isnull=True))
+            if source_ticket and task.ticket_machines.exists()
+            else source_ticket.attachments.all() if source_ticket else []
+        ),
         'task_assets': task.task_assets.select_related('asset'),
         'products': task.products.all(),
         'report': getattr(task, 'report', None),
@@ -2006,6 +2062,20 @@ def task_create(request):
 
     is_admin = requesting_technician.role == Technician.Role.ADMIN
 
+    # A portal ticket lists its machines: this task covers just the ones
+    # the manager selected (?machines=1,3), the others stay for another
+    # task or another decision (see ticket_review).
+    selected_machines, machine_decision = [], ''
+    if ticket is not None and ticket.machines.exists():
+        machine_ids = [int(value) for value in request.GET.get('machines', '').split(',') if value.isdigit()]
+        selected_machines = list(ticket.machines.filter(pk__in=machine_ids, decision=''))
+        if not selected_machines:
+            messages.error(request, _('Please select at least one machine that has not been decided yet.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+        machine_decision = request.GET.get('decision')
+        if machine_decision not in TicketMachine.TASK_DECISIONS:
+            machine_decision = TicketMachine.Decision.VISIT
+
     if request.method == 'POST':
         form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin)
         if form.is_valid():
@@ -2046,7 +2116,9 @@ def task_create(request):
                     task.pak_reference_number = ticket.pak_reference_number
                     task.shipping_company = ticket.shipping_company
                     task.shipping_tracking_number = ticket.shipping_tracking_number
-                    task.reported_serial_numbers = ticket.serial_numbers
+                    task.reported_serial_numbers = (
+                        ticket_machines_text(selected_machines)[0] if selected_machines else ticket.serial_numbers
+                    )
                 # A manager's own schedule is locked from the moment it's
                 # set — a supervisor's stays open. See task_edit for the
                 # same rule applied to a reschedule.
@@ -2057,7 +2129,15 @@ def task_create(request):
                     occurred_at=timezone.now(), actor=request.user,
                 )
                 TaskNotification.objects.create(task=task, created_at=timezone.now())
-                if ticket is not None:
+                if selected_machines:
+                    TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected_machines]).update(
+                        decision=machine_decision, task=task, decided_by=request.user, decided_at=timezone.now(),
+                    )
+                    if ticket.kind == CustomerTicket.Kind.CUSTOMER and ticket.customer_id is None:
+                        ticket.customer = site.customer
+                        ticket.save(update_fields=['customer'])
+                    settle_ticket_machines(ticket, request.user)
+                elif ticket is not None:
                     ticket.task = task
                     # An internal ticket stays internal — linking a customer
                     # would put it in their portal.
@@ -2072,6 +2152,8 @@ def task_create(request):
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin)
+        if selected_machines:
+            form.fields['description'].initial = ticket_machines_text(selected_machines)[1]
 
     # So whoever's creating this can see everyone's upcoming schedule
     # right here and pick a date that doesn't collide — no separate trip
@@ -2082,7 +2164,10 @@ def task_create(request):
         Technician.objects.filter(is_active=True, country=country, role=Technician.Role.TECHNICIAN),
     )
 
-    return render(request, 'tasks/task_create.html', {'form': form, 'ticket': ticket, 'team_schedule': team_schedule})
+    return render(request, 'tasks/task_create.html', {
+        'form': form, 'ticket': ticket, 'team_schedule': team_schedule,
+        'selected_machines': selected_machines, 'machine_decision': machine_decision,
+    })
 
 
 def ticket_form(request):
@@ -2608,6 +2693,29 @@ def ticket_review(request, pk):
             messages.success(request, _('The decision has been returned to the support desk.'))
             return redirect('tasks:ticket_review', pk=ticket.pk)
 
+    if (
+        request.method == 'POST' and can_manage and request.POST.get('action') == 'machines'
+        and ticket.status == CustomerTicket.Status.NEW
+    ):
+        # The selected machines: a task for them (visit or part shipment,
+        # created on the next page), or settled here without one.
+        undecided = ticket.machines.filter(decision='')
+        selected = list(undecided.filter(pk__in=[v for v in request.POST.getlist('machines') if v.isdigit()]))
+        choice = request.POST.get('do')
+        if not selected:
+            messages.error(request, _('Please select at least one machine that has not been decided yet.'))
+        elif choice in TicketMachine.TASK_DECISIONS:
+            ids = ','.join(str(machine.pk) for machine in selected)
+            return redirect(f"{reverse('tasks:task_create')}?ticket={ticket.pk}&machines={ids}&decision={choice}")
+        elif choice in (TicketMachine.Decision.ADVICE, TicketMachine.Decision.NOT_COVERED):
+            note = request.POST.get('decision_note', '').strip()[:255]
+            TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
+                decision=choice, decision_note=note, decided_by=request.user, decided_at=timezone.now(),
+            )
+            settle_ticket_machines(ticket, request.user)
+            messages.success(request, _('Decision saved.'))
+        return redirect('tasks:ticket_review', pk=ticket.pk)
+
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
 
@@ -2753,6 +2861,12 @@ def ticket_review(request, pk):
         # Photos not tied to one of the ticket's machines (staff-opened and
         # older tickets); a machine's own show in the machines table.
         'ticket_general_attachments': ticket.attachments.filter(machine__isnull=True),
+        # Every task made from it: the one for a single conversion, or each
+        # group of machines on a split ticket.
+        'ticket_tasks': (
+            Task.objects.filter(ticket_machines__ticket=ticket).distinct().order_by('pk')
+            or ([ticket.task] if ticket.task_id else [])
+        ),
         'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
