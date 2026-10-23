@@ -41,6 +41,11 @@ class WorkReport(models.Model):
         _('copy sent to'), blank=True, help_text=_('where the PDF copy was emailed when the report was first submitted'),
     )
     copy_sent_at = models.DateTimeField(_('copy sent at'), null=True, blank=True)
+    signed_content = models.JSONField(
+        _('signed content'), null=True, blank=True,
+        help_text=_('exactly what the customer signed (reports.pdf.report_content), kept to detect later changes'),
+    )
+    signed_at = models.DateTimeField(_('signed at'), null=True, blank=True)
 
     class Meta:
         verbose_name = _('work report')

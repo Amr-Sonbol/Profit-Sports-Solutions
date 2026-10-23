@@ -42,6 +42,7 @@
     .signoff img { max-block-size: 1.5cm; max-inline-size: 6cm; }
     .muted { color: #666; }
     .not-signed { color: #c00000; font-weight: bold; }
+    .changed-note { border: 0.8pt solid #c00000; color: #c00000; padding: 0.15cm 0.25cm; margin-block-end: 0.3cm; }
 </style>
 </head>
 <body>
@@ -54,6 +55,9 @@
 <h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% translate "Visit Report" %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
+{% if changed_after_signing %}
+<p class="changed-note">{% blocktranslate with date=signed_at|date:"j F Y, H:i" %}This report was changed after the customer signed it on {{ date }}. The signature below applies to the version signed at that time.{% endblocktranslate %}</p>
+{% endif %}
 
 <h2>{% translate "Visit Details" %}</h2>
 <table class="details">
@@ -71,16 +75,16 @@
 {% endif %}
 
 <h2>{% translate "Findings & Actions" %}</h2>
-<p>{{ report.findings|linebreaksbr }}</p>
+<p>{{ content.findings|linebreaksbr }}</p>
 {% if machines %}
 <table>
     <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Status" %}</th></tr></thead>
     <tbody>
-        {% for item in machines %}
+        {% for machine in machines %}
         <tr>
-            <td>{% if item.asset.brand %}{{ item.asset.brand.name }} {% endif %}{{ item.asset.model_name }}</td>
-            <td dir="ltr">{{ item.asset.serial_no|default:"—" }}</td>
-            <td>{{ item.get_outcome_display }}</td>
+            <td>{{ machine.name }}</td>
+            <td dir="ltr">{{ machine.serial|default:"—" }}</td>
+            <td>{{ machine.outcome_label }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -93,23 +97,23 @@
     <thead><tr><th>{% translate "Part code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th></tr></thead>
     <tbody>
         {% for part in parts %}
-        <tr><td dir="ltr">{{ part.part_code }}</td><td>{{ part.description|default:"—" }}</td><td>{{ part.quantity }}</td></tr>
+        <tr><td dir="ltr">{{ part.code }}</td><td>{{ part.description|default:"—" }}</td><td>{{ part.quantity }}</td></tr>
         {% endfor %}
     </tbody>
 </table>
 {% endif %}
 
 <h2>{% translate "Overall Condition" %}</h2>
-<p>{% if report.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>
+<p>{% if content.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>
 
 <h2>{% translate "Customer Sign-off" %}</h2>
 <table class="signoff">
     <thead><tr><th>{% translate "Name" %}</th><th>{% translate "Signature" %}</th><th>{% translate "Date and time" %}</th></tr></thead>
     <tbody>
         <tr>
-            <td>{{ report.customer_name|default:"—" }}</td>
-            <td>{% if report.signature_url %}<img src="{{ report.signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted">{{ report.signature_waived_reason }}</span>{% endif %}{% endif %}</td>
-            <td>{{ report.submitted_at|date:"j F Y, H:i" }}</td>
+            <td>{{ content.customer_name|default:"—" }}</td>
+            <td>{% if signature_url %}<img src="{{ signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted">{{ report.signature_waived_reason }}</span>{% endif %}{% endif %}</td>
+            <td>{{ signed_at|date:"j F Y, H:i" }}</td>
         </tr>
     </tbody>
 </table>

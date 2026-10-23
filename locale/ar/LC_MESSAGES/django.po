@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 07:28+0000\n"
+"POT-Creation-Date: 2026-10-23 07:53+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -3242,6 +3242,9 @@ msgstr "وقّعه"
 msgid "Signed in"
 msgstr "مسجّل الدخول"
 
+msgid "Signed version (PDF)"
+msgstr "النسخة الموقّعة (PDF)"
+
 msgid "Significantly over estimate"
 msgstr "تجاوز التقدير بشكل ملحوظ"
 
@@ -3511,6 +3514,10 @@ msgid "The customer receives this report as a PDF by email. Leave blank to send 
 msgstr "يتلقى العميل هذا التقرير بصيغة PDF عبر البريد الإلكتروني. اتركه فارغًا لعدم الإرسال."
 
 #, python-format
+msgid "The customer signed this report on %(date)s. If you change it, please ask the customer to sign again; otherwise it will be marked as changed after signing."
+msgstr "وقّع العميل هذا التقرير بتاريخ %(date)s. إذا قمت بتعديله، يُرجى أن تطلب من العميل التوقيع مجددًا، وإلا فسيُعلَّم بأنه عُدّل بعد التوقيع."
+
+#, python-format
 msgid "The day is set for %(date)s. Please select the exact time."
 msgstr "تم تحديد اليوم بتاريخ %(date)s. يرجى اختيار الوقت بدقة."
 
@@ -3702,6 +3709,14 @@ msgstr "رابط إعادة تعيين كلمة المرور لم يعد صال�
 
 msgid "This person has left the company, so their login is disabled. Reactivate them from their record should they return."
 msgstr "غادر هذا الشخص الشركة، لذا فإن تسجيل دخوله معطّل. أعد تفعيله من سجله إذا عاد."
+
+#, python-format
+msgid "This report has been changed since the customer signed it on %(date)s. Please ask the customer to sign the updated report, or refer to the signed version."
+msgstr "تم تعديل هذا التقرير بعد أن وقّعه العميل بتاريخ %(date)s. يُرجى أن تطلب من العميل توقيع التقرير المُحدَّث، أو الرجوع إلى النسخة الموقّعة."
+
+#, python-format
+msgid "This report was changed after the customer signed it on %(date)s. The signature below applies to the version signed at that time."
+msgstr "تم تعديل هذا التقرير بعد أن وقّعه العميل بتاريخ %(date)s. ينطبق التوقيع أدناه على النسخة التي وُقّعت في ذلك الوقت."
 
 msgid "This schedule is locked. Please request a change, and a manager will review it."
 msgstr "هذا الموعد مقفل. يرجى طلب التغيير، وسيقوم المدير بمراجعته."
@@ -4478,6 +4493,9 @@ msgstr "نوع الحدث"
 msgid "evidence"
 msgstr "الدليل"
 
+msgid "exactly what the customer signed (reports.pdf.report_content), kept to detect later changes"
+msgstr "ما وقّعه العميل بالضبط، ويُحفظ لاكتشاف أي تعديلات لاحقة"
+
 msgid "factory offer"
 msgstr "عرض المصنع"
 
@@ -4887,6 +4905,12 @@ msgstr "يظهر في قائمة الفريق واللوحات وتفاصيل ا
 
 msgid "signature URL"
 msgstr "رابط التوقيع"
+
+msgid "signed at"
+msgstr "وقت التوقيع"
+
+msgid "signed content"
+msgstr "المحتوى الموقّع"
 
 #, python-format
 msgid "since %(time)s"

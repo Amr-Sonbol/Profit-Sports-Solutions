@@ -1485,6 +1485,14 @@ def approve_report_as_manager(task, actor):
     return True
 
 
+def _report_changed_after_signing(task):
+    """True when the task's report no longer matches what the customer signed."""
+    from reports.pdf import changed_after_signing
+
+    report = getattr(task, 'report', None)
+    return report is not None and changed_after_signing(report)
+
+
 @login_required
 def task_report_pdf(request, pk):
     """The task's visit report as a PDF on the company letterhead, for the
@@ -1504,8 +1512,13 @@ def task_report_pdf(request, pk):
     language = request.GET.get('lang')
     if language not in dict(settings.LANGUAGES):
         language = task.site.customer.language or settings.LANGUAGE_CODE
-    response = HttpResponse(render_visit_report_pdf(report, language), content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{task.task_number}-visit-report.pdf"'
+    # ?version=signed: the frozen copy of what the customer signed.
+    signed_version = request.GET.get('version') == 'signed' and bool(report.signed_content)
+    response = HttpResponse(
+        render_visit_report_pdf(report, language, signed_version=signed_version), content_type='application/pdf',
+    )
+    suffix = '-signed' if signed_version else ''
+    response['Content-Disposition'] = f'inline; filename="{task.task_number}-visit-report{suffix}.pdf"'
     return response
 
 
@@ -1849,6 +1862,7 @@ def task_detail(request, pk):
         'task_assets': task.task_assets.select_related('asset'),
         'products': task.products.all(),
         'report': getattr(task, 'report', None),
+        'report_changed_after_signing': _report_changed_after_signing(task),
         'feedback': getattr(task, 'feedback', None),
         'close_task_form': close_task_form,
         'cancel_task_form': cancel_task_form,
@@ -4580,6 +4594,11 @@ def save_work_report(request, task, technician, report_form, part_rows):
     saved_report.first_submission = task.status not in (
         Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
     )
+    if signature:
+        # The customer signed this time: keep exactly what they signed, once
+        # everything (machines included, saved by the caller) is committed.
+        from reports.pdf import freeze_signed_content
+        transaction.on_commit(lambda: freeze_signed_content(saved_report))
     copy_to = report_form.cleaned_data.get('send_copy_to')
     if saved_report.first_submission and copy_to:
         # Only once the report is safely saved, so a rollback never sends a

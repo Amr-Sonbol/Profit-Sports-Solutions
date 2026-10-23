@@ -815,12 +815,16 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | submitted_at | timestamptz | |
 | copy_sent_to | varchar | blank — where the PDF copy was emailed when the report was first submitted |
 | copy_sent_at | timestamptz | null until the copy has been sent |
+| signed_content | jsonb | null — exactly what the customer signed (findings, work done, resolved, machines and outcomes, parts without prices, signer, signature URL), frozen at signing |
+| signed_at | timestamptz | null — when that signature was taken |
 
 **The lead submits one report for the whole task**, with helpers listed. The customer signs once.
 
 **The customer gets a PDF copy by email.** On the report form (web and app) "Send a copy to" starts as the site's contact email; on the first submission, once it's saved, the visit report PDF (on the company letterhead, in the customer's language) is emailed there and `copy_sent_to`/`copy_sent_at` record it. Blank means no email. A failed send never blocks the report; the office can still download the PDF from the task page.
 
 **No signature needs a reason.** On a task type that requires a signature, the lead can still file when the customer isn't there by ticking "Customer not available to sign" and saying why. The task page shows "Not signed" with the reason, so the office can follow up.
+
+**What the customer signed is kept.** Whenever a signature is taken (the first filing, or the customer signing again on a correction), `signed_content`/`signed_at` freeze exactly what they signed. If the report is edited afterwards and no longer matches, the task page warns "changed since the customer signed it", the current PDF says so, and the office can download the signed version (rebuilt from `signed_content`). Signing again replaces the frozen copy. Reports signed before this existed have no frozen copy and are never flagged.
 
 **No `approved_at`/`rejection_reason` columns here, and reports are never locked.** The task's own `status` carries the approval state now (`completed` → `closed`, see task's status-flow note above), not the report — a manager approving is a task action, logged as a `report_approved` task_event, not a field written on this row. The report itself can always be corrected by submitting again, whatever the task's status is; nothing about it needs unlocking first.
 

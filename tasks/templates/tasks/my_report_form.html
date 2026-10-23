@@ -21,6 +21,9 @@
 
     <div class="section">
         <h2>{% translate "Report" %}</h2>
+        {% if report.signed_content %}
+        <p class="flash flash--info" data-staff-only>{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}The customer signed this report on {{ date }}. If you change it, please ask the customer to sign again; otherwise it will be marked as changed after signing.{% endblocktranslate %}</p>
+        {% endif %}
         {% if report_form.non_field_errors %}
             <p class="flash flash--error">{{ report_form.non_field_errors }}</p>
         {% endif %}

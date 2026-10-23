@@ -473,8 +473,12 @@
         <div class="button-row">
             <a href="{% url 'tasks:task_report_pdf' task.pk %}" class="button button--secondary" target="_blank" rel="noopener">{% translate "Download report (PDF)" %}</a>
             <a href="{% url 'tasks:task_report_pdf' task.pk %}?lang={% if task.site.customer.language == 'ar' %}en{% else %}ar{% endif %}" class="button button--secondary" target="_blank" rel="noopener">{% if task.site.customer.language == 'ar' %}English{% else %}العربية{% endif %}</a>
+            {% if report_changed_after_signing %}<a href="{% url 'tasks:task_report_pdf' task.pk %}?version=signed" class="button button--secondary" target="_blank" rel="noopener">{% translate "Signed version (PDF)" %}</a>{% endif %}
         </div>
     </div>
+    {% if report_changed_after_signing %}
+    <p class="flash flash--error">{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}This report has been changed since the customer signed it on {{ date }}. Please ask the customer to sign the updated report, or refer to the signed version.{% endblocktranslate %}</p>
+    {% endif %}
     {% if task.status == 'pending_supervisor_review' %}
     <p class="flash flash--info">{% translate "Awaiting review by the responsible supervisor before manager approval." %}</p>
         {% if can_approve_as_supervisor %}

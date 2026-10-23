@@ -5631,6 +5631,64 @@ class MyReportFormTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.context['report_form']['send_copy_to'].value(), 'marina@example.com')
 
+    SIGNATURE = (
+        'data:image/png;base64,'
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+    )
+
+    def _file(self, **overrides):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(self.url, self._base_payload(**overrides))
+
+    def test_what_the_customer_signed_is_frozen(self):
+        self.client.login(username='tech1', password='pass12345')
+        self._file(signature_drawn=self.SIGNATURE)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertEqual(report.signed_content['findings'], 'Belt worn out')
+        self.assertTrue(report.signed_content['signature_url'].endswith('.png'))
+        self.assertIsNotNone(report.signed_at)
+
+    def test_an_edit_after_signing_is_flagged_and_the_signed_version_stays_downloadable(self):
+        from reports.pdf import changed_after_signing
+        self.client.login(username='tech1', password='pass12345')
+        self._file(signature_drawn=self.SIGNATURE)
+        self._file(findings='Belt worn out and motor noisy')
+        report = WorkReport.objects.get(task=self.task)
+        self.assertTrue(changed_after_signing(report))
+        self.assertEqual(report.signed_content['findings'], 'Belt worn out')
+
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertTrue(page.context['report_changed_after_signing'])
+        signed = self.client.get(f'/tasks/{self.task.pk}/report.pdf', {'version': 'signed', 'lang': 'en'})
+        self.assertIn('-signed.pdf', signed['Content-Disposition'])
+        self.assertTrue(signed.content.startswith(b'%PDF'))
+
+    def test_saving_the_same_content_again_is_not_a_change(self):
+        from reports.pdf import changed_after_signing
+        self.client.login(username='tech1', password='pass12345')
+        self._file(signature_drawn=self.SIGNATURE)
+        self._file()
+        self.assertFalse(changed_after_signing(WorkReport.objects.get(task=self.task)))
+
+    def test_signing_again_clears_the_flag(self):
+        from reports.pdf import changed_after_signing
+        self.client.login(username='tech1', password='pass12345')
+        self._file(signature_drawn=self.SIGNATURE)
+        self._file(findings='Belt worn out and motor noisy', signature_drawn=self.SIGNATURE)
+        report = WorkReport.objects.get(task=self.task)
+        self.assertFalse(changed_after_signing(report))
+        self.assertEqual(report.signed_content['findings'], 'Belt worn out and motor noisy')
+
+    def test_an_unsigned_report_is_never_flagged(self):
+        from reports.pdf import changed_after_signing
+        self.client.login(username='tech1', password='pass12345')
+        self._file()
+        self._file(findings='Something else')
+        report = WorkReport.objects.get(task=self.task)
+        self.assertIsNone(report.signed_content)
+        self.assertFalse(changed_after_signing(report))
+
     def test_helper_gets_404(self):
         self.client.login(username='helper1', password='pass12345')
         response = self.client.get(self.url)
