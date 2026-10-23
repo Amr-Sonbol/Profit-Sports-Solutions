@@ -335,6 +335,70 @@ def _candidates_with_skill_level(candidates_qs, task):
     return candidates
 
 
+# A job with no estimated hours still takes up time: an hour, for clashes.
+DEFAULT_JOB_HOURS = 1
+
+
+def _job_window(task):
+    """(start, finish) of a timed job — finish is the estimate, else an
+    hour on; None for a job with no time (a date only, or no date)."""
+    if task.scheduled_for is None:
+        return None
+    return task.scheduled_for, task.estimated_finish or task.scheduled_for + timedelta(hours=DEFAULT_JOB_HOURS)
+
+
+def _with_day_load(technicians, task):
+    """Annotate each technician with their other jobs on `task`'s day — no
+    limit, just so a supervisor sees how busy each person is:
+    `day_jobs` (their tasks that day, this one excluded, never cancelled),
+    `day_hours` (the estimates that are known) and `clashes` (those whose
+    time overlaps this task's). Nothing when the task has no day yet.
+    """
+    technicians = list(technicians)
+    day = _calendar_day(task)
+    for technician in technicians:
+        technician.day_jobs, technician.day_hours, technician.clashes = [], 0, []
+    if day is None:
+        return technicians
+    by_technician = {technician.pk: technician for technician in technicians}
+    assignments = TaskAssignment.objects.filter(
+        technician__in=by_technician, is_active=True,
+    ).exclude(task=task).exclude(task__status=Task.Status.CANCELLED).filter(
+        Q(task__scheduled_for__date=day) | Q(task__scheduled_for__isnull=True, task__scheduled_date=day),
+    ).select_related('task')
+    window = _job_window(task)
+    for assignment in assignments:
+        technician, job = by_technician[assignment.technician_id], assignment.task
+        technician.day_jobs.append(job)
+        technician.day_hours += job.estimated_hours or 0
+        other = _job_window(job)
+        if window and other and other[0] < window[1] and window[0] < other[1]:
+            technician.clashes.append(job)
+    for technician in technicians:
+        technician.day_jobs.sort(key=_time_of_day)
+        technician.clashes.sort(key=_time_of_day)
+    return technicians
+
+
+def _clash_warning(technician, task):
+    """'X already has Y from 9:00 to 11:00 that day.' — for a message after
+    assigning or moving a task; None without a clash."""
+    clashes = _with_day_load([technician], task)[0].clashes
+    if not clashes:
+        return None
+    return _('%(name)s already has %(jobs)s that day.') % {
+        'name': technician.full_name,
+        'jobs': ', '.join(
+            _('%(number)s from %(start)s to %(end)s') % {
+                'number': job.task_number,
+                'start': formats.time_format(timezone.localtime(_job_window(job)[0])),
+                'end': formats.time_format(timezone.localtime(_job_window(job)[1])),
+            }
+            for job in clashes
+        ),
+    }
+
+
 def _technicians_with_next_scheduled_task(technicians):
     """Annotate each technician with `.next_scheduled_task` — their
     soonest upcoming open, scheduled assignment, or None — so whoever is
@@ -2062,6 +2126,11 @@ def task_edit(request, pk):
             weekend_warning = _weekend_warning(updated_task)
             if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
                 messages.warning(request, weekend_warning)
+            if {'scheduled_for', 'scheduled_date', 'estimated_hours'} & set(form.changed_data):
+                for assignment in updated_task.assignments.filter(is_active=True).select_related('technician'):
+                    clash = _clash_warning(assignment.technician, updated_task)
+                    if clash:
+                        messages.warning(request, clash)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
@@ -3023,6 +3092,9 @@ def task_assign(request, pk):
                     set_lead_form.cleaned_data.get('hours_worked'),
                 )
                 messages.success(request, _('Lead technician set.'))
+                clash = _clash_warning(set_lead_form.cleaned_data['technician'], task)
+                if clash:
+                    messages.warning(request, clash)
                 return redirect('tasks:task_assign', pk=task.pk)
 
         elif action == 'add_helper' and active_lead and not locked:
@@ -3034,6 +3106,9 @@ def task_assign(request, pk):
                 )
                 push_assigned(add_helper_form.cleaned_data['technician'], task, is_lead=False)
                 messages.success(request, _('Helper added.'))
+                clash = _clash_warning(add_helper_form.cleaned_data['technician'], task)
+                if clash:
+                    messages.warning(request, clash)
                 return redirect('tasks:task_assign', pk=task.pk)
 
         elif action == 'remove_helper':
@@ -3055,7 +3130,10 @@ def task_assign(request, pk):
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'candidates': _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)),
+        'candidates': _with_day_load(
+            _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)), task,
+        ),
+        'task_day': _calendar_day(task),
         'locked': locked,
         'manager_override': manager_override,
         'can_set_lead': can_set_lead,

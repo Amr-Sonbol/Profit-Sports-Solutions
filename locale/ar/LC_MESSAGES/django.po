@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:40+0000\n"
+"POT-Creation-Date: 2026-10-23 22:46+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -61,6 +61,16 @@ msgstr ""
 #, python-format
 msgid "%(count)s fewer than last month"
 msgstr "أقل بـ %(count)s من الشهر الماضي"
+
+#, python-format
+msgid "%(count)s job"
+msgid_plural "%(count)s jobs"
+msgstr[0] "لا مهام"
+msgstr[1] "مهمة واحدة"
+msgstr[2] "مهمتان"
+msgstr[3] "%(count)s مهام"
+msgstr[4] "%(count)s مهمة"
+msgstr[5] "%(count)s مهمة"
 
 #, python-format
 msgid "%(count)s job with check-ins recorded away from the site"
@@ -163,6 +173,10 @@ msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
 
 #, python-format
+msgid "%(name)s already has %(jobs)s that day."
+msgstr "لدى %(name)s بالفعل %(jobs)s في ذلك اليوم."
+
+#, python-format
 msgid "%(name)s has been signed out of the mobile app on all devices."
 msgstr "تم تسجيل خروج %(name)s من تطبيق الجوال على جميع الأجهزة."
 
@@ -181,6 +195,10 @@ msgstr "لم يصل %(name)s إلى %(site)s بعد (الموعد المحدد %
 #, python-format
 msgid "%(name)s recorded “%(event)s” %(distance)s away from %(site)s."
 msgstr "سجّل %(name)s “%(event)s” على بُعد %(distance)s من %(site)s."
+
+#, python-format
+msgid "%(number)s from %(start)s to %(end)s"
+msgstr "%(number)s من %(start)s إلى %(end)s"
 
 #, python-format
 msgid "%(number)s — %(company)s"
@@ -838,6 +856,10 @@ msgstr "اختر سببًا لاستبدال الفني الرئيسي الحا�
 
 msgid "Choose at least one role, or turn this email off."
 msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
+
+#, python-format
+msgid "Clash: %(number)s at %(start)s"
+msgstr "تعارض: %(number)s الساعة %(start)s"
 
 msgid "Clear signature"
 msgstr "مسح التوقيع"
@@ -2550,6 +2572,9 @@ msgstr "ملاحظة للعميل (اختياري)"
 msgid "Notes"
 msgstr "الملاحظات"
 
+msgid "Nothing else"
+msgstr "لا شيء آخر"
+
 msgid "Nothing left to do today."
 msgstr "لا يوجد ما تبقّى لإنجازه اليوم."
 
@@ -3424,6 +3449,9 @@ msgstr "لوحة الرقم التسلسلي"
 msgid "Service history"
 msgstr "سجل الصيانة"
 
+msgid "Set a day to see"
+msgstr "حدّد يومًا للعرض"
+
 msgid "Set a new password"
 msgstr "تعيين كلمة مرور جديدة"
 
@@ -3783,6 +3811,13 @@ msgstr "نشكركم على تواصلكم معنا. يقوم فريقنا حا�
 
 msgid "Thank you."
 msgstr "شكراً لكم."
+
+msgid "That day"
+msgstr "ذلك اليوم"
+
+#, python-format
+msgid "That day (%(day)s)"
+msgstr "ذلك اليوم (%(day)s)"
 
 msgid "The address invoices should be issued to."
 msgstr "العنوان الذي تُصدر إليه الفواتير."
@@ -4640,6 +4675,10 @@ msgstr "صورة لملصق الرقم التسلسلي الفضي على الج
 
 msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"
+
+#, python-format
+msgid "about %(hours)s h"
+msgstr "نحو %(hours)s ساعة"
 
 msgid "access notes"
 msgstr "ملاحظات الدخول"

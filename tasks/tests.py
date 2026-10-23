@@ -452,6 +452,26 @@ class TaskEditTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
+    def test_moving_a_task_into_its_teams_other_job_warns(self):
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        other = Task.objects.create(
+            task_number='UAE-0002', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=dubai_time(2026, 9, 21, 9), estimated_hours=2,
+        )
+        TaskAssignment.objects.create(
+            task=other, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(scheduled_for='2026-09-21T10:00'), follow=True)
+        warnings = [str(m.message) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('UAE-0002', warnings[0])
+
     def test_a_weekend_visit_is_a_reminder_unless_its_an_emergency(self):
         # The test UAE's weekend is Saturday–Sunday; 2026-09-19 is a Saturday.
         self.client.login(username='supervisor1', password='pass12345')
@@ -2990,6 +3010,49 @@ class TaskAssignTests(TaskTestCase):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(f'/tasks/{other_task.pk}/assign/')
         self.assertEqual(response.status_code, 404)
+
+    def _other_job(self, number, start, hours, technician=None):
+        job = Task.objects.create(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=start, estimated_hours=hours,
+        )
+        TaskAssignment.objects.create(
+            task=job, technician=technician or self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        return job
+
+    def test_each_candidate_shows_their_load_and_clashes_that_day(self):
+        self.task.scheduled_for, self.task.estimated_hours = dubai_time(2026, 9, 9, 10), 2
+        self.task.save(update_fields=['scheduled_for', 'estimated_hours'])
+        clash = self._other_job('AE-0011', dubai_time(2026, 9, 9, 9), 2)       # 9–11: overlaps 10–12
+        self._other_job('AE-0012', dubai_time(2026, 9, 9, 13), 3)               # 13–16: doesn't
+        self._other_job('AE-0013', dubai_time(2026, 9, 10, 10), 2)              # another day
+        self.client.login(username='supervisor1', password='pass12345')
+        candidates = {c.pk: c for c in self.client.get(self.url).context['candidates']}
+        tarek = candidates[self.technician.pk]
+        self.assertEqual(len(tarek.day_jobs), 2)
+        self.assertEqual(tarek.day_hours, 5)
+        self.assertEqual(tarek.clashes, [clash])
+        self.assertEqual((candidates[self.helper.pk].day_jobs, candidates[self.helper.pk].clashes), ([], []))
+
+    def test_assigning_into_a_clash_saves_with_a_warning(self):
+        self.task.scheduled_for, self.task.estimated_hours = dubai_time(2026, 9, 9, 10), 2
+        self.task.save(update_fields=['scheduled_for', 'estimated_hours'])
+        self._other_job('AE-0011', dubai_time(2026, 9, 9, 11), None)  # no estimate: counts as an hour
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk}, follow=True)
+        self.assertTrue(self.task.assignments.filter(technician=self.technician, is_active=True).exists())
+        warnings = [str(m.message) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('AE-0011', warnings[0])
+
+    def test_no_day_yet_means_no_load(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertIsNone(response.context['task_day'])
+        self.assertTrue(all(c.day_jobs == [] for c in response.context['candidates']))
 
     def test_set_lead_assigns_and_advances_status(self):
         self.client.login(username='supervisor1', password='pass12345')
