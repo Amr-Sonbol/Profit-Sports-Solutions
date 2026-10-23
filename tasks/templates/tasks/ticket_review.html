@@ -69,6 +69,13 @@
         <p>{{ ticket.shipping_address }}</p>
     </div>
     {% endif %}
+    {% with machines=ticket.machines.all %}
+    {% if machines %}
+    <div class="description">
+        <dt>{% translate "Machines to service" %}</dt>
+        {% include "tasks/_ticket_machines.html" %}
+    </div>
+    {% else %}
     <div class="description">
         <dt>{% translate "Serial number(s)" %}</dt>
         <p class="pre-line">{{ ticket.serial_numbers }}</p>
@@ -77,17 +84,19 @@
         <dt>{% translate "Description" %}</dt>
         <p>{{ ticket.description }}</p>
     </div>
+    {% endif %}
+    {% endwith %}
     {% if ticket.notes %}
     <div class="description">
         <dt>{% translate "Additional information" %}</dt>
         <p>{{ ticket.notes }}</p>
     </div>
     {% endif %}
-    {% if ticket.attachments.all %}
+    {% if ticket_general_attachments %}
     <div class="description">
         <dt>{% translate "Photos and/or short video" %}</dt>
         <ul class="plain-list">
-            {% for attachment in ticket.attachments.all %}
+            {% for attachment in ticket_general_attachments %}
             <li>
                 {{ attachment.file.name }}
                 <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>

@@ -625,15 +625,82 @@ class TicketInternalNote(models.Model):
         return f'{self.ticket} — {self.created_at}'
 
 
+# A photo of a machine's serial-number sticker: pictures only, not video.
+SERIAL_PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic']
+
+# Machines one ticket can list. Never stated on screen: the portal just
+# stops offering "Add another machine" (see docs: ticket_machine).
+MAX_TICKET_MACHINES = 10
+
+
+class TicketMachine(models.Model):
+    """One machine a ticket is about (docs: ticket_machine): one of the
+    customer's registered machines, or a model and serial they typed when
+    it isn't in their list, with what's wrong with it and its own photos.
+    """
+
+    class Problem(models.TextChoices):
+        NOT_WORKING = 'not_working', _('Not working')
+        NOISE = 'noise', _('Noise or vibration')
+        DISPLAY = 'display', _('Display or electronics')
+        CABLES = 'cables', _('Cables, belts or pulleys')
+        OTHER = 'other', _('Other')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='machines', verbose_name=_('ticket'),
+    )
+    asset = models.ForeignKey(
+        Asset, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket_machines',
+        verbose_name=_('machine'), help_text=_('the registered machine, when the customer picked one from their list'),
+    )
+    model_name = models.CharField(
+        _('model'), max_length=150, blank=True, help_text=_('typed by the customer when the machine is not in their list'),
+    )
+    serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    serial_photo = models.FileField(
+        _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        help_text=_("a photo of the machine's silver serial-number sticker, instead of or as well as typing it"),
+    )
+    problem = models.CharField(_('problem'), max_length=20, choices=Problem.choices)
+    description = models.TextField(_('description'), blank=True)
+    out_of_service = models.BooleanField(_('cannot be used'), default=False)
+    position = models.PositiveSmallIntegerField(_('position'), default=0)
+
+    class Meta:
+        verbose_name = _('ticket machine')
+        verbose_name_plural = _('ticket machines')
+        ordering = ['ticket', 'position', 'pk']
+
+    def __str__(self):
+        return f'{self.ticket} — {self.machine_name}'
+
+    @property
+    def machine_name(self):
+        if self.asset_id:
+            brand = self.asset.brand.name if self.asset.brand_id else ''
+            return f'{brand} {self.asset.model_name}'.strip()
+        return self.model_name
+
+    @property
+    def serial(self):
+        return self.asset.serial_no if self.asset_id else self.serial_no
+
+
 class CustomerTicketAttachment(models.Model):
     """A customer's own phone photo or video of the fault, uploaded with
     the ticket — the ticket itself already records who submitted it
-    (ticket.customer), so there's no separate uploaded_by here.
+    (ticket.customer), so there's no separate uploaded_by here. On a
+    portal ticket each one belongs to one of its machines.
     """
 
     ticket = models.ForeignKey(
         CustomerTicket, on_delete=models.CASCADE, related_name='attachments',
         verbose_name=_('ticket'),
+    )
+    machine = models.ForeignKey(
+        TicketMachine, on_delete=models.SET_NULL, null=True, blank=True, related_name='attachments',
+        verbose_name=_('machine'),
     )
     file = models.FileField(
         _('file'), upload_to=_ticket_attachment_path,

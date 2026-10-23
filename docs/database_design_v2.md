@@ -635,10 +635,31 @@ A customer's own phone photo or short video of the fault, uploaded with the tick
 |---|---|---|
 | id | PK | |
 | ticket_id | FK → customer_ticket | |
+| machine_id | FK → ticket_machine | null — which machine on the ticket the photo shows; portal tickets always set it |
 | file | file | image or short video, 25 MB limit |
 | uploaded_at | timestamptz | |
 
 **Still shown once the ticket becomes a task.** Converting a ticket doesn't copy these rows into `task_attachment` — the file stays owned by the ticket, exactly where it was uploaded — but the task's own detail page reads them straight off `task.ticket.attachments` (the OneToOne back to `customer_ticket`) and shows them in their own "Attachments from the customer's ticket" section, so a supervisor sees the original evidence without anyone re-uploading it.
+
+### ticket_machine
+One machine a ticket is about. A customer reports each machine as its own card in the portal, instead of one free-text list of serials and one description for them all, so the office sees exactly which machine has which problem, with that machine's own photos.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| ticket_id | FK → customer_ticket | |
+| asset_id | FK → asset | null — set when the customer picked one of their registered machines at the ticket's site |
+| model_name | varchar | blank — typed when the machine isn't in their list |
+| serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
+| serial_photo | file | blank — a photo of the machine's silver serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
+| problem | varchar | not_working, noise, display, cables, other |
+| description | text | blank |
+| out_of_service | bool | "cannot be used" — the customer's own flag, for the office to prioritise |
+| position | smallint | order the customer added them |
+
+**Up to 10 machines per ticket, never stated on screen** — the portal simply stops offering "Add another machine". There is deliberately no "select all machines" or bulk option anywhere, so nothing in the product suggests a site-wide failure.
+
+**The ticket's own `serial_numbers` and `description` are still filled in**, generated from the machines on submission, so everything that reads them (staff emails, ticket lists, the mobile app, a task's `reported_serial_numbers` on conversion) keeps working unchanged. Tickets opened by staff still use those two text fields directly.
 
 ### task_asset
 Which machines the task covers. Populated by the technician during the work, not at creation.

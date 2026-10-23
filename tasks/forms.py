@@ -15,8 +15,9 @@ from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
-    MAX_TICKET_ATTACHMENT_COUNT, CustomerTicket, Task, TaskAssignment, TaskAsset, TaskAttachment, TaskEvent,
-    TicketEscalation,
+    MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
+    TaskAsset,
+    TaskAttachment, TaskEvent, TicketEscalation, TicketMachine,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -1032,6 +1033,11 @@ class MultipleFileField(forms.FileField):
             return [single_file_clean(d, initial) for d in data]
         return single_file_clean(data, initial)
 
+    def has_changed(self, initial, data):
+        # An empty list (nothing chosen) isn't a change — otherwise every
+        # unused card in a formset looks filled in once any file is posted.
+        return not self.disabled and bool(data)
+
 
 class TicketAttachmentsForm(forms.Form):
     """The photos/video box shared by both ways a ticket is opened."""
@@ -1059,29 +1065,132 @@ class TicketAttachmentsForm(forms.Form):
         return files
 
 
-class CustomerPortalTicketForm(TicketAttachmentsForm, forms.ModelForm):
+class SiteNameChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, site):
+        return site.name
+
+
+class CustomerPortalTicketForm(forms.ModelForm):
     """A logged-in customer reporting an issue at one of their own
     sites. The company name, site, and address are never typed here at
     all; a portal login already knows who they are and where their sites
-    are (set directly in the view).
+    are (set directly in the view). The machines and their photos come
+    from TicketMachineFormSet alongside it.
     """
 
     class Meta:
         model = CustomerTicket
-        fields = [
-            'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
-            'serial_numbers', 'description', 'notes',
-        ]
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes']
         widgets = {
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
-            'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
-            'description': forms.Textarea(attrs={'rows': 5}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
+        labels = {'notes': _('Anything else we should know')}
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields = {'site': forms.ModelChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+
+
+class TicketMachineForm(forms.Form):
+    """One machine card on the portal's ticket form: one of the
+    customer's registered machines (grouped by site), or the model and
+    serial of one that isn't in their list, plus what's wrong and photos.
+    """
+
+    asset = forms.ChoiceField(required=False, label=_('Machine'))
+    model_name = forms.CharField(required=False, max_length=150, label=_('Model, if not in the list'))
+    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number, if not in the list'))
+    # The silver serial-number sticker on the machine. No `capture`: phones
+    # then offer both "take photo" and "choose from library".
+    serial_photo = forms.FileField(
+        required=False, label=_('Or a photo of the serial number sticker'),
+        help_text=_('the silver sticker on the machine: take a photo or upload one'),
+        widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+    )
+    problem = forms.ChoiceField(
+        choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
+    )
+    description = forms.CharField(required=False, label=_('Description'), widget=forms.Textarea(attrs={'rows': 2}))
+    out_of_service = forms.BooleanField(required=False, label=_('The machine cannot be used'))
+    files = MultipleFileField(
+        required=False, label=_('Photos or a short video'),
+        help_text=_('showing the issue and the serial number'),
+        widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    def __init__(self, *args, customer, **kwargs):
+        super().__init__(*args, **kwargs)
+        assets = Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).select_related(
+            'site', 'brand',
+        ).order_by('site__name', 'brand__name', 'model_name')
+        self.assets = {str(asset.pk): asset for asset in assets}
+        groups = {}
+        for asset in assets:
+            label = f"{asset.brand.name + ' ' if asset.brand_id else ''}{asset.model_name}"
+            if asset.serial_no:
+                label += f' ({asset.serial_no})'
+            groups.setdefault(asset.site.name, []).append((str(asset.pk), label))
+        self.fields['asset'].choices = [('', _('Not in the list'))] + list(groups.items())
+
+    def clean_asset(self):
+        value = self.cleaned_data['asset']
+        return self.assets.get(value) if value else None
+
+    def clean_files(self):
+        files = self.cleaned_data['files'] or []
+        for file in files:
+            if file.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                    'name': file.name,
+                })
+        return files
+
+    def clean(self):
+        cleaned = super().clean()
+        if not self.has_changed():
+            return cleaned
+        if not cleaned.get('asset'):
+            if not cleaned.get('model_name'):
+                self.add_error('asset', _('Please choose the machine, or enter its model if it is not in the list.'))
+            if not cleaned.get('serial_no') and not cleaned.get('serial_photo'):
+                self.add_error(
+                    'serial_no', _('Please enter the serial number, or add a photo of the serial number sticker.'),
+                )
+        photo = cleaned.get('serial_photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            self.add_error('serial_photo', _('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                'name': photo.name,
+            })
+        if not cleaned.get('problem'):
+            self.add_error('problem', _('Please select the problem.'))
+        return cleaned
+
+
+class BaseTicketMachineFormSet(forms.BaseFormSet):
+    """The machine cards together: at least one, at most
+    MAX_TICKET_MACHINES, and the ticket's overall file limit across them.
+    """
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        filled = [form for form in self.forms if form.has_changed()]
+        if not filled:
+            raise forms.ValidationError(_('Please add at least one machine.'))
+        if sum(len(form.cleaned_data.get('files') or []) for form in filled) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
+
+
+TicketMachineFormSet = forms.formset_factory(
+    TicketMachineForm, formset=BaseTicketMachineFormSet,
+    extra=MAX_TICKET_MACHINES, max_num=MAX_TICKET_MACHINES, validate_max=True,
+)
 
 
 class SiteChoiceField(forms.ModelChoiceField):

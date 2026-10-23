@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 08:04+0000\n"
+"POT-Creation-Date: 2026-10-23 16:44+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -357,6 +357,9 @@ msgstr "إضافة قطعة"
 msgid "Add a site"
 msgstr "إضافة فرع"
 
+msgid "Add another machine"
+msgstr "إضافة جهاز آخر"
+
 msgid "Add brand"
 msgstr "إضافة علامة تجارية"
 
@@ -371,6 +374,9 @@ msgstr "إضافة عميل"
 
 msgid "Add document"
 msgstr "إضافة مستند"
+
+msgid "Add each machine separately, with its own photos, so our team can prepare the right parts for each one."
+msgstr "أضف كل جهاز على حدة مع صوره الخاصة، ليتمكن فريقنا من تجهيز القطع المناسبة لكل جهاز."
 
 msgid "Add helper"
 msgstr "إضافة مساعد"
@@ -467,6 +473,9 @@ msgstr "أو ارفع صورة لنسخة ورقية موقَّعة:"
 
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
+
+msgid "Anything else we should know"
+msgstr "أي معلومات أخرى ينبغي أن نعرفها"
 
 msgid "Approve"
 msgstr "اعتماد"
@@ -670,6 +679,9 @@ msgstr "العلامات التجارية"
 msgid "CSV file"
 msgstr "ملف CSV"
 
+msgid "Cables, belts or pulleys"
+msgstr "الكابلات أو السيور أو البكرات"
+
 msgid "Calendar view"
 msgstr "عرض التقويم"
 
@@ -684,6 +696,9 @@ msgstr "ملغاة"
 
 msgid "Cancels the task before a report is submitted. All assigned staff will be notified, and the customer's ticket conversation will remain open."
 msgstr "يُلغي المهمة قبل تقديم أي تقرير. سيتم إشعار جميع الموظفين المكلَّفين بها، وستظل محادثة تذكرة العميل مفتوحة."
+
+msgid "Cannot be used"
+msgstr "لا يمكن استخدامه"
 
 #, python-format
 msgid "Carrier: %(company)s"
@@ -821,6 +836,9 @@ msgstr "تأكيد زيارة Profit Sports Solutions القادمة — %(numbe
 
 msgid "Contact"
 msgstr "جهة الاتصال"
+
+msgid "Contact details"
+msgstr "بيانات التواصل"
 
 msgid "Contact email"
 msgstr "البريد الإلكتروني لجهة الاتصال"
@@ -1366,6 +1384,9 @@ msgstr "رفض"
 msgid "Dismissed"
 msgstr "مرفوضة"
 
+msgid "Display or electronics"
+msgstr "الشاشة أو الإلكترونيات"
+
 msgid "Displayed on the customer's ticket page under “escalated to our management team”."
 msgstr "يظهر في صفحة تذكرة العميل تحت «مصعَّدة إلى فريق الإدارة لدينا»."
 
@@ -1568,6 +1589,10 @@ msgstr "FedEx"
 
 msgid "File"
 msgstr "ملف"
+
+#, python-format
+msgid "File %(number)s"
+msgstr "ملف %(number)s"
 
 msgid "File report"
 msgstr "تقديم التقرير"
@@ -1888,6 +1913,10 @@ msgstr "منخفضة"
 msgid "Machine"
 msgstr "الجهاز"
 
+#, python-format
+msgid "Machine %(number)s"
+msgstr "الجهاز %(number)s"
+
 msgid "Machine serial number"
 msgstr "الرقم التسلسلي للجهاز"
 
@@ -1899,6 +1928,9 @@ msgstr "الأجهزة المشمولة"
 
 msgid "Machines covered this visit"
 msgstr "الأجهزة المشمولة في هذه الزيارة"
+
+msgid "Machines to service"
+msgstr "الأجهزة المطلوب صيانتها"
 
 msgid "Maintain the parts catalogue"
 msgstr "إدارة قائمة قطع الغيار"
@@ -1976,6 +2008,9 @@ msgstr "تطبيق الجوال"
 
 msgid "Model"
 msgstr "الموديل"
+
+msgid "Model, if not in the list"
+msgstr "الطراز، إن لم يكن في القائمة"
 
 msgid "Monday"
 msgstr "الإثنين"
@@ -2274,6 +2309,9 @@ msgstr "لا توجد زيارات مجدولة لليوم."
 msgid "No visits on record."
 msgstr "لا توجد زيارات مسجَّلة."
 
+msgid "Noise or vibration"
+msgstr "صوت أو اهتزاز"
+
 msgid "None submitted"
 msgstr "لم يتم إرسال أي شيء"
 
@@ -2289,6 +2327,12 @@ msgstr "ليس في الموقع"
 #, python-format
 msgid "Not at the site · %(distance)s"
 msgstr "ليس في الموقع · %(distance)s"
+
+msgid "Not in the list"
+msgstr "غير موجود في القائمة"
+
+msgid "Not in the machine list"
+msgstr "غير موجود في قائمة الأجهزة"
 
 msgid "Not invited"
 msgstr "غير مدعو"
@@ -2316,6 +2360,9 @@ msgstr "غير موقَّع"
 
 msgid "Not signed in"
 msgstr "غير مسجّل الدخول"
+
+msgid "Not working"
+msgstr "لا يعمل"
 
 msgid "Not yet assigned."
 msgstr "لم يتم الإسناد بعد."
@@ -2438,6 +2485,9 @@ msgstr "مدير العمليات"
 
 msgid "Optional: any notes required before work resumes."
 msgstr "اختياري: أي ملاحظات لازمة قبل استئناف العمل."
+
+msgid "Or a photo of the serial number sticker"
+msgstr "أو صورة لملصق الرقم التسلسلي"
 
 msgid "Other"
 msgstr "أخرى"
@@ -2574,6 +2624,9 @@ msgstr "الصور"
 msgid "Photos and/or short video"
 msgstr "صور و/أو مقطع فيديو قصير"
 
+msgid "Photos or a short video"
+msgstr "صور أو مقطع فيديو قصير"
+
 msgid "Please add a contact email address before notifying the customer."
 msgstr "يرجى إضافة بريد إلكتروني للتواصل قبل إشعار العميل."
 
@@ -2586,11 +2639,17 @@ msgstr "يرجى إضافة بريد إلكتروني للتواصل لهذا ا
 msgid "Please add a shipping tracking number before notifying the customer."
 msgstr "يرجى إضافة رقم تتبع الشحنة قبل إشعار العميل."
 
+msgid "Please add at least one machine."
+msgstr "يُرجى إضافة جهاز واحد على الأقل."
+
 msgid "Please ask your manager to send you a new link. If you have already set your password, you may sign in."
 msgstr "يُرجى أن تطلب من مديرك إرسال رابط جديد. إذا كنت قد عيّنت كلمة المرور بالفعل، يمكنك تسجيل الدخول."
 
 msgid "Please check your email"
 msgstr "يرجى مراجعة بريدك الإلكتروني"
+
+msgid "Please choose the machine, or enter its model if it is not in the list."
+msgstr "يُرجى اختيار الجهاز، أو إدخال طرازه إن لم يكن في القائمة."
 
 msgid "Please close the task (submit its report) before requesting feedback."
 msgstr "يرجى إغلاق المهمة (تقديم تقريرها) قبل طلب التقييم."
@@ -2601,11 +2660,17 @@ msgstr "يرجى استكمال الرمز والاسم والاسم بالعر�
 msgid "Please complete the part code, quantity, unit cost and currency, or leave this row blank."
 msgstr "يرجى استكمال رمز القطعة والكمية وتكلفة الوحدة والعملة، أو ترك هذا الصف فارغاً."
 
+msgid "Please enter the serial number, or add a photo of the serial number sticker."
+msgstr "يُرجى إدخال الرقم التسلسلي، أو إضافة صورة لملصق الرقم التسلسلي."
+
 msgid "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step."
 msgstr "يرجى تسليم الجهاز إلى العميل لمراجعة العمل والتوقيع. يتم إخفاء الساعات والأسعار خلال هذه الخطوة."
 
 msgid "Please mark yourself as resumed before submitting the report."
 msgstr "يرجى تسجيل استئناف العمل قبل تقديم التقرير."
+
+msgid "Please select the problem."
+msgstr "يُرجى اختيار المشكلة."
 
 msgid "Please set a scheduled time before notifying the customer."
 msgstr "يرجى تحديد موعد مجدول قبل إشعار العميل."
@@ -2654,6 +2719,9 @@ msgstr "الأسبوع الماضي"
 
 msgid "Priority"
 msgstr "الأولوية"
+
+msgid "Problem"
+msgstr "المشكلة"
 
 msgid "Product code"
 msgstr "رمز المنتج"
@@ -3064,6 +3132,9 @@ msgstr "يرجى اختيار نوع مهمة موجود أو إضافة نوع 
 msgid "Select the machine and an outcome, or leave this row blank."
 msgstr "يرجى اختيار الجهاز والنتيجة، أو ترك هذا الصف فارغاً."
 
+msgid "Select…"
+msgstr "اختر…"
+
 msgid "Self-assess a skill or conduct area"
 msgstr "التقييم الذاتي لمهارة أو مجال سلوك"
 
@@ -3130,6 +3201,9 @@ msgstr "الرقم التسلسلي"
 
 msgid "Serial number(s)"
 msgstr "الرقم/الأرقام التسلسلية"
+
+msgid "Serial number, if not in the list"
+msgstr "الرقم التسلسلي، إن لم يكن في القائمة"
 
 msgid "Serial plate"
 msgstr "لوحة الرقم التسلسلي"
@@ -3320,6 +3394,9 @@ msgstr "بدأت"
 
 msgid "Status"
 msgstr "الحالة"
+
+msgid "Sticker photo"
+msgstr "صورة الملصق"
 
 msgid "Stock request"
 msgstr "طلب مخزون"
@@ -3583,6 +3660,9 @@ msgstr "غادر قائد المهمة الشركة. وبما أن العمل ق
 msgid "The list from which technicians select parts when recording a work report. Deactivate a part rather than deleting it, so that past reports retain their codes."
 msgstr "القائمة التي يختار منها الفنيون القطع عند تسجيل تقرير العمل. يرجى إيقاف القطعة بدلاً من حذفها، لتحتفظ التقارير السابقة برموزها."
 
+msgid "The machine cannot be used"
+msgstr "لا يمكن استخدام الجهاز"
+
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
@@ -3697,6 +3777,9 @@ msgstr "انتهت صلاحية هذا الرابط أو سبق استخدامه
 
 msgid "This link has expired or has already been used. Please request a new one below, or contact us if you require assistance."
 msgstr "انتهت صلاحية هذا الرابط أو تم استخدامه مسبقاً. يرجى طلب رابط جديد أدناه، أو التواصل معنا إذا احتجتم إلى المساعدة."
+
+msgid "This machine is registered at another site."
+msgstr "هذا الجهاز مسجّل في موقع آخر."
 
 msgid "This month"
 msgstr "هذا الشهر"
@@ -4218,6 +4301,9 @@ msgstr "طلباتك"
 msgid "Your username, for your reference:"
 msgstr "اسم المستخدم الخاص بك، للرجوع إليه:"
 
+msgid "a photo of the machine's silver serial-number sticker, instead of or as well as typing it"
+msgstr "صورة لملصق الرقم التسلسلي الفضي على الجهاز، بدلًا من كتابته أو إضافةً إليه"
+
 msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"
 
@@ -4307,6 +4393,9 @@ msgstr "يستطيع حمل معدات كبيرة"
 
 msgid "can move a treadmill motor or locker bank"
 msgstr "يستطيع نقل محرك جهاز مشي أو خزانة أقفال"
+
+msgid "cannot be used"
+msgstr "لا يمكن استخدامه"
 
 msgid "category"
 msgstr "الفئة"
@@ -4611,6 +4700,9 @@ msgstr "حساب الدخول"
 msgid "longitude"
 msgstr "خط الطول"
 
+msgid "machine"
+msgstr "الجهاز"
+
 msgid "managers and administrators only"
 msgstr "للمديرين ومسؤولي النظام فقط"
 
@@ -4625,6 +4717,9 @@ msgstr "رسالة إلى العميل"
 
 msgid "minimum level"
 msgstr "الحد الأدنى للمستوى"
+
+msgid "model"
+msgstr "الطراز"
 
 msgid "model name"
 msgstr "اسم الموديل"
@@ -4707,8 +4802,14 @@ msgstr "يرجى ذكر كل جهاز متأثر في سطر منفصل"
 msgid "portal URL"
 msgstr "رابط بوابة الشركة"
 
+msgid "position"
+msgstr "الترتيب"
+
 msgid "priority"
 msgstr "الأولوية"
+
+msgid "problem"
+msgstr "المشكلة"
 
 msgid "product code"
 msgstr "رمز المنتج"
@@ -4854,6 +4955,12 @@ msgstr "أرسله"
 msgid "serial number"
 msgstr "الرقم التسلسلي"
 
+msgid "serial number on the sticker photo"
+msgstr "الرقم التسلسلي في صورة الملصق"
+
+msgid "serial number sticker photo"
+msgstr "صورة ملصق الرقم التسلسلي"
+
 msgid "serial number(s)"
 msgstr "الرقم/الأرقام التسلسلية"
 
@@ -4901,6 +5008,9 @@ msgstr "رقم تتبع الشحن"
 
 msgid "show invoice to the supervisor"
 msgstr "إظهار الفاتورة للمشرف"
+
+msgid "showing the issue and the serial number"
+msgstr "توضّح المشكلة والرقم التسلسلي"
 
 #, python-format
 msgid "showing the issue and the serial number; up to %(count)d files, %(size)d MB each"
@@ -5076,8 +5186,14 @@ msgstr "الشخص المسؤول عن توفير الكادر لهذه المه
 msgid "the person handling this ticket: a supervisor or manager, not necessarily the person who converts it"
 msgstr "الشخص الذي يتولى هذه التذكرة: مشرف أو مدير، وليس بالضرورة من يحوّلها"
 
+msgid "the registered machine, when the customer picked one from their list"
+msgstr "الجهاز المسجّل، عندما يختاره العميل من قائمته"
+
 msgid "the shipment paperwork; uploaded once the parts arrive"
 msgstr "مستندات الشحنة؛ تُرفع عند وصول القطع"
+
+msgid "the silver sticker on the machine: take a photo or upload one"
+msgstr "الملصق الفضي على الجهاز: التقط صورة أو ارفع صورة"
 
 msgid "the staff member who opened it; empty if opened by the customer"
 msgstr "الموظف الذي فتحها؛ ويكون فارغاً إذا فتحها العميل"
@@ -5111,6 +5227,12 @@ msgstr "ملاحظة داخلية على الطلب"
 
 msgid "ticket internal notes"
 msgstr "ملاحظات داخلية على الطلب"
+
+msgid "ticket machine"
+msgstr "جهاز التذكرة"
+
+msgid "ticket machines"
+msgstr "أجهزة التذكرة"
 
 msgid "ticket notification"
 msgstr "إشعار الطلب"
@@ -5147,6 +5269,9 @@ msgstr "رحلات"
 
 msgid "type"
 msgstr "النوع"
+
+msgid "typed by the customer when the machine is not in their list"
+msgstr "يكتبه العميل عندما لا يكون الجهاز في قائمته"
 
 msgid "unavailable reason"
 msgstr "سبب عدم التوفر"

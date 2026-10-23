@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% translate "New ticket" %} — Profit Sports Solutions{% endblock %}
 
@@ -11,21 +11,66 @@
     </div>
 </div>
 
-<div class="section">
-    <form method="post" enctype="multipart/form-data" novalidate>
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
-        {% endif %}
-        {% for field in form %}
-        <div class="field {% if field.errors %}field--error{% endif %}">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
-            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    {% if machines.non_form_errors %}<p class="flash flash--error">{{ machines.non_form_errors|join:" " }}</p>{% endif %}
+
+    <div class="section">
+        <div class="field {% if form.site.errors %}field--error{% endif %}">
+            <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
+            {{ form.site }}
+            {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        {% endfor %}
-        <button type="submit" class="button">{% translate "Submit" %}</button>
-    </form>
-</div>
+    </div>
+
+    <div class="section">
+        <h2>{% translate "Machines to service" %}</h2>
+        <p class="field__help">{% translate "Add each machine separately, with its own photos, so our team can prepare the right parts for each one." %}</p>
+        {{ machines.management_form }}
+        <div class="machine-cards" data-machine-cards>
+            {% for machine in machines %}
+            <fieldset class="machine-card" data-machine-card{% if not forloop.first and not machine.has_changed and not machine.errors %} hidden{% endif %}>
+                <legend>{% blocktranslate with number=forloop.counter %}Machine {{ number }}{% endblocktranslate %}</legend>
+                {% for error in machine.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                <div class="form-grid">
+                    {% for field in machine %}
+                    <div class="field{% if field.name == 'out_of_service' %} field--checkbox{% endif %}{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}">
+                        {% if field.name == 'out_of_service' %}
+                        <label>{{ field }} {{ field.label }}</label>
+                        {% else %}
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% endif %}
+                        {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                        {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            {% endfor %}
+        </div>
+        <button type="button" class="button button--secondary" data-add-machine hidden>{% translate "Add another machine" %}</button>
+    </div>
+
+    <div class="section">
+        <h2>{% translate "Contact details" %}</h2>
+        <div class="form-grid">
+            {% for field in form %}{% if field.name != 'site' %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+    </div>
+
+    <button type="submit" class="button">{% translate "Submit" %}</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/ticket-machines.js' %}?v={{ css_version }}" defer></script>
 {% endblock %}

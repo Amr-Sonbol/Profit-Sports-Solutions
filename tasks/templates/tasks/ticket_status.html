@@ -33,6 +33,12 @@
             <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
         </div>
     </dl>
+    {% with machines=ticket.machines.all %}{% if machines %}
+    <div class="description">
+        <dt>{% translate "Machines to service" %}</dt>
+        {% include "tasks/_ticket_machines.html" %}
+    </div>
+    {% endif %}{% endwith %}
     <div class="description">
         {% if ticket.status == 'new' %}
         <p>{% translate "Thank you for contacting us. Our team is now reviewing your ticket." %}</p>
