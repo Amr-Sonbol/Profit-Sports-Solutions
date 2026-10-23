@@ -377,9 +377,62 @@
 {% if ticket.status == 'new' %}
 <div class="section">
     <h2>{% translate "Decision" %}</h2>
+    {% with machines=ticket.machines.all %}
+    {% if machines %}
+    {# One decision per machine: select some, then a task for them or a decision without one. #}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="machines">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>{% translate "Machine" %}</th>
+                        <th>{% translate "Problem" %}</th>
+                        <th>{% translate "Decision" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for machine in machines %}
+                    <tr>
+                        <td>{% if not machine.decision %}<input type="checkbox" name="machines" value="{{ machine.pk }}" aria-label="{{ machine.machine_name }}">{% endif %}</td>
+                        <td class="cell-wrap">{{ machine.machine_name }}<br><span class="muted" dir="ltr">{{ machine.serial|default:"—" }}</span></td>
+                        <td class="cell-wrap">{{ machine.get_problem_display }}{% if machine.out_of_service %}<br><span class="badge badge--status-blocked">{% translate "Cannot be used" %}</span>{% endif %}</td>
+                        <td class="cell-wrap">
+                            {% if machine.decision %}
+                            {{ machine.get_decision_display }}
+                            {% if machine.task %} · <a class="task-number" href="{% url 'tasks:task_detail' machine.task.pk %}">{{ machine.task.task_number }}</a>{% endif %}
+                            {% if machine.decision_note %}<br><span class="muted">{{ machine.decision_note }}</span>{% endif %}
+                            {% else %}<span class="muted">{% translate "Awaiting your decision" %}</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="field__help">{% translate "Select the machines, then choose what happens to them. Machines can go to different tasks: create one task, then select the next machines." %}</p>
+        <div class="button-row">
+            <button type="submit" name="do" value="visit" class="button">{% translate "Create a visit task" %}</button>
+            <button type="submit" name="do" value="ship_part" class="button button--secondary">{% translate "Create a part shipment task" %}</button>
+        </div>
+        <div class="form-grid">
+            <div class="field">
+                <label for="decision-note">{% translate "Note to the customer (optional)" %}</label>
+                <input type="text" id="decision-note" name="decision_note" maxlength="255">
+            </div>
+            <div class="field field--submit button-row">
+                <button type="submit" name="do" value="advice" class="button button--secondary">{% translate "Advice given" %}</button>
+                <button type="submit" name="do" value="not_covered" class="button button--secondary">{% translate "Not covered" %}</button>
+            </div>
+        </div>
+    </form>
+    {% else %}
     <div class="form-grid">
         <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
     </div>
+    {% endif %}
+    {% endwith %}
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="dismiss">
@@ -397,7 +450,7 @@
 {% elif ticket.status == 'converted' %}
 <div class="section">
     <p class="empty-state">
-        <a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a>
+        {% for task in ticket_tasks %}<a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}
     </p>
 </div>
 {% elif ticket.status == 'dismissed' %}

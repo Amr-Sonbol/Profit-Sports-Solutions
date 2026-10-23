@@ -36,7 +36,7 @@
     {% with machines=ticket.machines.all %}{% if machines %}
     <div class="description">
         <dt>{% translate "Machines to service" %}</dt>
-        {% include "tasks/_ticket_machines.html" %}
+        {% include "tasks/_ticket_machines.html" with show_status=True %}
     </div>
     {% endif %}{% endwith %}
     <div class="description">

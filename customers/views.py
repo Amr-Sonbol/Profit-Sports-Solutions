@@ -24,7 +24,9 @@ from people.permissions import get_active_country, require_admin, require_manage
 from reference.models import Country
 from tasks.forms import CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
 from tasks.models import CustomerTicketAttachment, Task, TicketMachine, TicketNotification
-from tasks.views import save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer
+from tasks.views import (
+    save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer, ticket_machines_text,
+)
 
 from .accounts import (
     LINK_VALID_DAYS, AccountStatus, account_status, locked_usernames, log_account_action, send_password_link,
@@ -551,7 +553,6 @@ def portal_ticket_new(request):
                 ticket.site_description = site.name
                 ticket.site_address = site.address
                 ticket.submitted_at = timezone.now()
-                ticket.serial_numbers, ticket.description = _ticket_text_from_machines(lines)
                 save_new_ticket(ticket)
                 for position, line in enumerate(lines):
                     machine = TicketMachine.objects.create(
@@ -566,6 +567,8 @@ def portal_ticket_new(request):
                         CustomerTicketAttachment.objects.create(
                             ticket=ticket, machine=machine, file=uploaded_file, uploaded_at=timezone.now(),
                         )
+                ticket.serial_numbers, ticket.description = ticket_machines_text(ticket.machines.all())
+                ticket.save(update_fields=['serial_numbers', 'description'])
                 TicketNotification.objects.create(
                     ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
                 )
@@ -582,33 +585,6 @@ def portal_ticket_new(request):
 
     return render(request, 'customers/portal_ticket_new.html', {'form': form, 'machines': machines})
 
-
-def _ticket_text_from_machines(lines):
-    """(serial_numbers, description) text for a ticket, written from its
-    machine cards: what staff emails, ticket lists, the mobile app and a
-    task's reported_serial_numbers have always read. Always in English,
-    like the rest of what's written to the ticket for staff.
-    """
-    from django.utils import translation
-
-    serials, described = [], []
-    with translation.override('en'):
-        for line in lines:
-            asset = line['asset']
-            name = (f"{asset.brand.name + ' ' if asset.brand_id else ''}{asset.model_name}" if asset
-                    else line['model_name'])
-            serial = asset.serial_no if asset else line['serial_no']
-            if not serial and not asset and line['serial_photo']:
-                serial = _('serial number on the sticker photo')
-            if serial:
-                serials.append(serial)
-            entry = f"{name}{f' ({serial})' if serial else ''}: {TicketMachine.Problem(line['problem']).label}"
-            if line['out_of_service']:
-                entry += f" — {_('cannot be used')}"
-            if line['description']:
-                entry += f"\n  {line['description']}"
-            described.append(entry)
-    return '\n'.join(serials), '\n'.join(described)
 
 
 def _account_redirect(request):

@@ -25,6 +25,12 @@
         {% blocktranslate with company=ticket.company_name %}This task is being created from a customer ticket — {{ company }}. The site fields below are suggestions based on the customer's entry; please select or create the correct site.{% endblocktranslate %}
     {% endif %}
 </p>
+{% if selected_machines %}
+<div class="section">
+    <h2>{% if machine_decision == 'ship_part' %}{% translate "Machines this part shipment covers" %}{% else %}{% translate "Machines this visit covers" %}{% endif %}</h2>
+    {% include "tasks/_ticket_machines.html" with machines=selected_machines %}
+</div>
+{% endif %}
 {% endif %}
 
 <div class="section">
