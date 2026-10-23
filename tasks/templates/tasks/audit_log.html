@@ -9,7 +9,7 @@
 </div>
 
 <p class="muted">
-    {% translate "Every add, change, and delete made from Django admin, newest first. Actions taken from the app's own screens aren't recorded here — a task's own history is on its detail page." %}
+    {% translate "All additions, changes and deletions made through Django admin, together with every account action (logins created, passwords reset, accounts unlocked, devices signed out, logins enabled or disabled), newest first. A task's history is shown on its detail page." %}
 </p>
 
 <div class="section">
@@ -32,7 +32,7 @@
                     <td>{{ entry.user }}</td>
                     <td>
                         {% if entry.is_addition %}
-                        <span class="badge badge--status-new">{% translate "Added" %}</span>
+                        <span class="badge badge--neutral">{% translate "Added" %}</span>
                         {% elif entry.is_change %}
                         <span class="badge badge--muted">{% translate "Changed" %}</span>
                         {% elif entry.is_deletion %}
@@ -44,7 +44,7 @@
                     <td>{{ entry.get_change_message }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="empty-state">{% translate "Nothing logged yet." %}</td></tr>
+                <tr><td colspan="6" class="empty-state">{% translate "No entries recorded." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
+from spots.indexes import contains_search_index
 
 # A customer's own phone photos/videos of the fault — kept separate from
 # TaskAttachment's own list (tasks/forms.py) since this one has no LINK
@@ -19,6 +20,34 @@ MAX_TICKET_ATTACHMENT_BYTES = 25 * 1024 * 1024
 # A cap on file count, not just size — without this a single submission
 # could attach an unbounded number of files and exhaust storage.
 MAX_TICKET_ATTACHMENT_COUNT = 10
+
+
+# `MEDIA_URL` is served with no per-file login check (whatever's in
+# front of it — Django's own dev server, or a web server/CDN in
+# production — just returns whatever's on disk), so a file is only as
+# private as its URL is hard to guess. A flat `<folder>/<original
+# filename>` path is guessable — phone cameras reuse the same few
+# filename patterns (`IMG_0001.jpg`, `20250101_120000.jpg`) — so every
+# upload gets its own random directory instead; the original filename
+# is kept underneath it purely so a human looking at the path can still
+# tell what it is. Near-identical top-level functions rather than one
+# parameterized by a closure, since a migration must be able to import
+# each `upload_to` by its own dotted path — a closure's isn't stable
+# enough for that.
+def _ticket_attachment_path(instance, filename):
+    return f'ticket_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _ticket_reply_attachment_path(instance, filename):
+    return f'ticket_reply_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _ticket_internal_note_attachment_path(instance, filename):
+    return f'ticket_internal_note_attachments/{secrets.token_hex(16)}/{filename}'
+
+
+def _task_document_path(instance, filename):
+    return f'task_documents/{secrets.token_hex(16)}/{filename}'
 
 # The paperwork trail for a task — quotation, factory offer, invoice,
 # delivery note. Almost always a PDF export; jpg/png covers a photo of
@@ -67,6 +96,7 @@ class Task(models.Model):
         ASSIGNED = 'assigned', _('Assigned')
         ACCEPTED = 'accepted', _('Accepted')
         IN_PROGRESS = 'in_progress', _('In progress')
+        PENDING_SUPERVISOR_REVIEW = 'pending_supervisor_review', _('Pending supervisor review')
         COMPLETED = 'completed', _('Completed')
         CLOSED = 'closed', _('Closed')
         BLOCKED = 'blocked', _('Blocked')
@@ -78,7 +108,7 @@ class Task(models.Model):
     )
     site = models.ForeignKey(
         Site, on_delete=models.PROTECT, related_name='tasks',
-        verbose_name=_('site'), help_text=_('the only certain field at creation'),
+        verbose_name=_('site'), help_text=_('the only field known with certainty at creation'),
     )
     task_type = models.ForeignKey(
         TaskType, on_delete=models.PROTECT, related_name='tasks',
@@ -94,6 +124,13 @@ class Task(models.Model):
     )
     min_level = models.PositiveSmallIntegerField(_('minimum level'), null=True, blank=True)
     description = models.TextField(_('description'), blank=True, help_text=_('what the customer reported'))
+    reported_serial_numbers = models.TextField(
+        _('reported serial numbers'), blank=True,
+        help_text=_(
+            'copied from the ticket at conversion, one per line: the machines the customer identified before '
+            'the visit. Additional machines found on site are recorded in the work report, not here.',
+        ),
+    )
     priority = models.CharField(_('priority'), max_length=20, choices=Priority.choices)
     source = models.CharField(_('source'), max_length=20, choices=Source.choices)
     is_warranty = models.BooleanField(_('is warranty'), null=True, blank=True)
@@ -104,28 +141,28 @@ class Task(models.Model):
     )
     scheduled_for = models.DateTimeField(
         _('scheduled for'), null=True, blank=True,
-        help_text=_('the day the supervisor planned'),
+        help_text=_('the day planned by the supervisor'),
     )
     scheduled_date = models.DateField(
         _('scheduled date'), null=True, blank=True,
         help_text=_(
-            'set by a manager scheduling day-only — the day is fixed while '
-            'scheduled_for stays empty until a supervisor fills in the time'
+            'set when a manager schedules by day only; the day is fixed and the time remains empty until a '
+            'supervisor sets it'
         ),
     )
     schedule_time_locked = models.BooleanField(
         _('schedule time locked'), default=False,
         help_text=_(
-            'set automatically — true whenever a manager is the one who last set '
-            'scheduled_for; a supervisor doing so leaves it false. Locked means a '
-            'supervisor can no longer change scheduled_for directly and must request a change'
+            'set automatically: true whenever a manager last set the scheduled time; false when a supervisor '
+            'did. When locked, a supervisor can no longer change the scheduled time directly and must request '
+            'a change'
         ),
     )
     estimated_hours = models.DecimalField(
         _('estimated hours'), max_digits=4, decimal_places=2, null=True, blank=True,
-        help_text=_('roughly how long the job should take — shown as an estimated finish time'),
+        help_text=_('approximate duration of the job; shown as an estimated finish time'),
     )
-    status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
+    status = models.CharField(_('status'), max_length=25, choices=Status.choices, default=Status.NEW)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tasks_created',
         verbose_name=_('created by'),
@@ -134,8 +171,8 @@ class Task(models.Model):
         Technician, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tasks_responsible_for', verbose_name=_('responsible supervisor'),
         help_text=_(
-            'who is accountable for staffing this task — not necessarily who created it, '
-            'and not the same as the technician actually assigned to do the work'
+            'the person accountable for staffing this task; not necessarily its creator, nor the technician '
+            'assigned to perform the work'
         ),
     )
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
@@ -144,24 +181,31 @@ class Task(models.Model):
     )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     quotation = models.FileField(
-        _('quotation'), upload_to='task_documents/', null=True, blank=True,
+        _('quotation'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     quotation_uploaded_at = models.DateTimeField(_('quotation uploaded at'), null=True, blank=True)
     factory_offer = models.FileField(
-        _('factory offer'), upload_to='task_documents/', null=True, blank=True,
+        _('factory offer'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     factory_offer_uploaded_at = models.DateTimeField(_('factory offer uploaded at'), null=True, blank=True)
     invoice = models.FileField(
-        _('invoice'), upload_to='task_documents/', null=True, blank=True,
+        _('invoice'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
+    invoice_visible_to_supervisor = models.BooleanField(
+        _('show invoice to the supervisor'), default=False,
+        help_text=_(
+            'documents are restricted to managers by default; enable this for a specific task when a '
+            'supervisor collects payment on site and requires access to the invoice',
+        ),
+    )
     delivery_note = models.FileField(
-        _('delivery note'), upload_to='task_documents/', null=True, blank=True,
+        _('delivery note'), upload_to=_task_document_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
-        help_text=_('the shipment paperwork — uploaded once the parts arrive'),
+        help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
@@ -181,6 +225,8 @@ class Task(models.Model):
             models.Index(fields=['status', 'promised_at']),
             models.Index(fields=['site', 'status']),
             models.Index(fields=['scheduled_for', 'status']),
+            contains_search_index('task_number', 'task_number_trgm'),
+            contains_search_index('pak_reference_number', 'task_pak_trgm'),
         ]
 
     @property
@@ -208,9 +254,38 @@ class CustomerTicket(models.Model):
         DISMISSED = 'dismissed', _('Dismissed')
         CLOSED = 'closed', _('Closed')
 
+    class Kind(models.TextChoices):
+        CUSTOMER = 'customer', _('Customer')
+        STOCK = 'stock', _('Stock request')
+        VENDOR = 'vendor', _('Vendor follow-up')
+        OTHER = 'other', _('Other internal')
+
+    # How a customer ticket reached us — the same values as Task.Source,
+    # so a task made from it keeps the channel.
+    class Source(models.TextChoices):
+        PORTAL = 'portal', _('Customer portal')
+        PHONE = 'phone', _('Phone')
+        WHATSAPP = 'whatsapp', _('WhatsApp')
+        EMAIL = 'email', _('Email')
+
+    # Customer tickets come from the portal or from staff on the customer's
+    # behalf; internal ones (stock, vendor, other) are staff-only — no
+    # customer, nothing ever sent to one — and go to whoever they're
+    # assigned to (docs: customer_ticket).
+    kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
+    source = models.CharField(_('source'), max_length=10, choices=Source.choices, default=Source.PORTAL)
+    opened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='tickets_opened', verbose_name=_('opened by'),
+        help_text=_('the staff member who opened it; empty if opened by the customer'),
+    )
+    subject = models.CharField(_('subject'), max_length=200, blank=True, help_text=_('internal tickets only'))
+    vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
+
     ticket_number = models.CharField(
         _('ticket number'), max_length=30, unique=True,
-        help_text=_('auto-generated per country, e.g. AE-T0001 — the same prefix a task number uses, marked with a T so the two are never confused'),
+        help_text=_('auto-generated per country, e.g. AE-T0001; uses the same prefix as task numbers, with a T '
+                    'to distinguish the two'),
     )
     country = models.ForeignKey(
         Country, on_delete=models.PROTECT, related_name='customer_tickets',
@@ -219,28 +294,24 @@ class CustomerTicket(models.Model):
     customer = models.ForeignKey(
         Customer, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets', verbose_name=_('customer'),
-        help_text=_(
-            'set automatically — at submission if the customer was logged in, '
-            'otherwise once the ticket is converted to a task'
-        ),
+        help_text=_('set automatically on submission; every ticket is submitted by a signed-in customer'),
     )
     site = models.ForeignKey(
         Site, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets', verbose_name=_('site'),
         help_text=_(
-            'set when a logged-in customer picked one of their own registered sites — '
-            'carries straight through to the resulting task with no re-matching, '
-            'and only an admin can change it once set'
+            'set when a signed-in customer selected one of their registered sites; carried directly to the '
+            'resulting task without re-matching, and only an administrator can change it once set'
         ),
     )
     company_name = models.CharField(_('gym name'), max_length=150)
     customer_code = models.CharField(
         _('customer code'), max_length=50, blank=True,
-        help_text=_('set automatically for a logged-in customer, from their own account'),
+        help_text=_("set automatically from the signed-in customer's account"),
     )
     site_description = models.CharField(
         _('site / location'), max_length=150,
-        help_text=_('branch name, as the customer describes it'),
+        help_text=_('branch name, as described by the customer'),
     )
     # default='' only backfills existing rows cleanly — ModelForm validation
     # still enforces this as required on new submissions (blank=False).
@@ -250,7 +321,7 @@ class CustomerTicket(models.Model):
     contact_email = models.EmailField(_('contact email address'), blank=True)
     shipping_address = models.TextField(
         _('shipping address'), blank=True,
-        help_text=_('where replacement parts should be delivered, if different from the site itself'),
+        help_text=_('delivery address for replacement parts, if different from the site'),
     )
     serial_numbers = models.TextField(
         _('serial number(s)'), default='',
@@ -258,17 +329,18 @@ class CustomerTicket(models.Model):
     )
     description = models.TextField(
         _('description'),
-        help_text=_('please describe the issue for each machine separately (mention the serial number for each one)'),
+        help_text=_('please describe the issue for each machine separately, including its serial number'),
     )
     notes = models.TextField(
-        _('anything else we should know'), blank=True,
+        _('additional information'), blank=True,
     )
     submitted_at = models.DateTimeField(_('submitted at'))
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.NEW)
     assigned_to = models.ForeignKey(
         Technician, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='tickets_assigned', verbose_name=_('assigned to'),
-        help_text=_('who is handling this — a supervisor or manager, not necessarily who converts it'),
+        help_text=_('the person handling this ticket: a supervisor or manager, not necessarily the person who '
+                    'converts it'),
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
     pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
@@ -288,17 +360,28 @@ class CustomerTicket(models.Model):
     dismissal_reason = models.CharField(_('dismissal reason'), max_length=255, blank=True)
     close_reason = models.CharField(
         _('close reason'), max_length=255, blank=True,
-        help_text=_('resolved without needing a task — advice given, handled by phone, etc.'),
+        help_text=_('resolved without a task, for example advice given or handled by phone'),
     )
     token = models.CharField(
         _('token'), max_length=43, unique=True, editable=False,
-        help_text=_('lets the customer check this ticket’s status without an account — see reports.CustomerFeedback'),
+        help_text=_("allows the customer to check this ticket's status without an account"),
     )
 
     class Meta:
         verbose_name = _('customer ticket')
         verbose_name_plural = _('customer tickets')
         ordering = ['-submitted_at']
+        indexes = [
+            # Every ticket list: one country, one status, newest first.
+            models.Index(fields=['country', 'status', '-submitted_at'], name='ticket_country_status_idx'),
+            contains_search_index('ticket_number', 'ticket_number_trgm'),
+            contains_search_index('company_name', 'ticket_company_trgm'),
+            contains_search_index('site_description', 'ticket_site_trgm'),
+            contains_search_index('site_address', 'ticket_address_trgm'),
+            contains_search_index('pak_reference_number', 'ticket_pak_trgm'),
+            contains_search_index('contact_name', 'ticket_contact_trgm'),
+            contains_search_index('contact_phone', 'ticket_phone_trgm'),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.token:
@@ -315,9 +398,9 @@ class TicketReply(models.Model):
     resulting task isn't finished yet — read-only once dismissed,
     closed directly, or once that task itself is closed (a cancelled
     task does not close it — see _ticket_is_open, tasks/views.py).
-    `sent_by` is a real login either way: staff always
-    has one, and a customer does too when they replied through their
-    portal login rather than the anonymous token page.
+    `sent_by` is always a real login — staff or the customer's own
+    portal account (every ticket now requires signing in to submit,
+    see CustomerTicket).
     """
 
     class Sender(models.TextChoices):
@@ -335,12 +418,8 @@ class TicketReply(models.Model):
     )
     message = models.TextField(_('message'))
     attachment = models.FileField(
-        _('attachment'), upload_to='ticket_reply_attachments/', null=True, blank=True,
+        _('attachment'), upload_to=_ticket_reply_attachment_path, null=True, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
-    )
-    is_quotation = models.BooleanField(
-        _('is quotation'), default=False,
-        help_text=_('sends the dedicated quotation email (with the attachment) instead of a plain reply notice — staff only'),
     )
     sent_at = models.DateTimeField(_('sent at'))
 
@@ -351,6 +430,168 @@ class TicketReply(models.Model):
 
     def __str__(self):
         return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
+
+
+class TicketNotification(models.Model):
+    """A new ticket, or a new customer reply on an existing one — for the
+    header bell every manager/admin sees. A shared team inbox, not
+    per-user: any manager-tier person opening the ticket (ticket_review)
+    clears it for everyone, the same way any one of them acting on a
+    ticket already handles it for the team. Never shown to a supervisor
+    or technician — same is_manager_tier gate TicketInternalNote uses.
+    """
+
+    class Kind(models.TextChoices):
+        NEW_TICKET = 'new_ticket', _('New ticket')
+        NEW_REPLY = 'new_reply', _('New reply')
+        ESCALATION_DECIDED = 'escalation_decided', _('Escalation decided')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='notifications',
+        verbose_name=_('ticket'),
+    )
+    kind = models.CharField(_('kind'), max_length=20, choices=Kind.choices)
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('ticket notification')
+        verbose_name_plural = _('ticket notifications')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.get_kind_display()} — {self.ticket}'
+
+
+class TicketEscalation(models.Model):
+    """One step up the escalation chain (Country Support Manager ->
+    Technical Support Manager -> Operations Manager), and its outcome
+    (docs: ticket_escalation). A step passed on to the next level ends as
+    FORWARDED, with the next step as its own row. `reason` and
+    `decision_note` are internal; only `customer_message` is ever shown to
+    the customer.
+    """
+
+    class Decision(models.TextChoices):
+        PENDING = 'pending', _('Awaiting decision')
+        APPROVED = 'approved', _('Approved')
+        REJECTED = 'rejected', _('Rejected')
+        INSTRUCTIONS = 'instructions', _('Instructions given')
+        FORWARDED = 'forwarded', _('Forwarded to the next level')
+
+    ticket = models.ForeignKey(
+        CustomerTicket, on_delete=models.CASCADE, related_name='escalations', verbose_name=_('ticket'),
+    )
+    escalated_by = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='escalations_raised', verbose_name=_('escalated by'),
+    )
+    escalated_to = models.ForeignKey(
+        Technician, on_delete=models.PROTECT, related_name='escalations_received', verbose_name=_('escalated to'),
+    )
+    reason = models.TextField(_('reason'), help_text=_('internal — never shown to the customer'))
+    customer_message = models.TextField(
+        _('message to the customer'), blank=True, help_text=_("optional; displayed on the customer's ticket page"),
+    )
+    decision = models.CharField(_('decision'), max_length=20, choices=Decision.choices, default=Decision.PENDING)
+    decision_note = models.TextField(_('decision note'), blank=True)
+    escalated_at = models.DateTimeField(_('escalated at'))
+    decided_at = models.DateTimeField(_('decided at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('ticket escalation')
+        verbose_name_plural = _('ticket escalations')
+        ordering = ['-escalated_at']
+
+    def __str__(self):
+        return f'Escalation — {self.ticket}'
+
+
+class TaskNotification(models.Model):
+    """A newly created task — for the same header bell every manager/admin
+    sees, alongside TicketNotification. Same shared-team-inbox pattern:
+    any manager-tier person opening the task (task_detail) clears it for
+    everyone. A separate model, not a shared one with TicketNotification,
+    since a task and a ticket are different things to point a FK at —
+    there's only one kind of task notification so far, unlike the
+    ticket one's new_ticket/new_reply split.
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='notifications',
+        verbose_name=_('task'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('task notification')
+        verbose_name_plural = _('task notifications')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'New task — {self.task}'
+
+
+class TaskMessage(models.Model):
+    """A free-form note posted to a task's own thread — the warehouse
+    manager confirming a part arrived, a supervisor flagging something
+    for the team, anyone following up. Distinct from task_event (a
+    system-logged status change) and a staff document upload — this is
+    just people talking to each other about the job, visible to anyone
+    who can already see the task. Who actually gets notified about it is
+    TaskMessageRecipient, below.
+    """
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name='messages',
+        verbose_name=_('task'),
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='task_messages_sent',
+        verbose_name=_('sent by'),
+    )
+    message = models.TextField(_('message'))
+    sent_at = models.DateTimeField(_('sent at'))
+
+    class Meta:
+        verbose_name = _('task message')
+        verbose_name_plural = _('task messages')
+        ordering = ['sent_at']
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.sent_by}'
+
+
+class TaskMessageRecipient(models.Model):
+    """Who a task_message actually notifies, and whether they've seen it
+    yet — unlike TaskNotification's shared inbox (any manager-tier person
+    opening the task clears it for everyone), a message names real
+    individuals: whoever's actually on the job right now (active lead,
+    active helpers, the responsible supervisor) plus whoever created the
+    task and every manager-tier person in its country — so each gets
+    their own bell entry until they personally open the task, not just
+    whoever happens to look first.
+    """
+
+    message = models.ForeignKey(
+        TaskMessage, on_delete=models.CASCADE, related_name='recipients',
+        verbose_name=_('message'),
+    )
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='task_message_notifications',
+        verbose_name=_('technician'),
+    )
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('task message recipient')
+        verbose_name_plural = _('task message recipients')
+        constraints = [
+            models.UniqueConstraint(fields=['message', 'technician'], name='unique_task_message_recipient'),
+        ]
+
+    def __str__(self):
+        return f'{self.message} → {self.technician}'
 
 
 class TicketInternalNote(models.Model):
@@ -369,6 +610,10 @@ class TicketInternalNote(models.Model):
         related_name='ticket_internal_notes', verbose_name=_('author'),
     )
     message = models.TextField(_('note'))
+    attachment = models.FileField(
+        _('attachment'), upload_to=_ticket_internal_note_attachment_path, null=True, blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
     created_at = models.DateTimeField(_('created at'))
 
     class Meta:
@@ -382,8 +627,8 @@ class TicketInternalNote(models.Model):
 
 class CustomerTicketAttachment(models.Model):
     """A customer's own phone photo or video of the fault, uploaded with
-    the ticket — no login, so no uploaded_by; a plain FileField, since
-    there's no external-link case to support the way TaskAttachment has.
+    the ticket — the ticket itself already records who submitted it
+    (ticket.customer), so there's no separate uploaded_by here.
     """
 
     ticket = models.ForeignKey(
@@ -391,7 +636,7 @@ class CustomerTicketAttachment(models.Model):
         verbose_name=_('ticket'),
     )
     file = models.FileField(
-        _('file'), upload_to='ticket_attachments/',
+        _('file'), upload_to=_ticket_attachment_path,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     uploaded_at = models.DateTimeField(_('uploaded at'))
@@ -418,6 +663,7 @@ class TaskAssignment(models.Model):
         CUSTOMER_REQUEST = 'customer_request', _('Customer request')
         EMERGENCY = 'emergency', _('Emergency')
         VEHICLE = 'vehicle', _('Vehicle')
+        LEFT_COMPANY = 'left_company', _('Left the company')
         OTHER = 'other', _('Other')
 
     task = models.ForeignKey(
@@ -430,11 +676,16 @@ class TaskAssignment(models.Model):
     )
     role = models.CharField(_('role'), max_length=20, choices=Role.choices)
     assigned_at = models.DateTimeField(_('assigned at'))
-    is_active = models.BooleanField(_('active'), default=True, help_text=_('false once replaced'))
+    is_active = models.BooleanField(_('active'), default=True, help_text=_('set to false once replaced'))
     ended_at = models.DateTimeField(_('ended at'), null=True, blank=True)
     end_reason = models.CharField(
         _('end reason'), max_length=20, choices=EndReason.choices, blank=True,
-        help_text=_('required on reassignment — one tap, never free text'),
+        help_text=_('required on reassignment; selected from a list, never free text'),
+    )
+    labour_hours = models.DecimalField(
+        _('labour hours'), max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text=_("this person's own hours on the job, where they differ from the report: a helper's hours, or a "
+                    "lead's hours before a handover"),
     )
 
     class Meta:
@@ -476,6 +727,7 @@ class TaskEvent(models.Model):
         COMPLETED = 'completed', _('Completed')
         REPORT_SUBMITTED = 'report_submitted', _('Report submitted')
         REPORT_REJECTED = 'report_rejected', _('Report rejected')
+        SUPERVISOR_APPROVED = 'supervisor_approved', _('Approved by supervisor')
         REPORT_APPROVED = 'report_approved', _('Report approved')
         CLOSED = 'closed', _('Closed')
         REOPENED = 'reopened', _('Reopened')
@@ -494,14 +746,43 @@ class TaskEvent(models.Model):
     )
     corrected_at = models.DateTimeField(
         _('corrected at'), null=True, blank=True,
-        help_text=_("supervisor's correction"),
+        help_text=_('correction by a manager or administrator'),
     )
     corrected_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='task_event_corrections',
         null=True, blank=True, verbose_name=_('corrected by'),
-        help_text=_('supervisors only'),
+        help_text=_('managers and administrators only'),
     )
+    correction_reason = models.TextField(_('correction reason'), blank=True)
     note = models.TextField(_('note'), blank=True)
+
+    class LocationStatus(models.TextChoices):
+        AT_SITE = 'at_site', _('At the site')
+        AWAY = 'away', _('Not at the site')
+        NO_LOCATION = 'no_location', _('No location provided')
+        SITE_UNKNOWN = 'site_unknown', _('Site location not set')
+
+    # Where the phone was at a technician's tap (tasks.location) — taken
+    # only at the tap, never tracked in between. Blank on events that
+    # aren't taps.
+    latitude = models.DecimalField(_('latitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(_('longitude'), max_digits=9, decimal_places=6, null=True, blank=True)
+    location_accuracy_m = models.PositiveIntegerField(_('location accuracy (m)'), null=True, blank=True)
+    distance_m = models.PositiveIntegerField(
+        _('distance from the site (m)'), null=True, blank=True,
+        help_text=_('calculated at check-in from the site location at that time'),
+    )
+    location_status = models.CharField(
+        _('location'), max_length=15, choices=LocationStatus.choices, blank=True,
+    )
+
+    @property
+    def distance_display(self):
+        if self.distance_m is None:
+            return ''
+        if self.distance_m >= 1000:
+            return _('%(km)s km') % {'km': f'{self.distance_m / 1000:.1f}'}
+        return _('%(m)s m') % {'m': self.distance_m}
 
     class Meta:
         verbose_name = _('task event')
@@ -514,6 +795,11 @@ class TaskEvent(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.event_type}'
+
+    @property
+    def effective_at(self):
+        """When it really happened — the correction if there is one."""
+        return self.corrected_at or self.occurred_at
 
 
 class ScheduleChangeRequest(models.Model):
@@ -657,7 +943,7 @@ class TaskProduct(models.Model):
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
     replacement = models.CharField(
         _('replacement'), max_length=150, blank=True,
-        help_text=_('which machine this was swapped in for, if the one ordered wasn’t available'),
+        help_text=_('the item this replaced, if the ordered item was unavailable'),
     )
     frame = models.CharField(_('frame color'), max_length=100, blank=True)
     arm = models.CharField(_('arm color'), max_length=100, blank=True)
@@ -670,6 +956,7 @@ class TaskProduct(models.Model):
         verbose_name = _('task product')
         verbose_name_plural = _('task products')
         ordering = ['task', 'product_code']
+        indexes = [contains_search_index('serial_number', 'taskproduct_serial_trgm')]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'

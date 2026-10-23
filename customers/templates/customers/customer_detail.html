@@ -20,7 +20,7 @@
         </div>
         <div>
             <dt>{% translate "Country" %}</dt>
-            <dd>{{ customer.country.name }}</dd>
+            <dd>{{ customer.country.display_name }}</dd>
         </div>
         <div>
             <dt>{% translate "Customer code" %}</dt>
@@ -34,7 +34,7 @@
                 {% if customer.contact_phone %}<span class="muted">{{ customer.contact_phone }}</span>{% endif %}
                 {% if customer.contact_email %}<span class="muted">{{ customer.contact_email }}</span>{% endif %}
                 {% else %}
-                <span class="muted">{% translate "None — each site needs its own" %}</span>
+                <span class="muted">{% translate "None — each site requires its own" %}</span>
                 {% endif %}
             </dd>
         </div>
@@ -82,10 +82,11 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No sites yet." %}</p>
+    <p class="empty-state">{% translate "No sites have been added." %}</p>
     {% endif %}
 </div>
 
+{% if is_admin %}
 <div class="section">
     <h2>{% translate "Add a site" %}</h2>
     <form method="post" novalidate>
@@ -104,4 +105,5 @@
         <button type="submit" class="button">{% translate "Add site" %}</button>
     </form>
 </div>
+{% endif %}
 {% endblock %}

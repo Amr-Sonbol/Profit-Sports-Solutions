@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Set your password" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Set your password" %}</h1>
+</div>
+
+<div class="section">
+    <p class="field__help">{% blocktranslate with name=person.full_name username=person.user.username %}Welcome, {{ name }}. Your username is “{{ username }}”. Please choose a password to complete your account setup.{% endblocktranslate %}</p>
+    <form method="post" class="disclosure__body" novalidate>
+        {% csrf_token %}
+        {% include "_password_fields.html" with form=form %}
+        <button type="submit" class="button">{% translate "Save and sign in" %}</button>
+    </form>
+</div>
+{% endblock %}

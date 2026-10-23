@@ -27,6 +27,14 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=Csv())
+# Render assigns every service its own <name>.onrender.com address and
+# hands it to the container as this variable — added automatically so
+# ALLOWED_HOSTS doesn't need to guess it in advance. Unset anywhere but
+# Render, so this is a no-op elsewhere. A custom domain still needs adding
+# to ALLOWED_HOSTS by hand, in .env, once there is one.
+RENDER_EXTERNAL_HOSTNAME = config('RENDER_EXTERNAL_HOSTNAME', default='')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Error monitoring — off unless SENTRY_DSN is set in .env, so local dev
 # and CI (which never set it) are completely unaffected. This is what
@@ -57,6 +65,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Trigram search indexes (spots/indexes.py) need its index support.
+    'django.contrib.postgres',
     'axes',
     'rest_framework',
     'rest_framework.authtoken',
@@ -70,6 +80,13 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Serves STATIC_ROOT directly — no nginx in front on Render, so Django
+    # itself has to hand out static files efficiently in production. Safe
+    # in dev too: STATIC_ROOT is never populated there (collectstatic only
+    # runs when DEBUG=False, see docker-entrypoint.sh), so this simply
+    # finds nothing and django.contrib.staticfiles serves STATICFILES_DIRS
+    # as it always did.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -84,13 +101,13 @@ MIDDLEWARE = [
     'axes.middleware.AxesMiddleware',
 ]
 
-# django-axes: locks an IP address out after repeated failed logins
-# (the library's own default key, left as-is deliberately) — since
-# every username in this app is predictable (supervisor1, manager1,
-# ...) an attacker isn't limited to guessing one account's password,
-# they can just as easily spray one guess across many usernames, which
-# a per-username-only limit wouldn't catch. Nothing else in the
-# codebase throttles login attempts. AxesStandaloneBackend must come
+# django-axes: locks an account (by username) after repeated failed
+# logins — the account, not the connection, so one person's wrong
+# passwords never lock out everyone else on the same office Wi-Fi or
+# mobile network. Known trade-off: one guess sprayed across many
+# usernames isn't slowed down by this; every account still locks after
+# AXES_FAILURE_LIMIT wrong guesses at its own password. Nothing else in
+# the codebase throttles login attempts. AxesStandaloneBackend must come
 # first, ahead of Django's own ModelBackend, so a locked-out attempt
 # is rejected before password checking even runs.
 AUTHENTICATION_BACKENDS = [
@@ -98,6 +115,10 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 AXES_FAILURE_LIMIT = 5
+AXES_LOCKOUT_PARAMETERS = ['username']
+# axes warns that this leaves out the connection; leaving it out is the
+# point (see above), so the warning is silenced rather than acted on.
+SILENCED_SYSTEM_CHECKS = ['axes.W006']
 AXES_COOLOFF_TIME = 1  # hour
 AXES_LOCKOUT_TEMPLATE = 'axes_lockout.html'
 AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
@@ -126,6 +147,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'people.context_processors.role_permissions',
                 'people.context_processors.active_country',
+                'people.context_processors.notification_bell',
                 'spots.context_processors.static_version',
             ],
         },
@@ -183,6 +205,10 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / 'locale']
 
+# Day-month-year everywhere, in both languages — not Django's 'en'
+# locale default (month-first). See spots/formats/<lang>/formats.py.
+FORMAT_MODULE_PATH = ['spots.formats']
+
 # All timestamps are stored in UTC; convert to local time only at display.
 TIME_ZONE = 'UTC'
 
@@ -196,8 +222,32 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# Where `collectstatic` puts everything for WhiteNoiseMiddleware to serve
+# directly in production — never touched in dev, where `runserver`/
+# django.contrib.staticfiles serves STATICFILES_DIRS on the fly instead.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files (technician-uploaded photos and videos)
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        # The manifest variant fingerprints filenames (cache-busting) and
+        # needs `collectstatic` to have already run to build that manifest
+        # — true in production, never true in dev, hence the DEBUG switch.
+        # Using it unconditionally would break every {% static %} tag in
+        # dev with a "missing manifest entry" error.
+        'BACKEND': (
+            'django.contrib.staticfiles.storage.StaticFilesStorage' if DEBUG else
+            'whitenoise.storage.CompressedManifestStaticFilesStorage'
+        ),
+    },
+}
+
+# Media files (technician-uploaded photos and videos) — on Render this
+# path (the container's default working directory is /app, see Dockerfile)
+# is where render.yaml mounts the persistent disk, so uploads survive a
+# redeploy instead of vanishing with the old container.
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -205,6 +255,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Defaults to printing to the console so local dev and tests never need
 # real credentials — set EMAIL_BACKEND and the rest in .env to send for real.
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+
+# Push notifications to the mobile app via Expo's push service (people/push.py).
+EXPO_PUSH_ENABLED = config('EXPO_PUSH_ENABLED', default=True, cast=bool)
 EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
@@ -243,6 +296,12 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
     SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
     SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+    # Render's own edge terminates TLS and forwards this header (same deal
+    # on a VPS behind nginx); without telling Django which header to trust,
+    # request.is_secure() never returns True behind the proxy, and
+    # SECURE_SSL_REDIRECT above would redirect-loop forever the moment
+    # it's turned on.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # API (for the technician/staff mobile app)

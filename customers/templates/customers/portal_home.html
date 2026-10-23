@@ -30,9 +30,9 @@
                     <td>{{ ticket.site_description }}</td>
                     <td>
                         {% if ticket.status == 'new' %}
-                        <span class="badge badge--status-new">{% translate "Received" %}</span>
+                        <span class="badge badge--neutral">{% translate "Received" %}</span>
                         {% elif ticket.status == 'converted' %}
-                        <span class="badge badge--status-completed">{% translate "Scheduled" %}</span>
+                        <span class="badge badge--good">{% translate "Scheduled" %}</span>
                         {% else %}
                         <span class="badge badge--muted">{% translate "Closed" %}</span>
                         {% endif %}
@@ -43,7 +43,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "You haven't submitted any tickets yet." %}</p>
+    <p class="empty-state">{% translate "You have not submitted any tickets." %}</p>
     {% endif %}
 </div>
 
@@ -58,6 +58,7 @@
                     <th>{% translate "Site" %}</th>
                     <th>{% translate "Type" %}</th>
                     <th>{% translate "Status" %}</th>
+                    <th>{% translate "Report" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -67,13 +68,19 @@
                     <td>{{ visit.site.name }}</td>
                     <td>{{ visit.task_type.display_name|default:"—" }}</td>
                     <td><span class="badge badge--status-{{ visit.status }}">{{ visit.get_status_display }}</span></td>
+                    <td>
+                        {% if visit.has_report %}
+                        <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener">{% translate "Download (PDF)" %}</a>
+                        {% if visit.report_changed %}· <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener">{% translate "Signed version" %}</a>{% endif %}
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No visits on record yet." %}</p>
+    <p class="empty-state">{% translate "No visits on record." %}</p>
     {% endif %}
 </div>
 {% endblock %}

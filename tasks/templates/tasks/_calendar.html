@@ -1,0 +1,79 @@
+{% load i18n %}{% comment %}The schedule calendar shared by the country and all-countries views (views._calendar_context): a week of day columns or a month grid, then the open tasks with no day yet.{% endcomment %}
+<div class="cal-toolbar">
+    <nav class="tabs" aria-label="{% translate 'Calendar view' %}">
+        <a href="?view=week&start={{ start|date:'Y-m-d' }}" class="{% if view == 'week' %}is-active{% endif %}">{% translate "Week" %}</a>
+        <a href="?view=month&month={% if view == 'month' %}{{ month|date:'Y-m' }}{% else %}{{ start|date:'Y-m' }}{% endif %}" class="{% if view == 'month' %}is-active{% endif %}">{% translate "Month" %}</a>
+    </nav>
+    <h2 class="cal-toolbar__title">
+        {% if view == 'month' %}{{ month|date:"F Y" }}{% else %}{{ start|date:"j M" }} – {{ end|date:"j M Y" }}{% endif %}
+    </h2>
+    <div class="button-row">
+        {% if view == 'month' %}
+        <a href="?view=month&month={{ prev_month|date:'Y-m' }}" class="button button--secondary" aria-label="{% translate 'Previous month' %}">‹</a>
+        <a href="?view=month&month={{ this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
+        <a href="?view=month&month={{ next_month|date:'Y-m' }}" class="button button--secondary" aria-label="{% translate 'Next month' %}">›</a>
+        {% else %}
+        <a href="?view=week&start={{ prev_start|date:'Y-m-d' }}" class="button button--secondary" aria-label="{% translate 'Previous week' %}">‹</a>
+        <a href="?view=week&start={{ this_week_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "This week" %}</a>
+        <a href="?view=week&start={{ next_start|date:'Y-m-d' }}" class="button button--secondary" aria-label="{% translate 'Next week' %}">›</a>
+        {% endif %}
+    </div>
+</div>
+
+<ul class="cal-legend" aria-label="{% translate 'Colour key' %}">
+    <li><span class="cal-swatch cal-card--new"></span>{% translate "Awaiting action" %}</li>
+    <li><span class="cal-swatch cal-card--assigned"></span>{% translate "Assigned" %}</li>
+    <li><span class="cal-swatch cal-card--in_progress"></span>{% translate "In progress" %}</li>
+    <li><span class="cal-swatch cal-card--blocked"></span>{% translate "Blocked" %}</li>
+    <li><span class="cal-swatch cal-card--closed"></span>{% translate "Closed" %}</li>
+    <li><span class="cal-dot cal-dot--emergency"></span>{% translate "Emergency" %}</li>
+    <li><span class="cal-dot cal-dot--high"></span>{% translate "High priority" %}</li>
+</ul>
+
+{% if view == 'month' %}
+<div class="cal-month">
+    {% for day in weeks.0 %}<div class="cal-month__weekday">{{ day.date|date:"D" }}</div>{% endfor %}
+    {% for day in days %}
+    <div class="cal-cell{% if not day.in_month %} cal-cell--other-month{% endif %}{% if day.is_today %} cal-cell--today{% endif %}">
+        <a href="?view=week&start={{ day.week_start|date:'Y-m-d' }}" class="cal-cell__date">{{ day.date|date:"j" }}</a>
+        {% for task in day.shown %}
+        <a href="{% url 'tasks:task_detail' task.pk %}" class="cal-line cal-card--{{ task.status }}" title="{{ task.task_number }} · {{ task.get_status_display }}">
+            {% if task.priority == 'emergency' or task.priority == 'high' %}<span class="cal-dot cal-dot--{{ task.priority }}" aria-hidden="true"></span>{% endif %}
+            {% if task.scheduled_for %}{{ task.scheduled_for|time:"H:i" }} {% endif %}{{ task.site.customer.name }}
+        </a>
+        {% endfor %}
+        {% if day.more %}<a href="?view=week&start={{ day.week_start|date:'Y-m-d' }}" class="cal-more">{% blocktranslate with count=day.more %}+{{ count }} more{% endblocktranslate %}</a>{% endif %}
+        {% if day.tasks %}<span class="cal-cell__count">{{ day.tasks|length }}</span>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="cal-week">
+    {% for day in days %}
+    <section class="cal-day{% if day.is_today %} cal-day--today{% endif %}" aria-label="{{ day.date|date:'l j F' }}">
+        <h3 class="cal-day__head">
+            <span>{{ day.date|date:"D j" }}</span>
+            {% if day.is_today %}<span>{% translate "Today" %}</span>{% endif %}
+        </h3>
+        {% for task in day.tasks %}
+        {% include "tasks/_calendar_card.html" %}
+        {% empty %}
+        <p class="cal-day__empty">{% translate "No visits" %}</p>
+        {% endfor %}
+    </section>
+    {% endfor %}
+</div>
+{% endif %}
+
+<section class="section cal-unscheduled-section">
+    <h2>{% translate "Not yet scheduled" %} <span class="muted">({{ unscheduled|length }})</span></h2>
+    {% if unscheduled %}
+    <div class="cal-unscheduled">
+        {% for task in unscheduled %}
+        {% include "tasks/_calendar_card.html" %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "All open tasks have been scheduled." %}</p>
+    {% endif %}
+</section>

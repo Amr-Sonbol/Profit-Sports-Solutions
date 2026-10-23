@@ -11,13 +11,13 @@
     </div>
     <div class="badge-row">
         {% if ticket.status == 'new' %}
-        <span class="badge badge--status-new">{% translate "New" %}</span>
+        <span class="badge badge--neutral">{% translate "New" %}</span>
         {% elif ticket.status == 'converted' %}
-        <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+        <span class="badge badge--good">{% translate "Converted to task" %}</span>
         {% elif ticket.status == 'closed' %}
-        <span class="badge badge--status-completed">{% translate "Closed" %}</span>
+        <span class="badge badge--good">{% translate "Closed" %}</span>
         {% else %}
-        <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+        <span class="badge badge--bad">{% translate "Dismissed" %}</span>
         {% endif %}
     </div>
 </div>
@@ -28,6 +28,12 @@
             <dt>{% translate "Submitted" %}</dt>
             <dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
         </div>
+        {% if ticket.opened_by %}
+        <div>
+            <dt>{% translate "Opened by" %}</dt>
+            <dd>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {{ ticket.get_source_display }}</dd>
+        </div>
+        {% endif %}
         <div>
             <dt>{% translate "Site / location" %}</dt>
             <dd>{{ ticket.site_description }}</dd>
@@ -73,7 +79,7 @@
     </div>
     {% if ticket.notes %}
     <div class="description">
-        <dt>{% translate "Anything else we should know" %}</dt>
+        <dt>{% translate "Additional information" %}</dt>
         <p>{{ ticket.notes }}</p>
     </div>
     {% endif %}
@@ -96,28 +102,35 @@
 <div class="section">
     <h2>{% translate "Conversation" %}</h2>
     {% if replies %}
-    <ul class="plain-list">
+    {% translate "Staff" as staff_label %}
+    {% translate "Customer" as customer_label %}
+    <div class="chat-thread">
         {% for reply in replies %}
-        <li>
-            <span class="badge {% if reply.sender == 'staff' %}badge--muted{% else %}badge--status-new{% endif %}">
-                {% if reply.sender == 'staff' %}{% translate "Staff" %}{% else %}{% translate "Customer" %}{% endif %}
-            </span>
-            {% if reply.is_quotation %}
-            <span class="badge badge--status-completed">{% translate "Quotation" %}</span>
-            {% endif %}
-            <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
-            <p>{{ reply.message }}</p>
-            {% if reply.attachment %}
-            <p>
-                <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
-            </p>
-            {% endif %}
-        </li>
+        <div class="chat-message {% if reply.sender == 'staff' %}chat-message--mine{% endif %}">
+            <div class="chat-meta">
+                <span class="chat-name">
+                    {% if reply.sender == 'staff' %}
+                        {{ reply.sent_by.technician.full_name|default:reply.sent_by.get_username|default:staff_label }}
+                    {% else %}
+                        {{ ticket.contact_name|default:customer_label }}
+                    {% endif %}
+                </span>
+                <span class="muted">{{ reply.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+            </div>
+            <div class="chat-bubble">
+                <p>{{ reply.message }}</p>
+                {% if reply.attachment %}
+                <p class="chat-attachment">
+                    <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                    | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
         {% endfor %}
-    </ul>
+    </div>
     {% else %}
-    <p class="empty-state">{% translate "No messages yet." %}</p>
+    <p class="empty-state">{% translate "No messages." %}</p>
     {% endif %}
     {% if can_manage and can_reply %}
     <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
@@ -136,40 +149,43 @@
             {{ reply_form.attachment }}
             {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        <div class="field {% if reply_form.is_quotation.errors %}field--error{% endif %}">
-            <label class="checkbox-label">
-                {{ reply_form.is_quotation }}
-                {{ reply_form.is_quotation.label }}
-            </label>
-            {% if reply_form.is_quotation.help_text %}<p class="field__help">{{ reply_form.is_quotation.help_text }}</p>{% endif %}
-            {% for error in reply_form.is_quotation.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
         <div class="field field--submit">
             <button type="submit" class="button button--secondary">{% translate "Send reply" %}</button>
         </div>
     </form>
+    {% if can_escalate %}
+    <p><a href="#escalation">{% blocktranslate with role=escalation_role %}Requires further attention? Escalate to the {{ role }}{% endblocktranslate %}</a></p>
+    {% elif pending_escalation %}
+    <p class="field__help"><a href="#escalation">{% blocktranslate with name=pending_escalation.escalated_to.full_name %}Escalated — awaiting a decision from {{ name }}{% endblocktranslate %}</a></p>
+    {% endif %}
     {% elif can_manage %}
-    <p class="field__help">{% translate "This ticket is resolved — the conversation is closed." %}</p>
+    <p class="field__help">{% translate "This ticket has been resolved and the conversation is closed." %}</p>
     {% endif %}
 </div>
 
 {% if internal_note_form %}
 <div class="section">
     <h2>{% translate "Internal notes" %}</h2>
-    <p class="field__help">{% translate "Visible to managers and admins only — never shown to the customer or on the ticket's conversation." %}</p>
+    <p class="field__help">{% translate "Visible to managers and administrators only; never shown to the customer or in the ticket conversation." %}</p>
     {% if internal_notes %}
     <ul class="plain-list">
         {% for note in internal_notes %}
         <li>
             <span class="muted">{{ note.created_at|date:"SHORT_DATETIME_FORMAT" }}{% if note.author %} — {{ note.author.technician.full_name|default:note.author.get_username }}{% endif %}</span>
             <p>{{ note.message }}</p>
+            {% if note.attachment %}
+            <p>
+                <a href="{{ note.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+                | <a href="{{ note.attachment.url }}" download>{% translate "Download" %}</a>
+            </p>
+            {% endif %}
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No internal notes yet." %}</p>
+    <p class="empty-state">{% translate "No internal notes." %}</p>
     {% endif %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="add_internal_note">
         {% if internal_note_form.non_field_errors %}
@@ -179,6 +195,11 @@
             <label for="{{ internal_note_form.message.id_for_label }}">{{ internal_note_form.message.label }}</label>
             {{ internal_note_form.message }}
             {% for error in internal_note_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        <div class="field {% if internal_note_form.attachment.errors %}field--error{% endif %}">
+            <label for="{{ internal_note_form.attachment.id_for_label }}">{{ internal_note_form.attachment.label }}</label>
+            {{ internal_note_form.attachment }}
+            {% for error in internal_note_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">
             <button type="submit" class="button button--secondary">{% translate "Add note" %}</button>
@@ -210,6 +231,71 @@
 </div>
 {% endif %}
 
+{% if escalations or can_escalate %}
+<div class="section" id="escalation">
+    <h2>{% translate "Escalation" %}</h2>
+    {% for escalation in escalations %}
+    <div class="escalation">
+        <p>
+            {% if escalation.decision == 'pending' %}
+            <span class="badge badge--bad">{{ escalation.get_decision_display }}</span>
+            {% else %}
+            <span class="badge badge--good">{{ escalation.get_decision_display }}</span>
+            {% endif %}
+            {% blocktranslate with by=escalation.escalated_by.full_name to=escalation.escalated_to.full_name when=escalation.escalated_at|date:"SHORT_DATETIME_FORMAT" %}Escalated by {{ by }} to {{ to }} on {{ when }}{% endblocktranslate %}
+        </p>
+        <p class="timeline__note"><strong>{% translate "Reason:" %}</strong> {{ escalation.reason }}</p>
+        {% if escalation.customer_message %}
+        <p class="timeline__note"><strong>{% translate "Message sent to the customer:" %}</strong> {{ escalation.customer_message }}</p>
+        {% endif %}
+        {% if escalation.decided_at %}
+        <p class="timeline__note"><strong>{% blocktranslate with when=escalation.decided_at|date:"SHORT_DATETIME_FORMAT" %}Decision ({{ when }}):{% endblocktranslate %}</strong> {{ escalation.decision_note }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if can_decide %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="decide_escalation">
+        {% for field in decide_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label>{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Send decision" %}</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if can_escalate %}
+    {% if escalate_form.fields.escalated_to.queryset.exists %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="escalate">
+        {% for field in escalate_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button button--secondary">{% blocktranslate with role=escalation_role %}Escalate to the {{ role }}{% endblocktranslate %}</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="empty-state">{% blocktranslate with role=escalation_role %}No active {{ role }} is available to receive escalations. Please add one from Technicians.{% endblocktranslate %}</p>
+    {% endif %}
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="section">
     <h2>{% translate "Assigned to" %}</h2>
     {% if ticket.assigned_to %}
@@ -218,7 +304,7 @@
         <span class="muted">({{ ticket.assigned_to.get_role_display }})</span>
     </p>
     {% else %}
-    <p class="empty-state">{% translate "Not assigned yet." %}</p>
+    <p class="empty-state">{% translate "Not yet assigned." %}</p>
     {% endif %}
     {% if can_manage %}
     <form method="post" class="form-grid" novalidate>
@@ -268,16 +354,18 @@
         <button type="submit" class="button button--secondary">{% translate "Notify customer of tracking number" %}</button>
     </form>
     {% elif not ticket.shipping_tracking_number %}
-    <p class="field__help">{% translate "Add a shipping tracking number before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Please add a shipping tracking number before notifying the customer." %}</p>
     {% else %}
-    <p class="field__help">{% translate "Add a contact email before notifying the customer." %}</p>
+    <p class="field__help">{% translate "Please add a contact email address before notifying the customer." %}</p>
     {% endif %}
 </div>
 {% endif %}
 
 {% if not can_manage %}
-<p class="empty-state">{% translate "You've been assigned this ticket to look into — only a supervisor can convert or dismiss it." %}</p>
-{% elif ticket.status == 'new' %}
+<p class="empty-state">{% translate "This ticket has been assigned to you for review. Only authorised ticket reviewers can convert or dismiss it." %}</p>
+{% else %}
+
+{% if ticket.status == 'new' %}
 <div class="section">
     <h2>{% translate "Decision" %}</h2>
     <div class="form-grid">
@@ -296,6 +384,24 @@
             <button type="submit" class="button button--danger">{% translate "Dismiss" %}</button>
         </div>
     </form>
+</div>
+{% elif ticket.status == 'converted' %}
+<div class="section">
+    <p class="empty-state">
+        <a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a>
+    </p>
+</div>
+{% elif ticket.status == 'dismissed' %}
+<div class="section">
+    <h2>{% translate "Dismissed" %}</h2>
+    <p>{{ ticket.dismissal_reason }}</p>
+</div>
+{% endif %}
+
+{% if ticket.status != 'closed' %}
+<div class="section">
+    <h2>{% translate "Close ticket" %}</h2>
+    <p class="field__help">{% translate "Closes the ticket regardless of its current status, including converted or dismissed tickets." %}</p>
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="close">
@@ -310,21 +416,19 @@
         </div>
     </form>
 </div>
-{% elif ticket.status == 'converted' %}
-<div class="section">
-    <p class="empty-state">
-        <a class="task-number" href="{% url 'tasks:task_detail' ticket.task.pk %}">{{ ticket.task.task_number }}</a>
-    </p>
-</div>
-{% elif ticket.status == 'closed' %}
+{% else %}
 <div class="section">
     <h2>{% translate "Closed" %}</h2>
     <p>{{ ticket.close_reason }}</p>
+    {% if is_admin %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reopen">
+        <button type="submit" class="button button--secondary">{% translate "Reopen" %}</button>
+    </form>
+    {% endif %}
 </div>
-{% else %}
-<div class="section">
-    <h2>{% translate "Dismissed" %}</h2>
-    <p>{{ ticket.dismissal_reason }}</p>
-</div>
+{% endif %}
+
 {% endif %}
 {% endblock %}

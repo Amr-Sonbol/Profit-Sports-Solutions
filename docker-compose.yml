@@ -2,9 +2,14 @@
 # They're hardcoded rather than pulled from .env via ${...} because Compose
 # resolves $-sequences when it parses .env for its own interpolation, which
 # silently mangles values like SECRET_KEY that contain "$" (e.g. $v7i, $fx
-# get read as unset variable references and dropped). django-web reads .env
-# directly (bind-mounted into the container) via python-decouple instead,
-# which does no such interpolation.
+# get read as unset variable references and dropped). `env_file:` below is a
+# different mechanism — it hands the file's lines to the container as real
+# environment variables with no interpolation of its own, so it doesn't
+# have this problem (python-decouple reads the same values either way,
+# whether from those variables or, same as always, straight from the
+# bind-mounted file itself) — it's here so plain shell scripts in the
+# container (docker-entrypoint.sh's own $DEBUG check) can see them too,
+# which reading the file through decouple alone never gave them.
 services:
   db:
     image: postgres:16-alpine
@@ -24,6 +29,7 @@ services:
 
   web:
     build: .
+    env_file: .env
     environment:
       DB_HOST: db
       DB_PORT: 5432

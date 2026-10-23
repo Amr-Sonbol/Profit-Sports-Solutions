@@ -8,27 +8,71 @@
     <h1>{% translate "Dashboard" %}</h1>
 </div>
 
+{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_list' as task_list_url %}{% endif %}
+{% if 'assign_tasks' in role_permissions %}{% url 'tasks:technician_availability' as availability_url %}{% endif %}
 <div class="stat-row">
-    <div class="stat-tile">
-        <div class="stat-tile__value">{{ stats.available_count }}</div>
-        <div class="stat-tile__label">{% translate "Available now" %}</div>
+    {% blocktranslate with available=stats.available_count total=stats.technician_count asvar available_value %}{{ available }} of {{ total }}{% endblocktranslate %}
+    {% translate "Technicians available" as label %}{% include "_stat_tile.html" with value=available_value label=label url=availability_url query="" level="" %}
+    {% translate "Open tasks" as label %}{% include "_stat_tile.html" with value=stats.open_task_count label=label url=task_list_url query="status=open" level="" %}
+    {% translate "Unassigned" as label %}{% if stats.unassigned_count %}{% include "_stat_tile.html" with value=stats.unassigned_count label=label url=task_list_url query="lead=none" level="warning" %}{% else %}{% include "_stat_tile.html" with value=0 label=label url="" level="" %}{% endif %}
+    {% translate "Not scheduled" as label %}{% if stats.unscheduled_count %}{% include "_stat_tile.html" with value=stats.unscheduled_count label=label url=task_list_url query="scheduled=none" level="warning" %}{% else %}{% include "_stat_tile.html" with value=0 label=label url="" level="" %}{% endif %}
+    {% translate "Emergencies" as label %}{% if stats.emergency_count %}{% include "_stat_tile.html" with value=stats.emergency_count label=label url=task_list_url query="priority=emergency" level="critical" %}{% else %}{% include "_stat_tile.html" with value=0 label=label url="" level="" %}{% endif %}
+</div>
+
+<nav class="tabs chart-period" aria-label="{% translate 'Chart period' %}">
+    <a href="?period=month" class="{% if chart_period == 'month' %}is-active{% endif %}">{% translate "Monthly" %}</a>
+    <a href="?period=week" class="{% if chart_period == 'week' %}is-active{% endif %}">{% translate "Weekly" %}</a>
+</nav>
+{% if tickets_chart %}
+{% if chart_period == 'month' %}{% translate "Tickets received and resolved per month" as title %}{% blocktranslate count months=tickets_chart.periods|length asvar subtitle %}Customer tickets, the last {{ months }} month. Resolved means converted to a task, dismissed or closed.{% plural %}Customer tickets, the last {{ months }} months. Resolved means converted to a task, dismissed or closed.{% endblocktranslate %}{% else %}{% translate "Tickets received and resolved per week" as title %}{% blocktranslate count weeks=tickets_chart.periods|length asvar subtitle %}Customer tickets, the last {{ weeks }} week. Resolved means converted to a task, dismissed or closed.{% plural %}Customer tickets, the last {{ weeks }} weeks. Resolved means converted to a task, dismissed or closed.{% endblocktranslate %}{% endif %}
+{% translate "Received" as opened_label %}{% translate "Resolved" as completed_label %}
+{% include "tasks/_period_chart.html" with chart=tickets_chart %}
+{% endif %}
+{% if chart_period == 'month' %}{% translate "Tasks opened and completed per month" as title %}{% blocktranslate count months=tasks_chart.periods|length asvar subtitle %}The last {{ months }} month. Completed means the work report was submitted.{% plural %}The last {{ months }} months. Completed means the work report was submitted.{% endblocktranslate %}{% else %}{% translate "Tasks opened and completed per week" as title %}{% blocktranslate count weeks=tasks_chart.periods|length asvar subtitle %}The last {{ weeks }} week. Completed means the work report was submitted.{% plural %}The last {{ weeks }} weeks. Completed means the work report was submitted.{% endblocktranslate %}{% endif %}
+{% translate "Opened" as opened_label %}{% translate "Completed" as completed_label %}
+{% include "tasks/_period_chart.html" with chart=tasks_chart %}
+
+<div class="section">
+    <div class="section__header">
+        <h2>{% translate "Open tasks" %}</h2>
+        {% if task_list_url and stats.open_task_count > tasks|length %}
+        <a href="{{ task_list_url }}?status=open" class="forward-link">{% blocktranslate with count=stats.open_task_count %}View all {{ count }}{% endblocktranslate %}</a>
+        {% endif %}
     </div>
-    <div class="stat-tile {% if stats.unavailable_count %}stat-tile--warning{% endif %}">
-        <div class="stat-tile__value">{{ stats.unavailable_count }}</div>
-        <div class="stat-tile__label">{% translate "Unavailable" %}</div>
+    {% if tasks %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Task" %}</th>
+                    <th>{% translate "Customer / Site" %}</th>
+                    <th>{% translate "Lead" %}</th>
+                    <th>{% translate "Scheduled for" %}</th>
+                    <th>{% translate "Priority" %}</th>
+                    <th>{% translate "Status" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks %}
+                <tr>
+                    <td>{% if task_list_url %}<a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>{% else %}<span class="task-number">{{ task.task_number }}</span>{% endif %}</td>
+                    <td class="cell-wrap">{{ task.site.customer.name }}<br><span class="muted">{{ task.site.name }}</span></td>
+                    <td>{% if task.lead_technician %}{{ task.lead_technician.full_name }}{% else %}<span class="badge badge--status-new">{% translate "Unassigned" %}</span>{% endif %}</td>
+                    <td>
+                        {% if task.scheduled_for %}{{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
+                        {% elif task.scheduled_date %}{{ task.scheduled_date|date:"SHORT_DATE_FORMAT" }}
+                        {% else %}<span class="muted">{% translate "Not scheduled" %}</span>{% endif %}
+                    </td>
+                    <td><span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span></td>
+                    <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    <div class="stat-tile">
-        <div class="stat-tile__value">{{ stats.open_task_count }}</div>
-        <div class="stat-tile__label">{% translate "Open tasks" %}</div>
-    </div>
-    <div class="stat-tile {% if stats.unassigned_count %}stat-tile--warning{% endif %}">
-        <div class="stat-tile__value">{{ stats.unassigned_count }}</div>
-        <div class="stat-tile__label">{% translate "Unassigned" %}</div>
-    </div>
-    <div class="stat-tile {% if stats.emergency_count %}stat-tile--critical{% endif %}">
-        <div class="stat-tile__value">{{ stats.emergency_count }}</div>
-        <div class="stat-tile__label">{% translate "Emergencies" %}</div>
-    </div>
+    {% else %}
+    <p class="empty-state">{% translate "No open tasks." %}</p>
+    {% endif %}
 </div>
 
 <div class="section">
@@ -49,11 +93,9 @@
                     <td>{{ technician.full_name }}</td>
                     <td>
                         {% if technician.is_available %}
-                        <span class="badge badge--status-new">{% translate "Available" %}</span>
+                        <span class="badge badge--neutral">{% translate "Available" %}</span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
-                            {% translate "Unavailable" %} — {{ technician.get_unavailable_reason_display }}
-                        </span>
+                        <span class="badge badge--bad">{% translate "Unavailable" %} ({{ technician.get_unavailable_reason_display }})</span>
                         {% endif %}
                     </td>
                     <td>{{ technician.active_task_count }}</td>
@@ -64,43 +106,6 @@
     </div>
     {% else %}
     <p class="empty-state">{% translate "No active technicians in your country." %}</p>
-    {% endif %}
-</div>
-
-<div class="section">
-    <h2>{% translate "Open tasks" %}</h2>
-    {% if tasks %}
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% translate "Task" %}</th>
-                    <th>{% translate "Customer / Site" %}</th>
-                    <th>{% translate "Lead" %}</th>
-                    <th>{% translate "Scheduled for" %}</th>
-                    <th>{% translate "Priority" %}</th>
-                    <th>{% translate "Status" %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for task in tasks %}
-                <tr>
-                    <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
-                    <td>{{ task.site.customer.name }} — {{ task.site.name }}</td>
-                    <td>{{ task.lead_technician.full_name|default:"—" }}</td>
-                    <td>
-                        {% if task.scheduled_for %}{{ task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
-                        {% else %}<span class="muted">{% translate "Unscheduled" %}</span>{% endif %}
-                    </td>
-                    <td><span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span></td>
-                    <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="empty-state">{% translate "No open tasks." %}</p>
     {% endif %}
 </div>
 {% endblock %}

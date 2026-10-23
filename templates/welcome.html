@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Home" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="home">
+    <div class="page__header">
+        <h1>{% blocktranslate with name=user.technician.full_name %}Welcome, {{ name }}{% endblocktranslate %}</h1>
+        <span class="muted">{{ today|date:"l j F" }}</span>
+    </div>
+
+    {% if show_actions %}
+    <section class="section">
+        <h2>{% translate "Awaiting your action" %}</h2>
+        {% if actions %}
+        <ul class="action-list">
+            {% for action in actions %}
+            <li>
+                <a href="{{ action.url }}" class="action-row action-row--{{ action.level }}">
+                    <span>{{ action.label }}</span>
+                    {% if action.count %}<span class="action-row__count">{{ action.count }}</span>{% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-state">{% translate "There is nothing awaiting your action." %}</p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% if show_visits %}
+    <section class="section">
+        <h2>{% translate "Today's visits" %}</h2>
+        {% if visits %}
+        <ul class="action-list">
+            {% for task in visits %}
+            <li>
+                <a href="{% url 'tasks:my_task_detail' task.pk %}" class="action-row">
+                    <span class="visit-row__time">{% if task.scheduled_for %}{{ task.scheduled_for|time:"TIME_FORMAT" }}{% else %}{% translate "Today" %}{% endif %}</span>
+                    <span class="visit-row__place">
+                        {{ task.site.customer.name }}<br>
+                        <span class="muted">{{ task.site.name }} · <span class="task-number">{{ task.task_number }}</span></span>
+                    </span>
+                    <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-state">{% translate "No visits are scheduled for today." %}</p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <nav class="section" aria-label="{% translate 'Pages' %}">
+        <h2>{% translate "Quick links" %}</h2>
+        <div class="go-to">
+            {% for page in nav_pages %}
+            <a href="{{ page.url }}" class="go-to__link">
+                {% include "_icon.html" with name=page.icon %}
+                <span>{{ page.label }}</span>
+            </a>
+            {% endfor %}
+            <a href="{% url 'tasks:my_profile' %}" class="go-to__link">
+                {% include "_icon.html" with name='user' %}
+                <span>{% translate "My profile" %}</span>
+            </a>
+        </div>
+    </nav>
+</div>
+{% endblock %}

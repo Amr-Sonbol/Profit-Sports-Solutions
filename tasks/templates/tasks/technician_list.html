@@ -6,9 +6,15 @@
 {% block content %}
 <div class="page__header">
     <h1>{% translate "Technicians" %}</h1>
-    {% if 'manage_technicians' in role_permissions %}
-    <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add technician" %}</a>
-    {% endif %}
+    <div class="badge-row">
+        <a href="{% url 'tasks:technician_hours' %}" class="button button--secondary">{% translate "Hours" %}</a>
+        {% if 'assign_tasks' in role_permissions %}
+        <a href="{% url 'tasks:technician_availability' %}" class="button button--secondary">{% translate "Availability" %}</a>
+        {% endif %}
+        {% if user.technician.role == 'admin' %}
+        <a href="{% url 'tasks:technician_create' %}" class="button">{% translate "Add user" %}</a>
+        {% endif %}
+    </div>
 </div>
 
 <form method="get" class="filters">
@@ -41,7 +47,7 @@
                     <th>{% translate "Reason" %}</th>
                     {% else %}
                     <th>{% translate "Professional skills" %}</th>
-                    <th>{% translate "90-day track" %}</th>
+                    <th>{% translate "90-day progress" %}</th>
                     {% endif %}
                     <th></th>
                 </tr>
@@ -59,27 +65,27 @@
                     {% else %}
                     <td>
                         {% if row.certification.is_certified %}
-                        <span class="badge badge--status-completed">{% translate "Certified" %}</span>
+                        <span class="badge badge--good">{% translate "Certified" %}</span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
+                        <span class="badge badge--bad">
                             {{ row.certification.non_cardio_certified|add:row.certification.conduct_certified }}
                             /
                             {{ row.certification.non_cardio_total|add:row.certification.conduct_total }}
                         </span>
                         {% endif %}
                         {% if row.certification.cardio_ready %}
-                        <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                        <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if row.ninety_day %}
                         {% if row.ninety_day.on_track %}
-                        <span class="badge badge--status-completed">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                        <span class="badge badge--good">
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                         </span>
                         {% else %}
-                        <span class="badge badge--status-blocked">
-                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                        <span class="badge badge--bad">
+                            {% blocktranslate with days=row.ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                         </span>
                         {% endif %}
                         {% else %}
@@ -99,7 +105,7 @@
                         {% endif %}
                         {% else %}
                         <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
-                        <a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>
+                        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>{% endif %}
                         {% if 'manage_technicians' in role_permissions %}
                         <a href="{% url 'tasks:technician_edit' row.technician.pk %}">{% translate "Edit photo" %}</a>
                         {% endif %}
@@ -111,7 +117,7 @@
         </table>
     </div>
     {% elif search %}
-    <p class="empty-state">{% translate "No technicians match that search." %}</p>
+    <p class="empty-state">{% translate "No technicians match your search." %}</p>
     {% elif show_inactive %}
     <p class="empty-state">{% translate "No deactivated technicians in your country." %}</p>
     {% else %}

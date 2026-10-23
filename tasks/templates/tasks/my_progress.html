@@ -10,7 +10,7 @@
 
 {% if ninety_day %}
 <div class="section">
-    <h2>{% translate "90-day track" %}</h2>
+    <h2>{% translate "90-day progress" %}</h2>
     <div class="stat-row">
         <div class="stat-tile {% if not ninety_day.on_track %}stat-tile--warning{% endif %}">
             <div class="stat-tile__value">{{ ninety_day.days_remaining }}</div>
@@ -22,9 +22,9 @@
         </div>
     </div>
     {% if ninety_day.on_track %}
-    <p class="muted">{% translate "On track to be fully certified within 90 days." %}</p>
+    <p class="muted">{% translate "On track to achieve full certification within 90 days." %}</p>
     {% else %}
-    <p class="muted">{% translate "Behind pace for the 90-day target — talk to your supervisor about what's next." %}</p>
+    <p class="muted">{% translate "Progress is behind the 90-day target. Please discuss next steps with your supervisor." %}</p>
     {% endif %}
 </div>
 {% endif %}
@@ -32,9 +32,9 @@
 <div class="section">
     <h2>{% translate "Professional skills" %}</h2>
     {% if certification.is_certified %}
-    <p><span class="badge badge--status-completed">{% translate "Certified technician" %}</span></p>
+    <p><span class="badge badge--good">{% translate "Certified technician" %}</span></p>
     {% else %}
-    <p><span class="badge badge--status-blocked">{% translate "Not yet certified" %}</span></p>
+    <p><span class="badge badge--bad">{% translate "Not yet certified" %}</span></p>
     {% endif %}
     <dl class="detail-grid">
         <div>
@@ -46,16 +46,16 @@
             <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
         <div>
-            <dt>{% translate "Standing in your country" %}</dt>
+            <dt>{% translate "Ranking in your country" %}</dt>
             <dd>
                 {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
             </dd>
         </div>
     </dl>
     {% if certification.cardio_ready %}
-    <p class="muted">{% translate "Cardio-certified — ready for the supervisor track." %}</p>
+    <p class="muted">{% translate "Certified in advanced skills." %}</p>
     {% endif %}
-    <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Rate yourself on a skill or conduct area" %}</a></p>
+    <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>
 </div>
 
 <div class="section">
@@ -73,6 +73,26 @@
 </div>
 
 <div class="section">
+    <h2>{% translate "This month" %}</h2>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Labour hours" %}</dt>
+            <dd>{{ month_hours }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Reports filed" %}</dt>
+            <dd>{{ month_report_count }}</dd>
+        </div>
+        {% if month_overrun_count %}
+        <div>
+            <dt>{% translate "Significantly over estimate" %}</dt>
+            <dd>{{ month_overrun_count }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+</div>
+
+<div class="section">
     <h2>{% translate "Reliability" %}</h2>
     <dl class="detail-grid">
         <div>
@@ -80,7 +100,7 @@
             <dd>{{ reliability.total_completed }}</dd>
         </div>
         <div>
-            <dt>{% translate "Tasks helped on" %}</dt>
+            <dt>{% translate "Tasks assisted on" %}</dt>
             <dd>{{ reliability.total_helped }}</dd>
         </div>
         <div>
@@ -89,7 +109,7 @@
                 {% if reliability.on_time_percent is not None %}
                     {{ reliability.on_time_percent }}%
                 {% else %}
-                    <span class="muted">{% blocktranslate with have=reliability.on_time_sample_size need=reliability.min_sample %}not enough completed tasks yet ({{ have }} of {{ need }} needed){% endblocktranslate %}</span>
+                    <span class="muted">{% blocktranslate with have=reliability.on_time_sample_size need=reliability.min_sample %}insufficient completed tasks ({{ have }} of {{ need }} required){% endblocktranslate %}</span>
                 {% endif %}
             </dd>
         </div>
@@ -99,7 +119,7 @@
                 {% if reliability.acceptance_latency_minutes is not None %}
                     {% blocktranslate with minutes=reliability.acceptance_latency_minutes %}{{ minutes }} minutes{% endblocktranslate %}
                 {% else %}
-                    <span class="muted">{% translate "not enough completed tasks yet" %}</span>
+                    <span class="muted">{% translate "insufficient completed tasks" %}</span>
                 {% endif %}
             </dd>
         </div>
@@ -123,7 +143,7 @@
                         {% if row.on_time_percent is not None %}
                             {{ row.on_time_percent }}%
                         {% else %}
-                            <span class="muted">{% translate "not enough data" %}</span>
+                            <span class="muted">{% translate "insufficient data" %}</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -151,14 +171,14 @@
                 <tr>
                     <td>
                         {{ skill.display_name }}
-                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Cardio" %}</span>{% endif %}
+                        {% if skill.category == 'cardio' %}<span class="badge badge--muted">{% translate "Advanced" %}</span>{% endif %}
                     </td>
                     <td>{{ skill.current.level|default:"—" }}</td>
                     <td>
                         {% if skill.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% elif skill.current.source == 'supervisor' %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}
@@ -169,7 +189,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No skills set up yet." %}</p>
+    <p class="empty-state">{% translate "No skills have been set up." %}</p>
     {% endif %}
 </div>
 
@@ -192,9 +212,9 @@
                     <td>{{ area.current.level|default:"—" }}</td>
                     <td>
                         {% if area.current.source == 'self' %}
-                        <span class="badge badge--status-new">{% translate "Self-rated, unconfirmed" %}</span>
+                        <span class="badge badge--neutral">{% translate "Self-rated, unconfirmed" %}</span>
                         {% elif area.current.source == 'supervisor' %}
-                        <span class="badge badge--status-completed">{% translate "Confirmed" %}</span>
+                        <span class="badge badge--good">{% translate "Confirmed" %}</span>
                         {% else %}
                         <span class="muted">{% translate "Not rated" %}</span>
                         {% endif %}
@@ -205,7 +225,7 @@
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "No conduct areas set up yet." %}</p>
+    <p class="empty-state">{% translate "No conduct areas have been set up." %}</p>
     {% endif %}
 </div>
 {% endblock %}

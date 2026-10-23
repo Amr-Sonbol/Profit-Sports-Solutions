@@ -1,0 +1,50 @@
+{% load i18n %}{% comment %}
+A two-series column chart per month or week (views._period_chart): `chart`, plus `title`,
+`subtitle`, `opened_label` and `completed_label` for what each series means.
+Values show on hover or keyboard focus, and "Show as table" lists them all.
+{% endcomment %}
+<section class="section">
+    <div class="section__header">
+        <div>
+            <h2>{{ title }}</h2>
+            <p class="field__help">{{ subtitle }}</p>
+        </div>
+        <ul class="chart-legend">
+            <li><span class="chart-key chart-key--opened"></span>{{ opened_label }}</li>
+            <li><span class="chart-key chart-key--completed"></span>{{ completed_label }}</li>
+        </ul>
+    </div>
+    <div class="chart" role="group" aria-label="{{ title }}">
+        <div class="chart__grid" aria-hidden="true">
+            {% for tick in chart.ticks %}<span class="chart__tick" style="inset-block-end: {% widthratio tick chart.top 100 %}%">{{ tick }}</span>{% endfor %}
+        </div>
+        <div class="chart__plot">
+            {% for week in chart.periods %}
+            <div class="chart__week{% if week.is_current %} chart__week--current{% endif %}">
+                <div class="chart__bars">
+                    <span class="chart__bar chart__bar--opened" style="block-size: {{ week.opened_pct }}%" tabindex="0"
+                          data-tip="{{ opened_label }}: {{ week.opened }}"
+                          aria-label="{% if chart.period == 'month' %}{{ week.start|date:'F Y' }}{% else %}{{ week.start|date:'j M' }}{% endif %} · {{ opened_label }}: {{ week.opened }}"></span>
+                    <span class="chart__bar chart__bar--completed" style="block-size: {{ week.completed_pct }}%" tabindex="0"
+                          data-tip="{{ completed_label }}: {{ week.completed }}"
+                          aria-label="{% if chart.period == 'month' %}{{ week.start|date:'F Y' }}{% else %}{{ week.start|date:'j M' }}{% endif %} · {{ completed_label }}: {{ week.completed }}"></span>
+                </div>
+                <span class="chart__label">{% if week.is_current %}{% if chart.period == 'month' %}{% translate "This month" %}{% else %}{% translate "This week" %}{% endif %}{% elif chart.period == 'month' %}{{ week.start|date:"M Y" }}{% else %}{{ week.start|date:"j M" }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <details class="chart-table">
+        <summary>{% translate "Show as table" %}</summary>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{% if chart.period == 'month' %}{% translate "Month" %}{% else %}{% translate "Week of" %}{% endif %}</th><th>{{ opened_label }}</th><th>{{ completed_label }}</th></tr></thead>
+                <tbody>
+                    {% for week in chart.periods %}
+                    <tr><td>{% if chart.period == 'month' %}{{ week.start|date:"F Y" }}{% else %}{{ week.start|date:"j M Y" }}{% endif %}</td><td>{{ week.opened }}</td><td>{{ week.completed }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+</section>

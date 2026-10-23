@@ -1,14 +1,6 @@
-{% extends "base.html" %}
-{% load i18n %}
-
-{% block title %}{% translate "Not allowed" %} — Profit Sports Solutions{% endblock %}
-
-{% block content %}
-<div class="page__header">
-    <h1>{% translate "Not allowed" %}</h1>
-</div>
-<p class="empty-state">
-    {% translate "You don't have permission to do that. If you think this is wrong, check with a manager or admin." %}
-</p>
-<p><a href="{% url 'home' %}" class="button">{% translate "Go to home" %}</a></p>
-{% endblock %}
+{% extends "404.html" %}
+{% comment %}
+Shown for pages someone isn't allowed to open: the same page as "not found",
+so a typed or old link doesn't reveal that the page exists. The status code
+is still 403.
+{% endcomment %}

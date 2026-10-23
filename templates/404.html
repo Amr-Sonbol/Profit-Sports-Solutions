@@ -8,7 +8,7 @@
     <h1>{% translate "Page not found" %}</h1>
 </div>
 <p class="empty-state">
-    {% translate "This page doesn't exist, or you don't have access to it. Double-check the link, or go back to where you were." %}
+    {% translate "This page does not exist, or you do not have permission to access it. Please verify the link or return to the previous page." %}
 </p>
-<p><a href="{% url 'home' %}" class="button">{% translate "Go to home" %}</a></p>
+<p><a href="{% url 'home' %}" class="button">{% translate "Return to home page" %}</a></p>
 {% endblock %}

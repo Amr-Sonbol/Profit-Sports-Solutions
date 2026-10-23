@@ -8,4 +8,11 @@ done
 
 python manage.py migrate --noinput
 
+# Dev serves STATICFILES_DIRS on the fly (DEBUG=True) and bind-mounts the
+# repo, where a collected staticfiles/ folder would just be clutter —
+# only production (nginx serving STATIC_ROOT directly) needs this.
+if [ "$DEBUG" != "True" ]; then
+  python manage.py collectstatic --noinput
+fi
+
 exec "$@"

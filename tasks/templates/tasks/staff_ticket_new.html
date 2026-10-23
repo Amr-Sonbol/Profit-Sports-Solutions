@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "New ticket" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <div>
+        <a href="{% url 'home' %}" class="back-link">{% translate "Back" %}</a>
+        <h1>{% translate "New ticket" %}</h1>
+    </div>
+</div>
+
+<nav class="tabs" aria-label="{% translate 'Type of ticket' %}">
+    {% for value, label in kinds %}
+    <a href="?kind={{ value }}" class="{% if kind == value %}is-active{% endif %}">{{ label }}</a>
+    {% endfor %}
+</nav>
+
+<div class="section">
+    {% if kind == 'customer' %}
+    <p class="field__help">{% translate "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal." %}</p>
+    {% else %}
+    <p class="field__help">{% translate "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the ticket is closed." %}</p>
+    {% endif %}
+    <form method="post" action="?kind={{ kind }}" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+        {% endif %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Open ticket" %}</button>
+    </form>
+</div>
+{% endblock %}

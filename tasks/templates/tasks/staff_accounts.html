@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Staff accounts" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Staff accounts" %}</h1>
+</div>
+<p class="field__help">{% translate "All staff logins across all countries. Select a name to manage the account. Every action taken here is recorded in the Audit log." %}</p>
+
+<nav class="tabs">
+    <a href="?{% if country_id %}country={{ country_id }}&{% endif %}{% if search %}q={{ search|urlencode }}{% endif %}" class="{% if not status %}is-active{% endif %}">{% translate "All" %} ({{ total }})</a>
+    {% for value, label, count in status_counts %}
+    <a href="?status={{ value }}{% if country_id %}&country={{ country_id }}{% endif %}{% if search %}&q={{ search|urlencode }}{% endif %}" class="{% if status == value %}is-active{% endif %}">{{ label }} ({{ count }})</a>
+    {% endfor %}
+</nav>
+
+<form method="get" class="filters">
+    <input type="hidden" name="status" value="{{ status }}">
+    <div class="filters__search">
+        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name, sign-in name or email' %}">
+    </div>
+    <select name="country" aria-label="{% translate 'Country' %}">
+        <option value="">{% translate "All countries" %}</option>
+        {% for country in countries %}
+        <option value="{{ country.pk }}" {% if country_id == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.display_name }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="button">{% translate "Search" %}</button>
+</form>
+
+{% if managed %}
+{% with row=managed person=managed.person account=managed.person.user %}
+<div class="section" id="manage">
+    <div class="section__header">
+        <h2>{{ person.full_name }}</h2>
+        <div class="button-row">
+            <a href="{% url 'tasks:technician_edit' person.pk %}" class="button button--secondary">{% translate "Open their record" %}</a>
+            <a href="?{{ list_query }}" class="button button--secondary">{% translate "Close" %}</a>
+        </div>
+    </div>
+    <dl class="detail-grid">
+        <div><dt>{% translate "Status" %}</dt><dd>{% include "tasks/_staff_account_status.html" with status=row.status %}</dd></div>
+        <div><dt>{% translate "Role" %}</dt><dd>{{ person.get_role_display }}</dd></div>
+        <div><dt>{% translate "Country" %}</dt><dd>{{ person.country.display_name }}</dd></div>
+        <div><dt>{% translate "Sign-in name" %}</dt><dd dir="ltr">{{ account.username|default:"—" }}</dd></div>
+        <div><dt>{% translate "Email" %}</dt><dd dir="ltr">{{ account.email|default:"—" }}</dd></div>
+        <div><dt>{% translate "Last sign-in" %}</dt><dd>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd></div>
+        <div><dt>{% translate "Mobile app" %}</dt><dd>{% if person.app_sessions %}{% translate "Signed in" %}{% else %}{% translate "Not signed in" %}{% endif %}</dd></div>
+    </dl>
+
+    {% if not managed.can_manage %}
+    <p class="empty-state">{% translate "This account can only be changed by someone at the same level or above." %}</p>
+    {% elif row.status == 'no_login' %}
+    <p class="field__help">{% translate "No login has been created yet. Create one from their record and a setup link will be sent by email." %}</p>
+    {% elif row.status == 'left' %}
+    <p class="field__help">{% translate "This person has left the company, so their login is disabled. Reactivate them from their record should they return." %}</p>
+    {% else %}
+    <div class="account-panel__actions">
+        {% if row.status == 'locked' %}
+        {% include "tasks/_staff_account_action.html" with action="unlock" label=_("Unlock now") %}
+        {% endif %}
+        {% if account.is_active %}
+        {% if account.email %}
+        {% include "tasks/_staff_account_action.html" with action="send_setup_link" label=_("Send setup link") %}
+        {% endif %}
+        {% include "tasks/_staff_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% if person.app_sessions %}
+        {% include "tasks/_staff_account_action.html" with action="sign_out_phones" label=_("Sign out of all devices") %}
+        {% endif %}
+        {% include "tasks/_staff_account_action.html" with action="disable" label=_("Disable login") %}
+        {% else %}
+        {% include "tasks/_staff_account_action.html" with action="enable" label=_("Enable login") %}
+        {% endif %}
+        <form method="post" class="row-actions__inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_email">
+            <input type="hidden" name="technician" value="{{ person.pk }}">
+            <input type="hidden" name="return_query" value="{{ return_query }}">
+            <input type="email" name="email" required placeholder="{% translate 'New email' %}" aria-label="{% translate 'New email' %}">
+            <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+        </form>
+    </div>
+    <p class="field__help">{% translate "Link not received or expired: send a new setup link (please verify the email address first). Forgotten password: send a setup link, or set a temporary password and read it to them if email is unavailable. Lost or reassigned phone: sign them out of all devices. Locked out: unlock the account. Extended absence: disable their login." %}</p>
+    {% endif %}
+</div>
+{% endwith %}
+{% endif %}
+
+<div class="section">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Role" %}</th>
+                    <th>{% translate "Country" %}</th>
+                    <th>{% translate "Sign-in name" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Last sign-in" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in page_obj %}
+                {% with person=row.person account=row.person.user %}
+                <tr>
+                    <td><a href="?{% if list_query %}{{ list_query }}&{% endif %}manage={{ person.pk }}#manage">{{ person.full_name }}</a></td>
+                    <td>{{ person.get_role_display }}</td>
+                    <td>{{ person.country.display_name }}</td>
+                    <td dir="ltr">{{ account.username|default:"—" }}</td>
+                    <td>{% include "tasks/_staff_account_status.html" with status=row.status %}</td>
+                    <td>{{ account.last_login|date:"SHORT_DATE_FORMAT"|default:"—" }}</td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="6"><p class="empty-state">{% translate "No staff match the selected filters." %}</p></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="button-row">
+        {% if page_obj.has_previous %}<a href="?{% if return_query %}{{ return_query }}&{% endif %}page={{ page_obj.previous_page_number }}" class="back-link">{% translate "Previous" %}</a>{% endif %}
+        {% if page_obj.has_next %}<a href="?{% if return_query %}{{ return_query }}&{% endif %}page={{ page_obj.next_page_number }}" class="forward-link">{% translate "Next" %}</a>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -5,7 +5,8 @@ from django.utils.html import format_html
 
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, Task, TaskAsset, TaskAssignment,
-    TaskAttachment, TaskEvent, TaskProduct, TicketInternalNote, TicketReply,
+    TaskAttachment, TaskEvent, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
+    TicketNotification, TicketReply,
 )
 
 
@@ -38,6 +39,12 @@ class TaskAdmin(admin.ModelAdmin):
     search_fields = ['task_number', 'site__name', 'description']
     list_filter = ['status', 'priority', 'billing_type', 'source', 'is_warranty']
     inlines = [TaskAssignmentInline, TaskAttachmentInline, TaskAssetInline, TaskProductInline]
+
+    def has_delete_permission(self, request, obj=None):
+        # A task is never deleted, from anywhere — one that's no longer
+        # needed is closed or cancelled by a manager/admin instead, so its
+        # history stays.
+        return False
 
 
 def _has_file(field_name):
@@ -212,6 +219,9 @@ class TaskEventAdmin(admin.ModelAdmin):
     list_display = ['task', 'event_type', 'occurred_at', 'actor']
     search_fields = ['task__task_number']
     list_filter = ['event_type']
+    # The original time is never overwritten (docs: "Correcting a
+    # forgotten tap") — corrections go through task detail, with a reason.
+    readonly_fields = ['occurred_at', 'corrected_at', 'corrected_by', 'correction_reason']
 
 
 @admin.register(ScheduleChangeRequest)
@@ -275,3 +285,23 @@ class TicketReplyAdmin(admin.ModelAdmin):
 class TicketInternalNoteAdmin(admin.ModelAdmin):
     list_display = ['ticket', 'author', 'created_at']
     search_fields = ['ticket__company_name', 'message']
+
+
+@admin.register(TicketNotification)
+class TicketNotificationAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'kind', 'created_at', 'seen_at']
+    list_filter = ['kind']
+    search_fields = ['ticket__company_name']
+
+
+@admin.register(TaskNotification)
+class TaskNotificationAdmin(admin.ModelAdmin):
+    list_display = ['task', 'created_at', 'seen_at']
+    search_fields = ['task__task_number']
+
+
+@admin.register(TicketEscalation)
+class TicketEscalationAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'escalated_by', 'escalated_to', 'decision', 'escalated_at', 'decided_at']
+    list_filter = ['decision']
+    search_fields = ['ticket__ticket_number']

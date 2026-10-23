@@ -12,6 +12,15 @@ class SeedReferenceDataTests(TestCase):
         self.assertEqual(egypt.name_ar, 'مصر')
         self.assertEqual(Country.objects.count(), 9)
 
+    def test_country_display_name_follows_active_language(self):
+        egypt = Country.objects.get(iso_code='EG')
+        with translation.override('en'):
+            self.assertEqual(egypt.display_name, 'Egypt')
+            self.assertEqual(str(egypt), 'Egypt')
+        with translation.override('ar'):
+            self.assertEqual(egypt.display_name, 'مصر')
+            self.assertEqual(str(egypt), 'مصر')
+
     def test_skills_are_brand_agnostic_repair_tasks(self):
         # 0003/0005 originally seeded 21 brand-based skills (18 brands +
         # Panatta/Skillcore cardio lines) — 0011 deactivates all of those

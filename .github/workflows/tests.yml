@@ -1,4 +1,4 @@
-name: Tests
+name: Tests & Deploy
 
 on:
   push:
@@ -55,3 +55,19 @@ jobs:
 
       - name: Run tests
         run: python manage.py test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    # Only an actual push to master redeploys — a PR run stops at the test
+    # job above, same as before this was added.
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+
+    steps:
+      # render.yaml turns off Render's own deploy-on-push (autoDeployTrigger:
+      # off) specifically so this is the only thing that can trigger one —
+      # tests have to pass first. The hook URL comes from the service's own
+      # Settings tab in the Render dashboard (see render.yaml's own
+      # comment for the one-time setup).
+      - name: Trigger Render deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"

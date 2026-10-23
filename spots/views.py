@@ -1,19 +1,91 @@
+from django.conf import settings
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import redirect
+from django.http import HttpResponseRedirect
+from django.utils import translation
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
+from django.shortcuts import redirect, render
 
-from people.models import Technician
+from tasks.forms import NewPasswordForm
+from tasks.views import home_summary, send_password_changed_email
+
+
+@require_POST
+def set_language(request):
+    """The header language toggle posts here — same shape as Django's own
+    django.views.i18n.set_language (this URL replaces it, same name, so
+    no template needs to know), but for a signed-in technician or
+    customer it updates their saved language field instead of just the
+    session. spots.middleware.TechnicianLocaleMiddleware re-activates
+    that stored language on every request for them, so a session-only
+    change would silently revert on the very next page load — this is
+    the same preference My Profile's own language field already sets,
+    just reachable from anywhere. An anonymous visitor (the login pages)
+    still gets the ordinary session/cookie switch, since there's no
+    profile yet to save it to.
+    """
+    language = request.POST.get('language')
+    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or '/'
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = '/'
+    response = HttpResponseRedirect(next_url)
+    if not language or language not in dict(settings.LANGUAGES):
+        return response
+
+    technician = getattr(request.user, 'technician', None)
+    customer = getattr(request.user, 'customer', None)
+    if technician is not None:
+        technician.language = language
+        technician.save(update_fields=['language'])
+    elif customer is not None:
+        customer.language = language
+        customer.save(update_fields=['language'])
+    else:
+        translation.activate(language)
+        response.set_cookie(
+            settings.LANGUAGE_COOKIE_NAME, language,
+            max_age=settings.LANGUAGE_COOKIE_AGE, path=settings.LANGUAGE_COOKIE_PATH,
+            domain=settings.LANGUAGE_COOKIE_DOMAIN, secure=settings.LANGUAGE_COOKIE_SECURE,
+            httponly=settings.LANGUAGE_COOKIE_HTTPONLY, samesite=settings.LANGUAGE_COOKIE_SAMESITE,
+        )
+    return response
+
+
+class PasswordResetConfirmView(auth_views.PasswordResetConfirmView):
+    """Django's emailed "forgot password" link, with the same plain
+    password form as everywhere else — and, like any password change,
+    it emails them that it changed. Their phones stay signed in.
+    """
+    form_class = NewPasswordForm
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        send_password_changed_email(form.user)
+        return response
 
 
 @login_required
 def home(request):
-    """Land supervisors/managers on the task list, a customer login on
-    their own portal, and everyone else (a technician) on their own week.
+    """Land any staff login on the home page — what's waiting on them
+    and their visits today (tasks.views.home_summary), then a link to
+    every page they can open, from the same list as the header menu
+    (people.context_processors.nav_pages), so each role sees only its own
+    pages. A customer login lands on their own portal instead.
     One shared login page for every account type — this is the only
-    place that has to know how to route each of them afterward.
+    place that has to know how to route each of them afterward. Either
+    kind, still on a temporary system-generated password, is routed to
+    set a real one first — same reasoning as customers.views.portal_login,
+    just the staff-side entry point.
     """
-    if hasattr(request.user, 'customer'):
+    customer = getattr(request.user, 'customer', None)
+    if customer is not None:
+        if customer.must_change_password:
+            return redirect('customers:portal_first_login')
         return redirect('customers:portal_home')
     technician = getattr(request.user, 'technician', None)
-    if technician and (technician.role == Technician.Role.SUPERVISOR or technician.is_manager_tier):
-        return redirect('tasks:task_list')
-    return redirect('tasks:my_week')
+    if technician is None:
+        return redirect('tasks:dashboard')
+    if technician.must_change_password:
+        return redirect('tasks:first_login')
+    return render(request, 'welcome.html', home_summary(request, technician))

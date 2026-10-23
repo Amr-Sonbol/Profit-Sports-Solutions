@@ -6,21 +6,24 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:my_task_detail' task.pk %}" class="back-link">{% translate "Back to task" %}</a>
+        <a href="{{ back_url }}" class="back-link">{% translate "Back to task" %}</a>
         <h1><span class="task-number">{{ task.task_number }}</span> {% translate "— Report" %}</h1>
     </div>
 </div>
 
 {% if report %}
 <p class="flash flash--info">
-    {% translate "This task already has a report — saving below updates it." %}
+    {% translate "This task already has a report. Saving below will update it." %}
 </p>
 {% endif %}
-<form method="post" enctype="multipart/form-data" novalidate>
+<form method="post" enctype="multipart/form-data" class="report-form" data-report-form novalidate data-locate>
     {% csrf_token %}
 
     <div class="section">
         <h2>{% translate "Report" %}</h2>
+        {% if report.signed_content %}
+        <p class="flash flash--info" data-staff-only>{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}The customer signed this report on {{ date }}. If you change it, please ask the customer to sign again; otherwise it will be marked as changed after signing.{% endblocktranslate %}</p>
+        {% endif %}
         {% if report_form.non_field_errors %}
             <p class="flash flash--error">{{ report_form.non_field_errors }}</p>
         {% endif %}
@@ -40,22 +43,27 @@
                 {{ report_form.resolved }}
                 {% for error in report_form.resolved.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="field {% if report_form.labour_hours.errors %}field--error{% endif %}">
+            <div class="field {% if report_form.labour_hours.errors %}field--error{% endif %}" data-staff-only>
                 <label for="{{ report_form.labour_hours.id_for_label }}">{{ report_form.labour_hours.label }}</label>
                 {{ report_form.labour_hours }}
                 {% for error in report_form.labour_hours.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            <div class="field {% if report_form.customer_name.errors %}field--error{% endif %}">
-                <label for="{{ report_form.customer_name.id_for_label }}">{{ report_form.customer_name.label }}</label>
-                {{ report_form.customer_name }}
-                {% for error in report_form.customer_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
-            <div class="field {% if report_form.signature.errors %}field--error{% endif %}">
-                <label for="{{ report_form.signature.id_for_label }}">{{ report_form.signature.label }}</label>
-                {{ report_form.signature }}
-                {% for error in report_form.signature.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% if report_form.helpers %}
+        <div data-staff-only>
+            <h3>{% translate "Helpers' hours" %}</h3>
+            <p class="field__help">{% translate "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early." %}</p>
+            <div class="form-grid">
+                {% for field in report_form.helper_fields %}
+                <div class="field {% if field.errors %}field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     {{ existing_formset.management_form }}
@@ -63,7 +71,7 @@
         <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
     {% endif %}
     {% if has_existing_assets %}
-    <div class="section">
+    <div class="section" data-staff-only>
         <h2>{% translate "Machines covered this visit" %}</h2>
         <div class="table-wrap">
             <table>
@@ -89,7 +97,7 @@
     </div>
     {% endif %}
 
-    <div class="section">
+    <div class="section" data-staff-only>
         <h2>{% translate "New machines found" %}</h2>
         {{ new_formset.management_form }}
         {% if new_formset.non_form_errors %}
@@ -135,8 +143,8 @@
                         <th>{% translate "Part code" %}</th>
                         <th>{% translate "Description" %}</th>
                         <th>{% translate "Qty" %}</th>
-                        <th>{% translate "Unit cost" %}</th>
-                        <th>{% translate "Currency" %}</th>
+                        <th data-staff-only>{% translate "Unit cost" %}</th>
+                        <th data-staff-only>{% translate "Currency" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -145,8 +153,8 @@
                         <td>{{ form.part_code }}</td>
                         <td>{{ form.description }}</td>
                         <td>{{ form.quantity }}</td>
-                        <td>{{ form.unit_cost }}</td>
-                        <td>{{ form.currency_code }}</td>
+                        <td data-staff-only>{{ form.unit_cost }}</td>
+                        <td data-staff-only>{{ form.currency_code }}</td>
                     </tr>
                     {% if form.errors %}
                     <tr><td colspan="5"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
@@ -158,7 +166,64 @@
     </div>
 
     <div class="section">
+        <h2>{% translate "Customer sign-off" %}</h2>
+        <p class="field__help" data-staff-only>{% translate "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step." %}</p>
+        <p data-signoff-start hidden data-staff-only>
+            <button type="button" class="button button--secondary">{% translate "Hand to customer for signature" %}</button>
+        </p>
+        <div class="form-grid">
+            <div class="field {% if report_form.customer_name.errors %}field--error{% endif %}">
+                <label for="{{ report_form.customer_name.id_for_label }}">{{ report_form.customer_name.label }}</label>
+                {{ report_form.customer_name }}
+                {% for error in report_form.customer_name.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field {% if report_form.signature.errors %}field--error{% endif %}">
+                <label for="{{ report_form.signature.id_for_label }}">{{ report_form.signature.label }}</label>
+                <div class="signature-pad" data-signature-pad hidden>
+                    <canvas class="signature-pad__canvas" aria-label="{% translate 'Signature pad' %}"></canvas>
+                    <button type="button" class="button button--secondary" data-signature-clear>{% translate "Clear signature" %}</button>
+                    {% if report.signature_url %}<p class="field__help">{% translate "A signature is already on record. Sign again only if you wish to replace it." %}</p>{% endif %}
+                    <p class="field__help">{% translate "Alternatively, upload a photo of a signed paper copy:" %}</p>
+                </div>
+                {{ report_form.signature_drawn }}
+                {{ report_form.signature }}
+                {% if report_form.require_signature %}<p class="field__help">{% translate "Required for this type of task." %}</p>{% endif %}
+                {% for error in report_form.signature.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field field--checkbox signature-waiver" data-staff-only>
+                <label>{{ report_form.signature_waived }} {{ report_form.signature_waived.label }}</label>
+            </div>
+            <div class="field signature-waiver__reason {% if report_form.signature_waived_reason.errors %}field--error{% endif %}" data-staff-only>
+                <label for="{{ report_form.signature_waived_reason.id_for_label }}">{{ report_form.signature_waived_reason.label }}</label>
+                {{ report_form.signature_waived_reason }}
+                {% for error in report_form.signature_waived_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {# Left visible while the customer signs, so they can check where their copy goes. #}
+            <div class="field {% if report_form.send_copy_to.errors %}field--error{% endif %}">
+                <label for="{{ report_form.send_copy_to.id_for_label }}">{{ report_form.send_copy_to.label }}</label>
+                {{ report_form.send_copy_to }}
+                <div class="field__help">{{ report_form.send_copy_to.help_text }}{% if report.copy_sent_at %} {% blocktranslate with email=report.copy_sent_to date=report.copy_sent_at|date:"j F Y, H:i" %}A copy was sent to {{ email }} on {{ date }}.{% endblocktranslate %}{% endif %}</div>
+                {% for error in report_form.send_copy_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+        </div>
+        <p data-signing-only>
+            <button type="button" class="button" data-signoff-done>{% translate "Completed — return to the technician" %}</button>
+        </p>
+    </div>
+
+    <div class="section" data-staff-only>
         <button type="submit" class="button">{% translate "Save report" %}</button>
     </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+{% if catalogue_parts %}
+<datalist id="parts-catalogue">
+    {% for part in catalogue_parts %}<option value="{{ part.code }}">{{ part.description }}</option>{% endfor %}
+</datalist>
+{% endif %}
+{% load static %}
+<script src="{% static 'js/signature-pad.js' %}" defer></script>
+<script src="{% static 'js/tap-location.js' %}" defer></script>
 {% endblock %}

@@ -1,0 +1,5 @@
+{% comment %}One headline number. A link when `url` is given (plus `query`, without the "?"); `level` is "warning" or "critical" when the number needs attention.{% endcomment %}
+{% if url %}<a href="{{ url }}{% if query %}?{{ query }}{% endif %}" class="stat-tile stat-tile--link{% if level %} stat-tile--{{ level }}{% endif %}">{% else %}<div class="stat-tile{% if level %} stat-tile--{{ level }}{% endif %}">{% endif %}
+    <span class="stat-tile__value">{{ value }}</span>
+    <span class="stat-tile__label">{{ label }}</span>
+{% if url %}</a>{% else %}</div>{% endif %}

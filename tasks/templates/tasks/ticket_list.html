@@ -32,7 +32,7 @@
         </select>
     </div>
     <div class="field">
-        <label for="filter-company">{% translate "Company (as typed)" %}</label>
+        <label for="filter-company">{% translate "Company (as entered)" %}</label>
         <input type="text" id="filter-company" name="company" value="{{ company }}">
     </div>
     <div class="field">
@@ -47,6 +47,15 @@
         <label for="filter-date">{% translate "Date submitted" %}</label>
         <input type="date" id="filter-date" name="date" value="{{ date }}">
     </div>
+    {% if can_view_all_countries %}
+    <div class="field">
+        <label for="filter-country">{% translate "Country" %}</label>
+        <select id="filter-country" name="country">
+            <option value="">{{ active_country.display_name }}</option>
+            <option value="all" {% if all_countries %}selected{% endif %}>{% translate "All countries" %}</option>
+        </select>
+    </div>
+    {% endif %}
     <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
 
@@ -56,6 +65,7 @@
             <tr>
                 <th>{% translate "Ticket" %}</th>
                 <th>{% translate "Submitted" %}</th>
+                {% if all_countries %}<th>{% translate "Country" %}</th>{% endif %}
                 <th>{% translate "Company" %}</th>
                 <th>{% translate "Site / location" %}</th>
                 <th>{% translate "Contact" %}</th>
@@ -68,26 +78,30 @@
             <tr>
                 <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                {% if all_countries %}<td>{{ ticket.country.display_name }}</td>{% endif %}
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>
+                    {% if ticket.is_escalated %}
+                    <span class="badge badge--bad">{% translate "Escalated" %}</span>
+                    {% endif %}
                     {% if ticket.status == 'new' %}
-                    <span class="badge badge--status-new">{% translate "New" %}</span>
+                    <span class="badge badge--neutral">{% translate "New" %}</span>
                     {% elif ticket.status == 'converted' %}
-                    <span class="badge badge--status-completed">{% translate "Converted to task" %}</span>
+                    <span class="badge badge--good">{% translate "Converted to task" %}</span>
                     {% elif ticket.status == 'closed' %}
-                    <span class="badge badge--status-completed">{% translate "Closed" %}</span>
+                    <span class="badge badge--good">{% translate "Closed" %}</span>
                     {% else %}
-                    <span class="badge badge--status-blocked">{% translate "Dismissed" %}</span>
+                    <span class="badge badge--bad">{% translate "Dismissed" %}</span>
                     {% endif %}
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="6">
-                    <p class="empty-state">{% translate "No tickets match this filter." %}</p>
+                <td colspan="8">
+                    <p class="empty-state">{% translate "No tickets match the selected filters." %}</p>
                 </td>
             </tr>
             {% endfor %}

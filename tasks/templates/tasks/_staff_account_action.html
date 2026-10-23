@@ -1,0 +1,7 @@
+{% load i18n %}<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="technician" value="{{ person.pk }}">
+    <input type="hidden" name="return_query" value="{{ return_query }}">
+    <button type="submit" class="button button--secondary">{{ label }}</button>
+</form>

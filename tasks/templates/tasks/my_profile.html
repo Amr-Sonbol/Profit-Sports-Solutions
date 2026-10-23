@@ -9,73 +9,105 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Overview" %}</h2>
+    <h2>{% translate "Account" %}</h2>
+    <div class="profile-card">
+        {% include "_avatar.html" with technician=technician size="lg" %}
+        <dl class="detail-grid">
+            <div>
+                <dt>{% translate "Name" %}</dt>
+                <dd>{{ technician.full_name }}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Role" %}</dt>
+                <dd>{{ technician.get_role_display }}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Country" %}</dt>
+                <dd>{{ technician.country.display_name }}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Sign-in name" %}</dt>
+                <dd dir="ltr">{{ user.get_username }}</dd>
+            </div>
+        </dl>
+    </div>
+</div>
+
+{% if is_field_staff %}
+<div class="section">
+    <div class="section__header">
+        <h2>{% translate "Performance overview" %}</h2>
+        <a href="{% url 'tasks:my_progress' %}" class="forward-link">{% translate "See full progress" %}</a>
+    </div>
     <dl class="detail-grid">
-        <div>
-            <dt>{% translate "Country" %}</dt>
-            <dd>{{ technician.country.name }}</dd>
-        </div>
-        <div>
-            <dt>{% translate "Role" %}</dt>
-            <dd>{{ technician.get_role_display }}</dd>
-        </div>
         <div>
             <dt>{% translate "Professional skills" %}</dt>
             <dd>
                 {% if certification.is_certified %}
-                <span class="badge badge--status-completed">{% translate "Certified technician" %}</span>
+                <span class="badge badge--good">{% translate "Certified technician" %}</span>
                 {% else %}
-                <span class="badge badge--status-blocked">
+                <span class="badge badge--bad">
                     {{ certification.non_cardio_certified|add:certification.conduct_certified }}
                     /
                     {{ certification.non_cardio_total|add:certification.conduct_total }}
                 </span>
                 {% endif %}
                 {% if certification.cardio_ready %}
-                <span class="badge badge--muted">{% translate "Cardio-ready" %}</span>
+                <span class="badge badge--muted">{% translate "Ready for advanced level" %}</span>
                 {% endif %}
             </dd>
         </div>
         {% if ninety_day %}
         <div>
-            <dt>{% translate "90-day track" %}</dt>
+            <dt>{% translate "90-day progress" %}</dt>
             <dd>
                 {% if ninety_day.on_track %}
-                <span class="badge badge--status-completed">
-                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left{% endblocktranslate %}
+                <span class="badge badge--good">
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining{% endblocktranslate %}
                 </span>
                 {% else %}
-                <span class="badge badge--status-blocked">
-                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }}d left — behind{% endblocktranslate %}
+                <span class="badge badge--bad">
+                    {% blocktranslate with days=ninety_day.days_remaining %}{{ days }} days remaining — behind schedule{% endblocktranslate %}
                 </span>
                 {% endif %}
             </dd>
         </div>
         {% endif %}
+        {% if rank %}
         <div>
-            <dt>{% translate "Standing in your country" %}</dt>
-            <dd>{% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}</dd>
+            <dt>{% translate "Ranking in your country" %}</dt>
+            <dd>{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}</dd>
         </div>
+        {% endif %}
     </dl>
-    <p><a href="{% url 'tasks:my_progress' %}" class="back-link">{% translate "See full progress" %}</a></p>
 </div>
 
 <div class="section">
-    <h2>{% translate "Supervisors" %}</h2>
-    {% if supervisors %}
-    <ul class="plain-list">
-        {% for person in supervisors %}
-        <li>{{ person.full_name }} <span class="badge badge--muted">{{ person.get_role_display }}</span></li>
+    <h2>{% translate "Your contacts" %}</h2>
+    {% if contacts %}
+    <ul class="contact-list">
+        {% for person in contacts %}
+        <li class="contact-row">
+            {% include "_avatar.html" with technician=person %}
+            <span class="contact-row__name">
+                {{ person.full_name }}<br>
+                <span class="muted">{{ person.get_role_display }}</span>
+            </span>
+            <span class="contact-row__actions">
+                {% if person.phone %}<a href="tel:{{ person.phone }}" class="button button--secondary" dir="ltr">{{ person.phone }}</a>{% endif %}
+                {% if person.user.email %}<a href="mailto:{{ person.user.email }}" class="button button--secondary">{% translate "Email" %}</a>{% endif %}
+            </span>
+        </li>
         {% endfor %}
     </ul>
     {% else %}
-    <p class="empty-state">{% translate "No supervisor or manager set up in your country yet." %}</p>
+    <p class="empty-state">{% translate "No supervisor or manager has been set up in your country." %}</p>
     {% endif %}
 </div>
+{% endif %}
 
 <div class="section">
-    <h2>{% translate "Photo & language" %}</h2>
-    {% include "_avatar.html" with technician=technician size="lg" %}
+    <h2>{% translate "Your details" %}</h2>
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="save_profile">
@@ -95,27 +127,15 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Security" %}</h2>
-    <input type="checkbox" id="toggle-change-password" class="toggle-checkbox" hidden {% if password_form.errors %}checked{% endif %}>
-    <label for="toggle-change-password" class="add-new-toggle">{% translate "Change password" %}</label>
-    <fieldset class="new-item-fieldset">
-        <legend>{% translate "Change password" %}</legend>
-        <form method="post" novalidate>
+    <h2>{% translate "Password" %}</h2>
+    <details class="disclosure"{% if password_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "Change password" %}</summary>
+        <form method="post" class="disclosure__body" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="change_password">
-            {% if password_form.non_field_errors %}
-                <p class="flash flash--error">{{ password_form.non_field_errors }}</p>
-            {% endif %}
-            {% for field in password_form %}
-            <div class="field {% if field.errors %}field--error{% endif %}">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<div class="field__help">{{ field.help_text }}</div>{% endif %}
-                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
-            {% endfor %}
-            <button type="submit" class="button">{% translate "Change password" %}</button>
+            {% include "_password_fields.html" with form=password_form %}
+            <button type="submit" class="button">{% translate "Save new password" %}</button>
         </form>
-    </fieldset>
+    </details>
 </div>
 {% endblock %}

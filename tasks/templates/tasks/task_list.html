@@ -14,13 +14,23 @@
         {% endfor %}
     </nav>
     <div class="button-row">
-        <a href="{% url 'tasks:task_week' %}" class="button button--secondary">{% translate "Week view" %}</a>
-        <a href="{% url 'tasks:task_create' %}" class="button">{% translate "New task" %}</a>
+        <a href="{% url 'tasks:task_week' %}" class="button button--secondary">{% translate "Schedule" %}</a>
+        {% if 'create_tasks' in role_permissions %}<a href="{% url 'tasks:task_create' %}" class="button">{% translate "New task" %}</a>{% endif %}
     </div>
 </div>
 
+{% if quick_filters %}
+<p class="quick-filter">
+    {% translate "Filtered by:" %} <strong>{{ quick_filters|join:", " }}</strong>
+    <a href="?status={{ status }}">{% translate "Show all" %}</a>
+</p>
+{% endif %}
+
 <form method="get" class="filters">
     <input type="hidden" name="status" value="{{ status }}">
+    {% for key, value in quick_filter_params.items %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
     <div class="field">
         <label for="filter-task-id">{% translate "Task number" %}</label>
         <input type="text" id="filter-task-id" name="task_id" value="{{ task_id }}">
@@ -57,6 +67,15 @@
     </select>
     <input type="date" name="scheduled_from" value="{{ scheduled_from }}" title="{% translate 'Scheduled from' %}">
     <input type="date" name="scheduled_to" value="{{ scheduled_to }}" title="{% translate 'Scheduled to' %}">
+    {% if can_view_all_countries %}
+    <div class="field">
+        <label for="filter-country">{% translate "Country" %}</label>
+        <select id="filter-country" name="country">
+            <option value="">{{ active_country.display_name }}</option>
+            <option value="all" {% if all_countries %}selected{% endif %}>{% translate "All countries" %}</option>
+        </select>
+    </div>
+    {% endif %}
     <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
 
@@ -65,6 +84,7 @@
         <thead>
             <tr>
                 <th>{% translate "Task #" %}</th>
+                {% if all_countries %}<th>{% translate "Country" %}</th>{% endif %}
                 <th>{% translate "Customer / Site" %}</th>
                 <th>{% translate "Type" %}</th>
                 <th>{% translate "Priority" %}</th>
@@ -78,6 +98,7 @@
             {% for task in page_obj %}
             <tr>
                 <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
+                {% if all_countries %}<td>{{ task.site.customer.country.display_name }}</td>{% endif %}
                 <td>
                     {{ task.site.customer.name }}
                     <div class="muted">{{ task.site.name }}</div>
@@ -91,7 +112,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="8">
+                <td colspan="9">
                     <p class="empty-state">{% translate "No tasks match these filters." %}</p>
                 </td>
             </tr>

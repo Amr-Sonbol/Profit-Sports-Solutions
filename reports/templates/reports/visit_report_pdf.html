@@ -1,0 +1,122 @@
+{% load i18n static %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'en' }}" dir="{% if is_rtl %}rtl{% else %}ltr{% endif %}">
+<head>
+<meta charset="utf-8">
+<title>{% translate "Visit Report" %} — {{ task.task_number }}</title>
+<style>
+    @font-face { font-family: "Play"; src: url("{% static 'reports/Play-Regular.ttf' %}"); }
+    @font-face { font-family: "Play"; font-weight: bold; src: url("{% static 'reports/Play-Bold.ttf' %}"); }
+
+    @page {
+        size: A4;
+        margin: 3.1cm 2cm 2.5cm;
+        @top-center { content: element(letterhead); vertical-align: bottom; padding-block-end: 0.4cm; }
+        @bottom-center { content: element(footer); vertical-align: top; }
+    }
+
+    html { font-family: "Play", "Noto Sans Arabic", "Noto Sans", sans-serif; font-size: 9.5pt; line-height: 1.4; color: #111; }
+    body { margin: 0; }
+    .letterhead { position: running(letterhead); }
+    .letterhead img { inline-size: 17cm; }
+    .footer { position: running(footer); text-align: center; }
+    .footer img { inline-size: 17cm; }
+    .footer__page { font-size: 7.5pt; color: #666; margin-block-start: 0.1cm; }
+    .footer__page::after { content: counter(page) " / " counter(pages); }
+
+    h1 { text-align: center; font-size: 15pt; text-decoration: underline; margin: 0 0 0.3cm; }
+    .reference { color: #c00000; font-weight: bold; margin: 0; }
+    .date { margin: 0 0 0.3cm; }
+    h2 { font-size: 11pt; text-decoration: underline; margin: 0.32cm 0 0.12cm; break-after: avoid; }
+    p { margin: 0 0 0.2cm; }
+    ul { margin: 0; padding-inline-start: 0.6cm; }
+    li { margin-block-end: 0.05cm; }
+
+    table { inline-size: 100%; border-collapse: collapse; margin-block-end: 0.15cm; }
+    th, td { border: 0.6pt solid #222; padding: 0.09cm 0.2cm; text-align: start; vertical-align: top; }
+    th { background: #f2f2f2; font-weight: bold; }
+    .details th { inline-size: 30%; }
+    tr { break-inside: avoid; }
+
+    .signoff { margin-block-start: 0.3cm; break-inside: avoid; }
+    .signoff td { block-size: 1.6cm; }
+    .signoff img { max-block-size: 1.5cm; max-inline-size: 6cm; }
+    .muted { color: #666; }
+    .not-signed { color: #c00000; font-weight: bold; }
+    .changed-note { border: 0.8pt solid #c00000; color: #c00000; padding: 0.15cm 0.25cm; margin-block-end: 0.3cm; }
+</style>
+</head>
+<body>
+<div class="letterhead"><img src="{% static 'reports/letterhead-header.png' %}" alt="Profit Sports Solutions"></div>
+<div class="footer">
+    <img src="{% static 'reports/letterhead-footer.png' %}" alt="">
+    <div class="footer__page" dir="ltr">{{ task.task_number }} · </div>
+</div>
+
+<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% translate "Visit Report" %}</h1>
+<p class="reference">{{ task.task_number }}</p>
+<p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
+{% if changed_after_signing %}
+<p class="changed-note">{% blocktranslate with date=signed_at|date:"j F Y, H:i" %}This report was changed after the customer signed it on {{ date }}. The signature below applies to the version signed at that time.{% endblocktranslate %}</p>
+{% endif %}
+
+<h2>{% translate "Visit Details" %}</h2>
+<table class="details">
+    <tr><th>{% translate "Client" %}</th><td>{{ customer.name }}</td></tr>
+    <tr><th>{% translate "Site" %}</th><td>{{ site.name }}{% if site.address %}, {{ site.address }}{% endif %}, {{ customer.country.display_name }}</td></tr>
+    <tr><th>{% translate "Visit date" %}</th><td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j F Y" }}{% else %}{{ report.submitted_at|date:"j F Y" }}{% endif %}</td></tr>
+    {% if task.task_type %}<tr><th>{% translate "Visit type" %}</th><td>{{ task.task_type.display_name }}</td></tr>{% endif %}
+    {% if task.description %}<tr><th>{% translate "Scope" %}</th><td>{{ task.description|linebreaksbr }}</td></tr>{% endif %}
+    <tr><th>{% translate "Performed by" %}</th><td>{% for person in team %}{{ person.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{% translate "Profit Sports Solutions technical team" %}{% endfor %}</td></tr>
+</table>
+
+{% if work_lines %}
+<h2>{% translate "Work Performed" %}</h2>
+<ul>{% for line in work_lines %}<li>{{ line }}</li>{% endfor %}</ul>
+{% endif %}
+
+<h2>{% translate "Findings & Actions" %}</h2>
+<p>{{ content.findings|linebreaksbr }}</p>
+{% if machines %}
+<table>
+    <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Status" %}</th></tr></thead>
+    <tbody>
+        {% for machine in machines %}
+        <tr>
+            <td>{{ machine.name }}</td>
+            <td dir="ltr">{{ machine.serial|default:"—" }}</td>
+            <td>{{ machine.outcome_label }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if parts %}
+<h2>{% translate "Parts Used" %}</h2>
+<table>
+    <thead><tr><th>{% translate "Part code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th></tr></thead>
+    <tbody>
+        {% for part in parts %}
+        <tr><td dir="ltr">{{ part.code }}</td><td>{{ part.description|default:"—" }}</td><td>{{ part.quantity }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+<h2>{% translate "Overall Condition" %}</h2>
+<p>{% if content.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>
+
+<h2>{% translate "Customer Sign-off" %}</h2>
+<table class="signoff">
+    <thead><tr><th>{% translate "Name" %}</th><th>{% translate "Signature" %}</th><th>{% translate "Date and time" %}</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>{{ content.customer_name|default:"—" }}</td>
+            <td>{% if signature_url %}<img src="{{ signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted">{{ report.signature_waived_reason }}</span>{% endif %}{% endif %}</td>
+            <td>{{ signed_at|date:"j F Y, H:i" }}</td>
+        </tr>
+    </tbody>
+</table>
+<p class="muted">{% translate "Hours and prices are not included in this report." %}</p>
+</body>
+</html>

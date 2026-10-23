@@ -1,0 +1,9 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ contact }},</p>
+<p style="margin:0 0 16px;">Your Profit Sports Solutions account has been created. Please set your password using the secure button below. The link is valid for {{ days }} days and can be used once.</p>
+{% include "tasks/email/_button.html" with url=link label="Set your password" %}
+<p style="margin:0 0 16px;">Your username: <strong>{{ username }}</strong></p>
+<p style="margin:0 0 16px;">If the link has expired, please ask your manager to send a new one.</p>
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}
