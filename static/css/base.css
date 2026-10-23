@@ -1028,6 +1028,21 @@ tbody tr:hover {
     margin: 0;
 }
 
+/* The three skill tables share column widths, so their columns line up. */
+.skills-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.skills-table__name {
+    inline-size: 38%;
+}
+
+.skills-table__level {
+    inline-size: 22%;
+}
+
 .rate-form {
     margin-block-start: 0.4rem;
 }
