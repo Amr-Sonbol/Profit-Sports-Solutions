@@ -3665,6 +3665,9 @@ class MyProgressTests(TaskTestCase):
             TaskEvent.objects.create(
                 task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=now, actor=self.tech_user,
             )
+        # On the system for over a year: the chart shows the last year.
+        self.tech_user.date_joined = now - timedelta(days=500)
+        self.tech_user.save(update_fields=['date_joined'])
         self.client.login(username='tech1', password='pass12345')
         chart = self.client.get('/tasks/my-progress/').context['trend_chart']
         self.assertEqual(len(chart['periods']), 12)
@@ -3674,6 +3677,25 @@ class MyProgressTests(TaskTestCase):
         points = chart['line_points'].split()
         self.assertEqual(len(points), 12)
         self.assertEqual(points[-1].split(',')[1], str(100 - chart['periods'][-1]['completed_pct']))
+
+    def test_the_chart_starts_the_month_the_account_was_created(self):
+        this_month = timezone.localdate().replace(day=1)
+        three_months_ago = this_month
+        for _month in range(3):
+            three_months_ago = (three_months_ago - timedelta(days=1)).replace(day=1)
+        self.tech_user.date_joined = timezone.make_aware(datetime.combine(three_months_ago, datetime.min.time()))
+        self.tech_user.save(update_fields=['date_joined'])
+        self.client.login(username='tech1', password='pass12345')
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
+        self.assertEqual([period['start'] for period in chart['periods']][0], three_months_ago)
+        self.assertEqual(len(chart['periods']), 4)
+
+        # Their very first month: one point, nothing to compare with yet.
+        self.tech_user.date_joined = timezone.now()
+        self.tech_user.save(update_fields=['date_joined'])
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
+        self.assertEqual(len(chart['periods']), 1)
+        self.assertIsNone(chart['change'])
 
     def test_my_progress_shows_a_chosen_past_month_but_never_a_future_one(self):
         self.client.login(username='tech1', password='pass12345')

@@ -1159,13 +1159,14 @@ def _period_starts(period):
     return [this_monday - timedelta(weeks=n) for n in range(DASHBOARD_CHART_WEEKS - 1, -1, -1)]
 
 
-def _period_chart(opened, completed, period):
-    """Counts per period (see _period_starts) from two lists of datetimes:
-    what came in and what was finished. Bar heights are percentages of a
-    clean top value, so the template draws them without arithmetic. Shared
-    by the dashboard's tickets and tasks charts.
+def _period_chart(opened, completed, period, starts=None):
+    """Counts per period (see _period_starts, or the given `starts`) from
+    two lists of datetimes: what came in and what was finished. Bar
+    heights are percentages of a clean top value, so the template draws
+    them without arithmetic. Shared by the dashboard's tickets and tasks
+    charts and My progress.
     """
-    starts = _period_starts(period)
+    starts = starts or _period_starts(period)
     buckets = {start: {'opened': 0, 'completed': 0} for start in starts}
 
     def bucket_of(moment):
@@ -1206,26 +1207,30 @@ def _tasks_chart(country, period):
 
 
 def _my_trend_chart(technician):
-    """One person's tasks completed per month over the last year, as a
-    line (My progress): the tasks they were on (lead or helper) by their
-    first work report. Each month's `completed_pct` places its point;
-    `line_points` is the SVG polyline through them (x at each month's
-    centre, 0-100 both ways); `change` is this month against last.
+    """One person's tasks completed per month, as a line (My progress):
+    the tasks they were on (lead or helper) by their first work report.
+    It starts the month their account was created, not before (so a new
+    technician doesn't start on months of nothing), and shows at most the
+    last year. Each month's `completed_pct` places its point; `line_points`
+    is the SVG polyline through them (x at each month's centre, 0-100 both
+    ways); `change` is this month against last, None in their first month.
     """
-    since = _period_starts('month')[0]
+    joined = timezone.localtime(technician.user.date_joined).date().replace(day=1)
+    starts = [start for start in _period_starts('month') if start >= joined] or _period_starts('month')[-1:]
+    since = starts[0]
     mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
     completed = TaskEvent.objects.filter(
         event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
     ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
-    chart = _period_chart([], completed, 'month')
+    chart = _period_chart([], completed, 'month', starts=starts)
     periods = chart['periods']
     chart['line_points'] = ' '.join(
         f"{(index + 0.5) * 100 / len(periods):.2f},{100 - period['completed_pct']}"
         for index, period in enumerate(periods)
     )
     chart['this_month'] = periods[-1]['completed']
-    chart['change'] = periods[-1]['completed'] - periods[-2]['completed']
-    chart['change_size'] = abs(chart['change'])
+    chart['change'] = periods[-1]['completed'] - periods[-2]['completed'] if len(periods) > 1 else None
+    chart['change_size'] = abs(chart['change'] or 0)
     return chart
 
 

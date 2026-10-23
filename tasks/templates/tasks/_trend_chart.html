@@ -15,7 +15,7 @@ mirrored to match. "Show as table" lists every month.
             <span class="trend-summary__value">{{ chart.this_month }}</span> {% translate "this month" %}
             {% if chart.change > 0 %}<span class="trend-summary__change">▲ {% blocktranslate with count=chart.change_size %}{{ count }} more than last month{% endblocktranslate %}</span>
             {% elif chart.change < 0 %}<span class="trend-summary__change">▼ {% blocktranslate with count=chart.change_size %}{{ count }} fewer than last month{% endblocktranslate %}</span>
-            {% else %}<span class="trend-summary__change">{% translate "the same as last month" %}</span>{% endif %}
+            {% elif chart.change == 0 %}<span class="trend-summary__change">{% translate "the same as last month" %}</span>{% endif %}
         </p>
     </div>
     <div class="chart trend-chart" role="group" aria-label="{% translate 'Tasks you completed per month' %}">
