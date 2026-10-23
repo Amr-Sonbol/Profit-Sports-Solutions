@@ -39,6 +39,17 @@ class Country(models.Model):
         """weekend_days as a set of ints (Monday = 0), for date.weekday()."""
         return {int(day) for day in self.weekend_days.split(',') if day.strip()}
 
+    @property
+    def first_workday(self):
+        """The weekday its week starts on (Monday = 0): the first working
+        day after the weekend — Saturday with a Friday weekend, Sunday with
+        Friday–Saturday, Monday with Saturday–Sunday (or no weekend).
+        """
+        weekend = self.weekend_weekdays
+        return next(
+            (day for day in range(7) if day not in weekend and (day - 1) % 7 in weekend), 0,
+        )
+
     def __str__(self):
         return self.display_name
 

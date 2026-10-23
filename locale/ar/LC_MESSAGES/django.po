@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:09+0000\n"
+"POT-Creation-Date: 2026-10-23 22:20+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -4379,6 +4379,9 @@ msgstr "أسبوع"
 
 msgid "Week of"
 msgstr "أسبوع"
+
+msgid "Weekend"
+msgstr "عطلة"
 
 msgid "Weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"

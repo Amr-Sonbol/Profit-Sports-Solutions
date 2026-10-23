@@ -666,21 +666,31 @@ def _attach_lead_technician(tasks):
 
 
 
-def _week_window(request):
-    """The (today, start, end) of the 7-day window from ?start=, default this week's Monday."""
+def _week_start(day, country=None):
+    """The first day of the week `day` is in: the country's first working
+    day (Country.first_workday — Saturday in Egypt and Saudi Arabia), or
+    Monday with no country (the all-countries calendar).
+    """
+    first = country.first_workday if country else 0
+    return day - timedelta(days=(day.weekday() - first) % 7)
+
+
+def _week_window(request, country=None):
+    """The (today, start, end) of the 7-day window holding ?start=, or this
+    week; it always starts on the country's first working day."""
     today = timezone.localtime().date()
-    start = parse_date(request.GET.get('start', '') or '') or (today - timedelta(days=today.weekday()))
+    start = _week_start(parse_date(request.GET.get('start', '') or '') or today, country)
     end = start + timedelta(days=WEEK_LENGTH - 1)
     return today, start, end
 
 
-def _week_nav_context(today, start):
+def _week_nav_context(today, start, country=None):
     return {
         'today': today,
         'start': start,
         'prev_start': start - timedelta(days=WEEK_LENGTH),
         'next_start': start + timedelta(days=WEEK_LENGTH),
-        'this_week_start': today - timedelta(days=today.weekday()),
+        'this_week_start': _week_start(today, country),
     }
 
 
@@ -3101,7 +3111,7 @@ def _calendar_day(task):
     return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
 
 
-def _calendar_context(request, tasks):
+def _calendar_context(request, tasks, country=None):
     """A week (default, ?start=) or month (?view=month&month=YYYY-MM) of
     `tasks` laid out by local day, plus the open tasks with no day at all.
     A task booked by day only (scheduled_date) shows on its day too, after
@@ -3112,16 +3122,16 @@ def _calendar_context(request, tasks):
         month = parse_date(f"{request.GET.get('month', '')}-01") or today.replace(day=1)
         next_month = (month + timedelta(days=32)).replace(day=1)
         last_day = next_month - timedelta(days=1)
-        start = month - timedelta(days=month.weekday())
-        end = last_day + timedelta(days=6 - last_day.weekday())
+        start = _week_start(month, country)
+        end = _week_start(last_day, country) + timedelta(days=WEEK_LENGTH - 1)
         nav = {
             'view': 'month', 'today': today, 'month': month, 'start': start,
             'prev_month': (month - timedelta(days=1)).replace(day=1), 'next_month': next_month,
             'this_month': today.replace(day=1),
         }
     else:
-        today, start, end = _week_window(request)
-        nav = {'view': 'week', 'end': end, **_week_nav_context(today, start)}
+        today, start, end = _week_window(request, country)
+        nav = {'view': 'week', 'end': end, **_week_nav_context(today, start, country)}
 
     booked = list(_with_lead_prefetch(
         tasks.filter(
@@ -3144,7 +3154,7 @@ def _calendar_context(request, tasks):
         entry = {
             'date': day, 'tasks': [], 'is_today': day == today,
             'in_month': nav['view'] == 'week' or day.month == nav['month'].month,
-            'week_start': day - timedelta(days=day.weekday()),
+            'week_start': _week_start(day, country),
         }
         days.append(entry)
         by_date[day] = entry['tasks']
@@ -3173,8 +3183,9 @@ def _calendar_context(request, tasks):
 def task_week(request):
     """The schedule calendar for the active country, by week or by month."""
     require_permission(request, RolePermission.Permission.VIEW_TASKS)
-    tasks = Task.objects.filter(site__customer__country=get_active_country(request))
-    return render(request, 'tasks/task_week.html', _calendar_context(request, tasks))
+    country = get_active_country(request)
+    tasks = Task.objects.filter(site__customer__country=country)
+    return render(request, 'tasks/task_week.html', _calendar_context(request, tasks, country))
 
 
 @login_required
@@ -3193,12 +3204,6 @@ NOT_DONE_STATUSES = [
 ]
 
 
-def _task_day(task):
-    """The day a task is planned for: its scheduled_for, in local time, or
-    its scheduled_date when only the day is set; None when neither is."""
-    return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
-
-
 def _week_board(technician, request):
     """(days, overdue, unscheduled, nav_context) for one technician's week.
     Shared by my_week (self) and technician_board (a supervisor viewing
@@ -3214,7 +3219,7 @@ def _week_board(technician, request):
       shown, so a missed job never disappears.
     - unscheduled: open, with no day at all.
     """
-    today, start, end = _week_window(request)
+    today, start, end = _week_window(request, technician.country)
 
     roles = dict(
         TaskAssignment.objects.filter(technician=technician, is_active=True).values_list('task_id', 'role'),
@@ -3233,13 +3238,17 @@ def _week_board(technician, request):
             task.my_role = roles[task.pk]
         return tasks
 
-    days = [{'date': start + timedelta(days=offset), 'tasks': []} for offset in range(WEEK_LENGTH)]
+    weekend = technician.country.weekend_weekdays
+    days = [
+        {'date': day, 'tasks': [], 'is_weekend': day.weekday() in weekend}
+        for day in (start + timedelta(days=offset) for offset in range(WEEK_LENGTH))
+    ]
     tasks_by_date = {day['date']: day['tasks'] for day in days}
     for task in with_role(mine.filter(
         Q(scheduled_for__date__range=(start, end))
         | Q(scheduled_for__isnull=True, scheduled_date__range=(start, end)),
     )):
-        tasks_by_date[_task_day(task)].append(task)
+        tasks_by_date[_calendar_day(task)].append(task)
     for day in days:
         # Timed tasks by time, then the day-only ones.
         day['tasks'].sort(key=lambda task: (
@@ -3250,13 +3259,13 @@ def _week_board(technician, request):
 
     overdue = sorted(with_role(mine.filter(status__in=NOT_DONE_STATUSES).filter(
         Q(scheduled_for__date__lt=today) | Q(scheduled_for__isnull=True, scheduled_date__lt=today),
-    )), key=lambda task: (_task_day(task), task.task_number))
+    )), key=lambda task: (_calendar_day(task), task.task_number))
 
     unscheduled = with_role(mine.filter(
         status__in=OPEN_STATUSES, scheduled_for__isnull=True, scheduled_date__isnull=True,
     ).annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at'))
 
-    return days, overdue, unscheduled, _week_nav_context(today, start)
+    return days, overdue, unscheduled, _week_nav_context(today, start, technician.country)
 
 
 @login_required
@@ -3287,7 +3296,7 @@ def my_progress(request):
     leaderboard = _leaderboard(technician.country)
     rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
 
-    _today, start, end = _week_window(request)
+    _today, start, end = _week_window(request, technician.country)
     my_assignments = TaskAssignment.objects.filter(technician=technician, is_active=True)
 
     assigned_count = Task.objects.filter(

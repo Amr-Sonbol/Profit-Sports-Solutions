@@ -28,6 +28,7 @@ then the open tasks with no day yet.
         <h2>
             {{ day.date|date:"l, j F" }}
             {% if day.date == today %}<span class="badge badge--muted">{% translate "Today" %}</span>{% endif %}
+            {% if day.is_weekend %}<span class="badge badge--neutral">{% translate "Weekend" %}</span>{% endif %}
         </h2>
     </div>
     {% if day.tasks %}

@@ -42,6 +42,7 @@ class TaskTestCase(TestCase):
     def setUp(self):
         self.country = Country.objects.create(
             name='UAE', name_ar='الإمارات', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
+            weekend_days='5,6',  # Saturday–Sunday, so its week starts on Monday
         )
         self.brand = Brand.objects.create(name='Technogym')
         self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
@@ -3555,6 +3556,8 @@ class MyWeekTests(TaskTestCase):
         self.assertEqual(list(response.context['unscheduled']), [task])
 
     def _lead(self, task):
+        self.technician.language = 'en'  # the page text is checked in English
+        self.technician.save(update_fields=['language'])
         TaskAssignment.objects.create(
             task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
             assigned_at=timezone.now(), is_active=True,
@@ -3590,6 +3593,16 @@ class MyWeekTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
         self.assertEqual(sum(len(day['tasks']) for day in response.context['days']), 0)
+
+    def test_the_week_starts_on_the_countrys_first_working_day(self):
+        # Egypt and Saudi Arabia: only Friday off, so the week runs Saturday to Thursday.
+        self.country.weekend_days = '4'
+        self.country.save(update_fields=['weekend_days'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-09'})  # a Wednesday
+        days = response.context['days']
+        self.assertEqual(days[0]['date'], date(2026, 9, 5))  # Saturday
+        self.assertEqual([day['date'] for day in days if day['is_weekend']], [date(2026, 9, 11)])  # Friday
 
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')

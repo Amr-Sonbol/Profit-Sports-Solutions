@@ -51,7 +51,9 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 | weekend_days | varchar | comma-separated weekday numbers, Monday = 0 — `4,5` is Friday–Saturday (the default), `5,6` Saturday–Sunday |
 | is_active | bool | |
 
-**`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia, Egypt, Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.
+**`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia and Egypt are Friday only; Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.
+
+**It also sets where each country's week starts:** the first working day after the weekend (`Country.first_workday`) — Saturday in Saudi Arabia and Egypt, Sunday with a Friday–Saturday weekend, Monday in the UAE. Every week view (My week, a technician's board, the schedule calendar's week and month, My progress's week) starts there and marks the weekend days; the all-countries calendar keeps Monday.
 
 **`task_prefix` exists because the company doesn't use ISO codes at all.** Every seeded country has its own locally-used abbreviation set here — EGY, BAH, QAT, UAE, KSA, OMN, USA, CAN, KWT — none of them the two-letter ISO code. `iso_code` itself is left alone regardless: it stays the real ISO code, in case something else ever needs it to actually be one, and new countries still need `task_prefix` filled in explicitly (it has no default) or their task numbers fall back to that ISO code.
 
