@@ -20,12 +20,12 @@
             <dd>{{ certification.non_cardio_certified }} / {{ certification.non_cardio_total }}</dd>
         </div>
         <div>
-            <dt>{% blocktranslate %}Conduct areas confirmed at level {{ reliable_level }} or higher{% endblocktranslate %}</dt>
-            <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
-        </div>
-        <div>
             <dt>{% translate "Advanced skills confirmed" %}</dt>
             <dd>{{ cardio_confirmed }} / {{ cardio_skills|length }}</dd>
+        </div>
+        <div>
+            <dt>{% blocktranslate %}Conduct areas confirmed at level {{ reliable_level }} or higher{% endblocktranslate %}</dt>
+            <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
         <div>
             <dt>{% translate "Waiting for supervisor review" %}</dt>
