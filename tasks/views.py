@@ -4808,13 +4808,58 @@ def task_report_correct(request, pk):
     return _report_form(request, task, manager, reverse('tasks:task_detail', args=[task.pk]))
 
 
+def report_machine_initial(task):
+    """The report's machine rows, as (existing, new) initial data: what the
+    report already records, or before the first filing the machines the
+    customer reported for this task: theirs ready for an outcome, any not
+    in their machine list ready to register. Shared by the web report form
+    and the app (api.views.MyTaskReportView).
+    """
+    task_assets = list(task.task_assets.all())
+    if task_assets:
+        return [{'asset': ta.asset_id, 'outcome': ta.outcome, 'note': ta.note} for ta in task_assets], []
+    ticket_machines = list(task.ticket_machines.all())
+    return (
+        [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
+        [
+            {'model_name': machine.model_name, 'serial_no': machine.serial_no, 'ticket_machine': machine.pk}
+            for machine in ticket_machines if not machine.asset_id
+        ],
+    )
+
+
+def save_task_machines(task, existing_rows, new_rows):
+    """Replace the machines the report records with these cleaned rows
+    (ExistingAssetOutcomeForm / NewAssetForm). A new machine is registered
+    at the site; when it was a customer's unlisted ticket machine, that
+    ticket machine now points at it, so their ticket shows its result.
+    Blank rows are skipped.
+    """
+    TaskAsset.objects.filter(task=task).delete()
+    for cleaned in existing_rows:
+        if cleaned.get('asset') and cleaned.get('outcome'):
+            TaskAsset.objects.create(
+                task=task, asset=cleaned['asset'], outcome=cleaned['outcome'], note=cleaned.get('note', ''),
+            )
+    for cleaned in new_rows:
+        if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
+            new_asset = Asset.objects.create(
+                site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'],
+                serial_no=cleaned.get('serial_no', ''),
+            )
+            TaskAsset.objects.create(
+                task=task, asset=new_asset, outcome=cleaned['outcome'], note=cleaned.get('note', ''),
+            )
+            if cleaned.get('ticket_machine'):
+                task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=new_asset)
+
+
 def _report_form(request, task, technician, back_url):
     """The report form itself (report, machines, parts), shared by the
     lead filing it and a manager correcting it. `back_url` is where both
     the back link and a successful save go.
     """
     report = getattr(task, 'report', None)
-    task_assets = task.task_assets.select_related('asset__brand')
     parts = report.parts_used.all() if report else PartUsed.objects.none()
 
     existing_assets = list(Asset.objects.filter(site=task.site))
@@ -4822,7 +4867,7 @@ def _report_form(request, task, technician, back_url):
     NewAssetFormSet = formset_factory(NewAssetForm, extra=NEW_ASSET_ROWS)
     PartFormSet = formset_factory(PartUsedItemForm, extra=PART_ROWS)
 
-    existing_initial = [{'asset': ta.asset_id, 'outcome': ta.outcome} for ta in task_assets]
+    existing_initial, new_initial = report_machine_initial(task)
     part_initial = [
         {
             'part_code': part.part_code, 'description': part.description, 'quantity': part.quantity,
@@ -4840,7 +4885,7 @@ def _report_form(request, task, technician, back_url):
         existing_formset = ExistingAssetFormSet(
             request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )
-        new_formset = NewAssetFormSet(request.POST, prefix='new')
+        new_formset = NewAssetFormSet(request.POST, initial=new_initial, prefix='new')
         part_formset = PartFormSet(request.POST, prefix='parts')
 
         if (
@@ -4850,17 +4895,7 @@ def _report_form(request, task, technician, back_url):
             with transaction.atomic():
                 saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 
-                TaskAsset.objects.filter(task=task).delete()
-                for cleaned in existing_formset.cleaned_data:
-                    if cleaned.get('asset') and cleaned.get('outcome'):
-                        TaskAsset.objects.create(task=task, asset=cleaned['asset'], outcome=cleaned['outcome'])
-                for cleaned in new_formset.cleaned_data:
-                    if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
-                        new_asset = Asset.objects.create(
-                            site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'],
-                            serial_no=cleaned.get('serial_no', ''),
-                        )
-                        TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'])
+                save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
 
             messages.success(request, report_saved_message(saved_report.first_submission, task))
             return redirect(back_url)
@@ -4872,7 +4907,7 @@ def _report_form(request, task, technician, back_url):
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
         )
-        new_formset = NewAssetFormSet(prefix='new')
+        new_formset = NewAssetFormSet(initial=new_initial, prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
 
     context = {

@@ -79,6 +79,7 @@
                     <tr>
                         <th>{% translate "Machine" %}</th>
                         <th>{% translate "Outcome" %}</th>
+                        <th>{% translate "What was found and done" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -86,9 +87,10 @@
                     <tr>
                         <td>{{ form.asset }}</td>
                         <td>{{ form.outcome }}</td>
+                        <td>{{ form.note }}</td>
                     </tr>
                     {% if form.errors %}
-                    <tr><td colspan="2"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="3"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>
@@ -111,6 +113,7 @@
                         <th>{% translate "Model" %}</th>
                         <th>{% translate "Serial number" %}</th>
                         <th>{% translate "Outcome" %}</th>
+                        <th>{% translate "What was found and done" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -120,9 +123,10 @@
                         <td>{{ form.model_name }}</td>
                         <td>{{ form.serial_no }}</td>
                         <td>{{ form.outcome }}</td>
+                        <td>{{ form.note }}{{ form.ticket_machine }}</td>
                     </tr>
                     {% if form.errors %}
-                    <tr><td colspan="4"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="5"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>

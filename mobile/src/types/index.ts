@@ -107,6 +107,38 @@ export interface WorkReport {
   copy_sent_at?: string | null;
 }
 
+/**
+ * One machine on the report: one at the site (asset_id), or one to
+ * register (brand_id + model_name), which may be a customer's ticket
+ * machine that wasn't in their list (ticket_machine_id).
+ */
+export interface ReportMachine {
+  asset_id?: number;
+  name?: string;
+  ticket_machine_id?: number | null;
+  brand_id?: number | null;
+  model_name?: string;
+  serial_no: string;
+  outcome: string;
+  note: string;
+}
+
+export interface SiteMachine {
+  id: number;
+  name: string;
+  serial_no: string;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+}
+
+export interface Choice {
+  value: string;
+  label: string;
+}
+
 /** A helper on the job — their hours default to the report's own. */
 export interface ReportHelper {
   id: number;
@@ -129,6 +161,8 @@ export interface WorkReportInput {
   helper_hours?: Record<string, string>;
   // Where the customer's PDF copy is emailed on the first submission; blank sends nothing.
   send_copy_to?: string;
+  // The machines this visit covered; left out, the server keeps what it has.
+  machines?: ReportMachine[];
   // Where the phone was when Submit was pressed (src/location.ts) — kept
   // with a report waiting offline, so it's where it was filled in.
   latitude?: number;

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from people.models import RolePermission, Technician
 from reports.models import WorkReport
-from tasks.models import Task, TaskAssignment, TaskAttachment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent, TicketMachine
 from tasks.tests import TaskTestCase
 
 User = get_user_model()
@@ -232,6 +232,49 @@ class MyTaskReportTests(ApiTestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual([m.to for m in mail.outbox], [['ali@example.com']])
         self.assertEqual(WorkReport.objects.get(task=self.task).copy_sent_to, 'ali@example.com')
+
+    def test_the_app_records_each_machine_starting_from_the_ticket(self):
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0801', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='-', submitted_at=timezone.now(), task=self.task, status=CustomerTicket.Status.CONVERTED,
+        )
+        TicketMachine.objects.create(
+            ticket=ticket, asset=self.asset, problem='noise', decision='visit', task=self.task,
+        )
+        unlisted = TicketMachine.objects.create(
+            ticket=ticket, model_name='Old bike', serial_no='OB-9', problem='display', decision='visit',
+            task=self.task, position=1,
+        )
+        token = self.token_for('tech1')
+        screen = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()
+        self.assertEqual([row.get('asset_id') for row in screen['machines']], [self.asset.pk, None])
+        self.assertEqual(screen['machines'][1]['ticket_machine_id'], unlisted.pk)
+        self.assertIn({'value': 'repaired', 'label': 'Repaired'}, screen['outcomes'])
+
+        response = self._file(token, machines=[
+            {'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': 'Belt tightened.'},
+            {'brand_id': self.brand.pk, 'model_name': 'Old bike', 'serial_no': 'OB-9', 'outcome': 'replaced',
+             'note': 'Console replaced.', 'ticket_machine_id': unlisted.pk},
+        ])
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            sorted(self.task.task_assets.values_list('note', flat=True)), ['Belt tightened.', 'Console replaced.'],
+        )
+        unlisted.refresh_from_db()
+        self.assertEqual(unlisted.result.outcome, 'replaced')
+
+    def test_a_machine_without_an_outcome_is_refused(self):
+        token = self.token_for('tech1')
+        response = self._file(token, machines=[{'asset_id': self.asset.pk, 'outcome': '', 'note': ''}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('machines', response.json())
+
+    def test_an_older_app_sending_no_machines_keeps_them(self):
+        from tasks.models import TaskAsset
+        TaskAsset.objects.create(task=self.task, asset=self.asset, outcome='repaired')
+        self.assertEqual(self._file(self.token_for('tech1')).status_code, 201)
+        self.assertEqual(self.task.task_assets.count(), 1)
 
     def test_technicians_report_goes_to_supervisor_review(self):
         token = self.token_for('tech1')

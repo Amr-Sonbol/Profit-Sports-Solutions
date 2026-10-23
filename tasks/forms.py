@@ -926,6 +926,7 @@ class ExistingAssetOutcomeForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
+    note = forms.CharField(required=False, max_length=255, label=_('What was found and done'))
 
     def __init__(self, *args, site=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -956,6 +957,10 @@ class NewAssetForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
+    note = forms.CharField(required=False, max_length=255, label=_('What was found and done'))
+    # The customer's ticket machine this row registers, when it came from
+    # the ticket (it wasn't in their machine list).
+    ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     def clean(self):
         cleaned = super().clean()

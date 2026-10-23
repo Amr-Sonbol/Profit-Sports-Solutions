@@ -677,6 +677,9 @@ Which machines the task covers. Populated by the technician during the work, not
 | task_id | FK → task | |
 | asset_id | FK → asset | |
 | outcome | varchar | repaired, replaced, not_repairable, inspected_ok |
+| note | varchar(255) | blank — what was found and done on this machine; printed under its outcome on the visit report, and shown on the customer's ticket |
+
+**A task made from a portal ticket starts its report from that ticket's machines** (`ticket_machine.task`): the listed ones are already picked, waiting for an outcome; an unlisted one is a new-machine row with its model and serial filled in, and registering it there sets `ticket_machine.asset`. The customer's ticket page then shows each machine's outcome and note. The frozen signed copy includes a machine's `note` only when it has one, so reports signed before notes existed don't read as changed.
 
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
 

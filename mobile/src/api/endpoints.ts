@@ -2,7 +2,8 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
-  Candidate, CataloguePart, Me, PasswordInput, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Brand, Candidate, CataloguePart, Choice, Me, PasswordInput, ReportHelper, ReportMachine, SiteMachine, TaskDetail,
+  TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -52,7 +53,15 @@ export function uploadTaskAttachment(id: number, fileUri: string, fileName: stri
 }
 
 export function fetchMyReport(id: number) {
-  return apiRequest<{ report: WorkReport | null; helpers?: ReportHelper[]; send_copy_to?: string }>(
+  return apiRequest<{
+    report: WorkReport | null;
+    helpers?: ReportHelper[];
+    send_copy_to?: string;
+    machines?: ReportMachine[];
+    site_machines?: SiteMachine[];
+    brands?: Brand[];
+    outcomes?: Choice[];
+  }>(
     `/api/my-tasks/${id}/report/`,
   );
 }

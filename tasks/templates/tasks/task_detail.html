@@ -419,6 +419,7 @@
         <li>
             {{ task_asset.asset }}
             <span class="badge badge--muted">{{ task_asset.get_outcome_display }}</span>
+            {% if task_asset.note %}<br><span class="muted">{{ task_asset.note }}</span>{% endif %}
         </li>
         {% endfor %}
     </ul>

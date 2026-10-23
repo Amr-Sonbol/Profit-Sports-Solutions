@@ -51,14 +51,17 @@ def report_content(report):
     task = report.task
     # Sorted, not in saved order: the report form deletes and recreates
     # these rows on every save, which mustn't read as a change.
+    # A machine's finding only when there is one: reports signed before
+    # findings existed must still read as unchanged.
     machines = sorted((
         {
             'name': f"{item.asset.brand.name if item.asset.brand else ''} {item.asset.model_name}".strip(),
             'serial': item.asset.serial_no,
             'outcome': item.outcome,
+            **({'note': item.note} if item.note else {}),
         }
         for item in task.task_assets.select_related('asset__brand')
-    ), key=lambda machine: (machine['name'], machine['serial'], machine['outcome']))
+    ), key=lambda machine: (machine['name'], machine['serial'], machine['outcome'], machine.get('note', '')))
     parts = sorted((
         {'code': part.part_code, 'description': part.description, 'quantity': part.quantity}
         for part in report.parts_used.all()

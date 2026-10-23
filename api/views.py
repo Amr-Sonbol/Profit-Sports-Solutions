@@ -13,24 +13,26 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from customers.models import Asset
 from people.models import PushDevice, RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
-from reference.models import Part
+from reference.models import Brand, Part
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, ChangePasswordForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm,
-    TaskAttachmentUploadForm, TechnicianFirstLoginForm,
+    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, NewAssetForm, PauseTaskForm,
+    RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent
 from tasks.views import (
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report, search_tasks, search_tickets, send_password_changed_email,
+    report_machine_initial, report_saved_message, save_task_machines, save_work_report, search_tasks, search_tickets,
+    send_password_changed_email,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -273,6 +275,57 @@ class MyTaskAttachmentView(APIView):
         return Response(status=status.HTTP_201_CREATED)
 
 
+def _machine_label(asset):
+    return f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip()
+
+
+def _report_machines(task):
+    """The report screen's machines: its rows (what's recorded, or the
+    customer's ticket machines before the first filing), the site's
+    machines to add from, the brands for registering a new one, and the
+    outcomes to choose from.
+    """
+    existing, new = report_machine_initial(task)
+    site_assets = {asset.pk: asset for asset in Asset.objects.filter(site=task.site).select_related('brand')}
+    rows = [
+        {
+            'asset_id': row['asset'], 'name': _machine_label(site_assets[row['asset']]),
+            'serial_no': site_assets[row['asset']].serial_no,
+            'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+        }
+        for row in existing if row['asset'] in site_assets
+    ] + [
+        {
+            'ticket_machine_id': row['ticket_machine'], 'brand_id': None, 'model_name': row['model_name'],
+            'serial_no': row['serial_no'], 'outcome': '', 'note': '',
+        }
+        for row in new
+    ]
+    return {
+        'machines': rows,
+        'site_machines': [
+            {'id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no}
+            for asset in site_assets.values()
+        ],
+        'brands': [{'id': brand.pk, 'name': brand.name} for brand in Brand.objects.filter(is_active=True)],
+        'outcomes': [{'value': value, 'label': label} for value, label in TaskAsset.Outcome.choices],
+    }
+
+
+def _machine_form(task, row):
+    """The web form's validation for one machine row from the app."""
+    if row.get('asset_id'):
+        return ExistingAssetOutcomeForm(
+            {'asset': row.get('asset_id'), 'outcome': row.get('outcome', ''), 'note': row.get('note', '')},
+            site=task.site,
+        )
+    return NewAssetForm({
+        'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
+        'serial_no': row.get('serial_no', ''), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+        'ticket_machine': row.get('ticket_machine_id') or '',
+    })
+
+
 class MyTaskReportView(APIView):
     """The lead's work report — findings, parts used, labour hours and the
     customer's signature. GET returns {report: ... or null}; POST
@@ -285,7 +338,11 @@ class MyTaskReportView(APIView):
     optional — leaving it out keeps the one already on file),
     signature_waived_reason (customer not available to sign — files
     without a signature), helper_hours ({assignment id: hours} for a
-    helper whose hours differ from the report's).
+    helper whose hours differ from the report's), machines (optional —
+    the machines this visit covered, each {asset_id, outcome, note} for
+    one at the site, or {brand_id, model_name, serial_no, outcome, note,
+    ticket_machine_id} to register a new one; leaving it out keeps what's
+    recorded, as an older app sends no machines).
 
     A lead taken off the task before their report reached the server (it
     waited on the phone with no signal) isn't refused: the report goes to
@@ -315,6 +372,7 @@ class MyTaskReportView(APIView):
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
                 for a in _active_helpers(task)
             ],
+            **_report_machines(task),
         })
 
     def post(self, request, pk):
@@ -362,6 +420,10 @@ class MyTaskReportView(APIView):
             helpers=_active_helpers(task),
         )
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
+        machine_rows = request.data.get('machines')
+        machine_forms = None
+        if isinstance(machine_rows, list):
+            machine_forms = [_machine_form(task, row) for row in machine_rows if isinstance(row, dict)]
 
         errors = {}
         if not report_form.is_valid():
@@ -369,6 +431,10 @@ class MyTaskReportView(APIView):
         part_errors = [form.errors for form in part_forms if not form.is_valid()]
         if part_errors:
             errors['parts'] = part_errors
+        if machine_forms is not None:
+            machine_errors = [form.errors for form in machine_forms if not form.is_valid()]
+            if machine_errors:
+                errors['machines'] = machine_errors
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -376,6 +442,12 @@ class MyTaskReportView(APIView):
             report = save_work_report(
                 request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
             )
+            if machine_forms is not None:
+                save_task_machines(
+                    task,
+                    [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                    [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+                )
         return Response(
             {
                 'status': task.status,

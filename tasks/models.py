@@ -710,6 +710,15 @@ class TicketMachine(models.Model):
         return self.model_name
 
     @property
+    def result(self):
+        """The visit's outcome for this machine (a TaskAsset), once the
+        task's report records it; None before that.
+        """
+        if not (self.task_id and self.asset_id):
+            return None
+        return self.task.task_assets.filter(asset_id=self.asset_id).first()
+
+    @property
     def serial(self):
         return self.asset.serial_no if self.asset_id else self.serial_no
 
@@ -1002,6 +1011,9 @@ class TaskAsset(models.Model):
         verbose_name=_('asset'),
     )
     outcome = models.CharField(_('outcome'), max_length=20, choices=Outcome.choices)
+    note = models.CharField(
+        _('finding'), max_length=255, blank=True, help_text=_('what was found and done on this machine'),
+    )
 
     class Meta:
         verbose_name = _('task asset')

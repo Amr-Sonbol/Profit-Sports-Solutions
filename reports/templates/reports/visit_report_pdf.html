@@ -84,7 +84,7 @@
         <tr>
             <td>{{ machine.name }}</td>
             <td dir="ltr">{{ machine.serial|default:"—" }}</td>
-            <td>{{ machine.outcome_label }}</td>
+            <td>{{ machine.outcome_label }}{% if machine.note %}<br><span class="muted">{{ machine.note }}</span>{% endif %}</td>
         </tr>
         {% endfor %}
     </tbody>

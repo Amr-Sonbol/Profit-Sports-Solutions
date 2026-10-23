@@ -16,7 +16,9 @@ import { currentLocation } from '@/location';
 import {
   isNetworkError, pendingReportFor, removePendingReport, savePendingReport, withOfflineCopy,
 } from '@/offline';
-import type { CataloguePart, ReportHelper, TaskDetail, WorkReport } from '@/types';
+import type {
+  Brand, CataloguePart, Choice, ReportHelper, ReportMachine, SiteMachine, TaskDetail, WorkReport,
+} from '@/types';
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -28,7 +30,30 @@ interface PartRow {
   currency_code: string;
 }
 
+// One machine card: a machine at the site (asset_id set, name shown), or
+// one to register, with its brand typed and picked from the list.
+interface MachineRow extends ReportMachine {
+  key: string;
+  brand_name: string;
+}
+
 type FieldErrors = Record<string, string>;
+
+let nextMachineKey = 0;
+
+function machineRow(machine: ReportMachine, brands: Brand[]): MachineRow {
+  nextMachineKey += 1;
+  return {
+    ...machine,
+    key: String(nextMachineKey),
+    brand_name: brands.find((brand) => brand.id === machine.brand_id)?.name ?? '',
+  };
+}
+
+/** What the server is sent for a card, without the screen's own fields. */
+function machineInput({ key, brand_name, name, ...machine }: MachineRow): ReportMachine {
+  return machine;
+}
 
 // Hides the library's own Clear/Confirm footer — this screen has its own
 // buttons, and reads the signature itself when the report is submitted.
@@ -50,11 +75,11 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
     return errors;
   }
   for (const [field, value] of Object.entries(body as Record<string, unknown>)) {
-    if (field === 'parts' && Array.isArray(value)) {
+    if ((field === 'parts' || field === 'machines') && Array.isArray(value)) {
       const first = value.find((rowErrors) => rowErrors && Object.keys(rowErrors).length > 0);
       if (first) {
         const messages = Object.values(first as Record<string, string[]>).flat();
-        errors.parts = messages[0] ?? 'Please review the parts entries.';
+        errors[field] = messages[0] ?? `Please review the ${field} entries.`;
       }
     } else if (Array.isArray(value)) {
       errors[field] = String(value[0]);
@@ -96,6 +121,11 @@ export default function ReportScreen() {
   const [notSigned, setNotSigned] = useState(false);
   const [waivedReason, setWaivedReason] = useState('');
   const [sendCopyTo, setSendCopyTo] = useState('');
+  const [machines, setMachines] = useState<MachineRow[]>([]);
+  const [siteMachines, setSiteMachines] = useState<SiteMachine[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [outcomes, setOutcomes] = useState<Choice[]>([]);
+  const [pickingMachine, setPickingMachine] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,6 +144,12 @@ export default function ReportScreen() {
       setHelpers(reportHelpers);
       setHelperHours(Object.fromEntries(reportHelpers.map((helper) => [String(helper.id), helper.labour_hours ?? ''])));
       setSendCopyTo(reportResult.data.send_copy_to ?? '');
+      const reportBrands = reportResult.data.brands ?? [];
+      setBrands(reportBrands);
+      setSiteMachines(reportResult.data.site_machines ?? []);
+      setOutcomes(reportResult.data.outcomes ?? []);
+      // What the report records, or the machines the customer reported.
+      setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
       if (pending) {
         // A report already filled in here but not sent yet — carry on from it.
@@ -132,6 +168,12 @@ export default function ReportScreen() {
         }
         if (input.helper_hours) {
           setHelperHours((current) => ({ ...current, ...input.helper_hours }));
+        }
+        if (input.machines) {
+          const names = new Map((reportResult.data.site_machines ?? []).map((machine) => [machine.id, machine.name]));
+          setMachines(input.machines.map((machine) => machineRow(
+            { ...machine, name: machine.asset_id ? names.get(machine.asset_id) : undefined }, reportBrands,
+          )));
         }
         setParts(input.parts.map((part) => ({
           ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
@@ -179,6 +221,24 @@ export default function ReportScreen() {
     setParts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   };
 
+  const updateMachine = (key: string, changes: Partial<MachineRow>) => {
+    setMachines((rows) => rows.map((row) => (row.key === key ? { ...row, ...changes } : row)));
+  };
+
+  // Up to five brands matching what's typed, hidden once one is picked.
+  const brandSuggestions = (row: MachineRow): Brand[] => {
+    const query = row.brand_name.trim().toLowerCase();
+    if (!query || row.brand_id) {
+      return [];
+    }
+    return brands.filter((brand) => brand.name.toLowerCase().includes(query)).slice(0, 5);
+  };
+
+  const outcomeLabel = (value: string) => outcomes.find((outcome) => outcome.value === value)?.label ?? value;
+  const unpickedSiteMachines = siteMachines.filter(
+    (machine) => !machines.some((row) => row.asset_id === machine.id),
+  );
+
   const submit = async () => {
     setIsBusy(true);
     setErrors({});
@@ -197,6 +257,7 @@ export default function ReportScreen() {
       signature_waived_reason: notSigned ? waivedReason : '',
       helper_hours: helperHours,
       send_copy_to: sendCopyTo.trim(),
+      machines: machines.map(machineInput),
       ...(location ?? {}),
     };
     try {
@@ -260,6 +321,17 @@ export default function ReportScreen() {
               ) : null}
               <ThemedText type="smallBold">Problem resolved</ThemedText>
               <ThemedText>{resolved ? 'Yes' : 'No'}</ThemedText>
+              {machines.some((row) => row.outcome) ? (
+                <>
+                  <ThemedText type="smallBold">Machines</ThemedText>
+                  {machines.filter((row) => row.outcome).map((row) => (
+                    <ThemedText key={row.key}>
+                      {row.name || `${row.brand_name} ${row.model_name ?? ''}`.trim()}: {outcomeLabel(row.outcome)}
+                      {row.note ? ` — ${row.note}` : ''}
+                    </ThemedText>
+                  ))}
+                </>
+              ) : null}
               {usedParts.length > 0 ? (
                 <>
                   <ThemedText type="smallBold">Parts used</ThemedText>
@@ -385,6 +457,118 @@ export default function ReportScreen() {
                 ))}
               </ThemedView>
             ) : null}
+
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines</ThemedText>
+              <ThemedText themeColor="textSecondary" type="small">
+                The outcome for each machine this visit covered, and what was found and done.
+              </ThemedText>
+              {machines.map((row) => (
+                <ThemedView key={row.key} style={[styles.partCard, { borderColor: theme.backgroundSelected }]}>
+                  {row.asset_id ? (
+                    <ThemedText type="smallBold">
+                      {row.name}{row.serial_no ? ` · ${row.serial_no}` : ''}
+                    </ThemedText>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={inputStyle} value={row.brand_name} placeholder="Brand"
+                        placeholderTextColor={theme.textSecondary}
+                        onChangeText={(value) => updateMachine(row.key, { brand_name: value, brand_id: null })}
+                      />
+                      {brandSuggestions(row).map((brand) => (
+                        <TouchableOpacity
+                          key={brand.id}
+                          style={[styles.suggestion, { borderColor: theme.backgroundSelected }]}
+                          onPress={() => updateMachine(row.key, { brand_id: brand.id, brand_name: brand.name })}
+                        >
+                          <ThemedText type="small">{brand.name}</ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                      <TextInput
+                        style={inputStyle} value={row.model_name ?? ''} placeholder="Model"
+                        placeholderTextColor={theme.textSecondary}
+                        onChangeText={(value) => updateMachine(row.key, { model_name: value })}
+                      />
+                      <TextInput
+                        style={inputStyle} value={row.serial_no} placeholder="Serial number"
+                        placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
+                        onChangeText={(value) => updateMachine(row.key, { serial_no: value })}
+                      />
+                    </>
+                  )}
+                  <ThemedView style={styles.chipRow}>
+                    {outcomes.map((outcome) => (
+                      <TouchableOpacity
+                        key={outcome.value}
+                        style={[
+                          styles.chip, { borderColor: theme.backgroundSelected },
+                          row.outcome === outcome.value && { backgroundColor: theme.primary, borderColor: theme.primary },
+                        ]}
+                        onPress={() => updateMachine(row.key, { outcome: outcome.value })}
+                      >
+                        <ThemedText
+                          type="small"
+                          style={row.outcome === outcome.value ? { color: theme.onPrimary } : undefined}
+                        >
+                          {outcome.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </ThemedView>
+                  <TextInput
+                    style={inputStyle} value={row.note} placeholder="What was found and done"
+                    placeholderTextColor={theme.textSecondary} maxLength={255}
+                    onChangeText={(value) => updateMachine(row.key, { note: value })}
+                  />
+                  <TouchableOpacity onPress={() => setMachines((rows) => rows.filter((other) => other.key !== row.key))}>
+                    <ThemedText themeColor="danger" type="small">Remove machine</ThemedText>
+                  </TouchableOpacity>
+                </ThemedView>
+              ))}
+              {errors.machines ? <ThemedText themeColor="danger" type="small">{errors.machines}</ThemedText> : null}
+              {pickingMachine ? (
+                <>
+                  {unpickedSiteMachines.map((machine) => (
+                    <TouchableOpacity
+                      key={machine.id}
+                      style={[styles.suggestion, { borderColor: theme.backgroundSelected }]}
+                      onPress={() => {
+                        setMachines((rows) => [...rows, machineRow(
+                          { asset_id: machine.id, name: machine.name, serial_no: machine.serial_no, outcome: '', note: '' },
+                          brands,
+                        )]);
+                        setPickingMachine(false);
+                      }}
+                    >
+                      <ThemedText type="small">
+                        <ThemedText type="smallBold">{machine.name}</ThemedText>
+                        {machine.serial_no ? ` · ${machine.serial_no}` : ''}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                  {unpickedSiteMachines.length === 0 ? (
+                    <ThemedText themeColor="textSecondary" type="small">Every machine at this site is already listed.</ThemedText>
+                  ) : null}
+                </>
+              ) : null}
+              {siteMachines.length > 0 ? (
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { borderColor: theme.primary }]}
+                  onPress={() => setPickingMachine((value) => !value)}
+                >
+                  <ThemedText themeColor="primary">{pickingMachine ? 'Close the list' : '+ Add a machine at this site'}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.secondaryButton, { borderColor: theme.primary }]}
+                onPress={() => setMachines((rows) => [...rows, machineRow(
+                  { brand_id: null, model_name: '', serial_no: '', outcome: '', note: '' }, brands,
+                )])}
+              >
+                <ThemedText themeColor="primary">+ Add a machine not in the list</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
 
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Parts used</ThemedText>
@@ -557,6 +741,8 @@ const styles = StyleSheet.create({
   toggleTextActive: { color: '#fff', fontWeight: '600' },
   suggestion: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   partCard: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: Spacing.two },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
+  chip: { borderWidth: 1, borderRadius: Spacing.four, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },
   partCurrency: { width: 72 },

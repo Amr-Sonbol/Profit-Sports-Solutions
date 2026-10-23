@@ -8172,3 +8172,87 @@ class TicketMachineDecisionTests(TaskTestCase):
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Under review')
         self.assertContains(response, 'Under the gym supplier warranty.')
+
+
+class TicketMachineFindingsTests(TaskTestCase):
+    # The report records what was found and done on each machine, starts
+    # from the machines the customer reported for this task, and the
+    # customer's ticket shows each machine's result.
+
+    # The same report form and lead as the approval tests (not their tests).
+    _report_payload = TaskSupervisorApprovalTests._report_payload
+    _assign_lead = TaskSupervisorApprovalTests._assign_lead
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PORTAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=self.supervisor_user.technician,
+        )
+        self.report_url = f'/tasks/my/{self.task.pk}/report/'
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0701', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='(from the machines)', submitted_at=timezone.now(), task=self.task,
+            status=CustomerTicket.Status.CONVERTED,
+        )
+        self.listed = TicketMachine.objects.create(
+            ticket=self.ticket, asset=self.asset, problem=TicketMachine.Problem.NOISE,
+            decision=TicketMachine.Decision.VISIT, task=self.task,
+        )
+        self.unlisted = TicketMachine.objects.create(
+            ticket=self.ticket, model_name='Old bike', serial_no='OB-9', problem=TicketMachine.Problem.DISPLAY,
+            decision=TicketMachine.Decision.VISIT, task=self.task, position=1,
+        )
+        self._assign_lead(self.supervisor_user.technician)
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def test_the_report_starts_from_the_tickets_machines(self):
+        response = self.client.get(self.report_url)
+        self.assertEqual(response.context['existing_formset'].initial, [{'asset': self.asset.pk}])
+        self.assertEqual(response.context['new_formset'].initial, [
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': self.unlisted.pk},
+        ])
+
+    def test_each_machines_finding_is_saved_and_shown_to_the_customer(self):
+        payload = self._report_payload()
+        payload.update({
+            'existing-TOTAL_FORMS': '1', 'existing-INITIAL_FORMS': '1',
+            'existing-0-asset': str(self.asset.pk), 'existing-0-outcome': 'repaired',
+            'existing-0-note': 'Belt tightened.',
+            'new-TOTAL_FORMS': '1', 'new-INITIAL_FORMS': '1',
+            'new-0-brand': str(self.brand.pk), 'new-0-model_name': 'Old bike', 'new-0-serial_no': 'OB-9',
+            'new-0-outcome': 'replaced', 'new-0-note': 'Console replaced.',
+            'new-0-ticket_machine': str(self.unlisted.pk),
+        })
+        self.assertEqual(self.client.post(self.report_url, payload).status_code, 302)
+
+        self.unlisted.refresh_from_db()
+        self.assertIsNotNone(self.unlisted.asset)  # registered at the site now
+        self.assertEqual(self.unlisted.result.note, 'Console replaced.')
+        self.assertEqual(self.listed.result.get_outcome_display(), 'Repaired')
+
+        from reports.pdf import report_content
+        notes = sorted(machine.get('note') for machine in report_content(self.task.report)['machines'])
+        self.assertEqual(notes, ['Belt tightened.', 'Console replaced.'])
+
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertContains(response, 'Belt tightened.')
+        self.assertContains(response, 'Console replaced.')
+
+    def test_a_report_signed_before_findings_still_reads_as_unchanged(self):
+        from reports.pdf import changed_after_signing, report_content
+        self.client.post(self.report_url, self._report_payload())
+        report = self.task.report
+        report.signed_content = report_content(report)
+        report.save(update_fields=['signed_content'])
+        TaskAsset.objects.create(task=self.task, asset=self.asset, outcome='repaired')
+        report.signed_content['machines'] = report_content(report)['machines']
+        report.save(update_fields=['signed_content'])
+        self.assertNotIn('note', report.signed_content['machines'][0])
+        self.assertFalse(changed_after_signing(report))

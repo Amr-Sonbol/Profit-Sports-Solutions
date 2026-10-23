@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 17:06+0000\n"
+"POT-Creation-Date: 2026-10-23 17:29+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -4246,6 +4246,9 @@ msgstr "ما هذا؟"
 msgid "What the customer reported"
 msgstr "ما أبلغ به العميل"
 
+msgid "What was found and done"
+msgstr "ما تم العثور عليه وما تم إنجازه"
+
 msgid "WhatsApp"
 msgstr "واتساب"
 
@@ -4660,6 +4663,9 @@ msgstr "الحقول المعروضة في نموذج التقرير لهذا ا
 
 msgid "file"
 msgstr "الملف"
+
+msgid "finding"
+msgstr "الملاحظة"
 
 msgid "findings"
 msgstr "النتائج"
@@ -5385,6 +5391,9 @@ msgstr "ما أبلغ به العميل"
 
 msgid "what the technician found"
 msgstr "ما وجده الفني"
+
+msgid "what was found and done on this machine"
+msgstr "ما تم العثور عليه وما تم إنجازه على هذا الجهاز"
 
 msgid "when the customer was last emailed about the scheduled visit — never automatic"
 msgstr "آخر مرة أُرسل فيها بريد إلكتروني للعميل بشأن الزيارة المجدولة — ليس تلقائيًا أبدًا"
