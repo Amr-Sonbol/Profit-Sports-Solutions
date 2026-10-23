@@ -53,6 +53,7 @@ urlpatterns = [
     path('countries/new/', views.country_create, name='country_create'),
     path('active-country/', views.set_active_country, name='set_active_country'),
     path('<int:pk>/', views.task_detail, name='task_detail'),
+    path('<int:pk>/report.pdf', views.task_report_pdf, name='task_report_pdf'),
     path('<int:pk>/edit/', views.task_edit, name='task_edit'),
     path('<int:pk>/assign/', views.task_assign, name='task_assign'),
 ]

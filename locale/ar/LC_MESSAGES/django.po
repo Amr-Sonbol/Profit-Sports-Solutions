@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 06:48+0000\n"
+"POT-Creation-Date: 2026-10-23 07:09+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -735,6 +735,9 @@ msgstr "اختر سببًا لاستبدال الفني الرئيسي الحا�
 msgid "Clear signature"
 msgstr "مسح التوقيع"
 
+msgid "Client"
+msgstr "العميل"
+
 msgid "Close"
 msgstr "إغلاق"
 
@@ -921,6 +924,9 @@ msgstr "تم إنشاء العميل %(name)s وإرسال رسالة الترح
 msgid "Customer / Site"
 msgstr "العميل / الموقع"
 
+msgid "Customer Sign-off"
+msgstr "توقيع العميل"
+
 msgid "Customer account locked"
 msgstr "حساب عميل مقفل"
 
@@ -1006,6 +1012,9 @@ msgstr "لوحة التحكم"
 
 msgid "Date"
 msgstr "التاريخ"
+
+msgid "Date and time"
+msgstr "التاريخ والوقت"
 
 msgid "Date submitted"
 msgstr "تاريخ الإرسال"
@@ -1351,6 +1360,9 @@ msgstr "تنزيل CSV"
 msgid "Download a template CSV"
 msgstr "تنزيل نموذج CSV"
 
+msgid "Download report (PDF)"
+msgstr "تنزيل التقرير (PDF)"
+
 #, python-format
 msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
 msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. الملف «%(name)s» يتجاوز هذا الحد."
@@ -1438,6 +1450,9 @@ msgstr "أدخل البريد الإلكتروني الخاص بتسجيل ال�
 
 msgid "Entered by the office"
 msgstr "أدخله المكتب"
+
+msgid "Equipment"
+msgstr "المعدات"
 
 msgid "Equipment skills confirmed"
 msgstr "مهارات المعدات المعتمدة"
@@ -1532,6 +1547,9 @@ msgstr "مُصفّى حسب:"
 
 msgid "Findings"
 msgstr "النتائج"
+
+msgid "Findings & Actions"
+msgstr "النتائج والإجراءات"
 
 #, python-format
 msgid "Findings: %(text)s"
@@ -1629,6 +1647,9 @@ msgstr "الساعات"
 
 msgid "Hours already worked by the current lead"
 msgstr "الساعات التي عملها القائد الحالي"
+
+msgid "Hours and prices are not included in this report."
+msgstr "لا يتضمن هذا التقرير الساعات أو الأسعار."
 
 #, python-format
 msgid "Hours worked: %(hours)s"
@@ -2401,6 +2422,9 @@ msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(wh
 msgid "Outcome"
 msgstr "النتيجة"
 
+msgid "Overall Condition"
+msgstr "الحالة العامة"
+
 msgid "Overloaded"
 msgstr "محمّل بالعمل أكثر من اللازم"
 
@@ -2437,6 +2461,9 @@ msgstr "تم تحديث القطعة."
 
 msgid "Parts"
 msgstr "قطع الغيار"
+
+msgid "Parts Used"
+msgstr "القطع المستخدمة"
 
 msgid "Parts used"
 msgstr "القطع المستخدمة"
@@ -2477,6 +2504,9 @@ msgstr "بانتظار مراجعة المشرف"
 
 msgid "Performance overview"
 msgstr "نظرة عامة على الأداء"
+
+msgid "Performed by"
+msgstr "نُفّذت بواسطة"
 
 msgid "Permission"
 msgstr "الصلاحية"
@@ -2606,6 +2636,9 @@ msgstr "تم تحديث الملف الشخصي."
 
 msgid "Profit Sports Solutions"
 msgstr "Profit Sports Solutions"
+
+msgid "Profit Sports Solutions technical team"
+msgstr "الفريق الفني لـ Profit Sports Solutions"
 
 msgid "Progress is behind the 90-day target. Please discuss next steps with your supervisor."
 msgstr "التقدم متأخر عن هدف التسعين يوماً. يرجى مناقشة الخطوات التالية مع مشرفك."
@@ -2944,6 +2977,9 @@ msgstr "مجدولة إلى"
 msgid "Scheduling"
 msgstr "الجدولة"
 
+msgid "Scope"
+msgstr "النطاق"
+
 msgid "Search"
 msgstr "بحث"
 
@@ -3045,6 +3081,9 @@ msgstr "إرسال رسالة الترحيب"
 
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
+
+msgid "Serial No."
+msgstr "الرقم التسلسلي"
 
 msgid "Serial number"
 msgstr "الرقم التسلسلي"
@@ -3153,6 +3192,9 @@ msgstr "تسجيل الخروج من جميع الأجهزة"
 
 msgid "Sign-in name"
 msgstr "اسم الدخول"
+
+msgid "Signature"
+msgstr "التوقيع"
 
 msgid "Signature pad"
 msgstr "لوحة التوقيع"
@@ -3500,6 +3542,12 @@ msgstr "الشخص المسؤول عن معالجتها. سيتم إشعاره،
 
 msgid "The photo is too large. The maximum size is 5 MB."
 msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
+
+msgid "The reported issue has been resolved and the equipment is operating properly."
+msgstr "تم حل المشكلة المُبلّغ عنها والمعدات تعمل بشكل سليم."
+
+msgid "The reported issue has not yet been fully resolved. A follow-up visit will be arranged."
+msgstr "لم يتم حل المشكلة المُبلّغ عنها بالكامل بعد. سيتم ترتيب زيارة متابعة."
 
 msgid "The schedule for all countries. This view is not affected by the country selector above."
 msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
@@ -3915,6 +3963,18 @@ msgstr "تعرض بيانات"
 msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
 msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
 
+msgid "Visit Details"
+msgstr "تفاصيل الزيارة"
+
+msgid "Visit Report"
+msgstr "تقرير الزيارة"
+
+msgid "Visit date"
+msgstr "تاريخ الزيارة"
+
+msgid "Visit type"
+msgstr "نوع الزيارة"
+
 #, python-format
 msgid "Visiting from %(country)s"
 msgstr "زائر من %(country)s"
@@ -4000,6 +4060,9 @@ msgstr "من"
 
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
+
+msgid "Work Performed"
+msgstr "الأعمال المنفّذة"
 
 msgid "Work has already started. As a manager or administrator, you may still change the team; the new lead will continue from the current stage of the task."
 msgstr "لقد بدأ العمل بالفعل. بصفتك مديراً أو مسؤولاً للنظام، لا يزال بإمكانك تغيير الفريق؛ وسيتابع القائد الجديد من المرحلة الحالية للمهمة."

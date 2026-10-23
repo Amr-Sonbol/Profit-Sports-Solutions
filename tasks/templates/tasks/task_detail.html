@@ -468,7 +468,13 @@
 
 {% if report %}
 <div class="section">
-    <h2>{% translate "Work report" %}</h2>
+    <div class="section__header">
+        <h2>{% translate "Work report" %}</h2>
+        <div class="button-row">
+            <a href="{% url 'tasks:task_report_pdf' task.pk %}" class="button button--secondary" target="_blank" rel="noopener">{% translate "Download report (PDF)" %}</a>
+            <a href="{% url 'tasks:task_report_pdf' task.pk %}?lang={% if task.site.customer.language == 'ar' %}en{% else %}ar{% endif %}" class="button button--secondary" target="_blank" rel="noopener">{% if task.site.customer.language == 'ar' %}English{% else %}العربية{% endif %}</a>
+        </div>
+    </div>
     {% if task.status == 'pending_supervisor_review' %}
     <p class="flash flash--info">{% translate "Awaiting review by the responsible supervisor before manager approval." %}</p>
         {% if can_approve_as_supervisor %}

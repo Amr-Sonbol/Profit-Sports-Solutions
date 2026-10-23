@@ -7944,3 +7944,41 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
         response = self.client.get('/tasks/dashboard/')
         self.assertContains(response, 'chart-legend')
         self.assertContains(response, 'Show as table')
+
+
+class TaskReportPdfTests(TodayTestsMixin, TaskTestCase):
+    # The visit report as a PDF on the letterhead (reports.pdf), from the task page.
+
+    def setUp(self):
+        super().setUp()
+        self.task = self._make_task('UAE-0701', lead=self.technician, status=Task.Status.CLOSED,
+                                    scheduled_for=timezone.now())
+        self.report = WorkReport.objects.create(
+            task=self.task, findings='Belt worn out', action_taken='Replaced belt\nTested the treadmill',
+            resolved=True, labour_hours='1.50', customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+        self.url = f'/tasks/{self.task.pk}/report.pdf'
+
+    def test_staff_get_a_pdf_in_either_language(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        for lang in ('en', 'ar'):
+            response = self.client.get(self.url, {'lang': lang})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Content-Type'], 'application/pdf')
+            self.assertTrue(response.content.startswith(b'%PDF'))
+            self.assertIn('UAE-0701-visit-report.pdf', response['Content-Disposition'])
+
+    def test_a_technician_cannot_download_it(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_no_report_no_pdf(self):
+        self.report.delete()
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_the_pdf_never_fetches_anything_outside_the_app(self):
+        from reports.pdf import _local_file
+        self.assertIsNone(_local_file('http://example.com/evil.png'))
+        self.assertIsNone(_local_file('http://localhost/media/../../etc/passwd'))
+        self.assertIsNotNone(_local_file('/static/reports/letterhead-header.png'))

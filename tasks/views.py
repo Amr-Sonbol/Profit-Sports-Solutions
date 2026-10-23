@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from email.mime.image import MIMEImage
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, update_session_auth_hash
@@ -22,7 +23,7 @@ from django.db.models import (
     Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
 from django.forms import formset_factory
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -1433,6 +1434,30 @@ def approve_report_as_manager(task, actor):
         task=task, event_type=TaskEvent.EventType.REPORT_APPROVED, occurred_at=timezone.now(), actor=actor,
     )
     return True
+
+
+@login_required
+def task_report_pdf(request, pk):
+    """The task's visit report as a PDF on the company letterhead, for the
+    office to download or print: in the customer's language by default,
+    or ?lang=en / ?lang=ar. Same access as the task page itself.
+    """
+    from reports.pdf import render_visit_report_pdf
+
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    task = _scoped_or_404(
+        Task.objects.select_related('site__customer__country', 'task_type', 'report'),
+        pk, requesting_technician, get_active_country(request), 'site__customer__country',
+    )
+    report = getattr(task, 'report', None)
+    if report is None:
+        raise Http404
+    language = request.GET.get('lang')
+    if language not in dict(settings.LANGUAGES):
+        language = task.site.customer.language or settings.LANGUAGE_CODE
+    response = HttpResponse(render_visit_report_pdf(report, language), content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="{task.task_number}-visit-report.pdf"'
+    return response
 
 
 @login_required
