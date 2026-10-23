@@ -452,6 +452,21 @@ class TaskEditTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
+    def test_a_weekend_visit_is_a_reminder_unless_its_an_emergency(self):
+        # The test UAE's weekend is Saturday–Sunday; 2026-09-19 is a Saturday.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(scheduled_for='2026-09-19T09:00'), follow=True)
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)  # saved all the same
+        warnings = [m.message for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('weekend work is normally for emergencies only', warnings[0])
+
+        response = self.client.post(self.url, self._payload(
+            scheduled_for='2026-09-20T09:00', priority=Task.Priority.EMERGENCY,
+        ), follow=True)
+        self.assertFalse([m for m in response.context['messages'] if m.level_tag == 'warning'])
+
     def test_get_shows_current_values(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
@@ -6420,6 +6435,17 @@ class UnscheduledAlarmTests(TaskTestCase):
         sunday_evening = self._local(2026, 10, 4, 16)
         self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=saturday_night), [])
         self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=sunday_evening), [task])
+
+    def test_an_emergency_counts_the_weekend_too(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        # The team works weekends for emergencies: Thursday 15:00 plus 24
+        # hours is Friday 15:00, weekend or not.
+        task = self._task(created_at=self._local(2026, 10, 1, 15))
+        task.priority = Task.Priority.EMERGENCY
+        task.save(update_fields=['priority'])
+        friday_evening = self._local(2026, 10, 2, 16)
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=friday_evening), [task])
 
     def test_scheduled_or_started_tasks_are_not_flagged(self):
         from tasks.alarms import overdue_unscheduled_tasks

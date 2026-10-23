@@ -2059,6 +2059,9 @@ def task_edit(request, pk):
                 _send_shipment_notice_to_supervisor(request, updated_task)
                 notices.append(_('The supervisor has been notified of the shipment.'))
             messages.success(request, ' '.join([_('Task updated.')] + notices))
+            weekend_warning = _weekend_warning(updated_task)
+            if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
+                messages.warning(request, weekend_warning)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
@@ -2190,6 +2193,9 @@ def task_create(request):
                     ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
             _send_new_task_email_to_staff(request, task)
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
+            weekend_warning = _weekend_warning(task)
+            if weekend_warning:
+                messages.warning(request, weekend_warning)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin)
@@ -3109,6 +3115,20 @@ MONTH_DAY_LIMIT = 3
 def _calendar_day(task):
     """The local day a task is booked for: its time if set, else its day-only date."""
     return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
+
+
+def _weekend_warning(task):
+    """A reminder, not a block, when a task that isn't an emergency is
+    planned for one of its country's days off — the team works weekends
+    for emergencies only. None otherwise.
+    """
+    day = _calendar_day(task)
+    country = task.site.customer.country
+    if day is None or task.priority == Task.Priority.EMERGENCY or day.weekday() not in country.weekend_weekdays:
+        return None
+    return _('%(day)s is a day off in %(country)s; weekend work is normally for emergencies only.') % {
+        'day': formats.date_format(day, 'l j F'), 'country': country.display_name,
+    }
 
 
 def _calendar_context(request, tasks, country=None):

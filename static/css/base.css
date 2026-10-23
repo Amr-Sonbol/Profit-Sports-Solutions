@@ -509,6 +509,11 @@ html[dir="rtl"] .notif-dropdown > * {
     color: var(--color-accent);
 }
 
+.flash--warning {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
 .filters {
     display: flex;
     flex-direction: row;

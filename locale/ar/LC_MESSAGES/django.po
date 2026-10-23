@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:20+0000\n"
+"POT-Creation-Date: 2026-10-23 22:23+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -95,6 +95,10 @@ msgstr[2] "مهمتان تجاوزتا التقدير بشكل ملحوظ"
 msgstr[3] "%(count)s مهام تجاوزت التقدير بشكل ملحوظ"
 msgstr[4] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
 msgstr[5] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
+
+#, python-format
+msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
+msgstr "%(day)s يوم عطلة في %(country)s؛ ويقتصر العمل في العطلة عادةً على الحالات الطارئة."
 
 #, python-format
 msgid "%(days)s days remaining"
