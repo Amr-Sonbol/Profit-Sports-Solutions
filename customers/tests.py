@@ -8,7 +8,7 @@ from people.models import Technician
 from reference.models import Country
 from tasks.models import CustomerTicket, TicketNotification
 
-from .models import Customer, Site
+from .models import Asset, Customer, Site
 
 User = get_user_model()
 
@@ -646,11 +646,17 @@ class PortalTicketNewTests(CustomerTestCase):
         self.other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
         self.other_site = Site.objects.create(customer=self.other_customer, name='Other Branch', address='Elsewhere')
 
-    def _payload(self, **overrides):
+    def _payload(self, machines=None, **overrides):
         payload = {
             'site': self.site.pk, 'contact_name': 'Ali', 'contact_phone': '0501234567',
-            'contact_email': '', 'serial_numbers': 'SN-1', 'description': 'Belt noise', 'notes': '',
+            'contact_email': '', 'notes': '',
+            'machines-TOTAL_FORMS': '10', 'machines-INITIAL_FORMS': '0',
+            'machines-MIN_NUM_FORMS': '0', 'machines-MAX_NUM_FORMS': '10',
         }
+        if machines is None:
+            machines = [{'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': 'Belt noise'}]
+        for index, machine in enumerate(machines):
+            payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return payload
 
@@ -765,11 +771,101 @@ class PortalTicketNewTests(CustomerTestCase):
         # view another customer's fault photo with no login at all.
         photo = SimpleUploadedFile('IMG_0001.jpg', b'fake-image-bytes', content_type='image/jpeg')
         self.client.login(username='fitnessfirst', password='pass12345')
-        self.client.post('/customers/portal/tickets/new/', self._payload(attachments=[photo]))
+        self.client.post('/customers/portal/tickets/new/', self._payload(**{'machines-0-files': [photo]}))
 
         attachment = CustomerTicket.objects.get().attachments.get()
         self.assertNotEqual(attachment.file.name, 'ticket_attachments/IMG_0001.jpg')
         self.assertTrue(attachment.file.name.endswith('/IMG_0001.jpg'))
+
+
+class PortalTicketMachinesTests(PortalTicketNewTests):
+    # Each machine is its own card with its own photos (TicketMachine).
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Brand
+        self.brand = Brand.objects.create(name='Technogym')
+        self.asset = Asset.objects.create(site=self.site, brand=self.brand, model_name='Excite Run 700', serial_no='TG-77')
+
+    def test_a_registered_machine_can_be_picked(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'asset': str(self.asset.pk), 'problem': 'not_working', 'out_of_service': 'on'},
+            {'model_name': 'Old bike', 'serial_no': 'B-9', 'problem': 'display'},
+        ]))
+        ticket = CustomerTicket.objects.get()
+        first, second = ticket.machines.all()
+        self.assertEqual((first.asset, first.machine_name, first.serial, first.out_of_service),
+                         (self.asset, 'Technogym Excite Run 700', 'TG-77', True))
+        self.assertEqual((second.asset, second.machine_name, second.serial), (None, 'Old bike', 'B-9'))
+        # The ticket's text fields are written from the machines for everything that reads them.
+        self.assertEqual(ticket.serial_numbers, 'TG-77' + chr(10) + 'B-9')
+        self.assertIn('Technogym Excite Run 700 (TG-77): Not working', ticket.description)
+        self.assertIn('cannot be used', ticket.description)
+
+    def test_a_machine_from_another_site_is_rejected(self):
+        other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(
+            site=other_site.pk, machines=[{'asset': str(self.asset.pk), 'problem': 'noise'}],
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomerTicket.objects.exists())
+
+    def test_at_least_one_machine_is_needed(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomerTicket.objects.exists())
+
+    def test_a_machine_needs_a_problem_and_an_identity(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[{'description': 'Squeaks'}]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomerTicket.objects.exists())
+
+    def test_an_unlisted_machine_needs_its_serial_or_a_sticker_photo(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Old bike', 'problem': 'display'},
+        ]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomerTicket.objects.exists())
+
+        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
+        ]))
+        machine = CustomerTicket.objects.get().machines.get()
+        self.assertTrue(machine.serial_photo.name.endswith('/sticker.jpg'))
+        self.assertEqual(machine.ticket.serial_numbers, 'serial number on the sticker photo')
+
+    def test_a_listed_machine_needs_no_serial(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'asset': str(self.asset.pk), 'problem': 'noise'},
+        ]))
+        self.assertEqual(CustomerTicket.objects.get().machines.get().serial, 'TG-77')
+
+    def test_photos_belong_to_their_machine(self):
+        photo = SimpleUploadedFile('belt.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Treadmill', 'serial_no': 'T-1', 'problem': 'noise'},
+            {'model_name': 'Bike', 'serial_no': 'B-1', 'problem': 'display', 'files': [photo]},
+        ]))
+        ticket = CustomerTicket.objects.get()
+        self.assertEqual(ticket.machines.get(model_name='Bike').attachments.count(), 1)
+        self.assertEqual(ticket.machines.get(model_name='Treadmill').attachments.count(), 0)
+
+    def test_the_office_and_the_customer_see_the_machines_table(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'asset': str(self.asset.pk), 'problem': 'not_working'},
+        ]))
+        ticket = CustomerTicket.objects.get()
+        status_page = self.client.get(f'/tasks/tickets/status/{ticket.token}/')
+        self.assertContains(status_page, 'Technogym Excite Run 700')
 
 
 class SiteMapLocationTests(CustomerTestCase):

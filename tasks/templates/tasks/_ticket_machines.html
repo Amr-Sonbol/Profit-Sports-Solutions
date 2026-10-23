@@ -1,0 +1,44 @@
+{% load i18n %}{% comment %}
+A ticket's machines (TicketMachine), one row each with its own photos — on
+the office's ticket review and the customer's ticket page. Nothing here is
+internal: what the customer reported, and their own files.
+{% endcomment %}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>{% translate "Machine" %}</th>
+                <th>{% translate "Serial number" %}</th>
+                <th>{% translate "Problem" %}</th>
+                <th>{% translate "Photos" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for machine in machines %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td class="cell-wrap">
+                    {{ machine.machine_name }}
+                    {% if not machine.asset_id %}<br><span class="muted">{% translate "Not in the machine list" %}</span>{% endif %}
+                </td>
+                <td>
+                    <span dir="ltr">{{ machine.serial|default:"—" }}</span>
+                    {% if machine.serial_photo %}<br><a href="{{ machine.serial_photo.url }}" target="_blank" rel="noopener">{% translate "Sticker photo" %}</a>{% endif %}
+                </td>
+                <td class="cell-wrap">
+                    {{ machine.get_problem_display }}
+                    {% if machine.out_of_service %}<br><span class="badge badge--status-blocked">{% translate "Cannot be used" %}</span>{% endif %}
+                    {% if machine.description %}<br><span class="muted pre-line">{{ machine.description }}</span>{% endif %}
+                </td>
+                <td>
+                    {% for attachment in machine.attachments.all %}
+                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% blocktranslate with number=forloop.counter %}File {{ number }}{% endblocktranslate %}</a>{% if not forloop.last %}<br>{% endif %}
+                    {% empty %}<span class="muted">—</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

@@ -2750,6 +2750,9 @@ def ticket_review(request, pk):
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
     context = {
+        # Photos not tied to one of the ticket's machines (staff-opened and
+        # older tickets); a machine's own show in the machines table.
+        'ticket_general_attachments': ticket.attachments.filter(machine__isnull=True),
         'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,

@@ -22,8 +22,8 @@ from django.utils.translation import gettext as _
 from people.models import RolePermission, Technician
 from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
 from reference.models import Country
-from tasks.forms import CustomerPortalTicketForm, NewPasswordForm
-from tasks.models import CustomerTicketAttachment, Task, TicketNotification
+from tasks.forms import CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
+from tasks.models import CustomerTicketAttachment, Task, TicketMachine, TicketNotification
 from tasks.views import save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer
 
 from .accounts import (
@@ -521,6 +521,9 @@ def portal_ticket_new(request):
     """A logged-in customer reporting an issue — the customer and site
     are already known, so this skips straight to the issue itself and
     links the ticket to this customer immediately, no matching needed.
+    Each machine is its own card (TicketMachineFormSet) with its own
+    photos; the ticket's description and serial numbers are written from
+    them, so everything that reads those keeps working.
     """
     customer = require_customer(request)
     if customer.must_change_password:
@@ -528,8 +531,16 @@ def portal_ticket_new(request):
 
     if request.method == 'POST':
         form = CustomerPortalTicketForm(request.POST, request.FILES, customer=customer)
-        if form.is_valid():
+        machines = TicketMachineFormSet(request.POST, request.FILES, prefix='machines', form_kwargs={'customer': customer})
+        if form.is_valid() and machines.is_valid():
             site = form.cleaned_data['site']
+            for machine_form in machines:
+                asset = machine_form.cleaned_data.get('asset')
+                if asset is not None and asset.site_id != site.pk:
+                    machine_form.add_error('asset', _('This machine is registered at another site.'))
+        if form.is_valid() and machines.is_valid():
+            site = form.cleaned_data['site']
+            lines = [machine_form.cleaned_data for machine_form in machines if machine_form.has_changed()]
             with transaction.atomic():
                 ticket = form.save(commit=False)
                 ticket.customer = customer
@@ -540,11 +551,21 @@ def portal_ticket_new(request):
                 ticket.site_description = site.name
                 ticket.site_address = site.address
                 ticket.submitted_at = timezone.now()
+                ticket.serial_numbers, ticket.description = _ticket_text_from_machines(lines)
                 save_new_ticket(ticket)
-                for uploaded_file in form.cleaned_data['attachments']:
-                    CustomerTicketAttachment.objects.create(
-                        ticket=ticket, file=uploaded_file, uploaded_at=timezone.now(),
+                for position, line in enumerate(lines):
+                    machine = TicketMachine.objects.create(
+                        ticket=ticket, asset=line['asset'], position=position,
+                        model_name='' if line['asset'] else line['model_name'],
+                        serial_no='' if line['asset'] else line['serial_no'],
+                        serial_photo=None if line['asset'] else line['serial_photo'],
+                        problem=line['problem'], description=line['description'],
+                        out_of_service=line['out_of_service'],
                     )
+                    for uploaded_file in line['files']:
+                        CustomerTicketAttachment.objects.create(
+                            ticket=ticket, machine=machine, file=uploaded_file, uploaded_at=timezone.now(),
+                        )
                 TicketNotification.objects.create(
                     ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
                 )
@@ -557,8 +578,37 @@ def portal_ticket_new(request):
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             'contact_email': customer.contact_email, 'shipping_address': customer.shipping_address,
         })
+        machines = TicketMachineFormSet(prefix='machines', form_kwargs={'customer': customer})
 
-    return render(request, 'customers/portal_ticket_new.html', {'form': form})
+    return render(request, 'customers/portal_ticket_new.html', {'form': form, 'machines': machines})
+
+
+def _ticket_text_from_machines(lines):
+    """(serial_numbers, description) text for a ticket, written from its
+    machine cards: what staff emails, ticket lists, the mobile app and a
+    task's reported_serial_numbers have always read. Always in English,
+    like the rest of what's written to the ticket for staff.
+    """
+    from django.utils import translation
+
+    serials, described = [], []
+    with translation.override('en'):
+        for line in lines:
+            asset = line['asset']
+            name = (f"{asset.brand.name + ' ' if asset.brand_id else ''}{asset.model_name}" if asset
+                    else line['model_name'])
+            serial = asset.serial_no if asset else line['serial_no']
+            if not serial and not asset and line['serial_photo']:
+                serial = _('serial number on the sticker photo')
+            if serial:
+                serials.append(serial)
+            entry = f"{name}{f' ({serial})' if serial else ''}: {TicketMachine.Problem(line['problem']).label}"
+            if line['out_of_service']:
+                entry += f" — {_('cannot be used')}"
+            if line['description']:
+                entry += f"\n  {line['description']}"
+            described.append(entry)
+    return '\n'.join(serials), '\n'.join(described)
 
 
 def _account_redirect(request):
