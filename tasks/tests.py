@@ -7318,8 +7318,8 @@ class TodayTestsMixin:
         task = Task.objects.create(
             task_number=number, site=self.site, task_type=self.task_type, description='Belt noise',
             priority=priority, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
-            reported_at=timezone.now(), promised_at=timezone.now(), created_by=self.supervisor_user,
-            status=fields.pop('status', Task.Status.ASSIGNED), **fields,
+            reported_at=fields.pop('reported_at', timezone.now()), promised_at=timezone.now(),
+            created_by=self.supervisor_user, status=fields.pop('status', Task.Status.ASSIGNED), **fields,
         )
         if lead is not None:
             TaskAssignment.objects.create(
@@ -7875,3 +7875,72 @@ class SidebarPerUserTests(TaskTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'Page not found', status_code=403)
         self.assertNotContains(response, 'Not allowed', status_code=403)
+
+
+class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
+    # The dashboard's opened-vs-completed chart: tasks reported per local
+    # week, and tasks whose first work report was submitted that week.
+
+    def setUp(self):
+        clock = patch('django.utils.timezone.now', return_value=TEAM_MAP_NOW)  # a Thursday
+        clock.start()
+        self.addCleanup(clock.stop)
+        super().setUp()
+
+    def test_counts_opened_and_completed_by_week(self):
+        this_week = self._make_task('UAE-0501', reported_at=TEAM_MAP_NOW)
+        older = self._make_task('UAE-0502', reported_at=TEAM_MAP_NOW - timedelta(weeks=2))
+        self._make_task('UAE-0503', reported_at=TEAM_MAP_NOW - timedelta(weeks=20))
+        for when in (TEAM_MAP_NOW, TEAM_MAP_NOW + timedelta(hours=1)):  # only the first report counts
+            TaskEvent.objects.create(
+                task=older, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=when, actor=self.tech_user,
+            )
+        self.client.login(username='supervisor1', password='pass12345')
+        weekly = self.client.get('/tasks/dashboard/', {'period': 'week'}).context['tasks_chart']
+        weeks = weekly['periods']
+        self.assertEqual(len(weeks), 8)
+        self.assertTrue(weeks[-1]['is_current'])
+        self.assertEqual((weeks[-1]['opened'], weeks[-1]['completed']), (1, 1))
+        self.assertEqual(weeks[-3]['opened'], 1)
+        self.assertEqual(sum(week['opened'] for week in weeks), 2)
+        self.assertEqual(weekly['top'], 4)
+        self.assertEqual(weeks[-1]['opened_pct'], 25)
+        self.assertIsNotNone(this_week)
+
+    def test_tickets_chart_only_for_people_who_handle_tickets(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertIsNone(self.client.get('/tasks/dashboard/').context['tickets_chart'])
+
+        Technician.objects.create(
+            user=User.objects.create_user('ops1', password='pass12345'), country=self.country,
+            full_name='Ola Ops', language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0501', company_name='Fitness First', site_description='Marina',
+            contact_name='Ali', contact_phone='0501234567', description='Squeak', submitted_at=TEAM_MAP_NOW,
+            status=CustomerTicket.Status.CLOSED, reviewed_at=TEAM_MAP_NOW,
+        )
+        self.client.login(username='ops1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/', {'period': 'week'})
+        week = response.context['tickets_chart']['periods'][-1]
+        self.assertEqual((week['opened'], week['completed']), (1, 1))
+        self.assertContains(response, 'Tickets received and resolved per week')
+
+    def test_monthly_is_the_default_and_covers_twelve_months(self):
+        self._make_task('UAE-0601', reported_at=TEAM_MAP_NOW)
+        self._make_task('UAE-0602', reported_at=TEAM_MAP_NOW - timedelta(days=40))
+        self.client.login(username='supervisor1', password='pass12345')
+        chart = self.client.get('/tasks/dashboard/').context['tasks_chart']
+        self.assertEqual(chart['period'], 'month')
+        months = chart['periods']
+        self.assertEqual(len(months), 12)
+        self.assertEqual((months[-1]['start'], months[0]['start']), (date(2026, 10, 1), date(2025, 11, 1)))
+        self.assertEqual((months[-1]['opened'], months[-2]['opened']), (1, 1))
+
+    def test_chart_has_a_legend_and_a_table_view(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.supervisor_user.technician.language = 'en'
+        self.supervisor_user.technician.save(update_fields=['language'])
+        response = self.client.get('/tasks/dashboard/')
+        self.assertContains(response, 'chart-legend')
+        self.assertContains(response, 'Show as table')

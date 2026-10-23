@@ -19,7 +19,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import (
-    Case, Count, Exists, IntegerField, Max, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
+    Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
 from django.forms import formset_factory
 from django.http import HttpResponse
@@ -1029,6 +1029,96 @@ def _send_feedback_email(request, feedback):
 
 # Open tasks shown on the dashboard before "See all".
 DASHBOARD_TASK_LIMIT = 10
+# Periods in the dashboard's charts, the current one included: monthly by
+# default (what managers plan by), weekly on request.
+DASHBOARD_CHART_MONTHS = 12
+DASHBOARD_CHART_WEEKS = 8
+
+
+def _nice_ceiling(value):
+    """The smallest of 4, 6, 10, 20, 40, 60, 100, ... at or above `value`: a
+    chart's top gridline, always even so the middle one is a whole number.
+    """
+    step = 1
+    while True:
+        for factor in (2, 4, 6, 10):
+            if factor * step >= max(value, 4):
+                return factor * step
+        step *= 10
+
+
+def _period_starts(period):
+    """The first day of each chart period, oldest first: the last
+    DASHBOARD_CHART_MONTHS months, or the last DASHBOARD_CHART_WEEKS
+    Monday-based weeks, the current one included.
+    """
+    today = timezone.localdate()
+    if period == 'month':
+        starts = [today.replace(day=1)]
+        while len(starts) < DASHBOARD_CHART_MONTHS:
+            starts.insert(0, (starts[0] - timedelta(days=1)).replace(day=1))
+        return starts
+    this_monday = today - timedelta(days=today.weekday())
+    return [this_monday - timedelta(weeks=n) for n in range(DASHBOARD_CHART_WEEKS - 1, -1, -1)]
+
+
+def _period_chart(opened, completed, period):
+    """Counts per period (see _period_starts) from two lists of datetimes:
+    what came in and what was finished. Bar heights are percentages of a
+    clean top value, so the template draws them without arithmetic. Shared
+    by the dashboard's tickets and tasks charts.
+    """
+    starts = _period_starts(period)
+    buckets = {start: {'opened': 0, 'completed': 0} for start in starts}
+
+    def bucket_of(moment):
+        day = timezone.localtime(moment).date()
+        return day.replace(day=1) if period == 'month' else day - timedelta(days=day.weekday())
+
+    for key, moments in (('opened', opened), ('completed', completed)):
+        for moment in moments:
+            bucket = buckets.get(bucket_of(moment))
+            if bucket is not None:
+                bucket[key] += 1
+
+    top = _nice_ceiling(max(max(b['opened'], b['completed']) for b in buckets.values()))
+    return {
+        'period': period,
+        'top': top,
+        'ticks': [top, top // 2, 0],
+        'periods': [
+            {
+                'start': start, 'is_current': start == starts[-1], **counts,
+                'opened_pct': round(counts['opened'] * 100 / top), 'completed_pct': round(counts['completed'] * 100 / top),
+            }
+            for start, counts in buckets.items()
+        ],
+    }
+
+
+def _tasks_chart(country, period):
+    """Tasks reported vs tasks whose first work report was submitted, per period."""
+    since = _period_starts(period)[0]
+    opened = Task.objects.filter(
+        site__customer__country=country, reported_at__date__gte=since,
+    ).values_list('reported_at', flat=True)
+    completed = TaskEvent.objects.filter(
+        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task__site__customer__country=country,
+    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
+    return _period_chart(opened, completed, period)
+
+
+def _tickets_chart(country, period):
+    """Customer tickets received vs resolved (converted, dismissed or closed: reviewed_at), per period."""
+    since = _period_starts(period)[0]
+    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER, country=country)
+    return _period_chart(
+        tickets.filter(submitted_at__date__gte=since).values_list('submitted_at', flat=True),
+        tickets.filter(reviewed_at__date__gte=since).values_list('reviewed_at', flat=True),
+        period,
+    )
+
+
 # Escalations listed one by one on the home page.
 HOME_ESCALATION_LIMIT = 5
 
@@ -1114,7 +1204,8 @@ def dashboard(request):
     0024_dashboard_is_the_default_landing_page) since every role's
     welcome page (spots.views.home) links to it.
     """
-    require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
+    chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
     active_country = get_active_country(request)
 
     technicians = list(Technician.objects.filter(
@@ -1155,6 +1246,13 @@ def dashboard(request):
         'technicians': technicians,
         'tasks': tasks[:DASHBOARD_TASK_LIMIT],
         'stats': stats,
+        'chart_period': chart_period,
+        'tasks_chart': _tasks_chart(active_country, chart_period),
+        # The ticket desk's own chart, only for those who handle tickets.
+        'tickets_chart': (
+            _tickets_chart(active_country, chart_period)
+            if _has_permission(viewer, RolePermission.Permission.MANAGE_TICKETS) else None
+        ),
     }
     return render(request, 'tasks/dashboard.html', context)
 

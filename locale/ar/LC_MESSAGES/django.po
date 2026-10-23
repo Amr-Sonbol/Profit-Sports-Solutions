@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-22 21:20+0000\n"
+"POT-Creation-Date: 2026-10-23 06:48+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -720,6 +720,9 @@ msgstr "تم التعديل"
 msgid "Chargeable"
 msgstr "مدفوعة"
 
+msgid "Chart period"
+msgstr "فترة الرسم البياني"
+
 msgid "Check-ins away from the site"
 msgstr "نقرات مسجَّلة خارج الموقع"
 
@@ -968,6 +971,26 @@ msgstr "توقيع العميل"
 
 msgid "Customer ticket"
 msgstr "تذكرة عميل"
+
+#, python-format
+msgid "Customer tickets, the last %(months)s month. Resolved means converted to a task, dismissed or closed."
+msgid_plural "Customer tickets, the last %(months)s months. Resolved means converted to a task, dismissed or closed."
+msgstr[0] "تذاكر العملاء، لا توجد أشهر. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[1] "تذاكر العملاء، الشهر الأخير. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[2] "تذاكر العملاء، آخر شهرين. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[3] "تذاكر العملاء، آخر %(months)s أشهر. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[4] "تذاكر العملاء، آخر %(months)s شهرًا. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[5] "تذاكر العملاء، آخر %(months)s شهر. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+
+#, python-format
+msgid "Customer tickets, the last %(weeks)s week. Resolved means converted to a task, dismissed or closed."
+msgid_plural "Customer tickets, the last %(weeks)s weeks. Resolved means converted to a task, dismissed or closed."
+msgstr[0] "تذاكر العملاء، لا توجد أسابيع. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[1] "تذاكر العملاء، الأسبوع الأخير. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[2] "تذاكر العملاء، آخر أسبوعين. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[3] "تذاكر العملاء، آخر %(weeks)s أسابيع. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[4] "تذاكر العملاء، آخر %(weeks)s أسبوعًا. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
+msgstr[5] "تذاكر العملاء، آخر %(weeks)s أسبوع. تعني \"تم حلها\" أنها حُوّلت إلى مهمة أو رُفضت أو أُغلقت."
 
 msgid "Customer updated."
 msgstr "تم تحديث بيانات العميل."
@@ -1908,6 +1931,9 @@ msgstr "الإثنين"
 
 msgid "Month"
 msgstr "شهر"
+
+msgid "Monthly"
+msgstr "شهري"
 
 msgid "Monthly report"
 msgstr "التقرير الشهري"
@@ -3101,6 +3127,9 @@ msgstr "رقم تتبع الشحن"
 msgid "Show all"
 msgstr "عرض الكل"
 
+msgid "Show as table"
+msgstr "عرض كجدول"
+
 msgid "Show deactivated customers"
 msgstr "عرض العملاء الموقوفين"
 
@@ -3304,6 +3333,12 @@ msgstr "المهام المُنجزة كفني رئيسي"
 msgid "Tasks not scheduled"
 msgstr "مهام غير مجدولة"
 
+msgid "Tasks opened and completed per month"
+msgstr "المهام المفتوحة والمكتملة شهريًا"
+
+msgid "Tasks opened and completed per week"
+msgstr "المهام المفتوحة والمكتملة أسبوعيًا"
+
 #, python-format
 msgid "Tasks received (%(total)s)"
 msgstr "المهام الواردة (%(total)s)"
@@ -3426,6 +3461,26 @@ msgstr "تُحتسب ساعات التقرير لجميع أعضاء الفري�
 #, python-format
 msgid "The job at %(site)s has exceeded its estimate of %(hours)s hours."
 msgstr "تجاوز العمل في %(site)s التقدير المحدد بـ %(hours)s ساعة."
+
+#, python-format
+msgid "The last %(months)s month. Completed means the work report was submitted."
+msgid_plural "The last %(months)s months. Completed means the work report was submitted."
+msgstr[0] "لا توجد أشهر. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[1] "الشهر الأخير. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[2] "آخر شهرين. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[3] "آخر %(months)s أشهر. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[4] "آخر %(months)s شهرًا. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[5] "آخر %(months)s شهر. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+
+#, python-format
+msgid "The last %(weeks)s week. Completed means the work report was submitted."
+msgid_plural "The last %(weeks)s weeks. Completed means the work report was submitted."
+msgstr[0] "لا توجد أسابيع. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[1] "الأسبوع الأخير. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[2] "آخر أسبوعين. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[3] "آخر %(weeks)s أسابيع. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[4] "آخر %(weeks)s أسبوعًا. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
+msgstr[5] "آخر %(weeks)s أسبوع. تعني \"مكتملة\" أنه تم رفع تقرير العمل."
 
 msgid "The lead has left the company. As work has already started, only the lead can be replaced; the new lead will continue from the current stage of the task."
 msgstr "غادر قائد المهمة الشركة. وبما أن العمل قد بدأ، فلا يمكن إلا استبدال القائد؛ وسيتابع القائد الجديد من المرحلة الحالية للمهمة."
@@ -3683,6 +3738,12 @@ msgstr "التذاكر"
 msgid "Tickets received (%(total)s)"
 msgstr "الطلبات الواردة (%(total)s)"
 
+msgid "Tickets received and resolved per month"
+msgstr "التذاكر المستلمة والمحلولة شهريًا"
+
+msgid "Tickets received and resolved per week"
+msgstr "التذاكر المستلمة والمحلولة أسبوعيًا"
+
 msgid "Time"
 msgstr "الوقت"
 
@@ -3876,8 +3937,14 @@ msgstr "الأربعاء"
 msgid "Week"
 msgstr "أسبوع"
 
+msgid "Week of"
+msgstr "أسبوع"
+
 msgid "Weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"
+
+msgid "Weekly"
+msgstr "أسبوعي"
 
 msgid "Welcome"
 msgstr "أهلاً بك"

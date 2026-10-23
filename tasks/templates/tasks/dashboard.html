@@ -19,6 +19,19 @@
     {% translate "Emergencies" as label %}{% if stats.emergency_count %}{% include "_stat_tile.html" with value=stats.emergency_count label=label url=task_list_url query="priority=emergency" level="critical" %}{% else %}{% include "_stat_tile.html" with value=0 label=label url="" level="" %}{% endif %}
 </div>
 
+<nav class="tabs chart-period" aria-label="{% translate 'Chart period' %}">
+    <a href="?period=month" class="{% if chart_period == 'month' %}is-active{% endif %}">{% translate "Monthly" %}</a>
+    <a href="?period=week" class="{% if chart_period == 'week' %}is-active{% endif %}">{% translate "Weekly" %}</a>
+</nav>
+{% if tickets_chart %}
+{% if chart_period == 'month' %}{% translate "Tickets received and resolved per month" as title %}{% blocktranslate count months=tickets_chart.periods|length asvar subtitle %}Customer tickets, the last {{ months }} month. Resolved means converted to a task, dismissed or closed.{% plural %}Customer tickets, the last {{ months }} months. Resolved means converted to a task, dismissed or closed.{% endblocktranslate %}{% else %}{% translate "Tickets received and resolved per week" as title %}{% blocktranslate count weeks=tickets_chart.periods|length asvar subtitle %}Customer tickets, the last {{ weeks }} week. Resolved means converted to a task, dismissed or closed.{% plural %}Customer tickets, the last {{ weeks }} weeks. Resolved means converted to a task, dismissed or closed.{% endblocktranslate %}{% endif %}
+{% translate "Received" as opened_label %}{% translate "Resolved" as completed_label %}
+{% include "tasks/_period_chart.html" with chart=tickets_chart %}
+{% endif %}
+{% if chart_period == 'month' %}{% translate "Tasks opened and completed per month" as title %}{% blocktranslate count months=tasks_chart.periods|length asvar subtitle %}The last {{ months }} month. Completed means the work report was submitted.{% plural %}The last {{ months }} months. Completed means the work report was submitted.{% endblocktranslate %}{% else %}{% translate "Tasks opened and completed per week" as title %}{% blocktranslate count weeks=tasks_chart.periods|length asvar subtitle %}The last {{ weeks }} week. Completed means the work report was submitted.{% plural %}The last {{ weeks }} weeks. Completed means the work report was submitted.{% endblocktranslate %}{% endif %}
+{% translate "Opened" as opened_label %}{% translate "Completed" as completed_label %}
+{% include "tasks/_period_chart.html" with chart=tasks_chart %}
+
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Open tasks" %}</h2>
