@@ -590,6 +590,53 @@ class PortalHomeTests(CustomerTestCase):
         self.assertContains(response, 'JBR Branch')
 
 
+
+class PortalVisitReportTests(CustomerTestCase):
+    # Customers download their own visit reports from the portal's service history.
+
+    def setUp(self):
+        super().setUp()
+        from reports.models import WorkReport
+        from tasks.models import Task
+        self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.user = self.portal_user
+        self.customer.save(update_fields=['user'])
+        self.task = Task.objects.create(
+            task_number='AE-0801', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.CLOSED, scheduled_for=timezone.now(),
+        )
+        WorkReport.objects.create(
+            task=self.task, findings='Belt worn out', action_taken='Replaced belt', resolved=True,
+            labour_hours='1.50', customer_name='Ali', submitted_at=timezone.now(),
+        )
+        self.url = f'/customers/portal/visits/{self.task.pk}/report.pdf'
+
+    def test_the_customer_downloads_their_own_report(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.assertContains(self.client.get('/customers/portal/'), self.url)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertTrue(response.content.startswith(b'%PDF'))
+
+    def test_another_customers_report_is_not_found(self):
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        other.user = User.objects.create_user('othergym', password='pass12345')
+        other.save(update_fields=['user'])
+        self.client.login(username='othergym', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_a_visit_without_a_report_is_not_found(self):
+        self.task.report.delete()
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_staff_cannot_use_the_portal_link(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertIn(self.client.get(self.url).status_code, (302, 403, 404))
+
+
 class PortalTicketNewTests(CustomerTestCase):
     def setUp(self):
         super().setUp()

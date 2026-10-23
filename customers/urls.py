@@ -20,4 +20,5 @@ urlpatterns = [
     path('portal/first-login/', views.portal_first_login, name='portal_first_login'),
     path('portal/', views.portal_home, name='portal_home'),
     path('portal/tickets/new/', views.portal_ticket_new, name='portal_ticket_new'),
+    path('portal/visits/<int:pk>/report.pdf', views.portal_visit_report_pdf, name='portal_visit_report_pdf'),
 ]

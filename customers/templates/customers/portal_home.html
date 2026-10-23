@@ -58,6 +58,7 @@
                     <th>{% translate "Site" %}</th>
                     <th>{% translate "Type" %}</th>
                     <th>{% translate "Status" %}</th>
+                    <th>{% translate "Report" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -67,6 +68,12 @@
                     <td>{{ visit.site.name }}</td>
                     <td>{{ visit.task_type.display_name|default:"—" }}</td>
                     <td><span class="badge badge--status-{{ visit.status }}">{{ visit.get_status_display }}</span></td>
+                    <td>
+                        {% if visit.has_report %}
+                        <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener">{% translate "Download (PDF)" %}</a>
+                        {% if visit.report_changed %}· <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener">{% translate "Signed version" %}</a>{% endif %}
+                        {% else %}<span class="muted">—</span>{% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

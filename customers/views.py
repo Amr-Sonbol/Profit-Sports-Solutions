@@ -10,7 +10,8 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.conf import settings
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -465,18 +466,54 @@ def portal_first_login(request):
 
 @login_required(login_url='customers:portal_login')
 def portal_home(request):
-    """A logged-in customer's own tickets and service history — summary
-    only (date, site, type, status). Never the internal report detail,
-    technician names, or parts used that staff sees on the same task.
+    """A logged-in customer's own tickets and service history: date, site,
+    type and status, plus the visit report PDF once one is filed — the
+    same customer-facing document emailed to them (no hours or prices).
+    Never the internal report detail staff sees on the task page.
     """
     customer = require_customer(request)
     if customer.must_change_password:
         return redirect('customers:portal_first_login')
     tickets = customer.tickets.order_by('-submitted_at')
-    visits = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
+    visits = list(Task.objects.filter(site__customer=customer).select_related('site', 'task_type', 'report').order_by(
         '-scheduled_for', '-reported_at',
-    )
+    ))
+    from reports.pdf import changed_after_signing
+    for visit in visits:
+        report = getattr(visit, 'report', None)
+        visit.has_report = report is not None
+        visit.report_changed = report is not None and changed_after_signing(report)
     return render(request, 'customers/portal_home.html', {'customer': customer, 'tickets': tickets, 'visits': visits})
+
+
+@login_required(login_url='customers:portal_login')
+def portal_visit_report_pdf(request, pk):
+    """The visit report PDF for one of the customer's own visits, in their
+    language (or ?lang=en / ?lang=ar). ?version=signed gives the copy they
+    signed, when the report has changed since. Anyone else's visit, or one
+    without a report yet, is simply not found.
+    """
+    from reports.pdf import render_visit_report_pdf
+
+    customer = require_customer(request)
+    if customer.must_change_password:
+        return redirect('customers:portal_first_login')
+    task = get_object_or_404(
+        Task.objects.select_related('site__customer__country', 'task_type', 'report'), pk=pk, site__customer=customer,
+    )
+    report = getattr(task, 'report', None)
+    if report is None:
+        raise Http404
+    language = request.GET.get('lang')
+    if language not in dict(settings.LANGUAGES):
+        language = customer.language or settings.LANGUAGE_CODE
+    signed_version = request.GET.get('version') == 'signed' and bool(report.signed_content)
+    response = HttpResponse(
+        render_visit_report_pdf(report, language, signed_version=signed_version), content_type='application/pdf',
+    )
+    suffix = '-signed' if signed_version else ''
+    response['Content-Disposition'] = f'inline; filename="{task.task_number}-visit-report{suffix}.pdf"'
+    return response
 
 
 @login_required(login_url='customers:portal_login')
