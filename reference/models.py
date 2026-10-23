@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
@@ -22,6 +23,10 @@ class Country(models.Model):
     weekend_days = models.CharField(
         _('weekend days'), max_length=13, default='4,5',
         help_text=_('comma-separated weekday numbers, where Monday = 0 (e.g. 4,5 for Friday–Saturday)'),
+    )
+    report_language = models.CharField(
+        _('visit report language'), max_length=2, choices=settings.LANGUAGES, default='en',
+        help_text=_("the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"),
     )
     is_active = models.BooleanField(_('active'), default=True)
 

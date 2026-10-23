@@ -116,6 +116,16 @@ def _template_context(report, content, signature_url, signed_at, changed):
     }
 
 
+def report_language(customer):
+    """The language a customer's visit reports are in: always their
+    country's (Country.report_language) — Arabic in Saudi Arabia and Egypt,
+    English everywhere else, whatever the customer picked for themselves.
+    The emailed copy and its email, and every download not asking for a
+    language (?lang=), use this.
+    """
+    return customer.country.report_language or 'en'
+
+
 def render_visit_report_pdf(report, language=None, signed_version=False):
     """The report as PDF bytes, in `language` (default: the active one),
     with times in the site's own country time zone. With signed_version,

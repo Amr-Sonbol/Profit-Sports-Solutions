@@ -6026,6 +6026,33 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(report.copy_sent_to, 'ali@example.com')
         self.assertIsNotNone(report.copy_sent_at)
 
+    def _send_copy_capturing_language(self):
+        with patch('reports.pdf.render_visit_report_pdf', return_value=b'%PDF-test') as render:
+            self.client.login(username='tech1', password='pass12345')
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        return render.call_args.args[1], mail.outbox[0]
+
+    def test_in_saudi_arabia_and_egypt_the_report_and_its_email_are_arabic(self):
+        self.country.report_language = 'ar'
+        self.country.save(update_fields=['report_language'])
+        self.customer.language = 'en'  # their own choice doesn't change it
+        self.customer.save(update_fields=['language'])
+        language, email = self._send_copy_capturing_language()
+        self.assertEqual(language, 'ar')
+        self.assertNotIn('Visit report', email.subject)
+        html = email.alternatives[0][0]
+        self.assertIn('dir="rtl"', html)
+        self.assertIn('Profit Sports Solutions', html)  # the company name stays in English
+
+    def test_elsewhere_the_report_is_always_english(self):
+        self.customer.language = 'ar'  # even a customer who picked Arabic
+        self.customer.save(update_fields=['language'])
+        language, email = self._send_copy_capturing_language()
+        self.assertEqual(language, 'en')
+        self.assertIn('Visit report', email.subject)
+        self.assertIn('dir="ltr"', email.alternatives[0][0])
+
     def test_a_correction_does_not_send_another_copy(self):
         self.client.login(username='tech1', password='pass12345')
         with self.captureOnCommitCallbacks(execute=True):

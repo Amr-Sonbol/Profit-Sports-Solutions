@@ -49,6 +49,7 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 | timezone | varchar | IANA name, e.g. `Asia/Riyadh` |
 | currency_code | char(3) | |
 | weekend_days | varchar | comma-separated weekday numbers, Monday = 0 — `4,5` is Friday–Saturday (the default), `5,6` Saturday–Sunday |
+| report_language | varchar(2) | default `en` — the language of every customer's visit report in this country, whatever the customer picked: `ar` in Saudi Arabia and Egypt, `en` everywhere else |
 | is_active | bool | |
 
 **`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia and Egypt are Friday only; Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.

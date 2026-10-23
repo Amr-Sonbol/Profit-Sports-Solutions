@@ -962,29 +962,32 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
 
 
 def send_visit_report_copy(report, email_address):
-    """Email the customer the visit report PDF (reports.pdf) in their own
-    language, and record where and when on the report. Best-effort: a
-    failure is logged, never raised, and the PDF stays downloadable from
-    the task page. The email itself is in English, like every other
-    outbound customer email here.
+    """Email the customer the visit report PDF (reports.pdf), and record
+    where and when on the report. Both the PDF and its email are in the
+    report's language (reports.pdf.report_language — Arabic in Saudi
+    Arabia and Egypt), unlike other customer emails, which stay English.
+    Best-effort: a failure is logged, never raised, and the PDF stays
+    downloadable from the task page.
     """
-    from reports.pdf import render_visit_report_pdf
+    from reports.pdf import render_visit_report_pdf, report_language
 
     task = report.task
     customer = task.site.customer
+    language = report_language(customer)
     try:
-        pdf = render_visit_report_pdf(report, customer.language or settings.LANGUAGE_CODE)
+        pdf = render_visit_report_pdf(report, language)
     except Exception:  # noqa: BLE001 — same as a failed send: log it, don't break the report
         logger.exception('Visit report PDF failed: %s', task.task_number)
         return False
     contact = task.site.contact_name or customer.contact_name or customer.name
-    context = {
-        'contact': contact, 'site': task.site.name, 'number': task.task_number,
-        'date': formats.date_format(
-            timezone.localtime(report.submitted_at, ZoneInfo(customer.country.timezone)).date(), 'j F Y',
-        ),
-    }
-    with translation.override('en'):
+    with translation.override(language):
+        context = {
+            'contact': contact, 'site': task.site.name, 'number': task.task_number,
+            'date': formats.date_format(
+                timezone.localtime(report.submitted_at, ZoneInfo(customer.country.timezone)).date(), 'j F Y',
+            ),
+            'email_language': language,
+        }
         subject = _('Visit report — %(number)s — Profit Sports Solutions') % context
         message = _(
             'Dear %(contact)s,\n\n'
@@ -993,10 +996,10 @@ def send_visit_report_copy(report, email_address):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % context
-    sent = _send_notification_email(
-        subject, message, 'tasks/email/visit_report.html', context, [email_address],
-        attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'),
-    )
+        sent = _send_notification_email(
+            subject, message, 'tasks/email/visit_report.html', context, [email_address],
+            attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'),
+        )
     if sent:
         report.copy_sent_to = email_address
         report.copy_sent_at = timezone.now()
@@ -1649,7 +1652,7 @@ def task_report_pdf(request, pk):
     office to download or print: in the customer's language by default,
     or ?lang=en / ?lang=ar. Same access as the task page itself.
     """
-    from reports.pdf import render_visit_report_pdf
+    from reports.pdf import render_visit_report_pdf, report_language
 
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
     task = _scoped_or_404(
@@ -1661,7 +1664,7 @@ def task_report_pdf(request, pk):
         raise Http404
     language = request.GET.get('lang')
     if language not in dict(settings.LANGUAGES):
-        language = task.site.customer.language or settings.LANGUAGE_CODE
+        language = report_language(task.site.customer)
     # ?version=signed: the frozen copy of what the customer signed.
     signed_version = request.GET.get('version') == 'signed' and bool(report.signed_content)
     response = HttpResponse(
