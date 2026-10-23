@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-23 22:23+0000\n"
+"POT-Creation-Date: 2026-10-23 22:40+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -77,6 +77,16 @@ msgid "%(count)s more than last month"
 msgstr "أكثر بـ %(count)s من الشهر الماضي"
 
 #, python-format
+msgid "%(count)s overdue"
+msgid_plural "%(count)s overdue"
+msgstr[0] "لا توجد متأخرات"
+msgstr[1] "مهمة متأخرة واحدة"
+msgstr[2] "مهمتان متأخرتان"
+msgstr[3] "%(count)s مهام متأخرة"
+msgstr[4] "%(count)s مهمة متأخرة"
+msgstr[5] "%(count)s مهمة متأخرة"
+
+#, python-format
 msgid "%(count)s report exceeding the recorded time"
 msgid_plural "%(count)s reports exceeding the recorded time"
 msgstr[0] "لا توجد تقارير تتجاوز الوقت المسجَّل"
@@ -95,6 +105,16 @@ msgstr[2] "مهمتان تجاوزتا التقدير بشكل ملحوظ"
 msgstr[3] "%(count)s مهام تجاوزت التقدير بشكل ملحوظ"
 msgstr[4] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
 msgstr[5] "%(count)s مهمة تجاوزت التقدير بشكل ملحوظ"
+
+#, python-format
+msgid "%(count)s task today"
+msgid_plural "%(count)s tasks today"
+msgstr[0] "لا مهام اليوم"
+msgstr[1] "مهمة واحدة اليوم"
+msgstr[2] "مهمتان اليوم"
+msgstr[3] "%(count)s مهام اليوم"
+msgstr[4] "%(count)s مهمة اليوم"
+msgstr[5] "%(count)s مهمة اليوم"
 
 #, python-format
 msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
@@ -515,6 +535,9 @@ msgstr "يوجد حساب مسجَّل بهذا البريد الإلكترون�
 
 msgid "Any time that day"
 msgstr "في أي وقت من ذلك اليوم"
+
+msgid "Any time today"
+msgstr "في أي وقت اليوم"
 
 msgid "Anything else we should know"
 msgstr "أي معلومات أخرى ينبغي أن نعرفها"
@@ -1450,6 +1473,9 @@ msgstr "وصف المشكلة"
 msgid "Details"
 msgstr "التفاصيل"
 
+msgid "Directions"
+msgstr "الاتجاهات"
+
 msgid "Disable login"
 msgstr "تعطيل تسجيل الدخول"
 
@@ -1479,6 +1505,9 @@ msgstr "تمت إضافة المستند."
 
 msgid "Documents"
 msgstr "المستندات"
+
+msgid "Done today"
+msgstr "أُنجزت اليوم"
 
 msgid "Download"
 msgstr "تنزيل"
@@ -1923,6 +1952,9 @@ msgstr "آخر تسجيل"
 msgid "Last sign-in"
 msgstr "آخر تسجيل دخول"
 
+msgid "Later today"
+msgstr "لاحقًا اليوم"
+
 msgid "Lead"
 msgstr "الفني الرئيسي"
 
@@ -2243,6 +2275,9 @@ msgstr "طلب جديد %(number)s — %(company)s"
 msgid "Next"
 msgstr "التالي"
 
+msgid "Next job"
+msgstr "المهمة التالية"
+
 msgid "Next month"
 msgstr "الشهر القادم"
 
@@ -2515,6 +2550,9 @@ msgstr "ملاحظة للعميل (اختياري)"
 msgid "Notes"
 msgstr "الملاحظات"
 
+msgid "Nothing left to do today."
+msgstr "لا يوجد ما تبقّى لإنجازه اليوم."
+
 #, python-format
 msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
 msgstr "إشعار بتأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
@@ -2582,6 +2620,9 @@ msgstr "مفتوحة"
 
 msgid "Open customer record"
 msgstr "فتح سجل العميل"
+
+msgid "Open task"
+msgstr "فتح المهمة"
 
 msgid "Open tasks"
 msgstr "المهام المفتوحة"
@@ -3264,6 +3305,9 @@ msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلا
 
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
+
+msgid "See the week"
+msgstr "عرض الأسبوع"
 
 msgid "Segment"
 msgstr "الفئة"
@@ -4227,6 +4271,9 @@ msgstr "قيد المراجعة"
 
 msgid "Under supervision"
 msgstr "تحت الإشراف"
+
+msgid "Under way"
+msgstr "قيد التنفيذ"
 
 #, python-format
 msgid "Undo “%(step)s”"

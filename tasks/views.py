@@ -3224,23 +3224,12 @@ NOT_DONE_STATUSES = [
 ]
 
 
-def _week_board(technician, request):
-    """(days, overdue, unscheduled, nav_context) for one technician's week.
-    Shared by my_week (self) and technician_board (a supervisor viewing
-    someone else).
-
-    Their tasks are those they're assigned to (lead or helper) and those
-    they're the responsible supervisor for — a task where both are true
-    appears once, under its assignment. Cancelled tasks never show.
-    - days: the week's 7 days. A task lands on its day by scheduled_for,
-      or by scheduled_date when only the day is set ("any time that day",
-      after the timed ones).
-    - overdue: not yet done, planned before today — whatever week is
-      shown, so a missed job never disappears.
-    - unscheduled: open, with no day at all.
+def _my_tasks(technician):
+    """(queryset, with_role) for everything on someone's own plate: tasks
+    they're assigned to (lead or helper) and tasks they're the responsible
+    supervisor for — once each, under its assignment — never cancelled
+    ones. with_role(tasks) lists them, each with `.my_role` set.
     """
-    today, start, end = _week_window(request, technician.country)
-
     roles = dict(
         TaskAssignment.objects.filter(technician=technician, is_active=True).values_list('task_id', 'role'),
     )
@@ -3258,6 +3247,73 @@ def _week_board(technician, request):
             task.my_role = roles[task.pk]
         return tasks
 
+    return mine, with_role
+
+
+def _time_of_day(task):
+    """Sort key within one day: timed tasks by time, then the day-only ones."""
+    return (
+        task.scheduled_for is None,
+        timezone.localtime(task.scheduled_for).time() if task.scheduled_for else datetime.min.time(),
+        task.task_number,
+    )
+
+
+def _overdue(mine, with_role, today):
+    """Still to be done, planned for a day before today, oldest first."""
+    return sorted(with_role(mine.filter(status__in=NOT_DONE_STATUSES).filter(
+        Q(scheduled_for__date__lt=today) | Q(scheduled_for__isnull=True, scheduled_date__lt=today),
+    )), key=lambda task: (_calendar_day(task), task.task_number))
+
+
+def _today_plan(technician):
+    """My week's Today view: today's tasks split into the next job (one
+    already under way first, else the earliest still to do), the rest
+    still to do, and those done — plus overdue. The next job carries the
+    lead's next tap (`next_action`) and its site's map link.
+    """
+    today = timezone.localtime().date()
+    mine, with_role = _my_tasks(technician)
+    todays = sorted(with_role(mine.filter(
+        Q(scheduled_for__date=today) | Q(scheduled_for__isnull=True, scheduled_date=today),
+    )), key=_time_of_day)
+    to_do = [task for task in todays if task.status in NOT_DONE_STATUSES]
+    to_do.sort(key=lambda task: task.status != Task.Status.IN_PROGRESS)  # stable: time order otherwise
+    next_job = to_do[0] if to_do else None
+    if next_job is not None:
+        next_job.next_action = _next_technician_action(next_job) if next_job.my_role == 'lead' else None
+        site = next_job.site
+        next_job.directions_url = 'https://www.google.com/maps/search/?api=1&query=' + quote(
+            f'{site.latitude},{site.longitude}' if site.latitude is not None else f'{site.name}, {site.address}',
+        )
+    return {
+        'today': today,
+        'next_job': next_job,
+        'later_today': to_do[1:],
+        'done_today': [task for task in todays if task.status not in NOT_DONE_STATUSES],
+        'today_count': len(todays),
+        'overdue': _overdue(mine, with_role, today),
+    }
+
+
+def _week_board(technician, request):
+    """(days, overdue, unscheduled, nav_context) for one technician's week.
+    Shared by my_week (self) and technician_board (a supervisor viewing
+    someone else).
+
+    Their tasks are those they're assigned to (lead or helper) and those
+    they're the responsible supervisor for — a task where both are true
+    appears once, under its assignment. Cancelled tasks never show.
+    - days: the week's 7 days. A task lands on its day by scheduled_for,
+      or by scheduled_date when only the day is set ("any time that day",
+      after the timed ones).
+    - overdue: not yet done, planned before today — whatever week is
+      shown, so a missed job never disappears.
+    - unscheduled: open, with no day at all.
+    """
+    today, start, end = _week_window(request, technician.country)
+    mine, with_role = _my_tasks(technician)
+
     weekend = technician.country.weekend_weekdays
     days = [
         {'date': day, 'tasks': [], 'is_weekend': day.weekday() in weekend}
@@ -3270,16 +3326,8 @@ def _week_board(technician, request):
     )):
         tasks_by_date[_calendar_day(task)].append(task)
     for day in days:
-        # Timed tasks by time, then the day-only ones.
-        day['tasks'].sort(key=lambda task: (
-            task.scheduled_for is None,
-            timezone.localtime(task.scheduled_for).time() if task.scheduled_for else datetime.min.time(),
-            task.task_number,
-        ))
-
-    overdue = sorted(with_role(mine.filter(status__in=NOT_DONE_STATUSES).filter(
-        Q(scheduled_for__date__lt=today) | Q(scheduled_for__isnull=True, scheduled_date__lt=today),
-    )), key=lambda task: (_calendar_day(task), task.task_number))
+        day['tasks'].sort(key=_time_of_day)
+    overdue = _overdue(mine, with_role, today)
 
     unscheduled = with_role(mine.filter(
         status__in=OPEN_STATUSES, scheduled_for__isnull=True, scheduled_date__isnull=True,
@@ -3290,9 +3338,14 @@ def _week_board(technician, request):
 
 @login_required
 def my_week(request):
+    """Someone's own schedule: Today (the default — the next job first)
+    or the Week (?view=week, or any ?start=)."""
     technician = require_technician(request)
-    days, overdue, unscheduled, nav_context = _week_board(technician, request)
-    context = {'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context}
+    if request.GET.get('view') == 'week' or 'start' in request.GET:
+        days, overdue, unscheduled, nav_context = _week_board(technician, request)
+        context = {'view': 'week', 'days': days, 'overdue': overdue, 'unscheduled': unscheduled, **nav_context}
+    else:
+        context = {'view': 'today', **_today_plan(technician)}
     return render(request, 'tasks/my_week.html', context)
 
 
@@ -4688,6 +4741,8 @@ def my_task_detail(request, pk):
                     task.status = new_status
                     task.save(update_fields=['status'])
             messages.success(request, _('Updated.'))
+            if request.POST.get('next') == 'today':  # tapped on My week's Today card
+                return redirect('tasks:my_week')
             return redirect('tasks:my_task_detail', pk=task.pk)
 
         elif action == 'block' and can_block:

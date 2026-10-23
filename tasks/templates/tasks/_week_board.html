@@ -10,17 +10,7 @@ then the open tasks with no day yet.
     <a href="?start={{ next_start|date:'Y-m-d' }}" class="forward-link">{% translate "Next week" %}</a>
 </div>
 
-{% if overdue %}
-<div class="section week-overdue">
-    <h2>{% translate "Overdue" %}</h2>
-    <p class="field__help">{% translate "Planned for an earlier day and not done yet." %}</p>
-    <ul class="plain-list">
-        {% for task in overdue %}
-        {% include "tasks/_week_task.html" with show_day=True %}
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
+{% include "tasks/_week_overdue.html" %}
 
 {% for day in days %}
 <div class="section">

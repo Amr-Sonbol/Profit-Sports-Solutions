@@ -1022,6 +1022,47 @@ tbody tr:hover {
     border-inline-start: 4px solid var(--color-danger);
 }
 
+/* My week, Today: the next job as a large card, what's done greyed out. */
+.today-summary {
+    margin-block: 0.75rem;
+}
+
+.next-job {
+    border-inline-start: 4px solid var(--color-accent);
+}
+
+.next-job__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-muted);
+}
+
+.next-job__time {
+    margin-block: 0.25rem 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.next-job__where {
+    margin-block: 0.25rem;
+}
+
+.next-job .badge-row {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.next-job__actions {
+    flex-wrap: wrap;
+    margin-block-start: 0.75rem;
+}
+
+.today-done {
+    opacity: 0.6;
+}
+
 /* Notifications page: the same column widths in all three tables. */
 .notification-table {
     table-layout: fixed;

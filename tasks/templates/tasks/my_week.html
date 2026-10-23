@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% translate "My week" %} — Profit Sports Solutions{% endblock %}
 
@@ -8,5 +8,87 @@
     <h1>{% translate "My week" %}</h1>
 </div>
 
+<nav class="tabs" aria-label="{% translate 'My week' %}">
+    <a href="?" class="{% if view == 'today' %}is-active{% endif %}"{% if view == 'today' %} aria-current="page"{% endif %}>{% translate "Today" %}</a>
+    <a href="?view=week" class="{% if view == 'week' %}is-active{% endif %}"{% if view == 'week' %} aria-current="page"{% endif %}>{% translate "Week" %}</a>
+</nav>
+
+{% if view == 'week' %}
 {% include "tasks/_week_board.html" with task_url="tasks:my_task_detail" %}
+{% else %}
+<p class="today-summary">
+    <strong>{{ today|date:"l j F" }}</strong> ·
+    {% blocktranslate count count=today_count %}{{ count }} task today{% plural %}{{ count }} tasks today{% endblocktranslate %}
+    {% if overdue %} · {% blocktranslate count count=overdue|length %}{{ count }} overdue{% plural %}{{ count }} overdue{% endblocktranslate %}{% endif %}
+</p>
+
+{% include "tasks/_week_overdue.html" with task_url="tasks:my_task_detail" %}
+
+{% if next_job %}
+{% with task=next_job %}
+<div class="section next-job">
+    <p class="next-job__label">{% if task.status == 'in_progress' %}{% translate "Under way" %}{% else %}{% translate "Next job" %}{% endif %}</p>
+    <p class="next-job__time">
+        {% if not task.scheduled_for %}{% translate "Any time today" %}
+        {% elif task.estimated_finish %}{% blocktranslate with start=task.scheduled_for|date:"TIME_FORMAT" end=task.estimated_finish|date:"TIME_FORMAT" %}{{ start }}–{{ end }} (est.){% endblocktranslate %}
+        {% else %}{{ task.scheduled_for|date:"TIME_FORMAT" }}{% endif %}
+    </p>
+    <h2 class="next-job__where">{{ task.site.customer.name }} — {{ task.site.name }}</h2>
+    <p class="muted">{{ task.site.address }}</p>
+    <p class="badge-row">
+        <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
+        {% if task.my_role == 'lead' %}<span class="badge badge--role-lead">{% translate "Lead" %}</span>
+        {% elif task.my_role == 'helper' %}<span class="badge badge--role-helper">{% translate "Helper" %}</span>
+        {% else %}<span class="badge badge--muted">{% translate "Responsible" %}</span>{% endif %}
+        <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+        <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+    </p>
+    <div class="button-row next-job__actions">
+        {% if task.next_action %}
+        <form method="post" action="{% url 'tasks:my_task_detail' task.pk %}" novalidate data-locate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ task.next_action }}">
+            <input type="hidden" name="next" value="today">
+            <button type="submit" class="button">
+                {% if task.next_action == 'accept' %}{% translate "Accept task" %}
+                {% elif task.next_action == 'en_route' %}{% translate "Heading to site" %}
+                {% elif task.next_action == 'arrive' %}{% translate "I have arrived" %}
+                {% elif task.next_action == 'start' %}{% translate "Start work" %}{% endif %}
+            </button>
+        </form>
+        {% endif %}
+        <a href="{{ task.directions_url }}" class="button button--secondary" target="_blank" rel="noopener">{% translate "Directions" %}</a>
+        <a href="{% url 'tasks:my_task_detail' task.pk %}" class="button button--secondary">{% translate "Open task" %}</a>
+    </div>
+</div>
+{% endwith %}
+{% else %}
+<div class="section">
+    <p class="empty-state">{% translate "Nothing left to do today." %} <a href="?view=week">{% translate "See the week" %}</a></p>
+</div>
+{% endif %}
+
+{% if later_today %}
+<div class="section">
+    <h2>{% translate "Later today" %}</h2>
+    <ul class="plain-list">
+        {% for task in later_today %}
+        {% include "tasks/_week_task.html" with task_url="tasks:my_task_detail" %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if done_today %}
+<div class="section today-done">
+    <h2>{% translate "Done today" %}</h2>
+    <ul class="plain-list">
+        {% for task in done_today %}
+        {% include "tasks/_week_task.html" with task_url="tasks:my_task_detail" %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+<script src="{% static 'js/tap-location.js' %}" defer></script>
+{% endif %}
 {% endblock %}

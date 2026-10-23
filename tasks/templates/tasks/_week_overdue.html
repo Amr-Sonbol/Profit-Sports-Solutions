@@ -1,0 +1,12 @@
+{% load i18n %}{# Missed jobs, on a week board and on Today (views._overdue). #}
+{% if overdue %}
+<div class="section week-overdue">
+    <h2>{% translate "Overdue" %}</h2>
+    <p class="field__help">{% translate "Planned for an earlier day and not done yet." %}</p>
+    <ul class="plain-list">
+        {% for task in overdue %}
+        {% include "tasks/_week_task.html" with show_day=True %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}

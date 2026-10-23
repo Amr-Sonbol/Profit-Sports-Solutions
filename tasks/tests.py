@@ -1,6 +1,6 @@
 import tempfile
 from unittest.mock import patch
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
@@ -3536,7 +3536,7 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
         self.assertEqual(response.context['unscheduled'][0].my_role, 'responsible')
@@ -3549,7 +3549,7 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
 
@@ -3566,7 +3566,7 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
 
@@ -3618,6 +3618,52 @@ class MyWeekTests(TaskTestCase):
         days = response.context['days']
         self.assertEqual(days[0]['date'], date(2026, 9, 5))  # Saturday
         self.assertEqual([day['date'] for day in days if day['is_weekend']], [date(2026, 9, 11)])  # Friday
+
+    def test_today_is_the_default_with_the_job_under_way_first(self):
+        dubai = ZoneInfo('Asia/Dubai')  # the page's "today" is the technician's own country's
+        today = timezone.localtime(timezone.now(), dubai).date()
+        today_at = lambda hour: datetime(today.year, today.month, today.day, hour, tzinfo=dubai)
+        early = self._lead(self._make_task('AE-0801', scheduled_for=today_at(8), status=Task.Status.ASSIGNED))
+        under_way = self._lead(self._make_task('AE-0802', scheduled_for=today_at(10), status=Task.Status.IN_PROGRESS))
+        done = self._lead(self._make_task('AE-0803', scheduled_for=today_at(7), status=Task.Status.COMPLETED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.context['view'], 'today')
+        self.assertEqual(response.context['next_job'], under_way)
+        self.assertEqual(response.context['later_today'], [early])
+        self.assertEqual(response.context['done_today'], [done])
+        self.assertEqual(response.context['today_count'], 3)
+        self.assertContains(response, 'Under way')
+        # The week is one tap away.
+        self.assertEqual(self.client.get('/tasks/my-week/', {'view': 'week'}).context['view'], 'week')
+
+    def test_the_next_job_has_its_tap_and_directions(self):
+        self.site.latitude, self.site.longitude = Decimal('25.080000'), Decimal('55.140000')
+        self.site.save(update_fields=['latitude', 'longitude'])
+        task = self._lead(self._make_task(
+            'AE-0804', scheduled_for=datetime.combine(
+                timezone.localtime(timezone.now(), ZoneInfo('Asia/Dubai')).date(), time(23), ZoneInfo('Asia/Dubai'),
+            ), status=Task.Status.ASSIGNED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.context['next_job'].next_action, 'accept')
+        self.assertIn('query=25.080000%2C55.140000', response.context['next_job'].directions_url)
+        self.assertContains(response, 'Accept task')
+
+        # Tapping it on the card comes back to Today.
+        response = self.client.post(f'/tasks/my/{task.pk}/', {'action': 'accept', 'next': 'today'})
+        self.assertRedirects(response, '/tasks/my-week/', fetch_redirect_response=False)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.ACCEPTED)
+
+    def test_a_quiet_day_says_so(self):
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertIsNone(response.context['next_job'])
+        self.assertContains(response, 'Nothing left to do today.')
 
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')
