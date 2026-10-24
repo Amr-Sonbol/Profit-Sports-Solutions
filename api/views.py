@@ -15,16 +15,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from customers.models import Asset
-from people.models import PushDevice, RolePermission
+from people.models import PushDevice, RolePermission, TechnicianConduct, TechnicianSkill
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
-from reference.models import Brand, Part
+from reference.models import Brand, ConductArea, Part, Skill
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, NewAssetForm, PauseTaskForm,
-    RemoveAssignmentForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
+    RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
 from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent
@@ -36,7 +36,7 @@ from tasks.views import (
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
-    send_password_changed_email,
+    save_conduct_self_rating, save_skill_self_rating, send_password_changed_email, skills_summary,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -253,6 +253,57 @@ class MyScheduleView(APIView):
                 'days': [day(entry) for entry in context['days']],
             })
         return Response(payload)
+
+
+class MySkillsView(APIView):
+    """The app's My skills — the website's page (tasks.views.my_skills):
+    GET the progress, what the levels mean and every skill / conduct area
+    with its status; POST a self-rating (multipart: kind = skill|conduct,
+    id, level, note, and for a skill the evidence photo or video). Only
+    until a supervisor reviews it, as on the website.
+    """
+
+    permission_classes = [IsTechnician]
+
+    @staticmethod
+    def _summary(request, technician):
+        data = skills_summary(technician)
+        for group in ('basic', 'advanced', 'conduct'):
+            for row in data[group]:
+                if row['evidence_url']:
+                    row['evidence_url'] = request.build_absolute_uri(row['evidence_url'])
+        return data
+
+    def get(self, request):
+        return Response(self._summary(request, request.user.technician))
+
+    def post(self, request):
+        technician = request.user.technician
+        today = timezone.localtime().date()
+        kind = request.data.get('kind')
+        if kind == 'skill':
+            item = get_object_or_404(Skill, pk=request.data.get('id'), is_active=True)
+            current = TechnicianSkill.objects.filter(technician=technician, skill=item).first()
+            form = SelfRateSkillForm(request.data, request.FILES)
+        elif kind == 'conduct':
+            item = get_object_or_404(ConductArea, pk=request.data.get('id'), is_active=True)
+            current = TechnicianConduct.objects.filter(technician=technician, conduct_area=item).first()
+            form = SelfRateLevelForm(request.data)
+        else:
+            return Response({'detail': 'kind must be skill or conduct.'}, status=status.HTTP_400_BAD_REQUEST)
+        if current is not None and current.source != TechnicianSkill.Source.SELF:
+            return Response(
+                {'detail': str(_('A supervisor has reviewed this, so only a supervisor can change it now.'))},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if kind == 'skill':
+            save_skill_self_rating(technician, item, form.cleaned_data, today)
+        else:
+            save_conduct_self_rating(technician, item, form.cleaned_data, today)
+        return Response(self._summary(request, technician))
 
 
 class MyProgressView(APIView):

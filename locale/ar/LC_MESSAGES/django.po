@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 15:13+0000\n"
+"POT-Creation-Date: 2026-10-24 18:37+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -365,6 +365,9 @@ msgstr "راجع المشرف هذا الجانب، لذا لا يمكن تغي�
 
 msgid "A supervisor has reviewed this skill, so only a supervisor can change it now."
 msgstr "راجع المشرف هذه المهارة، لذا لا يمكن تغييرها الآن إلا من قِبل مشرف."
+
+msgid "A supervisor has reviewed this, so only a supervisor can change it now."
+msgstr "راجع المشرف هذا التقييم، لذا لا يمكن تغييره الآن إلا من قِبل المشرف."
 
 msgid "A task type with this code already exists."
 msgstr "يوجد نوع مهمة بهذا الرمز مسبقاً."

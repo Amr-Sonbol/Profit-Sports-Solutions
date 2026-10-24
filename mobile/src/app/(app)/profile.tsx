@@ -72,6 +72,14 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={[styles.button, { borderColor: theme.backgroundSelected }]}
+            onPress={() => router.push('/skills')}
+          >
+            <Ionicons name="ribbon-outline" size={18} color={theme.text} />
+            <ThemedText>My skills</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, { borderColor: theme.backgroundSelected }]}
             onPress={() => router.push('/change-password')}
           >
             <Ionicons name="key-outline" size={18} color={theme.text} />

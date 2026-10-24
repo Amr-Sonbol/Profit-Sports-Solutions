@@ -343,3 +343,36 @@ export interface MySchedule {
   year?: number;
   months?: { first: string; count: number; cells: (ScheduleYearCell | null)[] }[];
 }
+
+/** One skill or conduct area on My skills (api/views.py MySkillsView). */
+export interface SkillRow {
+  kind: 'skill' | 'conduct';
+  id: number;
+  name: string;
+  level: number | null;
+  level_label: string;
+  // 'none' (not rated), 'self' (waiting for supervisor review) or 'confirmed'.
+  status: 'none' | 'self' | 'confirmed';
+  confirmed_by: string;
+  note: string;
+  evidence_url: string;
+  can_rate: boolean;
+}
+
+export interface MySkills {
+  progress: {
+    basic_confirmed: number;
+    basic_total: number;
+    advanced_confirmed: number;
+    advanced_total: number;
+    conduct_confirmed: number;
+    conduct_total: number;
+    waiting: number;
+    is_certified: boolean;
+    reliable_level: number;
+  };
+  levels: { level: number; short: string; text: string }[];
+  basic: SkillRow[];
+  advanced: SkillRow[];
+  conduct: SkillRow[];
+}

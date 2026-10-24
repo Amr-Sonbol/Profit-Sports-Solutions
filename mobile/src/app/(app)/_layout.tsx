@@ -62,6 +62,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="team-task/[id]" options={{ href: null }} />
       <Tabs.Screen name="schedule/[id]" options={{ href: null }} />
       <Tabs.Screen name="change-password" options={{ href: null }} />
+      <Tabs.Screen name="skills" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  MySkills,
   Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
   TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
 } from '@/types';
@@ -152,4 +153,28 @@ export function previewMyReport(id: number, report: WorkReportInput) {
     method: 'POST',
     body: { ...report, signature: null },
   });
+}
+
+/** My skills: progress, what the levels mean, every skill and conduct area. */
+export function fetchMySkills() {
+  return apiRequest<MySkills>('/api/my-skills/');
+}
+
+/**
+ * A self-rating, until a supervisor reviews it. A skill needs evidence:
+ * a photo or video of doing the repair. Returns My skills again.
+ */
+export function rateMySkill(
+  kind: 'skill' | 'conduct', id: number, level: number, note: string,
+  evidence?: { uri: string; name: string; type: string },
+) {
+  const form = new FormData();
+  form.append('kind', kind);
+  form.append('id', String(id));
+  form.append('level', String(level));
+  form.append('note', note);
+  if (evidence) {
+    form.append('evidence', evidence as unknown as Blob);
+  }
+  return apiRequest<MySkills>('/api/my-skills/', { method: 'POST', body: form, isFormData: true });
 }

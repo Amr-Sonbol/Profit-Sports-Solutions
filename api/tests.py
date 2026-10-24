@@ -1211,3 +1211,48 @@ class ReportReviewTests(ApiTestCase):
         )
         problems = response.json()['problems']
         self.assertTrue(any('Belt was worn' in problem for problem in problems), problems)
+
+
+class MySkillsApiTests(ApiTestCase):
+    # The app's My skills: the same figures and rules as the website.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import ConductArea, Skill
+        self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
+        self.area = ConductArea.objects.create(name='Punctuality', name_ar='الالتزام بالمواعيد')
+
+    def test_rating_a_skill_with_evidence_then_it_waits_for_review(self):
+        token = self.token_for('tech1')
+        body = self.client.get('/api/my-skills/', **self.auth(token)).json()
+        row = next(item for item in body['basic'] if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['can_rate']), ('none', True))
+        self.assertEqual(len(body['levels']), 4)
+
+        evidence = SimpleUploadedFile('doing-it.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post('/api/my-skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '3', 'note': 'belt change', 'evidence': evidence,
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        row = next(item for item in response.json()['basic'] if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['level']), ('self', 3))
+        self.assertTrue(row['evidence_url'].startswith('http'))
+        self.assertEqual(response.json()['progress']['waiting'], 1)
+
+    def test_a_skill_needs_evidence_and_a_reviewed_one_is_locked(self):
+        from people.models import TechnicianConduct
+        token = self.token_for('tech1')
+        response = self.client.post('/api/my-skills/', {'kind': 'skill', 'id': self.skill.pk, 'level': '3'},
+                                    **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('evidence', response.json())
+
+        technician = Technician.objects.get(user__username='tech1')
+        TechnicianConduct.objects.create(
+            technician=technician, conduct_area=self.area, level=2, source=TechnicianConduct.Source.SUPERVISOR,
+            set_on=timezone.localdate(), set_by=technician,
+        )
+        response = self.client.post('/api/my-skills/', {'kind': 'conduct', 'id': self.area.pk, 'level': '4'},
+                                    **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TechnicianConduct.objects.get(technician=technician).level, 2)

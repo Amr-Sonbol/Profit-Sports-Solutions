@@ -3589,6 +3589,94 @@ def team_progress_rows(viewer, country, month_first):
     return rows
 
 
+def save_skill_self_rating(technician, skill, cleaned, today):
+    """A technician's own rating of a skill, with its evidence — the
+    current rating plus its history row. My skills on the website and in
+    the app (api.views.MySkillsView). Check first that it's still theirs
+    to change (not yet reviewed by a supervisor).
+    """
+    level, evidence, note = int(cleaned['level']), cleaned['evidence'], cleaned.get('note', '')
+    with transaction.atomic():
+        TechnicianSkill.objects.update_or_create(
+            technician=technician, skill=skill, defaults=dict(
+                level=level, evidence=evidence, source=TechnicianSkill.Source.SELF,
+                set_by=technician, set_on=today, note=note,
+            ),
+        )
+        # The same uploaded file gets saved twice (current snapshot +
+        # history log) — its read pointer is at the end after the first
+        # save, so it must be rewound or the history row gets an empty file.
+        evidence.seek(0)
+        TechnicianSkillAssessment.objects.create(
+            technician=technician, skill=skill, level=level, evidence=evidence,
+            source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
+        )
+
+
+def save_conduct_self_rating(technician, area, cleaned, today):
+    """The same for a conduct area (no evidence)."""
+    level = int(cleaned['level'])
+    with transaction.atomic():
+        TechnicianConduct.objects.update_or_create(
+            technician=technician, conduct_area=area, defaults=dict(
+                level=level, source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+            ),
+        )
+        TechnicianConductAssessment.objects.create(
+            technician=technician, conduct_area=area, level=level,
+            source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
+        )
+
+
+def skills_summary(technician):
+    """Someone's skills as plain data, for the app: progress toward
+    certification, what each level means, and each basic / advanced skill
+    and conduct area with its level and status. Same rules and figures as
+    the My skills page.
+    """
+    skills = _skills_with_current_rating(technician)
+    areas = _conduct_areas_with_current_rating(technician)
+    basic, advanced = _split_by_category(skills)
+    confirmed = TechnicianSkill.Source.SUPERVISOR
+    certification = _certification_status(technician)
+
+    def row(item, kind):
+        current = item.current
+        return {
+            'kind': kind, 'id': item.pk, 'name': item.display_name,
+            'level': current.level if current else None,
+            'level_label': str(SKILL_LEVEL_SHORT[current.level]) if current else '',
+            # 'none' (not rated), 'self' (waiting for review) or 'confirmed'.
+            'status': 'none' if current is None else ('confirmed' if current.source == confirmed else 'self'),
+            'confirmed_by': current.set_by.full_name if current and current.source == confirmed and current.set_by else '',
+            'note': current.note if current else '',
+            'evidence_url': current.evidence.url if kind == 'skill' and current and current.evidence else '',
+            'can_rate': current is None or current.source != confirmed,
+        }
+
+    return {
+        'progress': {
+            'basic_confirmed': certification['non_cardio_certified'], 'basic_total': certification['non_cardio_total'],
+            'advanced_confirmed': sum(
+                1 for skill in advanced
+                if skill.current and skill.current.source == confirmed and skill.current.level >= RELIABLE_LEVEL
+            ),
+            'advanced_total': len(advanced),
+            'conduct_confirmed': certification['conduct_certified'], 'conduct_total': certification['conduct_total'],
+            'waiting': sum(1 for item in skills + areas if item.current and item.current.source != confirmed),
+            'is_certified': certification['is_certified'],
+            'reliable_level': RELIABLE_LEVEL,
+        },
+        'levels': [
+            {'level': level, 'short': str(SKILL_LEVEL_SHORT[level]), 'text': str(text)}
+            for level, text in sorted(SKILL_LEVEL_RUBRIC.items())
+        ],
+        'basic': [row(skill, 'skill') for skill in basic],
+        'advanced': [row(skill, 'skill') for skill in advanced],
+        'conduct': [row(area, 'conduct') for area in areas],
+    }
+
+
 @login_required
 def my_skills(request):
     """Self-assessment — a technician's own first guess at each skill and
@@ -3614,25 +3702,7 @@ def my_skills(request):
                 messages.error(request, _('A supervisor has reviewed this skill, so only a supervisor can change it now.'))
                 return redirect('tasks:my_skills')
             if form.is_valid():
-                level = int(form.cleaned_data['level'])
-                evidence = form.cleaned_data['evidence']
-                note = form.cleaned_data['note']
-                with transaction.atomic():
-                    TechnicianSkill.objects.update_or_create(
-                        technician=technician, skill=skill, defaults=dict(
-                            level=level, evidence=evidence, source=TechnicianSkill.Source.SELF,
-                            set_by=technician, set_on=today, note=note,
-                        ),
-                    )
-                    # The same uploaded file gets saved twice (current
-                    # snapshot + history log) — its read pointer is at EOF
-                    # after the first save, so it must be rewound first or
-                    # the assessment row would get an empty file.
-                    evidence.seek(0)
-                    TechnicianSkillAssessment.objects.create(
-                        technician=technician, skill=skill, level=level, evidence=evidence,
-                        source=TechnicianSkill.Source.SELF, set_by=technician, set_on=today, note=note,
-                    )
+                save_skill_self_rating(technician, skill, form.cleaned_data, today)
                 messages.success(request, _('Self-rating saved.'))
                 return redirect(f"{reverse('tasks:my_skills')}#skill-{skill.pk}")
             failed = ('skill', skill.pk, form)
@@ -3645,17 +3715,7 @@ def my_skills(request):
                 messages.error(request, _('A supervisor has reviewed this area, so only a supervisor can change it now.'))
                 return redirect('tasks:my_skills')
             if form.is_valid():
-                level = int(form.cleaned_data['level'])
-                with transaction.atomic():
-                    TechnicianConduct.objects.update_or_create(
-                        technician=technician, conduct_area=area, defaults=dict(
-                            level=level, source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
-                        ),
-                    )
-                    TechnicianConductAssessment.objects.create(
-                        technician=technician, conduct_area=area, level=level,
-                        source=TechnicianConduct.Source.SELF, set_by=technician, set_on=today,
-                    )
+                save_conduct_self_rating(technician, area, form.cleaned_data, today)
                 messages.success(request, _('Self-rating saved.'))
                 return redirect(f"{reverse('tasks:my_skills')}#conduct-{area.pk}")
             failed = ('conduct', area.pk, form)
