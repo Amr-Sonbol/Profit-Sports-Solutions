@@ -45,8 +45,8 @@ def _url_fetcher(url, *args, **kwargs):
 
 def report_content(report):
     """What the customer sees and signs, as plain JSON-safe data: findings,
-    work done, the machines with their outcomes, the parts (no prices) and
-    who signed. Frozen into WorkReport.signed_content at signing, so a
+    work done, the time on site, the machines with their outcomes, the
+    parts (no prices) and who signed. Frozen into WorkReport.signed_content at signing, so a
     later edit can be spotted by comparing this with the frozen copy.
     """
     task = report.task
@@ -83,6 +83,7 @@ def report_content(report):
         'findings': report.findings,
         'action_taken': report.action_taken,
         'resolved': report.resolved,
+        'hours': str(report.labour_hours),
         'customer_name': report.customer_name,
         'machines': machines,
         'parts': parts,
@@ -105,7 +106,10 @@ def changed_after_signing(report):
     if not report.signed_content:
         return False
     signed = {key: value for key, value in report.signed_content.items() if key != 'signature_url'}
-    return signed != report_content(report)
+    current = report_content(report)
+    if 'hours' not in signed:
+        current.pop('hours')  # signed before the report showed the time on site
+    return signed != current
 
 
 def _next_visit(task):
@@ -156,6 +160,8 @@ def _template_context(report, content, signature_url, signed_at, changed):
             if code in dict(Recommendation.choices)
         ] + ([content['recommendation']] if content.get('recommendation') else []),
         'next_visit': _next_visit(task),
+        # The time on site as "2.5", "3" — none on reports signed before it was shown.
+        'hours': content['hours'].rstrip('0').rstrip('.') if '.' in content.get('hours', '') else content.get('hours', ''),
         'parts': content['parts'],
         'signature_url': signature_url,
         'signed_at': signed_at,

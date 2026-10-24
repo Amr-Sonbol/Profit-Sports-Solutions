@@ -233,10 +233,12 @@
         <span class="report-step__number">5</span>
         <div>
             <h2 class="report-step__title">{% translate "Customer sign-off" %}</h2>
-            <p class="field__help">{% translate "Hand the device to the customer to review the work and sign. Your hours are hidden while they do." %}</p>
+            <p class="field__help">{% translate "Hand the device to the customer to review the work and the time on site, and sign." %}</p>
         </div>
     </div>
     <div class="section">
+        {# While the customer signs: the time on site, as on their report (filled in by signature-pad.js). #}
+        <p data-signing-only><strong>{% translate "Time on site" %}:</strong> <span data-signing-hours></span> {% translate "hours" context "time on site" %}</p>
         <p data-signoff-start hidden data-staff-only>
             <button type="button" class="button button--secondary">{% translate "Hand to customer for signature" %}</button>
         </p>

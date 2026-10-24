@@ -8719,7 +8719,7 @@ class CorporateReportTests(TicketMachineFindingsTests):
     # The visit report like the company's PPM report: standard wording that
     # reads in the report's language, per-machine finding / action /
     # status, recommendations, the next visit, the team as "performed by",
-    # and no hours-and-prices line.
+    # and the time on site (no prices).
 
     def _file(self, **extra):
         from reports.models import WorkReport
@@ -8782,3 +8782,17 @@ class CorporateReportTests(TicketMachineFindingsTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'PREVIEW')
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_the_customer_sees_the_time_on_site(self):
+        from reports.pdf import changed_after_signing, render_visit_report_html
+        report = self._file(labour_hours='2.50')
+        self.assertIn('2.5 hours', render_visit_report_html(report, language='en'))
+        self.assertContains(self.client.get(self.report_url), 'data-signing-hours')
+
+    def test_a_report_signed_before_the_time_was_shown_is_not_marked_changed(self):
+        from reports.pdf import changed_after_signing, report_content
+        report = self._file()
+        older = report_content(report)
+        older.pop('hours')
+        report.signed_content = {**older, 'signature_url': ''}
+        self.assertFalse(changed_after_signing(report))

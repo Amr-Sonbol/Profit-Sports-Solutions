@@ -68,11 +68,17 @@
   pad.querySelector('[data-signature-clear]').addEventListener('click', resetCanvas);
 
   // "Hand to customer to sign" switches the form into the customer's view
-  // (hours and prices hidden by CSS); "Done" switches it back.
+  // (the staff-only fields hidden by CSS, the time on site shown as text);
+  // "Done" switches it back.
   var start = form.querySelector('[data-signoff-start]');
   if (start) {
     start.hidden = false;
     start.querySelector('button').addEventListener('click', function () {
+      var hours = form.elements.labour_hours;
+      var shown = form.querySelector('[data-signing-hours]');
+      if (hours && shown) {
+        shown.textContent = hours.value ? String(Number(hours.value)) : '—';
+      }
       form.classList.add('is-signing');
       pad.scrollIntoView({ block: 'center' });
       // The canvas was sized while visible; resize now it's on screen.

@@ -106,7 +106,7 @@ export default function ReportScreen() {
   const [catalogue, setCatalogue] = useState<CataloguePart[]>([]);
   const [signatureOnFile, setSignatureOnFile] = useState(false);
   // Signing happens on its own screen (see the `signing` branch below) so
-  // the customer never sees labour hours while signing.
+  // the customer sees the work and the time on site while signing, not the form itself.
   const [signing, setSigning] = useState(false);
   const [newSignature, setNewSignature] = useState<string | null>(null);
   const [signError, setSignError] = useState('');
@@ -386,6 +386,12 @@ export default function ReportScreen() {
               ) : null}
               <ThemedText type="smallBold">Problem resolved</ThemedText>
               <ThemedText>{resolved ? 'Yes' : 'No'}</ThemedText>
+              {labourHours ? (
+                <>
+                  <ThemedText type="smallBold">Time on site</ThemedText>
+                  <ThemedText>{Number(labourHours)} hours</ThemedText>
+                </>
+              ) : null}
               {machines.some((row) => row.outcome) ? (
                 <>
                   <ThemedText type="smallBold">Machines</ThemedText>
@@ -800,7 +806,7 @@ export default function ReportScreen() {
 
             <StepTitle
               number={5} title="Customer sign-off"
-              hint="Hand the phone to the customer to sign — they see the work, not your hours."
+              hint="Hand the phone to the customer to sign — they see the work and the time on site."
             />
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
@@ -811,7 +817,7 @@ export default function ReportScreen() {
                   ? `Signed by ${customerName || 'the customer'} ✓`
                   : signatureOnFile
                     ? `Signed by ${customerName || 'the customer'} — sign again only if you wish to replace it.`
-                    : 'The customer reviews the work and signs on their own screen. Your hours are not displayed.'}
+                    : 'The customer reviews the work and the time on site, and signs on their own screen.'}
               </ThemedText>
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}

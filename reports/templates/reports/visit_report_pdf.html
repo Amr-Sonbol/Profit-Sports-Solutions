@@ -91,6 +91,7 @@
     <tr><th>{% translate "Client" %}</th><td><span class="iso" dir="{{ customer.name|text_dir }}">{{ customer.name }}</span></td></tr>
     <tr><th>{% translate "Site" %}</th><td><span class="iso" dir="{{ site.name|text_dir }}">{{ site.name }}</span>{% if site.address and site.address != site.name %}, <span class="iso" dir="{{ site.address|text_dir }}">{{ site.address }}</span>{% endif %}, {{ customer.country.display_name }}</td></tr>
     <tr><th>{% translate "Visit date" %}</th><td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j F Y" }}{% else %}{{ report.submitted_at|date:"j F Y" }}{% endif %}</td></tr>
+    {% if hours %}<tr><th>{% translate "Time on site" %}</th><td>{% blocktranslate %}{{ hours }} hours{% endblocktranslate %}</td></tr>{% endif %}
     {% if task.task_type %}<tr><th>{% translate "Visit type" %}</th><td>{{ task.task_type.display_name }}</td></tr>{% endif %}
     {# The scope in the report's own words: the brand's equipment; the typed description only when there's no brand. #}
     {% if task.brand %}<tr><th>{% translate "Scope" %}</th><td>{% blocktranslate with brand=task.brand.name %}All {{ brand }} equipment{% endblocktranslate %}</td></tr>

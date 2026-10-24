@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 14:28+0000\n"
+"POT-Creation-Date: 2026-10-24 14:42+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -163,6 +163,10 @@ msgstr "%(event)s الساعة %(time)s"
 #, python-format
 msgid "%(hours)s h"
 msgstr "%(hours)s س"
+
+#, python-format
+msgid "%(hours)s hours"
+msgstr "%(hours)s ساعة"
 
 #, python-format
 msgid "%(hours)s labour hours across %(reports)s submitted report."
@@ -1884,8 +1888,8 @@ msgstr "صالة رياضية"
 msgid "Gym address"
 msgstr "عنوان النادي الرياضي"
 
-msgid "Hand the device to the customer to review the work and sign. Your hours are hidden while they do."
-msgstr "سلّم الجهاز للعميل لمراجعة العمل والتوقيع. تُخفى ساعات عملك أثناء ذلك."
+msgid "Hand the device to the customer to review the work and the time on site, and sign."
+msgstr "سلّم الجهاز للعميل لمراجعة العمل ومدة العمل في الموقع، ثم التوقيع."
 
 msgid "Hand to customer for signature"
 msgstr "تسليم إلى العميل للتوقيع"
@@ -3049,9 +3053,6 @@ msgstr "يُرجى إدخال الرقم التسلسلي، أو إضافة صو
 #, python-format
 msgid "Please find attached the visit report for <strong>%(site)s</strong>, dated <strong>%(date)s</strong> (reference %(number)s)."
 msgstr "تجدون مرفقًا تقرير الزيارة لموقع <strong>%(site)s</strong> بتاريخ <strong>%(date)s</strong> (المرجع %(number)s)."
-
-msgid "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step."
-msgstr "يرجى تسليم الجهاز إلى العميل لمراجعة العمل والتوقيع. يتم إخفاء الساعات والأسعار خلال هذه الخطوة."
 
 msgid "Please mark yourself as resumed before submitting the report."
 msgstr "يرجى تسجيل استئناف العمل قبل تقديم التقرير."
@@ -4463,6 +4464,9 @@ msgstr "الوقت"
 msgid "Time corrected."
 msgstr "تم تصحيح الوقت."
 
+msgid "Time on site"
+msgstr "مدة العمل في الموقع"
+
 msgid "Time set."
 msgstr "تم تحديد الوقت."
 
@@ -5311,6 +5315,10 @@ msgstr "لديه وسيلة نقل"
 
 msgid "hired on"
 msgstr "تاريخ التعيين"
+
+msgctxt "time on site"
+msgid "hours"
+msgstr "ساعة"
 
 msgid "installed on"
 msgstr "تاريخ التركيب"
