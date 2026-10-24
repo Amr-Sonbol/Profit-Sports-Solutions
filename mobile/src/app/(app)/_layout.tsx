@@ -57,6 +57,7 @@ export default function AppTabsLayout() {
         options={{ title: 'Tickets', tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
       />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
+      <Tabs.Screen name="more" options={{ title: 'More', tabBarIcon: tabIcon('grid') }} />
       <Tabs.Screen name="task/[id]" options={{ href: null }} />
       <Tabs.Screen name="report/[id]" options={{ href: null }} />
       <Tabs.Screen name="team-task/[id]" options={{ href: null }} />
@@ -65,6 +66,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="skills" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
       <Tabs.Screen name="people/[id]" options={{ href: null }} />
+      <Tabs.Screen name="website" options={{ href: null }} />
     </Tabs>
   );
 }

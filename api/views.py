@@ -1,12 +1,15 @@
 from decimal import Decimal, InvalidOperation
 
-from django.contrib.auth import authenticate
+from django.contrib.auth import SESSION_KEY, authenticate, login
 from django.contrib.auth.models import update_last_login
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.http import HttpResponseRedirect
+from django.utils import translation
 from django.utils.dateparse import parse_datetime
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -16,6 +19,7 @@ from rest_framework.views import APIView
 
 from customers.models import Asset
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
+from people.context_processors import nav_groups, nav_pages
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
 from reference.models import Brand, ConductArea, Part, Skill
@@ -275,6 +279,56 @@ class MyScheduleView(APIView):
                 'days': [day(entry) for entry in context['days']],
             })
         return Response(payload)
+
+
+class WebsiteMenuView(APIView):
+    """The app's More tab: every website page this person may open, in the
+    website's own menu groups and order (people.context_processors
+    .nav_pages — the same gates as the pages themselves), in their
+    language. Their own schedule, progress and skills are native screens
+    in the app, so that group is left out.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        allowed = set(
+            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        )
+        with translation.override(technician.language):
+            groups = nav_groups(nav_pages(technician, allowed), '')
+            return Response([
+                {
+                    'heading': str(group['heading'] or ''),
+                    'pages': [{'title': str(page['label']), 'url': page['url'], 'icon': page['icon']}
+                              for page in group['pages']],
+                }
+                for group in groups if group['pages'][0]['group'] != 'mine'
+            ])
+
+
+class WebsiteSessionView(APIView):
+    """Opens a website page inside the app, already signed in: the app
+    calls this once with its token in the Authorization header (never in
+    the address), gets a normal website session in its web view, and is
+    sent on to `next` — a path on this site only. From then on the web
+    view is just the website, with its own permission checks.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        next_url = request.query_params.get('next') or '/'
+        if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()},
+        ):
+            next_url = '/'
+        # The session, not request.user: DRF sets the token's user on the
+        # underlying request too, so that alone can't tell a session apart.
+        if request._request.session.get(SESSION_KEY) != str(request.user.pk):
+            login(request._request, request.user, backend='django.contrib.auth.backends.ModelBackend')
+        return HttpResponseRedirect(next_url)
 
 
 class MySkillsView(APIView):

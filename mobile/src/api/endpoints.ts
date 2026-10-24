@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  WebsiteMenuGroup,
   Person,
   MySkills,
   Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
@@ -208,4 +209,9 @@ export function setPersonAvailability(id: number, available: boolean, reason = '
   return apiRequest<Person>(`/api/people/${id}/availability/`, {
     method: 'POST', body: { available, reason },
   });
+}
+
+/** Every website page I may open, in the website menu's groups. */
+export function fetchWebsiteMenu() {
+  return apiRequest<WebsiteMenuGroup[]>('/api/website-menu/');
 }

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -16,11 +16,12 @@ import type { Ticket } from '@/types';
 /**
  * New customer tickets still needing a decision — same manage_tickets
  * permission as the web Tickets screen (api/views.py TicketListView).
- * Read-only here: converting a ticket to a task, dismissing it, or
- * assigning it is all web-only for now (no API endpoint for those yet).
+ * A ticket opens its full website page inside the app (website.tsx) —
+ * replying, deciding each machine, assigning, escalating, dismissing.
  */
 export default function TicketsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,7 +76,13 @@ export default function TicketsScreen() {
               ) : undefined
             }
             renderItem={({ item }) => (
-              <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+              // The full ticket — reply, decide each machine, assign, escalate — is the website's page.
+              <TouchableOpacity
+                style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+                onPress={() => router.push({
+                  pathname: '/website', params: { path: `/tasks/tickets/${item.id}/`, title: item.ticket_number },
+                })}
+              >
                 <ThemedView style={styles.row}>
                   <ThemedText type="smallBold">{item.ticket_number} — {item.company_name}</ThemedText>
                   {query ? <ThemedText themeColor="primary" type="small">{item.status_display}</ThemedText> : null}
@@ -85,7 +92,8 @@ export default function TicketsScreen() {
                 <ThemedText themeColor="textSecondary" type="small">
                   {item.contact_name} — {item.contact_phone}
                 </ThemedText>
-              </ThemedView>
+                <ThemedText type="small" themeColor="primary">Open ›</ThemedText>
+              </TouchableOpacity>
             )}
           />
         )}

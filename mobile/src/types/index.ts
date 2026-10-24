@@ -395,3 +395,9 @@ export interface Person {
   skills: MySkills;
   record: { completed: number; helped: number; on_time_percent: number | null; acceptance_minutes: number | null };
 }
+
+/** The More tab: the website's menu (api/views.py WebsiteMenuView). */
+export interface WebsiteMenuGroup {
+  heading: string;
+  pages: { title: string; url: string; icon: string }[];
+}

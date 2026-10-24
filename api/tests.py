@@ -1323,3 +1323,24 @@ class PersonApiTests(ApiTestCase):
             'kind': 'skill', 'id': self.skill.pk, 'level': '4',
         }, **self.auth(token))
         self.assertEqual(response.status_code, 403)
+
+
+class WebsiteInTheAppTests(ApiTestCase):
+    # The More tab: the website's menu, and its pages opened signed in.
+
+    def test_the_menu_follows_the_website_and_leaves_out_my_own_pages(self):
+        groups = self.client.get('/api/website-menu/', **self.auth(self.token_for('supervisor1'))).json()
+        urls = [page['url'] for group in groups for page in group['pages']]
+        self.assertIn('/tasks/', urls)
+        self.assertNotIn('/tasks/my-week/', urls)
+
+    def test_the_token_opens_a_website_session_and_only_this_site(self):
+        token = self.token_for('tech1')
+        response = self.client.get('/api/website-session/?next=/tasks/my-skills/', **self.auth(token))
+        self.assertRedirects(response, '/tasks/my-skills/', fetch_redirect_response=False)
+        # Signed in on the website now, with no token.
+        page = self.client.get('/tasks/my-skills/')
+        self.assertEqual(page.status_code, 200, page.get('Location'))
+        response = self.client.get('/api/website-session/?next=https://evil.example/', **self.auth(token))
+        self.assertEqual(response['Location'], '/')
+        self.assertEqual(self.client.get('/api/website-session/').status_code, 401)
