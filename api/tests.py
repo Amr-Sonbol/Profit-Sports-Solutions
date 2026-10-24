@@ -318,7 +318,8 @@ class MyTaskReportTests(ApiTestCase):
 
     def test_half_filled_part_row_is_rejected(self):
         token = self.token_for('tech1')
-        response = self._file(token, parts=[{'part_code': 'BELT-01', 'quantity': 1}])
+        # A part code with no quantity (prices aren't asked for).
+        response = self._file(token, parts=[{'part_code': 'BELT-01', 'quantity': ''}])
         self.assertEqual(response.status_code, 400)
         self.assertIn('parts', response.json())
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())

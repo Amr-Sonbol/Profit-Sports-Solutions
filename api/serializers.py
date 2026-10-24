@@ -128,7 +128,7 @@ class CustomerTicketSerializer(serializers.ModelSerializer):
 class PartUsedSerializer(serializers.ModelSerializer):
     class Meta:
         model = PartUsed
-        fields = ['part_code', 'description', 'quantity', 'unit_cost', 'currency_code']
+        fields = ['part_code', 'description', 'quantity']
 
 
 class WorkReportSerializer(serializers.ModelSerializer):

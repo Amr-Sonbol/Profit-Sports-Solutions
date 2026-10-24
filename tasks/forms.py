@@ -949,9 +949,15 @@ class ExistingAssetOutcomeForm(forms.Form):
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
     finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
-    note = forms.CharField(required=False, max_length=255, label=_('Other finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
     action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
-    action = forms.CharField(required=False, max_length=255, label=_('Other action'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
+    )
 
     def __init__(self, *args, site=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -983,9 +989,15 @@ class NewAssetForm(forms.Form):
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
     finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
-    note = forms.CharField(required=False, max_length=255, label=_('Other finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
     action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
-    action = forms.CharField(required=False, max_length=255, label=_('Other action'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
+    )
     # The customer's ticket machine this row registers, when it came from
     # the ticket (it wasn't in their machine list).
     ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)

@@ -19,7 +19,7 @@ function initials(name: string) {
 }
 
 /**
- * Who's signed in: their photo (set by the office on the website) or
+ * Who's signed in: their photo (set on the website's My profile) or
  * initials, name and role, then their details and account actions.
  */
 export default function ProfileScreen() {
@@ -66,7 +66,7 @@ export default function ProfileScreen() {
           </ThemedView>
           {!me?.photo_url ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-              Your photo is added by the office on the website.
+              Add your photo on the website: My profile → Photo.
             </ThemedText>
           ) : null}
 

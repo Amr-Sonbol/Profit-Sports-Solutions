@@ -136,9 +136,12 @@ class PartUsed(models.Model):
     part_code = models.CharField(_('part code'), max_length=50)
     description = models.CharField(_('description'), max_length=200, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'))
-    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2)
+    # Prices are agreed by the managers with the customer before the visit,
+    # so a report records only the part and quantity; these stay for older
+    # reports that had a price.
+    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2, null=True, blank=True)
     currency_code = models.CharField(
-        _('currency code'), max_length=3,
+        _('currency code'), max_length=3, blank=True,
         help_text=_('an amount must never be stored without its currency'),
     )
 

@@ -1063,6 +1063,48 @@ tbody tr:hover {
     opacity: 0.6;
 }
 
+/* The report form's numbered steps, like the app's. */
+.report-step {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-block: 1.25rem 0.5rem;
+}
+
+.report-step__number {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.9rem;
+    block-size: 1.9rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 700;
+}
+
+.report-step__title {
+    margin: 0;
+}
+
+.report-step .field__help {
+    margin: 0.15rem 0 0;
+}
+
+/* A machine's finding / action: the list, with the "other" box under it. */
+.report-pick select,
+.report-pick input {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 12rem;
+}
+
+.report-pick input {
+    margin-block-start: 0.35rem;
+}
+
 /* Notifications page: the same column widths in all three tables. */
 .notification-table {
     table-layout: fixed;
@@ -2172,6 +2214,28 @@ tbody tr:hover {
 }
 
 .checkbox-label input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+}
+
+/* Django's tick lists (CheckboxSelectMultiple), rendered as <div>s:
+   the box beside its text, like .field ul above. */
+.field div > label:has(> input[type="checkbox"]),
+.field div > label:has(> input[type="radio"]) {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.3rem;
+    color: var(--color-text);
+    font-size: 0.95rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.field label > input[type="checkbox"],
+.field label > input[type="radio"] {
     width: 1.15rem;
     height: 1.15rem;
     flex-shrink: 0;

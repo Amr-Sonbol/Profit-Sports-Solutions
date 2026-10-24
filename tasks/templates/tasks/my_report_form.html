@@ -22,21 +22,105 @@
         {% else %}{% translate "This customer's report is in English. Use the lists where you can; write anything you type in English." %}{% endif %}
     </p>
     {% csrf_token %}
-
-    <div class="section">
-        <h2>{% translate "Report" %}</h2>
+    {% if report.signed_content or report_form.non_field_errors %}
+    <div class="section" data-staff-only>
         {% if report.signed_content %}
         <p class="flash flash--info" data-staff-only>{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}The customer signed this report on {{ date }}. If you change it, please ask the customer to sign again; otherwise it will be marked as changed after signing.{% endblocktranslate %}</p>
         {% endif %}
         {% if report_form.non_field_errors %}
             <p class="flash flash--error">{{ report_form.non_field_errors }}</p>
         {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="report-step" data-staff-only>
+        <span class="report-step__number">1</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Machines" %}</h2>
+            <p class="field__help">{% translate "For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed." %}</p>
+        </div>
+    </div>
+    {{ existing_formset.management_form }}
+    {% if existing_formset.non_form_errors %}
+        <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
+    {% endif %}
+    {% if has_existing_assets %}
+    <div class="section" data-staff-only>
+        <h3>{% translate "Machines at this site" %}</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{% translate "Machine" %}</th>
+                        <th>{% translate "Finding" %}</th>
+                        <th>{% translate "Action Taken" %}</th>
+                        <th>{% translate "Outcome" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in existing_formset %}
+                    <tr>
+                        <td>{{ form.asset }}</td>
+                        <td class="report-pick">{{ form.finding_code }}{{ form.note }}</td>
+                        <td class="report-pick">{{ form.action_code }}{{ form.action }}</td>
+                        <td>{{ form.outcome }}</td>
+                    </tr>
+                    {% if form.errors %}
+                    <tr><td colspan="4"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section" data-staff-only>
+        <h3>{% translate "Machines not in the list" %}</h3>
+        {{ new_formset.management_form }}
+        {% if new_formset.non_form_errors %}
+            <p class="flash flash--error">{{ new_formset.non_form_errors }}</p>
+        {% endif %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{% translate "Brand" %}</th>
+                        <th>{% translate "Model" %}</th>
+                        <th>{% translate "Serial number" %}</th>
+                        <th>{% translate "Finding" %}</th>
+                        <th>{% translate "Action Taken" %}</th>
+                        <th>{% translate "Outcome" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in new_formset %}
+                    <tr>
+                        <td>{{ form.brand }}</td>
+                        <td>{{ form.model_name }}</td>
+                        <td>{{ form.serial_no }}</td>
+                        <td class="report-pick">{{ form.finding_code }}{{ form.note }}</td>
+                        <td class="report-pick">{{ form.action_code }}{{ form.action }}{{ form.ticket_machine }}</td>
+                        <td>{{ form.outcome }}</td>
+                    </tr>
+                    {% if form.errors %}
+                    <tr><td colspan="6"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="report-step">
+        <span class="report-step__number">2</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Work performed" %}</h2>
+            <p class="field__help">{% translate "Tick everything you did on this visit." %}</p>
+        </div>
+    </div>
+    <div class="section">
         <div class="form-grid">
-            <div class="field {% if report_form.findings.errors %}field--error{% endif %}">
-                <label for="{{ report_form.findings.id_for_label }}">{{ report_form.findings.label }}</label>
-                {{ report_form.findings }}
-                {% for error in report_form.findings.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
             <div class="field field--wide {% if report_form.work_lines.errors %}field--error{% endif %}">
                 <label>{{ report_form.work_lines.label }}</label>
                 {{ report_form.work_lines }}
@@ -47,10 +131,27 @@
                 {{ report_form.action_taken }}
                 {% for error in report_form.action_taken.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+        </div>
+    </div>
+
+    <div class="report-step">
+        <span class="report-step__number">3</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Result and advice" %}</h2>
+            <p class="field__help">{% translate "Say whether the problem is solved, and add advice for the customer if needed." %}</p>
+        </div>
+    </div>
+    <div class="section">
+        <div class="form-grid">
             <div class="field {% if report_form.resolved.errors %}field--error{% endif %}">
                 <label>{{ report_form.resolved.label }}</label>
                 {{ report_form.resolved }}
                 {% for error in report_form.resolved.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="field {% if report_form.findings.errors %}field--error{% endif %}">
+                <label for="{{ report_form.findings.id_for_label }}">{{ report_form.findings.label }}</label>
+                {{ report_form.findings }}
+                {% for error in report_form.findings.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
             <div class="field field--wide {% if report_form.recommendations.errors %}field--error{% endif %}">
                 <label>{{ report_form.recommendations.label }}</label>
@@ -62,6 +163,18 @@
                 {{ report_form.recommendation }}
                 {% for error in report_form.recommendation.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+        </div>
+    </div>
+
+    <div class="report-step">
+        <span class="report-step__number">4</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Hours and parts" %}</h2>
+            <p class="field__help">{% translate "Your hours on site, and any parts you fitted." %}</p>
+        </div>
+    </div>
+    <div class="section" data-staff-only>
+        <div class="form-grid">
             <div class="field {% if report_form.labour_hours.errors %}field--error{% endif %}" data-staff-only>
                 <label for="{{ report_form.labour_hours.id_for_label }}">{{ report_form.labour_hours.label }}</label>
                 {{ report_form.labour_hours }}
@@ -85,80 +198,8 @@
         {% endif %}
     </div>
 
-    {{ existing_formset.management_form }}
-    {% if existing_formset.non_form_errors %}
-        <p class="flash flash--error">{{ existing_formset.non_form_errors }}</p>
-    {% endif %}
-    {% if has_existing_assets %}
-    <div class="section" data-staff-only>
-        <h2>{% translate "Machines covered this visit" %}</h2>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>{% translate "Machine" %}</th>
-                        <th>{% translate "Finding" %}</th>
-                        <th>{% translate "Action Taken" %}</th>
-                        <th>{% translate "Outcome" %}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for form in existing_formset %}
-                    <tr>
-                        <td>{{ form.asset }}</td>
-                        <td>{{ form.finding_code }}{{ form.note }}</td>
-                        <td>{{ form.action_code }}{{ form.action }}</td>
-                        <td>{{ form.outcome }}</td>
-                    </tr>
-                    {% if form.errors %}
-                    <tr><td colspan="4"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
-                    {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="section" data-staff-only>
-        <h2>{% translate "New machines found" %}</h2>
-        {{ new_formset.management_form }}
-        {% if new_formset.non_form_errors %}
-            <p class="flash flash--error">{{ new_formset.non_form_errors }}</p>
-        {% endif %}
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>{% translate "Brand" %}</th>
-                        <th>{% translate "Model" %}</th>
-                        <th>{% translate "Serial number" %}</th>
-                        <th>{% translate "Finding" %}</th>
-                        <th>{% translate "Action Taken" %}</th>
-                        <th>{% translate "Outcome" %}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for form in new_formset %}
-                    <tr>
-                        <td>{{ form.brand }}</td>
-                        <td>{{ form.model_name }}</td>
-                        <td>{{ form.serial_no }}</td>
-                        <td>{{ form.finding_code }}{{ form.note }}</td>
-                        <td>{{ form.action_code }}{{ form.action }}{{ form.ticket_machine }}</td>
-                        <td>{{ form.outcome }}</td>
-                    </tr>
-                    {% if form.errors %}
-                    <tr><td colspan="6"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
-                    {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
     <div class="section">
-        <h2>{% translate "Parts used" %}</h2>
+        <h3>{% translate "Parts used" %}</h3>
         {{ part_formset.management_form }}
         {% if part_formset.non_form_errors %}
             <p class="flash flash--error">{{ part_formset.non_form_errors }}</p>
@@ -170,8 +211,6 @@
                         <th>{% translate "Part code" %}</th>
                         <th>{% translate "Description" %}</th>
                         <th>{% translate "Qty" %}</th>
-                        <th data-staff-only>{% translate "Unit cost" %}</th>
-                        <th data-staff-only>{% translate "Currency" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -180,11 +219,9 @@
                         <td>{{ form.part_code }}</td>
                         <td>{{ form.description }}</td>
                         <td>{{ form.quantity }}</td>
-                        <td data-staff-only>{{ form.unit_cost }}</td>
-                        <td data-staff-only>{{ form.currency_code }}</td>
                     </tr>
                     {% if form.errors %}
-                    <tr><td colspan="5"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="3"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>
@@ -192,9 +229,14 @@
         </div>
     </div>
 
+    <div class="report-step">
+        <span class="report-step__number">5</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Customer sign-off" %}</h2>
+            <p class="field__help">{% translate "Hand the device to the customer to review the work and sign. Your hours are hidden while they do." %}</p>
+        </div>
+    </div>
     <div class="section">
-        <h2>{% translate "Customer sign-off" %}</h2>
-        <p class="field__help" data-staff-only>{% translate "Please hand the device to the customer to review the work and sign. Hours and prices are hidden during this step." %}</p>
         <p data-signoff-start hidden data-staff-only>
             <button type="button" class="button button--secondary">{% translate "Hand to customer for signature" %}</button>
         </p>
@@ -238,10 +280,17 @@
         </p>
     </div>
 
-    <div class="section" data-staff-only>
-        {# Check it first: opens the report as the customer will get it, in a new tab — nothing is saved. #}
-        <button type="submit" name="preview" value="1" formtarget="_blank" class="button button--secondary">{% translate "Preview report" %}</button>
-        <button type="submit" class="button">{% translate "Save report" %}</button>
+    <div class="report-step" data-staff-only>
+        <span class="report-step__number">6</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Review and send" %}</h2>
+            <p class="field__help">{% translate "Preview the report exactly as the customer will get it, check the list of anything to fix, then save it." %}</p>
+        </div>
+    </div>
+    <div class="section button-row" data-staff-only>
+        {# Opens the report as the customer will get it, in a new tab — nothing is saved. #}
+        <button type="submit" name="preview" value="1" formtarget="_blank" class="button">{% translate "Preview report" %}</button>
+        <button type="submit" class="button button--secondary">{% translate "Save report" %}</button>
     </div>
 </form>
 {% endblock %}
@@ -255,4 +304,5 @@
 {% load static %}
 <script src="{% static 'js/signature-pad.js' %}" defer></script>
 <script src="{% static 'js/tap-location.js' %}" defer></script>
+<script src="{% static 'js/report-picks.js' %}" defer></script>
 {% endblock %}

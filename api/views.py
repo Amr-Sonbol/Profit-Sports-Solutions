@@ -539,7 +539,7 @@ class MyTaskReportView(APIView):
 
     POST body (JSON): findings, action_taken, resolved (bool),
     labour_hours, customer_name, parts (list of {part_code, description,
-    quantity, unit_cost, currency_code}), signature (PNG data URL,
+    quantity}), signature (PNG data URL,
     optional — leaving it out keeps the one already on file),
     signature_waived_reason (customer not available to sign — files
     without a signature), helper_hours ({assignment id: hours} for a

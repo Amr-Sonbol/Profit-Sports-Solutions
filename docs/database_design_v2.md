@@ -898,8 +898,8 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | part_code | varchar | a `part.code` once the catalogue is in use — kept as text, so a later catalogue change never rewrites history |
 | description | varchar | |
 | quantity | int | |
-| unit_cost | decimal | |
-| currency_code | char(3) | never store an amount without its currency |
+| unit_cost | decimal, nullable | not asked for any more — managers agree prices with the customer before the visit; kept for older reports |
+| currency_code | char(3), blank | with unit_cost: never store an amount without its currency |
 
 ### customer_feedback
 A rating request sent to the customer once their task is closed (report filed). Not automatic — a supervisor sends it deliberately, from the task's own detail page.

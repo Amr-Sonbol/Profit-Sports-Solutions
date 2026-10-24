@@ -27,8 +27,6 @@ interface PartRow {
   part_code: string;
   description: string;
   quantity: string;
-  unit_cost: string;
-  currency_code: string;
 }
 
 // One machine card: a machine at the site (asset_id set, name shown), or
@@ -65,8 +63,9 @@ const SIGNATURE_WEB_STYLE = `
   body, html { height: 100%; }
 `;
 
-function emptyPart(currency: string): PartRow {
-  return { part_code: '', description: '', quantity: '', unit_cost: '', currency_code: currency };
+// No price: the managers agree prices with the customer before the visit.
+function emptyPart(): PartRow {
+  return { part_code: '', description: '', quantity: '' };
 }
 
 /** DRF's {"field": ["message"]} errors, flattened to one message per field. */
@@ -107,7 +106,7 @@ export default function ReportScreen() {
   const [catalogue, setCatalogue] = useState<CataloguePart[]>([]);
   const [signatureOnFile, setSignatureOnFile] = useState(false);
   // Signing happens on its own screen (see the `signing` branch below) so
-  // the customer never sees labour hours or part prices while signing.
+  // the customer never sees labour hours while signing.
   const [signing, setSigning] = useState(false);
   const [newSignature, setNewSignature] = useState<string | null>(null);
   const [signError, setSignError] = useState('');
@@ -197,7 +196,7 @@ export default function ReportScreen() {
           )));
         }
         setParts(input.parts.map((part) => ({
-          ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
+          part_code: part.part_code, description: part.description, quantity: String(part.quantity),
         })));
         if (pending.error) {
           setErrors({ form: `This report could not be sent: ${pending.error} Please correct it and submit again.` });
@@ -215,7 +214,7 @@ export default function ReportScreen() {
         setNotSigned(Boolean(report.signature_waived_reason));
         setWaivedReason(report.signature_waived_reason ?? '');
         setParts(report.parts_used.map((part) => ({
-          ...part, quantity: String(part.quantity), unit_cost: String(part.unit_cost),
+          part_code: part.part_code, description: part.description, quantity: String(part.quantity),
         })));
       }
     } catch (err) {
@@ -290,7 +289,7 @@ export default function ReportScreen() {
       customer_name: customerName,
       // Fully blank rows are just unused space, same as the web form.
       parts: parts
-        .filter((row) => row.part_code || row.quantity || row.unit_cost)
+        .filter((row) => row.part_code || row.quantity)
         .map((row) => ({ ...row, quantity: Number(row.quantity) || 0 })),
       signature: notSigned ? null : newSignature,
       signature_waived_reason: notSigned ? waivedReason : '',
@@ -784,16 +783,6 @@ export default function ReportScreen() {
                       placeholderTextColor={theme.textSecondary} keyboardType="number-pad"
                       onChangeText={(value) => updatePart(index, 'quantity', value)}
                     />
-                    <TextInput
-                      style={[inputStyle, styles.partNumber]} value={row.unit_cost} placeholder="Unit cost"
-                      placeholderTextColor={theme.textSecondary} keyboardType="decimal-pad"
-                      onChangeText={(value) => updatePart(index, 'unit_cost', value)}
-                    />
-                    <TextInput
-                      style={[inputStyle, styles.partCurrency]} value={row.currency_code} placeholder="AED"
-                      placeholderTextColor={theme.textSecondary} autoCapitalize="characters" maxLength={3}
-                      onChangeText={(value) => updatePart(index, 'currency_code', value.toUpperCase())}
-                    />
                   </ThemedView>
                   <TouchableOpacity onPress={() => setParts((rows) => rows.filter((_, i) => i !== index))}>
                     <ThemedText themeColor="danger" type="small">Remove part</ThemedText>
@@ -803,7 +792,7 @@ export default function ReportScreen() {
               {errors.parts ? <ThemedText themeColor="danger" type="small">{errors.parts}</ThemedText> : null}
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
-                onPress={() => setParts((rows) => [...rows, emptyPart(task.currency_code)])}
+                onPress={() => setParts((rows) => [...rows, emptyPart()])}
               >
                 <ThemedText themeColor="primary">+ Add a part</ThemedText>
               </TouchableOpacity>
@@ -811,7 +800,7 @@ export default function ReportScreen() {
 
             <StepTitle
               number={5} title="Customer sign-off"
-              hint="Hand the phone to the customer to sign — they see the work, not hours or prices."
+              hint="Hand the phone to the customer to sign — they see the work, not your hours."
             />
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
@@ -822,7 +811,7 @@ export default function ReportScreen() {
                   ? `Signed by ${customerName || 'the customer'} ✓`
                   : signatureOnFile
                     ? `Signed by ${customerName || 'the customer'} — sign again only if you wish to replace it.`
-                    : 'The customer reviews the work and signs on their own screen. Hours and prices are not displayed.'}
+                    : 'The customer reviews the work and signs on their own screen. Your hours are not displayed.'}
               </ThemedText>
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
@@ -983,7 +972,6 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: Spacing.four, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },
-  partCurrency: { width: 72 },
   secondaryButton: { borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
   summary: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   centerLink: { alignItems: 'center', paddingVertical: Spacing.two },

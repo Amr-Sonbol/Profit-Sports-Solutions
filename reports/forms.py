@@ -3,7 +3,7 @@ import binascii
 
 from django import forms
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.validators import FileExtensionValidator, RegexValidator
+from django.core.validators import FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import Part
@@ -74,7 +74,13 @@ class WorkReportForm(forms.ModelForm):
             'recommendation': forms.Textarea(attrs={'rows': 2}),
             'signature_waived_reason': forms.Textarea(attrs={'rows': 2}),
         }
-        labels = {'signature_waived_reason': _('Why the customer could not sign')}
+        labels = {
+            'signature_waived_reason': _('Why the customer could not sign'),
+            # Same wording as the app's report screen.
+            'findings': _('Overall findings (optional)'),
+            'action_taken': _('Other work, one per line'),
+            'recommendation': _('Other recommendation'),
+        }
 
     def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', **kwargs):
         super().__init__(*args, **kwargs)
@@ -161,11 +167,7 @@ class PartUsedItemForm(forms.Form):
     # integer overflow, which would otherwise surface as the same kind of
     # unhandled DB error.
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Qty'))
-    unit_cost = forms.DecimalField(required=False, min_value=0, max_digits=10, decimal_places=2, label=_('Unit cost'))
-    currency_code = forms.CharField(
-        required=False, max_length=3, label=_('Currency'),
-        validators=[RegexValidator(r'^[A-Z]{3}$', _('Enter a 3-letter currency code, e.g. AED.'))],
-    )
+    # No price: the managers agree prices with the customer before the visit.
 
     def clean_part_code(self):
         """Once the catalogue has any active part, the code must be one of
@@ -193,11 +195,9 @@ class PartUsedItemForm(forms.Form):
         part = getattr(self, 'catalogue_part', None)
         if part and not cleaned.get('description'):
             cleaned['description'] = part.description
-        if not any(cleaned.get(f) for f in ('part_code', 'quantity', 'unit_cost')):
+        if not any(cleaned.get(f) for f in ('part_code', 'quantity')):
             return cleaned
-        missing = [f for f in ('part_code', 'quantity', 'unit_cost', 'currency_code') if not cleaned.get(f)]
+        missing = [f for f in ('part_code', 'quantity') if not cleaned.get(f)]
         if missing:
-            raise forms.ValidationError(
-                _('Please complete the part code, quantity, unit cost and currency, or leave this row blank.'),
-            )
+            raise forms.ValidationError(_('Please complete the part code and quantity, or leave this row blank.'))
         return cleaned

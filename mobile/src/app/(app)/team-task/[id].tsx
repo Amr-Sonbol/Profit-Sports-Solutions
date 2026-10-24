@@ -241,8 +241,7 @@ export default function TeamTaskScreen() {
                   <ThemedText type="small" themeColor="textSecondary">Parts used</ThemedText>
                   {task.report.parts_used.map((part, index) => (
                     <ThemedText key={index} type="small">
-                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''} —{' '}
-                      {part.unit_cost} {part.currency_code}
+                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''}
                     </ThemedText>
                   ))}
                 </>

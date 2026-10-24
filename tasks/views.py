@@ -5064,11 +5064,10 @@ def save_work_report(request, task, technician, report_form, part_rows):
 
     saved_report.parts_used.all().delete()
     for cleaned in part_rows:
-        if cleaned.get('part_code') and cleaned.get('quantity') and cleaned.get('unit_cost'):
+        if cleaned.get('part_code') and cleaned.get('quantity'):
             PartUsed.objects.create(
                 report=saved_report, part_code=cleaned['part_code'],
                 description=cleaned.get('description', ''), quantity=cleaned['quantity'],
-                unit_cost=cleaned['unit_cost'], currency_code=cleaned['currency_code'],
             )
 
     now = timezone.now()

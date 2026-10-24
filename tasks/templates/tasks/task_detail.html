@@ -559,7 +559,6 @@
                     <th>{% translate "Part" %}</th>
                     <th>{% translate "Description" %}</th>
                     <th>{% translate "Qty" %}</th>
-                    <th>{% translate "Unit cost" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -568,7 +567,6 @@
                     <td>{{ part.part_code }}</td>
                     <td>{{ part.description|default:"—" }}</td>
                     <td>{{ part.quantity }}</td>
-                    <td>{{ part.unit_cost }} {{ part.currency_code }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

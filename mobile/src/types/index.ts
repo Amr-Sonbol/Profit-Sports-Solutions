@@ -104,8 +104,6 @@ export interface PartUsed {
   part_code: string;
   description: string;
   quantity: number;
-  unit_cost: string;
-  currency_code: string;
 }
 
 export interface WorkReport {

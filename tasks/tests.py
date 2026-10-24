@@ -6363,16 +6363,18 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-    def test_invalid_currency_code_is_rejected(self):
+    def test_a_part_needs_no_price(self):
+        # Managers agree prices with the customer before the visit: a part
+        # is recorded with its code and quantity only.
         self.client.login(username='tech1', password='pass12345')
         payload = self._base_payload()
         payload['parts-0-part_code'] = 'BELT-42'
-        payload['parts-0-quantity'] = '1'
-        payload['parts-0-unit_cost'] = '85.00'
-        payload['parts-0-currency_code'] = 'aed'
+        payload['parts-0-quantity'] = '2'
         response = self.client.post(self.url, payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertEqual(response.status_code, 302)
+        part = WorkReport.objects.get(task=self.task).parts_used.get()
+        self.assertEqual((part.part_code, part.quantity, part.unit_cost), ('BELT-42', 2, None))
+        self.assertNotContains(self.client.get(self.url), 'Unit cost')
 
     def test_excessive_part_quantity_is_rejected_cleanly(self):
         # PositiveIntegerField has no upper bound of its own; this must fail
