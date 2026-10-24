@@ -73,6 +73,8 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="machines" options={{ href: null }} />
       <Tabs.Screen name="machine/[id]" options={{ href: null }} />
       <Tabs.Screen name="hours" options={{ href: null }} />
+      <Tabs.Screen name="internal-tickets" options={{ href: null }} />
+      <Tabs.Screen name="team-map" options={{ href: null }} />
     </Tabs>
   );
 }

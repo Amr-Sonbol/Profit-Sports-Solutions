@@ -476,3 +476,22 @@ export interface HoursPage {
     reports: { task_id: number; task_number: string; submitted_at: string; hours: string; customer_name: string }[];
   }[];
 }
+
+/** An internal ticket (api/views.py InternalTicketsView). */
+export interface InternalTicket {
+  id: number;
+  ticket_number: string;
+  kind: string;
+  subject: string;
+  description: string;
+  status_display: string;
+  submitted_at: string;
+  assigned_to: string;
+}
+
+/** The team map (api/views.py TeamMapView). */
+export interface TeamMap {
+  pins: { name: string; detail: string; place: string; lat: number; lng: number; away: boolean; task_id: number }[];
+  attention: { text: string; level: 'critical' | 'warning'; task_id: number }[];
+  without_taps: string[];
+}

@@ -1406,3 +1406,22 @@ class HoursApiTests(ApiTestCase):
         self.assertEqual(body['prev_month'], '2025-12-01')
         self.assertIn(self.technician.pk, [row['id'] for row in body['rows']])
         self.assertEqual(self.client.get('/api/hours/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class InternalTicketsApiTests(ApiTestCase):
+    def test_a_supervisor_sees_the_list_and_a_technician_cannot(self):
+        response = self.client.get('/api/internal-tickets/', **self.auth(self.token_for('supervisor1')))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+        self.assertEqual(self.client.get('/api/internal-tickets/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class TeamMapApiTests(ApiTestCase):
+    def test_the_last_tap_today_is_a_pin(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.ARRIVED, occurred_at=timezone.now(), actor=self.tech_user,
+            latitude='25.080000', longitude='55.140000', location_status=TaskEvent.LocationStatus.AT_SITE,
+        )
+        body = self.client.get('/api/team-map/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual([(pin['name'], pin['task_id']) for pin in body['pins']], [(self.technician.full_name, self.task.pk)])
+        self.assertEqual(self.client.get('/api/team-map/', **self.auth(self.token_for('tech1'))).status_code, 403)

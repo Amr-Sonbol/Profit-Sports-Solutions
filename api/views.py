@@ -44,7 +44,7 @@ from tasks.views import (
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
-    _overseen_rows, _shift_month, _technician_hours_rows,
+    _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -515,6 +515,55 @@ class HoursView(APIView):
                 }
                 for row in rows
             ],
+        })
+
+
+class InternalTicketsView(APIView):
+    """The app's Internal tickets — the website's list (anyone above a
+    technician): stock requests, vendor follow-ups and other internal
+    tickets, open ones by default (?status=open|closed|all), newest first.
+    Each opens its website page in the app to reply, hand on or close."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        if technician.role == Technician.Role.TECHNICIAN:
+            raise PermissionDenied
+        tickets = _visible_internal_tickets(technician, get_active_country(request) or technician.country).select_related(
+            'assigned_to',
+        ).order_by('-submitted_at')
+        status_filter = request.query_params.get('status', 'open')
+        if status_filter == 'open':
+            tickets = tickets.filter(status=CustomerTicket.Status.NEW)
+        elif status_filter == 'closed':
+            tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
+        return Response([
+            {
+                'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'kind': ticket.get_kind_display(),
+                'subject': ticket.subject, 'description': ticket.description,
+                'status_display': ticket.get_status_display(), 'submitted_at': ticket.submitted_at,
+                'assigned_to': ticket.assigned_to.full_name if ticket.assigned_to_id else '',
+            }
+            for ticket in tickets[:200]
+        ])
+
+
+class TeamMapView(APIView):
+    """The app's Team map — the website's (view_technicians): where each
+    technician last tapped today, as pins, and what needs a follow-up."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_TECHNICIANS)
+        data = team_map_data(get_active_country(request) or technician.country)
+        return Response({
+            'pins': [{key: str(value) if key in ('detail', 'place') else value for key, value in pin.items()
+                      if key != 'url'} for pin in data['pins']],
+            'attention': [{'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']}
+                          for item in data['attention']],
+            'without_taps': [person.full_name for person in data['technicians'] if person.last_tap is None],
         })
 
 

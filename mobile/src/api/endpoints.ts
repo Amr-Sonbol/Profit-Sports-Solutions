@@ -2,6 +2,8 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  TeamMap,
+  InternalTicket,
   HoursPage,
   CustomerPage, CustomerRow, MachinePage, MachineRow,
   FormFieldSpec,
@@ -250,4 +252,14 @@ export function fetchMachine(id: number) {
 /** The Hours page for a month ("YYYY-MM"; this month by default). */
 export function fetchHours(month = '') {
   return apiRequest<HoursPage>(`/api/hours/${month ? `?month=${month}` : ''}`);
+}
+
+/** Internal tickets: 'open' (default), 'closed' or 'all'. */
+export function fetchInternalTickets(status = 'open') {
+  return apiRequest<InternalTicket[]>(`/api/internal-tickets/?status=${status}`);
+}
+
+/** Where each technician last tapped today, and what needs a follow-up. */
+export function fetchTeamMap() {
+  return apiRequest<TeamMap>('/api/team-map/');
 }

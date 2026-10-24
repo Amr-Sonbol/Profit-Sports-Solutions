@@ -4078,7 +4078,15 @@ def team_map(request):
     (tasks.location) — nobody is tracked between taps.
     """
     require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
-    country = get_active_country(request)
+    return render(request, 'tasks/team_map.html', team_map_data(get_active_country(request)))
+
+
+def team_map_data(country):
+    """The team map's content for a country: each technician with their
+    last tap today, the pins, and what needs a follow-up (late arrivals,
+    taps away from the site, jobs past their estimate). The website's Team
+    map and the app's (api.views.TeamMapView).
+    """
     now = timezone.now()
     today = timezone.localdate()
 
@@ -4107,7 +4115,7 @@ def team_map(request):
             'name': technician.full_name, 'detail': detail, 'place': place,
             'lat': float(tap.latitude), 'lng': float(tap.longitude),
             'away': tap.location_status == TaskEvent.LocationStatus.AWAY,
-            'url': reverse('tasks:task_detail', args=[tap.task_id]),
+            'url': reverse('tasks:task_detail', args=[tap.task_id]), 'task_id': tap.task_id,
         })
 
     open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country)
@@ -4128,7 +4136,7 @@ def team_map(request):
                 'name': task.lead_technician.full_name if task.lead_technician else _('No one assigned'),
                 'site': task.site.name, 'time': formats.time_format(timezone.localtime(task.scheduled_for)),
             },
-            'url': reverse('tasks:task_detail', args=[task.pk]), 'level': 'critical',
+            'url': reverse('tasks:task_detail', args=[task.pk]), 'task_id': task.pk, 'level': 'critical',
         })
     for tap in (
         TaskEvent.objects.filter(
@@ -4141,7 +4149,7 @@ def team_map(request):
                 'name': tap.actor.technician.full_name if hasattr(tap.actor, 'technician') else tap.actor.get_username(),
                 'event': tap.get_event_type_display(), 'distance': tap.distance_display, 'site': tap.task.site.name,
             },
-            'url': reverse('tasks:task_detail', args=[tap.task_id]), 'level': 'warning',
+            'url': reverse('tasks:task_detail', args=[tap.task_id]), 'task_id': tap.task_id, 'level': 'warning',
         })
     running = open_tasks.filter(status=Task.Status.IN_PROGRESS, estimated_hours__isnull=False).annotate(
         working_since=Max('events__occurred_at', filter=Q(
@@ -4154,11 +4162,10 @@ def team_map(request):
                 'text': _('The job at %(site)s has exceeded its estimate of %(hours)s hours.') % {
                     'site': task.site.name, 'hours': formats.number_format(task.estimated_hours, decimal_pos=1),
                 },
-                'url': reverse('tasks:task_detail', args=[task.pk]), 'level': 'warning',
+                'url': reverse('tasks:task_detail', args=[task.pk]), 'task_id': task.pk, 'level': 'warning',
             })
 
-    context = {'technicians': technicians, 'pins': pins, 'attention': attention, 'today': today}
-    return render(request, 'tasks/team_map.html', context)
+    return {'technicians': technicians, 'pins': pins, 'attention': attention, 'today': today}
 
 
 @login_required
