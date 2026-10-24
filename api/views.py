@@ -23,7 +23,7 @@ from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, NewAssetForm, PauseTaskForm,
+    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MyProfileForm, NewAssetForm, PauseTaskForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
@@ -88,6 +88,7 @@ def _me_payload(user, request=None):
         'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
+        'language_choices': [{'value': value, 'label': str(label)} for value, label in technician.Language.choices],
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
         'must_change_password': technician.must_change_password,
@@ -101,6 +102,25 @@ def _me_payload(user, request=None):
 
 class MeView(APIView):
     def get(self, request):
+        return Response(_me_payload(request.user, request))
+
+    def post(self, request):
+        """Edit my profile, as on the website's My profile (MyProfileForm):
+        photo, language, phone and email — multipart; anything left out
+        stays as it is. Role, country and employment stay office-side.
+        """
+        technician = getattr(request.user, 'technician', None)
+        if technician is None:
+            raise PermissionDenied
+        data = {
+            'language': technician.language, 'phone': technician.phone, 'email': request.user.email,
+            **{field: request.data[field] for field in ('language', 'phone', 'email') if field in request.data},
+        }
+        form = MyProfileForm(data, request.FILES, instance=technician)
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        form.save()
         return Response(_me_payload(request.user, request))
 
 

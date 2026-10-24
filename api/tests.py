@@ -1256,3 +1256,34 @@ class MySkillsApiTests(ApiTestCase):
                                     **self.auth(token))
         self.assertEqual(response.status_code, 400)
         self.assertEqual(TechnicianConduct.objects.get(technician=technician).level, 2)
+
+
+class MyProfileApiTests(ApiTestCase):
+    # Editing my profile from the app, as on the website's My profile.
+
+    def test_phone_language_email_and_photo_change_and_the_rest_stays(self):
+        token = self.token_for('tech1')
+        technician = Technician.objects.get(user__username='tech1')
+        role, country = technician.role, technician.country_id
+        photo = SimpleUploadedFile('me.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post('/api/me/', {
+            'phone': '+971500000001', 'language': 'ar', 'email': 'tech1@example.com', 'photo': photo,
+            'role': 'manager',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        technician.refresh_from_db()
+        self.assertEqual((technician.phone, technician.language, technician.user.email),
+                         ('+971500000001', 'ar', 'tech1@example.com'))
+        self.assertTrue(response.json()['photo_url'].startswith('http'))
+        self.assertEqual((technician.role, technician.country_id), (role, country))
+
+        # Only the phone: the photo and the rest are kept.
+        self.client.post('/api/me/', {'phone': '+971500000002'}, **self.auth(token))
+        technician.refresh_from_db()
+        self.assertEqual((technician.phone, technician.language), ('+971500000002', 'ar'))
+        self.assertTrue(technician.photo)
+
+    def test_a_bad_email_is_rejected(self):
+        response = self.client.post('/api/me/', {'email': 'not-an-email'}, **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.json())

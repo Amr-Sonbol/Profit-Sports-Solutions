@@ -13,6 +13,7 @@ export interface Me {
   employment_type_display?: string;
   country?: string;
   language?: string;
+  language_choices?: Choice[];
   /** What this role may do (RolePermission codes) — decides which tabs show. */
   permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */

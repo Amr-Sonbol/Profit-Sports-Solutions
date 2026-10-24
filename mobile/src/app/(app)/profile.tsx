@@ -19,7 +19,7 @@ function initials(name: string) {
 }
 
 /**
- * Who's signed in: their photo (set on the website's My profile) or
+ * Who's signed in: their photo (Edit profile, or the website's My profile) or
  * initials, name and role, then their details and account actions.
  */
 export default function ProfileScreen() {
@@ -64,11 +64,13 @@ export default function ProfileScreen() {
             {detail('mail-outline', 'Email', me?.email)}
             {detail('call-outline', 'Phone', me?.phone)}
           </ThemedView>
-          {!me?.photo_url ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
-              Add your photo on the website: My profile → Photo.
-            </ThemedText>
-          ) : null}
+          <TouchableOpacity
+            style={[styles.button, { borderColor: theme.backgroundSelected }]}
+            onPress={() => router.push('/edit-profile')}
+          >
+            <Ionicons name="create-outline" size={18} color={theme.text} />
+            <ThemedText>{me?.photo_url ? 'Edit profile' : 'Add your photo and edit profile'}</ThemedText>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, { borderColor: theme.backgroundSelected }]}
@@ -109,7 +111,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.three },
   detail: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, backgroundColor: 'transparent' },
   detailText: { flex: 1, backgroundColor: 'transparent' },
-  note: { textAlign: 'center' },
   button: {
     flexDirection: 'row', justifyContent: 'center', gap: Spacing.two,
     borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.three, alignItems: 'center',

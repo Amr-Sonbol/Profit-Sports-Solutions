@@ -18,6 +18,17 @@ export function fetchMe() {
   return apiRequest<Me>('/api/me/');
 }
 
+/** Edit my profile: phone, email, language and a new photo (any left out stay). */
+export function updateMe(changes: { phone?: string; email?: string; language?: string },
+  photo?: { uri: string; name: string; type: string }) {
+  const form = new FormData();
+  Object.entries(changes).forEach(([field, value]) => form.append(field, value ?? ''));
+  if (photo) {
+    form.append('photo', photo as unknown as Blob);
+  }
+  return apiRequest<Me>('/api/me/', { method: 'POST', body: form, isFormData: true });
+}
+
 /** Signs out every other phone; the fresh token returned keeps this one in. */
 export function setMyPassword(input: PasswordInput) {
   return apiRequest<{ token: string } & Me>('/api/me/password/', { method: 'POST', body: input });
