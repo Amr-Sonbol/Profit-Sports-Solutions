@@ -377,3 +377,21 @@ export interface MySkills {
   advanced: SkillRow[];
   conduct: SkillRow[];
 }
+
+/** Someone on the viewer's team (api/views.py PersonView). */
+export interface Person {
+  id: number;
+  name: string;
+  role: string;
+  photo_url: string;
+  phone: string;
+  email: string;
+  country: string;
+  is_available: boolean;
+  unavailable_reason: string;
+  unavailable_reasons: Choice[];
+  can_review_skills: boolean;
+  can_set_availability: boolean;
+  skills: MySkills;
+  record: { completed: number; helped: number; on_time_percent: number | null; acceptance_minutes: number | null };
+}

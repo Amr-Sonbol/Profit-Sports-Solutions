@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from customers.models import Asset
-from people.models import PushDevice, RolePermission, TechnicianConduct, TechnicianSkill
+from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
 from reference.models import Brand, ConductArea, Part, Skill
@@ -23,7 +23,8 @@ from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MyProfileForm, NewAssetForm, PauseTaskForm,
+    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
@@ -36,7 +37,8 @@ from tasks.views import (
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
-    save_conduct_self_rating, save_skill_self_rating, send_password_changed_email, skills_summary,
+    save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
+    send_password_changed_email, set_availability, skills_summary, _reliability_stats,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -324,6 +326,103 @@ class MySkillsView(APIView):
         else:
             save_conduct_self_rating(technician, item, form.cleaned_data, today)
         return Response(self._summary(request, technician))
+
+
+def _person(request, pk):
+    """Someone the viewer oversees, in their country — like the website's
+    technician pages; anyone else is a 404. Needs view_technicians."""
+    if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
+        raise PermissionDenied
+    viewer = request.user.technician
+    return get_object_or_404(_people_i_oversee(viewer).filter(country=viewer.country), pk=pk)
+
+
+class PersonView(APIView):
+    """A person's page in the app (Team → a name): their details,
+    availability, skills (with what the viewer may do — confirm skills,
+    set availability) and work record. The website's technician skills,
+    availability and progress pages in one.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        person = _person(request, pk)
+        skills = MySkillsView._summary(request, person)
+        reliability = _reliability_stats(person)
+        return Response({
+            'id': person.pk,
+            'name': person.full_name,
+            'role': person.get_role_display(),
+            'photo_url': request.build_absolute_uri(person.photo.url) if person.photo else '',
+            'phone': person.phone,
+            'email': person.user.email if person.user_id else '',
+            'country': person.country.display_name,
+            'is_available': person.is_available,
+            'unavailable_reason': person.get_unavailable_reason_display() if not person.is_available else '',
+            'unavailable_reasons': [
+                {'value': value, 'label': str(label)} for value, label in Technician.UnavailableReason.choices
+            ],
+            'can_review_skills': has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS),
+            'can_set_availability': has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS),
+            'skills': skills,
+            'record': {
+                'completed': reliability['total_completed'],
+                'helped': reliability['total_helped'],
+                'on_time_percent': reliability['on_time_percent'],
+                'acceptance_minutes': reliability['acceptance_latency_minutes'],
+            },
+        })
+
+
+class PersonSkillReviewView(APIView):
+    """A supervisor confirming or adjusting one of the person's levels
+    (kind = skill|conduct, id, level, note) — review_skills, like the
+    website's review screen. Returns the person's page again."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        person = _person(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS):
+            raise PermissionDenied
+        form = ReviewLevelForm(request.data)
+        kind = request.data.get('kind')
+        if kind not in ('skill', 'conduct'):
+            return Response({'detail': 'kind must be skill or conduct.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        today = timezone.localtime().date()
+        if kind == 'skill':
+            skill = get_object_or_404(Skill, pk=request.data.get('id'), is_active=True)
+            save_skill_review(person, skill, request.user.technician, form.cleaned_data, today)
+        else:
+            area = get_object_or_404(ConductArea, pk=request.data.get('id'), is_active=True)
+            save_conduct_review(person, area, request.user.technician, form.cleaned_data, today)
+        return PersonView().get(request, pk)
+
+
+class PersonAvailabilityView(APIView):
+    """Available, or unavailable with a reason (available = true/false,
+    reason) — whoever assigns tasks, like the website's Availability page.
+    Returns the person's page again."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        person = _person(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS):
+            raise PermissionDenied
+        if request.data.get('available') in (True, 'true', '1'):
+            set_availability(person, True)
+        else:
+            form = MarkUnavailableForm(request.data)
+            if not form.is_valid():
+                return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                                status=status.HTTP_400_BAD_REQUEST)
+            set_availability(person, False, form.cleaned_data['reason'])
+        return PersonView().get(request, pk)
 
 
 class MyProgressView(APIView):

@@ -64,6 +64,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="change-password" options={{ href: null }} />
       <Tabs.Screen name="skills" options={{ href: null }} />
       <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="people/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

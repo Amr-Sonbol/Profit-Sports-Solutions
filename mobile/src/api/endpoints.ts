@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  Person,
   MySkills,
   Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
   TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
@@ -188,4 +189,23 @@ export function rateMySkill(
     form.append('evidence', evidence as unknown as Blob);
   }
   return apiRequest<MySkills>('/api/my-skills/', { method: 'POST', body: form, isFormData: true });
+}
+
+/** Someone on my team: details, availability, skills and work record. */
+export function fetchPerson(id: number) {
+  return apiRequest<Person>(`/api/people/${id}/`);
+}
+
+/** A supervisor confirming or adjusting one of their levels. */
+export function reviewPersonSkill(id: number, kind: 'skill' | 'conduct', itemId: number, level: number, note: string) {
+  return apiRequest<Person>(`/api/people/${id}/skills/`, {
+    method: 'POST', body: { kind, id: itemId, level, note },
+  });
+}
+
+/** Available again, or unavailable with a reason. */
+export function setPersonAvailability(id: number, available: boolean, reason = '') {
+  return apiRequest<Person>(`/api/people/${id}/availability/`, {
+    method: 'POST', body: { available, reason },
+  });
 }

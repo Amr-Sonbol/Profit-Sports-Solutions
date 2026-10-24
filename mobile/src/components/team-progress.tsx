@@ -72,10 +72,10 @@ export function TeamProgressList() {
         <ThemedText themeColor="textSecondary">No one on your team yet.</ThemedText>
       ) : undefined}
       renderItem={({ item }) => (
-        // Opens their schedule (week, month, year).
+        // Opens their page: details, availability, skills, schedule.
         <TouchableOpacity
           style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => router.push({ pathname: '/schedule/[id]', params: { id: String(item.id), name: item.name } })}
+          onPress={() => router.push({ pathname: '/people/[id]', params: { id: String(item.id) } })}
         >
           <ThemedView style={styles.top}>
             <ThemedText type="smallBold">{item.rank ? `#${item.rank}  ` : ''}{item.name}</ThemedText>
@@ -88,7 +88,7 @@ export function TeamProgressList() {
             {' · '}{hm(item.hours)} h
             {' · '}{item.is_certified ? 'Certified' : `${item.certified}/${item.required} skills confirmed`}
           </ThemedText>
-          <ThemedText type="small" themeColor="primary">View schedule ›</ThemedText>
+          <ThemedText type="small" themeColor="primary">Open ›</ThemedText>
         </TouchableOpacity>
       )}
     />

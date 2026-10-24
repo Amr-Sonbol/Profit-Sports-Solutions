@@ -1287,3 +1287,39 @@ class MyProfileApiTests(ApiTestCase):
         response = self.client.post('/api/me/', {'email': 'not-an-email'}, **self.auth(self.token_for('tech1')))
         self.assertEqual(response.status_code, 400)
         self.assertIn('email', response.json())
+
+
+class PersonApiTests(ApiTestCase):
+    # A person's page in the app: details, skills to confirm, availability.
+
+    def test_a_supervisor_confirms_a_skill_and_sets_availability(self):
+        token = self.token_for('supervisor1')
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['can_review_skills'])
+        self.assertTrue(page['can_set_availability'])
+        self.assertTrue(any(row['id'] == self.skill.pk for row in page['skills']['basic'] + page['skills']['advanced']))
+
+        response = self.client.post(f'/api/people/{self.technician.pk}/skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '3', 'note': 'seen on site',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()['skills']['basic'] + response.json()['skills']['advanced']
+        row = next(item for item in rows if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['level'], row['can_rate']), ('confirmed', 3, False))
+
+        response = self.client.post(f'/api/people/{self.technician.pk}/availability/', {
+            'available': 'false', 'reason': Technician.UnavailableReason.choices[0][0],
+        }, **self.auth(token))
+        self.assertFalse(response.json()['is_available'])
+        self.client.post(f'/api/people/{self.technician.pk}/availability/', {'available': 'true'}, **self.auth(token))
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.is_available)
+
+    def test_a_technician_cannot_open_or_change_someone_else(self):
+        other = Technician.objects.get(user__username='supervisor1')
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get(f'/api/people/{other.pk}/', **self.auth(token)).status_code, 403)
+        response = self.client.post(f'/api/people/{self.technician.pk}/skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '4',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 403)

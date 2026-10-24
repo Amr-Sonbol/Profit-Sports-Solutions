@@ -3178,16 +3178,12 @@ def technician_availability(request):
         if action == 'mark_unavailable':
             mark_unavailable_form = MarkUnavailableForm(request.POST)
             if mark_unavailable_form.is_valid():
-                technician.is_available = False
-                technician.unavailable_reason = mark_unavailable_form.cleaned_data['reason']
-                technician.save(update_fields=['is_available', 'unavailable_reason'])
+                set_availability(technician, False, mark_unavailable_form.cleaned_data['reason'])
                 messages.success(request, _('Marked as unavailable.'))
                 return redirect('tasks:technician_availability')
 
         elif action == 'mark_available':
-            technician.is_available = True
-            technician.unavailable_reason = ''
-            technician.save(update_fields=['is_available', 'unavailable_reason'])
+            set_availability(technician, True)
             messages.success(request, _('Marked as available.'))
             return redirect('tasks:technician_availability')
 
@@ -4321,6 +4317,51 @@ def machine_detail(request, pk):
     return render(request, 'tasks/machine_detail.html', context)
 
 
+def save_skill_review(technician, skill, supervisor, cleaned, today):
+    """A supervisor confirming (or adjusting) a skill level — it always
+    overwrites what was there, and goes in the history. The review screen
+    on the website and the person's page in the app."""
+    level, note = int(cleaned['level']), cleaned.get('note', '')
+    with transaction.atomic():
+        TechnicianSkill.objects.update_or_create(
+            technician=technician, skill=skill,
+            defaults={
+                'level': level, 'source': TechnicianSkill.Source.SUPERVISOR,
+                'set_by': supervisor, 'set_on': today, 'note': note,
+            },
+        )
+        TechnicianSkillAssessment.objects.create(
+            technician=technician, skill=skill, level=level,
+            source=TechnicianSkill.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
+        )
+
+
+def save_conduct_review(technician, area, supervisor, cleaned, today):
+    """The same for a conduct area."""
+    level, note = int(cleaned['level']), cleaned.get('note', '')
+    with transaction.atomic():
+        TechnicianConduct.objects.update_or_create(
+            technician=technician, conduct_area=area,
+            defaults={
+                'level': level, 'source': TechnicianConduct.Source.SUPERVISOR,
+                'set_by': supervisor, 'set_on': today, 'note': note,
+            },
+        )
+        TechnicianConductAssessment.objects.create(
+            technician=technician, conduct_area=area, level=level,
+            source=TechnicianConduct.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
+        )
+
+
+def set_availability(technician, available, reason=''):
+    """Available for work, or not (with a reason) — for every task at
+    once. The Availability page on the website and the person's page in
+    the app."""
+    technician.is_available = available
+    technician.unavailable_reason = '' if available else reason
+    technician.save(update_fields=['is_available', 'unavailable_reason'])
+
+
 @login_required
 def technician_skills(request, pk):
     """A supervisor's review screen for one technician — confirm or
@@ -4339,20 +4380,7 @@ def technician_skills(request, pk):
             skill = get_object_or_404(Skill, pk=request.POST.get('skill_id'), is_active=True)
             form = ReviewLevelForm(request.POST)
             if form.is_valid():
-                level = int(form.cleaned_data['level'])
-                note = form.cleaned_data['note']
-                with transaction.atomic():
-                    TechnicianSkill.objects.update_or_create(
-                        technician=technician, skill=skill,
-                        defaults={
-                            'level': level, 'source': TechnicianSkill.Source.SUPERVISOR,
-                            'set_by': supervisor, 'set_on': today, 'note': note,
-                        },
-                    )
-                    TechnicianSkillAssessment.objects.create(
-                        technician=technician, skill=skill, level=level,
-                        source=TechnicianSkill.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
-                    )
+                save_skill_review(technician, skill, supervisor, form.cleaned_data, today)
                 messages.success(request, _('Level confirmed.'))
                 return redirect('tasks:technician_skills', pk=technician.pk)
 
@@ -4360,20 +4388,7 @@ def technician_skills(request, pk):
             area = get_object_or_404(ConductArea, pk=request.POST.get('conduct_area_id'), is_active=True)
             form = ReviewLevelForm(request.POST)
             if form.is_valid():
-                level = int(form.cleaned_data['level'])
-                note = form.cleaned_data['note']
-                with transaction.atomic():
-                    TechnicianConduct.objects.update_or_create(
-                        technician=technician, conduct_area=area,
-                        defaults={
-                            'level': level, 'source': TechnicianConduct.Source.SUPERVISOR,
-                            'set_by': supervisor, 'set_on': today, 'note': note,
-                        },
-                    )
-                    TechnicianConductAssessment.objects.create(
-                        technician=technician, conduct_area=area, level=level,
-                        source=TechnicianConduct.Source.SUPERVISOR, set_by=supervisor, set_on=today, note=note,
-                    )
+                save_conduct_review(technician, area, supervisor, form.cleaned_data, today)
                 messages.success(request, _('Level confirmed.'))
                 return redirect('tasks:technician_skills', pk=technician.pk)
 
