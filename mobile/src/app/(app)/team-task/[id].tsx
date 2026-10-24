@@ -1,6 +1,7 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -13,6 +14,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { hm } from '@/hours';
 import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
+import { when } from '@/task-time';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
@@ -122,11 +124,50 @@ export default function TeamTaskScreen() {
           <ThemedText type="title" style={styles.taskNumber}>{task.task_number}</ThemedText>
           <ThemedText type="subtitle" style={styles.customer}>{task.customer_name}</ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          <ThemedView style={styles.quickRow}>
+            <Ionicons name="time-outline" size={18} color={theme.text} />
+            <ThemedText type="smallBold">{when(task)}</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.quickRow}>
+            {task.directions_url ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(task.directions_url!)}
+              >
+                <Ionicons name="navigate-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary">Directions</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {task.site_contact_phone ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
+              >
+                <Ionicons name="call-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary" numberOfLines={1}>
+                  Call {task.site_contact_name || task.site_contact_phone}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {/* Everything else on the website's task page: edit, schedule and delay
+                notices to the customer, messages, documents, feedback request... */}
+            <TouchableOpacity
+              style={[styles.quickButton, { borderColor: theme.primary }]}
+              onPress={() => router.push({
+                pathname: '/website', params: { path: `/tasks/${task.id}/`, title: task.task_number },
+              })}
+            >
+              <Ionicons name="open-outline" size={16} color={theme.primary} />
+              <ThemedText type="small" themeColor="primary">Full task page</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
 
           <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
             <Row label="Status" value={task.status_display} />
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
+            {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
+            {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
             ) : null}
@@ -137,6 +178,36 @@ export default function TeamTaskScreen() {
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
+            </ThemedView>
+          ) : null}
+
+          {task.machines && task.machines.length > 0 ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines the customer reported</ThemedText>
+              {task.machines.map((machine, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
+                  <ThemedText type="small">
+                    {machine.problem}{machine.out_of_service ? ' · cannot be used' : ''}
+                  </ThemedText>
+                  {machine.description ? (
+                    <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText>
+                  ) : null}
+                </ThemedView>
+              ))}
+            </ThemedView>
+          ) : null}
+
+          {task.attachments.length > 0 ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
+              {task.attachments.map((attachment) => (
+                <TouchableOpacity key={attachment.id} onPress={() => Linking.openURL(attachment.url)}>
+                  <ThemedText type="small" themeColor="primary">
+                    {attachment.purpose_display} — {attachment.media_type_display} ›
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
             </ThemedView>
           ) : null}
 
@@ -226,6 +297,13 @@ export default function TeamTaskScreen() {
           {task.report ? (
             <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Work report</ThemedText>
+              <TouchableOpacity
+                onPress={() => router.push({
+                  pathname: '/website', params: { path: `/tasks/${task.id}/report.pdf`, title: `${task.task_number} report` },
+                })}
+              >
+                <ThemedText type="small" themeColor="primary">View the customer&apos;s report ›</ThemedText>
+              </TouchableOpacity>
               <Row label="Resolved" value={task.report.resolved ? 'Yes' : 'No'} />
               <Row label="Time on site" value={hm(task.report.labour_hours)} />
               <Row label="Signed by" value={task.report.customer_name || '—'} />
@@ -318,6 +396,12 @@ function SecondaryButton({ label, onPress, disabled }: { label: string; onPress:
 }
 
 const styles = StyleSheet.create({
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  quickButton: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderWidth: 1, borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three, paddingVertical: Spacing.one,
+  },
+  machine: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: 2 },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },

@@ -15,6 +15,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { TaskDetail } from '@/types';
+import { when } from '@/task-time';
 
 const ACTION_LABELS: Record<string, string> = {
   accept: 'Accept task',
@@ -33,24 +34,6 @@ const PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; lab
   { purpose: 'after', label: 'After', icon: 'checkmark-circle-outline' },
 ];
 
-/** "Sat 24 Oct, 10:00–13:00", "Sat 24 Oct, any time", or "Not scheduled yet". */
-function when(task: TaskDetail) {
-  if (task.scheduled_for) {
-    const start = new Date(task.scheduled_for);
-    const day = start.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-    const from = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (task.estimated_hours) {
-      const end = new Date(start.getTime() + Number(task.estimated_hours) * 3600 * 1000);
-      return `${day}, ${from}–${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    }
-    return `${day}, ${from}`;
-  }
-  if (task.scheduled_date) {
-    const day = new Date(`${task.scheduled_date}T00:00:00`);
-    return `${day.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}, any time`;
-  }
-  return 'Not scheduled yet';
-}
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
