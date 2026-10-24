@@ -1425,3 +1425,20 @@ class TeamMapApiTests(ApiTestCase):
         body = self.client.get('/api/team-map/', **self.auth(self.token_for('supervisor1'))).json()
         self.assertEqual([(pin['name'], pin['task_id']) for pin in body['pins']], [(self.technician.full_name, self.task.pk)])
         self.assertEqual(self.client.get('/api/team-map/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class AppUsesTheCountryDayTests(ApiTestCase):
+    # At 1 a.m. in Dubai it's still yesterday in UTC: the app's "today"
+    # must be the person's country's, like the website's.
+
+    def test_today_just_after_midnight_in_dubai(self):
+        from zoneinfo import ZoneInfo
+        dubai = ZoneInfo('Asia/Dubai')
+        one_am = datetime(2026, 10, 25, 1, 0, tzinfo=dubai)
+        self.task.scheduled_for = datetime(2026, 10, 25, 10, 0, tzinfo=dubai)
+        self.task.save(update_fields=['scheduled_for'])
+        token = self.token_for('tech1')
+        with patch('django.utils.timezone.now', return_value=one_am):
+            plan = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual(plan['today'], '2026-10-25')
+        self.assertEqual(plan['today_count'], 1)
