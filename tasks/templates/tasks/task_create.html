@@ -192,7 +192,7 @@
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
                     </td>
-                    <td>{% if 'view_technicians' in role_permissions %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a>{% endif %}</td>
+                    <td>{% if 'view_technicians' in role_permissions and person.can_open %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View schedule" %}</a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

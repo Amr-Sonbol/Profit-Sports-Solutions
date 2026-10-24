@@ -2279,6 +2279,8 @@ def task_create(request):
     ) + _technicians_with_next_scheduled_task(
         Technician.objects.filter(is_active=True, country=country, role=Technician.Role.TECHNICIAN),
     )
+    # Everyone's next booking shows; only those the creator oversees link to their schedule.
+    _mark_openable(team_schedule, requesting_technician)
 
     return render(request, 'tasks/task_create.html', {
         'form': form, 'ticket': ticket, 'team_schedule': team_schedule,
@@ -3130,9 +3132,9 @@ def task_assign(request, pk):
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'candidates': _with_day_load(
+        'candidates': _mark_openable(_with_day_load(
             _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)), task,
-        ),
+        ), requesting_technician),
         'task_day': _calendar_day(task),
         'locked': locked,
         'manager_override': manager_override,
@@ -3818,6 +3820,22 @@ def _people_i_oversee(viewer):
     return Technician.objects.all() if roles is None else Technician.objects.filter(role__in=roles)
 
 
+def _mark_openable(people, viewer):
+    """Set `.can_open` on each person: whether `viewer` oversees them, so a
+    list showing everyone (the assign page, the new-task team panel) links
+    only the schedules they can open. Returns `people`."""
+    roles = overseen_roles(viewer)
+    for person in people:
+        person.can_open = roles is None or person.role in roles
+    return people
+
+
+def _overseen_rows(viewer, rows):
+    """Hours rows ({'technician': ...}) kept to the people `viewer` oversees."""
+    roles = overseen_roles(viewer)
+    return rows if roles is None else [row for row in rows if row['technician'].role in roles]
+
+
 @login_required
 def technician_list(request):
     """The technician roster for a supervisor's own country — the "who can
@@ -4073,9 +4091,9 @@ def technician_hours(request):
     Every active technician gets a row, so someone with nothing filed
     shows up as zero rather than going unnoticed.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     period_start_date = _resolve_report_month(request)
-    rows = _technician_hours_rows(get_active_country(request), period_start_date)
+    rows = _overseen_rows(viewer, _technician_hours_rows(get_active_country(request), period_start_date))
 
     context = {
         'rows': rows,
@@ -4094,10 +4112,10 @@ def technician_hours_export(request):
     """The Hours page as CSV — a per-technician summary, then every report
     behind it, for payroll/month-end. Same permission and country scope.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     active_country = get_active_country(request)
     period_start_date = _resolve_report_month(request)
-    rows = _technician_hours_rows(active_country, period_start_date)
+    rows = _overseen_rows(viewer, _technician_hours_rows(active_country, period_start_date))
 
     response = HttpResponse(content_type='text/csv')
     response['Content-Disposition'] = (

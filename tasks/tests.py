@@ -8140,16 +8140,17 @@ class AccountTakeoverGuardTests(TaskTestCase):
         response = self.client.post(f'/tasks/technicians/{self.manager.pk}/edit/', {
             'full_name': 'Mona Manager', 'email': 'attacker@example.com', 'language': 'en',
         })
-        self.assertEqual(response.status_code, 403)
+        # Someone above you isn't on your list at all (overseen_roles).
+        self.assertEqual(response.status_code, 404)
 
     def test_a_manager_gets_no_password_reset_for_an_admin(self):
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.get(f'/tasks/technicians/{self.admin.pk}/edit/')
-        self.assertIsNone(response.context['password_form'])
+        # A manager doesn't oversee an admin: neither the page nor a reset is reachable.
+        self.assertEqual(self.client.get(f'/tasks/technicians/{self.admin.pk}/edit/').status_code, 404)
         response = self.client.post(f'/tasks/technicians/{self.admin.pk}/edit/', {
             'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_the_last_admin_cannot_be_deactivated(self):
         self.client.login(username='admin1', password='pass12345')
