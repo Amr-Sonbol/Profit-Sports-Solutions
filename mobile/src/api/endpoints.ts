@@ -2,8 +2,8 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
-  Brand, Candidate, CataloguePart, Choice, Me, PasswordInput, ReportHelper, ReportMachine, SiteMachine, TaskDetail,
-  TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Brand, Candidate, CataloguePart, Choice, Me, MyProgress, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
+  TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -108,4 +108,17 @@ export function approveTaskReport(id: number) {
 /** New tickets; with `search`, matches across every status (newest 50). */
 export function fetchNewTickets(search = '') {
   return apiRequest<Ticket[]>(search ? `/api/tickets/?q=${encodeURIComponent(search)}` : '/api/tickets/');
+}
+
+export function fetchMyToday() {
+  return apiRequest<TodayPlan>('/api/my-today/');
+}
+
+/** `month` is YYYY-MM; this month when left out. */
+export function fetchMyProgress(month?: string) {
+  return apiRequest<MyProgress>(`/api/my-progress/${month ? `?month=${month}` : ''}`);
+}
+
+export function fetchTeamProgress(month?: string) {
+  return apiRequest<{ month: string; rows: TeamProgressRow[] }>(`/api/team-progress/${month ? `?month=${month}` : ''}`);
 }

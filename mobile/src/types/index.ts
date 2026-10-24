@@ -224,3 +224,49 @@ export interface Candidate {
   next_task_number: string | null;
   next_task_at: string | null;
 }
+
+/** A task on the Today screen (/api/my-today/). */
+export interface ScheduleItem extends TaskListItem {
+  my_role: 'lead' | 'helper' | 'responsible' | '';
+  address: string;
+  scheduled_date: string | null;
+  estimated_finish: string | null;
+}
+
+export interface TodayPlan {
+  today: string;
+  today_count: number;
+  overdue: ScheduleItem[];
+  next_job: (ScheduleItem & { next_action: string | null; directions_url: string }) | null;
+  later_today: ScheduleItem[];
+  done_today: ScheduleItem[];
+}
+
+/** My progress (/api/my-progress/): the year's line and a month's figures. */
+export interface MyProgress {
+  trend: {
+    months: { start: string; completed: number }[];
+    top: number;
+    this_month: number;
+    change: number | null;
+  };
+  month: { first: string; is_this_month: boolean; hours: string | number; reports: number; over_estimate: number };
+  rank: number | null;
+  leaderboard_size: number;
+  certification: { certified: number; required: number; is_certified: boolean };
+}
+
+/** One person on Team progress (/api/team-progress/). */
+export interface TeamProgressRow {
+  id: number;
+  name: string;
+  role: string;
+  rank: number | null;
+  completed: number;
+  change: number;
+  hours: string | number;
+  certified: number;
+  required: number;
+  is_certified: boolean;
+  months: number[];
+}

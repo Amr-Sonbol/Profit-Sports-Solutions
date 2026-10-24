@@ -28,6 +28,7 @@ export default function AppTabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'My Tasks' }} />
+      <Tabs.Screen name="progress" options={{ title: 'Progress' }} />
       <Tabs.Screen name="team" options={{ title: 'Team' }} />
       <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />

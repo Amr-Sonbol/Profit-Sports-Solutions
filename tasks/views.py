@@ -3381,7 +3381,7 @@ def _overdue(mine, with_role, today):
     )), key=lambda task: (_calendar_day(task), task.task_number))
 
 
-def _today_plan(technician):
+def today_plan(technician):
     """My schedule's Today view: today's tasks split into the next job (one
     already under way first, else the earliest still to do), the rest
     still to do, and those done — plus overdue. The next job carries the
@@ -3427,7 +3427,7 @@ def my_week(request):
         context['unscheduled'] = with_role(context['unscheduled'])
         context['overdue'] = _overdue(mine, with_role, timezone.localtime().date())
     else:
-        context = {'view': 'today', **_today_plan(technician)}
+        context = {'view': 'today', **today_plan(technician)}
     return render(request, 'tasks/my_week.html', context)
 
 
@@ -3441,7 +3441,7 @@ def my_progress(request):
     months of real event data, not just a query.
     """
     technician = require_technician(request)
-    return render(request, 'tasks/my_progress.html', _progress_context(request, technician))
+    return render(request, 'tasks/my_progress.html', progress_context(request, technician))
 
 
 @login_required
@@ -3453,11 +3453,11 @@ def technician_progress(request, pk):
         _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
     return render(request, 'tasks/my_progress.html', {
-        **_progress_context(request, technician), 'viewing_other': True, 'technician': technician,
+        **progress_context(request, technician), 'viewing_other': True, 'technician': technician,
     })
 
 
-def _progress_context(request, technician):
+def progress_context(request, technician):
     """Everything My progress shows, for `technician`."""
     skills = _skills_with_current_rating(technician)
     conduct_areas = _conduct_areas_with_current_rating(technician)
@@ -3540,9 +3540,20 @@ def team_progress(request):
     their Progress page.
     """
     viewer = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
-    country = get_active_country(request)
     this_month = timezone.localtime().date().replace(day=1)
     month_first = min(_resolve_report_month(request), this_month)
+    return render(request, 'tasks/team_progress.html', {
+        'rows': team_progress_rows(viewer, get_active_country(request), month_first),
+        'month_first': month_first,
+        'prev_month': _shift_month(month_first, -1),
+        'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
+        'is_this_month': month_first == this_month,
+    })
+
+
+def team_progress_rows(viewer, country, month_first):
+    """Team progress's rows — the field team `viewer` oversees in
+    `country`, by rank. Shared with the app (api.views.TeamProgressView)."""
     previous = _shift_month(month_first, -1)
     ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
     hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
@@ -3567,13 +3578,7 @@ def team_progress(request):
     rows.sort(key=lambda row: (row['rank'] is None, row['rank'] or 0, row['technician'].full_name))
     for row in rows:
         row['change_size'] = abs(row['change'])
-    return render(request, 'tasks/team_progress.html', {
-        'rows': rows,
-        'month_first': month_first,
-        'prev_month': previous,
-        'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
-        'is_this_month': month_first == this_month,
-    })
+    return rows
 
 
 @login_required

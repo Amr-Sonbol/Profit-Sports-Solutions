@@ -31,7 +31,8 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_machine_initial, report_saved_message, save_task_machines, save_work_report, search_tasks, search_tickets,
+    _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
+    save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     send_password_changed_email,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
@@ -126,6 +127,110 @@ class MyPasswordView(APIView):
         # the token is sent back so the app's flow doesn't depend on that.
         token, _created = Token.objects.get_or_create(user=user)
         return Response({'token': token.key, **_me_payload(user)})
+
+
+def _schedule_item(task):
+    """One task on the app's Today screen: the list fields, plus the
+    person's role, the address and the planned window."""
+    return {
+        **TaskListSerializer(task).data,
+        'my_role': getattr(task, 'my_role', ''),
+        'address': task.site.address,
+        'scheduled_date': task.scheduled_date,
+        'estimated_finish': task.estimated_finish,
+    }
+
+
+class MyTodayView(APIView):
+    """The app's Today screen — the same plan as the website's (My
+    schedule, tasks.views.today_plan): overdue, the next job with the
+    lead's next tap and a map link, the rest of today and what's done.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        plan = today_plan(request.user.technician)
+        next_job = plan['next_job']
+        return Response({
+            'today': plan['today'],
+            'today_count': plan['today_count'],
+            'overdue': [_schedule_item(task) for task in plan['overdue']],
+            'next_job': {
+                **_schedule_item(next_job),
+                'next_action': next_job.next_action,
+                'directions_url': next_job.directions_url,
+            } if next_job else None,
+            'later_today': [_schedule_item(task) for task in plan['later_today']],
+            'done_today': [_schedule_item(task) for task in plan['done_today']],
+        })
+
+
+class MyProgressView(APIView):
+    """The app's Progress screen — My progress's own figures
+    (tasks.views.progress_context): the year's line, a month (?month=),
+    rank and certification."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        context = progress_context(request, request.user.technician)
+        chart, certification = context['trend_chart'], context['certification']
+        return Response({
+            'trend': {
+                'months': [{'start': p['start'], 'completed': p['completed']} for p in chart['periods']],
+                'top': chart['top'],
+                'this_month': chart['this_month'],
+                'change': chart['change'],
+            },
+            'month': {
+                'first': context['month_first'],
+                'is_this_month': context['is_this_month'],
+                'hours': context['month_hours'],
+                'reports': context['month_report_count'],
+                'over_estimate': context['month_overrun_count'],
+            },
+            'rank': context['rank'],
+            'leaderboard_size': context['leaderboard_size'],
+            'certification': {
+                'certified': certification['non_cardio_certified'] + certification['conduct_certified'],
+                'required': certification['non_cardio_total'] + certification['conduct_total'],
+                'is_certified': certification['is_certified'],
+            },
+        })
+
+
+class TeamProgressView(APIView):
+    """The app's team progress — the website's Team progress
+    (tasks.views.team_progress_rows): the field team this person oversees
+    in their country, by rank, for a month (?month=)."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TECHNICIANS)]
+
+    def get(self, request):
+        viewer = request.user.technician
+        this_month = timezone.localtime().date().replace(day=1)
+        month_first = min(_resolve_report_month(request), this_month)
+        rows = team_progress_rows(viewer, viewer.country, month_first)
+        return Response({
+            'month': month_first,
+            'rows': [
+                {
+                    'id': row['technician'].pk,
+                    'name': row['technician'].full_name,
+                    'role': row['technician'].get_role_display(),
+                    'rank': row['rank'],
+                    'completed': row['completed'],
+                    'change': row['change'],
+                    'hours': row['hours'],
+                    'certified': row['certified'],
+                    'required': row['required'],
+                    'is_certified': row['is_certified'],
+                    'months': [p['completed'] for p in row['trend']['periods']],
+                }
+                for row in rows
+            ],
+        })
 
 
 class MyTaskListView(APIView):

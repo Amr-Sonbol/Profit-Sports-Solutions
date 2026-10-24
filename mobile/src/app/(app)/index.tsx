@@ -3,18 +3,20 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyTasks } from '@/api/endpoints';
+import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
+import { TodayPlanView } from '@/components/today-plan';
 import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskListItem } from '@/types';
+import type { TaskListItem, TodayPlan } from '@/types';
 
 export default function MyTasksScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
+  const [today, setToday] = useState<TodayPlan | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState('');
@@ -25,9 +27,13 @@ export default function MyTasksScreen() {
   const load = useCallback(async () => {
     setPending(await sendPendingReports());
     try {
-      const { data, offline } = await withOfflineCopy('my-tasks', fetchMyTasks);
-      setTasks(data);
-      setIsOffline(offline);
+      const [list, plan] = await Promise.all([
+        withOfflineCopy('my-tasks', fetchMyTasks),
+        withOfflineCopy('my-today', fetchMyToday),
+      ]);
+      setTasks(list.data);
+      setToday(plan.data);
+      setIsOffline(list.offline || plan.offline);
       setError('');
     } catch {
       setError('Could not load your tasks.');
@@ -80,6 +86,13 @@ export default function MyTasksScreen() {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+          // Today first (the next job, its tap and Directions), then every open task.
+          ListHeaderComponent={today ? (
+            <>
+              <TodayPlanView plan={today} onChanged={load} />
+              <ThemedText type="smallBold">All my open tasks</ThemedText>
+            </>
+          ) : undefined}
           ListEmptyComponent={
             tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : undefined
           }

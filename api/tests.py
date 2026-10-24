@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, time
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -1034,3 +1035,43 @@ class MyPasswordApiTests(ApiTestCase):
         response = self._post(token, {'old_password': 'pass12345', 'new_password1': '1234', 'new_password2': '1234'})
         self.assertEqual(response.status_code, 400)
         self.assertIn('new_password2', response.json())
+
+
+class AppScheduleAndProgressTests(ApiTestCase):
+    # The app's Today, Progress and team progress screens: the website's
+    # own plan and figures (tasks.views.today_plan, progress_context,
+    # team_progress_rows).
+
+    def test_today_has_the_next_job_with_its_tap_and_directions(self):
+        from zoneinfo import ZoneInfo
+        dubai = ZoneInfo('Asia/Dubai')
+        today = timezone.localtime(timezone.now(), dubai).date()
+        self.task.scheduled_for = datetime.combine(today, time(23), dubai)
+        self.task.save(update_fields=['scheduled_for'])
+        token = self.token_for('tech1')
+        plan = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual(plan['today_count'], 1)
+        self.assertEqual(plan['next_job']['task_number'], 'UAE-0001')
+        self.assertEqual(plan['next_job']['next_action'], 'accept')
+        self.assertEqual(plan['next_job']['my_role'], 'lead')
+        self.assertTrue(plan['next_job']['directions_url'].startswith('https://www.google.com/maps/'))
+
+    def test_progress_has_the_years_line_and_the_month(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=timezone.now(),
+            actor=self.tech_user,
+        )
+        token = self.token_for('tech1')
+        progress = self.client.get('/api/my-progress/', **self.auth(token)).json()
+        self.assertEqual(progress['trend']['this_month'], 1)
+        self.assertEqual(progress['trend']['months'][-1]['completed'], 1)
+        self.assertIn('hours', progress['month'])
+        self.assertIn('certified', progress['certification'])
+
+    def test_team_progress_is_for_those_who_oversee_a_team(self):
+        self.assertEqual(
+            self.client.get('/api/team-progress/', **self.auth(self.token_for('tech1'))).status_code, 403,
+        )
+        rows = self.client.get('/api/team-progress/', **self.auth(self.token_for('supervisor1'))).json()['rows']
+        self.assertEqual([row['name'] for row in rows], [self.technician.full_name])
+        self.assertTrue(rows[0]['months'])  # their year, month by month
