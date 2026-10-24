@@ -44,6 +44,7 @@ from tasks.views import (
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
+    _overseen_rows, _shift_month, _technician_hours_rows,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -473,6 +474,46 @@ class MachineView(APIView):
                     'action': Action(visit.action_code).label if visit.action_code else visit.action,
                 }
                 for visit in visits
+            ],
+        })
+
+
+class HoursView(APIView):
+    """The app's Hours — the website's Hours page (view_technicians): for
+    a month (?month=YYYY-MM), each person this viewer oversees, with the
+    reports they filed, their hours (h:mm), the estimate and the warning
+    counts, and each report behind them."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.VIEW_TECHNICIANS)
+        month = _resolve_report_month(request)
+        rows = _overseen_rows(viewer, _technician_hours_rows(get_active_country(request) or viewer.country, month))
+        return Response({
+            'month': month,
+            'prev_month': _shift_month(month, -1),
+            'next_month': _shift_month(month, 1),
+            'is_this_month': month == timezone.localtime().date().replace(day=1),
+            'total_hours': hours_text(sum(row['hours'] for row in rows)) or '0:00',
+            'total_reports': sum(len(row['reports']) for row in rows),
+            'rows': [
+                {
+                    'id': row['technician'].pk, 'name': row['technician'].full_name,
+                    'reports_count': len(row['reports']), 'hours': hours_text(row['hours']) or '0:00',
+                    'estimated': hours_text(row['estimated']), 'helped_on': row['helped_on'],
+                    'overrun_count': row['overrun_count'], 'above_tapped_count': row['above_tapped_count'],
+                    'away_count': row['away_count'],
+                    'reports': [
+                        {
+                            'task_id': report.task_id, 'task_number': report.task.task_number,
+                            'submitted_at': report.submitted_at, 'hours': hours_text(report.labour_hours) or '0:00',
+                            'customer_name': report.task.site.customer.name,
+                        }
+                        for report in row['reports']
+                    ],
+                }
+                for row in rows
             ],
         })
 

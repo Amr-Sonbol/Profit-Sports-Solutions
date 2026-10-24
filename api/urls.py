@@ -17,6 +17,7 @@ urlpatterns = [
     path('customers/<int:pk>/', views.CustomerView.as_view(), name='customer'),
     path('machines/', views.MachinesView.as_view(), name='machines'),
     path('machines/<int:pk>/', views.MachineView.as_view(), name='machine'),
+    path('hours/', views.HoursView.as_view(), name='hours'),
     path('website-menu/', views.WebsiteMenuView.as_view(), name='website_menu'),
     path('website-session/', views.WebsiteSessionView.as_view(), name='website_session'),
     path('people/<int:pk>/', views.PersonView.as_view(), name='person'),

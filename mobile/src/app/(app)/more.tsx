@@ -18,7 +18,9 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
 const NATIVE: Record<string, string> = {
   '/customers/': '/customers',
   '/tasks/machines/': '/machines',
-  '/tasks/technicians/progress/': '/team',
+  '/tasks/technicians/hours/': '/hours',
+  '/tasks/technicians/progress/': '/team?view=progress',
+  '/tasks/technicians/': '/team?view=progress',
 };
 
 /** The website menu's icon names, as the nearest Ionicons. */

@@ -1397,3 +1397,12 @@ class CustomersAndMachinesApiTests(ApiTestCase):
         token = self.token_for('tech1')
         self.assertEqual(self.client.get('/api/customers/', **self.auth(token)).status_code, 403)
         self.assertEqual(self.client.get('/api/machines/', **self.auth(token)).status_code, 403)
+
+
+class HoursApiTests(ApiTestCase):
+    def test_the_hours_page_lists_the_team_for_a_month(self):
+        body = self.client.get('/api/hours/?month=2026-01', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual(body['month'], '2026-01-01')
+        self.assertEqual(body['prev_month'], '2025-12-01')
+        self.assertIn(self.technician.pk, [row['id'] for row in body['rows']])
+        self.assertEqual(self.client.get('/api/hours/', **self.auth(self.token_for('tech1'))).status_code, 403)

@@ -461,3 +461,18 @@ export interface MachinePage extends MachineRow {
   warranty_end: string | null;
   history: (HistoryTask & { outcome: string; finding: string; action: string })[];
 }
+
+/** The Hours page (api/views.py HoursView). Hours as "1:32". */
+export interface HoursPage {
+  month: string;
+  prev_month: string;
+  next_month: string;
+  is_this_month: boolean;
+  total_hours: string;
+  total_reports: number;
+  rows: {
+    id: number; name: string; reports_count: number; hours: string; estimated: string; helped_on: number;
+    overrun_count: number; above_tapped_count: number; away_count: number;
+    reports: { task_id: number; task_number: string; submitted_at: string; hours: string; customer_name: string }[];
+  }[];
+}

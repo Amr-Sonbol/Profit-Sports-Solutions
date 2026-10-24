@@ -142,6 +142,15 @@ export default function PersonScreen() {
               <Ionicons name="calendar-outline" size={16} color={theme.primary} />
               <ThemedText type="small" themeColor="primary">Schedule</ThemedText>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.action, { borderColor: theme.primary }]}
+              onPress={() => router.push({
+                pathname: '/website', params: { path: `/tasks/technicians/${person.id}/edit/`, title: person.name },
+              })}
+            >
+              <Ionicons name="create-outline" size={16} color={theme.primary} />
+              <ThemedText type="small" themeColor="primary">Edit details</ThemedText>
+            </TouchableOpacity>
           </ThemedView>
 
           <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>

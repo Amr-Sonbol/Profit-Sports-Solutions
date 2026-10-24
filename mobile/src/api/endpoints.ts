@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  HoursPage,
   CustomerPage, CustomerRow, MachinePage, MachineRow,
   FormFieldSpec,
   WebsiteMenuGroup,
@@ -244,4 +245,9 @@ export function fetchMachines(query = '') {
 
 export function fetchMachine(id: number) {
   return apiRequest<MachinePage>(`/api/machines/${id}/`);
+}
+
+/** The Hours page for a month ("YYYY-MM"; this month by default). */
+export function fetchHours(month = '') {
+  return apiRequest<HoursPage>(`/api/hours/${month ? `?month=${month}` : ''}`);
 }
