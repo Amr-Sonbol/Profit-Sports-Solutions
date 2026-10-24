@@ -315,7 +315,7 @@ class MyTaskReportTests(ApiTestCase):
         token = self.token_for('tech1')
         self.assertEqual(
             self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['time_on_site'],
-            '2.00',
+            '2:00',
         )
         response = self._file(token, labour_hours='')
         self.assertEqual(response.status_code, 201)

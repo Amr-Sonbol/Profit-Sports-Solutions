@@ -245,8 +245,9 @@ class Task(models.Model):
         "Resumed". Waiting for review, a rejection or a later correction
         adds nothing. Before the first sending it runs to `until` (when the
         report is being filed; now by default). A manager's corrected tap
-        time counts in place of the original. Rounded to the nearest
-        quarter hour, at least a quarter; None before "Start".
+        time counts in place of the original. To the minute, as hours with
+        two decimals (1:32 -> 1.53, which reads back as 1:32 — see
+        reports.pdf.hours_text); at least a minute; None before "Start".
         Same rule as WorkReport.tapped_hours.
         """
         from django.utils import timezone
@@ -273,8 +274,8 @@ class Task(models.Model):
                 paused, paused_at = paused + (at - paused_at), None
         if paused_at is not None:
             paused += end - paused_at
-        quarters = max(round((end - start - paused).total_seconds() / 900), 1)
-        return (Decimal(quarters) / 4).quantize(Decimal('0.01'))
+        minutes = max(round((end - start - paused).total_seconds() / 60), 1)
+        return (Decimal(minutes) / 60).quantize(Decimal('0.01'))
 
     def __str__(self):
         return self.task_number

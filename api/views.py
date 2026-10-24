@@ -19,7 +19,7 @@ from people.models import PushDevice, RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
 from reference.models import Brand, Part
-from reports.pdf import report_language
+from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
@@ -575,7 +575,7 @@ class MyTaskReportView(APIView):
             'send_copy_to': (report.copy_sent_to if report else '') or task.site.effective_contact_email or '',
             # The visit's hours, from the taps — shown, never typed (Task.time_on_site);
             # final once the report has been sent.
-            'time_on_site': str(task.time_on_site() or '') or None,
+            'time_on_site': hours_text(task.time_on_site()) or None,  # "1:32"
             'time_is_final': bool(report and report.submitted_at),
             # Each helper's hours box: empty = same as the report's.
             'helpers': [

@@ -98,7 +98,7 @@ export default function ReportScreen() {
   const [findings, setFindings] = useState('');
   const [actionTaken, setActionTaken] = useState('');
   const [resolved, setResolved] = useState(true);
-  // The visit's hours, worked out by the server from the taps — shown, not typed.
+  // The visit's time as "1:32", worked out by the server from the taps — shown, not typed.
   const [labourHours, setLabourHours] = useState('');
   const [timeIsFinal, setTimeIsFinal] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -390,7 +390,7 @@ export default function ReportScreen() {
               {labourHours ? (
                 <>
                   <ThemedText type="smallBold">Time on site</ThemedText>
-                  <ThemedText>{Number(labourHours)} hours</ThemedText>
+                  <ThemedText>{labourHours} hours</ThemedText>
                 </>
               ) : null}
               {machines.some((row) => row.outcome) ? (
@@ -730,7 +730,7 @@ export default function ReportScreen() {
             />
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
-                Time on site: {labourHours ? `${Number(labourHours)} hours` : '—'}
+                Time on site: {labourHours ? `${labourHours} hours` : '—'}
               </ThemedText>
               <ThemedText themeColor="textSecondary" type="small">
                 {timeIsFinal

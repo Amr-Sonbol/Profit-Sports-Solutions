@@ -113,11 +113,13 @@ def changed_after_signing(report):
     return signed != current
 
 
-def _hours_text(hours):
-    """'2.50' -> '2.5', '3.00' -> '3'; '' for none or zero."""
-    if not hours or Decimal(hours) == 0:
+def hours_text(hours):
+    """Hours as h:mm — '1.53' -> '1:32', '2.50' -> '2:30'; '' for none or
+    zero. Two decimals of an hour are exact to the minute."""
+    if hours in (None, '') or Decimal(hours) == 0:
         return ''
-    return f'{Decimal(hours):f}'.rstrip('0').rstrip('.') if '.' in hours else hours
+    hours_part, minutes = divmod(round(Decimal(hours) * 60), 60)
+    return f'{hours_part}:{minutes:02d}'
 
 
 def _next_visit(task):
@@ -170,7 +172,7 @@ def _template_context(report, content, signature_url, signed_at, changed):
         'next_visit': _next_visit(task),
         # The time on site as "2.5", "3" — none on reports signed before it
         # was shown, or with no taps to work it out from.
-        'hours': _hours_text(content.get('hours')),
+        'hours': hours_text(content.get('hours')),
         'parts': content['parts'],
         'signature_url': signature_url,
         'signed_at': signed_at,

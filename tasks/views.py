@@ -5372,7 +5372,7 @@ def _report_form(request, task, technician, back_url):
         new_formset = NewAssetFormSet(initial=new_initial, prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
 
-    from reports.pdf import report_language
+    from reports.pdf import hours_text, report_language
 
     context = {
         'task': task,
@@ -5387,8 +5387,8 @@ def _report_form(request, task, technician, back_url):
         'has_existing_assets': bool(existing_assets),
         'new_formset': new_formset,
         'part_formset': part_formset,
-        # "2.5", "3": the visit's hours from the taps (Task.time_on_site).
-        'time_on_site': f'{time_on_site:f}'.rstrip('0').rstrip('.') if time_on_site is not None else None,
+        # "1:32": the visit's time from the taps (Task.time_on_site).
+        'time_on_site': hours_text(time_on_site),
         'time_is_final': report is not None and report.submitted_at is not None,
     }
     return render(request, 'tasks/my_report_form.html', context)

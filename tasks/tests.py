@@ -8787,7 +8787,7 @@ class CorporateReportTests(TicketMachineFindingsTests):
         from reports.pdf import changed_after_signing, render_visit_report_html
         self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2, minutes=30))
         report = self._file()
-        self.assertIn('2.5 hours', render_visit_report_html(report, language='en'))
+        self.assertIn('2:30 hours', render_visit_report_html(report, language='en'))
         self.assertContains(self.client.get(self.report_url), 'Time on site')
 
     def test_a_report_signed_before_the_time_was_shown_is_not_marked_changed(self):
@@ -8811,7 +8811,7 @@ class CorporateReportTests(TicketMachineFindingsTests):
         self._tap(kinds.COMPLETED, start + timedelta(hours=3, minutes=32))
         # Waiting for review and approval adds nothing.
         self._tap(kinds.SUPERVISOR_APPROVED, start + timedelta(hours=9))
-        self.assertEqual(self.task.time_on_site(), Decimal('1.50'))
+        self.assertEqual(self.task.time_on_site(), Decimal('1.53'))  # 1:32
 
     def test_the_hours_are_worked_out_not_typed(self):
         self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2))
@@ -8819,3 +8819,10 @@ class CorporateReportTests(TicketMachineFindingsTests):
         self.assertEqual(report.labour_hours, Decimal('2.00'))
         # A later correction keeps the time the report was first sent.
         self.assertEqual(self._file(labour_hours='9').labour_hours, Decimal('2.00'))
+
+    def test_hours_read_as_hours_and_minutes(self):
+        from reports.pdf import hours_text
+        self.assertEqual(
+            [hours_text(value) for value in ('1.53', '2.50', '0.02', '10.00', '0.00', None)],
+            ['1:32', '2:30', '0:01', '10:00', '', ''],
+        )
