@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Technicians" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{{ page_title }} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "Technicians" %}</h1>
+    <h1>{{ page_title }}</h1>
     <div class="badge-row">
         <a href="{% url 'tasks:technician_hours' %}" class="button button--secondary">{% translate "Hours" %}</a>
         {% if 'assign_tasks' in role_permissions %}

@@ -4422,6 +4422,50 @@ class MyProfileTests(TaskTestCase):
 
 
 class TechnicianListTests(TaskTestCase):
+    def _staff(self, username, role):
+        return Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345'), country=self.country,
+            full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+
+    def test_each_level_sees_the_people_below_it(self):
+        manager = self._staff('manager1', Technician.Role.MANAGER)
+        admin = self._staff('admin1', Technician.Role.ADMIN)
+        supervisor = self.supervisor_user.technician
+
+        def listed(username):
+            self.client.login(username=username, password='pass12345')
+            response = self.client.get('/tasks/technicians/')
+            return response, {row['technician'] for row in response.context['rows']}
+
+        response, people = listed('supervisor1')
+        self.assertEqual(people, {self.technician})
+        self.assertEqual(response.context['page_title'], 'Technicians')
+
+        response, people = listed('manager1')
+        self.assertEqual(people, {self.technician, supervisor})
+        self.assertEqual(response.context['page_title'], 'My team')
+
+        response, people = listed('admin1')
+        self.assertEqual(people, {self.technician, supervisor, manager, admin})
+        self.assertEqual(response.context['page_title'], 'Users')
+
+    def test_someone_outside_your_scope_cant_be_opened(self):
+        self._staff('manager1', Technician.Role.MANAGER)
+        supervisor = self.supervisor_user.technician
+        other_supervisor = self._staff('supervisor2', Technician.Role.SUPERVISOR)
+        self.client.login(username='supervisor1', password='pass12345')
+        for page in ('progress', 'board', 'skills'):
+            self.assertEqual(
+                self.client.get(f'/tasks/technicians/{other_supervisor.pk}/{page}/').status_code, 404, page,
+            )
+            self.assertEqual(self.client.get(f'/tasks/technicians/{self.technician.pk}/{page}/').status_code, 200, page)
+        # A manager can open a supervisor's pages, and sees them on Team progress.
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self.client.get(f'/tasks/technicians/{supervisor.pk}/progress/').status_code, 200)
+        team = {row['technician'] for row in self.client.get('/tasks/technicians/progress/').context['rows']}
+        self.assertIn(supervisor, team)
+
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/technicians/')

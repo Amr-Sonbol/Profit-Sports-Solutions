@@ -3448,7 +3448,7 @@ def technician_progress(request, pk):
     can view technicians, in their country (Technicians, Team progress)."""
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     technician = _scoped_or_404(
-        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+        _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
     return render(request, 'tasks/my_progress.html', {
         **_progress_context(request, technician), 'viewing_other': True, 'technician': technician,
@@ -3532,12 +3532,12 @@ def _completed_in_month(technician, month_first):
 
 @login_required
 def team_progress(request):
-    """Every technician in the country side by side, for a month
+    """The field team the viewer oversees, side by side, for a month
     (?month=YYYY-MM): rank, tasks completed (against the month before),
     hours, certification, and a small line of their year. Each opens
     their Progress page.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     country = get_active_country(request)
     this_month = timezone.localtime().date().replace(day=1)
     month_first = min(_resolve_report_month(request), this_month)
@@ -3545,8 +3545,9 @@ def team_progress(request):
     ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
     hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
     rows = []
-    for technician in Technician.objects.filter(
-        country=country, is_active=True, role=Technician.Role.TECHNICIAN,
+    # The field team: a manager or admin sees supervisors here too.
+    for technician in _people_i_oversee(viewer).filter(
+        country=country, is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
     ).select_related('user').order_by('full_name'):
         completed = _completed_in_month(technician, month_first)
         certification = _certification_status(technician)
@@ -3799,6 +3800,24 @@ def technician_create(request):
     return render(request, 'tasks/technician_create.html', {'form': form})
 
 
+def overseen_roles(viewer):
+    """Whose records `viewer` can open — the list, each person's progress,
+    schedule, skills and edit page: an admin everyone (None); any manager
+    the supervisors and technicians; anyone else the technicians.
+    """
+    if viewer.role == Technician.Role.ADMIN:
+        return None
+    if viewer.is_any_manager:
+        return [Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN]
+    return [Technician.Role.TECHNICIAN]
+
+
+def _people_i_oversee(viewer):
+    """Technician.objects narrowed to overseen_roles(viewer)."""
+    roles = overseen_roles(viewer)
+    return Technician.objects.all() if roles is None else Technician.objects.filter(role__in=roles)
+
+
 @login_required
 def technician_list(request):
     """The technician roster for a supervisor's own country — the "who can
@@ -3809,12 +3828,12 @@ def technician_list(request):
     belong on the "who can I rely on" list), so a manager can find someone
     to reactivate without them cluttering the roster everyone else uses.
     """
-    require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
 
     if request.method == 'POST' and request.POST.get('action') == 'reactivate':
         require_permission(request, RolePermission.Permission.MANAGE_TECHNICIANS)
         technician = get_object_or_404(
-            Technician, pk=request.POST.get('technician_id'), country=get_active_country(request),
+            _people_i_oversee(viewer), pk=request.POST.get('technician_id'), country=get_active_country(request),
         )
         technician.set_active(True)
         messages.success(request, _('Technician reactivated.'))
@@ -3822,7 +3841,7 @@ def technician_list(request):
 
     show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
-    technicians = Technician.objects.filter(
+    technicians = _people_i_oversee(viewer).filter(
         is_active=not show_inactive, country=get_active_country(request),
     ).order_by('full_name')
     if search:
@@ -3837,7 +3856,14 @@ def technician_list(request):
             'ninety_day': _ninety_day_progress(technician, certification),
         })
 
-    context = {'rows': rows, 'search': search, 'show_inactive': show_inactive}
+    # Named, like its sidebar link, for who's in it (overseen_roles).
+    if viewer.role == Technician.Role.ADMIN:
+        page_title = _('Users')
+    elif viewer.is_any_manager:
+        page_title = _('My team')
+    else:
+        page_title = _('Technicians')
+    context = {'rows': rows, 'search': search, 'show_inactive': show_inactive, 'page_title': page_title}
     return render(request, 'tasks/technician_list.html', context)
 
 
@@ -3849,10 +3875,10 @@ def all_technicians(request):
     overview, so auditing someone doesn't mean switching active country
     first. Manager-only, same fixed floor as the other "all ..." boards.
     """
-    require_manager(request)
+    viewer = require_manager(request)
 
     search = request.GET.get('q', '').strip()
-    technicians = Technician.objects.filter(is_active=True).select_related('country').order_by('full_name')
+    technicians = _people_i_oversee(viewer).filter(is_active=True).select_related('country').order_by('full_name')
     if search:
         technicians = technicians.filter(full_name__icontains=search)
 
@@ -4141,7 +4167,7 @@ def technician_board(request, pk):
     """
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
     technician = _scoped_or_404(
-        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+        _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
     mine, with_role = _my_tasks(technician)
     context = _calendar_context(request, mine, technician.country)
@@ -4212,7 +4238,7 @@ def technician_skills(request, pk):
     writes to it automatically.
     """
     supervisor = require_permission(request, RolePermission.Permission.REVIEW_SKILLS)
-    technician = _scoped_or_404(Technician.objects, pk, supervisor, get_active_country(request), 'country')
+    technician = _scoped_or_404(_people_i_oversee(supervisor), pk, supervisor, get_active_country(request), 'country')
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -4309,7 +4335,7 @@ def technician_edit(request, pk):
     is_manager = requesting_technician.is_manager_tier
     is_admin = requesting_technician.role == Technician.Role.ADMIN
     technician = _scoped_or_404(
-        Technician.objects, pk, requesting_technician, get_active_country(request), 'country',
+        _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
     # Someone below this person can look, but not change anything — an
     # email or password change would let them sign in as them.

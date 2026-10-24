@@ -183,7 +183,13 @@ def nav_pages(technician, allowed):
     if RolePermission.Permission.VIEW_TASKS in allowed:
         add('tasks:task_list', _('Tasks'), 'clipboard', 'tasks')
     if RolePermission.Permission.VIEW_TECHNICIANS in allowed:
-        add('tasks:technician_list', _('Technicians'), 'users', 'team')
+        # Named for who's in it (tasks.views.overseen_roles).
+        if technician.role == technician.Role.ADMIN:
+            add('tasks:technician_list', _('Users'), 'users', 'team')
+        elif technician.is_any_manager:
+            add('tasks:technician_list', _('My team'), 'users', 'team')
+        else:
+            add('tasks:technician_list', _('Technicians'), 'users', 'team')
         add('tasks:team_progress', _('Team progress'), 'bar-chart', 'team')
         add('tasks:technician_hours', _('Hours'), 'clock', 'team')
         add('tasks:team_map', _('Team map'), 'map-pin', 'team')
