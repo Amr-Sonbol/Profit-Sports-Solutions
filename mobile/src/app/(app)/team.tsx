@@ -74,7 +74,7 @@ export default function TeamTasksScreen() {
             ListEmptyComponent={
               tasks !== null ? (
                 <ThemedText themeColor="textSecondary">{query ? 'No tasks match your search.' : 'No open tasks.'}</ThemedText>
-              ) : null
+              ) : undefined
             }
             renderItem={({ item }) => (
               <TouchableOpacity

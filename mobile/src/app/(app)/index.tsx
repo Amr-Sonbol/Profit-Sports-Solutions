@@ -81,7 +81,7 @@ export default function MyTasksScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
-            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : null
+            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : undefined
           }
           renderItem={({ item }) => (
             <TouchableOpacity
