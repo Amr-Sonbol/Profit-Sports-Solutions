@@ -173,6 +173,22 @@ def report_language(customer):
     return customer.country.report_language or 'en'
 
 
+def render_visit_report_html(report, language=None, problems=()):
+    """The report as it would be sent, as an HTML page with a "preview"
+    banner and the things to fix (`problems`) above it — the review step
+    before sending. Same template, content and language as the PDF.
+    """
+    context = _template_context(report, report_content(report), report.signature_url, report.submitted_at, False)
+    country_zone = report.task.site.customer.country.timezone
+    with translation.override(language or translation.get_language()), timezone.override(country_zone):
+        return render_to_string('reports/visit_report_pdf.html', {
+            **context,
+            'is_rtl': translation.get_language_bidi(),
+            'preview': True,
+            'problems': [str(problem) for problem in problems],
+        })
+
+
 def render_visit_report_pdf(report, language=None, signed_version=False):
     """The report as PDF bytes, in `language` (default: the active one),
     with times in the site's own country time zone. With signed_version,

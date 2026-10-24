@@ -5111,15 +5111,70 @@ def save_work_report(request, task, technician, report_form, part_rows):
             occurred_at=now, actor=request.user,
         )
         if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
-            push_in_their_language(
+            # Once saved for good — a report preview is rolled back and sends nothing.
+            transaction.on_commit(lambda: push_in_their_language(
                 task.responsible_supervisor,
                 lambda: _('Report awaiting your review'),
                 lambda: _('%(number)s — submitted by %(name)s') % {
                     'number': task.task_number, 'name': technician.full_name,
                 },
                 {'type': 'team_task', 'task_id': task.pk},
-            )
+            ))
     return saved_report
+
+
+def report_problems(report, language):
+    """What to fix before sending a report, for its review: machines
+    without a finding or action, no work performed, and typed text that
+    isn't in the report's language (`language`: 'ar' or 'en'). Warnings —
+    the person can still send it.
+    """
+    from reports.templatetags.report_text import text_dir
+
+    problems = []
+    machines = list(report.task.task_assets.select_related('asset__brand'))
+    if not machines:
+        problems.append(_('No machines are recorded. Add each machine you worked on.'))
+    typed = [
+        (_('Overall findings'), report.findings), (_('Other work'), report.action_taken),
+        (_('Other recommendation'), report.recommendation),
+    ]
+    for item in machines:
+        name = f"{item.asset.brand.name if item.asset.brand_id else ''} {item.asset.model_name}".strip()
+        if not item.finding_code and not item.note.strip():
+            problems.append(_('%(machine)s: pick a finding.') % {'machine': name})
+        if not item.action_code and not item.action.strip():
+            problems.append(_('%(machine)s: pick the action taken.') % {'machine': name})
+        typed += [(name, item.note), (name, item.action)]
+    if not report.work_lines and not report.action_taken.strip():
+        problems.append(_('Pick the work performed.'))
+    expected = 'rtl' if language == 'ar' else 'ltr'
+    language_name = _('Arabic') if language == 'ar' else _('English')
+    for label, text in typed:
+        if text and any(char.isalpha() for char in text) and text_dir(text) != expected:
+            problems.append(_('%(where)s: “%(text)s” is not in %(language)s, but the report is in %(language)s.') % {
+                'where': label, 'text': text.strip()[:60], 'language': language_name,
+            })
+    return problems
+
+
+def report_preview(request, task, technician, report_form, part_rows, machine_rows=None):
+    """(html, problems): the report exactly as it would be sent, saved
+    for a moment and rolled back — nothing is kept, sent or notified. For
+    the "Review report" step on the website and in the app.
+    `machine_rows` is (existing rows, new rows), or None to leave them.
+    """
+    from reports.pdf import render_visit_report_html, report_language
+
+    language = report_language(task.site.customer)
+    with transaction.atomic():
+        saved = save_work_report(request, task, technician, report_form, part_rows)
+        if machine_rows is not None:
+            save_task_machines(task, *machine_rows)
+        problems = report_problems(saved, language)
+        html = render_visit_report_html(saved, language=language, problems=problems)
+        transaction.set_rollback(True)
+    return html, problems
 
 
 def report_saved_message(first_submission, task):
@@ -5262,9 +5317,16 @@ def _report_form(request, task, technician, back_url):
 
     helpers = _active_helpers(task)
     if request.method == 'POST':
+        # "Preview report": the report as it would be sent, in a new tab —
+        # nothing saved, and no signature needed yet.
+        preview = 'preview' in request.POST
+        data = request.POST
+        if preview:
+            data = request.POST.copy()
+            data['signature_drawn'] = ''  # nothing is stored for a preview
         report_form = WorkReportForm(
-            request.POST, request.FILES, instance=report, require_signature=_requires_signature(task),
-            helpers=helpers,
+            data, None if preview else request.FILES, instance=report,
+            require_signature=_requires_signature(task) and not preview, helpers=helpers,
         )
         existing_formset = ExistingAssetFormSet(
             request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
@@ -5276,6 +5338,12 @@ def _report_form(request, task, technician, back_url):
             report_form.is_valid() and existing_formset.is_valid()
             and new_formset.is_valid() and part_formset.is_valid()
         ):
+            if preview:
+                html, _problems = report_preview(
+                    request, task, technician, report_form, part_formset.cleaned_data,
+                    (existing_formset.cleaned_data, new_formset.cleaned_data),
+                )
+                return HttpResponse(html)
             with transaction.atomic():
                 saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 

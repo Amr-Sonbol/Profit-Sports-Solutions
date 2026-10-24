@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 13:57+0000\n"
+"POT-Creation-Date: 2026-10-24 14:12+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -183,6 +183,14 @@ msgid "%(m)s m"
 msgstr "%(m)s م"
 
 #, python-format
+msgid "%(machine)s: pick a finding."
+msgstr "%(machine)s: اختر الملاحظة."
+
+#, python-format
+msgid "%(machine)s: pick the action taken."
+msgstr "%(machine)s: اختر الإجراء المتخذ."
+
+#, python-format
 msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
 
@@ -237,6 +245,10 @@ msgstr "%(source)s — %(time)s"
 #, python-format
 msgid "%(start)s–%(end)s (est.)"
 msgstr "%(start)s–%(end)s (متوقع)"
+
+#, python-format
+msgid "%(where)s: “%(text)s” is not in %(language)s, but the report is in %(language)s."
+msgstr "%(where)s: «%(text)s» ليس باللغة %(language)s، بينما التقرير باللغة %(language)s."
 
 msgid "+ Add new brand"
 msgstr "+ إضافة علامة تجارية جديدة"
@@ -2500,6 +2512,9 @@ msgstr "لم يتم إنشاء حساب دخول بعد. أنشئه من سجل�
 msgid "No login has been created yet. Once created, a one-time link will be emailed so they can set their own password. No password is sent by email."
 msgstr "لم يتم إنشاء حساب دخول بعد. بعد إنشائه، سيُرسل رابط لمرة واحدة بالبريد الإلكتروني ليعيّن كلمة مروره بنفسه. لا تُرسل أي كلمة مرور بالبريد الإلكتروني."
 
+msgid "No machines are recorded. Add each machine you worked on."
+msgstr "لم تُسجَّل أي أجهزة. أضف كل جهاز عملت عليه."
+
 msgid "No machines match your search."
 msgstr "لا توجد أجهزة مطابقة لبحثك."
 
@@ -2687,6 +2702,9 @@ msgstr "لا شيء آخر"
 msgid "Nothing left to do today."
 msgstr "لا يوجد ما تبقّى لإنجازه اليوم."
 
+msgid "Nothing missing was found."
+msgstr "لم يُعثر على أي نقص."
+
 #, python-format
 msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
 msgstr "إشعار بتأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
@@ -2800,8 +2818,14 @@ msgstr "ملاحظة أخرى"
 msgid "Other internal"
 msgstr "داخلية أخرى"
 
+msgid "Other recommendation"
+msgstr "توصية أخرى"
+
 msgid "Other team members on this task"
 msgstr "أعضاء الفريق الآخرون في هذه المهمة"
+
+msgid "Other work"
+msgstr "أعمال أخرى"
 
 msgid "Others call on them when they are stuck. Can train others."
 msgstr "يلجأ إليه الآخرون عندما تواجههم صعوبة. قادر على تدريب الآخرين."
@@ -2816,6 +2840,9 @@ msgstr "النتيجة"
 msgid "Overall Condition"
 msgstr "الحالة العامة"
 
+msgid "Overall findings"
+msgstr "الملاحظات العامة"
+
 msgid "Overdue"
 msgstr "متأخرة"
 
@@ -2827,6 +2854,9 @@ msgstr "الرقم المرجعي PAK"
 
 msgid "PAK reference number"
 msgstr "رقم مرجعي PAK"
+
+msgid "PREVIEW — not sent yet."
+msgstr "معاينة — لم يُرسل بعد."
 
 msgid "Padding color"
 msgstr "لون الحشوة"
@@ -2959,6 +2989,9 @@ msgstr "صور و/أو مقطع فيديو قصير"
 msgid "Photos or a short video"
 msgstr "صور أو مقطع فيديو قصير"
 
+msgid "Pick the work performed."
+msgstr "اختر الأعمال المنفّذة."
+
 msgid "Planned for an earlier day and not done yet."
 msgstr "كانت مخططة ليوم سابق ولم تُنجز بعد."
 
@@ -3052,6 +3085,9 @@ msgstr "حساب البوابة"
 
 msgid "Portal welcome and password link"
 msgstr "الترحيب في البوابة ورابط كلمة المرور"
+
+msgid "Preview report"
+msgstr "معاينة التقرير"
 
 msgid "Previous"
 msgstr "السابق"
@@ -4213,6 +4249,9 @@ msgstr "هذا هو مسؤول النظام الوحيد القادر على ت�
 
 msgid "This is the only administrator able to sign in. Please assign the administrator role to someone else first."
 msgstr "هذا هو مسؤول النظام الوحيد القادر على تسجيل الدخول. يُرجى إسناد دور مسؤول النظام إلى شخص آخر أولًا."
+
+msgid "This is the report exactly as the customer will receive it."
+msgstr "هذا هو التقرير تمامًا كما سيستلمه العميل."
 
 #, python-format
 msgid "This link has expired or has already been used. Each link can be used once and is valid for %(days)s days."

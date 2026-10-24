@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
+import { WebView } from 'react-native-webview';
 
-import { ApiRequestError } from '@/api/client';
-import { fetchMyReport, fetchMyTaskDetail, fetchParts, submitMyReport } from '@/api/endpoints';
+import { API_BASE_URL, ApiRequestError } from '@/api/client';
+import { fetchMyReport, fetchMyTaskDetail, fetchParts, previewMyReport, submitMyReport } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -135,6 +136,8 @@ export default function ReportScreen() {
   const [recommendation, setRecommendation] = useState('');
   // The customer's report language: anything typed should be in it.
   const [reportLanguage, setReportLanguage] = useState('en');
+  // The review before sending (see openReview); null while filling in.
+  const [review, setReview] = useState<{ html: string; problems: string[]; offline?: boolean } | null>(null);
   const [pickingMachine, setPickingMachine] = useState(false);
 
   const load = useCallback(async () => {
@@ -242,6 +245,21 @@ export default function ReportScreen() {
     setParts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   };
 
+  // A pick fills in what follows from it, unless already chosen: "No
+  // fault found" means no action and "Inspected OK"; a replacement means
+  // "Replaced"; a repair action means "Repaired".
+  const withFinding = (row: MachineRow, code: string): Partial<MachineRow> => (
+    code === 'no_fault'
+      ? { finding_code: code, action_code: row.action_code || 'none_needed', outcome: row.outcome || 'inspected_ok' }
+      : { finding_code: code }
+  );
+  const withAction = (row: MachineRow, code: string): Partial<MachineRow> => {
+    const replaced = ['part_replaced', 'cable_replaced', 'belt_replaced', 'console_replaced'];
+    const repaired = ['adjusted', 'greased', 'tightened', 'belt_adjusted', 'calibrated'];
+    const outcome = replaced.includes(code) ? 'replaced' : repaired.includes(code) ? 'repaired' : '';
+    return { action_code: code, ...(outcome && !row.outcome ? { outcome } : {}) };
+  };
+
   const updateMachine = (key: string, changes: Partial<MachineRow>) => {
     setMachines((rows) => rows.map((row) => (row.key === key ? { ...row, ...changes } : row)));
   };
@@ -260,11 +278,8 @@ export default function ReportScreen() {
     (machine) => !machines.some((row) => row.asset_id === machine.id),
   );
 
-  const submit = async () => {
-    setIsBusy(true);
-    setErrors({});
-    const location = await currentLocation();
-    const input = {
+  // Everything the report holds, as sent to the server.
+  const reportInput = () => ({
       findings,
       action_taken: actionTaken,
       work_lines: workLines,
@@ -282,8 +297,34 @@ export default function ReportScreen() {
       helper_hours: helperHours,
       send_copy_to: sendCopyTo.trim(),
       machines: machines.map(machineInput),
-      ...(location ?? {}),
-    };
+  });
+
+  // "Review report": the report exactly as the customer will get it, and
+  // what to fix — nothing is sent until Submit on the review.
+  const openReview = async () => {
+    setIsBusy(true);
+    setErrors({});
+    try {
+      setReview(await previewMyReport(Number(id), reportInput()));
+    } catch (err) {
+      if (isNetworkError(err)) {
+        setReview({ html: '', problems: [], offline: true });
+      } else if (err instanceof ApiRequestError && err.status === 400) {
+        const fieldErrors = fieldErrorsFrom(err.body);
+        setErrors(Object.keys(fieldErrors).length ? fieldErrors : { form: err.message });
+      } else {
+        setErrors({ form: err instanceof ApiRequestError ? err.message : 'Unable to prepare the review. Please try again.' });
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const submit = async () => {
+    setIsBusy(true);
+    setErrors({});
+    const location = await currentLocation();
+    const input = { ...reportInput(), ...(location ?? {}) };
     try {
       const result = await submitMyReport(Number(id), input);
       removePendingReport(Number(id));
@@ -300,6 +341,7 @@ export default function ReportScreen() {
       } else if (err instanceof ApiRequestError && err.status === 400) {
         const fieldErrors = fieldErrorsFrom(err.body);
         setErrors(Object.keys(fieldErrors).length ? fieldErrors : { form: err.message });
+        setReview(null);  // back to the form, where the errors show
       } else {
         setErrors({ form: err instanceof ApiRequestError ? err.message : 'Unable to save. Please try again.' });
       }
@@ -410,6 +452,68 @@ export default function ReportScreen() {
     );
   }
 
+  if (review) {
+    const signed = Boolean(newSignature || signatureOnFile || notSigned);
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <TouchableOpacity onPress={() => setReview(null)} style={styles.backLink}>
+            <ThemedText themeColor="primary">← Edit the report</ThemedText>
+          </TouchableOpacity>
+          <ThemedView style={styles.reviewHead}>
+            <ThemedText type="subtitle">Review before sending</ThemedText>
+            {review.offline ? (
+              <ThemedText themeColor="danger" type="small">
+                No connection, so the report can’t be shown. You can still submit: it’s sent when you’re back online.
+              </ThemedText>
+            ) : review.problems.length ? (
+              <>
+                <ThemedText themeColor="danger" type="smallBold">Please check {review.problems.length === 1 ? 'this' : 'these'}:</ThemedText>
+                {review.problems.map((problem, index) => (
+                  <ThemedText key={index} themeColor="danger" type="small">• {problem}</ThemedText>
+                ))}
+              </>
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary">Nothing missing. This is the report as the customer will get it.</ThemedText>
+            )}
+          </ThemedView>
+          {review.html ? (
+            <WebView
+              originWhitelist={['*']}
+              source={{ html: review.html, baseUrl: API_BASE_URL }}
+              style={styles.reviewPage}
+            />
+          ) : <ThemedView style={styles.reviewPage} />}
+          <ThemedView style={styles.reviewActions}>
+            {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}
+            {!signed ? (
+              <TouchableOpacity
+                style={[styles.secondaryButton, { borderColor: theme.primary }]}
+                onPress={() => {
+                  setSignError('');
+                  setSigning(true);
+                }}
+              >
+                <ThemedText themeColor="primary">Hand to customer for signature</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
+              onPress={submit}
+              disabled={isBusy}
+            >
+              {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
+                  {review.problems.length ? 'Submit anyway' : 'Submit report'}
+                </ThemedText>
+              )}
+            </TouchableOpacity>
+          </ThemedView>
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -435,73 +539,11 @@ export default function ReportScreen() {
               </ThemedText>
             </ThemedView>
 
-            <Field label="Work performed" error={errors.work_lines}>
-              <Chips
-                choices={workLineChoices} selected={workLines} multi
-                onChange={setWorkLines}
-              />
-              <TextInput
-                style={[inputStyle, styles.multiline]} value={actionTaken} onChangeText={setActionTaken} multiline
-                placeholder="Other work, one per line" placeholderTextColor={theme.textSecondary}
-              />
-            </Field>
-
-            <Field label="Overall findings (optional)" error={errors.findings}>
-              <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />
-            </Field>
-
-            <Field label="Has the issue been resolved?" error={errors.resolved}>
-              <ThemedView style={styles.toggleRow}>
-                {[true, false].map((value) => (
-                  <TouchableOpacity
-                    key={String(value)}
-                    style={[
-                      styles.toggle, { borderColor: theme.backgroundSelected },
-                      resolved === value && { backgroundColor: theme.primary, borderColor: theme.primary },
-                    ]}
-                    onPress={() => setResolved(value)}
-                  >
-                    <ThemedText style={resolved === value ? [styles.toggleTextActive, { color: theme.onPrimary }] : undefined}>
-                      {value ? 'Yes' : 'No'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </ThemedView>
-            </Field>
-
-            <Field label="Labour hours" error={errors.labour_hours}>
-              <TextInput
-                style={inputStyle} value={labourHours} onChangeText={setLabourHours}
-                keyboardType="decimal-pad" placeholder="e.g. 2.5" placeholderTextColor={theme.textSecondary}
-              />
-            </Field>
-
-            {helpers.length > 0 ? (
-              <ThemedView style={styles.section}>
-                <ThemedText type="smallBold">Helpers’ hours</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  Each helper gets the same hours as above. Fill one in only if it was different.
-                </ThemedText>
-                {helpers.map((helper) => (
-                  <Field
-                    key={helper.id} label={helper.technician_name} error={errors[`helper_hours_${helper.id}`]}
-                  >
-                    <TextInput
-                      style={inputStyle} value={helperHours[String(helper.id)] ?? ''}
-                      onChangeText={(value) => setHelperHours((current) => ({ ...current, [String(helper.id)]: value }))}
-                      keyboardType="decimal-pad" placeholder="Same as the report"
-                      placeholderTextColor={theme.textSecondary}
-                    />
-                  </Field>
-                ))}
-              </ThemedView>
-            ) : null}
-
+            <StepTitle
+              number={1} title="Machines"
+              hint="For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed."
+            />
             <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">Machines</ThemedText>
-              <ThemedText themeColor="textSecondary" type="small">
-                The outcome for each machine this visit covered, and what was found and done.
-              </ThemedText>
               {machines.map((row) => (
                 <ThemedView key={row.key} style={[styles.partCard, { borderColor: theme.backgroundSelected }]}>
                   {row.asset_id ? (
@@ -558,7 +600,7 @@ export default function ReportScreen() {
                   <ThemedText type="smallBold">Finding</ThemedText>
                   <Chips
                     choices={findingChoices} selected={row.finding_code ? [row.finding_code] : []}
-                    onChange={(picked) => updateMachine(row.key, { finding_code: picked[0] ?? '' })}
+                    onChange={(picked) => updateMachine(row.key, withFinding(row, picked[0] ?? ''))}
                   />
                   <TextInput
                     style={inputStyle} value={row.note} placeholder="Other finding (if none fits)"
@@ -568,7 +610,7 @@ export default function ReportScreen() {
                   <ThemedText type="smallBold">Action taken</ThemedText>
                   <Chips
                     choices={actionChoices} selected={row.action_code ? [row.action_code] : []}
-                    onChange={(picked) => updateMachine(row.key, { action_code: picked[0] ?? '' })}
+                    onChange={(picked) => updateMachine(row.key, withAction(row, picked[0] ?? ''))}
                   />
                   <TextInput
                     style={inputStyle} value={row.action ?? ''} placeholder="Other action (if none fits)"
@@ -624,6 +666,86 @@ export default function ReportScreen() {
                 <ThemedText themeColor="primary">+ Add a machine not in the list</ThemedText>
               </TouchableOpacity>
             </ThemedView>
+
+            <StepTitle number={2} title="Work performed" hint="Tick everything you did on this visit." />
+            <Field label="Work performed" error={errors.work_lines}>
+              <Chips
+                choices={workLineChoices} selected={workLines} multi
+                onChange={setWorkLines}
+              />
+              <TextInput
+                style={[inputStyle, styles.multiline]} value={actionTaken} onChangeText={setActionTaken} multiline
+                placeholder="Other work, one per line" placeholderTextColor={theme.textSecondary}
+              />
+            </Field>
+
+            <StepTitle
+              number={3} title="Result and advice"
+              hint="Say whether the problem is solved, and add advice for the customer if needed."
+            />
+            <Field label="Has the issue been resolved?" error={errors.resolved}>
+              <ThemedView style={styles.toggleRow}>
+                {[true, false].map((value) => (
+                  <TouchableOpacity
+                    key={String(value)}
+                    style={[
+                      styles.toggle, { borderColor: theme.backgroundSelected },
+                      resolved === value && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    ]}
+                    onPress={() => setResolved(value)}
+                  >
+                    <ThemedText style={resolved === value ? [styles.toggleTextActive, { color: theme.onPrimary }] : undefined}>
+                      {value ? 'Yes' : 'No'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </ThemedView>
+            </Field>
+
+            <Field label="Overall findings (optional)" error={errors.findings}>
+              <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />
+            </Field>
+
+            <Field label="Recommendation" error={errors.recommendations}>
+              <Chips
+                choices={recommendationChoices} selected={recommendations} multi
+                onChange={setRecommendations}
+              />
+              <TextInput
+                style={[inputStyle, styles.multiline]} value={recommendation} onChangeText={setRecommendation} multiline
+                placeholder="Other recommendation" placeholderTextColor={theme.textSecondary}
+              />
+            </Field>
+
+
+            <StepTitle number={4} title="Hours and parts" hint="Your hours on site, and any parts you fitted." />
+            <Field label="Labour hours" error={errors.labour_hours}>
+              <TextInput
+                style={inputStyle} value={labourHours} onChangeText={setLabourHours}
+                keyboardType="decimal-pad" placeholder="e.g. 2.5" placeholderTextColor={theme.textSecondary}
+              />
+            </Field>
+
+            {helpers.length > 0 ? (
+              <ThemedView style={styles.section}>
+                <ThemedText type="smallBold">Helpers’ hours</ThemedText>
+                <ThemedText themeColor="textSecondary" type="small">
+                  Each helper gets the same hours as above. Fill one in only if it was different.
+                </ThemedText>
+                {helpers.map((helper) => (
+                  <Field
+                    key={helper.id} label={helper.technician_name} error={errors[`helper_hours_${helper.id}`]}
+                  >
+                    <TextInput
+                      style={inputStyle} value={helperHours[String(helper.id)] ?? ''}
+                      onChangeText={(value) => setHelperHours((current) => ({ ...current, [String(helper.id)]: value }))}
+                      keyboardType="decimal-pad" placeholder="Same as the report"
+                      placeholderTextColor={theme.textSecondary}
+                    />
+                  </Field>
+                ))}
+              </ThemedView>
+            ) : null}
 
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Parts used</ThemedText>
@@ -687,17 +809,10 @@ export default function ReportScreen() {
               </TouchableOpacity>
             </ThemedView>
 
-            <Field label="Recommendation" error={errors.recommendations}>
-              <Chips
-                choices={recommendationChoices} selected={recommendations} multi
-                onChange={setRecommendations}
-              />
-              <TextInput
-                style={[inputStyle, styles.multiline]} value={recommendation} onChangeText={setRecommendation} multiline
-                placeholder="Other recommendation" placeholderTextColor={theme.textSecondary}
-              />
-            </Field>
-
+            <StepTitle
+              number={5} title="Customer sign-off"
+              hint="Hand the phone to the customer to sign — they see the work, not hours or prices."
+            />
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
                 Customer sign-off{task.requires_signature ? ' (required)' : ''}
@@ -761,18 +876,35 @@ export default function ReportScreen() {
 
             {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}
 
+            <StepTitle number={6} title="Review and send" hint="See the report exactly as the customer will get it, then send it." />
             <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
-              onPress={submit}
+              onPress={openReview}
               disabled={isBusy}
             >
               {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
-                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Submit report</ThemedText>
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Review report</ThemedText>
               )}
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+/** A numbered step with its one-line instruction. */
+function StepTitle({ number, title, hint }: { number: number; title: string; hint: string }) {
+  const theme = useTheme();
+  return (
+    <ThemedView style={styles.step}>
+      <ThemedView style={[styles.stepNumber, { backgroundColor: theme.primary }]}>
+        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>{number}</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.stepText}>
+        <ThemedText type="subtitle" style={styles.stepTitle}>{title}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">{hint}</ThemedText>
+      </ThemedView>
     </ThemedView>
   );
 }
@@ -841,6 +973,13 @@ const styles = StyleSheet.create({
   partCard: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: Spacing.two },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
   languageNote: { borderRadius: Spacing.two, padding: Spacing.three },
+  step: { flexDirection: 'row', gap: Spacing.two, alignItems: 'flex-start', marginTop: Spacing.two, backgroundColor: 'transparent' },
+  stepNumber: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  stepText: { flex: 1, backgroundColor: 'transparent' },
+  stepTitle: { fontSize: 17 },
+  reviewHead: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, gap: Spacing.one },
+  reviewPage: { flex: 1 },
+  reviewActions: { padding: Spacing.three, gap: Spacing.two },
   chip: { borderWidth: 1, borderRadius: Spacing.four, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },

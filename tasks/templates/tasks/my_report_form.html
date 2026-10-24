@@ -239,6 +239,8 @@
     </div>
 
     <div class="section" data-staff-only>
+        {# Check it first: opens the report as the customer will get it, in a new tab — nothing is saved. #}
+        <button type="submit" name="preview" value="1" formtarget="_blank" class="button button--secondary">{% translate "Preview report" %}</button>
         <button type="submit" class="button">{% translate "Save report" %}</button>
     </div>
 </form>

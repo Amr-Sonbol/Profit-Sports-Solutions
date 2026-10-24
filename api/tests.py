@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 from datetime import datetime, time
 
 from django.contrib.auth import get_user_model
@@ -1148,3 +1149,50 @@ class AppScheduleTests(ApiTestCase):
             full_name='Other Supervisor', language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
         )
         self.assertEqual(self._get('supervisor1', technician=other.pk).status_code, 404)
+
+
+class ReportReviewTests(ApiTestCase):
+    # "Review report": the report exactly as it would be sent, with what to
+    # fix — and nothing saved, sent or notified.
+
+    def setUp(self):
+        super().setUp()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+
+    def test_the_preview_shows_the_report_and_its_problems_and_saves_nothing(self):
+        from tasks.models import TaskAsset
+        token = self.token_for('tech1')
+        with patch('people.push.send_push') as send_push, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f'/api/my-tasks/{self.task.pk}/report/?preview=1', json.dumps({
+                    'findings': '', 'action_taken': '', 'resolved': True, 'labour_hours': '1.50',
+                    'customer_name': 'Ali', 'parts': [], 'send_copy_to': 'ali@example.com',
+                    'machines': [{'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': '', 'action': ''}],
+                }), content_type='application/json', **self.auth(token),
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn('PREVIEW', body['html'])
+        self.assertTrue(any('pick a finding' in problem for problem in body['problems']))
+        self.assertIn('Pick the work performed.', body['problems'])
+        # Nothing kept, sent or notified.
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertFalse(TaskAsset.objects.filter(task=self.task).exists())
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+        send_push.assert_not_called()
+        from django.core import mail
+        self.assertEqual(mail.outbox, [])
+
+    def test_typed_text_in_the_wrong_language_is_flagged(self):
+        self.country.report_language = 'ar'
+        self.country.save(update_fields=['report_language'])
+        response = self.client.post(
+            f'/api/my-tasks/{self.task.pk}/report/?preview=1', json.dumps({
+                'findings': 'Belt was worn', 'action_taken': '', 'work_lines': ['bolts'], 'resolved': True,
+                'labour_hours': '1', 'customer_name': 'Ali', 'parts': [],
+            }), content_type='application/json', **self.auth(self.token_for('tech1')),
+        )
+        problems = response.json()['problems']
+        self.assertTrue(any('Belt was worn' in problem for problem in problems), problems)

@@ -33,7 +33,7 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    _calendar_context, _my_tasks, _overdue, _people_i_oversee, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
+    _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     send_password_changed_email,
     undo_last_tap,
@@ -616,7 +616,10 @@ class MyTaskReportView(APIView):
         data['work_lines'] = list(request.data.get('work_lines') or [])
         data['recommendations'] = list(request.data.get('recommendations') or [])
         data['resolved'] = str(bool(request.data.get('resolved')))
-        data['signature_drawn'] = request.data.get('signature') or ''
+        # ?preview=1: the "Review report" step — the report as it would be
+        # sent, nothing saved; the customer signs after the review.
+        preview = request.query_params.get('preview') == '1'
+        data['signature_drawn'] = '' if preview else request.data.get('signature') or ''
         waived_reason = request.data.get('signature_waived_reason') or ''
         if waived_reason:
             data['signature_waived'] = 'on'
@@ -624,8 +627,8 @@ class MyTaskReportView(APIView):
         for assignment_id, hours in (request.data.get('helper_hours') or {}).items():
             data[f'helper_hours_{assignment_id}'] = '' if hours is None else str(hours)
         report_form = WorkReportForm(
-            data, instance=getattr(task, 'report', None), require_signature=_requires_signature(task),
-            helpers=_active_helpers(task),
+            data, instance=getattr(task, 'report', None),
+            require_signature=_requires_signature(task) and not preview, helpers=_active_helpers(task),
         )
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
         machine_rows = request.data.get('machines')
@@ -645,6 +648,16 @@ class MyTaskReportView(APIView):
                 errors['machines'] = machine_errors
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if preview:
+            html, problems = report_preview(
+                request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
+                None if machine_forms is None else (
+                    [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                    [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+                ),
+            )
+            return Response({'html': html, 'problems': [str(problem) for problem in problems]})
 
         with transaction.atomic():
             report = save_work_report(

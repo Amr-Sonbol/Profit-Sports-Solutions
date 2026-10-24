@@ -139,3 +139,14 @@ export function fetchMySchedule(params: { view: string; start?: string; month?: 
     .join('&');
   return apiRequest<MySchedule>(`/api/my-schedule/?${query}`);
 }
+
+/**
+ * "Review report": the report exactly as it would be sent (HTML) and what
+ * to fix — nothing is saved. The signature isn't needed yet.
+ */
+export function previewMyReport(id: number, report: WorkReportInput) {
+  return apiRequest<{ html: string; problems: string[] }>(`/api/my-tasks/${id}/report/?preview=1`, {
+    method: 'POST',
+    body: { ...report, signature: null },
+  });
+}

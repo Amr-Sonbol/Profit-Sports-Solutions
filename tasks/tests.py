@@ -8770,3 +8770,13 @@ class CorporateReportTests(TicketMachineFindingsTests):
         report.save(update_fields=['signed_content'])
         self.assertNotIn('work_lines', report.signed_content)
         self.assertFalse(changed_after_signing(report))
+
+    def test_the_website_preview_opens_the_report_and_saves_nothing(self):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({'preview': '1', 'findings': '', 'work_lines': ['bolts'], 'new-TOTAL_FORMS': '0',
+                        'new-INITIAL_FORMS': '0', 'existing-TOTAL_FORMS': '0', 'existing-INITIAL_FORMS': '0'})
+        response = self.client.post(self.report_url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'PREVIEW')
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())

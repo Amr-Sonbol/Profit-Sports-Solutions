@@ -2,6 +2,7 @@
 <html lang="{{ LANGUAGE_CODE|default:'en' }}" dir="{% if is_rtl %}rtl{% else %}ltr{% endif %}">
 <head>
 <meta charset="utf-8">
+{% if preview %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endif %}
 <title>{% translate "Visit Report" %} — {{ task.task_number }}</title>
 <style>
     @font-face { font-family: "Play"; src: url("{% static 'reports/Play-Regular.ttf' %}"); }
@@ -47,19 +48,37 @@
     .signoff td { block-size: 1.35cm; }
     .signoff img { max-block-size: 1.25cm; max-inline-size: 6cm; }
     .muted { color: #666; }
+    /* The review before sending, on a screen: no page furniture, a banner. */
+    .preview-page { max-inline-size: 19cm; margin: 0 auto; padding: 0.5cm; background: #fff; }
+    .preview-page .footer { display: none; }
+    .preview-page .letterhead img { inline-size: 100%; }
+    .preview-banner { border: 2px solid #b5760a; background: #fdf3e3; padding: 0.3cm; margin-block-end: 0.4cm; }
+    .preview-banner strong { color: #b5760a; }
+    .preview-banner ul { margin-block-start: 0.15cm; }
+    .preview-banner li { color: #c0392b; }
+    .preview-ok { color: #1e8449; }
     /* Typed-in text keeps its own direction (report_text.text_dir). */
     .iso { unicode-bidi: embed; }
     .not-signed { color: #c00000; font-weight: bold; }
     .changed-note { border: 0.8pt solid #c00000; color: #c00000; padding: 0.15cm 0.25cm; margin-block-end: 0.3cm; }
 </style>
 </head>
-<body>
+<body{% if preview %} class="preview-page"{% endif %}>
 <div class="letterhead"><img src="{% static 'reports/letterhead-header.png' %}" alt="Profit Sports Solutions"></div>
 <div class="footer">
     <img src="{% static 'reports/letterhead-footer.png' %}" alt="">
     <div class="footer__page" dir="ltr">{{ task.task_number }} · </div>
 </div>
 
+{% if preview %}
+<div class="preview-banner">
+    <strong>{% translate "PREVIEW — not sent yet." %}</strong>
+    {% translate "This is the report exactly as the customer will receive it." %}
+    {% if problems %}
+    <ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    {% else %}<p class="preview-ok">{% translate "Nothing missing was found." %}</p>{% endif %}
+</div>
+{% endif %}
 <h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% translate "Visit Report" %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
