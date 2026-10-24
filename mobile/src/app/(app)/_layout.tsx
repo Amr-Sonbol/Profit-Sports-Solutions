@@ -47,7 +47,7 @@ export default function AppTabsLayout() {
         }),
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'My Tasks', tabBarIcon: tabIcon('today') }} />
+      <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
       <Tabs.Screen name="progress" options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up') }} />
       <Tabs.Screen
         name="team" options={{ title: 'Team', tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}
@@ -60,6 +60,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="task/[id]" options={{ href: null }} />
       <Tabs.Screen name="report/[id]" options={{ href: null }} />
       <Tabs.Screen name="team-task/[id]" options={{ href: null }} />
+      <Tabs.Screen name="schedule/[id]" options={{ href: null }} />
       <Tabs.Screen name="change-password" options={{ href: null }} />
     </Tabs>
   );

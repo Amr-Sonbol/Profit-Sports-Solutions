@@ -1103,3 +1103,48 @@ class AppIdentityTests(ApiTestCase):
         self.assertEqual(detail['site_contact_phone'], '+971500000001')
         self.assertTrue(detail['directions_url'].startswith('https://www.google.com/maps/'))
         self.assertEqual(detail['machines'][0]['serial'], 'OB-9')
+
+
+class AppScheduleTests(ApiTestCase):
+    # The app's Week / Month / Year: the website's calendar of one's own
+    # tasks, and a supervisor opening a technician's.
+
+    def setUp(self):
+        super().setUp()
+        from zoneinfo import ZoneInfo
+        self.task.scheduled_for = datetime(2026, 9, 9, 10, tzinfo=ZoneInfo('Asia/Dubai'))
+        self.task.save(update_fields=['scheduled_for'])
+
+    def _get(self, username, **params):
+        query = '&'.join(f'{key}={value}' for key, value in params.items())
+        return self.client.get(f'/api/my-schedule/?{query}', **self.auth(self.token_for(username)))
+
+    def test_week_month_and_year(self):
+        week = self._get('tech1', view='week', start='2026-09-09').json()
+        self.assertEqual(len(week['days']), 7)
+        busy = [day for day in week['days'] if day['tasks']]
+        self.assertEqual(busy[0]['date'], '2026-09-09')
+        self.assertEqual(busy[0]['tasks'][0]['my_role'], 'lead')
+        self.assertIn('is_weekend', busy[0])
+
+        month = self._get('tech1', view='month', month='2026-09').json()
+        self.assertEqual(sum(len(day['tasks']) for day in month['days']), 1)
+
+        year = self._get('tech1', view='year', year='2026').json()
+        self.assertEqual([m['count'] for m in year['months']][8], 1)
+        self.assertEqual(len(year['months']), 12)
+
+    def test_a_supervisor_opens_a_technicians_schedule_but_not_the_reverse(self):
+        response = self._get('supervisor1', view='week', start='2026-09-09', technician=self.technician.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['person']['name'], self.technician.full_name)
+        self.assertEqual(
+            self._get('tech1', technician=self.supervisor_user.technician.pk).status_code, 403,
+        )
+        # Someone the supervisor doesn't oversee (another supervisor) isn't found.
+        from people.models import Technician
+        other = Technician.objects.create(
+            user=User.objects.create_user('supervisor2', password='pass12345'), country=self.country,
+            full_name='Other Supervisor', language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.assertEqual(self._get('supervisor1', technician=other.pk).status_code, 404)

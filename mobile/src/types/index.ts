@@ -285,3 +285,47 @@ export interface TeamProgressRow {
   is_certified: boolean;
   months: number[];
 }
+
+/** One day of the schedule calendar (/api/my-schedule/). */
+export interface ScheduleDay {
+  date: string;
+  is_today: boolean;
+  is_weekend: boolean;
+  in_month: boolean;
+  week_start: string;
+  tasks: ScheduleItem[];
+}
+
+/** One day of a small month on the year view. */
+export interface ScheduleYearCell {
+  date: string;
+  count: number;
+  is_today: boolean;
+  is_weekend: boolean;
+  week_start: string;
+}
+
+/** Week, month or year of someone's tasks — the website's My schedule. */
+export interface MySchedule {
+  view: 'week' | 'month' | 'year';
+  today: string;
+  person: { id: number; name: string };
+  overdue: ScheduleItem[];
+  unscheduled: ScheduleItem[];
+  // week
+  start?: string;
+  end?: string;
+  prev_start?: string;
+  next_start?: string;
+  this_week_start?: string;
+  // month
+  month?: string;
+  prev_month?: string;
+  next_month?: string;
+  this_month?: string;
+  // week and month
+  days?: ScheduleDay[];
+  // year
+  year?: number;
+  months?: { first: string; count: number; cells: (ScheduleYearCell | null)[] }[];
+}

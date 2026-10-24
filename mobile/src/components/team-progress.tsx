@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchTeamProgress } from '@/api/endpoints';
@@ -19,6 +19,7 @@ import type { TeamProgressRow } from '@/types';
  */
 export function TeamProgressList() {
   const theme = useTheme();
+  const router = useRouter();
   const [rows, setRows] = useState<TeamProgressRow[] | null>(null);
   const [month, setMonth] = useState('');
   const [error, setError] = useState('');
@@ -70,7 +71,11 @@ export function TeamProgressList() {
         <ThemedText themeColor="textSecondary">No one on your team yet.</ThemedText>
       ) : undefined}
       renderItem={({ item }) => (
-        <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+        // Opens their schedule (week, month, year).
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+          onPress={() => router.push({ pathname: '/schedule/[id]', params: { id: String(item.id), name: item.name } })}
+        >
           <ThemedView style={styles.top}>
             <ThemedText type="smallBold">{item.rank ? `#${item.rank}  ` : ''}{item.name}</ThemedText>
             <Sparkline values={item.months} />
@@ -82,7 +87,8 @@ export function TeamProgressList() {
             {' · '}{item.hours} h
             {' · '}{item.is_certified ? 'Certified' : `${item.certified}/${item.required} skills confirmed`}
           </ThemedText>
-        </ThemedView>
+          <ThemedText type="small" themeColor="primary">View schedule ›</ThemedText>
+        </TouchableOpacity>
       )}
     />
   );

@@ -10,6 +10,7 @@ urlpatterns = [
     path('me/password/', views.MyPasswordView.as_view(), name='my_password'),
     path('my-tasks/', views.MyTaskListView.as_view(), name='my_task_list'),
     path('my-today/', views.MyTodayView.as_view(), name='my_today'),
+    path('my-schedule/', views.MyScheduleView.as_view(), name='my_schedule'),
     path('my-progress/', views.MyProgressView.as_view(), name='my_progress'),
     path('team-progress/', views.TeamProgressView.as_view(), name='team_progress'),
     path('my-tasks/<int:pk>/', views.MyTaskDetailView.as_view(), name='my_task_detail'),

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
 import { TodayPlanView } from '@/components/today-plan';
+import { type ScheduleMode, ScheduleView } from '@/components/schedule-view';
 import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -17,6 +18,8 @@ export default function MyTasksScreen() {
   const theme = useTheme();
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [today, setToday] = useState<TodayPlan | null>(null);
+  // Today (the next job first) or the calendar: week, month, year.
+  const [mode, setMode] = useState<'today' | ScheduleMode>('today');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +62,7 @@ export default function MyTasksScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ThemedText type="title" style={styles.heading}>
-          My Tasks
+          My schedule
         </ThemedText>
         {isOffline ? (
           <ThemedText themeColor="danger" type="small" style={styles.notice}>
@@ -81,6 +84,14 @@ export default function MyTasksScreen() {
             </ThemedText>
           </TouchableOpacity>
         ))}
+        {mode !== 'today' ? (
+          <ScheduleView
+            mode={mode}
+            onModeChange={setMode}
+            onToday={() => setMode('today')}
+            taskRoute={(id) => `/task/${id}`}
+          />
+        ) : (
         <FlatList
           data={tasks ?? []}
           keyExtractor={(item) => String(item.id)}
@@ -89,6 +100,22 @@ export default function MyTasksScreen() {
           // Today first (the next job, its tap and Directions), then every open task.
           ListHeaderComponent={today ? (
             <>
+              <ThemedView style={styles.tabs}>
+                {(['today', 'week', 'month', 'year'] as const).map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.tab, { borderColor: theme.backgroundSelected },
+                      mode === option && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    ]}
+                    onPress={() => setMode(option)}
+                  >
+                    <ThemedText type="small" style={mode === option ? { color: theme.onPrimary } : undefined}>
+                      {option[0]!.toUpperCase() + option.slice(1)}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </ThemedView>
               <TodayPlanView plan={today} onChanged={load} />
               <ThemedText type="smallBold">All my open tasks</ThemedText>
             </>
@@ -114,6 +141,7 @@ export default function MyTasksScreen() {
             </TouchableOpacity>
           )}
         />
+        )}
       </SafeAreaView>
     </ThemedView>
   );
@@ -131,4 +159,6 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   row: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
+  tabs: { flexDirection: 'row', gap: Spacing.two, paddingBottom: Spacing.three, backgroundColor: 'transparent' },
+  tab: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
 });

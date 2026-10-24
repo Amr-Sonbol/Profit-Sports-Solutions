@@ -2,7 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
-  Brand, Candidate, CataloguePart, Choice, Me, MyProgress, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
+  Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
   TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
 } from '@/types';
 
@@ -121,4 +121,16 @@ export function fetchMyProgress(month?: string) {
 
 export function fetchTeamProgress(month?: string) {
   return apiRequest<{ month: string; rows: TeamProgressRow[] }>(`/api/team-progress/${month ? `?month=${month}` : ''}`);
+}
+
+/**
+ * A week (`start` YYYY-MM-DD), month (`month` YYYY-MM) or year of someone's
+ * schedule; `technician` for a person on the viewer's team.
+ */
+export function fetchMySchedule(params: { view: string; start?: string; month?: string; year?: string; technician?: number }) {
+  const query = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+    .join('&');
+  return apiRequest<MySchedule>(`/api/my-schedule/?${query}`);
 }

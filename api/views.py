@@ -31,7 +31,7 @@ from tasks.views import (
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
+    _calendar_context, _my_tasks, _overdue, _people_i_oversee, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     send_password_changed_email,
     undo_last_tap,
@@ -174,6 +174,82 @@ class MyTodayView(APIView):
             'later_today': [_schedule_item(task) for task in plan['later_today']],
             'done_today': [_schedule_item(task) for task in plan['done_today']],
         })
+
+
+class MyScheduleView(APIView):
+    """The app's Week / Month / Year — the website's My schedule calendar
+    (tasks.views._calendar_context) of the person's own tasks: ?view=week
+    (&start=YYYY-MM-DD), month (&month=YYYY-MM) or year (&year=YYYY). Weeks
+    start on their country's first working day; days off are marked.
+    Overdue and the tasks with no day come with every view.
+
+    ?technician=<id> shows someone else's — for whoever can view
+    technicians, within the people they oversee in their country (like
+    the website's "View schedule"); anyone else is a 404.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        person_id = request.query_params.get('technician')
+        if person_id:
+            if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
+                return Response({'detail': 'Not allowed.'}, status=status.HTTP_403_FORBIDDEN)
+            technician = get_object_or_404(
+                _people_i_oversee(technician).filter(country=technician.country), pk=person_id if person_id.isdigit() else 0,
+            )
+        mine, with_role = _my_tasks(technician)
+        context = _calendar_context(request, mine, technician.country)
+        for entry in context['days']:
+            with_role(entry['tasks'])
+
+        def day(entry):
+            return {
+                'date': entry['date'], 'is_today': entry['is_today'], 'is_weekend': entry['is_weekend'],
+                'in_month': entry['in_month'], 'week_start': entry['week_start'],
+                'tasks': [_schedule_item(task) for task in entry['tasks']],
+            }
+
+        view = context['view']
+        payload = {
+            'view': view,
+            'today': context['today'],
+            'person': {'id': technician.pk, 'name': technician.full_name},
+            'overdue': [_schedule_item(task) for task in _overdue(mine, with_role, timezone.localtime().date())],
+            'unscheduled': [_schedule_item(task) for task in with_role(context['unscheduled'])],
+        }
+        if view == 'year':
+            payload.update({
+                'year': context['year'],
+                'months': [
+                    {
+                        'first': month['first'],
+                        'count': month['count'],
+                        'cells': [
+                            None if cell is None else {
+                                'date': cell['date'], 'count': len(cell['tasks']), 'is_today': cell['is_today'],
+                                'is_weekend': cell['is_weekend'], 'week_start': cell['week_start'],
+                            }
+                            for cell in month['cells']
+                        ],
+                    }
+                    for month in context['year_months']
+                ],
+            })
+        elif view == 'month':
+            payload.update({
+                'month': context['month'], 'prev_month': context['prev_month'],
+                'next_month': context['next_month'], 'this_month': context['this_month'],
+                'days': [day(entry) for entry in context['days']],
+            })
+        else:
+            payload.update({
+                'start': context['start'], 'end': context['end'], 'prev_start': context['prev_start'],
+                'next_start': context['next_start'], 'this_week_start': context['this_week_start'],
+                'days': [day(entry) for entry in context['days']],
+            })
+        return Response(payload)
 
 
 class MyProgressView(APIView):
