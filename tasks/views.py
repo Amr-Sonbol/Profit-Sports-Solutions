@@ -2148,6 +2148,84 @@ def task_edit(request, pk):
     return render(request, 'tasks/task_edit.html', context)
 
 
+def create_task(request, form, creator, ticket=None, selected_machines=(), machine_decision=''):
+    """Creates the task from a valid TaskCreateForm — with any new site,
+    brand or task type it adds, the "created" event, the bell, the ticket
+    it came from (and its machines) — and emails the staff. The website's
+    New task and the app (api.views.TaskCreateView).
+    """
+    cleaned = form.cleaned_data
+    with transaction.atomic():
+        site = cleaned.get('site')
+        if not site:
+            site = Site.objects.create(
+                customer=cleaned['new_site_customer'], name=cleaned['new_site_name'].strip(),
+                address=cleaned.get('new_site_address', '').strip(),
+                contact_name=cleaned.get('new_site_contact_name', '').strip(),
+                contact_phone=cleaned.get('new_site_contact_phone', '').strip(),
+                access_notes=cleaned.get('new_site_access_notes', '').strip(),
+            )
+
+        brand = cleaned.get('brand')
+        if not brand and cleaned.get('new_brand_name'):
+            brand = Brand.objects.create(
+                name=cleaned['new_brand_name'].strip(),
+                portal_url=cleaned.get('new_brand_portal_url', ''),
+            )
+
+        task_type = cleaned.get('task_type')
+        if not task_type and cleaned.get('new_task_type_name'):
+            task_type = TaskType.objects.create(
+                code=cleaned['new_task_type_code'].strip(), name=cleaned['new_task_type_name'].strip(),
+                name_ar=cleaned['new_task_type_name_ar'].strip(),
+                category=cleaned['new_task_type_category'],
+            )
+
+        task = form.save(commit=False)
+        task.site = site
+        task.brand = brand
+        task.task_type = task_type
+        task.created_by = request.user
+        task.status = Task.Status.NEW
+        if ticket is not None:
+            task.pak_reference_number = ticket.pak_reference_number
+            task.shipping_company = ticket.shipping_company
+            task.shipping_tracking_number = ticket.shipping_tracking_number
+            task.reported_serial_numbers = (
+                ticket_machines_text(selected_machines)[0] if selected_machines else ticket.serial_numbers
+            )
+        # A manager's own schedule is locked from the moment it's
+        # set — a supervisor's stays open. See task_edit for the
+        # same rule applied to a reschedule.
+        task.schedule_time_locked = creator.is_manager_tier and bool(task.scheduled_for)
+        _save_new_task(task)
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.CREATED,
+            occurred_at=timezone.now(), actor=request.user,
+        )
+        TaskNotification.objects.create(task=task, created_at=timezone.now())
+        if selected_machines:
+            TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected_machines]).update(
+                decision=machine_decision, task=task, decided_by=request.user, decided_at=timezone.now(),
+            )
+            if ticket.kind == CustomerTicket.Kind.CUSTOMER and ticket.customer_id is None:
+                ticket.customer = site.customer
+                ticket.save(update_fields=['customer'])
+            settle_ticket_machines(ticket, request.user)
+        elif ticket is not None:
+            ticket.task = task
+            # An internal ticket stays internal — linking a customer
+            # would put it in their portal.
+            if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+                ticket.customer = site.customer
+            ticket.status = CustomerTicket.Status.CONVERTED
+            ticket.reviewed_by = request.user
+            ticket.reviewed_at = timezone.now()
+            ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
+    _send_new_task_email_to_staff(request, task)
+    return task
+
+
 @login_required
 def task_create(request):
     requesting_technician = require_technician(request)
@@ -2200,75 +2278,7 @@ def task_create(request):
     if request.method == 'POST':
         form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin)
         if form.is_valid():
-            cleaned = form.cleaned_data
-            with transaction.atomic():
-                site = cleaned.get('site')
-                if not site:
-                    site = Site.objects.create(
-                        customer=cleaned['new_site_customer'], name=cleaned['new_site_name'].strip(),
-                        address=cleaned.get('new_site_address', '').strip(),
-                        contact_name=cleaned.get('new_site_contact_name', '').strip(),
-                        contact_phone=cleaned.get('new_site_contact_phone', '').strip(),
-                        access_notes=cleaned.get('new_site_access_notes', '').strip(),
-                    )
-
-                brand = cleaned.get('brand')
-                if not brand and cleaned.get('new_brand_name'):
-                    brand = Brand.objects.create(
-                        name=cleaned['new_brand_name'].strip(),
-                        portal_url=cleaned.get('new_brand_portal_url', ''),
-                    )
-
-                task_type = cleaned.get('task_type')
-                if not task_type and cleaned.get('new_task_type_name'):
-                    task_type = TaskType.objects.create(
-                        code=cleaned['new_task_type_code'].strip(), name=cleaned['new_task_type_name'].strip(),
-                        name_ar=cleaned['new_task_type_name_ar'].strip(),
-                        category=cleaned['new_task_type_category'],
-                    )
-
-                task = form.save(commit=False)
-                task.site = site
-                task.brand = brand
-                task.task_type = task_type
-                task.created_by = request.user
-                task.status = Task.Status.NEW
-                if ticket is not None:
-                    task.pak_reference_number = ticket.pak_reference_number
-                    task.shipping_company = ticket.shipping_company
-                    task.shipping_tracking_number = ticket.shipping_tracking_number
-                    task.reported_serial_numbers = (
-                        ticket_machines_text(selected_machines)[0] if selected_machines else ticket.serial_numbers
-                    )
-                # A manager's own schedule is locked from the moment it's
-                # set — a supervisor's stays open. See task_edit for the
-                # same rule applied to a reschedule.
-                task.schedule_time_locked = requesting_technician.is_manager_tier and bool(task.scheduled_for)
-                _save_new_task(task)
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.CREATED,
-                    occurred_at=timezone.now(), actor=request.user,
-                )
-                TaskNotification.objects.create(task=task, created_at=timezone.now())
-                if selected_machines:
-                    TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected_machines]).update(
-                        decision=machine_decision, task=task, decided_by=request.user, decided_at=timezone.now(),
-                    )
-                    if ticket.kind == CustomerTicket.Kind.CUSTOMER and ticket.customer_id is None:
-                        ticket.customer = site.customer
-                        ticket.save(update_fields=['customer'])
-                    settle_ticket_machines(ticket, request.user)
-                elif ticket is not None:
-                    ticket.task = task
-                    # An internal ticket stays internal — linking a customer
-                    # would put it in their portal.
-                    if ticket.kind == CustomerTicket.Kind.CUSTOMER:
-                        ticket.customer = site.customer
-                    ticket.status = CustomerTicket.Status.CONVERTED
-                    ticket.reviewed_by = request.user
-                    ticket.reviewed_at = timezone.now()
-                    ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
-            _send_new_task_email_to_staff(request, task)
+            task = create_task(request, form, requesting_technician, ticket, selected_machines, machine_decision)
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             weekend_warning = _weekend_warning(task)
             if weekend_warning:

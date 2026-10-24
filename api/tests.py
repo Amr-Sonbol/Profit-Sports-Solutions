@@ -1344,3 +1344,32 @@ class WebsiteInTheAppTests(ApiTestCase):
         response = self.client.get('/api/website-session/?next=https://evil.example/', **self.auth(token))
         self.assertEqual(response['Location'], '/')
         self.assertEqual(self.client.get('/api/website-session/').status_code, 401)
+
+
+class TaskCreateApiTests(ApiTestCase):
+    # New task from the app: the website's form and rules.
+
+    def test_a_supervisor_creates_a_task(self):
+        token = self.token_for('supervisor1')
+        fields = self.client.get('/api/tasks/new/', **self.auth(token)).json()['fields']
+        self.assertIn(str(self.site.pk), [choice['value'] for choice in fields['site']['choices']])
+        self.assertEqual(fields['priority']['initial'], Task.Priority.NORMAL)
+
+        response = self.client.post('/api/tasks/new/', json.dumps({
+            'site': self.site.pk, 'brand': self.brand.pk, 'description': 'Treadmill belt slipping',
+            'priority': fields['priority']['initial'], 'source': fields['source']['initial'],
+            'billing_type': fields['billing_type']['initial'], 'reported_at': fields['reported_at']['initial'],
+            'is_warranty': False,
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        task = Task.objects.get(pk=response.json()['id'])
+        self.assertEqual((task.site, task.status, task.description), (self.site, Task.Status.NEW, 'Treadmill belt slipping'))
+        self.assertTrue(task.events.filter(event_type=TaskEvent.EventType.CREATED).exists())
+
+    def test_a_site_is_needed_and_a_technician_cannot_create(self):
+        token = self.token_for('supervisor1')
+        response = self.client.post('/api/tasks/new/', json.dumps({'description': 'x'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('site', response.json())
+        self.assertEqual(self.client.get('/api/tasks/new/', **self.auth(self.token_for('tech1'))).status_code, 403)

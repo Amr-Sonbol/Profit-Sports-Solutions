@@ -401,3 +401,11 @@ export interface WebsiteMenuGroup {
   heading: string;
   pages: { title: string; url: string; icon: string }[];
 }
+
+/** One field of the New task form (api/views.py TaskCreateView). */
+export interface FormFieldSpec {
+  label: string;
+  required: boolean;
+  initial: string;
+  choices?: Choice[];
+}

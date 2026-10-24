@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  FormFieldSpec,
   WebsiteMenuGroup,
   Person,
   MySkills,
@@ -214,4 +215,16 @@ export function setPersonAvailability(id: number, available: boolean, reason = '
 /** Every website page I may open, in the website menu's groups. */
 export function fetchWebsiteMenu() {
   return apiRequest<WebsiteMenuGroup[]>('/api/website-menu/');
+}
+
+/** New task: every field's label, default and choices, as on the website. */
+export function fetchNewTaskForm() {
+  return apiRequest<{ fields: Record<string, FormFieldSpec> }>('/api/tasks/new/');
+}
+
+/** Creates the task; field errors come back as a 400 like the website's. */
+export function createTask(values: Record<string, string | boolean>) {
+  return apiRequest<{ id: number; task_number: string; warning: string }>('/api/tasks/new/', {
+    method: 'POST', body: values,
+  });
 }

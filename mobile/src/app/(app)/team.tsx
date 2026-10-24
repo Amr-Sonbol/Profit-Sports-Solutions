@@ -13,6 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskListItem } from '@/types';
+import { useSession } from '@/context/auth';
 
 /**
  * Every open task in the viewer's active country — same view_tasks
@@ -24,6 +25,8 @@ import type { TaskListItem } from '@/types';
 export default function TeamTasksScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { me } = useSession();
+  const canCreate = me?.permissions?.includes('create_tasks') ?? false;
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -60,9 +63,18 @@ export default function TeamTasksScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ThemedText type="title" style={styles.heading}>
-          Team
-        </ThemedText>
+        <ThemedView style={styles.headerRow}>
+          <ThemedText type="title" style={styles.heading}>
+            Team
+          </ThemedText>
+          {canCreate ? (
+            <TouchableOpacity
+              style={[styles.newTask, { backgroundColor: theme.primary }]} onPress={() => router.push('/new-task')}
+            >
+              <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>+ New task</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+        </ThemedView>
         <ThemedView style={styles.switcher}>
           {(['tasks', 'progress'] as const).map((option) => (
             <TouchableOpacity
@@ -120,6 +132,11 @@ export default function TeamTasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingEnd: Spacing.three, backgroundColor: 'transparent',
+  },
+  newTask: { borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },

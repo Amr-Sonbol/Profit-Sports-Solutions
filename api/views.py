@@ -28,7 +28,7 @@ from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NewAssetForm, PauseTaskForm, ReviewLevelForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
@@ -42,7 +42,7 @@ from tasks.views import (
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
-    send_password_changed_email, set_availability, skills_summary, _reliability_stats,
+    send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -279,6 +279,66 @@ class MyScheduleView(APIView):
                 'days': [day(entry) for entry in context['days']],
             })
         return Response(payload)
+
+
+# The fields the app's New task screen fills in — the website form's,
+# less adding a new site / brand / task type there (admin and desk work).
+APP_TASK_FIELDS = [
+    'site', 'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority', 'source',
+    'is_warranty', 'billing_type', 'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
+]
+
+
+def _form_errors(form):
+    return {field: [str(error) for error in errors] for field, errors in form.errors.items()}
+
+
+class TaskCreateView(APIView):
+    """The app's New task — the website's (tasks.views.task_create), with
+    the same form, rules and side effects (create_task): GET the choices
+    for every field, in the viewer's country and language, with the
+    defaults; POST the fields (times as YYYY-MM-DDTHH:MM, local). Needs
+    create_tasks. Converting a ticket stays on the ticket's own page.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def _form(self, request, data=None):
+        if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
+            raise PermissionDenied
+        technician = request.user.technician
+        return TaskCreateForm(data, country=get_active_country(request) or technician.country,
+                              is_admin=technician.role == Technician.Role.ADMIN)
+
+    def get(self, request):
+        form = self._form(request)
+        fields = {}
+        for name in APP_TASK_FIELDS:
+            field = form.fields[name]
+            initial = form[name].initial
+            fields[name] = {
+                'label': str(field.label),
+                'required': name in ('site', 'priority', 'source', 'billing_type', 'reported_at'),
+                'initial': '' if initial is None else str(getattr(initial, 'pk', initial)),
+                **({'choices': [
+                    {'value': str(value), 'label': str(label)} for value, label in field.choices if str(value) != ''
+                ]} if hasattr(field, 'choices') else {}),
+            }
+        return Response({'fields': fields})
+
+    def post(self, request):
+        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS}
+        if str(data['is_warranty']).lower() not in ('true', '1', 'on'):
+            data.pop('is_warranty')
+        form = self._form(request, data)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        task = create_task(request, form, request.user.technician)
+        warning = _weekend_warning(task)
+        return Response(
+            {'id': task.pk, 'task_number': task.task_number, 'warning': str(warning) if warning else ''},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class WebsiteMenuView(APIView):

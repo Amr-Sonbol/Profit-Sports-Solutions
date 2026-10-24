@@ -12,6 +12,7 @@ urlpatterns = [
     path('my-today/', views.MyTodayView.as_view(), name='my_today'),
     path('my-schedule/', views.MyScheduleView.as_view(), name='my_schedule'),
     path('my-skills/', views.MySkillsView.as_view(), name='my_skills'),
+    path('tasks/new/', views.TaskCreateView.as_view(), name='task_create'),
     path('website-menu/', views.WebsiteMenuView.as_view(), name='website_menu'),
     path('website-session/', views.WebsiteSessionView.as_view(), name='website_session'),
     path('people/<int:pk>/', views.PersonView.as_view(), name='person'),
