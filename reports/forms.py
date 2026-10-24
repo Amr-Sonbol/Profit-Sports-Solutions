@@ -65,7 +65,7 @@ class WorkReportForm(forms.ModelForm):
     class Meta:
         model = WorkReport
         fields = [
-            'findings', 'work_lines', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
+            'findings', 'work_lines', 'action_taken', 'resolved', 'customer_name',
             'signature_waived_reason', 'recommendations', 'recommendation',
         ]
         widgets = {
@@ -82,8 +82,11 @@ class WorkReportForm(forms.ModelForm):
             'recommendation': _('Other recommendation'),
         }
 
-    def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', **kwargs):
+    def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', time_on_site=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # The visit's hours (Task.time_on_site) — worked out from the taps,
+        # not typed; a helper's own hours can't exceed them.
+        self.time_on_site = time_on_site
         self.fields['send_copy_to'].initial = (self.instance.copy_sent_to if self.instance.pk else '') or copy_to_default
         # The task type's requires_signature — met by a new upload or one
         # already on file from an earlier filing of this same report.
@@ -120,7 +123,7 @@ class WorkReportForm(forms.ModelForm):
             except ValueError:
                 self.add_error('signature', _('The signature could not be read. Please sign again.'))
                 return cleaned
-        labour_hours = cleaned.get('labour_hours')
+        labour_hours = self.time_on_site
         for assignment in self.helpers:
             hours = cleaned.get(f'helper_hours_{assignment.pk}')
             if hours is not None and labour_hours is not None and hours > labour_hours:

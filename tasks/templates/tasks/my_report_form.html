@@ -170,21 +170,21 @@
         <span class="report-step__number">4</span>
         <div>
             <h2 class="report-step__title">{% translate "Hours and parts" %}</h2>
-            <p class="field__help">{% translate "Your hours on site, and any parts you fitted." %}</p>
+            <p class="field__help">{% translate "Your time on site is worked out from your taps. Add any parts you fitted." %}</p>
         </div>
     </div>
     <div class="section" data-staff-only>
-        <div class="form-grid">
-            <div class="field {% if report_form.labour_hours.errors %}field--error{% endif %}" data-staff-only>
-                <label for="{{ report_form.labour_hours.id_for_label }}">{{ report_form.labour_hours.label }}</label>
-                {{ report_form.labour_hours }}
-                {% for error in report_form.labour_hours.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            </div>
-        </div>
+        {# Not typed: from "Start" to sending the report, less pauses — Task.time_on_site. #}
+        <p><strong>{% translate "Time on site" %}:</strong>
+            {% if time_on_site %}{{ time_on_site }} {% translate "hours" context "time on site" %}{% else %}—{% endif %}</p>
+        <p class="field__help">
+            {% if time_is_final %}{% translate "From when you tapped Start until the report was sent, without pauses. Waiting for review doesn't count." %}
+            {% else %}{% translate "From when you tapped Start until now, without pauses. It stops when you send the report; waiting for review doesn't count." %}{% endif %}
+        </p>
         {% if report_form.helpers %}
         <div data-staff-only>
             <h3>{% translate "Helpers' hours" %}</h3>
-            <p class="field__help">{% translate "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early." %}</p>
+            <p class="field__help">{% translate "Each helper is credited with the time on site. Enter a value only if it is less, for example for a team member who left early." %}</p>
             <div class="form-grid">
                 {% for field in report_form.helper_fields %}
                 <div class="field {% if field.errors %}field--error{% endif %}">
@@ -238,7 +238,7 @@
     </div>
     <div class="section">
         {# While the customer signs: the time on site, as on their report (filled in by signature-pad.js). #}
-        <p data-signing-only><strong>{% translate "Time on site" %}:</strong> <span data-signing-hours></span> {% translate "hours" context "time on site" %}</p>
+        <p data-signing-only><strong>{% translate "Time on site" %}:</strong> {{ time_on_site|default:"—" }} {% translate "hours" context "time on site" %}</p>
         <p data-signoff-start hidden data-staff-only>
             <button type="button" class="button button--secondary">{% translate "Hand to customer for signature" %}</button>
         </p>

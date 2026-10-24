@@ -1,5 +1,6 @@
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
@@ -236,6 +237,44 @@ class Task(models.Model):
         if self.scheduled_for is None or self.estimated_hours is None:
             return None
         return self.scheduled_for + timedelta(hours=float(self.estimated_hours))
+
+    def time_on_site(self, until=None):
+        """The visit's hours, worked out from the lead's taps — never typed:
+        from their first "Start" (in the app or on the website) until the
+        report was first sent ("Completed"), less any "Paused" until
+        "Resumed". Waiting for review, a rejection or a later correction
+        adds nothing. Before the first sending it runs to `until` (when the
+        report is being filed; now by default). A manager's corrected tap
+        time counts in place of the original. Rounded to the nearest
+        quarter hour, at least a quarter; None before "Start".
+        Same rule as WorkReport.tapped_hours.
+        """
+        from django.utils import timezone
+
+        kinds = TaskEvent.EventType
+        events = sorted(
+            (event.effective_at, event.event_type)
+            for event in self.events.filter(event_type__in=[
+                kinds.STARTED, kinds.PAUSED, kinds.RESUMED, kinds.COMPLETED,
+            ])
+        )
+        start = next((at for at, kind in events if kind == kinds.STARTED), None)
+        if start is None:
+            return None
+        end = next((at for at, kind in events if kind == kinds.COMPLETED and at > start), None)
+        end = end or max(until or timezone.now(), start)
+        paused, paused_at = timedelta(0), None
+        for at, kind in events:
+            if not start < at < end:
+                continue
+            if kind == kinds.PAUSED and paused_at is None:
+                paused_at = at
+            elif kind == kinds.RESUMED and paused_at is not None:
+                paused, paused_at = paused + (at - paused_at), None
+        if paused_at is not None:
+            paused += end - paused_at
+        quarters = max(round((end - start - paused).total_seconds() / 900), 1)
+        return (Decimal(quarters) / 4).quantize(Decimal('0.01'))
 
     def __str__(self):
         return self.task_number

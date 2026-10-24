@@ -1,6 +1,6 @@
 import json
 from unittest.mock import patch
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -220,7 +220,6 @@ class MyTaskReportTests(ApiTestCase):
         response = self._file(token)
         self.assertEqual(response.status_code, 201)
         report = WorkReport.objects.get(task=self.task)
-        self.assertEqual(str(report.labour_hours), '2.50')
         self.assertTrue(report.resolved)
         self.assertTrue(report.signature_url.startswith('http'))
         self.assertEqual(list(report.parts_used.values_list('part_code', flat=True)), ['BELT-01'])
@@ -293,7 +292,7 @@ class MyTaskReportTests(ApiTestCase):
         response = self._file(token, labour_hours='3.00', signature=None, parts=[])
         self.assertEqual(response.status_code, 200)
         report = WorkReport.objects.get(task=self.task)
-        self.assertEqual(str(report.labour_hours), '3.00')
+        self.assertEqual(str(report.labour_hours), '0.00')  # typed hours are ignored; no Start tap here
         self.assertEqual(report.signature_url, first_signature)
         self.assertFalse(report.parts_used.exists())
         self.assertEqual(
@@ -306,15 +305,30 @@ class MyTaskReportTests(ApiTestCase):
         self.assertIsNone(response.json()['report'])
         self._file(token)
         body = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['report']
-        self.assertEqual(body['labour_hours'], '2.50')
         self.assertEqual(body['parts_used'][0]['part_code'], 'BELT-01')
 
-    def test_missing_labour_hours_is_rejected(self):
+    def test_the_hours_come_from_the_start_tap_not_from_typing(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=2), actor=self.supervisor_user,
+        )
         token = self.token_for('tech1')
+        self.assertEqual(
+            self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['time_on_site'],
+            '2.00',
+        )
         response = self._file(token, labour_hours='')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('labour_hours', response.json())
-        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.00')
+
+    def test_a_report_filed_offline_counts_until_it_was_filed(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=5), actor=self.supervisor_user,
+        )
+        filed_at = (timezone.now() - timedelta(hours=4)).isoformat()
+        self._file(self.token_for('tech1'), filed_at=filed_at)
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '1.00')
 
     def test_half_filled_part_row_is_rejected(self):
         token = self.token_for('tech1')

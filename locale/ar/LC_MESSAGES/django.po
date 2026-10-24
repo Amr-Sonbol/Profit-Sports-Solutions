@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 14:42+0000\n"
+"POT-Creation-Date: 2026-10-24 15:13+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1630,8 +1630,8 @@ msgstr "تنزيل التقرير (PDF)"
 msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
 msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. الملف «%(name)s» يتجاوز هذا الحد."
 
-msgid "Each helper is credited with the hours above. Enter a value only if it differs, for example for a team member who left early."
-msgstr "يُحتسب لكل مساعد عدد الساعات أعلاه. يرجى إدخال قيمة فقط إذا كانت مختلفة، كأن يكون أحد أعضاء الفريق قد غادر مبكراً."
+msgid "Each helper is credited with the time on site. Enter a value only if it is less, for example for a team member who left early."
+msgstr "يُحتسب لكل مساعد وقت العمل في الموقع. أدخل قيمة فقط إذا كانت أقل، مثلًا لعضو في الفريق غادر مبكرًا."
 
 msgid "Each marked day has tasks; the number is how many. Click a day for its week, or a month for its month."
 msgstr "الأيام المميزة فيها مهام، والرقم يبيّن عددها. اضغط على يوم لعرض أسبوعه، أو على شهر لعرضه."
@@ -1878,6 +1878,12 @@ msgstr "الجمعة"
 
 msgid "From customer"
 msgstr "من العميل"
+
+msgid "From when you tapped Start until now, without pauses. It stops when you send the report; waiting for review doesn't count."
+msgstr "من ضغطك على «بدء العمل» حتى الآن، دون فترات التوقف. يتوقف العدّ عند إرسال التقرير، ولا يُحتسب وقت انتظار المراجعة."
+
+msgid "From when you tapped Start until the report was sent, without pauses. Waiting for review doesn't count."
+msgstr "من ضغطك على «بدء العمل» حتى إرسال التقرير، دون فترات التوقف. لا يُحتسب وقت انتظار المراجعة."
 
 msgid "Goodwill"
 msgstr "مجاملة"
@@ -4911,9 +4917,6 @@ msgstr "بياناتك"
 msgid "Your feedback has already been recorded. Thank you for your time."
 msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
-msgid "Your hours on site, and any parts you fitted."
-msgstr "ساعات عملك في الموقع، وأي قطع قمت بتركيبها."
-
 msgid "Your login email"
 msgstr "البريد الإلكتروني لتسجيل الدخول"
 
@@ -4946,6 +4949,9 @@ msgstr "تم تحويل تذكرتكم إلى مهمة خدمة. سنتواصل 
 
 msgid "Your tickets"
 msgstr "طلباتك"
+
+msgid "Your time on site is worked out from your taps. Add any parts you fitted."
+msgstr "يُحسب وقتك في الموقع تلقائيًا من خطواتك في التطبيق. أضف أي قطع قمت بتركيبها."
 
 msgid "Your username, for your reference:"
 msgstr "اسم المستخدم الخاص بك، للرجوع إليه:"

@@ -6225,7 +6225,7 @@ class MyReportFormTests(TaskTestCase):
 
         response = self.client.post(self.url, self._base_payload(labour_hours='9.00'))
         self.assertRedirects(response, f'/tasks/my/{self.task.pk}/')
-        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '1.50')
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '0.00')  # no Start tap here
 
     def test_manager_corrects_a_closed_report_and_it_stays_closed(self):
         self.client.login(username='tech1', password='pass12345')
@@ -6246,15 +6246,15 @@ class MyReportFormTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.CLOSED)
-        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.25')
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
 
     def test_hours_and_prices_are_marked_staff_only_for_the_signing_view(self):
         self.client.login(username='tech1', password='pass12345')
         html = self.client.get(self.url).content.decode()
         self.assertIn('data-report-form', html)
-        hours_field = html[html.index('name="labour_hours"') - 400:html.index('name="labour_hours"')]
-        self.assertIn('data-staff-only', hours_field)
+        # The hours aren't typed any more — shown, worked out from the taps.
+        self.assertNotIn('name="labour_hours"', html)
+        self.assertIn('data-signing-only', html)
         self.assertIn('data-signoff-start', html)
 
     def test_supervisor_cannot_use_the_manager_correction(self):
@@ -7708,9 +7708,9 @@ class TappedHoursTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
         form = WorkReportForm({
-            'findings': 'x', 'resolved': 'True', 'labour_hours': '2', 'customer_name': 'Ali',
+            'findings': 'x', 'resolved': 'True', 'customer_name': 'Ali',
             f'helper_hours_{helper.pk}': '3',
-        }, helpers=[helper])
+        }, helpers=[helper], time_on_site=Decimal('2'))
         self.assertFalse(form.is_valid())
         self.assertIn(f'helper_hours_{helper.pk}', form.errors)
 
@@ -8785,9 +8785,10 @@ class CorporateReportTests(TicketMachineFindingsTests):
 
     def test_the_customer_sees_the_time_on_site(self):
         from reports.pdf import changed_after_signing, render_visit_report_html
-        report = self._file(labour_hours='2.50')
+        self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2, minutes=30))
+        report = self._file()
         self.assertIn('2.5 hours', render_visit_report_html(report, language='en'))
-        self.assertContains(self.client.get(self.report_url), 'data-signing-hours')
+        self.assertContains(self.client.get(self.report_url), 'Time on site')
 
     def test_a_report_signed_before_the_time_was_shown_is_not_marked_changed(self):
         from reports.pdf import changed_after_signing, report_content
@@ -8796,3 +8797,25 @@ class CorporateReportTests(TicketMachineFindingsTests):
         older.pop('hours')
         report.signed_content = {**older, 'signature_url': ''}
         self.assertFalse(changed_after_signing(report))
+
+    def _tap(self, kind, at):
+        TaskEvent.objects.create(task=self.task, event_type=kind, occurred_at=at, actor=self.supervisor_user)
+
+    def test_the_time_on_site_runs_from_start_to_sending_without_pauses_or_review(self):
+        start = timezone.now() - timedelta(days=1)
+        kinds = TaskEvent.EventType
+        self._tap(kinds.ARRIVED, start - timedelta(minutes=20))  # not counted: the clock starts at "Start"
+        self._tap(kinds.STARTED, start)
+        self._tap(kinds.PAUSED, start + timedelta(hours=1))
+        self._tap(kinds.RESUMED, start + timedelta(hours=3))
+        self._tap(kinds.COMPLETED, start + timedelta(hours=3, minutes=32))
+        # Waiting for review and approval adds nothing.
+        self._tap(kinds.SUPERVISOR_APPROVED, start + timedelta(hours=9))
+        self.assertEqual(self.task.time_on_site(), Decimal('1.50'))
+
+    def test_the_hours_are_worked_out_not_typed(self):
+        self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2))
+        report = self._file(labour_hours='9')
+        self.assertEqual(report.labour_hours, Decimal('2.00'))
+        # A later correction keeps the time the report was first sent.
+        self.assertEqual(self._file(labour_hours='9').labour_hours, Decimal('2.00'))

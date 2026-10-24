@@ -98,7 +98,9 @@ export default function ReportScreen() {
   const [findings, setFindings] = useState('');
   const [actionTaken, setActionTaken] = useState('');
   const [resolved, setResolved] = useState(true);
+  // The visit's hours, worked out by the server from the taps — shown, not typed.
   const [labourHours, setLabourHours] = useState('');
+  const [timeIsFinal, setTimeIsFinal] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [parts, setParts] = useState<PartRow[]>([]);
   // The parts catalogue (Parts screen on the web); once it has anything in
@@ -156,6 +158,8 @@ export default function ReportScreen() {
       setHelpers(reportHelpers);
       setHelperHours(Object.fromEntries(reportHelpers.map((helper) => [String(helper.id), helper.labour_hours ?? ''])));
       setSendCopyTo(reportResult.data.send_copy_to ?? '');
+      setLabourHours(reportResult.data.time_on_site ?? '');
+      setTimeIsFinal(Boolean(reportResult.data.time_is_final));
       const reportBrands = reportResult.data.brands ?? [];
       setBrands(reportBrands);
       setSiteMachines(reportResult.data.site_machines ?? []);
@@ -177,7 +181,6 @@ export default function ReportScreen() {
         setRecommendations(input.recommendations ?? []);
         setRecommendation(input.recommendation ?? '');
         setResolved(input.resolved);
-        setLabourHours(input.labour_hours);
         setCustomerName(input.customer_name);
         setNewSignature(input.signature);
         setSignatureOnFile(Boolean(report?.signature_url));
@@ -208,7 +211,6 @@ export default function ReportScreen() {
         setRecommendations(report.recommendations ?? []);
         setRecommendation(report.recommendation ?? '');
         setResolved(report.resolved);
-        setLabourHours(report.labour_hours);
         setCustomerName(report.customer_name);
         setSignatureOnFile(Boolean(report.signature_url));
         setNotSigned(Boolean(report.signature_waived_reason));
@@ -285,7 +287,6 @@ export default function ReportScreen() {
       recommendations,
       recommendation,
       resolved,
-      labour_hours: labourHours,
       customer_name: customerName,
       // Fully blank rows are just unused space, same as the web form.
       parts: parts
@@ -323,7 +324,7 @@ export default function ReportScreen() {
     setIsBusy(true);
     setErrors({});
     const location = await currentLocation();
-    const input = { ...reportInput(), ...(location ?? {}) };
+    const input = { ...reportInput(), ...(location ?? {}), filed_at: new Date().toISOString() };
     try {
       const result = await submitMyReport(Number(id), input);
       removePendingReport(Number(id));
@@ -723,19 +724,26 @@ export default function ReportScreen() {
             </Field>
 
 
-            <StepTitle number={4} title="Hours and parts" hint="Your hours on site, and any parts you fitted." />
-            <Field label="Labour hours" error={errors.labour_hours}>
-              <TextInput
-                style={inputStyle} value={labourHours} onChangeText={setLabourHours}
-                keyboardType="decimal-pad" placeholder="e.g. 2.5" placeholderTextColor={theme.textSecondary}
-              />
-            </Field>
+            <StepTitle
+              number={4} title="Hours and parts"
+              hint="Your time on site is worked out from your taps. Add any parts you fitted."
+            />
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">
+                Time on site: {labourHours ? `${Number(labourHours)} hours` : '—'}
+              </ThemedText>
+              <ThemedText themeColor="textSecondary" type="small">
+                {timeIsFinal
+                  ? 'From when you tapped Start until the report was sent, without pauses. Waiting for review doesn’t count.'
+                  : 'From when you tapped Start until now, without pauses. It stops when you send the report; waiting for review doesn’t count.'}
+              </ThemedText>
+            </ThemedView>
 
             {helpers.length > 0 ? (
               <ThemedView style={styles.section}>
                 <ThemedText type="smallBold">Helpers’ hours</ThemedText>
                 <ThemedText themeColor="textSecondary" type="small">
-                  Each helper gets the same hours as above. Fill one in only if it was different.
+                  Each helper gets the time on site. Fill one in only if it was less (someone who left early).
                 </ThemedText>
                 {helpers.map((helper) => (
                   <Field

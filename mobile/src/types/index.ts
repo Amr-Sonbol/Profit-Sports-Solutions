@@ -175,7 +175,11 @@ export interface WorkReportInput {
   recommendations?: string[];
   recommendation?: string;
   resolved: boolean;
-  labour_hours: string;
+  // Ignored by the server now — the visit's hours come from the taps.
+  labour_hours?: string;
+  // When it was filed: a report saved offline is sent later, and the
+  // visit's time stops at filing, not at sending.
+  filed_at?: string;
   customer_name: string;
   parts: PartUsed[];
   // A PNG data URL from the signature pad; null keeps the one on file.

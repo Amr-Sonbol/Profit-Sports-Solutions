@@ -57,6 +57,9 @@ export function fetchMyReport(id: number) {
     report: WorkReport | null;
     helpers?: ReportHelper[];
     send_copy_to?: string;
+    // The visit's hours from the taps, and whether the report was sent (then fixed).
+    time_on_site?: string | null;
+    time_is_final?: boolean;
     machines?: ReportMachine[];
     site_machines?: SiteMachine[];
     brands?: Brand[];

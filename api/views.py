@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -572,6 +573,10 @@ class MyTaskReportView(APIView):
             'report': WorkReportSerializer(report).data if report else None,
             # "Send a copy to" starts as wherever the last copy went, else the site's contact.
             'send_copy_to': (report.copy_sent_to if report else '') or task.site.effective_contact_email or '',
+            # The visit's hours, from the taps — shown, never typed (Task.time_on_site);
+            # final once the report has been sent.
+            'time_on_site': str(task.time_on_site() or '') or None,
+            'time_is_final': bool(report and report.submitted_at),
             # Each helper's hours box: empty = same as the report's.
             'helpers': [
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
@@ -610,7 +615,7 @@ class MyTaskReportView(APIView):
 
         data = {
             field: request.data.get(field, '')
-            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name', 'send_copy_to', 'recommendation')
+            for field in ('findings', 'action_taken', 'customer_name', 'send_copy_to', 'recommendation')
         }
         # The standard work lines and recommendations, as lists of codes.
         data['work_lines'] = list(request.data.get('work_lines') or [])
@@ -626,10 +631,17 @@ class MyTaskReportView(APIView):
             data['signature_waived_reason'] = waived_reason
         for assignment_id, hours in (request.data.get('helper_hours') or {}).items():
             data[f'helper_hours_{assignment_id}'] = '' if hours is None else str(hours)
+        # A report saved offline in the app carries when it was filed: the
+        # visit's time stops then, not when the phone was back online.
+        filed_at = parse_datetime(str(request.data.get('filed_at') or ''))
+        if filed_at is not None:
+            filed_at = min(filed_at if timezone.is_aware(filed_at) else timezone.make_aware(filed_at), timezone.now())
         report_form = WorkReportForm(
             data, instance=getattr(task, 'report', None),
             require_signature=_requires_signature(task) and not preview, helpers=_active_helpers(task),
+            time_on_site=task.time_on_site(until=filed_at),
         )
+        report_form.filed_at = filed_at
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
         machine_rows = request.data.get('machines')
         machine_forms = None

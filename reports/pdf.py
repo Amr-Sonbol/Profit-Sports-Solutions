@@ -2,6 +2,7 @@
 the technician recorded, the machines and parts, and the customer's
 sign-off. Rendered in the language asked for, right to left in Arabic.
 """
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -83,7 +84,7 @@ def report_content(report):
         'findings': report.findings,
         'action_taken': report.action_taken,
         'resolved': report.resolved,
-        'hours': str(report.labour_hours),
+        'hours': f'{report.labour_hours:.2f}',
         'customer_name': report.customer_name,
         'machines': machines,
         'parts': parts,
@@ -110,6 +111,13 @@ def changed_after_signing(report):
     if 'hours' not in signed:
         current.pop('hours')  # signed before the report showed the time on site
     return signed != current
+
+
+def _hours_text(hours):
+    """'2.50' -> '2.5', '3.00' -> '3'; '' for none or zero."""
+    if not hours or Decimal(hours) == 0:
+        return ''
+    return f'{Decimal(hours):f}'.rstrip('0').rstrip('.') if '.' in hours else hours
 
 
 def _next_visit(task):
@@ -160,8 +168,9 @@ def _template_context(report, content, signature_url, signed_at, changed):
             if code in dict(Recommendation.choices)
         ] + ([content['recommendation']] if content.get('recommendation') else []),
         'next_visit': _next_visit(task),
-        # The time on site as "2.5", "3" — none on reports signed before it was shown.
-        'hours': content['hours'].rstrip('0').rstrip('.') if '.' in content.get('hours', '') else content.get('hours', ''),
+        # The time on site as "2.5", "3" — none on reports signed before it
+        # was shown, or with no taps to work it out from.
+        'hours': _hours_text(content.get('hours')),
         'parts': content['parts'],
         'signature_url': signature_url,
         'signed_at': signed_at,

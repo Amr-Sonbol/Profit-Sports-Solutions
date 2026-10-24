@@ -1884,6 +1884,11 @@ def task_detail(request, pk):
             event.corrected_by = request.user
             event.correction_reason = correct_form.cleaned_data['reason']
             event.save(update_fields=['corrected_at', 'corrected_by', 'correction_reason'])
+            # The visit's hours come from these times (Task.time_on_site).
+            report = getattr(task, 'report', None)
+            if report is not None and report.submitted_at:
+                report.labour_hours = task.time_on_site() or report.labour_hours
+                report.save(update_fields=['labour_hours'])
             messages.success(request, _('Time corrected.'))
         else:
             messages.error(request, ' '.join(error for errors in correct_form.errors.values() for error in errors))
@@ -5052,6 +5057,10 @@ def save_work_report(request, task, technician, report_form, part_rows):
     saved_report = report_form.save(commit=False)
     saved_report.task = task
     saved_report.submitted_at = timezone.now()
+    # Worked out from the lead's taps, never typed (Task.time_on_site);
+    # `filed_at` is when a report saved offline in the app was filed.
+    filed_at = getattr(report_form, 'filed_at', None)
+    saved_report.labour_hours = task.time_on_site(until=filed_at) or saved_report.labour_hours or 0
     signature = report_form.cleaned_data.get('signature')
     if signature:
         path = default_storage.save(f'signatures/{task.pk}/{signature.name}', signature)
@@ -5315,6 +5324,7 @@ def _report_form(request, task, technician, back_url):
     ]
 
     helpers = _active_helpers(task)
+    time_on_site = task.time_on_site()
     if request.method == 'POST':
         # "Preview report": the report as it would be sent, in a new tab —
         # nothing saved, and no signature needed yet.
@@ -5326,6 +5336,7 @@ def _report_form(request, task, technician, back_url):
         report_form = WorkReportForm(
             data, None if preview else request.FILES, instance=report,
             require_signature=_requires_signature(task) and not preview, helpers=helpers,
+            time_on_site=time_on_site,
         )
         existing_formset = ExistingAssetFormSet(
             request.POST, initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
@@ -5353,7 +5364,7 @@ def _report_form(request, task, technician, back_url):
     else:
         report_form = WorkReportForm(
             instance=report, require_signature=_requires_signature(task), helpers=helpers,
-            copy_to_default=task.site.effective_contact_email or '',
+            copy_to_default=task.site.effective_contact_email or '', time_on_site=time_on_site,
         )
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},
@@ -5376,6 +5387,9 @@ def _report_form(request, task, technician, back_url):
         'has_existing_assets': bool(existing_assets),
         'new_formset': new_formset,
         'part_formset': part_formset,
+        # "2.5", "3": the visit's hours from the taps (Task.time_on_site).
+        'time_on_site': f'{time_on_site:f}'.rstrip('0').rstrip('.') if time_on_site is not None else None,
+        'time_is_final': report is not None and report.submitted_at is not None,
     }
     return render(request, 'tasks/my_report_form.html', context)
 

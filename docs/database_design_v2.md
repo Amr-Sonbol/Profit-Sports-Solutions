@@ -870,7 +870,7 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | recommendations | varchar[] | standard recommendations (`reports.phrases.Recommendation`) |
 | recommendation | text | blank — another recommendation, typed |
 | resolved | bool | |
-| labour_hours | decimal | |
+| labour_hours | decimal | worked out, never typed: from the lead's first "Started" tap (app or website) to the first "Completed" (the report first sent), less "Paused"→"Resumed" — waiting for review, rejections and later corrections add nothing. Nearest quarter hour, at least ¼. A report filed offline counts until it was filed on the phone. A manager correcting a tap time recomputes it. Shown to the customer as "Time on site" and part of what they sign |
 | customer_name | varchar | who signed |
 | signature_url | varchar | |
 | signature_waived_reason | text | blank — filled in when the customer wasn't available to sign |
