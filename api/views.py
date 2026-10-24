@@ -18,6 +18,8 @@ from people.models import PushDevice, RolePermission
 from people.permissions import get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
 from reference.models import Brand, Part
+from reports.pdf import report_language
+from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, NewAssetForm, PauseTaskForm,
@@ -483,12 +485,14 @@ def _report_machines(task):
             'asset_id': row['asset'], 'name': _machine_label(site_assets[row['asset']]),
             'serial_no': site_assets[row['asset']].serial_no,
             'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+            'finding_code': row.get('finding_code', ''), 'action_code': row.get('action_code', ''), 'action': row.get('action', ''),
         }
         for row in existing if row['asset'] in site_assets
     ] + [
         {
             'ticket_machine_id': row['ticket_machine'], 'brand_id': None, 'model_name': row['model_name'],
             'serial_no': row['serial_no'], 'outcome': '', 'note': '',
+            'finding_code': '', 'action_code': '', 'action': '',
         }
         for row in new
     ]
@@ -500,19 +504,29 @@ def _report_machines(task):
         ],
         'brands': [{'id': brand.pk, 'name': brand.name} for brand in Brand.objects.filter(is_active=True)],
         'outcomes': [{'value': value, 'label': label} for value, label in TaskAsset.Outcome.choices],
+        # The report's standard wording (reports.phrases), to pick from.
+        'findings': [{'value': value, 'label': label} for value, label in Finding.choices],
+        'actions': [{'value': value, 'label': label} for value, label in Action.choices],
+        'work_line_choices': [{'value': value, 'label': label} for value, label in WorkLine.choices],
+        'recommendation_choices': [{'value': value, 'label': label} for value, label in Recommendation.choices],
+        # What the customer reads it in: anything typed should be in this language.
+        'report_language': report_language(task.site.customer),
     }
 
 
 def _machine_form(task, row):
     """The web form's validation for one machine row from the app."""
     if row.get('asset_id'):
-        return ExistingAssetOutcomeForm(
-            {'asset': row.get('asset_id'), 'outcome': row.get('outcome', ''), 'note': row.get('note', '')},
-            site=task.site,
-        )
+        return ExistingAssetOutcomeForm({
+            'asset': row.get('asset_id'), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+            'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
+            'action': row.get('action', ''),
+        }, site=task.site)
     return NewAssetForm({
         'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
         'serial_no': row.get('serial_no', ''), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+        'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
+        'action': row.get('action', ''),
         'ticket_machine': row.get('ticket_machine_id') or '',
     })
 
@@ -596,8 +610,11 @@ class MyTaskReportView(APIView):
 
         data = {
             field: request.data.get(field, '')
-            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name', 'send_copy_to')
+            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name', 'send_copy_to', 'recommendation')
         }
+        # The standard work lines and recommendations, as lists of codes.
+        data['work_lines'] = list(request.data.get('work_lines') or [])
+        data['recommendations'] = list(request.data.get('recommendations') or [])
         data['resolved'] = str(bool(request.data.get('resolved')))
         data['signature_drawn'] = request.data.get('signature') or ''
         waived_reason = request.data.get('signature_waived_reason') or ''

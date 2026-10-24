@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 13:47+0000\n"
+"POT-Creation-Date: 2026-10-24 13:57+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -399,6 +399,9 @@ msgstr "الحساب"
 msgid "Action"
 msgstr "الإجراء"
 
+msgid "Action Taken"
+msgstr "الإجراء المتخذ"
+
 msgid "Action taken"
 msgstr "الإجراء المتخذ"
 
@@ -517,6 +520,10 @@ msgstr "بعد"
 msgid "All"
 msgstr "الكل"
 
+#, python-format
+msgid "All %(brand)s equipment"
+msgstr "جميع معدات %(brand)s"
+
 msgid "All active customers across all countries, for search and management. This view is not affected by the country selector above."
 msgstr "جميع العملاء النشطين في جميع الدول، لأغراض البحث والإدارة. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
 
@@ -525,6 +532,12 @@ msgstr "جميع الفنيين النشطين في جميع الدول، لأغ
 
 msgid "All additions, changes and deletions made through Django admin, together with every account action (logins created, passwords reset, accounts unlocked, devices signed out, logins enabled or disabled), newest first. A task's history is shown on its detail page."
 msgstr "جميع الإضافات والتعديلات والحذف التي تمت من خلال لوحة إدارة Django، مع كل إجراء على الحسابات (إنشاء حسابات الدخول، وإعادة تعيين كلمات المرور، وفك القفل، وتسجيل الخروج من الأجهزة، وتفعيل الدخول أو تعطيله)، الأحدث أولًا. يظهر سجل المهمة في صفحة تفاصيلها."
+
+msgid "All bolts checked and tightened."
+msgstr "تم فحص جميع البراغي وإحكام شدّها."
+
+msgid "All cables inspected and confirmed in good condition."
+msgstr "تم فحص جميع الكابلات والتأكد من سلامتها."
 
 msgid "All countries"
 msgstr "كل الدول"
@@ -537,6 +550,15 @@ msgstr "كل الدول — الجدول الزمني"
 
 msgid "All customers"
 msgstr "كل العملاء"
+
+msgid "All machines cleaned."
+msgstr "تم تنظيف جميع الأجهزة."
+
+msgid "All machines greased."
+msgstr "تم تشحيم جميع الأجهزة."
+
+msgid "All machines tested to confirm proper operation."
+msgstr "تم اختبار جميع الأجهزة للتأكد من سلامة عملها."
 
 msgid "All open tasks have been scheduled."
 msgstr "تمت جدولة جميع المهام المفتوحة."
@@ -759,6 +781,12 @@ msgstr "المهارات الأساسية المعتمدة بالمستوى %(re
 msgid "Before"
 msgstr "قبل"
 
+msgid "Belt aligned and tensioned"
+msgstr "تم ضبط محاذاة السير وشدّه"
+
+msgid "Belt replaced"
+msgstr "تم استبدال السير"
+
 msgid "Best regards,"
 msgstr "مع أطيب التحيات،"
 
@@ -770,6 +798,9 @@ msgstr "معطّلة"
 
 msgid "Board"
 msgstr "اللوحة"
+
+msgid "Bolts tightened"
+msgstr "تم إحكام شدّ البراغي"
 
 msgid "Branch name or city"
 msgstr "اسم الفرع أو المدينة"
@@ -788,6 +819,9 @@ msgstr "العلامات التجارية"
 
 msgid "CSV file"
 msgstr "ملف CSV"
+
+msgid "Cable replaced"
+msgstr "تم استبدال الكابل"
 
 msgid "Cables, belts or pulleys"
 msgstr "الكابلات أو السيور أو البكرات"
@@ -967,6 +1001,9 @@ msgstr "اعتمده %(name)s"
 #, python-format
 msgid "Confirming your upcoming Profit Sports Solutions visit — %(number)s"
 msgstr "تأكيد زيارة Profit Sports Solutions القادمة — %(number)s"
+
+msgid "Console replaced"
+msgstr "تم استبدال لوحة التحكم"
 
 msgid "Contact"
 msgstr "جهة الاتصال"
@@ -1174,6 +1211,9 @@ msgstr "العملاء"
 
 msgid "DHL"
 msgstr "DHL"
+
+msgid "Damaged upholstery"
+msgstr "تلف في التنجيد"
 
 msgid "Dashboard"
 msgstr "لوحة التحكم"
@@ -1537,6 +1577,9 @@ msgstr "رفض"
 msgid "Dismissed"
 msgstr "مرفوضة"
 
+msgid "Display or console fault"
+msgstr "عطل في الشاشة أو لوحة التحكم"
+
 msgid "Display or electronics"
 msgstr "الشاشة أو الإلكترونيات"
 
@@ -1603,6 +1646,9 @@ msgstr "تعديل بيانات الفني"
 
 msgid "Edit technicians' details and profile photos"
 msgstr "تعديل بيانات الفنيين وصورهم الشخصية"
+
+msgid "Electrical connections and power supply checked."
+msgstr "تم فحص التوصيلات الكهربائية ومصدر الطاقة."
 
 msgid "Email"
 msgstr "البريد الإلكتروني"
@@ -1749,6 +1795,9 @@ msgstr "عطل"
 msgid "Faulty"
 msgstr "معطل"
 
+msgid "Faulty part replaced"
+msgstr "تم استبدال الجزء التالف"
+
 msgid "FedEx"
 msgstr "FedEx"
 
@@ -1767,6 +1816,9 @@ msgstr "تقديم التقرير"
 
 msgid "Filtered by:"
 msgstr "مُصفّى حسب:"
+
+msgid "Finding"
+msgstr "الملاحظة"
 
 msgid "Findings"
 msgstr "النتائج"
@@ -1882,9 +1934,6 @@ msgstr "الساعات"
 
 msgid "Hours already worked by the current lead"
 msgstr "الساعات التي عملها القائد الحالي"
-
-msgid "Hours and prices are not included in this report."
-msgstr "لا يتضمن هذا التقرير الساعات أو الأسعار."
 
 #, python-format
 msgid "Hours worked: %(hours)s"
@@ -2094,6 +2143,9 @@ msgstr "تم تفعيل تسجيل الدخول لـ %(name)s."
 msgid "Logistics updated."
 msgstr "تم تحديث بيانات الشحن."
 
+msgid "Loose bolts or parts"
+msgstr "براغٍ أو أجزاء غير محكمة"
+
 msgid "Low"
 msgstr "منخفضة"
 
@@ -2104,11 +2156,20 @@ msgstr "الجهاز"
 msgid "Machine %(number)s"
 msgstr "الجهاز %(number)s"
 
+msgid "Machine calibrated"
+msgstr "تمت معايرة الجهاز"
+
+msgid "Machine disassembled and the affected part greased"
+msgstr "تم فك الجهاز وتشحيم الجزء المتأثر"
+
 msgid "Machine serial number"
 msgstr "الرقم التسلسلي للجهاز"
 
 msgid "Machines"
 msgstr "الأجهزة"
+
+msgid "Machines calibrated."
+msgstr "تمت معايرة الأجهزة."
 
 msgid "Machines covered"
 msgstr "الأجهزة المشمولة"
@@ -2330,6 +2391,9 @@ msgstr "طلب جديد %(number)s — %(company)s"
 msgid "Next"
 msgstr "التالي"
 
+msgid "Next Visit"
+msgstr "الزيارة القادمة"
+
 msgid "Next job"
 msgstr "المهمة التالية"
 
@@ -2347,6 +2411,9 @@ msgstr "السنة التالية"
 
 msgid "No"
 msgstr "لا"
+
+msgid "No action needed"
+msgstr "لا يلزم أي إجراء"
 
 #, python-format
 msgid "No active %(role)s is available to receive escalations. Please add one from Technicians."
@@ -2405,6 +2472,9 @@ msgstr "لا توجد سجلات."
 
 msgid "No events recorded."
 msgstr "لا توجد أحداث مسجَّلة."
+
+msgid "No fault found"
+msgstr "لم يُعثر على أي عطل"
 
 msgid "No helpers on this task."
 msgstr "لا يوجد مساعدون في هذه المهمة."
@@ -2469,6 +2539,9 @@ msgstr "لا توجد صور."
 msgid "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in."
 msgstr "لم يتم إنشاء بيانات دخول إلى البوابة بعد. يرجى إنشاؤها لتمكين هذا العميل من متابعة تذاكره وسجل الخدمة. سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني مع رابط تسجيل الدخول، وسيعيّن العميل كلمة مروره الخاصة ويؤكد بيانات التواصل عند تسجيل الدخول لأول مرة."
 
+msgid "No power or an electrical fault"
+msgstr "انقطاع الطاقة أو عطل كهربائي"
+
 msgid "No products."
 msgstr "لا توجد منتجات."
 
@@ -2508,8 +2581,14 @@ msgstr "لا توجد طلبات هذا الشهر."
 msgid "No visits on record."
 msgstr "لا توجد زيارات مسجَّلة."
 
+msgid "Noise from a moving part"
+msgstr "صوت صادر من جزء متحرك"
+
 msgid "Noise or vibration"
 msgstr "صوت أو اهتزاز"
+
+msgid "Noise under heavy weights"
+msgstr "صوت عند استخدام أوزان ثقيلة"
 
 msgid "None submitted"
 msgstr "لم يتم إرسال أي شيء"
@@ -2712,6 +2791,12 @@ msgstr "أو صورة لملصق الرقم التسلسلي"
 msgid "Other"
 msgstr "أخرى"
 
+msgid "Other action"
+msgstr "إجراء آخر"
+
+msgid "Other finding"
+msgstr "ملاحظة أخرى"
+
 msgid "Other internal"
 msgstr "داخلية أخرى"
 
@@ -2767,6 +2852,12 @@ msgstr "جارٍ تجهيز القطعة"
 
 msgid "Part code"
 msgstr "رمز القطعة"
+
+msgid "Part inspected and adjusted"
+msgstr "تم فحص الجزء وضبطه"
+
+msgid "Part ordered, to be fitted on a follow-up visit"
+msgstr "تم طلب القطعة، وستُركَّب في زيارة لاحقة"
 
 msgid "Part updated."
 msgstr "تم تحديث القطعة."
@@ -3094,6 +3185,12 @@ msgstr "تمت إعادة الإسناد إلى %(name)s."
 msgid "Received"
 msgstr "تم الاستلام"
 
+msgid "Recommendation"
+msgstr "التوصية"
+
+msgid "Recommendations"
+msgstr "التوصيات"
+
 msgid "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time."
 msgstr "هل سُجّل ذلك عن طريق الخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك، يمكن للمدير تصحيح الوقت."
 
@@ -3296,6 +3393,9 @@ msgstr "الأدوار والصلاحيات"
 
 msgid "Row"
 msgstr "الصف"
+
+msgid "Running belts inspected, aligned and tensioned."
+msgstr "تم فحص سيور الجري وضبط محاذاتها وشدّها."
 
 msgid "Running late"
 msgstr "التأخر عن الموعد"
@@ -3634,6 +3734,9 @@ msgstr "تجاوز التقدير بشكل ملحوظ"
 #, python-format
 msgid "Signs in as “%(username)s”."
 msgstr "يسجّل الدخول باسم \"%(username)s\"."
+
+msgid "Silicone spray applied to all machines."
+msgstr "تم رش السيليكون على جميع الأجهزة."
 
 msgid "Site"
 msgstr "الموقع"
@@ -4087,6 +4190,12 @@ msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً."
 msgid "This customer can sign in as “%(username)s” to view their tickets and service history."
 msgstr "يمكن لهذا العميل تسجيل الدخول باسم «%(username)s» للاطلاع على تذاكره وسجل الخدمة."
 
+msgid "This customer's report is in Arabic. Use the lists where you can; write anything you type in Arabic."
+msgstr "تقرير هذا العميل باللغة العربية. استخدم القوائم قدر الإمكان، واكتب أي نص إضافي باللغة العربية."
+
+msgid "This customer's report is in English. Use the lists where you can; write anything you type in English."
+msgstr "تقرير هذا العميل باللغة الإنجليزية. استخدم القوائم قدر الإمكان، واكتب أي نص إضافي باللغة الإنجليزية."
+
 msgid "This is earlier than the previous step on this task."
 msgstr "هذا الوقت سابق للخطوة السابقة في هذه المهمة."
 
@@ -4294,6 +4403,9 @@ msgstr "الوقت سيُحدَّد لاحقًا"
 msgid "To customers"
 msgstr "إلى العملاء"
 
+msgid "To maintain the lubrication, we recommend advising the gym's cleaning team not to remove the grease applied to the moving parts during routine cleaning."
+msgstr "للحفاظ على فعالية التشحيم، نوصي بتوجيه فريق التنظيف في النادي بعدم إزالة الشحم الموضوع على الأجزاء المتحركة أثناء التنظيف الدوري."
+
 #, python-format
 msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
 msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
@@ -4394,6 +4506,9 @@ msgstr "إلغاء القفل الآن"
 
 msgid "Updated."
 msgstr "تم التحديث."
+
+msgid "Upholstery and grips inspected."
+msgstr "تم فحص التنجيد والمقابض."
 
 msgid "Upload"
 msgstr "رفع"
@@ -4522,6 +4637,21 @@ msgstr "ضمان"
 msgid "Warranty end"
 msgstr "نهاية الضمان"
 
+msgid "We recommend cleaning the equipment regularly with suitable, non-abrasive products."
+msgstr "نوصي بتنظيف المعدات بانتظام باستخدام مواد مناسبة وغير كاشطة."
+
+msgid "We recommend keeping the machines noted above out of use until they are repaired."
+msgstr "نوصي بإيقاف استخدام الأجهزة المذكورة أعلاه حتى يتم إصلاحها."
+
+msgid "We recommend keeping to the scheduled preventive maintenance visits."
+msgstr "نوصي بالالتزام بزيارات الصيانة الوقائية المجدولة."
+
+msgid "We recommend replacing the parts noted above at the next visit."
+msgstr "نوصي باستبدال القطع المذكورة أعلاه في الزيارة القادمة."
+
+msgid "We recommend that members respect each machine's maximum load."
+msgstr "نوصي بالتزام الأعضاء بالحمولة القصوى لكل جهاز."
+
 msgid "We would value your feedback on your recent Profit Sports Solutions visit"
 msgstr "نقدّر رأيكم في زيارة Profit Sports Solutions الأخيرة"
 
@@ -4582,9 +4712,6 @@ msgstr "ما أبلغ به العميل"
 
 msgid "What the levels mean"
 msgstr "ماذا تعني المستويات"
-
-msgid "What was found and done"
-msgstr "ما تم العثور عليه وما تم إنجازه"
 
 msgid "WhatsApp"
 msgstr "واتساب"
@@ -4652,6 +4779,9 @@ msgstr "لقد بدأ العمل بالفعل. بصفتك مديراً أو مس
 msgid "Work has started, so only a manager or administrator can now change the team."
 msgstr "لقد بدأ العمل، لذا لا يمكن الآن تغيير الفريق إلا من قِبل مدير أو مسؤول النظام."
 
+msgid "Work performed"
+msgstr "الأعمال المنفّذة"
+
 msgid "Work report"
 msgstr "تقرير العمل"
 
@@ -4660,6 +4790,12 @@ msgstr "تم استئناف العمل"
 
 msgid "Working in another country for specified dates. During a trip, they may be assigned tasks there; their home country, hours and figures remain unchanged."
 msgstr "يعمل في دولة أخرى خلال تواريخ محددة. يمكن إسناد مهام إليه هناك خلال الرحلة، بينما تظل دولته الأصلية وساعاته وأرقامه دون تغيير."
+
+msgid "Worn or frayed cable"
+msgstr "كابل متآكل أو متهالك"
+
+msgid "Worn or slipping belt"
+msgstr "سير متآكل أو منزلق"
 
 msgid "Written report"
 msgstr "تقرير مكتوب"
@@ -5228,8 +5364,17 @@ msgstr "اختياري، يظهر للعميل مع قرار \"تم تقديم �
 msgid "optional; displayed on the customer's ticket page"
 msgstr "اختياري؛ يظهر في صفحة تذكرة العميل"
 
+msgid "other recommendation"
+msgstr "توصية أخرى"
+
+msgid "other work, one per line"
+msgstr "أعمال أخرى، كل منها في سطر"
+
 msgid "outcome"
 msgstr "النتيجة"
+
+msgid "overall, if needed — each machine has its own finding and action"
+msgstr "ملاحظات عامة عند الحاجة — لكل جهاز ملاحظته وإجراؤه"
 
 msgid "overrides the ISO code as the task-number prefix, e.g. KSA or UAE, reflecting common local usage. Leave blank to use the ISO code."
 msgstr "يحل محل رمز ISO كبادئة لأرقام المهام، مثل KSA أو UAE، وفقاً للاستخدام المحلي الشائع. اتركه فارغاً لاستخدام رمز ISO."
@@ -5335,6 +5480,9 @@ msgstr "سبب إلغاء التفعيل، مثل الاستقالة أو إنه
 
 msgid "recipient of feedback requests after a report is approved"
 msgstr "الجهة التي تُرسل إليها طلبات التقييم بعد اعتماد التقرير"
+
+msgid "recommendations"
+msgstr "التوصيات"
 
 msgid "recorded by"
 msgstr "سجّلها"
@@ -5544,6 +5692,12 @@ msgstr "المصدر"
 
 msgid "stable key; never changes"
 msgstr "مفتاح ثابت؛ لا يتغير أبداً"
+
+msgid "standard action"
+msgstr "الإجراء المعتاد"
+
+msgid "standard finding"
+msgstr "الملاحظة المعتادة"
 
 msgid "start date"
 msgstr "تاريخ البدء"
@@ -5820,11 +5974,8 @@ msgstr "ما هو مستحق للعميل"
 msgid "what the customer reported"
 msgstr "ما أبلغ به العميل"
 
-msgid "what the technician found"
-msgstr "ما وجده الفني"
-
-msgid "what was found and done on this machine"
-msgstr "ما تم العثور عليه وما تم إنجازه على هذا الجهاز"
+msgid "what was found, in the report language — when none of the standard findings fits"
+msgstr "ما تم العثور عليه، بلغة التقرير — عندما لا تناسب أي من الملاحظات المعتادة"
 
 msgid "when off, a supervisor sends it by hand from the task details instead"
 msgstr "عند إيقافها، يرسلها المشرف يدويًا من تفاصيل المهمة"
@@ -5852,6 +6003,9 @@ msgstr "من وقّع"
 
 msgid "why there is no signature"
 msgstr "سبب عدم وجود توقيع"
+
+msgid "work performed"
+msgstr "الأعمال المنفّذة"
 
 msgid "work report"
 msgstr "تقرير العمل"

@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
+from reports.phrases import Action, Finding
 from spots.indexes import contains_search_index
 
 # A customer's own phone photos/videos of the fault — kept separate from
@@ -1012,8 +1013,14 @@ class TaskAsset(models.Model):
     )
     outcome = models.CharField(_('outcome'), max_length=20, choices=Outcome.choices)
     note = models.CharField(
-        _('finding'), max_length=255, blank=True, help_text=_('what was found and done on this machine'),
+        _('finding'), max_length=255, blank=True,
+        help_text=_('what was found, in the report language — when none of the standard findings fits'),
     )
+    # The standard finding and action (reports.phrases), shown in the
+    # report's language; `note` and `action` for anything else.
+    finding_code = models.CharField(_('standard finding'), max_length=20, choices=Finding.choices, blank=True)
+    action_code = models.CharField(_('standard action'), max_length=20, choices=Action.choices, blank=True)
+    action = models.CharField(_('action taken'), max_length=255, blank=True)
 
     class Meta:
         verbose_name = _('task asset')

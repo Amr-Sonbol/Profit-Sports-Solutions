@@ -7,10 +7,11 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.utils import timezone, translation
 
-from tasks.models import TaskAssignment
+from .phrases import Action, Finding, Recommendation, WorkLine
 
 
 def _local_file(url):
@@ -59,6 +60,10 @@ def report_content(report):
             'serial': item.asset.serial_no,
             'outcome': item.outcome,
             **({'note': item.note} if item.note else {}),
+            # The standard wording and the action, likewise only when set.
+            **({'finding_code': item.finding_code} if item.finding_code else {}),
+            **({'action_code': item.action_code} if item.action_code else {}),
+            **({'action': item.action} if item.action else {}),
         }
         for item in task.task_assets.select_related('asset__brand')
     ), key=lambda machine: (machine['name'], machine['serial'], machine['outcome'], machine.get('note', '')))
@@ -66,6 +71,14 @@ def report_content(report):
         {'code': part.part_code, 'description': part.description, 'quantity': part.quantity}
         for part in report.parts_used.all()
     ), key=lambda part: (part['code'], part['description'], part['quantity']))
+    # The standard work lines and recommendations, only when there are
+    # any — reports signed before they existed still read as unchanged.
+    extras = {
+        key: value for key, value in (
+            ('work_lines', list(report.work_lines)), ('recommendations', list(report.recommendations)),
+            ('recommendation', report.recommendation),
+        ) if value
+    }
     return {
         'findings': report.findings,
         'action_taken': report.action_taken,
@@ -73,6 +86,7 @@ def report_content(report):
         'customer_name': report.customer_name,
         'machines': machines,
         'parts': parts,
+        **extras,
     }
 
 
@@ -94,21 +108,54 @@ def changed_after_signing(report):
     return signed != report_content(report)
 
 
+def _next_visit(task):
+    """The site's next booked task after this one, as a date — the
+    report's "Next visit". None when nothing is booked yet."""
+    from tasks.models import Task
+
+    day = timezone.localtime(task.scheduled_for).date() if task.scheduled_for else timezone.localdate()
+    upcoming = Task.objects.filter(site=task.site).exclude(pk=task.pk).exclude(
+        status__in=[Task.Status.CANCELLED, Task.Status.CLOSED],
+    ).filter(Q(scheduled_for__date__gt=day) | Q(scheduled_for__isnull=True, scheduled_date__gt=day))
+    dates = [
+        timezone.localtime(other.scheduled_for).date() if other.scheduled_for else other.scheduled_date
+        for other in upcoming.only('scheduled_for', 'scheduled_date')
+    ]
+    return min(dates) if dates else None
+
+
 def _template_context(report, content, signature_url, signed_at, changed):
     from tasks.models import TaskAsset
 
     task = report.task
-    team = TaskAssignment.objects.filter(task=task, is_active=True).select_related('technician')
     outcomes = dict(TaskAsset.Outcome.choices)
+    findings, actions = dict(Finding.choices), dict(Action.choices)
+    free_lines = [line.strip(' -•\t') for line in content['action_taken'].splitlines() if line.strip(' -•\t')]
+    standard_lines = dict(WorkLine.choices)
     return {
         'report': report,
         'task': task,
         'site': task.site,
         'customer': task.site.customer,
-        'team': [assignment.technician for assignment in sorted(team, key=lambda a: a.role != TaskAssignment.Role.LEAD)],
         'content': content,
-        'work_lines': [line.strip(' -•\t') for line in content['action_taken'].splitlines() if line.strip(' -•\t')],
-        'machines': [{**machine, 'outcome_label': outcomes.get(machine['outcome'], '')} for machine in content['machines']],
+        # The standard lines first (in the report's language), then any typed.
+        'work_lines': [standard_lines[code] for code in content.get('work_lines', []) if code in standard_lines] + free_lines,
+        'machines': [
+            {
+                **machine,
+                'outcome_label': outcomes.get(machine['outcome'], ''),
+                'finding_label': findings.get(machine.get('finding_code'), machine.get('note', '')),
+                'finding_extra': machine.get('note', '') if machine.get('finding_code') else '',
+                'action_label': actions.get(machine.get('action_code'), machine.get('action', '')),
+                'action_extra': machine.get('action', '') if machine.get('action_code') else '',
+            }
+            for machine in content['machines']
+        ],
+        'recommendations': [
+            dict(Recommendation.choices)[code] for code in content.get('recommendations', [])
+            if code in dict(Recommendation.choices)
+        ] + ([content['recommendation']] if content.get('recommendation') else []),
+        'next_visit': _next_visit(task),
         'parts': content['parts'],
         'signature_url': signature_url,
         'signed_at': signed_at,

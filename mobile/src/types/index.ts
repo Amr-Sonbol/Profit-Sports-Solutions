@@ -120,6 +120,9 @@ export interface WorkReport {
   parts_used: PartUsed[];
   copy_sent_to?: string;
   copy_sent_at?: string | null;
+  work_lines?: string[];
+  recommendations?: string[];
+  recommendation?: string;
 }
 
 /**
@@ -135,7 +138,12 @@ export interface ReportMachine {
   model_name?: string;
   serial_no: string;
   outcome: string;
+  /** The finding when none of the standard ones fits. */
   note: string;
+  // The report's standard wording (reports.phrases): codes, shown in the customer's language.
+  finding_code?: string;
+  action_code?: string;
+  action?: string;
 }
 
 export interface SiteMachine {
@@ -164,6 +172,10 @@ export interface ReportHelper {
 export interface WorkReportInput {
   findings: string;
   action_taken: string;
+  // Standard work lines and recommendations (codes), and a typed one.
+  work_lines?: string[];
+  recommendations?: string[];
+  recommendation?: string;
   resolved: boolean;
   labour_hours: string;
   customer_name: string;

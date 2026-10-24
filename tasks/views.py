@@ -5192,7 +5192,13 @@ def report_machine_initial(task):
     """
     task_assets = list(task.task_assets.all())
     if task_assets:
-        return [{'asset': ta.asset_id, 'outcome': ta.outcome, 'note': ta.note} for ta in task_assets], []
+        return [
+            {
+                'asset': ta.asset_id, 'outcome': ta.outcome, 'note': ta.note,
+                'finding_code': ta.finding_code, 'action_code': ta.action_code, 'action': ta.action,
+            }
+            for ta in task_assets
+        ], []
     ticket_machines = list(task.ticket_machines.all())
     return (
         [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
@@ -5211,20 +5217,23 @@ def save_task_machines(task, existing_rows, new_rows):
     Blank rows are skipped.
     """
     TaskAsset.objects.filter(task=task).delete()
+
+    def wording(cleaned):
+        return {
+            'note': cleaned.get('note', ''), 'finding_code': cleaned.get('finding_code', ''),
+            'action_code': cleaned.get('action_code', ''), 'action': cleaned.get('action', ''),
+        }
+
     for cleaned in existing_rows:
         if cleaned.get('asset') and cleaned.get('outcome'):
-            TaskAsset.objects.create(
-                task=task, asset=cleaned['asset'], outcome=cleaned['outcome'], note=cleaned.get('note', ''),
-            )
+            TaskAsset.objects.create(task=task, asset=cleaned['asset'], outcome=cleaned['outcome'], **wording(cleaned))
     for cleaned in new_rows:
         if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
             new_asset = Asset.objects.create(
                 site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'],
                 serial_no=cleaned.get('serial_no', ''),
             )
-            TaskAsset.objects.create(
-                task=task, asset=new_asset, outcome=cleaned['outcome'], note=cleaned.get('note', ''),
-            )
+            TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'], **wording(cleaned))
             if cleaned.get('ticket_machine'):
                 task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=new_asset)
 
@@ -5285,10 +5294,14 @@ def _report_form(request, task, technician, back_url):
         new_formset = NewAssetFormSet(initial=new_initial, prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
 
+    from reports.pdf import report_language
+
     context = {
         'task': task,
         'report': report,
         'back_url': back_url,
+        # What the customer reads it in — anything typed goes in this language.
+        'report_language': report_language(task.site.customer),
         'catalogue_parts': Part.objects.filter(is_active=True),
         'can_edit': True,
         'report_form': report_form,

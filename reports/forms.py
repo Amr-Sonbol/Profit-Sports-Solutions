@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 from reference.models import Part
 
 from .models import CustomerFeedback, WorkReport
+from .phrases import Recommendation, WorkLine
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -51,13 +52,26 @@ class WorkReportForm(forms.ModelForm):
         required=False, label=_('Send a copy to'),
         help_text=_('The customer receives this report as a PDF by email. Leave blank to send nothing.'),
     )
+    # The standard wording (reports.phrases): ticked, it reads in the
+    # customer's language on the report.
+    work_lines = forms.MultipleChoiceField(
+        choices=WorkLine.choices, required=False, widget=forms.CheckboxSelectMultiple, label=_('Work performed'),
+    )
+    recommendations = forms.MultipleChoiceField(
+        choices=Recommendation.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Recommendations'),
+    )
 
     class Meta:
         model = WorkReport
-        fields = ['findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name', 'signature_waived_reason']
+        fields = [
+            'findings', 'work_lines', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
+            'signature_waived_reason', 'recommendations', 'recommendation',
+        ]
         widgets = {
             'findings': forms.Textarea(attrs={'rows': 3}),
             'action_taken': forms.Textarea(attrs={'rows': 3}),
+            'recommendation': forms.Textarea(attrs={'rows': 2}),
             'signature_waived_reason': forms.Textarea(attrs={'rows': 2}),
         }
         labels = {'signature_waived_reason': _('Why the customer could not sign')}

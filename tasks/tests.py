@@ -11,7 +11,7 @@ from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from django.utils import timezone
+from django.utils import timezone, translation
 
 from customers.models import Asset, Customer, Site
 from people.models import (
@@ -8710,4 +8710,63 @@ class TicketMachineFindingsTests(TaskTestCase):
         report.signed_content['machines'] = report_content(report)['machines']
         report.save(update_fields=['signed_content'])
         self.assertNotIn('note', report.signed_content['machines'][0])
+        self.assertFalse(changed_after_signing(report))
+
+
+class CorporateReportTests(TicketMachineFindingsTests):
+    # The visit report like the company's PPM report: standard wording that
+    # reads in the report's language, per-machine finding / action /
+    # status, recommendations, the next visit, the team as "performed by",
+    # and no hours-and-prices line.
+
+    def _file(self, **extra):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({
+            'findings': '', 'work_lines': ['bolts', 'greased'], 'recommendations': ['keep_grease'],
+            'existing-TOTAL_FORMS': '1', 'existing-INITIAL_FORMS': '1',
+            'existing-0-asset': str(self.asset.pk), 'existing-0-outcome': 'repaired',
+            'existing-0-finding_code': 'noise_moving_part', 'existing-0-action_code': 'greased',
+            'new-TOTAL_FORMS': '0', 'new-INITIAL_FORMS': '0', **extra,
+        })
+        self.client.post(self.report_url, payload)
+        return WorkReport.objects.get(task=self.task)
+
+    def test_the_report_reads_in_its_language_with_findings_actions_and_next_visit(self):
+        from reports.pdf import _template_context, report_content
+        report = self._file()
+        self.assertEqual(report.work_lines, ['bolts', 'greased'])
+        follow_up = Task.objects.create(
+            task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            scheduled_date=timezone.localdate() + timedelta(days=90),
+        )
+        with translation.override('ar'):
+            context = _template_context(report, report_content(report), '', None, False)
+            lines = [str(line) for line in context['work_lines']]
+            machine = context['machines'][0]
+            self.assertIn('تم فحص جميع البراغي وإحكام شدّها.', lines)
+            self.assertEqual(str(machine['finding_label']), 'صوت صادر من جزء متحرك')
+            self.assertEqual(str(machine['action_label']), 'تم فك الجهاز وتشحيم الجزء المتأثر')
+            self.assertTrue(str(context['recommendations'][0]).startswith('للحفاظ على فعالية التشحيم'))
+        self.assertEqual(context['next_visit'], follow_up.scheduled_date)
+
+    def test_no_hours_line_and_the_team_performed_it(self):
+        from django.template.loader import render_to_string
+        from reports.pdf import _template_context, report_content
+        report = self._file()
+        html = render_to_string('reports/visit_report_pdf.html', {
+            **_template_context(report, report_content(report), '', None, False), 'is_rtl': False,
+        })
+        self.assertNotIn('Hours and prices', html)
+        self.assertIn('Profit Sports Solutions technical team', html)
+        self.assertIn('Noise from a moving part', html)
+
+    def test_a_report_signed_before_the_standard_wording_still_reads_as_unchanged(self):
+        from reports.pdf import changed_after_signing, report_content
+        report = self._file(**{'work_lines': [], 'recommendations': [],
+                               'existing-0-finding_code': '', 'existing-0-action_code': ''})
+        report.signed_content = report_content(report)
+        report.save(update_fields=['signed_content'])
+        self.assertNotIn('work_lines', report.signed_content)
         self.assertFalse(changed_after_signing(report))

@@ -13,6 +13,7 @@ from people.models import (
     SKILL_LEVEL_CHOICES, NotificationSettings, RolePermission, Technician, TechnicianTrip,
 )
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
+from reports.phrases import Action, Finding
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
@@ -947,7 +948,10 @@ class ExistingAssetOutcomeForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
-    note = forms.CharField(required=False, max_length=255, label=_('What was found and done'))
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(required=False, max_length=255, label=_('Other finding'))
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(required=False, max_length=255, label=_('Other action'))
 
     def __init__(self, *args, site=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -978,7 +982,10 @@ class NewAssetForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
-    note = forms.CharField(required=False, max_length=255, label=_('What was found and done'))
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(required=False, max_length=255, label=_('Other finding'))
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(required=False, max_length=255, label=_('Other action'))
     # The customer's ticket machine this row registers, when it came from
     # the ticket (it wasn't in their machine list).
     ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)

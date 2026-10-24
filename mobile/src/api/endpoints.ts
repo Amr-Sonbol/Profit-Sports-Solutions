@@ -61,6 +61,11 @@ export function fetchMyReport(id: number) {
     site_machines?: SiteMachine[];
     brands?: Brand[];
     outcomes?: Choice[];
+    findings?: Choice[];
+    actions?: Choice[];
+    work_line_choices?: Choice[];
+    recommendation_choices?: Choice[];
+    report_language?: string;
   }>(
     `/api/my-tasks/${id}/report/`,
   );

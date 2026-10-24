@@ -125,6 +125,16 @@ export default function ReportScreen() {
   const [siteMachines, setSiteMachines] = useState<SiteMachine[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [outcomes, setOutcomes] = useState<Choice[]>([]);
+  // The report's standard wording to pick from, and what's picked.
+  const [findingChoices, setFindingChoices] = useState<Choice[]>([]);
+  const [actionChoices, setActionChoices] = useState<Choice[]>([]);
+  const [workLineChoices, setWorkLineChoices] = useState<Choice[]>([]);
+  const [recommendationChoices, setRecommendationChoices] = useState<Choice[]>([]);
+  const [workLines, setWorkLines] = useState<string[]>([]);
+  const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [recommendation, setRecommendation] = useState('');
+  // The customer's report language: anything typed should be in it.
+  const [reportLanguage, setReportLanguage] = useState('en');
   const [pickingMachine, setPickingMachine] = useState(false);
 
   const load = useCallback(async () => {
@@ -148,6 +158,11 @@ export default function ReportScreen() {
       setBrands(reportBrands);
       setSiteMachines(reportResult.data.site_machines ?? []);
       setOutcomes(reportResult.data.outcomes ?? []);
+      setFindingChoices(reportResult.data.findings ?? []);
+      setActionChoices(reportResult.data.actions ?? []);
+      setWorkLineChoices(reportResult.data.work_line_choices ?? []);
+      setRecommendationChoices(reportResult.data.recommendation_choices ?? []);
+      setReportLanguage(reportResult.data.report_language ?? 'en');
       // What the report records, or the machines the customer reported.
       setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
@@ -156,6 +171,9 @@ export default function ReportScreen() {
         const input = pending.input;
         setFindings(input.findings);
         setActionTaken(input.action_taken);
+        setWorkLines(input.work_lines ?? []);
+        setRecommendations(input.recommendations ?? []);
+        setRecommendation(input.recommendation ?? '');
         setResolved(input.resolved);
         setLabourHours(input.labour_hours);
         setCustomerName(input.customer_name);
@@ -184,6 +202,9 @@ export default function ReportScreen() {
       } else if (report) {
         setFindings(report.findings);
         setActionTaken(report.action_taken);
+        setWorkLines(report.work_lines ?? []);
+        setRecommendations(report.recommendations ?? []);
+        setRecommendation(report.recommendation ?? '');
         setResolved(report.resolved);
         setLabourHours(report.labour_hours);
         setCustomerName(report.customer_name);
@@ -246,6 +267,9 @@ export default function ReportScreen() {
     const input = {
       findings,
       action_taken: actionTaken,
+      work_lines: workLines,
+      recommendations,
+      recommendation,
       resolved,
       labour_hours: labourHours,
       customer_name: customerName,
@@ -327,6 +351,8 @@ export default function ReportScreen() {
                   {machines.filter((row) => row.outcome).map((row) => (
                     <ThemedText key={row.key}>
                       {row.name || `${row.brand_name} ${row.model_name ?? ''}`.trim()}: {outcomeLabel(row.outcome)}
+                      {row.finding_code ? ` — ${findingChoices.find((c) => c.value === row.finding_code)?.label ?? ''}` : ''}
+                      {row.action_code ? ` → ${actionChoices.find((c) => c.value === row.action_code)?.label ?? ''}` : ''}
                       {row.note ? ` — ${row.note}` : ''}
                     </ThemedText>
                   ))}
@@ -401,14 +427,27 @@ export default function ReportScreen() {
               </ThemedText>
             ) : null}
 
-            <Field label="Findings" error={errors.findings}>
-              <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />
-            </Field>
+            <ThemedView style={[styles.languageNote, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="small">
+                {reportLanguage === 'ar'
+                  ? 'This customer’s report is in ARABIC. Pick from the lists where you can; write anything you type in Arabic.'
+                  : 'This customer’s report is in English. Pick from the lists where you can; write anything you type in English.'}
+              </ThemedText>
+            </ThemedView>
 
-            <Field label="Work performed" error={errors.action_taken}>
+            <Field label="Work performed" error={errors.work_lines}>
+              <Chips
+                choices={workLineChoices} selected={workLines} multi
+                onChange={setWorkLines}
+              />
               <TextInput
                 style={[inputStyle, styles.multiline]} value={actionTaken} onChangeText={setActionTaken} multiline
+                placeholder="Other work, one per line" placeholderTextColor={theme.textSecondary}
               />
+            </Field>
+
+            <Field label="Overall findings (optional)" error={errors.findings}>
+              <TextInput style={[inputStyle, styles.multiline]} value={findings} onChangeText={setFindings} multiline />
             </Field>
 
             <Field label="Has the issue been resolved?" error={errors.resolved}>
@@ -516,11 +555,27 @@ export default function ReportScreen() {
                       </TouchableOpacity>
                     ))}
                   </ThemedView>
+                  <ThemedText type="smallBold">Finding</ThemedText>
+                  <Chips
+                    choices={findingChoices} selected={row.finding_code ? [row.finding_code] : []}
+                    onChange={(picked) => updateMachine(row.key, { finding_code: picked[0] ?? '' })}
+                  />
                   <TextInput
-                    style={inputStyle} value={row.note} placeholder="What was found and done"
+                    style={inputStyle} value={row.note} placeholder="Other finding (if none fits)"
                     placeholderTextColor={theme.textSecondary} maxLength={255}
                     onChangeText={(value) => updateMachine(row.key, { note: value })}
                   />
+                  <ThemedText type="smallBold">Action taken</ThemedText>
+                  <Chips
+                    choices={actionChoices} selected={row.action_code ? [row.action_code] : []}
+                    onChange={(picked) => updateMachine(row.key, { action_code: picked[0] ?? '' })}
+                  />
+                  <TextInput
+                    style={inputStyle} value={row.action ?? ''} placeholder="Other action (if none fits)"
+                    placeholderTextColor={theme.textSecondary} maxLength={255}
+                    onChangeText={(value) => updateMachine(row.key, { action: value })}
+                  />
+                  <ThemedText type="smallBold">Status</ThemedText>
                   <TouchableOpacity onPress={() => setMachines((rows) => rows.filter((other) => other.key !== row.key))}>
                     <ThemedText themeColor="danger" type="small">Remove machine</ThemedText>
                   </TouchableOpacity>
@@ -632,6 +687,17 @@ export default function ReportScreen() {
               </TouchableOpacity>
             </ThemedView>
 
+            <Field label="Recommendation" error={errors.recommendations}>
+              <Chips
+                choices={recommendationChoices} selected={recommendations} multi
+                onChange={setRecommendations}
+              />
+              <TextInput
+                style={[inputStyle, styles.multiline]} value={recommendation} onChangeText={setRecommendation} multiline
+                placeholder="Other recommendation" placeholderTextColor={theme.textSecondary}
+              />
+            </Field>
+
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
                 Customer sign-off{task.requires_signature ? ' (required)' : ''}
@@ -711,6 +777,38 @@ export default function ReportScreen() {
   );
 }
 
+/**
+ * Choices as chips: one (tap again to clear) or several (`multi`).
+ */
+function Chips({ choices, selected, onChange, multi = false }: {
+  choices: Choice[]; selected: string[]; onChange: (picked: string[]) => void; multi?: boolean;
+}) {
+  const theme = useTheme();
+  const toggle = (value: string) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter((other) => other !== value));
+    } else {
+      onChange(multi ? [...selected, value] : [value]);
+    }
+  };
+  return (
+    <ThemedView style={styles.chipRow}>
+      {choices.map((choice) => {
+        const on = selected.includes(choice.value);
+        return (
+          <TouchableOpacity
+            key={choice.value}
+            style={[styles.chip, { borderColor: theme.backgroundSelected }, on && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+            onPress={() => toggle(choice.value)}
+          >
+            <ThemedText type="small" style={on ? { color: theme.onPrimary } : undefined}>{choice.label}</ThemedText>
+          </TouchableOpacity>
+        );
+      })}
+    </ThemedView>
+  );
+}
+
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <ThemedView style={styles.section}>
@@ -742,6 +840,7 @@ const styles = StyleSheet.create({
   suggestion: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   partCard: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: Spacing.two },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
+  languageNote: { borderRadius: Spacing.two, padding: Spacing.three },
   chip: { borderWidth: 1, borderRadius: Spacing.four, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },

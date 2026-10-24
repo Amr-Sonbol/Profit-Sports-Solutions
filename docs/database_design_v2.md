@@ -700,7 +700,10 @@ Which machines the task covers. Populated by the technician during the work, not
 | task_id | FK → task | |
 | asset_id | FK → asset | |
 | outcome | varchar | repaired, replaced, not_repairable, inspected_ok |
-| note | varchar(255) | blank — what was found and done on this machine; printed under its outcome on the visit report, and shown on the customer's ticket |
+| finding_code | varchar | blank — a standard finding (`reports.phrases.Finding`), printed in the report's language |
+| note | varchar(255) | blank — any other finding, typed in the report's language |
+| action_code | varchar | blank — a standard action (`reports.phrases.Action`) |
+| action | varchar(255) | blank — any other action, typed in the report's language |
 
 **A task made from a portal ticket starts its report from that ticket's machines** (`ticket_machine.task`): the listed ones are already picked, waiting for an outcome; an unlisted one is a new-machine row with its model and serial filled in, and registering it there sets `ticket_machine.asset`. The customer's ticket page then shows each machine's outcome and note. The frozen signed copy includes a machine's `note` only when it has one, so reports signed before notes existed don't read as changed.
 
@@ -855,12 +858,17 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 ## 5. Reports
 
 ### work_report
+**The visit report follows the company's PPM report and reads fully in its customer's language** (Arabic in Saudi Arabia and Egypt, English elsewhere — `country.report_language`). Everything standard is stored as a code and printed in that language: the work performed, each machine's finding and action, the recommendations, "Performed by" (the company's technical team), the scope (the brand's equipment) and the next visit (the site's next booked task). Only machine names and codes stay as entered; anything else the technician types, the form and the app ask them to write in the report's language. No hours or prices on it.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | one per task |
-| findings | text | what the technician found |
-| action_taken | text | |
+| findings | text | blank — overall findings, if needed (each machine has its own) |
+| work_lines | varchar[] | standard work performed (`reports.phrases.WorkLine`), printed in the report's language |
+| action_taken | text | blank — other work, one per line |
+| recommendations | varchar[] | standard recommendations (`reports.phrases.Recommendation`) |
+| recommendation | text | blank — another recommendation, typed |
 | resolved | bool | |
 | labour_hours | decimal | |
 | customer_name | varchar | who signed |
