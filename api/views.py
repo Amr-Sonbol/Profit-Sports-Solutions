@@ -4,6 +4,7 @@ from django.contrib.auth import SESSION_KEY, authenticate, login
 from django.contrib.auth.models import update_last_login
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponseRedirect
@@ -17,7 +18,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from customers.models import Asset
+from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
 from people.context_processors import nav_groups, nav_pages
 from people.permissions import get_active_country, require_manager, scoped_or_404
@@ -50,6 +51,7 @@ from tasks.views import (
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
     CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
+    directions_url,
 )
 
 
@@ -289,6 +291,13 @@ APP_TASK_FIELDS = [
 ]
 
 
+def require_role_permission_or_403(request, permission):
+    """The signed-in technician, if their role allows `permission`."""
+    if not has_role_permission(request, permission):
+        raise PermissionDenied
+    return request.user.technician
+
+
 def _form_errors(form):
     return {field: [str(error) for error in errors] for field, errors in form.errors.items()}
 
@@ -339,6 +348,133 @@ class TaskCreateView(APIView):
             {'id': task.pk, 'task_number': task.task_number, 'warning': str(warning) if warning else ''},
             status=status.HTTP_201_CREATED,
         )
+
+
+def _task_line(task):
+    """A task in a customer's or a machine's history."""
+    return {
+        'id': task.pk, 'task_number': task.task_number, 'status_display': task.get_status_display(),
+        'reported_at': task.reported_at, 'site_name': task.site.name,
+        'task_type_name': task.task_type.display_name if task.task_type_id else '',
+    }
+
+
+class CustomersView(APIView):
+    """The app's Customers — the website's list (manage_customers): every
+    active customer in the viewer's country, searchable by name."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        customers = Customer.objects.filter(
+            is_active=True, country=get_active_country(request) or technician.country,
+        ).prefetch_related('sites').order_by('name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            customers = customers.filter(Q(name__icontains=search) | Q(sites__name__icontains=search)).distinct()
+        return Response([
+            {
+                'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+                'sites': [site.name for site in customer.sites.all()],
+                'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            }
+            for customer in customers[:200]
+        ])
+
+
+class CustomerView(APIView):
+    """One customer in the app — the website's customer page: contacts,
+    each site (address, contact, access notes, directions, its machines)
+    and their recent tasks."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        customer = scoped_or_404(Customer.objects, pk, technician, get_active_country(request), 'country')
+        sites = customer.sites.prefetch_related('assets__brand').order_by('name')
+        tasks = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
+            '-reported_at',
+        )[:30]
+        return Response({
+            'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            'contact_email': customer.contact_email, 'billing_address': customer.billing_address,
+            'has_portal': customer.user_id is not None,
+            'sites': [
+                {
+                    'id': site.pk, 'name': site.name, 'address': site.address,
+                    'contact_name': site.effective_contact_name, 'contact_phone': site.effective_contact_phone,
+                    'access_notes': site.access_notes, 'directions_url': directions_url(site),
+                    'machines': [
+                        {'id': asset.pk, 'name': f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip(),
+                         'serial': asset.serial_no, 'status': asset.get_status_display()}
+                        for asset in site.assets.all()
+                    ],
+                }
+                for site in sites
+            ],
+            'tasks': [_task_line(task) for task in tasks],
+        })
+
+
+class MachinesView(APIView):
+    """The app's Machines — the website's list (view_machines): every
+    machine on file in the viewer's country, searchable by serial, model,
+    brand, site or customer."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_MACHINES)
+        assets = Asset.objects.filter(
+            site__customer__country=get_active_country(request) or technician.country,
+        ).select_related('site__customer', 'brand').order_by('site__customer__name', 'site__name', 'model_name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            assets = assets.filter(
+                Q(serial_no__icontains=search) | Q(model_name__icontains=search)
+                | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
+                | Q(site__customer__name__icontains=search)
+            )
+        return Response([_machine(asset) for asset in assets[:100]])
+
+
+def _machine(asset):
+    return {
+        'id': asset.pk, 'name': f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip(),
+        'serial': asset.serial_no, 'status': asset.get_status_display(),
+        'customer_id': asset.site.customer_id, 'customer_name': asset.site.customer.name, 'site_name': asset.site.name,
+    }
+
+
+class MachineView(APIView):
+    """One machine's history in the app — the website's machine page:
+    every visit that recorded it, with what was found and done."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_MACHINES)
+        asset = scoped_or_404(
+            Asset.objects.select_related('site__customer__country', 'brand'),
+            pk, technician, get_active_country(request), 'site__customer__country',
+        )
+        visits = asset.task_assets.select_related('task__site', 'task__task_type').order_by('-task__reported_at')
+        return Response({
+            **_machine(asset),
+            'installed_on': asset.installed_on, 'warranty_end': asset.warranty_end,
+            'history': [
+                {
+                    **_task_line(visit.task),
+                    'outcome': visit.get_outcome_display() if visit.outcome else '',
+                    'finding': Finding(visit.finding_code).label if visit.finding_code else visit.note,
+                    'action': Action(visit.action_code).label if visit.action_code else visit.action,
+                }
+                for visit in visits
+            ],
+        })
 
 
 class WebsiteMenuView(APIView):

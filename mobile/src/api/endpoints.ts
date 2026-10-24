@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  CustomerPage, CustomerRow, MachinePage, MachineRow,
   FormFieldSpec,
   WebsiteMenuGroup,
   Person,
@@ -227,4 +228,20 @@ export function createTask(values: Record<string, string | boolean>) {
   return apiRequest<{ id: number; task_number: string; warning: string }>('/api/tasks/new/', {
     method: 'POST', body: values,
   });
+}
+
+export function fetchCustomers(query = '') {
+  return apiRequest<CustomerRow[]>(`/api/customers/?q=${encodeURIComponent(query)}`);
+}
+
+export function fetchCustomer(id: number) {
+  return apiRequest<CustomerPage>(`/api/customers/${id}/`);
+}
+
+export function fetchMachines(query = '') {
+  return apiRequest<MachineRow[]>(`/api/machines/?q=${encodeURIComponent(query)}`);
+}
+
+export function fetchMachine(id: number) {
+  return apiRequest<MachinePage>(`/api/machines/${id}/`);
 }

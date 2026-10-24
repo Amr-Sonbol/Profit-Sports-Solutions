@@ -42,6 +42,12 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at']
 
 
+def directions_url(site):
+    """Google Maps to the site: its pin if it has one, else its name and address."""
+    place = f'{site.latitude},{site.longitude}' if site.latitude is not None else f'{site.name}, {site.address}'
+    return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
+
+
 class TaskDetailSerializer(serializers.ModelSerializer):
     site_name = serializers.CharField(source='site.name')
     site_address = serializers.CharField(source='site.address')
@@ -82,9 +88,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
         return self.context.get('next_action')
 
     def get_directions_url(self, obj):
-        site = obj.site
-        place = f'{site.latitude},{site.longitude}' if site.latitude is not None else f'{site.name}, {site.address}'
-        return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
+        return directions_url(obj.site)
 
     def get_machines(self, obj):
         return [

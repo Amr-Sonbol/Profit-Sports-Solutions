@@ -1373,3 +1373,27 @@ class TaskCreateApiTests(ApiTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('site', response.json())
         self.assertEqual(self.client.get('/api/tasks/new/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class CustomersAndMachinesApiTests(ApiTestCase):
+    # Customers and machines in the app, as on the website.
+
+    def test_a_supervisor_finds_a_customer_its_sites_machines_and_history(self):
+        token = self.token_for('supervisor1')
+        found = self.client.get('/api/customers/?q=fitness', **self.auth(token)).json()
+        self.assertEqual([row['id'] for row in found], [self.customer.pk])
+        page = self.client.get(f'/api/customers/{self.customer.pk}/', **self.auth(token)).json()
+        site = page['sites'][0]
+        self.assertEqual(site['name'], self.site.name)
+        self.assertTrue(site['directions_url'].startswith('https://www.google.com/maps/'))
+        self.assertEqual(site['machines'][0]['id'], self.asset.pk)
+        self.assertEqual(page['tasks'][0]['task_number'], self.task.task_number)
+
+        machines = self.client.get('/api/machines/?q=excite', **self.auth(token)).json()
+        self.assertEqual([row['id'] for row in machines], [self.asset.pk])
+        self.assertEqual(self.client.get(f'/api/machines/{self.asset.pk}/', **self.auth(token)).status_code, 200)
+
+    def test_a_technician_cannot_open_them(self):
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get('/api/customers/', **self.auth(token)).status_code, 403)
+        self.assertEqual(self.client.get('/api/machines/', **self.auth(token)).status_code, 403)

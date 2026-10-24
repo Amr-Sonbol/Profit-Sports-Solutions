@@ -68,6 +68,10 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="people/[id]" options={{ href: null }} />
       <Tabs.Screen name="website" options={{ href: null }} />
       <Tabs.Screen name="new-task" options={{ href: null }} />
+      <Tabs.Screen name="customers" options={{ href: null }} />
+      <Tabs.Screen name="customer/[id]" options={{ href: null }} />
+      <Tabs.Screen name="machines" options={{ href: null }} />
+      <Tabs.Screen name="machine/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

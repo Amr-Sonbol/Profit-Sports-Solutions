@@ -14,6 +14,13 @@ import type { WebsiteMenuGroup } from '@/types';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
+/** Website pages the app has its own screen for: those open natively. */
+const NATIVE: Record<string, string> = {
+  '/customers/': '/customers',
+  '/tasks/machines/': '/machines',
+  '/tasks/technicians/progress/': '/team',
+};
+
 /** The website menu's icon names, as the nearest Ionicons. */
 const ICONS: Record<string, IconName> = {
   award: 'ribbon-outline', 'bar-chart': 'bar-chart-outline', bell: 'notifications-outline',
@@ -75,7 +82,9 @@ export default function MoreScreen() {
                 <TouchableOpacity
                   key={page.url}
                   style={[styles.page, { backgroundColor: theme.backgroundElement }]}
-                  onPress={() => router.push({ pathname: '/website', params: { path: page.url, title: page.title } })}
+                  onPress={() => (NATIVE[page.url]
+                    ? router.push(NATIVE[page.url] as never)
+                    : router.push({ pathname: '/website', params: { path: page.url, title: page.title } }))}
                 >
                   <Ionicons name={ICONS[page.icon] ?? 'open-outline'} size={20} color={theme.primary} />
                   <ThemedText style={styles.pageTitle}>{page.title}</ThemedText>

@@ -409,3 +409,55 @@ export interface FormFieldSpec {
   initial: string;
   choices?: Choice[];
 }
+
+/** Customers, sites and machines (api/views.py CustomersView, CustomerView, MachinesView, MachineView). */
+export interface CustomerRow {
+  id: number;
+  name: string;
+  segment: string;
+  sites: string[];
+  contact_name: string;
+  contact_phone: string;
+}
+
+export interface HistoryTask {
+  id: number;
+  task_number: string;
+  status_display: string;
+  reported_at: string;
+  site_name: string;
+  task_type_name: string;
+}
+
+export interface MachineRow {
+  id: number;
+  name: string;
+  serial: string;
+  status: string;
+  customer_id: number;
+  customer_name: string;
+  site_name: string;
+}
+
+export interface CustomerPage {
+  id: number;
+  name: string;
+  segment: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  billing_address: string;
+  has_portal: boolean;
+  sites: {
+    id: number; name: string; address: string; contact_name: string; contact_phone: string;
+    access_notes: string; directions_url: string;
+    machines: { id: number; name: string; serial: string; status: string }[];
+  }[];
+  tasks: HistoryTask[];
+}
+
+export interface MachinePage extends MachineRow {
+  installed_on: string | null;
+  warranty_end: string | null;
+  history: (HistoryTask & { outcome: string; finding: string; action: string })[];
+}
