@@ -1,4 +1,4 @@
-{% load i18n static %}<!DOCTYPE html>
+{% load i18n static report_text %}<!DOCTYPE html>
 <html lang="{{ LANGUAGE_CODE|default:'en' }}" dir="{% if is_rtl %}rtl{% else %}ltr{% endif %}">
 <head>
 <meta charset="utf-8">
@@ -41,6 +41,8 @@
     .signoff td { block-size: 1.6cm; }
     .signoff img { max-block-size: 1.5cm; max-inline-size: 6cm; }
     .muted { color: #666; }
+    /* Typed-in text keeps its own direction (report_text.text_dir). */
+    .iso { unicode-bidi: embed; }
     .not-signed { color: #c00000; font-weight: bold; }
     .changed-note { border: 0.8pt solid #c00000; color: #c00000; padding: 0.15cm 0.25cm; margin-block-end: 0.3cm; }
 </style>
@@ -61,30 +63,30 @@
 
 <h2>{% translate "Visit Details" %}</h2>
 <table class="details">
-    <tr><th>{% translate "Client" %}</th><td>{{ customer.name }}</td></tr>
-    <tr><th>{% translate "Site" %}</th><td>{{ site.name }}{% if site.address %}, {{ site.address }}{% endif %}, {{ customer.country.display_name }}</td></tr>
+    <tr><th>{% translate "Client" %}</th><td><span class="iso" dir="{{ customer.name|text_dir }}">{{ customer.name }}</span></td></tr>
+    <tr><th>{% translate "Site" %}</th><td><span class="iso" dir="{{ site.name|text_dir }}">{{ site.name }}</span>{% if site.address and site.address != site.name %}, <span class="iso" dir="{{ site.address|text_dir }}">{{ site.address }}</span>{% endif %}, {{ customer.country.display_name }}</td></tr>
     <tr><th>{% translate "Visit date" %}</th><td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j F Y" }}{% else %}{{ report.submitted_at|date:"j F Y" }}{% endif %}</td></tr>
     {% if task.task_type %}<tr><th>{% translate "Visit type" %}</th><td>{{ task.task_type.display_name }}</td></tr>{% endif %}
-    {% if task.description %}<tr><th>{% translate "Scope" %}</th><td>{{ task.description|linebreaksbr }}</td></tr>{% endif %}
-    <tr><th>{% translate "Performed by" %}</th><td>{% for person in team %}{{ person.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{% translate "Profit Sports Solutions technical team" %}{% endfor %}</td></tr>
+    {% if task.description %}<tr><th>{% translate "Scope" %}</th><td><span class="iso" dir="{{ task.description|text_dir }}">{{ task.description|linebreaksbr }}</span></td></tr>{% endif %}
+    <tr><th>{% translate "Performed by" %}</th><td>{% for person in team %}<span class="iso" dir="{{ person.full_name|text_dir }}">{{ person.full_name }}</span>{% if not forloop.last %}, {% endif %}{% empty %}{% translate "Profit Sports Solutions technical team" %}{% endfor %}</td></tr>
 </table>
 
 {% if work_lines %}
 <h2>{% translate "Work Performed" %}</h2>
-<ul>{% for line in work_lines %}<li>{{ line }}</li>{% endfor %}</ul>
+<ul>{% for line in work_lines %}<li><span class="iso" dir="{{ line|text_dir }}">{{ line }}</span></li>{% endfor %}</ul>
 {% endif %}
 
 <h2>{% translate "Findings & Actions" %}</h2>
-<p>{{ content.findings|linebreaksbr }}</p>
+<p><span class="iso" dir="{{ content.findings|text_dir }}">{{ content.findings|linebreaksbr }}</span></p>
 {% if machines %}
 <table>
     <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Status" %}</th></tr></thead>
     <tbody>
         {% for machine in machines %}
         <tr>
-            <td>{{ machine.name }}</td>
+            <td><span class="iso" dir="{{ machine.name|text_dir }}">{{ machine.name }}</span></td>
             <td dir="ltr">{{ machine.serial|default:"—" }}</td>
-            <td>{{ machine.outcome_label }}{% if machine.note %}<br><span class="muted">{{ machine.note }}</span>{% endif %}</td>
+            <td>{{ machine.outcome_label }}{% if machine.note %}<br><span class="muted"><span class="iso" dir="{{ machine.note|text_dir }}">{{ machine.note }}</span></span>{% endif %}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -97,7 +99,7 @@
     <thead><tr><th>{% translate "Part code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th></tr></thead>
     <tbody>
         {% for part in parts %}
-        <tr><td dir="ltr">{{ part.code }}</td><td>{{ part.description|default:"—" }}</td><td>{{ part.quantity }}</td></tr>
+        <tr><td dir="ltr">{{ part.code }}</td><td><span class="iso" dir="{{ part.description|text_dir }}">{{ part.description|default:"—" }}</span></td><td>{{ part.quantity }}</td></tr>
         {% endfor %}
     </tbody>
 </table>
@@ -111,7 +113,7 @@
     <thead><tr><th>{% translate "Name" %}</th><th>{% translate "Signature" %}</th><th>{% translate "Date and time" %}</th></tr></thead>
     <tbody>
         <tr>
-            <td>{{ content.customer_name|default:"—" }}</td>
+            <td><span class="iso" dir="{{ content.customer_name|text_dir }}">{{ content.customer_name|default:"—" }}</span></td>
             <td>{% if signature_url %}<img src="{{ signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted">{{ report.signature_waived_reason }}</span>{% endif %}{% endif %}</td>
             <td>{{ signed_at|date:"j F Y, H:i" }}</td>
         </tr>
