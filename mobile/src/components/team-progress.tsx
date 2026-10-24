@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TeamProgressRow } from '@/types';
+import { hm } from '@/hours';
 
 /**
  * The website's Team progress, on the phone: the field team this person
@@ -84,7 +85,7 @@ export function TeamProgressList() {
           <ThemedText type="small">
             <ThemedText type="smallBold">{item.completed}</ThemedText> completed
             {item.change > 0 ? ` ▲ ${item.change}` : item.change < 0 ? ` ▼ ${-item.change}` : ''}
-            {' · '}{item.hours} h
+            {' · '}{hm(item.hours)} h
             {' · '}{item.is_certified ? 'Certified' : `${item.certified}/${item.required} skills confirmed`}
           </ThemedText>
           <ThemedText type="small" themeColor="primary">View schedule ›</ThemedText>

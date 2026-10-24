@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{% translate "Team progress" %} — Profit Sports Solutions{% endblock %}
 
@@ -50,7 +50,7 @@
                         {% if row.change > 0 %}<span class="muted">▲ {{ row.change_size }}</span>
                         {% elif row.change < 0 %}<span class="muted">▼ {{ row.change_size }}</span>{% endif %}
                     </td>
-                    <td>{{ row.hours }}</td>
+                    <td>{{ row.hours|hm }}</td>
                     <td>
                         {% if row.is_certified %}<span class="badge badge--good">{% translate "Certified" %}</span>
                         {% else %}{{ row.certified }} / {{ row.required }}{% endif %}

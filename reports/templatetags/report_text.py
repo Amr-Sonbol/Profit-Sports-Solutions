@@ -1,4 +1,5 @@
 import unicodedata
+from decimal import Decimal
 
 from django import template
 
@@ -20,3 +21,13 @@ def text_dir(value):
         if direction == 'L':
             return 'ltr'
     return 'ltr'
+
+
+@register.filter
+def hm(value):
+    """Hours as h:mm — 1.53 -> '1:32', 2.5 -> '2:30', 0 -> '0:00'; '' for
+    none. How hours read everywhere (reports.pdf.hours_text likewise)."""
+    if value in (None, ''):
+        return ''
+    hours, minutes = divmod(round(Decimal(str(value)) * 60), 60)
+    return f'{hours}:{minutes:02d}'

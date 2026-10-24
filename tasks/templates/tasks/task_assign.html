@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{% translate "Assign" %} — {{ task.task_number }}{% endblock %}
 
@@ -159,7 +159,7 @@
                     <td class="cell-wrap">
                         {% if not task_day %}<span class="muted">{% translate "Set a day to see" %}</span>
                         {% elif technician.day_jobs %}
-                        {% blocktranslate count count=technician.day_jobs|length %}{{ count }} job{% plural %}{{ count }} jobs{% endblocktranslate %}{% if technician.day_hours %} · {% blocktranslate with hours=technician.day_hours|floatformat:"-1" %}about {{ hours }} h{% endblocktranslate %}{% endif %}
+                        {% blocktranslate count count=technician.day_jobs|length %}{{ count }} job{% plural %}{{ count }} jobs{% endblocktranslate %}{% if technician.day_hours %} · {% blocktranslate with hours=technician.day_hours|hm %}about {{ hours }} h{% endblocktranslate %}{% endif %}
                         {% for job in technician.clashes %}<br><span class="badge badge--bad">{% blocktranslate with number=job.task_number start=job.scheduled_for|date:"TIME_FORMAT" %}Clash: {{ number }} at {{ start }}{% endblocktranslate %}</span>{% endfor %}
                         {% else %}<span class="muted">{% translate "Nothing else" %}</span>{% endif %}
                     </td>

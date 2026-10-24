@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{% if viewing_other %}{% blocktranslate with name=technician.full_name %}Progress — {{ name }}{% endblocktranslate %}{% else %}{% translate "My progress" %}{% endif %} — Profit Sports Solutions{% endblock %}
 
@@ -102,7 +102,7 @@
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Labour hours" %}</dt>
-            <dd>{{ month_hours }}</dd>
+            <dd>{{ month_hours|hm }}</dd>
         </div>
         <div>
             <dt>{% translate "Reports filed" %}</dt>

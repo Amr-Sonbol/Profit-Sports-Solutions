@@ -12,6 +12,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { MyProgress } from '@/types';
+import { hm } from '@/hours';
 
 /** YYYY-MM of `first` (YYYY-MM-DD) moved by `step` months. */
 function shiftMonth(first: string, step: number) {
@@ -107,7 +108,7 @@ export default function ProgressScreen() {
               </TouchableOpacity>
             </ThemedView>
             <ThemedView style={styles.tiles}>
-              {tile(progress.month.hours, 'Labour hours')}
+              {tile(hm(progress.month.hours), 'Labour hours')}
               {tile(progress.month.reports, 'Reports filed')}
               {progress.month.over_estimate ? tile(progress.month.over_estimate, 'Over estimate') : null}
             </ThemedView>
