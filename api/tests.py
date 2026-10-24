@@ -1075,3 +1075,31 @@ class AppScheduleAndProgressTests(ApiTestCase):
         rows = self.client.get('/api/team-progress/', **self.auth(self.token_for('supervisor1'))).json()['rows']
         self.assertEqual([row['name'] for row in rows], [self.technician.full_name])
         self.assertTrue(rows[0]['months'])  # their year, month by month
+
+
+class AppIdentityTests(ApiTestCase):
+    # What the app needs to look right: tabs by permission, the profile,
+    # and the task screen's contact, directions and machines.
+
+    def test_me_carries_the_roles_permissions_and_profile(self):
+        token = self.token_for('tech1')
+        me = self.client.get('/api/me/', **self.auth(token)).json()
+        self.assertNotIn('manage_tickets', me['permissions'])  # so no Tickets tab
+        self.assertEqual(me['username'], 'tech1')
+        self.assertIn('photo_url', me)
+        supervisor = self.client.get('/api/me/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertIn('view_tasks', supervisor['permissions'])
+
+    def test_the_task_has_its_contact_directions_and_machines(self):
+        from tasks.models import CustomerTicket, TicketMachine
+        self.site.contact_phone = '+971500000001'
+        self.site.save(update_fields=['contact_phone'])
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0990', company_name='Fitness First', contact_name='Ali',
+            contact_phone='0501234567', description='-', submitted_at=timezone.now(), task=self.task,
+        )
+        TicketMachine.objects.create(ticket=ticket, model_name='Old bike', serial_no='OB-9', problem='display', task=self.task)
+        detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(self.token_for('tech1'))).json()
+        self.assertEqual(detail['site_contact_phone'], '+971500000001')
+        self.assertTrue(detail['directions_url'].startswith('https://www.google.com/maps/'))
+        self.assertEqual(detail['machines'][0]['serial'], 'OB-9')

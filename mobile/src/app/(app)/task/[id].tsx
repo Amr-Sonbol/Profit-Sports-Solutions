@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useCallback, useState, type ComponentProps } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity,
+  ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -21,6 +22,35 @@ const ACTION_LABELS: Record<string, string> = {
   arrive: 'I have arrived',
   start: 'Start work',
 };
+
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
+// The four kinds of photo, each with its own icon.
+const PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; label: string; icon: IconName }[] = [
+  { purpose: 'fault', label: 'Fault', icon: 'warning-outline' },
+  { purpose: 'serial_plate', label: 'Serial plate', icon: 'barcode-outline' },
+  { purpose: 'before', label: 'Before', icon: 'camera-outline' },
+  { purpose: 'after', label: 'After', icon: 'checkmark-circle-outline' },
+];
+
+/** "Sat 24 Oct, 10:00–13:00", "Sat 24 Oct, any time", or "Not scheduled yet". */
+function when(task: TaskDetail) {
+  if (task.scheduled_for) {
+    const start = new Date(task.scheduled_for);
+    const day = start.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    const from = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (task.estimated_hours) {
+      const end = new Date(start.getTime() + Number(task.estimated_hours) * 3600 * 1000);
+      return `${day}, ${from}–${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return `${day}, ${from}`;
+  }
+  if (task.scheduled_date) {
+    const day = new Date(`${task.scheduled_date}T00:00:00`);
+    return `${day.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}, any time`;
+  }
+  return 'Not scheduled yet';
+}
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -111,6 +141,33 @@ export default function TaskDetailScreen() {
             {task.customer_name}
           </ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          <ThemedView style={styles.whenRow}>
+            <Ionicons name="time-outline" size={18} color={theme.text} />
+            <ThemedText type="smallBold">{when(task)}</ThemedText>
+          </ThemedView>
+          {/* Get there, and call the site. */}
+          <ThemedView style={styles.quickRow}>
+            {task.directions_url ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(task.directions_url!)}
+              >
+                <Ionicons name="navigate-outline" size={18} color={theme.primary} />
+                <ThemedText themeColor="primary">Directions</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {task.site_contact_phone ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
+              >
+                <Ionicons name="call-outline" size={18} color={theme.primary} />
+                <ThemedText themeColor="primary" numberOfLines={1}>
+                  Call {task.site_contact_name || task.site_contact_phone}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+          </ThemedView>
           {isOffline ? (
             <ThemedText themeColor="danger" type="small">
               No connection — showing what was loaded last. Status buttons need a connection; the report can be
@@ -126,7 +183,20 @@ export default function TaskDetailScreen() {
             {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
           </ThemedView>
 
-          {task.description ? (
+          {task.machines && task.machines.length > 0 ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines the customer reported</ThemedText>
+              {task.machines.map((machine, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
+                  <ThemedText type="small">
+                    {machine.problem}{machine.out_of_service ? ' · cannot be used' : ''}
+                  </ThemedText>
+                  {machine.description ? <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText> : null}
+                </ThemedView>
+              ))}
+            </ThemedView>
+          ) : task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
@@ -176,14 +246,15 @@ export default function TaskDetailScreen() {
           <ThemedView style={styles.section}>
             <ThemedText type="smallBold">Add a photo</ThemedText>
             <ThemedView style={styles.photoRow}>
-              {(['fault', 'serial_plate', 'before', 'after'] as const).map((purpose) => (
+              {PHOTO_KINDS.map(({ purpose, label, icon }) => (
                 <TouchableOpacity
                   key={purpose}
                   style={[styles.photoButton, { borderColor: theme.backgroundSelected }]}
                   onPress={() => handleAddPhoto(purpose)}
                   disabled={isBusy}
                 >
-                  <ThemedText type="small">{purpose.replace('_', ' ')}</ThemedText>
+                  <Ionicons name={icon} size={22} color={theme.text} />
+                  <ThemedText type="small">{label}</ThemedText>
                 </TouchableOpacity>
               ))}
             </ThemedView>
@@ -205,7 +276,9 @@ export default function TaskDetailScreen() {
               <ThemedText type="smallBold">History</ThemedText>
               {task.events.map((event) => (
                 <ThemedText key={event.id} themeColor="textSecondary" type="small">
-                  {event.event_type_display} — {event.actor_name}
+                  {new Date(event.occurred_at).toLocaleString([], {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })} · {event.event_type_display} — {event.actor_name}
                 </ThemedText>
               ))}
             </ThemedView>
@@ -243,5 +316,15 @@ const styles = StyleSheet.create({
   undoButton: { borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
-  photoButton: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two },
+  photoButton: {
+    flexBasis: '47%', flexGrow: 1, alignItems: 'center', gap: Spacing.one,
+    borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.three,
+  },
+  whenRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  quickRow: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
+  quickButton: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one,
+    borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.two,
+  },
+  machine: { borderBottomWidth: 1, paddingBottom: Spacing.two, gap: 2, backgroundColor: 'transparent' },
 });

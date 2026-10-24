@@ -3,10 +3,18 @@
 
 export interface Me {
   full_name: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  /** Their profile photo, or '' for none. */
+  photo_url?: string;
   role: string | null;
   role_display?: string;
+  employment_type_display?: string;
   country?: string;
   language?: string;
+  /** What this role may do (RolePermission codes) — decides which tabs show. */
+  permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */
   must_change_password?: boolean;
 }
@@ -68,7 +76,14 @@ export interface TaskDetail {
   reported_at: string;
   promised_at: string | null;
   scheduled_for: string | null;
+  scheduled_date?: string | null;
   estimated_hours: string | null;
+  // Who to call on site and how to get there.
+  site_contact_name?: string;
+  site_contact_phone?: string;
+  directions_url?: string;
+  // The machines the customer reported for this task (portal ticket).
+  machines?: { name: string; serial: string; problem: string; out_of_service: boolean; description: string }[];
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Image } from 'expo-image';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -35,11 +36,17 @@ export default function SignInScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.form}>
-          <ThemedText type="title" style={styles.title}>
-            Profit Sports Solutions
-          </ThemedText>
+          {/* The company logo on a white card, so it reads in dark mode too. */}
+          <ThemedView style={styles.logoCard}>
+            <Image
+              source={require('@/assets/images/logo.png')}
+              style={styles.logo}
+              contentFit="contain"
+              accessibilityLabel="Profit Sports Solutions"
+            />
+          </ThemedView>
           <ThemedText type="subtitle" style={styles.subtitle}>
-            Sign in
+            Sign in to your account
           </ThemedText>
 
           <TextInput
@@ -85,6 +92,11 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, justifyContent: 'center' },
   form: { paddingHorizontal: Spacing.four, gap: Spacing.three },
   title: { fontSize: 24, textAlign: 'center', marginBottom: Spacing.one },
+  logoCard: {
+    alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: Spacing.three,
+    paddingVertical: Spacing.three, paddingHorizontal: Spacing.four, marginBottom: Spacing.three,
+  },
+  logo: { width: 200, height: 75 },
   subtitle: { fontSize: 18, textAlign: 'center', marginBottom: Spacing.three },
   input: {
     borderWidth: 1,

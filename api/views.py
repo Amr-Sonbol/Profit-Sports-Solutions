@@ -67,28 +67,38 @@ class LoginView(APIView):
         token, _created = Token.objects.get_or_create(user=user)
         # So Staff accounts' "Last sign-in" counts the app, not only the website.
         update_last_login(None, user)
-        return Response({'token': token.key, **_me_payload(user)})
+        return Response({'token': token.key, **_me_payload(user, request)})
 
 
-def _me_payload(user):
+def _me_payload(user, request=None):
     technician = getattr(user, 'technician', None)
     if technician is None:
-        return {'full_name': user.get_username(), 'role': None, 'country': None}
+        return {'full_name': user.get_username(), 'role': None, 'country': None, 'permissions': []}
     return {
         'full_name': technician.full_name,
+        'username': user.get_username(),
+        'email': user.email,
+        'phone': technician.phone,
+        'photo_url': request.build_absolute_uri(technician.photo.url) if technician.photo and request else '',
         'role': technician.role,
         'role_display': technician.get_role_display(),
+        'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
         'must_change_password': technician.must_change_password,
+        # What this role may do (RolePermission), so the app shows only
+        # the tabs that will open — the API still checks every request.
+        'permissions': sorted(
+            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        ),
     }
 
 
 class MeView(APIView):
     def get(self, request):
-        return Response(_me_payload(request.user))
+        return Response(_me_payload(request.user, request))
 
 
 class MyPasswordView(APIView):
@@ -126,7 +136,7 @@ class MyPasswordView(APIView):
         # Their own change, so this phone and any other stay signed in;
         # the token is sent back so the app's flow doesn't depend on that.
         token, _created = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key, **_me_payload(user)})
+        return Response({'token': token.key, **_me_payload(user, request)})
 
 
 def _schedule_item(task):
