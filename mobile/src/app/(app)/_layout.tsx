@@ -1,19 +1,39 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import type { ComponentProps } from 'react';
+import { type ColorValue, Platform } from 'react-native';
 
+import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 
+type IconName = ComponentProps<typeof Ionicons>['name'];
+
+type TabIconProps = { color: ColorValue; focused: boolean; size: number };
+
+/** A tab's icon: outlined, filled when it's the open tab. */
+function TabIcon({ name, color, focused, size }: TabIconProps & { name: string }) {
+  return <Ionicons name={(focused ? name : `${name}-outline`) as IconName} color={color as string} size={size} />;
+}
+
+function tabIcon(name: string) {
+  return function Icon(props: TabIconProps) {
+    return <TabIcon name={name} {...props} />;
+  };
+}
+
 /**
- * Every tab is reachable regardless of role — access itself is enforced
- * by the API (same RolePermission checks as the web app; see
- * api/permissions.py), not by hiding tabs client-side. A technician with
- * no team-management permissions just sees an empty/blocked state on the
- * Team or Tickets tab rather than the tab disappearing, which is simpler
- * than fetching "what am I allowed to see" separately just to decide
- * what to render.
+ * The tabs this person can use: Team needs the task list or the team
+ * (view_tasks / view_technicians), Tickets needs manage_tickets — the
+ * same permissions the website's sidebar follows, sent with /api/me/.
+ * The API still checks every request; this just doesn't offer a tab that
+ * would only say "no permission".
  */
 export default function AppTabsLayout() {
   const theme = useTheme();
+  const { me } = useSession();
+  const can = (permission: string) => me?.permissions?.includes(permission) ?? false;
+  const showTeam = can('view_tasks') || can('view_technicians');
+  const showTickets = can('manage_tickets');
 
   return (
     <Tabs
@@ -27,13 +47,20 @@ export default function AppTabsLayout() {
         }),
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'My Tasks' }} />
-      <Tabs.Screen name="team" options={{ title: 'Team' }} />
-      <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
+      <Tabs.Screen name="progress" options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up') }} />
+      <Tabs.Screen
+        name="team" options={{ title: 'Team', tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}
+      />
+      <Tabs.Screen
+        name="tickets"
+        options={{ title: 'Tickets', tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
+      />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
       <Tabs.Screen name="task/[id]" options={{ href: null }} />
       <Tabs.Screen name="report/[id]" options={{ href: null }} />
       <Tabs.Screen name="team-task/[id]" options={{ href: null }} />
+      <Tabs.Screen name="schedule/[id]" options={{ href: null }} />
       <Tabs.Screen name="change-password" options={{ href: null }} />
     </Tabs>
   );

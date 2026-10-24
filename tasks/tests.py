@@ -1,6 +1,6 @@
 import tempfile
 from unittest.mock import patch
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 from zoneinfo import ZoneInfo
@@ -11,7 +11,7 @@ from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from django.utils import timezone
+from django.utils import timezone, translation
 
 from customers.models import Asset, Customer, Site
 from people.models import (
@@ -42,6 +42,7 @@ class TaskTestCase(TestCase):
     def setUp(self):
         self.country = Country.objects.create(
             name='UAE', name_ar='الإمارات', iso_code='AE', timezone='Asia/Dubai', currency_code='AED',
+            weekend_days='5,6',  # Saturday–Sunday, so its week starts on Monday
         )
         self.brand = Brand.objects.create(name='Technogym')
         self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
@@ -451,6 +452,41 @@ class TaskEditTests(TaskTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
+    def test_moving_a_task_into_its_teams_other_job_warns(self):
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        other = Task.objects.create(
+            task_number='UAE-0002', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=dubai_time(2026, 9, 21, 9), estimated_hours=2,
+        )
+        TaskAssignment.objects.create(
+            task=other, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(scheduled_for='2026-09-21T10:00'), follow=True)
+        warnings = [str(m.message) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('UAE-0002', warnings[0])
+
+    def test_a_weekend_visit_is_a_reminder_unless_its_an_emergency(self):
+        # The test UAE's weekend is Saturday–Sunday; 2026-09-19 is a Saturday.
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(scheduled_for='2026-09-19T09:00'), follow=True)
+        self.task.refresh_from_db()
+        self.assertIsNotNone(self.task.scheduled_for)  # saved all the same
+        warnings = [m.message for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('weekend work is normally for emergencies only', warnings[0])
+
+        response = self.client.post(self.url, self._payload(
+            scheduled_for='2026-09-20T09:00', priority=Task.Priority.EMERGENCY,
+        ), follow=True)
+        self.assertFalse([m for m in response.context['messages'] if m.level_tag == 'warning'])
+
     def test_get_shows_current_values(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
@@ -532,6 +568,7 @@ class TaskEditTests(TaskTestCase):
     def test_rescheduling_does_not_auto_notify_when_setting_is_off(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
         self.site.save()
+        NotificationSettings.objects.update_or_create(pk=1, defaults={'auto_notify_on_reschedule': False})
 
         self.client.login(username='supervisor1', password='pass12345')
         self.client.post(self.url, self._payload(scheduled_for='2026-09-20T09:00'))
@@ -2974,6 +3011,49 @@ class TaskAssignTests(TaskTestCase):
         response = self.client.get(f'/tasks/{other_task.pk}/assign/')
         self.assertEqual(response.status_code, 404)
 
+    def _other_job(self, number, start, hours, technician=None):
+        job = Task.objects.create(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=start, estimated_hours=hours,
+        )
+        TaskAssignment.objects.create(
+            task=job, technician=technician or self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        return job
+
+    def test_each_candidate_shows_their_load_and_clashes_that_day(self):
+        self.task.scheduled_for, self.task.estimated_hours = dubai_time(2026, 9, 9, 10), 2
+        self.task.save(update_fields=['scheduled_for', 'estimated_hours'])
+        clash = self._other_job('AE-0011', dubai_time(2026, 9, 9, 9), 2)       # 9–11: overlaps 10–12
+        self._other_job('AE-0012', dubai_time(2026, 9, 9, 13), 3)               # 13–16: doesn't
+        self._other_job('AE-0013', dubai_time(2026, 9, 10, 10), 2)              # another day
+        self.client.login(username='supervisor1', password='pass12345')
+        candidates = {c.pk: c for c in self.client.get(self.url).context['candidates']}
+        tarek = candidates[self.technician.pk]
+        self.assertEqual(len(tarek.day_jobs), 2)
+        self.assertEqual(tarek.day_hours, 5)
+        self.assertEqual(tarek.clashes, [clash])
+        self.assertEqual((candidates[self.helper.pk].day_jobs, candidates[self.helper.pk].clashes), ([], []))
+
+    def test_assigning_into_a_clash_saves_with_a_warning(self):
+        self.task.scheduled_for, self.task.estimated_hours = dubai_time(2026, 9, 9, 10), 2
+        self.task.save(update_fields=['scheduled_for', 'estimated_hours'])
+        self._other_job('AE-0011', dubai_time(2026, 9, 9, 11), None)  # no estimate: counts as an hour
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk}, follow=True)
+        self.assertTrue(self.task.assignments.filter(technician=self.technician, is_active=True).exists())
+        warnings = [str(m.message) for m in response.context['messages'] if m.level_tag == 'warning']
+        self.assertEqual(len(warnings), 1)
+        self.assertIn('AE-0011', warnings[0])
+
+    def test_no_day_yet_means_no_load(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get(self.url)
+        self.assertIsNone(response.context['task_day'])
+        self.assertTrue(all(c.day_jobs == [] for c in response.context['candidates']))
+
     def test_set_lead_assigns_and_advances_status(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {'action': 'set_lead', 'technician': self.technician.pk})
@@ -3307,6 +3387,12 @@ class TaskOwnershipTests(TaskTestCase):
 
 
 class TaskWeekTests(TaskTestCase):
+    def test_the_schedule_has_a_year_view(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.get('/tasks/week/', {'view': 'year', 'year': '2026'})
+        self.assertEqual(response.context['view'], 'year')
+        self.assertEqual(len(response.context['year_months']), 12)
+
     # 2026-09-07 is a Monday.
     WEEK_START = date(2026, 9, 7)
 
@@ -3519,7 +3605,7 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
         self.assertEqual(response.context['unscheduled'][0].my_role, 'responsible')
@@ -3532,7 +3618,7 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
 
@@ -3549,9 +3635,127 @@ class MyWeekTests(TaskTestCase):
         )
 
         self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-week/')
+        response = self.client.get('/tasks/my-week/', {'view': 'week'})
 
         self.assertEqual(list(response.context['unscheduled']), [task])
+
+    def _lead(self, task):
+        self.technician.language = 'en'  # the page text is checked in English
+        self.technician.save(update_fields=['language'])
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        return task
+
+    def test_a_task_with_only_a_day_shows_on_that_day(self):
+        task = self._lead(self._make_task('AE-0701', scheduled_date=date(2026, 9, 9), status=Task.Status.ASSIGNED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+        wednesday = next(day for day in response.context['days'] if day['date'] == date(2026, 9, 9))
+        self.assertEqual(wednesday['tasks'], [task])
+        self.assertNotIn(task, response.context['unscheduled'])
+        self.assertContains(response, 'Any time that day')
+
+    def test_a_missed_job_shows_as_overdue_whatever_the_week(self):
+        missed = self._lead(self._make_task(
+            'AE-0702', scheduled_for=timezone.now() - timedelta(days=10), status=Task.Status.ACCEPTED,
+        ))
+        self._lead(self._make_task(  # done, waiting for review: not overdue
+            'AE-0703', scheduled_for=timezone.now() - timedelta(days=10), status=Task.Status.COMPLETED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        for week in ({}, {'start': '2030-01-07'}):
+            response = self.client.get('/tasks/my-week/', week)
+            self.assertEqual(response.context['overdue'], [missed])
+        self.assertContains(response, 'Overdue')
+
+    def test_a_cancelled_task_does_not_show(self):
+        self._lead(self._make_task(
+            'AE-0704', scheduled_for=dubai_time(2026, 9, 9, 9, 0), status=Task.Status.CANCELLED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-07'})
+        self.assertEqual(sum(len(day['tasks']) for day in response.context['days']), 0)
+
+    def test_the_week_starts_on_the_countrys_first_working_day(self):
+        # Egypt and Saudi Arabia: only Friday off, so the week runs Saturday to Thursday.
+        self.country.weekend_days = '4'
+        self.country.save(update_fields=['weekend_days'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'start': '2026-09-09'})  # a Wednesday
+        days = response.context['days']
+        self.assertEqual(days[0]['date'], date(2026, 9, 5))  # Saturday
+        self.assertEqual([day['date'] for day in days if day['is_weekend']], [date(2026, 9, 11)])  # Friday
+
+    def test_today_is_the_default_with_the_job_under_way_first(self):
+        dubai = ZoneInfo('Asia/Dubai')  # the page's "today" is the technician's own country's
+        today = timezone.localtime(timezone.now(), dubai).date()
+        today_at = lambda hour: datetime(today.year, today.month, today.day, hour, tzinfo=dubai)
+        early = self._lead(self._make_task('AE-0801', scheduled_for=today_at(8), status=Task.Status.ASSIGNED))
+        under_way = self._lead(self._make_task('AE-0802', scheduled_for=today_at(10), status=Task.Status.IN_PROGRESS))
+        done = self._lead(self._make_task('AE-0803', scheduled_for=today_at(7), status=Task.Status.COMPLETED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.context['view'], 'today')
+        self.assertEqual(response.context['next_job'], under_way)
+        self.assertEqual(response.context['later_today'], [early])
+        self.assertEqual(response.context['done_today'], [done])
+        self.assertEqual(response.context['today_count'], 3)
+        self.assertContains(response, 'Under way')
+        # The week is one tap away.
+        self.assertEqual(self.client.get('/tasks/my-week/', {'view': 'week'}).context['view'], 'week')
+
+    def test_the_next_job_has_its_tap_and_directions(self):
+        self.site.latitude, self.site.longitude = Decimal('25.080000'), Decimal('55.140000')
+        self.site.save(update_fields=['latitude', 'longitude'])
+        task = self._lead(self._make_task(
+            'AE-0804', scheduled_for=datetime.combine(
+                timezone.localtime(timezone.now(), ZoneInfo('Asia/Dubai')).date(), time(23), ZoneInfo('Asia/Dubai'),
+            ), status=Task.Status.ASSIGNED,
+        ))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertEqual(response.context['next_job'].next_action, 'accept')
+        self.assertIn('query=25.080000%2C55.140000', response.context['next_job'].directions_url)
+        self.assertContains(response, 'Accept task')
+
+        # Tapping it on the card comes back to Today.
+        response = self.client.post(f'/tasks/my/{task.pk}/', {'action': 'accept', 'next': 'today'})
+        self.assertRedirects(response, '/tasks/my-week/', fetch_redirect_response=False)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.Status.ACCEPTED)
+
+    def test_a_quiet_day_says_so(self):
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/')
+        self.assertIsNone(response.context['next_job'])
+        self.assertContains(response, 'Nothing left to do today.')
+
+    def test_the_year_shows_every_visit_like_a_quarterly_maintenance(self):
+        # A preventive maintenance visit every 3 months.
+        for number, month in (('AE-0901', 1), ('AE-0902', 4), ('AE-0903', 7), ('AE-0904', 10)):
+            self._lead(self._make_task(number, scheduled_for=dubai_time(2027, month, 12, 9), status=Task.Status.ASSIGNED))
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'view': 'year', 'year': '2027'})
+        months = response.context['year_months']
+        self.assertEqual(len(months), 12)
+        self.assertEqual([month['count'] for month in months], [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0])
+        busy_day = next(cell for cell in months[3]['cells'] if cell and cell['tasks'])
+        self.assertEqual(busy_day['date'], date(2027, 4, 12))
+        self.assertEqual(busy_day['tasks'][0].my_role, 'lead')
+        self.assertContains(response, 'My schedule')
+
+    def test_the_month_shows_my_tasks_only(self):
+        mine = self._lead(self._make_task('AE-0905', scheduled_for=dubai_time(2026, 9, 9, 9)))
+        self._make_task('AE-0906', scheduled_for=dubai_time(2026, 9, 10, 9))  # not mine
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-week/', {'view': 'month', 'month': '2026-09'})
+        booked = [task for day in response.context['days'] for task in day['tasks']]
+        self.assertEqual(booked, [mine])
+        self.assertContains(response, f'href="/tasks/my/{mine.pk}/"')
 
     def test_supervisor_can_view_their_own_week_too(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -3648,6 +3852,103 @@ class MyProgressTests(TaskTestCase):
         response = self.client.get('/tasks/my-progress/', {'start': '2026-09-07'})
 
         self.assertEqual(response.context['completed_count'], 1)
+
+    def test_a_manager_sees_a_technicians_progress_and_the_team(self):
+        Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Maya Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        task = Task.objects.create(
+            task_number='AE-0960', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        TaskAssignment.objects.create(
+            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=timezone.now(), actor=self.tech_user,
+        )
+        self.client.login(username='manager1', password='pass12345')
+
+        response = self.client.get(f'/tasks/technicians/{self.technician.pk}/progress/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['viewing_other'])
+        self.assertEqual(response.context['trend_chart']['this_month'], 1)
+        self.assertContains(response, 'Tasks completed per month')
+        self.assertNotContains(response, 'Self-assess a skill')
+
+        team = self.client.get('/tasks/technicians/progress/').context['rows']
+        row = next(row for row in team if row['technician'] == self.technician)
+        self.assertEqual((row['completed'], row['change']), (1, 1))
+        self.assertEqual(len(row['trend']['line_points'].split()), len(row['trend']['periods']))
+
+    def test_a_technician_cannot_see_someone_elses_progress(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/technicians/progress/').status_code, 403)
+        self.assertEqual(self.client.get(f'/tasks/technicians/{self.technician.pk}/progress/').status_code, 403)
+
+    def test_my_progress_charts_my_own_tasks_per_month(self):
+        now = timezone.now()
+        mine, other = [
+            Task.objects.create(
+                task_number=number, site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=now, created_by=self.supervisor_user,
+            )
+            for number in ('AE-0901', 'AE-0902')
+        ]
+        TaskAssignment.objects.create(
+            task=mine, technician=self.technician, role=TaskAssignment.Role.LEAD, assigned_at=now, is_active=True,
+        )
+        for task in (mine, other):  # someone else's task doesn't count
+            TaskEvent.objects.create(
+                task=task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=now, actor=self.tech_user,
+            )
+        # On the system for over a year: the chart shows the last year.
+        self.tech_user.date_joined = now - timedelta(days=500)
+        self.tech_user.save(update_fields=['date_joined'])
+        self.client.login(username='tech1', password='pass12345')
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
+        self.assertEqual(len(chart['periods']), 12)
+        self.assertEqual(chart['periods'][-1]['completed'], 1)
+        self.assertEqual((chart['this_month'], chart['change']), (1, 1))
+        # Twelve points, the last at the top of the scale.
+        points = chart['line_points'].split()
+        self.assertEqual(len(points), 12)
+        self.assertEqual(points[-1].split(',')[1], str(100 - chart['periods'][-1]['completed_pct']))
+
+    def test_the_chart_starts_the_month_the_account_was_created(self):
+        this_month = timezone.localdate().replace(day=1)
+        three_months_ago = this_month
+        for _month in range(3):
+            three_months_ago = (three_months_ago - timedelta(days=1)).replace(day=1)
+        self.tech_user.date_joined = timezone.make_aware(datetime.combine(three_months_ago, datetime.min.time()))
+        self.tech_user.save(update_fields=['date_joined'])
+        self.client.login(username='tech1', password='pass12345')
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
+        self.assertEqual([period['start'] for period in chart['periods']][0], three_months_ago)
+        self.assertEqual(len(chart['periods']), 4)
+
+        # Their very first month: one point, nothing to compare with yet.
+        self.tech_user.date_joined = timezone.now()
+        self.tech_user.save(update_fields=['date_joined'])
+        chart = self.client.get('/tasks/my-progress/').context['trend_chart']
+        self.assertEqual(len(chart['periods']), 1)
+        self.assertIsNone(chart['change'])
+
+    def test_my_progress_shows_a_chosen_past_month_but_never_a_future_one(self):
+        self.client.login(username='tech1', password='pass12345')
+        this_month = timezone.localdate().replace(day=1)
+        last_month = (this_month - timedelta(days=1)).replace(day=1)
+
+        response = self.client.get('/tasks/my-progress/', {'month': last_month.strftime('%Y-%m')})
+        self.assertEqual(response.context['month_first'], last_month)
+        self.assertEqual(response.context['next_month'], this_month)
+        self.assertFalse(response.context['is_this_month'])
+
+        response = self.client.get('/tasks/my-progress/', {'month': '2999-01'})
+        self.assertEqual(response.context['month_first'], this_month)
+        self.assertIsNone(response.context['next_month'])
 
     def test_supervisor_can_view_their_own_progress_too(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -3874,6 +4175,12 @@ class ReliabilityStatsTests(TaskTestCase):
 
 
 class MySkillsTests(TaskTestCase):
+    def setUp(self):
+        super().setUp()
+        # The page text is checked in English.
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+
     def test_anonymous_is_redirected_to_login(self):
         response = self.client.get('/tasks/my-skills/')
         self.assertEqual(response.status_code, 302)
@@ -3908,19 +4215,53 @@ class MySkillsTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(TechnicianSkill.objects.filter(technician=self.technician, skill=self.skill).exists())
 
-    def test_cannot_self_rate_a_skill_twice(self):
+    def test_a_self_rating_can_be_replaced_until_a_supervisor_reviews_it(self):
         TechnicianSkill.objects.create(
             technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
             set_by=self.technician, set_on=timezone.now().date(),
         )
-
         self.client.login(username='tech1', password='pass12345')
         self.client.post('/tasks/my-skills/', {
-            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 4,
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'evidence': self._evidence('better.mp4'),
         })
-
         rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
-        self.assertEqual(rating.level, 2)
+        self.assertEqual(rating.level, 3)
+        self.assertTrue(rating.evidence.name.endswith('.mp4'))
+        # Both stay in the history.
+        self.assertEqual(TechnicianSkillAssessment.objects.filter(skill=self.skill).count(), 1)
+
+    def test_a_supervisor_confirmed_level_cannot_be_changed_by_the_technician(self):
+        TechnicianSkill.objects.create(
+            technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SUPERVISOR,
+            set_by=self.supervisor_user.technician, set_on=timezone.now().date(), note='Watch the torque.',
+        )
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 4, 'evidence': self._evidence(),
+        }, follow=True)
+        self.assertEqual(TechnicianSkill.objects.get(technician=self.technician, skill=self.skill).level, 2)
+        self.assertContains(response, 'only a supervisor can change it now')
+        # The supervisor's note is shown with the confirmed level.
+        self.assertContains(response, 'Watch the torque.')
+
+    def test_a_failed_submission_says_so_and_keeps_the_chosen_level(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post('/tasks/my-skills/', {
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'note': 'Took 10 minutes',
+        })
+        self.assertContains(response, 'Your self-rating was not saved')
+        self.assertContains(response, f'id="skill-{self.skill.pk}"')
+        self.assertContains(response, '<details class="rate-form" open>')
+        self.assertContains(response, '<option value="3" selected>', html=False)
+        self.assertContains(response, 'value="Took 10 minutes"')
+
+    def test_the_page_explains_the_levels_and_shows_progress(self):
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.get('/tasks/my-skills/')
+        self.assertContains(response, 'Has led this work alone, repeatedly, with no callbacks.')
+        self.assertContains(response, 'Needed for certification')
+        self.assertIn('non_cardio_total', response.context['certification'])
+        self.assertEqual(response.context['waiting_count'], 0)
 
     def test_self_rate_conduct_area_creates_self_sourced_rating(self):
         area = ConductArea.objects.filter(is_active=True).first()
@@ -3971,39 +4312,6 @@ class MyProfileTests(TaskTestCase):
         self.assertEqual(response.context['rank'], 1)
         self.assertEqual(response.context['leaderboard_size'], 1)
 
-    def test_shows_supervisors_and_managers_in_the_country(self):
-        manager_user = User.objects.create_user('manager1', password='pass12345')
-        Technician.objects.create(
-            user=manager_user, country=self.country, full_name='Mona Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
-        )
-        other_country = Country.objects.create(
-            name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
-        )
-        other_supervisor_user = User.objects.create_user('egypt_sup', password='pass12345')
-        Technician.objects.create(
-            user=other_supervisor_user, country=other_country, full_name='Nour Cairo',
-            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
-        )
-
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/my-profile/')
-
-        # Nearest first: the supervisor, then the manager.
-        names = [person.full_name for person in response.context['contacts']]
-        self.assertEqual(names, ['Sara Super', 'Mona Manager'])
-
-    def test_a_supervisor_sees_only_people_above_them(self):
-        Technician.objects.create(
-            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
-            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
-            phone='+971500000000',
-        )
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/tasks/my-profile/')
-        self.assertEqual([person.full_name for person in response.context['contacts']], ['Mona Manager'])
-        self.assertContains(response, 'href="tel:+971500000000"')
-
     def test_an_admin_sees_their_account_without_field_staff_sections(self):
         Technician.objects.create(
             user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
@@ -4013,9 +4321,7 @@ class MyProfileTests(TaskTestCase):
         response = self.client.get('/tasks/my-profile/')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['is_field_staff'])
-        self.assertNotIn('contacts', response.context)
         self.assertNotIn('certification', response.context)
-        self.assertNotContains(response, 'Your contacts')
         self.assertNotContains(response, 'Professional skills')
         self.assertContains(response, 'admin1')
 
@@ -4116,6 +4422,50 @@ class MyProfileTests(TaskTestCase):
 
 
 class TechnicianListTests(TaskTestCase):
+    def _staff(self, username, role):
+        return Technician.objects.create(
+            user=User.objects.create_user(username, password='pass12345'), country=self.country,
+            full_name=username.title(), language='en', role=role, employment_type='staff',
+        )
+
+    def test_each_level_sees_the_people_below_it(self):
+        manager = self._staff('manager1', Technician.Role.MANAGER)
+        admin = self._staff('admin1', Technician.Role.ADMIN)
+        supervisor = self.supervisor_user.technician
+
+        def listed(username):
+            self.client.login(username=username, password='pass12345')
+            response = self.client.get('/tasks/technicians/')
+            return response, {row['technician'] for row in response.context['rows']}
+
+        response, people = listed('supervisor1')
+        self.assertEqual(people, {self.technician})
+        self.assertEqual(response.context['page_title'], 'Technicians')
+
+        response, people = listed('manager1')
+        self.assertEqual(people, {self.technician, supervisor})
+        self.assertEqual(response.context['page_title'], 'My team')
+
+        response, people = listed('admin1')
+        self.assertEqual(people, {self.technician, supervisor, manager, admin})
+        self.assertEqual(response.context['page_title'], 'Users')
+
+    def test_someone_outside_your_scope_cant_be_opened(self):
+        self._staff('manager1', Technician.Role.MANAGER)
+        supervisor = self.supervisor_user.technician
+        other_supervisor = self._staff('supervisor2', Technician.Role.SUPERVISOR)
+        self.client.login(username='supervisor1', password='pass12345')
+        for page in ('progress', 'board', 'skills'):
+            self.assertEqual(
+                self.client.get(f'/tasks/technicians/{other_supervisor.pk}/{page}/').status_code, 404, page,
+            )
+            self.assertEqual(self.client.get(f'/tasks/technicians/{self.technician.pk}/{page}/').status_code, 200, page)
+        # A manager can open a supervisor's pages, and sees them on Team progress.
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self.client.get(f'/tasks/technicians/{supervisor.pk}/progress/').status_code, 200)
+        team = {row['technician'] for row in self.client.get('/tasks/technicians/progress/').context['rows']}
+        self.assertIn(supervisor, team)
+
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/technicians/')
@@ -4164,7 +4514,20 @@ class TechnicianListTests(TaskTestCase):
         self.assertContains(response, 'No technicians match your search.')
 
 
-class DashboardTests(TaskTestCase):
+class DashboardManagerMixin:
+    # The dashboard is for managers and above (people migration 0050);
+    # a plain manager has it without handling tickets.
+
+    def _login_manager(self):
+        user = User.objects.create_user('dash_manager', password='pass12345')
+        self.manager = Technician.objects.create(
+            user=user, country=self.country, full_name='Maya Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.client.login(username='dash_manager', password='pass12345')
+
+
+class DashboardTests(DashboardManagerMixin, TaskTestCase):
     def _make_task(self, number, **overrides):
         fields = dict(
             task_number=number, site=self.site, priority=Task.Priority.NORMAL,
@@ -4174,20 +4537,18 @@ class DashboardTests(TaskTestCase):
         fields.update(overrides)
         return Task.objects.create(**fields)
 
-    def test_technician_can_view_it_too(self):
-        # Every role has view_dashboard now — it's the universal landing
-        # page (spots.views.home) — so a technician gets a normal 200,
-        # not the 403 this used to be.
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.get('/tasks/dashboard/')
-        self.assertEqual(response.status_code, 200)
+    def test_only_managers_and_above_can_view_it(self):
+        # Technicians and supervisors have My week and My progress instead.
+        for username in ('tech1', 'supervisor1'):
+            self.client.login(username=username, password='pass12345')
+            self.assertEqual(self.client.get('/tasks/dashboard/').status_code, 403, username)
 
     def test_shows_technician_availability(self):
         self.technician.is_available = False
         self.technician.unavailable_reason = Technician.UnavailableReason.SICK
         self.technician.save()
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(response.status_code, 200)
@@ -4205,7 +4566,7 @@ class DashboardTests(TaskTestCase):
             language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['technicians']), [self.technician])
@@ -4222,7 +4583,7 @@ class DashboardTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         technician = response.context['technicians'][0]
@@ -4235,7 +4596,7 @@ class DashboardTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         tasks = list(response.context['tasks'])
@@ -4245,7 +4606,7 @@ class DashboardTests(TaskTestCase):
     def test_closed_task_excluded(self):
         self._make_task('AE-0001', status=Task.Status.CLOSED)
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['tasks']), [])
@@ -4258,7 +4619,7 @@ class DashboardTests(TaskTestCase):
         other_site = Site.objects.create(customer=other_customer, name='Zamalek Branch', address='Cairo')
         self._make_task('EG-0001', site=other_site, status=Task.Status.NEW)
 
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         self.assertEqual(list(response.context['tasks']), [])
@@ -4971,50 +5332,103 @@ class RolePermissionsTests(TaskTestCase):
             ).exists(),
         )
 
-    def test_notification_setting_defaults_to_off(self):
+    def test_the_roles_page_links_to_notifications(self):
         self.client.login(username='admin1', password='pass12345')
         response = self.client.get('/tasks/roles/')
-        self.assertFalse(response.context['notification_settings'].auto_notify_on_reschedule)
+        self.assertContains(response, 'href="/tasks/notifications/"')
 
-    def test_admin_can_turn_on_auto_notify(self):
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {
-            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(NotificationSettings.load().auto_notify_on_reschedule)
 
-    def test_admin_can_turn_off_auto_notify(self):
-        settings = NotificationSettings.load()
-        settings.auto_notify_on_reschedule = True
-        settings.save()
+class NotificationSettingsPageTests(TaskTestCase):
+    # The admin's Notifications page (tasks.views.notification_settings):
+    # a switch per automatic message, and who gets the staff emails.
 
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {'action': 'save_notifications'})
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
-
-    def test_saving_notifications_does_not_touch_the_permission_matrix(self):
-        RolePermission.objects.filter(
-            role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS,
-        ).update(allowed=True)
-
-        self.client.login(username='admin1', password='pass12345')
-        self.client.post('/tasks/roles/', {'action': 'save_notifications', 'auto_notify_on_reschedule': 'on'})
-
-        self.assertTrue(
-            RolePermission.objects.filter(
-                role=Technician.Role.SUPERVISOR, permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
-            ).exists(),
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345', email='admin@example.com'),
+            country=self.country, full_name='Adam Admin', language='en', role=Technician.Role.ADMIN,
+            employment_type='staff',
         )
 
-    def test_technician_cannot_change_notification_setting(self):
-        self.client.login(username='tech1', password='pass12345')
-        response = self.client.post('/tasks/roles/', {
-            'action': 'save_notifications', 'auto_notify_on_reschedule': 'on',
-        })
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(NotificationSettings.load().auto_notify_on_reschedule)
+    def _post(self, **changes):
+        data = {
+            'ticket_received_email': 'on', 'reply_to_customer_email': 'on', 'auto_notify_on_reschedule': 'on',
+            'new_ticket_email': 'on', 'new_ticket_roles': ['support_manager', 'admin'],
+            'new_task_email': 'on', 'new_task_roles': ['manager', 'admin'],
+            'reply_to_staff_email': 'on', 'escalation_emails': 'on', 'shipment_to_supervisor_email': 'on',
+            'push_assigned': 'on', 'push_removed': 'on', 'push_cancelled': 'on',
+        }
+        data.update(changes)
+        return self.client.post('/tasks/notifications/', {key: value for key, value in data.items() if value})
+
+    def test_only_an_admin_opens_it(self):
+        for username in ('tech1', 'supervisor1'):
+            self.client.login(username=username, password='pass12345')
+            self.assertEqual(self.client.get('/tasks/notifications/').status_code, 403, username)
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/notifications/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Always sent, for account security')
+        self.assertIn('/tasks/notifications/', [page['url'] for page in response.context['nav_pages']])
+
+    def test_everything_is_on_by_default_including_reschedule(self):
+        settings = NotificationSettings.load()
+        self.assertTrue(settings.auto_notify_on_reschedule)
+        self.assertTrue(settings.ticket_received_email and settings.push_assigned)
+        self.assertEqual(settings.new_task_roles, ['manager', 'admin'])
+
+    def test_saving_switches_and_recipients(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self._post(ticket_received_email='', new_task_roles=['supervisor'])
+        self.assertRedirects(response, '/tasks/notifications/')
+        settings = NotificationSettings.load()
+        self.assertFalse(settings.ticket_received_email)
+        self.assertEqual(settings.new_task_roles, ['supervisor'])
+
+    def test_an_email_that_is_on_needs_someone_to_receive_it(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self._post(new_ticket_roles=[])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors['new_ticket_roles'])
+        # Off, it may have no one.
+        self.assertEqual(self._post(new_ticket_email='', new_ticket_roles=[]).status_code, 302)
+
+    def test_a_switched_off_message_is_not_sent(self):
+        from tasks.views import send_ticket_confirmation_to_customer
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0901', company_name='Fitness First', site_description='Marina',
+            contact_name='Ali', contact_phone='0501234567', contact_email='ali@example.com',
+            description='Squeak', submitted_at=timezone.now(),
+        )
+        NotificationSettings.objects.filter(pk=NotificationSettings.load().pk).update(ticket_received_email=False)
+        send_ticket_confirmation_to_customer(None, ticket)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_the_new_task_email_goes_to_the_chosen_roles(self):
+        from tasks.views import _send_new_task_email_to_staff
+        self.supervisor_user.email = 'sup@example.com'
+        self.supervisor_user.save(update_fields=['email'])
+        settings = NotificationSettings.load()
+        settings.new_task_roles = ['supervisor']
+        settings.save()
+        task = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        request = self.client.request().wsgi_request
+        _send_new_task_email_to_staff(request, task)
+        self.assertEqual([message.to for message in mail.outbox], [['sup@example.com']])
+
+    def test_a_switched_off_phone_notification_is_not_sent(self):
+        from people.push import push_assigned
+        task = Task.objects.create(
+            task_number='AE-0951', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        NotificationSettings.objects.filter(pk=NotificationSettings.load().pk).update(push_assigned=False)
+        with patch('people.push.send_push') as send_push:
+            push_assigned(self.technician, task, is_lead=True)
+        send_push.assert_not_called()
 
 
 class MonthlyReportTests(TaskTestCase):
@@ -5194,8 +5608,8 @@ class HomeRedirectTests(TaskTestCase):
     def test_technician_sees_only_their_own_pages(self):
         self.client.login(username='tech1', password='pass12345')
         urls = self._tile_urls(self.client.get('/'))
-        self.assertEqual(urls[:4], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/', '/tasks/dashboard/'])
-        for url in ('/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
+        self.assertEqual(urls[:3], ['/tasks/my-week/', '/tasks/my-progress/', '/tasks/my-skills/'])
+        for url in ('/tasks/dashboard/', '/tasks/countries/', '/tasks/roles/', '/tasks/audit-log/'):
             self.assertNotIn(url, urls)
 
     def test_supervisor_sees_tasks_but_not_manager_pages(self):
@@ -5209,7 +5623,10 @@ class HomeRedirectTests(TaskTestCase):
         self._make_staff('manager1', Technician.Role.MANAGER)
         urls = self._tile_urls(self.client.get('/'))
         self.assertIn('/tasks/countries/', urls)
-        self.assertNotIn('/tasks/my-week/', urls)
+        # Their own schedule and the team's progress; not the field team's own progress page.
+        self.assertIn('/tasks/my-week/', urls)
+        self.assertIn('/tasks/technicians/progress/', urls)
+        self.assertNotIn('/tasks/my-progress/', urls)
         self.assertNotIn('/tasks/roles/', urls)
 
     def test_admin_sees_roles_and_audit_log(self):
@@ -5278,13 +5695,13 @@ class TechnicianFirstLoginTests(TaskTestCase):
         self.technician.must_change_password = False
         self.technician.save(update_fields=['must_change_password'])
         response = self.client.get('/tasks/first-login/')
-        self.assertRedirects(response, '/tasks/dashboard/')
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
 
     def test_submitting_sets_the_password_and_clears_the_flag(self):
         response = self.client.post('/tasks/first-login/', {
             'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertRedirects(response, '/tasks/dashboard/')
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
 
         self.technician.refresh_from_db()
         self.assertFalse(self.technician.must_change_password)
@@ -5609,6 +6026,33 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(report.copy_sent_to, 'ali@example.com')
         self.assertIsNotNone(report.copy_sent_at)
 
+    def _send_copy_capturing_language(self):
+        with patch('reports.pdf.render_visit_report_pdf', return_value=b'%PDF-test') as render:
+            self.client.login(username='tech1', password='pass12345')
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        return render.call_args.args[1], mail.outbox[0]
+
+    def test_in_saudi_arabia_and_egypt_the_report_and_its_email_are_arabic(self):
+        self.country.report_language = 'ar'
+        self.country.save(update_fields=['report_language'])
+        self.customer.language = 'en'  # their own choice doesn't change it
+        self.customer.save(update_fields=['language'])
+        language, email = self._send_copy_capturing_language()
+        self.assertEqual(language, 'ar')
+        self.assertNotIn('Visit report', email.subject)
+        html = email.alternatives[0][0]
+        self.assertIn('dir="rtl"', html)
+        self.assertIn('Profit Sports Solutions', html)  # the company name stays in English
+
+    def test_elsewhere_the_report_is_always_english(self):
+        self.customer.language = 'ar'  # even a customer who picked Arabic
+        self.customer.save(update_fields=['language'])
+        language, email = self._send_copy_capturing_language()
+        self.assertEqual(language, 'en')
+        self.assertIn('Visit report', email.subject)
+        self.assertIn('dir="ltr"', email.alternatives[0][0])
+
     def test_a_correction_does_not_send_another_copy(self):
         self.client.login(username='tech1', password='pass12345')
         with self.captureOnCommitCallbacks(execute=True):
@@ -5781,7 +6225,7 @@ class MyReportFormTests(TaskTestCase):
 
         response = self.client.post(self.url, self._base_payload(labour_hours='9.00'))
         self.assertRedirects(response, f'/tasks/my/{self.task.pk}/')
-        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '1.50')
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '0.00')  # no Start tap here
 
     def test_manager_corrects_a_closed_report_and_it_stays_closed(self):
         self.client.login(username='tech1', password='pass12345')
@@ -5802,15 +6246,15 @@ class MyReportFormTests(TaskTestCase):
 
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.CLOSED)
-        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.25')
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.COMPLETED).count(), 1)
 
     def test_hours_and_prices_are_marked_staff_only_for_the_signing_view(self):
         self.client.login(username='tech1', password='pass12345')
         html = self.client.get(self.url).content.decode()
         self.assertIn('data-report-form', html)
-        hours_field = html[html.index('name="labour_hours"') - 400:html.index('name="labour_hours"')]
-        self.assertIn('data-staff-only', hours_field)
+        # The hours aren't typed any more — shown, worked out from the taps.
+        self.assertNotIn('name="labour_hours"', html)
+        self.assertIn('data-signing-only', html)
         self.assertIn('data-signoff-start', html)
 
     def test_supervisor_cannot_use_the_manager_correction(self):
@@ -5919,16 +6363,18 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-    def test_invalid_currency_code_is_rejected(self):
+    def test_a_part_needs_no_price(self):
+        # Managers agree prices with the customer before the visit: a part
+        # is recorded with its code and quantity only.
         self.client.login(username='tech1', password='pass12345')
         payload = self._base_payload()
         payload['parts-0-part_code'] = 'BELT-42'
-        payload['parts-0-quantity'] = '1'
-        payload['parts-0-unit_cost'] = '85.00'
-        payload['parts-0-currency_code'] = 'aed'
+        payload['parts-0-quantity'] = '2'
         response = self.client.post(self.url, payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertEqual(response.status_code, 302)
+        part = WorkReport.objects.get(task=self.task).parts_used.get()
+        self.assertEqual((part.part_code, part.quantity, part.unit_cost), ('BELT-42', 2, None))
+        self.assertNotContains(self.client.get(self.url), 'Unit cost')
 
     def test_excessive_part_quantity_is_rejected_cleanly(self):
         # PositiveIntegerField has no upper bound of its own; this must fail
@@ -6238,6 +6684,17 @@ class UnscheduledAlarmTests(TaskTestCase):
         sunday_evening = self._local(2026, 10, 4, 16)
         self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=saturday_night), [])
         self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=sunday_evening), [task])
+
+    def test_an_emergency_counts_the_weekend_too(self):
+        from tasks.alarms import overdue_unscheduled_tasks
+
+        # The team works weekends for emergencies: Thursday 15:00 plus 24
+        # hours is Friday 15:00, weekend or not.
+        task = self._task(created_at=self._local(2026, 10, 1, 15))
+        task.priority = Task.Priority.EMERGENCY
+        task.save(update_fields=['priority'])
+        friday_evening = self._local(2026, 10, 2, 16)
+        self.assertEqual(overdue_unscheduled_tasks(self.country, self.supervisor, now=friday_evening), [task])
 
     def test_scheduled_or_started_tasks_are_not_flagged(self):
         from tasks.alarms import overdue_unscheduled_tasks
@@ -7251,9 +7708,9 @@ class TappedHoursTests(TaskTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
         form = WorkReportForm({
-            'findings': 'x', 'resolved': 'True', 'labour_hours': '2', 'customer_name': 'Ali',
+            'findings': 'x', 'resolved': 'True', 'customer_name': 'Ali',
             f'helper_hours_{helper.pk}': '3',
-        }, helpers=[helper])
+        }, helpers=[helper], time_on_site=Decimal('2'))
         self.assertFalse(form.is_valid())
         self.assertIn(f'helper_hours_{helper.pk}', form.errors)
 
@@ -7489,22 +7946,23 @@ class TaskListQuickFilterTests(TodayTestsMixin, TaskTestCase):
         self.assertContains(response, '<input type="hidden" name="lead" value="none">', html=True)
 
 
-class DashboardTileTests(TodayTestsMixin, TaskTestCase):
+class DashboardTileTests(DashboardManagerMixin, TodayTestsMixin, TaskTestCase):
     def test_tiles_link_to_the_filtered_lists_and_urgent_rows_come_first(self):
         self._make_task('UAE-0301', lead=self.technician, scheduled_for=timezone.now())
         self._make_task('UAE-0302', priority=Task.Priority.EMERGENCY, lead=self.technician,
                         scheduled_for=timezone.now())
         self._make_task('UAE-0303', scheduled_for=timezone.now())
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
         self.assertContains(response, 'href="/tasks/?priority=emergency"')
         self.assertContains(response, 'href="/tasks/?lead=none"')
         numbers = [task.task_number for task in response.context['tasks']]
         self.assertEqual(numbers[:2], ['UAE-0302', 'UAE-0303'])
 
-    def test_technician_sees_numbers_but_no_links(self):
+    def test_a_role_without_the_task_list_sees_numbers_but_no_links(self):
         self._make_task('UAE-0304')
-        self.client.login(username='tech1', password='pass12345')
+        self._login_manager()
+        RolePermission.objects.filter(role=Technician.Role.MANAGER, permission='view_tasks').update(allowed=False)
         response = self.client.get('/tasks/dashboard/')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'href="/tasks/?lead=none"')
@@ -7711,16 +8169,17 @@ class AccountTakeoverGuardTests(TaskTestCase):
         response = self.client.post(f'/tasks/technicians/{self.manager.pk}/edit/', {
             'full_name': 'Mona Manager', 'email': 'attacker@example.com', 'language': 'en',
         })
-        self.assertEqual(response.status_code, 403)
+        # Someone above you isn't on your list at all (overseen_roles).
+        self.assertEqual(response.status_code, 404)
 
     def test_a_manager_gets_no_password_reset_for_an_admin(self):
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.get(f'/tasks/technicians/{self.admin.pk}/edit/')
-        self.assertIsNone(response.context['password_form'])
+        # A manager doesn't oversee an admin: neither the page nor a reset is reachable.
+        self.assertEqual(self.client.get(f'/tasks/technicians/{self.admin.pk}/edit/').status_code, 404)
         response = self.client.post(f'/tasks/technicians/{self.admin.pk}/edit/', {
             'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
     def test_the_last_admin_cannot_be_deactivated(self):
         self.client.login(username='admin1', password='pass12345')
@@ -7973,7 +8432,7 @@ class SidebarPerUserTests(TaskTestCase):
         self.assertNotContains(response, 'Not allowed', status_code=403)
 
 
-class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
+class DashboardWeeklyChartTests(DashboardManagerMixin, TodayTestsMixin, TaskTestCase):
     # The dashboard's opened-vs-completed chart: tasks reported per local
     # week, and tasks whose first work report was submitted that week.
 
@@ -7991,7 +8450,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
             TaskEvent.objects.create(
                 task=older, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=when, actor=self.tech_user,
             )
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         weekly = self.client.get('/tasks/dashboard/', {'period': 'week'}).context['tasks_chart']
         weeks = weekly['periods']
         self.assertEqual(len(weeks), 8)
@@ -8004,7 +8463,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
         self.assertIsNotNone(this_week)
 
     def test_tickets_chart_only_for_people_who_handle_tickets(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         self.assertIsNone(self.client.get('/tasks/dashboard/').context['tickets_chart'])
 
         Technician.objects.create(
@@ -8025,7 +8484,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
     def test_monthly_is_the_default_and_covers_twelve_months(self):
         self._make_task('UAE-0601', reported_at=TEAM_MAP_NOW)
         self._make_task('UAE-0602', reported_at=TEAM_MAP_NOW - timedelta(days=40))
-        self.client.login(username='supervisor1', password='pass12345')
+        self._login_manager()
         chart = self.client.get('/tasks/dashboard/').context['tasks_chart']
         self.assertEqual(chart['period'], 'month')
         months = chart['periods']
@@ -8034,9 +8493,7 @@ class DashboardWeeklyChartTests(TodayTestsMixin, TaskTestCase):
         self.assertEqual((months[-1]['opened'], months[-2]['opened']), (1, 1))
 
     def test_chart_has_a_legend_and_a_table_view(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        self.supervisor_user.technician.language = 'en'
-        self.supervisor_user.technician.save(update_fields=['language'])
+        self._login_manager()
         response = self.client.get('/tasks/dashboard/')
         self.assertContains(response, 'chart-legend')
         self.assertContains(response, 'Show as table')
@@ -8172,3 +8629,200 @@ class TicketMachineDecisionTests(TaskTestCase):
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Under review')
         self.assertContains(response, 'Under the gym supplier warranty.')
+
+
+class TicketMachineFindingsTests(TaskTestCase):
+    # The report records what was found and done on each machine, starts
+    # from the machines the customer reported for this task, and the
+    # customer's ticket shows each machine's result.
+
+    # The same report form and lead as the approval tests (not their tests).
+    _report_payload = TaskSupervisorApprovalTests._report_payload
+    _assign_lead = TaskSupervisorApprovalTests._assign_lead
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PORTAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=self.supervisor_user.technician,
+        )
+        self.report_url = f'/tasks/my/{self.task.pk}/report/'
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0701', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='(from the machines)', submitted_at=timezone.now(), task=self.task,
+            status=CustomerTicket.Status.CONVERTED,
+        )
+        self.listed = TicketMachine.objects.create(
+            ticket=self.ticket, asset=self.asset, problem=TicketMachine.Problem.NOISE,
+            decision=TicketMachine.Decision.VISIT, task=self.task,
+        )
+        self.unlisted = TicketMachine.objects.create(
+            ticket=self.ticket, model_name='Old bike', serial_no='OB-9', problem=TicketMachine.Problem.DISPLAY,
+            decision=TicketMachine.Decision.VISIT, task=self.task, position=1,
+        )
+        self._assign_lead(self.supervisor_user.technician)
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def test_the_report_starts_from_the_tickets_machines(self):
+        response = self.client.get(self.report_url)
+        self.assertEqual(response.context['existing_formset'].initial, [{'asset': self.asset.pk}])
+        self.assertEqual(response.context['new_formset'].initial, [
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': self.unlisted.pk},
+        ])
+
+    def test_each_machines_finding_is_saved_and_shown_to_the_customer(self):
+        payload = self._report_payload()
+        payload.update({
+            'existing-TOTAL_FORMS': '1', 'existing-INITIAL_FORMS': '1',
+            'existing-0-asset': str(self.asset.pk), 'existing-0-outcome': 'repaired',
+            'existing-0-note': 'Belt tightened.',
+            'new-TOTAL_FORMS': '1', 'new-INITIAL_FORMS': '1',
+            'new-0-brand': str(self.brand.pk), 'new-0-model_name': 'Old bike', 'new-0-serial_no': 'OB-9',
+            'new-0-outcome': 'replaced', 'new-0-note': 'Console replaced.',
+            'new-0-ticket_machine': str(self.unlisted.pk),
+        })
+        self.assertEqual(self.client.post(self.report_url, payload).status_code, 302)
+
+        self.unlisted.refresh_from_db()
+        self.assertIsNotNone(self.unlisted.asset)  # registered at the site now
+        self.assertEqual(self.unlisted.result.note, 'Console replaced.')
+        self.assertEqual(self.listed.result.get_outcome_display(), 'Repaired')
+
+        from reports.pdf import report_content
+        notes = sorted(machine.get('note') for machine in report_content(self.task.report)['machines'])
+        self.assertEqual(notes, ['Belt tightened.', 'Console replaced.'])
+
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.assertContains(response, 'Belt tightened.')
+        self.assertContains(response, 'Console replaced.')
+
+    def test_a_report_signed_before_findings_still_reads_as_unchanged(self):
+        from reports.pdf import changed_after_signing, report_content
+        self.client.post(self.report_url, self._report_payload())
+        report = self.task.report
+        report.signed_content = report_content(report)
+        report.save(update_fields=['signed_content'])
+        TaskAsset.objects.create(task=self.task, asset=self.asset, outcome='repaired')
+        report.signed_content['machines'] = report_content(report)['machines']
+        report.save(update_fields=['signed_content'])
+        self.assertNotIn('note', report.signed_content['machines'][0])
+        self.assertFalse(changed_after_signing(report))
+
+
+class CorporateReportTests(TicketMachineFindingsTests):
+    # The visit report like the company's PPM report: standard wording that
+    # reads in the report's language, per-machine finding / action /
+    # status, recommendations, the next visit, the team as "performed by",
+    # and the time on site (no prices).
+
+    def _file(self, **extra):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({
+            'findings': '', 'work_lines': ['bolts', 'greased'], 'recommendations': ['keep_grease'],
+            'existing-TOTAL_FORMS': '1', 'existing-INITIAL_FORMS': '1',
+            'existing-0-asset': str(self.asset.pk), 'existing-0-outcome': 'repaired',
+            'existing-0-finding_code': 'noise_moving_part', 'existing-0-action_code': 'greased',
+            'new-TOTAL_FORMS': '0', 'new-INITIAL_FORMS': '0', **extra,
+        })
+        self.client.post(self.report_url, payload)
+        return WorkReport.objects.get(task=self.task)
+
+    def test_the_report_reads_in_its_language_with_findings_actions_and_next_visit(self):
+        from reports.pdf import _template_context, report_content
+        report = self._file()
+        self.assertEqual(report.work_lines, ['bolts', 'greased'])
+        follow_up = Task.objects.create(
+            task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            scheduled_date=timezone.localdate() + timedelta(days=90),
+        )
+        with translation.override('ar'):
+            context = _template_context(report, report_content(report), '', None, False)
+            lines = [str(line) for line in context['work_lines']]
+            machine = context['machines'][0]
+            self.assertIn('تم فحص جميع البراغي وإحكام شدّها.', lines)
+            self.assertEqual(str(machine['finding_label']), 'صوت صادر من جزء متحرك')
+            self.assertEqual(str(machine['action_label']), 'تم فك الجهاز وتشحيم الجزء المتأثر')
+            self.assertTrue(str(context['recommendations'][0]).startswith('للحفاظ على فعالية التشحيم'))
+        self.assertEqual(context['next_visit'], follow_up.scheduled_date)
+
+    def test_no_hours_line_and_the_team_performed_it(self):
+        from django.template.loader import render_to_string
+        from reports.pdf import _template_context, report_content
+        report = self._file()
+        html = render_to_string('reports/visit_report_pdf.html', {
+            **_template_context(report, report_content(report), '', None, False), 'is_rtl': False,
+        })
+        self.assertNotIn('Hours and prices', html)
+        self.assertIn('Profit Sports Solutions technical team', html)
+        self.assertIn('Noise from a moving part', html)
+
+    def test_a_report_signed_before_the_standard_wording_still_reads_as_unchanged(self):
+        from reports.pdf import changed_after_signing, report_content
+        report = self._file(**{'work_lines': [], 'recommendations': [],
+                               'existing-0-finding_code': '', 'existing-0-action_code': ''})
+        report.signed_content = report_content(report)
+        report.save(update_fields=['signed_content'])
+        self.assertNotIn('work_lines', report.signed_content)
+        self.assertFalse(changed_after_signing(report))
+
+    def test_the_website_preview_opens_the_report_and_saves_nothing(self):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({'preview': '1', 'findings': '', 'work_lines': ['bolts'], 'new-TOTAL_FORMS': '0',
+                        'new-INITIAL_FORMS': '0', 'existing-TOTAL_FORMS': '0', 'existing-INITIAL_FORMS': '0'})
+        response = self.client.post(self.report_url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'PREVIEW')
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_the_customer_sees_the_time_on_site(self):
+        from reports.pdf import changed_after_signing, render_visit_report_html
+        self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2, minutes=30))
+        report = self._file()
+        self.assertIn('2:30 hours', render_visit_report_html(report, language='en'))
+        self.assertContains(self.client.get(self.report_url), 'Time on site')
+
+    def test_a_report_signed_before_the_time_was_shown_is_not_marked_changed(self):
+        from reports.pdf import changed_after_signing, report_content
+        report = self._file()
+        older = report_content(report)
+        older.pop('hours')
+        report.signed_content = {**older, 'signature_url': ''}
+        self.assertFalse(changed_after_signing(report))
+
+    def _tap(self, kind, at):
+        TaskEvent.objects.create(task=self.task, event_type=kind, occurred_at=at, actor=self.supervisor_user)
+
+    def test_the_time_on_site_runs_from_start_to_sending_without_pauses_or_review(self):
+        start = timezone.now() - timedelta(days=1)
+        kinds = TaskEvent.EventType
+        self._tap(kinds.ARRIVED, start - timedelta(minutes=20))  # not counted: the clock starts at "Start"
+        self._tap(kinds.STARTED, start)
+        self._tap(kinds.PAUSED, start + timedelta(hours=1))
+        self._tap(kinds.RESUMED, start + timedelta(hours=3))
+        self._tap(kinds.COMPLETED, start + timedelta(hours=3, minutes=32))
+        # Waiting for review and approval adds nothing.
+        self._tap(kinds.SUPERVISOR_APPROVED, start + timedelta(hours=9))
+        self.assertEqual(self.task.time_on_site(), Decimal('1.53'))  # 1:32
+
+    def test_the_hours_are_worked_out_not_typed(self):
+        self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2))
+        report = self._file(labour_hours='9')
+        self.assertEqual(report.labour_hours, Decimal('2.00'))
+        # A later correction keeps the time the report was first sent.
+        self.assertEqual(self._file(labour_hours='9').labour_hours, Decimal('2.00'))
+
+    def test_hours_read_as_hours_and_minutes(self):
+        from reports.pdf import hours_text
+        self.assertEqual(
+            [hours_text(value) for value in ('1.53', '2.50', '0.02', '10.00', '0.00', None)],
+            ['1:32', '2:30', '0:01', '10:00', '', ''],
+        )

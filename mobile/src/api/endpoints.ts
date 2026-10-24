@@ -2,7 +2,8 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
-  Candidate, CataloguePart, Me, PasswordInput, ReportHelper, TaskDetail, TaskListItem, TeamTaskDetail, Ticket, WorkReport, WorkReportInput,
+  Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
+  TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -52,7 +53,23 @@ export function uploadTaskAttachment(id: number, fileUri: string, fileName: stri
 }
 
 export function fetchMyReport(id: number) {
-  return apiRequest<{ report: WorkReport | null; helpers?: ReportHelper[]; send_copy_to?: string }>(
+  return apiRequest<{
+    report: WorkReport | null;
+    helpers?: ReportHelper[];
+    send_copy_to?: string;
+    // The visit's time from the taps as "1:32", and whether the report was sent (then fixed).
+    time_on_site?: string | null;
+    time_is_final?: boolean;
+    machines?: ReportMachine[];
+    site_machines?: SiteMachine[];
+    brands?: Brand[];
+    outcomes?: Choice[];
+    findings?: Choice[];
+    actions?: Choice[];
+    work_line_choices?: Choice[];
+    recommendation_choices?: Choice[];
+    report_language?: string;
+  }>(
     `/api/my-tasks/${id}/report/`,
   );
 }
@@ -99,4 +116,40 @@ export function approveTaskReport(id: number) {
 /** New tickets; with `search`, matches across every status (newest 50). */
 export function fetchNewTickets(search = '') {
   return apiRequest<Ticket[]>(search ? `/api/tickets/?q=${encodeURIComponent(search)}` : '/api/tickets/');
+}
+
+export function fetchMyToday() {
+  return apiRequest<TodayPlan>('/api/my-today/');
+}
+
+/** `month` is YYYY-MM; this month when left out. */
+export function fetchMyProgress(month?: string) {
+  return apiRequest<MyProgress>(`/api/my-progress/${month ? `?month=${month}` : ''}`);
+}
+
+export function fetchTeamProgress(month?: string) {
+  return apiRequest<{ month: string; rows: TeamProgressRow[] }>(`/api/team-progress/${month ? `?month=${month}` : ''}`);
+}
+
+/**
+ * A week (`start` YYYY-MM-DD), month (`month` YYYY-MM) or year of someone's
+ * schedule; `technician` for a person on the viewer's team.
+ */
+export function fetchMySchedule(params: { view: string; start?: string; month?: string; year?: string; technician?: number }) {
+  const query = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+    .join('&');
+  return apiRequest<MySchedule>(`/api/my-schedule/?${query}`);
+}
+
+/**
+ * "Review report": the report exactly as it would be sent (HTML) and what
+ * to fix — nothing is saved. The signature isn't needed yet.
+ */
+export function previewMyReport(id: number, report: WorkReportInput) {
+  return apiRequest<{ html: string; problems: string[] }>(`/api/my-tasks/${id}/report/?preview=1`, {
+    method: 'POST',
+    body: { ...report, signature: null },
+  });
 }

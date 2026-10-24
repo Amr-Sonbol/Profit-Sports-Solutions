@@ -3,10 +3,18 @@
 
 export interface Me {
   full_name: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  /** Their profile photo, or '' for none. */
+  photo_url?: string;
   role: string | null;
   role_display?: string;
+  employment_type_display?: string;
   country?: string;
   language?: string;
+  /** What this role may do (RolePermission codes) — decides which tabs show. */
+  permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */
   must_change_password?: boolean;
 }
@@ -68,7 +76,14 @@ export interface TaskDetail {
   reported_at: string;
   promised_at: string | null;
   scheduled_for: string | null;
+  scheduled_date?: string | null;
   estimated_hours: string | null;
+  // Who to call on site and how to get there.
+  site_contact_name?: string;
+  site_contact_phone?: string;
+  directions_url?: string;
+  // The machines the customer reported for this task (portal ticket).
+  machines?: { name: string; serial: string; problem: string; out_of_service: boolean; description: string }[];
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null
@@ -89,8 +104,6 @@ export interface PartUsed {
   part_code: string;
   description: string;
   quantity: number;
-  unit_cost: string;
-  currency_code: string;
 }
 
 export interface WorkReport {
@@ -105,6 +118,46 @@ export interface WorkReport {
   parts_used: PartUsed[];
   copy_sent_to?: string;
   copy_sent_at?: string | null;
+  work_lines?: string[];
+  recommendations?: string[];
+  recommendation?: string;
+}
+
+/**
+ * One machine on the report: one at the site (asset_id), or one to
+ * register (brand_id + model_name), which may be a customer's ticket
+ * machine that wasn't in their list (ticket_machine_id).
+ */
+export interface ReportMachine {
+  asset_id?: number;
+  name?: string;
+  ticket_machine_id?: number | null;
+  brand_id?: number | null;
+  model_name?: string;
+  serial_no: string;
+  outcome: string;
+  /** The finding when none of the standard ones fits. */
+  note: string;
+  // The report's standard wording (reports.phrases): codes, shown in the customer's language.
+  finding_code?: string;
+  action_code?: string;
+  action?: string;
+}
+
+export interface SiteMachine {
+  id: number;
+  name: string;
+  serial_no: string;
+}
+
+export interface Brand {
+  id: number;
+  name: string;
+}
+
+export interface Choice {
+  value: string;
+  label: string;
 }
 
 /** A helper on the job — their hours default to the report's own. */
@@ -117,8 +170,16 @@ export interface ReportHelper {
 export interface WorkReportInput {
   findings: string;
   action_taken: string;
+  // Standard work lines and recommendations (codes), and a typed one.
+  work_lines?: string[];
+  recommendations?: string[];
+  recommendation?: string;
   resolved: boolean;
-  labour_hours: string;
+  // Ignored by the server now — the visit's hours come from the taps.
+  labour_hours?: string;
+  // When it was filed: a report saved offline is sent later, and the
+  // visit's time stops at filing, not at sending.
+  filed_at?: string;
   customer_name: string;
   parts: PartUsed[];
   // A PNG data URL from the signature pad; null keeps the one on file.
@@ -129,6 +190,8 @@ export interface WorkReportInput {
   helper_hours?: Record<string, string>;
   // Where the customer's PDF copy is emailed on the first submission; blank sends nothing.
   send_copy_to?: string;
+  // The machines this visit covered; left out, the server keeps what it has.
+  machines?: ReportMachine[];
   // Where the phone was when Submit was pressed (src/location.ts) — kept
   // with a report waiting offline, so it's where it was filled in.
   latitude?: number;
@@ -189,4 +252,94 @@ export interface Candidate {
   skill_level: number | null;
   next_task_number: string | null;
   next_task_at: string | null;
+}
+
+/** A task on the Today screen (/api/my-today/). */
+export interface ScheduleItem extends TaskListItem {
+  my_role: 'lead' | 'helper' | 'responsible' | '';
+  address: string;
+  scheduled_date: string | null;
+  estimated_finish: string | null;
+}
+
+export interface TodayPlan {
+  today: string;
+  today_count: number;
+  overdue: ScheduleItem[];
+  next_job: (ScheduleItem & { next_action: string | null; directions_url: string }) | null;
+  later_today: ScheduleItem[];
+  done_today: ScheduleItem[];
+}
+
+/** My progress (/api/my-progress/): the year's line and a month's figures. */
+export interface MyProgress {
+  trend: {
+    months: { start: string; completed: number }[];
+    top: number;
+    this_month: number;
+    change: number | null;
+  };
+  month: { first: string; is_this_month: boolean; hours: string | number; reports: number; over_estimate: number };
+  rank: number | null;
+  leaderboard_size: number;
+  certification: { certified: number; required: number; is_certified: boolean };
+}
+
+/** One person on Team progress (/api/team-progress/). */
+export interface TeamProgressRow {
+  id: number;
+  name: string;
+  role: string;
+  rank: number | null;
+  completed: number;
+  change: number;
+  hours: string | number;
+  certified: number;
+  required: number;
+  is_certified: boolean;
+  months: number[];
+}
+
+/** One day of the schedule calendar (/api/my-schedule/). */
+export interface ScheduleDay {
+  date: string;
+  is_today: boolean;
+  is_weekend: boolean;
+  in_month: boolean;
+  week_start: string;
+  tasks: ScheduleItem[];
+}
+
+/** One day of a small month on the year view. */
+export interface ScheduleYearCell {
+  date: string;
+  count: number;
+  is_today: boolean;
+  is_weekend: boolean;
+  week_start: string;
+}
+
+/** Week, month or year of someone's tasks — the website's My schedule. */
+export interface MySchedule {
+  view: 'week' | 'month' | 'year';
+  today: string;
+  person: { id: number; name: string };
+  overdue: ScheduleItem[];
+  unscheduled: ScheduleItem[];
+  // week
+  start?: string;
+  end?: string;
+  prev_start?: string;
+  next_start?: string;
+  this_week_start?: string;
+  // month
+  month?: string;
+  prev_month?: string;
+  next_month?: string;
+  this_month?: string;
+  // week and month
+  days?: ScheduleDay[];
+  // year
+  year?: number;
+  months?: { first: string; count: number; cells: (ScheduleYearCell | null)[] }[];
 }

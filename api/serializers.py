@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from rest_framework import serializers
 
 from reports.models import PartUsed, WorkReport
@@ -57,11 +59,18 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     can_file_report = serializers.SerializerMethodField()
     requires_signature = serializers.SerializerMethodField()
     undoable_step = serializers.SerializerMethodField()
+    # Who to call on site, how to get there, and the machines the customer
+    # reported for this task (from their portal ticket).
+    site_contact_name = serializers.CharField(source='site.effective_contact_name', default='')
+    site_contact_phone = serializers.CharField(source='site.effective_contact_phone', default='')
+    directions_url = serializers.SerializerMethodField()
+    machines = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             'id', 'task_number', 'site_name', 'site_address', 'customer_name', 'currency_code',
+            'site_contact_name', 'site_contact_phone', 'directions_url', 'machines', 'scheduled_date',
             'status', 'status_display', 'priority', 'priority_display',
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
@@ -71,6 +80,21 @@ class TaskDetailSerializer(serializers.ModelSerializer):
 
     def get_next_action(self, obj):
         return self.context.get('next_action')
+
+    def get_directions_url(self, obj):
+        site = obj.site
+        place = f'{site.latitude},{site.longitude}' if site.latitude is not None else f'{site.name}, {site.address}'
+        return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
+
+    def get_machines(self, obj):
+        return [
+            {
+                'name': machine.machine_name, 'serial': machine.serial,
+                'problem': machine.get_problem_display(), 'out_of_service': machine.out_of_service,
+                'description': machine.description,
+            }
+            for machine in obj.ticket_machines.all()
+        ]
 
     def get_is_lead(self, obj):
         return self.context.get('is_lead', False)
@@ -104,7 +128,7 @@ class CustomerTicketSerializer(serializers.ModelSerializer):
 class PartUsedSerializer(serializers.ModelSerializer):
     class Meta:
         model = PartUsed
-        fields = ['part_code', 'description', 'quantity', 'unit_cost', 'currency_code']
+        fields = ['part_code', 'description', 'quantity']
 
 
 class WorkReportSerializer(serializers.ModelSerializer):
@@ -115,6 +139,7 @@ class WorkReportSerializer(serializers.ModelSerializer):
         fields = [
             'findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name',
             'signature_url', 'signature_waived_reason', 'submitted_at', 'parts_used', 'copy_sent_to', 'copy_sent_at',
+            'work_lines', 'recommendations', 'recommendation',
         ]
 
 

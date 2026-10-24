@@ -72,7 +72,7 @@ export default function TicketsScreen() {
             ListEmptyComponent={
               tickets !== null ? (
                 <ThemedText themeColor="textSecondary">{query ? 'No tickets match your search.' : 'No new tickets.'}</ThemedText>
-              ) : null
+              ) : undefined
             }
             renderItem={({ item }) => (
               <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>

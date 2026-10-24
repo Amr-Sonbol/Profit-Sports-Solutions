@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { hm } from '@/hours';
 import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
@@ -129,7 +130,7 @@ export default function TeamTaskScreen() {
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
             ) : null}
-            {task.estimated_hours ? <Row label="Estimated hours" value={task.estimated_hours} /> : null}
+            {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
 
           {task.description ? (
@@ -226,7 +227,7 @@ export default function TeamTaskScreen() {
             <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Work report</ThemedText>
               <Row label="Resolved" value={task.report.resolved ? 'Yes' : 'No'} />
-              <Row label="Labour hours" value={task.report.labour_hours} />
+              <Row label="Time on site" value={hm(task.report.labour_hours)} />
               <Row label="Signed by" value={task.report.customer_name || '—'} />
               <ThemedText type="small" themeColor="textSecondary">Findings</ThemedText>
               <ThemedText>{task.report.findings}</ThemedText>
@@ -241,8 +242,7 @@ export default function TeamTaskScreen() {
                   <ThemedText type="small" themeColor="textSecondary">Parts used</ThemedText>
                   {task.report.parts_used.map((part, index) => (
                     <ThemedText key={index} type="small">
-                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''} —{' '}
-                      {part.unit_cost} {part.currency_code}
+                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''}
                     </ThemedText>
                   ))}
                 </>

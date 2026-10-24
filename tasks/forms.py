@@ -4,14 +4,16 @@ from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
 from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
-    SKILL_LEVEL_CHOICES, RolePermission, Technician, TechnicianTrip,
+    SKILL_LEVEL_CHOICES, NotificationSettings, RolePermission, Technician, TechnicianTrip,
 )
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
+from reports.phrases import Action, Finding
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
@@ -584,11 +586,31 @@ class TechnicianFirstLoginForm(forms.Form):
         return password2
 
 
+# The four sentences every level is judged by, for a skill or a conduct
+# area alike (docs/database_design_v2.md, "How a level gets set"): the
+# full sentence on My skills, the short form in the level choices.
+SKILL_LEVEL_RUBRIC = {
+    1: _('Has never done this repair alone, or has not been observed yet. Helper only.'),
+    2: _('Has done it under supervision and it went fine. Leads simple jobs, calls for help on faults.'),
+    3: _('Has led this work alone, repeatedly, with no callbacks.'),
+    4: _('Others call on them when they are stuck. Can train others.'),
+}
+SKILL_LEVEL_SHORT = {
+    1: _('Helper only'),
+    2: _('Under supervision'),
+    3: _('Alone, no callbacks'),
+    4: _('Can train others'),
+}
+LABELLED_LEVEL_CHOICES = [('', '---------')] + [
+    (level, format_lazy('{} — {}', level, SKILL_LEVEL_SHORT[level])) for level, _label in SKILL_LEVEL_CHOICES
+]
+
+
 class SelfRateLevelForm(forms.Form):
     """A technician's own first guess at a conduct-area level — for a
     skill, see SelfRateSkillForm below, which also requires evidence.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
 
 
 class SelfRateSkillForm(SelfRateLevelForm):
@@ -616,7 +638,7 @@ class ReviewLevelForm(forms.Form):
     """A supervisor's confirmed level — always overwrites whatever was
     there, self-rated or previously supervisor-set.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
     note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
 
@@ -751,7 +773,7 @@ class CountryCreateForm(forms.ModelForm):
 
     class Meta:
         model = Country
-        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days']
+        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language']
 
     def clean_weekend_days(self):
         return ','.join(sorted(self.cleaned_data['weekend_days']))
@@ -926,6 +948,16 @@ class ExistingAssetOutcomeForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
+    )
 
     def __init__(self, *args, site=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -956,6 +988,19 @@ class NewAssetForm(forms.Form):
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
+    )
+    # The customer's ticket machine this row registers, when it came from
+    # the ticket (it wasn't in their machine list).
+    ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     def clean(self):
         cleaned = super().clean()
@@ -1523,3 +1568,34 @@ class PartImportForm(forms.Form):
         label=_('CSV file'), help_text=_('Two columns: code and description. A header row is permitted.'),
         validators=[FileExtensionValidator(allowed_extensions=['csv'])],
     )
+
+
+class NotificationSettingsForm(forms.ModelForm):
+    """The admin's Notifications page: one switch per automatic message,
+    and which roles get the new-ticket and new-task emails.
+    """
+
+    new_ticket_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+    new_task_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+
+    class Meta:
+        model = NotificationSettings
+        fields = [
+            'ticket_received_email', 'reply_to_customer_email', 'auto_notify_on_reschedule',
+            'new_ticket_email', 'new_ticket_roles', 'new_task_email', 'new_task_roles',
+            'reply_to_staff_email', 'escalation_emails', 'shipment_to_supervisor_email',
+            'push_assigned', 'push_removed', 'push_cancelled',
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        for switch, roles in (('new_ticket_email', 'new_ticket_roles'), ('new_task_email', 'new_task_roles')):
+            if cleaned.get(switch) and not cleaned.get(roles):
+                self.add_error(roles, _('Choose at least one role, or turn this email off.'))
+        return cleaned

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{% translate "Technician hours" %} — Profit Sports Solutions{% endblock %}
 
@@ -20,7 +20,7 @@
 
 <h2>{{ period_start|date:"F Y" }}</h2>
 <p class="muted">
-    {% blocktranslate with hours=total_hours count reports=total_reports %}{{ hours }} labour hours across {{ reports }} submitted report.{% plural %}{{ hours }} labour hours across {{ reports }} submitted reports.{% endblocktranslate %}
+    {% blocktranslate with hours=total_hours|hm count reports=total_reports %}{{ hours }} labour hours across {{ reports }} submitted report.{% plural %}{{ hours }} labour hours across {{ reports }} submitted reports.{% endblocktranslate %}
     {% translate "The hours on a report are credited to every team member — the lead and all helpers — unless the lead has entered a helper's individual hours. Hours worked prior to a handover are also included." %}
     {% translate "“Significantly over estimate” means more than 50% above the task's estimated hours." %}
     {% translate "“Exceeds recorded time” means the hours entered are significantly higher than the time between the Start check-in and report submission, excluding pauses, and should be reviewed." %}
@@ -79,12 +79,12 @@
                                 <li>
                                     <a href="{% url 'tasks:task_detail' report.task.pk %}">{{ report.task.task_number }}</a>
                                     — {{ report.task.site.customer.name }}:
-                                    {% blocktranslate with hours=report.labour_hours %}{{ hours }} h{% endblocktranslate %}
+                                    {% blocktranslate with hours=report.labour_hours|hm %}{{ hours }} h{% endblocktranslate %}
                                     {% if report.task.estimated_hours %}
-                                    <span class="muted">({% blocktranslate with hours=report.task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>
+                                    <span class="muted">({% blocktranslate with hours=report.task.estimated_hours|hm %}est. {{ hours }} h{% endblocktranslate %})</span>
                                     {% endif %}
                                     {% if report.is_overrun %}<span class="badge badge--bad">{% translate "Significantly over estimate" %}</span>{% endif %}
-                                    {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% blocktranslate with hours=report.tapped_hours %}Exceeds recorded time ({{ hours }} h){% endblocktranslate %}</span>{% endif %}
+                                    {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% blocktranslate with hours=report.tapped_hours|hm %}Exceeds recorded time ({{ hours }} h){% endblocktranslate %}</span>{% endif %}
                                     {% if report.has_taps_away_from_site %}<span class="badge badge--bad">{% translate "Check-ins away from the site" %}</span>{% endif %}
                                 </li>
                                 {% endfor %}

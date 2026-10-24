@@ -1,0 +1,25 @@
+{% load i18n %}{% comment %}
+One message on the Notifications page: what it is, when it goes out,
+how (email / phone / bell), and its setting — a switch (`field`), with
+the roles who receive it (`roles`) for the two staff emails, or a fixed
+note (`fixed`) for messages sent by hand and the security emails.
+{% endcomment %}
+<tr>
+    <td class="cell-wrap"><strong>{{ title }}</strong><br><span class="muted">{{ when }}</span></td>
+    <td>{{ channel }}</td>
+    <td class="cell-wrap">
+        {% if field %}
+        <label class="checkbox-label">{{ field }} {% translate "On" %}</label>
+        {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        {% if roles %}
+        <fieldset class="role-choices">
+            <legend>{{ roles.label }}</legend>
+            {{ roles }}
+            {% for error in roles.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </fieldset>
+        {% endif %}
+        {% else %}
+        <span class="muted">{{ fixed }}</span>
+        {% endif %}
+    </td>
+</tr>

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiRequestError } from '@/api/client';
 import { fetchTeamTasks } from '@/api/endpoints';
 import { SearchBox } from '@/components/search-box';
+import { TeamProgressList } from '@/components/team-progress';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -28,6 +29,8 @@ export default function TeamTasksScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const query = useDebouncedValue(search.trim());
+  // The team's open tasks, or how each person on it is doing.
+  const [view, setView] = useState<'tasks' | 'progress'>('tasks');
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +63,24 @@ export default function TeamTasksScreen() {
         <ThemedText type="title" style={styles.heading}>
           Team
         </ThemedText>
+        <ThemedView style={styles.switcher}>
+          {(['tasks', 'progress'] as const).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.switch, { borderColor: theme.backgroundSelected },
+                view === option && { backgroundColor: theme.primary, borderColor: theme.primary },
+              ]}
+              onPress={() => setView(option)}
+            >
+              <ThemedText style={view === option ? { color: theme.onPrimary } : undefined}>
+                {option === 'tasks' ? 'Tasks' : 'Progress'}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </ThemedView>
+        {view === 'progress' ? <TeamProgressList /> : (
+        <>
         <SearchBox value={search} onChangeText={setSearch} placeholder="Search by task, customer, site, PAK or serial number" />
         {error ? (
           <ThemedText themeColor="textSecondary" style={styles.message}>
@@ -74,7 +95,7 @@ export default function TeamTasksScreen() {
             ListEmptyComponent={
               tasks !== null ? (
                 <ThemedText themeColor="textSecondary">{query ? 'No tasks match your search.' : 'No open tasks.'}</ThemedText>
-              ) : null
+              ) : undefined
             }
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -91,6 +112,8 @@ export default function TeamTasksScreen() {
             )}
           />
         )}
+        </>
+        )}
       </SafeAreaView>
     </ThemedView>
   );
@@ -104,4 +127,9 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   row: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
+  switcher: {
+    flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two,
+    backgroundColor: 'transparent',
+  },
+  switch: { flex: 1, borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
 });

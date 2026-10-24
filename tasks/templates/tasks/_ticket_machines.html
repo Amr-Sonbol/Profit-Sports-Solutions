@@ -41,6 +41,7 @@ internal: what the customer reported, and their own files.
                 {% if show_status %}
                 <td class="cell-wrap">
                     {% if not machine.decision %}{% translate "Under review" %}
+                    {% elif machine.result %}{{ machine.result.get_outcome_display }}{% if machine.result.note %}<br><span class="muted">{{ machine.result.note }}</span>{% endif %}
                     {% elif machine.decision == 'visit' %}{% if machine.task.scheduled_for %}{% blocktranslate with date=machine.task.scheduled_for|date:"SHORT_DATETIME_FORMAT" %}Visit scheduled for {{ date }}{% endblocktranslate %}{% else %}{% translate "Visit being scheduled" %}{% endif %}
                     {% elif machine.decision == 'ship_part' %}{% translate "Part being arranged" %}{% if machine.task.shipping_tracking_number %}<br><span class="muted" dir="ltr">{{ machine.task.shipping_tracking_number }}</span>{% endif %}
                     {% else %}{{ machine.get_decision_display }}{% endif %}

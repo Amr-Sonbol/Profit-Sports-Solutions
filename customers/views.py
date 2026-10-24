@@ -495,7 +495,7 @@ def portal_visit_report_pdf(request, pk):
     signed, when the report has changed since. Anyone else's visit, or one
     without a report yet, is simply not found.
     """
-    from reports.pdf import render_visit_report_pdf
+    from reports.pdf import render_visit_report_pdf, report_language
 
     customer = require_customer(request)
     if customer.must_change_password:
@@ -508,7 +508,7 @@ def portal_visit_report_pdf(request, pk):
         raise Http404
     language = request.GET.get('lang')
     if language not in dict(settings.LANGUAGES):
-        language = customer.language or settings.LANGUAGE_CODE
+        language = report_language(customer)
     signed_version = request.GET.get('version') == 'signed' and bool(report.signed_content)
     response = HttpResponse(
         render_visit_report_pdf(report, language, signed_version=signed_version), content_type='application/pdf',

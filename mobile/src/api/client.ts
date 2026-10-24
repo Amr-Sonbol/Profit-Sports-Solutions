@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:8000';
+/** The server's address — also the review page's base, so its images load. */
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:8000';
+const BASE_URL = API_BASE_URL;
 const TOKEN_KEY = 'auth_token';
 
 // expo-secure-store has no real implementation on web (no OS keychain to

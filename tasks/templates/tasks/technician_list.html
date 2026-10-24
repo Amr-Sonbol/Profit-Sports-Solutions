@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Technicians" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{{ page_title }} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "Technicians" %}</h1>
+    <h1>{{ page_title }}</h1>
     <div class="badge-row">
         <a href="{% url 'tasks:technician_hours' %}" class="button button--secondary">{% translate "Hours" %}</a>
         {% if 'assign_tasks' in role_permissions %}
@@ -104,7 +104,8 @@
                         </form>
                         {% endif %}
                         {% else %}
-                        <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View board" %}</a>
+                        <a href="{% url 'tasks:technician_board' row.technician.pk %}">{% translate "View schedule" %}</a>
+                        <a href="{% url 'tasks:technician_progress' row.technician.pk %}">{% translate "Progress" %}</a>
                         {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' row.technician.pk %}">{% translate "Review skills" %}</a>{% endif %}
                         {% if 'manage_technicians' in role_permissions %}
                         <a href="{% url 'tasks:technician_edit' row.technician.pk %}">{% translate "Edit photo" %}</a>
