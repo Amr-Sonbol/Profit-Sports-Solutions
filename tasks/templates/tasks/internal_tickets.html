@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Internal tickets" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "Internal tasks" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
-    <h1>{% translate "Internal tickets" %}</h1>
+    <h1>{% translate "Internal tasks" %}</h1>
     {% if can_open %}
-    <a href="{% url 'tasks:ticket_open' %}?kind=stock" class="button">{% translate "New ticket" %}</a>
+    <a href="{% url 'tasks:ticket_open' %}?kind=stock" class="button">{% translate "New internal task" %}</a>
     {% endif %}
 </div>
 
@@ -21,7 +21,7 @@
     <table>
         <thead>
             <tr>
-                <th>{% translate "Ticket" %}</th>
+                <th>{% translate "Number" %}</th>
                 <th>{% translate "Type" %}</th>
                 <th>{% translate "Subject" %}</th>
                 <th>{% translate "For" %}</th>
@@ -41,12 +41,12 @@
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 <td>
                     {% if ticket.status == 'new' %}<span class="badge badge--neutral">{% translate "Open" %}</span>
-                    {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Converted to task" %}</span>
+                    {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Scheduled as a task" %}</span>
                     {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="7" class="empty-state">{% translate "No internal tickets found." %}</td></tr>
+            <tr><td colspan="7" class="empty-state">{% translate "No internal tasks found." %}</td></tr>
             {% endfor %}
         </tbody>
     </table>

@@ -1369,7 +1369,7 @@ def home_summary(request, technician):
             kind=CustomerTicket.Kind.CUSTOMER, status=CustomerTicket.Status.NEW, country=country,
         ).count(), reverse('tasks:ticket_list'))
     if technician.role != Technician.Role.TECHNICIAN:
-        add(_('Internal tickets assigned to you'), CustomerTicket.objects.filter(
+        add(_('Internal tasks assigned to you'), CustomerTicket.objects.filter(
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
         ).exclude(kind=CustomerTicket.Kind.CUSTOMER).count(), reverse('tasks:internal_tickets'))
     escalations = TicketEscalation.objects.filter(
@@ -5502,10 +5502,11 @@ def ticket_open(request):
     kind comes from ?kind=, so each form is plain HTML, no script.
     """
     technician = require_technician(request)
-    # open_tickets covers every kind; any other manager opens internal ones.
+    # open_tickets covers every kind (customer tickets too); anyone else
+    # above a technician — a supervisor included — creates internal tasks.
     kinds = CustomerTicket.Kind.choices
     if not _has_permission(technician, RolePermission.Permission.OPEN_TICKETS):
-        if not technician.is_any_manager:
+        if technician.role == Technician.Role.TECHNICIAN:
             raise PermissionDenied
         kinds = [(value, label) for value, label in kinds if value != CustomerTicket.Kind.CUSTOMER]
     country = get_active_country(request)
@@ -5552,8 +5553,11 @@ def ticket_open(request):
             send_ticket_confirmation_to_customer(request, ticket)
             send_new_ticket_email_to_staff(request, ticket)
         elif ticket.assigned_to != technician:
-            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket assigned to you'))
-        messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
+            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal task assigned to you'))
+        if is_customer:
+            messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
+        else:
+            messages.success(request, _('Internal task %(number)s created.') % {'number': ticket.ticket_number})
         if not is_customer:
             return redirect('tasks:internal_ticket', pk=ticket.pk)
         if _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
@@ -5602,7 +5606,8 @@ def internal_tickets(request):
         tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
     return render(request, 'tasks/internal_tickets.html', {
         'tickets': tickets[:200], 'status': status,
-        'can_open': technician.is_any_manager or _has_permission(technician, RolePermission.Permission.OPEN_TICKETS),
+        # Anyone who can see the list can create one (ticket_open).
+        'can_open': True,
     })
 
 
@@ -5638,7 +5643,7 @@ def internal_ticket(request, pk):
                     created_at=timezone.now(),
                 )
                 if other and other != technician:
-                    _push_internal_ticket(other, ticket, _('New note on an internal ticket'))
+                    _push_internal_ticket(other, ticket, _('New note on an internal task'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'reassign':
             reassign_form = ReassignInternalTicketForm(request.POST, country=country)
@@ -5651,7 +5656,7 @@ def internal_ticket(request, pk):
                     message=_('Reassigned to %(name)s.') % {'name': ticket.assigned_to.full_name},
                 )
                 if ticket.assigned_to != technician:
-                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal ticket assigned to you'))
+                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal task assigned to you'))
                 messages.success(request, _('Reassigned successfully.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'close':
@@ -5663,7 +5668,7 @@ def internal_ticket(request, pk):
                 ticket.reviewed_at = timezone.now()
                 ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
                 if other and other != technician:
-                    _push_internal_ticket(other, ticket, _('Internal ticket closed'))
+                    _push_internal_ticket(other, ticket, _('Internal task closed'))
                 messages.success(request, _('Ticket closed.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
 

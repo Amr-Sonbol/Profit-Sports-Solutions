@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 18:37+0000\n"
+"POT-Creation-Date: 2026-10-24 23:28+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -943,6 +943,9 @@ msgstr "العميل"
 msgid "Close"
 msgstr "إغلاق"
 
+msgid "Close internal task"
+msgstr "إغلاق المهمة الداخلية"
+
 msgid "Close task"
 msgstr "إغلاق المهمة"
 
@@ -1107,6 +1110,9 @@ msgstr "إنشاء الحساب وإرسال بيانات الدخول"
 
 msgid "Create and send welcome email"
 msgstr "إنشاء العميل وإرسال رسالة الترحيب"
+
+msgid "Create internal task"
+msgstr "إنشاء مهمة داخلية"
 
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
@@ -2033,20 +2039,24 @@ msgstr "داخلي"
 msgid "Internal notes"
 msgstr "الملاحظات الداخلية"
 
-msgid "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the ticket is closed."
-msgstr "داخلية فقط؛ لا يُرسل أي شيء إلى العميل. يتم إشعار الموظف المكلَّف، ويتابع الطرفان بالملاحظات حتى إغلاق التذكرة."
+msgid "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the task is closed."
+msgstr "داخلي فقط؛ لا يُرسل أي شيء إلى العميل. يتم إشعار المكلَّف، ويتابع الطرفان بالملاحظات حتى إغلاق المهمة."
 
-msgid "Internal ticket assigned to you"
-msgstr "تذكرة داخلية مسندة إليك"
+#, python-format
+msgid "Internal task %(number)s created."
+msgstr "تم إنشاء المهمة الداخلية %(number)s."
 
-msgid "Internal ticket closed"
-msgstr "أُغلقت التذكرة الداخلية"
+msgid "Internal task assigned to you"
+msgstr "مهمة داخلية مُسندة إليك"
 
-msgid "Internal tickets"
-msgstr "التذاكر الداخلية"
+msgid "Internal task closed"
+msgstr "تم إغلاق المهمة الداخلية"
 
-msgid "Internal tickets assigned to you"
-msgstr "تذاكر داخلية مسندة إليك"
+msgid "Internal tasks"
+msgstr "المهام الداخلية"
+
+msgid "Internal tasks assigned to you"
+msgstr "المهام الداخلية المُسندة إليك"
 
 msgid "Invitation expired"
 msgstr "انتهت صلاحية الدعوة"
@@ -2367,8 +2377,11 @@ msgstr "تذاكر عملاء جديدة"
 msgid "New email"
 msgstr "البريد الإلكتروني الجديد"
 
-msgid "New internal ticket assigned to you"
-msgstr "تذكرة داخلية جديدة مسندة إليك"
+msgid "New internal task"
+msgstr "مهمة داخلية جديدة"
+
+msgid "New internal task assigned to you"
+msgstr "مهمة داخلية جديدة مُسندة إليك"
 
 msgid "New login email"
 msgstr "البريد الإلكتروني الجديد لتسجيل الدخول"
@@ -2380,8 +2393,8 @@ msgstr "رسالة جديدة"
 msgid "New message — %(number)s"
 msgstr "رسالة جديدة — %(number)s"
 
-msgid "New note on an internal ticket"
-msgstr "ملاحظة جديدة على تذكرة داخلية"
+msgid "New note on an internal task"
+msgstr "ملاحظة جديدة على مهمة داخلية"
 
 msgid "New password"
 msgstr "كلمة المرور الجديدة"
@@ -2510,8 +2523,8 @@ msgstr "لا يوجد مساعدون في هذه المهمة."
 msgid "No internal notes."
 msgstr "لا توجد ملاحظات داخلية."
 
-msgid "No internal tickets found."
-msgstr "لا توجد تذاكر داخلية."
+msgid "No internal tasks found."
+msgstr "لا توجد مهام داخلية."
 
 msgid "No lead technician"
 msgstr "لا يوجد فني رئيسي"
@@ -2746,6 +2759,9 @@ msgstr "إشعار العميل بالزيارة المجدولة"
 
 msgid "Notify customer of tracking number"
 msgstr "إشعار العميل برقم التتبع"
+
+msgid "Number"
+msgstr "الرقم"
 
 msgid "Object"
 msgstr "العنصر"
@@ -3500,6 +3516,9 @@ msgstr "حدّد ما إذا كانت المشكلة قد حُلّت، وأضف 
 msgid "Schedule"
 msgstr "الجدول الزمني"
 
+msgid "Schedule as a task"
+msgstr "جدولتها كمهمة"
+
 msgid "Schedule change approved"
 msgstr "تمت الموافقة على تغيير الموعد"
 
@@ -3517,6 +3536,9 @@ msgstr "طُلب تغيير الموعد"
 
 msgid "Scheduled"
 msgstr "مجدولة"
+
+msgid "Scheduled as a task"
+msgstr "جُدولت كمهمة"
 
 msgid "Scheduled date"
 msgstr "تاريخ الجدولة"
@@ -4177,8 +4199,8 @@ msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports So
 msgid "The password has been reset. They will be asked to choose their own at their next sign-in."
 msgstr "تمت إعادة تعيين كلمة المرور. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
 
-msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tickets."
-msgstr "الشخص المسؤول عن معالجتها. سيتم إشعاره، وستظهر ضمن تذاكره الداخلية."
+msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tasks."
+msgstr "الشخص المسؤول عن متابعتها. سيتم إشعاره، وستظهر ضمن مهامه الداخلية."
 
 msgid "The photo is too large. The maximum size is 5 MB."
 msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
@@ -4366,8 +4388,8 @@ msgid "This task is being created from a customer ticket — %(company)s. The si
 msgstr "يتم إنشاء هذه المهمة من تذكرة عميل — %(company)s. حقول الموقع أدناه مقترحة بناءً على ما أدخله العميل؛ يرجى اختيار الموقع الصحيح أو إنشاؤه."
 
 #, python-format
-msgid "This task is being created from internal ticket %(number)s — %(subject)s. Please select the site for this job."
-msgstr "يتم إنشاء هذه المهمة من التذكرة الداخلية %(number)s — %(subject)s. يرجى اختيار الموقع الخاص بهذا العمل."
+msgid "This task is being created from internal task %(number)s — %(subject)s. Please select the site for this job."
+msgstr "يتم إنشاء هذه المهمة من المهمة الداخلية %(number)s — %(subject)s. يرجى اختيار الموقع لهذا العمل."
 
 msgid "This task is closed. Only a manager or administrator can now correct its report."
 msgstr "هذه المهمة مغلقة. لا يمكن الآن تصحيح تقريرها إلا من قِبل مدير أو مسؤول النظام."

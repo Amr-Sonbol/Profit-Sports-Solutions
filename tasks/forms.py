@@ -1295,7 +1295,7 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
     assigned_to = forms.ModelChoiceField(
         queryset=Technician.objects.none(), label=_('For'),
         help_text=_('The person responsible for handling it. They will be notified, and it will appear in their '
-                    'internal tickets.'),
+                    'internal tasks.'),
     )
 
     class Meta:

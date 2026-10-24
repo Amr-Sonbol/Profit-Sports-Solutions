@@ -14,9 +14,10 @@ import type { InternalTicket } from '@/types';
 const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']] as const;
 
 /**
- * More → Internal tickets: stock requests, vendor follow-ups and other
- * internal tickets, open ones first. Each opens its website page in the
- * app — notes back and forth, handing it on, closing it.
+ * More → Internal tasks: stock requests, vendor follow-ups and other work
+ * inside the company, open ones first; "+ New" creates one (supervisors
+ * and up). Each opens its website page in the app — notes back and forth,
+ * handing it on, closing it, or scheduling it as a task at a site.
  */
 export default function InternalTicketsScreen() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function InternalTicketsScreen() {
       setTickets(await fetchInternalTickets(status));
       setError('');
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not load the tickets.');
+      setError(err instanceof ApiRequestError ? err.message : 'Could not load the internal tasks.');
     }
   }, [status]);
 
@@ -45,7 +46,17 @@ export default function InternalTicketsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <ThemedText themeColor="primary">← Back</ThemedText>
         </TouchableOpacity>
-        <ThemedText type="title" style={styles.heading}>Internal tickets</ThemedText>
+        <ThemedView style={styles.headerRow}>
+          <ThemedText type="title" style={styles.heading}>Internal tasks</ThemedText>
+          <TouchableOpacity
+            style={[styles.newButton, { backgroundColor: theme.primary }]}
+            onPress={() => router.push({
+              pathname: '/website', params: { path: '/tasks/tickets/open/?kind=stock', title: 'New internal task' },
+            })}
+          >
+            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>+ New</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
         <ThemedView style={styles.filters}>
           {FILTERS.map(([value, label]) => {
             const on = status === value;
@@ -71,7 +82,7 @@ export default function InternalTicketsScreen() {
             await load();
             setRefreshing(false);
           }} />}
-          ListEmptyComponent={tickets !== null ? <ThemedText themeColor="textSecondary">No tickets here.</ThemedText> : undefined}
+          ListEmptyComponent={tickets !== null ? <ThemedText themeColor="textSecondary">No internal tasks here.</ThemedText> : undefined}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.card, { backgroundColor: theme.backgroundElement }]}
@@ -99,6 +110,11 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   back: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
   heading: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+  headerRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingEnd: Spacing.three, backgroundColor: 'transparent',
+  },
+  newButton: { borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   filters: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, backgroundColor: 'transparent' },
   filter: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   message: { paddingHorizontal: Spacing.three },

@@ -6,13 +6,13 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tickets" %}</a>
+        <a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tasks" %}</a>
         <h1><span class="task-number">{{ ticket.ticket_number }}</span></h1>
     </div>
     <div class="badge-row">
         <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
         {% if is_open %}<span class="badge badge--neutral">{% translate "Open" %}</span>
-        {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Converted to task" %}</span>
+        {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Scheduled as a task" %}</span>
         {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
     </div>
 </div>
@@ -82,7 +82,7 @@
 {% if can_convert %}
 <div class="section">
     <h2>{% translate "Convert to a field task" %}</h2>
-    <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
+    <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Schedule as a task" %}</a>
 </div>
 {% endif %}
 
@@ -115,7 +115,7 @@
             {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">
-            <button type="submit" class="button">{% translate "Close ticket" %}</button>
+            <button type="submit" class="button">{% translate "Close internal task" %}</button>
         </div>
     </form>
 </div>

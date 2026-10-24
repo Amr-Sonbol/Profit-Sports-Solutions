@@ -7764,9 +7764,15 @@ class StaffOpenedTicketTests(TaskTestCase):
         self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
         self.assertEqual(ticket.opened_by, self.ops.user)
 
-    def test_supervisor_cannot_open_tickets(self):
+    def test_supervisor_cannot_open_a_customer_ticket(self):
+        # A supervisor creates internal tasks here, but a customer's ticket
+        # stays with open_tickets: asked for one, they get the internal form
+        # and nothing is created.
         self.client.login(username='supervisor1', password='pass12345')
-        self.assertEqual(self._customer_ticket().status_code, 403)
+        response = self._customer_ticket()
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('customer', [value for value, label in response.context['kinds']])
+        self.assertFalse(CustomerTicket.objects.exists())
 
     def _stock_request(self):
         self.client.login(username='support1', password='pass12345')
@@ -8826,3 +8832,28 @@ class CorporateReportTests(TicketMachineFindingsTests):
             [hours_text(value) for value in ('1.53', '2.50', '0.02', '10.00', '0.00', None)],
             ['1:32', '2:30', '0:01', '10:00', '', ''],
         )
+
+
+class SupervisorCreatesInternalTasksTests(TaskTestCase):
+    # Everything inside the company is a task: a supervisor creates an
+    # internal one (stock request, vendor follow-up, other) — but a
+    # customer's ticket stays with whoever has open_tickets.
+
+    def test_a_supervisor_creates_an_internal_task_but_not_a_customer_ticket(self):
+        from tasks.models import CustomerTicket
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get('/tasks/tickets/open/?kind=stock')
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn('customer', [value for value, label in page.context['kinds']])
+        supervisor = Technician.objects.get(user__username='supervisor1')
+        response = self.client.post('/tasks/tickets/open/?kind=stock', {
+            'subject': 'Treadmill belts', 'description': 'We need 5 belts for Excite Run 700.',
+            'assigned_to': supervisor.pk,
+        })
+        ticket = CustomerTicket.objects.get(subject='Treadmill belts')
+        self.assertEqual(ticket.kind, CustomerTicket.Kind.STOCK)
+        self.assertRedirects(response, f'/tasks/tickets/internal/{ticket.pk}/', fetch_redirect_response=False)
+
+    def test_a_technician_still_cannot(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/tickets/open/?kind=stock').status_code, 403)
