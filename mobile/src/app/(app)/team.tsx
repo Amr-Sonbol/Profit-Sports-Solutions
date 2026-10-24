@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,11 +35,14 @@ export default function TeamTasksScreen() {
   // The team's open tasks, or how each person on it is doing (?view=progress from More → Technicians).
   const params = useLocalSearchParams<{ view?: string }>();
   const [view, setView] = useState<'tasks' | 'progress'>(params.view === 'progress' ? 'progress' : 'tasks');
-  useEffect(() => {
+  // Opened again from More with ?view=progress while already mounted: follow it.
+  const [seenView, setSeenView] = useState(params.view);
+  if (params.view !== seenView) {
+    setSeenView(params.view);
     if (params.view === 'progress') {
       setView('progress');
     }
-  }, [params.view]);
+  }
 
   const load = useCallback(async () => {
     try {
