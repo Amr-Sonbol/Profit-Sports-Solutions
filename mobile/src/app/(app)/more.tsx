@@ -16,6 +16,7 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
 
 /** Website pages the app has its own screen for: those open natively. */
 const NATIVE: Record<string, string> = {
+  '/tasks/': '/team',
   '/customers/': '/customers',
   '/tasks/machines/': '/machines',
   '/tasks/technicians/hours/': '/hours',
