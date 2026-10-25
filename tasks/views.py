@@ -5503,7 +5503,8 @@ def report_problems(report, language):
 
     problems = []
     machines = list(report.task.task_assets.select_related('asset__brand'))
-    if not machines:
+    # A checklist step records its machines in the checklist instead.
+    if not machines and not has_checklist(report.task):
         problems.append(_('No machines are recorded. Add each machine you worked on.'))
     typed = [
         (_('Overall findings'), report.findings), (_('Other work'), report.action_taken),
