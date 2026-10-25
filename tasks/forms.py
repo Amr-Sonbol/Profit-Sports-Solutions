@@ -1156,8 +1156,10 @@ class TicketMachineForm(forms.Form):
     serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number, if not in the list'))
     # The silver serial-number sticker on the machine. No `capture`: phones
     # then offer both "take photo" and "choose from library".
+    # The number itself is required (a machine is tracked by it); the photo
+    # helps the technician check it.
     serial_photo = forms.FileField(
-        required=False, label=_('Or a photo of the serial number sticker'),
+        required=False, label=_('Photo of the serial number sticker (optional)'),
         help_text=_('the silver sticker on the machine: take a photo or upload one'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
@@ -1208,9 +1210,9 @@ class TicketMachineForm(forms.Form):
         if not cleaned.get('asset'):
             if not cleaned.get('model_name'):
                 self.add_error('asset', _('Please choose the machine, or enter its model if it is not in the list.'))
-            if not cleaned.get('serial_no') and not cleaned.get('serial_photo'):
+            if not (cleaned.get('serial_no') or '').strip():
                 self.add_error(
-                    'serial_no', _('Please enter the serial number, or add a photo of the serial number sticker.'),
+                    'serial_no', _('Please enter the serial number from the silver sticker on the machine.'),
                 )
         photo = cleaned.get('serial_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:

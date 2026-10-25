@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 11:16+0000\n"
+"POT-Creation-Date: 2026-10-25 11:24+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2845,9 +2845,6 @@ msgstr "مدير العمليات"
 msgid "Optional: any notes required before work resumes."
 msgstr "اختياري: أي ملاحظات لازمة قبل استئناف العمل."
 
-msgid "Or a photo of the serial number sticker"
-msgstr "أو صورة لملصق الرقم التسلسلي"
-
 msgid "Other"
 msgstr "أخرى"
 
@@ -3025,6 +3022,9 @@ msgstr "صورة"
 msgid "Photo added."
 msgstr "تمت إضافة الصورة."
 
+msgid "Photo of the serial number sticker (optional)"
+msgstr "صورة ملصق الرقم التسلسلي (اختياري)"
+
 msgid "Photo or video"
 msgstr "صورة أو فيديو"
 
@@ -3082,8 +3082,8 @@ msgstr "يرجى استكمال الرمز والاسم والاسم بالعر�
 msgid "Please complete the part code and quantity, or leave this row blank."
 msgstr "يرجى إكمال رمز القطعة والكمية، أو ترك هذا الصف فارغًا."
 
-msgid "Please enter the serial number, or add a photo of the serial number sticker."
-msgstr "يُرجى إدخال الرقم التسلسلي، أو إضافة صورة لملصق الرقم التسلسلي."
+msgid "Please enter the serial number from the silver sticker on the machine."
+msgstr "يرجى إدخال الرقم التسلسلي من الملصق الفضي على الجهاز."
 
 #, python-format
 msgid "Please find attached the visit report for <strong>%(site)s</strong>, dated <strong>%(date)s</strong> (reference %(number)s)."

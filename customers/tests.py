@@ -824,21 +824,24 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
-    def test_an_unlisted_machine_needs_its_serial_or_a_sticker_photo(self):
+    def test_an_unlisted_machine_needs_its_typed_serial_a_photo_is_extra(self):
+        # The typed number is how the machine is tracked; a sticker photo
+        # alone isn't enough, but it's kept alongside to check it.
         self.client.login(username='fitnessfirst', password='pass12345')
+        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display'},
+            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
         ]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
         sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'problem': 'display', 'serial_photo': sticker},
         ]))
         machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual(machine.serial_no, 'OB-9')
         self.assertTrue(machine.serial_photo.name.endswith('/sticker.jpg'))
-        self.assertEqual(machine.ticket.serial_numbers, 'serial number on the sticker photo')
 
     def test_a_listed_machine_needs_no_serial(self):
         self.client.login(username='fitnessfirst', password='pass12345')
