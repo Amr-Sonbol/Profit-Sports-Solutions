@@ -517,3 +517,16 @@ export interface Dashboard {
     priority: string; priority_display: string; lead: string; scheduled_for: string | null; scheduled_date: string | null;
   }[];
 }
+
+/** A staff login (api/views.py StaffAccountsView). */
+export interface StaffAccount {
+  id: number;
+  name: string;
+  role: string;
+  username: string;
+  status: string;
+  status_display: string;
+  has_login: boolean;
+  is_active: boolean;
+  can_manage: boolean;
+}

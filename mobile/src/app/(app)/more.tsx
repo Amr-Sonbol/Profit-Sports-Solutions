@@ -23,6 +23,7 @@ const NATIVE: Record<string, string> = {
   '/tasks/technicians/hours/': '/hours',
   '/tasks/tickets/internal/': '/internal-tickets',
   '/tasks/technicians/map/': '/team-map',
+  '/tasks/technicians/accounts/': '/staff-accounts',
   '/tasks/technicians/progress/': '/team?view=progress',
   '/tasks/technicians/': '/team?view=progress',
 };

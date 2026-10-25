@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  StaffAccount,
   Dashboard,
   TeamMap,
   InternalTicket,
@@ -276,4 +277,15 @@ export function fetchDashboard() {
  */
 export function manageTask(id: number, body: Record<string, string | number>) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/manage/`, { method: 'POST', body });
+}
+
+export function fetchStaffAccounts(query = '') {
+  return apiRequest<StaffAccount[]>(`/api/staff-accounts/?q=${encodeURIComponent(query)}`);
+}
+
+/** An urgent fix to someone's login; a temporary password comes back once. */
+export function staffAccountAction(id: number, action: string) {
+  return apiRequest<{ message: string; password: string }>(`/api/staff-accounts/${id}/`, {
+    method: 'POST', body: { action },
+  });
 }

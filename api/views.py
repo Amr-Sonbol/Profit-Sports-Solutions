@@ -21,7 +21,11 @@ from rest_framework.views import APIView
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
 from people.context_processors import nav_groups, nav_pages
-from people.permissions import ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_manager, scoped_or_404
+from customers.accounts import locked_usernames
+from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
+from people.permissions import (
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, require_manager, scoped_or_404,
+)
 from people.push import push_assigned, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill
 from reports.pdf import hours_text, report_language
@@ -616,6 +620,59 @@ class DashboardView(APIView):
                 for task in tasks[:15]
             ],
         })
+
+
+class StaffAccountsView(APIView):
+    """The app's Staff accounts (manager tier): everyone's login in the
+    chosen country, searchable (?q=), with what's wrong with it — locked
+    out, temporary password, turned off — like the website's page."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        actor = require_manager(request)
+        locked = locked_usernames()
+        people = Technician.objects.filter(country=get_active_country(request)).select_related('user').order_by('full_name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            people = people.filter(
+                Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+            )
+        now = timezone.now()
+        rows = []
+        for person in people[:200]:
+            status_value = staff_account_status(person, locked, now)
+            rows.append({
+                'id': person.pk, 'name': person.full_name, 'role': person.get_role_display(),
+                'username': person.user.username if person.user_id else '',
+                'status': status_value, 'status_display': str(StaffAccountStatus(status_value).label),
+                'has_login': person.user_id is not None,
+                'is_active': bool(person.user_id and person.user.is_active),
+                'can_manage': person.user_id is not None and can_manage_account(actor, person),
+            })
+        return Response(rows)
+
+
+class StaffAccountView(APIView):
+    """One of the urgent fixes to someone's login from the app (action =
+    temporary_password | unlock | sign_out_phones | disable | enable) — the
+    website's Staff accounts code (urgent_account_action), recorded in the
+    audit log. A temporary password comes back once, to read out."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        actor = require_manager(request)
+        target = get_object_or_404(Technician.objects.select_related('user'), pk=pk)
+        if target.user_id is None or not can_manage_account(actor, target):
+            raise PermissionDenied
+        action = request.data.get('action')
+        if action not in URGENT_ACTIONS:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        message, error, password = urgent_account_action(request._request, actor, target, action)
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': str(message), 'password': password})
 
 
 class WebsiteMenuView(APIView):

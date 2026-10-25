@@ -1538,3 +1538,35 @@ class ManagerTaskActionsApiTests(ManagerChoosesTheCountryTests):
             'action': 'cancel', 'note': 'Customer called it off',
         }), content_type='application/json', **self.auth(token))
         self.assertEqual(response.json()['status'], Task.Status.CANCELLED)
+
+
+class StaffAccountEmergencyApiTests(ManagerChoosesTheCountryTests):
+    # A lost phone or a locked-out technician, handled from the app.
+
+    def test_a_manager_signs_out_phones_and_sets_a_temporary_password(self):
+        from rest_framework.authtoken.models import Token
+        tech_token = self.token_for('tech1')
+        token = self.token_for('manager1')
+        rows = self.client.get('/api/staff-accounts/?q=tech', **self.auth(token)).json()
+        row = next(item for item in rows if item['id'] == self.technician.pk)
+        self.assertTrue(row['can_manage'])
+
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'sign_out_phones'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Token.objects.filter(key=tech_token).exists())
+
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'temporary_password'}),
+                                    content_type='application/json', **self.auth(token))
+        password = response.json()['password']
+        self.assertTrue(password)
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.must_change_password)
+        self.assertTrue(self.technician.user.check_password(password))
+
+    def test_a_supervisor_cannot(self):
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get('/api/staff-accounts/', **self.auth(token)).status_code, 403)
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'unlock'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 403)
