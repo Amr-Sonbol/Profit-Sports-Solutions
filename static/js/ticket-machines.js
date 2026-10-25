@@ -4,7 +4,9 @@
 // last card is showing — the limit itself is never mentioned.
 //
 // Each card's machine list is narrowed to the chosen site, so a customer
-// with several sites only sees the machines at the one they picked.
+// with several sites only sees the machines at the one they picked. Each
+// card asks "Is this machine in your list?" first and shows only the
+// fields for that answer.
 (function () {
     var cards = Array.prototype.slice.call(document.querySelectorAll('[data-machine-card]'));
     var addButton = document.querySelector('[data-add-machine]');
@@ -48,6 +50,24 @@
             });
         });
     }
+
+    // "Is this machine in your list?" — show only what the answer needs:
+    // the list to pick from, or the model, serial and sticker photo.
+    function showForAnswer(card) {
+        var picked = card.querySelector('[data-machine-which] input:checked');
+        var hidden = card.querySelector('input[type="hidden"][name$="-which"]');
+        var answer = picked ? picked.value : (hidden ? hidden.value : 'list');
+        Array.prototype.forEach.call(card.querySelectorAll('[data-show-for]'), function (field) {
+            field.hidden = field.getAttribute('data-show-for') !== answer;
+        });
+    }
+
+    cards.forEach(function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('[data-machine-which] input'), function (input) {
+            input.addEventListener('change', function () { showForAnswer(card); });
+        });
+        showForAnswer(card);
+    });
 
     if (siteSelect) {
         siteSelect.addEventListener('change', filterMachines);

@@ -1,7 +1,9 @@
 {% extends "tasks/email/base.html" %}
+{% load i18n %}
 {% block content %}
-<p style="margin:0 0 16px;">Dear {{ contact }},</p>
-<p style="margin:0 0 16px;">Please find attached the visit report for <strong>{{ site }}</strong>, dated <strong>{{ date }}</strong> (reference {{ number }}).</p>
-<p style="margin:0 0 16px;">Should you have any questions about the work carried out, please do not hesitate to contact us.</p>
-<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{# In the report's own language (views.send_visit_report_copy); the company name never translates. #}
+<p style="margin:0 0 16px;">{% blocktranslate %}Dear {{ contact }},{% endblocktranslate %}</p>
+<p style="margin:0 0 16px;">{% blocktranslate %}Please find attached the visit report for <strong>{{ site }}</strong>, dated <strong>{{ date }}</strong> (reference {{ number }}).{% endblocktranslate %}</p>
+<p style="margin:0 0 16px;">{% translate "Should you have any questions about the work carried out, please do not hesitate to contact us." %}</p>
+<p style="margin:24px 0 0;">{% translate "Best regards," %}<br>Profit Sports Solutions</p>
 {% endblock %}

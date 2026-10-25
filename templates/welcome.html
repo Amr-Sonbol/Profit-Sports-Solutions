@@ -32,7 +32,7 @@
 
     {% if show_visits %}
     <section class="section">
-        <h2>{% translate "Today's visits" %}</h2>
+        <h2>{% translate "Today's tasks" %}</h2>
         {% if visits %}
         <ul class="action-list">
             {% for task in visits %}
@@ -49,7 +49,7 @@
             {% endfor %}
         </ul>
         {% else %}
-        <p class="empty-state">{% translate "No visits are scheduled for today." %}</p>
+        <p class="empty-state">{% translate "No tasks are scheduled for today." %}</p>
         {% endif %}
     </section>
     {% endif %}

@@ -1,7 +1,8 @@
-{% load i18n static %}<!DOCTYPE html>
+{% load i18n static report_text %}<!DOCTYPE html>
 <html lang="{{ LANGUAGE_CODE|default:'en' }}" dir="{% if is_rtl %}rtl{% else %}ltr{% endif %}">
 <head>
 <meta charset="utf-8">
+{% if preview %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endif %}
 <title>{% translate "Visit Report" %} — {{ task.task_number }}</title>
 <style>
     @font-face { font-family: "Play"; src: url("{% static 'reports/Play-Regular.ttf' %}"); }
@@ -14,7 +15,7 @@
         @bottom-center { content: element(footer); vertical-align: top; }
     }
 
-    html { font-family: "Play", "Noto Sans Arabic", "Noto Sans", sans-serif; font-size: 9.5pt; line-height: 1.4; color: #111; }
+    html { font-family: "Play", "Noto Sans Arabic", "Noto Sans", sans-serif; font-size: 9.5pt; line-height: 1.35; color: #111; }
     body { margin: 0; }
     .letterhead { position: running(letterhead); }
     .letterhead img { inline-size: 17cm; }
@@ -26,8 +27,8 @@
     h1 { text-align: center; font-size: 15pt; text-decoration: underline; margin: 0 0 0.3cm; }
     .reference { color: #c00000; font-weight: bold; margin: 0; }
     .date { margin: 0 0 0.3cm; }
-    h2 { font-size: 11pt; text-decoration: underline; margin: 0.32cm 0 0.12cm; break-after: avoid; }
-    p { margin: 0 0 0.2cm; }
+    h2 { font-size: 11pt; text-decoration: underline; margin: 0.26cm 0 0.1cm; break-after: avoid; }
+    p { margin: 0 0 0.15cm; }
     ul { margin: 0; padding-inline-start: 0.6cm; }
     li { margin-block-end: 0.05cm; }
 
@@ -37,22 +38,48 @@
     .details th { inline-size: 30%; }
     tr { break-inside: avoid; }
 
+    /* Findings & Actions, like the company's PPM report: five columns,
+       sized within the page (a fixed layout added the padding on top). */
+    .findings th:nth-child(1) { inline-size: 21%; }
+    .findings th:nth-child(2) { inline-size: 12%; }
+    .findings th:nth-child(3), .findings th:nth-child(4) { inline-size: 25%; }
+    .findings th:nth-child(5) { inline-size: 17%; }
     .signoff { margin-block-start: 0.3cm; break-inside: avoid; }
-    .signoff td { block-size: 1.6cm; }
-    .signoff img { max-block-size: 1.5cm; max-inline-size: 6cm; }
+    .signoff td { block-size: 1.35cm; }
+    .signoff img { max-block-size: 1.25cm; max-inline-size: 6cm; }
     .muted { color: #666; }
+    /* The review before sending, on a screen: no page furniture, a banner. */
+    .preview-page { max-inline-size: 19cm; margin: 0 auto; padding: 0.5cm; background: #fff; }
+    .preview-page .footer { display: none; }
+    .preview-page .letterhead img { inline-size: 100%; }
+    .preview-banner { border: 2px solid #b5760a; background: #fdf3e3; padding: 0.3cm; margin-block-end: 0.4cm; }
+    .preview-banner strong { color: #b5760a; }
+    .preview-banner ul { margin-block-start: 0.15cm; }
+    .preview-banner li { color: #c0392b; }
+    .preview-ok { color: #1e8449; }
+    /* Typed-in text keeps its own direction (report_text.text_dir). */
+    .iso { unicode-bidi: embed; }
     .not-signed { color: #c00000; font-weight: bold; }
     .changed-note { border: 0.8pt solid #c00000; color: #c00000; padding: 0.15cm 0.25cm; margin-block-end: 0.3cm; }
 </style>
 </head>
-<body>
+<body{% if preview %} class="preview-page"{% endif %}>
 <div class="letterhead"><img src="{% static 'reports/letterhead-header.png' %}" alt="Profit Sports Solutions"></div>
 <div class="footer">
     <img src="{% static 'reports/letterhead-footer.png' %}" alt="">
     <div class="footer__page" dir="ltr">{{ task.task_number }} · </div>
 </div>
 
-<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% translate "Visit Report" %}</h1>
+{% if preview %}
+<div class="preview-banner">
+    <strong>{% translate "PREVIEW — not sent yet." %}</strong>
+    {% translate "This is the report exactly as the customer will receive it." %}
+    {% if problems %}
+    <ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    {% else %}<p class="preview-ok">{% translate "Nothing missing was found." %}</p>{% endif %}
+</div>
+{% endif %}
+<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% if equipment_step == 'receiving' %}{% translate "Receiving Report" %}{% elif equipment_step == 'loading' %}{% translate "Loading Report" %}{% elif equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
 {% if changed_after_signing %}
@@ -61,34 +88,60 @@
 
 <h2>{% translate "Visit Details" %}</h2>
 <table class="details">
-    <tr><th>{% translate "Client" %}</th><td>{{ customer.name }}</td></tr>
-    <tr><th>{% translate "Site" %}</th><td>{{ site.name }}{% if site.address %}, {{ site.address }}{% endif %}, {{ customer.country.display_name }}</td></tr>
+    <tr><th>{% translate "Client" %}</th><td><span class="iso" dir="{{ customer.name|text_dir }}">{{ customer.name }}</span></td></tr>
+    <tr><th>{% translate "Site" %}</th><td><span class="iso" dir="{{ site.name|text_dir }}">{{ site.name }}</span>{% if site.address and site.address != site.name %}, <span class="iso" dir="{{ site.address|text_dir }}">{{ site.address }}</span>{% endif %}, {{ customer.country.display_name }}</td></tr>
     <tr><th>{% translate "Visit date" %}</th><td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j F Y" }}{% else %}{{ report.submitted_at|date:"j F Y" }}{% endif %}</td></tr>
+    {% if hours %}<tr><th>{% translate "Time on site" %}</th><td>{% blocktranslate %}{{ hours }} hours{% endblocktranslate %}</td></tr>{% endif %}
     {% if task.task_type %}<tr><th>{% translate "Visit type" %}</th><td>{{ task.task_type.display_name }}</td></tr>{% endif %}
-    {% if task.description %}<tr><th>{% translate "Scope" %}</th><td>{{ task.description|linebreaksbr }}</td></tr>{% endif %}
-    <tr><th>{% translate "Performed by" %}</th><td>{% for person in team %}{{ person.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{% translate "Profit Sports Solutions technical team" %}{% endfor %}</td></tr>
+    {# The scope in the report's own words: the brand's equipment; the typed description only when there's no brand. #}
+    {% if task.brand %}<tr><th>{% translate "Scope" %}</th><td>{% blocktranslate with brand=task.brand.name %}All {{ brand }} equipment{% endblocktranslate %}</td></tr>
+    {% elif task.description %}<tr><th>{% translate "Scope" %}</th><td><span class="iso" dir="{{ task.description|text_dir }}">{{ task.description|linebreaksbr }}</span></td></tr>{% endif %}
+    <tr><th>{% translate "Performed by" %}</th><td>{% translate "Profit Sports Solutions technical team" %}</td></tr>
 </table>
 
 {% if work_lines %}
 <h2>{% translate "Work Performed" %}</h2>
-<ul>{% for line in work_lines %}<li>{{ line }}</li>{% endfor %}</ul>
+<ul>{% for line in work_lines %}<li><span class="iso" dir="{{ line|text_dir }}">{{ line }}</span></li>{% endfor %}</ul>
 {% endif %}
 
+{% if equipment %}
+{# An installation: each machine as checked off on site. #}
+<h2>{% if equipment_step == 'receiving' %}{% translate "Received Equipment" %}{% elif equipment_step == 'loading' %}{% translate "Loaded Equipment" %}{% else %}{% translate "Installed Equipment" %}{% endif %}</h2>
+<table class="findings">
+    <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Colors (frame / arm / padding / trim)" %}</th><th>{% translate "Status" %}</th><th>{% translate "Note" %}</th></tr></thead>
+    <tbody>
+        {% for line in equipment %}
+        <tr>
+            <td><span class="iso" dir="ltr">{{ line.code }}</span></td>
+            <td dir="ltr">{{ line.serial|default:"—" }}</td>
+            <td><span class="iso" dir="{{ line.colors.0|text_dir }}">{{ line.colors|join:" / " }}</span></td>
+            <td>{{ line.status_label }}</td>
+            <td>{% if line.instead %}{% translate "Instead:" %} <span class="iso" dir="{{ line.instead|text_dir }}">{{ line.instead }}</span>{% if line.note %}<br>{% endif %}{% endif %}{% if line.note %}<span class="iso" dir="{{ line.note|text_dir }}">{{ line.note }}</span>{% endif %}{% if not line.instead and not line.note %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if not equipment or machines or content.findings %}
 <h2>{% translate "Findings & Actions" %}</h2>
-<p>{{ content.findings|linebreaksbr }}</p>
+{% if content.findings %}<p><span class="iso" dir="{{ content.findings|text_dir }}">{{ content.findings|linebreaksbr }}</span></p>{% endif %}
 {% if machines %}
-<table>
-    <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Status" %}</th></tr></thead>
+<table class="findings">
+    <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Finding" %}</th><th>{% translate "Action Taken" %}</th><th>{% translate "Status" %}</th></tr></thead>
     <tbody>
         {% for machine in machines %}
         <tr>
-            <td>{{ machine.name }}</td>
+            <td><span class="iso" dir="{{ machine.name|text_dir }}">{{ machine.name }}</span></td>
             <td dir="ltr">{{ machine.serial|default:"—" }}</td>
+            <td><span class="iso" dir="{{ machine.finding_label|text_dir }}">{{ machine.finding_label|default:"—" }}</span>{% if machine.finding_extra %}<br><span class="muted"><span class="iso" dir="{{ machine.finding_extra|text_dir }}">{{ machine.finding_extra }}</span></span>{% endif %}</td>
+            <td><span class="iso" dir="{{ machine.action_label|text_dir }}">{{ machine.action_label|default:"—" }}</span>{% if machine.action_extra %}<br><span class="muted"><span class="iso" dir="{{ machine.action_extra|text_dir }}">{{ machine.action_extra }}</span></span>{% endif %}</td>
             <td>{{ machine.outcome_label }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 {% endif %}
 
 {% if parts %}
@@ -97,26 +150,42 @@
     <thead><tr><th>{% translate "Part code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th></tr></thead>
     <tbody>
         {% for part in parts %}
-        <tr><td dir="ltr">{{ part.code }}</td><td>{{ part.description|default:"—" }}</td><td>{{ part.quantity }}</td></tr>
+        <tr><td dir="ltr">{{ part.code }}</td><td><span class="iso" dir="{{ part.description|text_dir }}">{{ part.description|default:"—" }}</span></td><td>{{ part.quantity }}</td></tr>
         {% endfor %}
     </tbody>
 </table>
 {% endif %}
 
 <h2>{% translate "Overall Condition" %}</h2>
+{% if equipment and equipment_step != 'installation' %}
+<p>{% if not_installed %}{% blocktranslate count count=not_installed %}{{ count }} machine needs attention — see its status and note above.{% plural %}{{ count }} machines need attention — see their status and notes above.{% endblocktranslate %}{% else %}{% translate "All the machines listed were checked and are in order." %}{% endif %}</p>
+{% elif equipment %}
+<p>{% if not_installed %}{% blocktranslate count count=not_installed %}The installation is partly complete: {{ count }} machine is still to be installed, and a follow-up visit will be arranged.{% plural %}The installation is partly complete: {{ count }} machines are still to be installed, and a follow-up visit will be arranged.{% endblocktranslate %}{% else %}{% translate "The installation is complete and the equipment has been tested and is operating properly." %}{% endif %}</p>
+{% else %}
 <p>{% if content.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>
+{% endif %}
+
+{% if recommendations %}
+<h2>{% translate "Recommendation" %}</h2>
+{% if recommendations|length == 1 %}<p><span class="iso" dir="{{ recommendations.0|text_dir }}">{{ recommendations.0 }}</span></p>
+{% else %}<ul>{% for line in recommendations %}<li><span class="iso" dir="{{ line|text_dir }}">{{ line }}</span></li>{% endfor %}</ul>{% endif %}
+{% endif %}
+
+{% if next_visit %}
+<h2>{% translate "Next Visit" %}</h2>
+<p>{{ next_visit|date:"j F Y" }}</p>
+{% endif %}
 
 <h2>{% translate "Customer Sign-off" %}</h2>
 <table class="signoff">
     <thead><tr><th>{% translate "Name" %}</th><th>{% translate "Signature" %}</th><th>{% translate "Date and time" %}</th></tr></thead>
     <tbody>
         <tr>
-            <td>{{ content.customer_name|default:"—" }}</td>
-            <td>{% if signature_url %}<img src="{{ signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted">{{ report.signature_waived_reason }}</span>{% endif %}{% endif %}</td>
+            <td><span class="iso" dir="{{ content.customer_name|text_dir }}">{{ content.customer_name|default:"—" }}</span></td>
+            <td>{% if signature_url %}<img src="{{ signature_url }}" alt="{% translate 'Signature' %}">{% else %}<span class="not-signed">{% translate "Not signed" %}</span>{% if report.signature_waived_reason %}<br><span class="muted"><span class="iso" dir="{{ report.signature_waived_reason|text_dir }}">{{ report.signature_waived_reason }}</span></span>{% endif %}{% endif %}</td>
             <td>{{ signed_at|date:"j F Y, H:i" }}</td>
         </tr>
     </tbody>
 </table>
-<p class="muted">{% translate "Hours and prices are not included in this report." %}</p>
 </body>
 </html>

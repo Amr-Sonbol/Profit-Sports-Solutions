@@ -495,7 +495,7 @@ def portal_visit_report_pdf(request, pk):
     signed, when the report has changed since. Anyone else's visit, or one
     without a report yet, is simply not found.
     """
-    from reports.pdf import render_visit_report_pdf
+    from reports.pdf import render_visit_report_pdf, report_language
 
     customer = require_customer(request)
     if customer.must_change_password:
@@ -508,7 +508,7 @@ def portal_visit_report_pdf(request, pk):
         raise Http404
     language = request.GET.get('lang')
     if language not in dict(settings.LANGUAGES):
-        language = customer.language or settings.LANGUAGE_CODE
+        language = report_language(customer)
     signed_version = request.GET.get('version') == 'signed' and bool(report.signed_content)
     response = HttpResponse(
         render_visit_report_pdf(report, language, signed_version=signed_version), content_type='application/pdf',
@@ -613,7 +613,7 @@ def customer_accounts(request):
         action = request.POST.get('action')
         if action == 'invite_selected':
             sent, skipped = 0, 0
-            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True)
+            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True, is_internal=False)
             for customer in selected.select_related('user'):
                 if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
                     log_account_action(request, customer, 'Portal welcome email sent')
@@ -696,7 +696,8 @@ def customer_accounts(request):
             })
         return _account_redirect(request)
 
-    customers = Customer.objects.filter(is_active=True).select_related('user', 'country').order_by('name')
+    # Our own account (the warehouses) never gets a portal login.
+    customers = Customer.objects.filter(is_active=True, is_internal=False).select_related('user', 'country').order_by('name')
     country_id = request.GET.get('country', '')
     if country_id:
         customers = customers.filter(country_id=country_id)

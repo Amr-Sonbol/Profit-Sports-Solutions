@@ -68,7 +68,7 @@
   pad.querySelector('[data-signature-clear]').addEventListener('click', resetCanvas);
 
   // "Hand to customer to sign" switches the form into the customer's view
-  // (hours and prices hidden by CSS); "Done" switches it back.
+  // (the staff-only fields hidden by CSS); "Done" switches it back.
   var start = form.querySelector('[data-signoff-start]');
   if (start) {
     start.hidden = false;

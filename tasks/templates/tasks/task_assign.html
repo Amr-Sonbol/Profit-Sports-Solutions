@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{% translate "Assign" %} — {{ task.task_number }}{% endblock %}
 
@@ -138,6 +138,7 @@
                     <th>{% translate "Transport" %}</th>
                     <th>{% translate "Large equipment" %}</th>
                     {% if task.required_skill %}<th>{% blocktranslate with skill=task.required_skill.display_name %}Level — {{ skill }}{% endblocktranslate %}</th>{% endif %}
+                    <th>{% if task_day %}{% blocktranslate with day=task_day|date:"D j M" %}That day ({{ day }}){% endblocktranslate %}{% else %}{% translate "That day" %}{% endif %}</th>
                     <th>{% translate "Next scheduled" %}</th>
                     <th>{% translate "Status" %}</th>
                 </tr>
@@ -155,13 +156,20 @@
                     <td>{% if technician.has_transport %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     <td>{% if technician.can_carry_large %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</td>
                     {% if task.required_skill %}<td>{{ technician.skill_level|default:"—" }}</td>{% endif %}
+                    <td class="cell-wrap">
+                        {% if not task_day %}<span class="muted">{% translate "Set a day to see" %}</span>
+                        {% elif technician.day_jobs %}
+                        {% blocktranslate count count=technician.day_jobs|length %}{{ count }} job{% plural %}{{ count }} jobs{% endblocktranslate %}{% if technician.day_hours %} · {% blocktranslate with hours=technician.day_hours|hm %}about {{ hours }} h{% endblocktranslate %}{% endif %}
+                        {% for job in technician.clashes %}<br><span class="badge badge--bad">{% blocktranslate with number=job.task_number start=job.scheduled_for|date:"TIME_FORMAT" %}Clash: {{ number }} at {{ start }}{% endblocktranslate %}</span>{% endfor %}
+                        {% else %}<span class="muted">{% translate "Nothing else" %}</span>{% endif %}
+                    </td>
                     <td>
                         {% if technician.next_scheduled_task %}
                         <a href="{% url 'tasks:task_detail' technician.next_scheduled_task.pk %}">
                             {{ technician.next_scheduled_task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
-                        <a href="{% url 'tasks:technician_board' technician.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a>
+                        {% if technician.can_open %}<a href="{% url 'tasks:technician_board' technician.pk %}" target="_blank" rel="noopener">{% translate "View schedule" %}</a>{% endif %}
                     </td>
                     <td>
                         {% if technician.is_available %}

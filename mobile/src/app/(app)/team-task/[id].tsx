@@ -1,17 +1,23 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  type AssignAction, approveTaskReport, assignTask, fetchAssignmentCandidates, fetchTeamTaskDetail,
+  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
 } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { hm } from '@/hours';
 import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
+import { when } from '@/task-time';
+import { ChoicePicker } from '@/components/choice-picker';
+import { useSession } from '@/context/auth';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
@@ -28,10 +34,98 @@ type Picking =
   | { kind: 'lead_reason'; technician: number }
   | { kind: 'remove_reason'; assignment: Assignment };
 
+type ManageAction = 'cancel' | 'close' | 'negligence' | 'correct_time';
+const MANAGE_TITLES: Record<ManageAction, string> = {
+  cancel: 'Cancel this task — why?',
+  close: 'Close this task — note',
+  negligence: 'Flag negligence — what happened?',
+  correct_time: 'Correct the time of this tap',
+};
+const MANAGE_DONE: Record<ManageAction, string> = {
+  cancel: 'Task cancelled.', close: 'Task closed.', negligence: 'Task flagged.', correct_time: 'Time corrected.',
+};
+
+/**
+ * Receiving / loading: carry the machines that are done to the next step —
+ * loading at a warehouse, or an installation at a customer's site, in any
+ * country for a manager — choosing which go (a load can be split).
+ */
+function NextStepPanel({ taskId, nextStep, onCreated }: {
+  taskId: number;
+  nextStep: NonNullable<NonNullable<TeamTaskDetail['equipment']>['next_step']>;
+  onCreated: (id: number) => void;
+}) {
+  const theme = useTheme();
+  const [step, setStep] = useState(nextStep.steps[0]?.value ?? '');
+  const [site, setSite] = useState('');
+  const [chosen, setChosen] = useState<number[]>(nextStep.lines.map((line) => line.id));
+  const [error, setError] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
+  const sites = nextStep.steps.find((option) => option.value === step)?.sites ?? [];
+
+  const create = async () => {
+    if (!site) {
+      setError('Choose where the next step is.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    try {
+      const created = await createNextStep(taskId, step, site, chosen);
+      Alert.alert('Next step created', `${created.task_number}, with ${chosen.length} machines.`);
+      onCreated(created.id);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Not created. Please try again.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  return (
+    <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
+      <ThemedText type="smallBold">Create the next step</ThemedText>
+      <ThemedView style={styles.quickRow}>
+        {nextStep.steps.map((option) => {
+          const on = step === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.quickButton, { borderColor: theme.primary }, on && { backgroundColor: theme.primary }]}
+              onPress={() => {
+                setStep(option.value);
+                setSite('');
+              }}
+            >
+              <ThemedText type="small" style={{ color: on ? theme.onPrimary : theme.primary }}>{option.label}</ThemedText>
+            </TouchableOpacity>
+          );
+        })}
+      </ThemedView>
+      <ChoicePicker label="Where" choices={sites} value={site} onChange={setSite} placeholder="Country — customer — site" />
+      <ThemedText type="small" themeColor="textSecondary">The machines to carry, with their serials and colours:</ThemedText>
+      {nextStep.lines.map((line) => {
+        const on = chosen.includes(line.id);
+        return (
+          <TouchableOpacity
+            key={line.id} style={styles.quickRow}
+            onPress={() => setChosen(on ? chosen.filter((id) => id !== line.id) : [...chosen, line.id])}
+          >
+            <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={theme.primary} />
+            <ThemedText type="small">{line.label}</ThemedText>
+          </TouchableOpacity>
+        );
+      })}
+      {error ? <ThemedText type="small" themeColor="danger">{error}</ThemedText> : null}
+      <SecondaryButton label={`Create the next step (${chosen.length})`} onPress={create} disabled={isBusy || !chosen.length} />
+    </ThemedView>
+  );
+}
+
 export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { me } = useSession();
   const [task, setTask] = useState<TeamTaskDetail | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [picking, setPicking] = useState<Picking | null>(null);
@@ -64,6 +158,30 @@ export default function TeamTaskScreen() {
     } finally {
       setIsBusy(false);
     }
+  };
+
+  // A manager's action being filled in: its note, and for a tap the right time.
+  const [managing, setManaging] = useState<{ action: ManageAction; eventId?: number } | null>(null);
+  const [manageNote, setManageNote] = useState('');
+  const [manageTime, setManageTime] = useState<Date | null>(null);
+  const [pickingTime, setPickingTime] = useState<'date' | 'time' | 'datetime' | null>(null);
+
+  const startManaging = (action: ManageAction, eventId?: number, at?: string) => {
+    setManaging({ action, eventId });
+    setManageNote('');
+    setManageTime(at ? new Date(at) : null);
+  };
+
+  const saveManaging = () => {
+    if (!managing || !task) {
+      return;
+    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const local = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const body: Record<string, string | number> = managing.action === 'correct_time'
+      ? { action: 'correct_time', event_id: managing.eventId ?? 0, corrected_at: manageTime ? local(manageTime) : '', reason: manageNote }
+      : { action: managing.action, note: manageNote };
+    run(() => manageTask(task.id, body), MANAGE_DONE[managing.action]).then(() => setManaging(null));
   };
 
   const startPicking = async (kind: 'lead' | 'helper') => {
@@ -121,21 +239,99 @@ export default function TeamTaskScreen() {
           <ThemedText type="title" style={styles.taskNumber}>{task.task_number}</ThemedText>
           <ThemedText type="subtitle" style={styles.customer}>{task.customer_name}</ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          <ThemedView style={styles.quickRow}>
+            <Ionicons name="time-outline" size={18} color={theme.text} />
+            <ThemedText type="smallBold">{when(task)}</ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.quickRow}>
+            {task.directions_url ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(task.directions_url!)}
+              >
+                <Ionicons name="navigate-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary">Directions</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {task.site_contact_phone ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
+              >
+                <Ionicons name="call-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary" numberOfLines={1}>
+                  Call {task.site_contact_name || task.site_contact_phone}
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {me?.permissions?.includes('create_tasks') ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => router.push({ pathname: '/plan-lines/[id]', params: { id: String(task.id), title: task.task_number } })}
+              >
+                <Ionicons name="cube-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary">Plan the machines</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {/* Everything else on the website's task page: edit, schedule and delay
+                notices to the customer, messages, documents, feedback request... */}
+            <TouchableOpacity
+              style={[styles.quickButton, { borderColor: theme.primary }]}
+              onPress={() => router.push({
+                pathname: '/website', params: { path: `/tasks/${task.id}/`, title: task.task_number },
+              })}
+            >
+              <Ionicons name="open-outline" size={16} color={theme.primary} />
+              <ThemedText type="small" themeColor="primary">Full task page</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
 
           <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
             <Row label="Status" value={task.status_display} />
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
+            {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
+            {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
             ) : null}
-            {task.estimated_hours ? <Row label="Estimated hours" value={task.estimated_hours} /> : null}
+            {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
 
           {task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
+            </ThemedView>
+          ) : null}
+
+          {task.machines && task.machines.length > 0 ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines the customer reported</ThemedText>
+              {task.machines.map((machine, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
+                  <ThemedText type="small">
+                    {machine.problem}{machine.out_of_service ? ' · cannot be used' : ''}
+                  </ThemedText>
+                  {machine.description ? (
+                    <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText>
+                  ) : null}
+                </ThemedView>
+              ))}
+            </ThemedView>
+          ) : null}
+
+          {task.attachments.length > 0 ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
+              {task.attachments.map((attachment) => (
+                <TouchableOpacity key={attachment.id} onPress={() => Linking.openURL(attachment.url)}>
+                  <ThemedText type="small" themeColor="primary">
+                    {attachment.purpose_display} — {attachment.media_type_display} ›
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
             </ThemedView>
           ) : null}
 
@@ -225,8 +421,15 @@ export default function TeamTaskScreen() {
           {task.report ? (
             <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
               <ThemedText type="smallBold">Work report</ThemedText>
+              <TouchableOpacity
+                onPress={() => router.push({
+                  pathname: '/website', params: { path: `/tasks/${task.id}/report.pdf`, title: `${task.task_number} report` },
+                })}
+              >
+                <ThemedText type="small" themeColor="primary">View the customer&apos;s report ›</ThemedText>
+              </TouchableOpacity>
               <Row label="Resolved" value={task.report.resolved ? 'Yes' : 'No'} />
-              <Row label="Labour hours" value={task.report.labour_hours} />
+              <Row label="Time on site" value={hm(task.report.labour_hours)} />
               <Row label="Signed by" value={task.report.customer_name || '—'} />
               <ThemedText type="small" themeColor="textSecondary">Findings</ThemedText>
               <ThemedText>{task.report.findings}</ThemedText>
@@ -241,8 +444,7 @@ export default function TeamTaskScreen() {
                   <ThemedText type="small" themeColor="textSecondary">Parts used</ThemedText>
                   {task.report.parts_used.map((part, index) => (
                     <ThemedText key={index} type="small">
-                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''} —{' '}
-                      {part.unit_cost} {part.currency_code}
+                      {part.quantity} × {part.part_code}{part.description ? ` (${part.description})` : ''}
                     </ThemedText>
                   ))}
                 </>
@@ -267,13 +469,148 @@ export default function TeamTaskScreen() {
             </TouchableOpacity>
           ) : null}
 
+          {task.equipment ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines</ThemedText>
+              {task.equipment.previous_task ? (
+                <TouchableOpacity onPress={() => router.push(`/team-task/${task.equipment!.previous_task!.id}`)}>
+                  <ThemedText type="small" themeColor="primary">Previous step: {task.equipment.previous_task.task_number} ›</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              {task.equipment.next_tasks.map((next) => (
+                <TouchableOpacity key={next.id} onPress={() => router.push(`/team-task/${next.id}`)}>
+                  <ThemedText type="small" themeColor="primary">Next step: {next.task_number} ›</ThemedText>
+                </TouchableOpacity>
+              ))}
+              {task.equipment.lines.map((line, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold">
+                    {line.product_code}{line.serial_number ? ` · ${line.serial_number}` : ''}{line.added_on_site ? ' · added on site' : ''}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor={line.status === 'done' ? 'text' : line.status === 'pending' ? 'textSecondary' : 'danger'}>
+                    {line.status_label} · {line.colors}
+                  </ThemedText>
+                  {line.replacement ? <ThemedText type="small">Instead: {line.replacement}</ThemedText> : null}
+                  {line.note ? <ThemedText type="small" themeColor="textSecondary">{line.note}</ThemedText> : null}
+                  {line.photo_url ? (
+                    <TouchableOpacity onPress={() => Linking.openURL(line.photo_url)}>
+                      <ThemedText type="small" themeColor="primary">Photo ›</ThemedText>
+                    </TouchableOpacity>
+                  ) : null}
+                </ThemedView>
+              ))}
+              {task.equipment.next_step ? (
+                <NextStepPanel
+                  taskId={task.id} nextStep={task.equipment.next_step}
+                  onCreated={(id) => router.push(`/team-task/${id}`)}
+                />
+              ) : null}
+              {task.equipment.still_to_install ? (
+                <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
+                  <ThemedText type="small">
+                    {task.equipment.still_to_install} {task.equipment.still_to_install === 1 ? 'machine is' : 'machines are'} still to install.
+                  </ThemedText>
+                  {task.equipment.can_follow_up ? (
+                    <SecondaryButton
+                      label="Create a follow-up task for them" disabled={isBusy}
+                      onPress={async () => {
+                        setIsBusy(true);
+                        try {
+                          const created = await createFollowUp(task.id);
+                          router.push(`/team-task/${created.id}`);
+                        } catch (err) {
+                          setError(err instanceof ApiRequestError ? errorText(err) : 'Not created. Please try again.');
+                        } finally {
+                          setIsBusy(false);
+                        }
+                      }}
+                    />
+                  ) : null}
+                </ThemedView>
+              ) : null}
+            </ThemedView>
+          ) : null}
+
+          {task.manage && (task.manage.can_cancel || task.manage.can_close || task.manage.can_flag) ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Manager</ThemedText>
+              <ThemedView style={styles.quickRow}>
+                {task.manage.can_cancel ? (
+                  <SecondaryButton label="Cancel task" onPress={() => startManaging('cancel')} disabled={isBusy} />
+                ) : null}
+                {task.manage.can_close ? (
+                  <SecondaryButton label="Close task" onPress={() => startManaging('close')} disabled={isBusy} />
+                ) : null}
+                {task.manage.can_flag ? (
+                  <SecondaryButton label="Flag negligence" onPress={() => startManaging('negligence')} disabled={isBusy} />
+                ) : null}
+              </ThemedView>
+            </ThemedView>
+          ) : null}
+
+          {managing ? (
+            <ThemedView style={[styles.section, styles.manageBox, { borderColor: theme.primary }]}>
+              <ThemedText type="smallBold">{MANAGE_TITLES[managing.action]}</ThemedText>
+              {managing.action === 'correct_time' ? (
+                <TouchableOpacity
+                  style={[styles.quickButton, { borderColor: theme.primary }]}
+                  onPress={() => setPickingTime(Platform.OS === 'ios' ? 'datetime' : 'date')}
+                >
+                  <ThemedText type="small" themeColor="primary">
+                    {manageTime ? manageTime.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pick the right time'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              <TextInput
+                style={[styles.manageInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                value={manageNote} onChangeText={setManageNote} multiline
+                placeholder={managing.action === 'correct_time' ? 'Reason' : managing.action === 'negligence' ? 'What happened' : 'Note'}
+                placeholderTextColor={theme.textSecondary}
+              />
+              <ThemedView style={styles.quickRow}>
+                <SecondaryButton label="Save" onPress={saveManaging} disabled={isBusy} />
+                <SecondaryButton label="Back" onPress={() => setManaging(null)} />
+              </ThemedView>
+            </ThemedView>
+          ) : null}
+          {pickingTime && manageTime ? (
+            <DateTimePicker
+              value={manageTime} mode={pickingTime} display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                if (event.type === 'dismissed' || !date) {
+                  setPickingTime(null);
+                  return;
+                }
+                const next = new Date(manageTime);
+                if (pickingTime === 'time') {
+                  next.setHours(date.getHours(), date.getMinutes());
+                } else if (pickingTime === 'date') {
+                  next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                } else {
+                  next.setTime(date.getTime());
+                }
+                setManageTime(next);
+                setPickingTime(pickingTime === 'date' ? 'time' : null);
+              }}
+            />
+          ) : null}
+
           {task.events.length > 0 ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">History</ThemedText>
               {task.events.map((event) => (
-                <ThemedText key={event.id} themeColor="textSecondary" type="small">
-                  {event.event_type_display} — {event.actor_name}
-                </ThemedText>
+                <ThemedView key={event.id} style={styles.eventRow}>
+                  <ThemedText themeColor="textSecondary" type="small" style={styles.eventText}>
+                    {new Date(event.corrected_at ?? event.occurred_at).toLocaleString([], {
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                    })}{event.corrected_at ? ' (corrected)' : ''} · {event.event_type_display} — {event.actor_name}
+                  </ThemedText>
+                  {task.manage?.correctable_event_ids.includes(event.id) ? (
+                    <TouchableOpacity onPress={() => startManaging('correct_time', event.id, event.corrected_at ?? event.occurred_at)}>
+                      <ThemedText type="small" themeColor="primary">Correct time</ThemedText>
+                    </TouchableOpacity>
+                  ) : null}
+                </ThemedView>
               ))}
             </ThemedView>
           ) : null}
@@ -318,6 +655,16 @@ function SecondaryButton({ label, onPress, disabled }: { label: string; onPress:
 }
 
 const styles = StyleSheet.create({
+  manageBox: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three },
+  manageInput: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 60, textAlignVertical: 'top' },
+  eventRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  eventText: { flex: 1 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  quickButton: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderWidth: 1, borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three, paddingVertical: Spacing.one,
+  },
+  machine: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: 2 },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },

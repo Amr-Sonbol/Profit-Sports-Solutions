@@ -2,10 +2,13 @@ import secrets
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from tasks.models import Task, TaskEvent
+
+from .phrases import Recommendation, WorkLine
 
 
 # Labour hours this far past the task's estimate get flagged to
@@ -26,8 +29,22 @@ class WorkReport(models.Model):
         Task, on_delete=models.CASCADE, related_name='report',
         verbose_name=_('task'),
     )
-    findings = models.TextField(_('findings'), help_text=_('what the technician found'))
-    action_taken = models.TextField(_('action taken'), blank=True)
+    findings = models.TextField(
+        _('findings'), blank=True,
+        help_text=_('overall, if needed — each machine has its own finding and action'),
+    )
+    action_taken = models.TextField(_('action taken'), blank=True, help_text=_('other work, one per line'))
+    # The standard wording (reports.phrases), so the report reads in its
+    # customer's language whoever filled it in.
+    work_lines = ArrayField(
+        models.CharField(max_length=20, choices=WorkLine.choices), default=list, blank=True,
+        verbose_name=_('work performed'),
+    )
+    recommendations = ArrayField(
+        models.CharField(max_length=20, choices=Recommendation.choices), default=list, blank=True,
+        verbose_name=_('recommendations'),
+    )
+    recommendation = models.TextField(_('other recommendation'), blank=True)
     resolved = models.BooleanField(_('resolved'))
     labour_hours = models.DecimalField(_('labour hours'), max_digits=5, decimal_places=2)
     customer_name = models.CharField(_('customer name'), max_length=150, help_text=_('who signed'))
@@ -119,9 +136,12 @@ class PartUsed(models.Model):
     part_code = models.CharField(_('part code'), max_length=50)
     description = models.CharField(_('description'), max_length=200, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'))
-    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2)
+    # Prices are agreed by the managers with the customer before the visit,
+    # so a report records only the part and quantity; these stay for older
+    # reports that had a price.
+    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2, null=True, blank=True)
     currency_code = models.CharField(
-        _('currency code'), max_length=3,
+        _('currency code'), max_length=3, blank=True,
         help_text=_('an amount must never be stored without its currency'),
     )
 

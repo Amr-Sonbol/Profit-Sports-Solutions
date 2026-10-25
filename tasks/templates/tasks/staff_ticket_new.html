@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "New ticket" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% if kind == 'customer' %}{% translate "New ticket" %}{% else %}{% translate "New internal task" %}{% endif %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
     <div>
         <a href="{% url 'home' %}" class="back-link">{% translate "Back" %}</a>
-        <h1>{% translate "New ticket" %}</h1>
+        <h1>{% if kind == 'customer' %}{% translate "New ticket" %}{% else %}{% translate "New internal task" %}{% endif %}</h1>
     </div>
 </div>
 
@@ -21,7 +21,7 @@
     {% if kind == 'customer' %}
     <p class="field__help">{% translate "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal." %}</p>
     {% else %}
-    <p class="field__help">{% translate "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the ticket is closed." %}</p>
+    <p class="field__help">{% translate "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the task is closed." %}</p>
     {% endif %}
     <form method="post" action="?kind={{ kind }}" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
@@ -36,7 +36,7 @@
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button type="submit" class="button">{% translate "Open ticket" %}</button>
+        <button type="submit" class="button">{% if kind == 'customer' %}{% translate "Open ticket" %}{% else %}{% translate "Create internal task" %}{% endif %}</button>
     </form>
 </div>
 {% endblock %}

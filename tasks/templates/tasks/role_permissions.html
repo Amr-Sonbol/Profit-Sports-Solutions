@@ -9,7 +9,7 @@
 </div>
 
 <p class="muted">
-    {% translate "Permissions for each role. Self-service technician screens (My week, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role." %}
+    {% translate "Permissions for each role. Self-service technician screens (My schedule, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role." %}
 </p>
 
 <form method="post" novalidate>
@@ -45,23 +45,7 @@
 </form>
 
 <div class="section">
-    <h2>{% translate "Notifications" %}</h2>
-    <p class="muted">
-        {% translate "How the customer is informed of a rescheduled visit: sent deliberately by a supervisor from the task details, or sent automatically by the system as soon as the date or time changes." %}
-    </p>
-    <form method="post" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="save_notifications">
-        <label class="checkbox-label">
-            <input
-                type="checkbox" name="auto_notify_on_reschedule"
-                {% if notification_settings.auto_notify_on_reschedule %}checked{% endif %}
-            >
-            {% translate "Email the customer automatically when a task is rescheduled" %}
-        </label>
-        <div class="section">
-            <button type="submit" class="button">{% translate "Save" %}</button>
-        </div>
-    </form>
+    <p class="muted">{% translate "Which emails and phone notifications the system sends, and to whom, is set on its own page." %}
+    <a href="{% url 'tasks:notification_settings' %}">{% translate "Notifications" %}</a></p>
 </div>
 {% endblock %}

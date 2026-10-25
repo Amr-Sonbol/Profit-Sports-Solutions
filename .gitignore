@@ -6,3 +6,6 @@ db.sqlite3
 staticfiles/
 media/
 *.log
+
+# Local test logins (never committed)
+test-accounts.local.txt

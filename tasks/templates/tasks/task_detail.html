@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -419,50 +419,93 @@
         <li>
             {{ task_asset.asset }}
             <span class="badge badge--muted">{{ task_asset.get_outcome_display }}</span>
+            {% if task_asset.note %}<br><span class="muted">{{ task_asset.note }}</span>{% endif %}
         </li>
         {% endfor %}
     </ul>
 </div>
 {% endif %}
 
-{% if products %}
+{% if products or task.previous_task %}
 <div class="section">
-    <h2>{% translate "Products" %}</h2>
+    <h2>{% translate "Machines" %}</h2>
+    {# The equipment chain: the step before, and the ones after. #}
+    {% if task.previous_task %}<p>{% translate "Previous step:" %} <a href="{% url 'tasks:task_detail' task.previous_task.pk %}">{{ task.previous_task.task_number }}</a></p>{% endif %}
+    {% for next_task in next_tasks %}<p>{% translate "Next step:" %} <a href="{% url 'tasks:task_detail' next_task.pk %}">{{ next_task.task_number }}</a> — {{ next_task.get_status_display }}</p>{% endfor %}
+    {% if products %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>{% translate "Product code" %}</th>
                     <th>{% translate "Serial number" %}</th>
-                    <th>{% translate "Quantity" %}</th>
-                    <th>{% translate "Replacement" %}</th>
-                    <th>{% translate "Frame color" %}</th>
-                    <th>{% translate "Arm color" %}</th>
-                    <th>{% translate "Padding color" %}</th>
-                    <th>{% translate "Trim color" %}</th>
-                    <th>{% translate "Comment" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Colors" %}</th>
+                    <th>{% translate "Installed instead" %}</th>
                     <th>{% translate "Note" %}</th>
+                    <th>{% translate "Photo" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for product in products %}
                 <tr>
-                    <td>{{ product.product_code }}</td>
+                    <td>{{ product.product_code }}{% if product.quantity > 1 %} × {{ product.quantity }}{% endif %}{% if product.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}</td>
                     <td>{{ product.serial_number|default:"—" }}</td>
-                    <td>{{ product.quantity }}</td>
+                    <td>{{ product.status_label }}</td>
+                    <td>{{ product.frame }} / {{ product.arm }} / {{ product.padding }} / {{ product.trim }}</td>
                     <td>{{ product.replacement|default:"—" }}</td>
-                    <td>{{ product.frame|default:"—" }}</td>
-                    <td>{{ product.arm|default:"—" }}</td>
-                    <td>{{ product.padding|default:"—" }}</td>
-                    <td>{{ product.trim|default:"—" }}</td>
-                    <td>{{ product.comment|default:"—" }}</td>
-                    <td>{{ product.note|default:"—" }}</td>
+                    <td class="cell-wrap">{{ product.note|default:"—" }}</td>
+                    <td>{% if product.photo %}<a href="{{ product.photo.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>{% else %}—{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <p class="field__help">{% translate "These can be edited from the task's Edit screen." %}</p>
+    <p class="field__help">{% translate "Planned from the task's Edit screen; checked off on site in the installers' report." %}</p>
+    {% endif %}
+    {% if lines_to_carry and can_create_follow_up %}
+    {# Receiving / loading: carry the machines that are ready to the next step — any country. #}
+    <form method="post" class="next-step">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_next_step">
+        <h3>{% translate "Create the next step" %}</h3>
+        <div class="form-grid">
+            <div class="field">
+                <label for="next-step">{% translate "Next step" %}</label>
+                <select name="step" id="next-step" data-next-step>
+                    {% for step, label, sites in next_step_choices %}<option value="{{ step }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="next-site">{% translate "Where" %}</label>
+                <select name="site" id="next-site" required>
+                    {% for step, label, sites in next_step_choices %}
+                    <optgroup label="{{ label }}" data-for-step="{{ step }}">
+                        {% for site in sites %}<option value="{{ site.pk }}">{{ site.customer.country.display_name }} — {{ site.customer.name }} — {{ site.name }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <p class="field__help">{% translate "The machines to carry, with their serial numbers and colors:" %}</p>
+        {% for line in lines_to_carry %}
+        <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Create the next step" %}</button>
+    </form>
+    {% endif %}
+    {% if still_to_install %}
+    <div class="flash flash--warning">
+        {% blocktranslate count count=still_to_install|length %}{{ count }} machine is still to install.{% plural %}{{ count }} machines are still to install.{% endblocktranslate %}
+        {% if can_create_follow_up %}
+        <form method="post" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_follow_up">
+            <button type="submit" class="button">{% translate "Create a follow-up task for them" %}</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -509,11 +552,11 @@
         <div>
             <dt>{% translate "Labour hours" %}</dt>
             <dd>
-                {{ report.labour_hours }}
-                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
+                {{ report.labour_hours|hm }}
+                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours|hm %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
                 {% if report.is_overrun %}<span class="badge badge--bad">{% translate "Significantly over estimate" %}</span>{% endif %}
                 {% with tapped=report.tapped_hours %}{% if tapped is not None %}
-                <span class="muted">({% blocktranslate with hours=tapped %}taps: {{ hours }} h{% endblocktranslate %})</span>
+                <span class="muted">({% blocktranslate with hours=tapped|hm %}taps: {{ hours }} h{% endblocktranslate %})</span>
                 {% endif %}{% endwith %}
                 {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% translate "Exceeds recorded time" %}</span>{% endif %}
             </dd>
@@ -558,7 +601,6 @@
                     <th>{% translate "Part" %}</th>
                     <th>{% translate "Description" %}</th>
                     <th>{% translate "Qty" %}</th>
-                    <th>{% translate "Unit cost" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -567,7 +609,6 @@
                     <td>{{ part.part_code }}</td>
                     <td>{{ part.description|default:"—" }}</td>
                     <td>{{ part.quantity }}</td>
-                    <td>{{ part.unit_cost }} {{ part.currency_code }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -738,4 +779,9 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% load static %}
+<script src="{% static 'js/next-step.js' %}?v={{ css_version }}" defer></script>
 {% endblock %}

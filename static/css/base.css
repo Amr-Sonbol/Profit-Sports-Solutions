@@ -509,6 +509,11 @@ html[dir="rtl"] .notif-dropdown > * {
     color: var(--color-accent);
 }
 
+.flash--warning {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
 .filters {
     display: flex;
     flex-direction: row;
@@ -815,6 +820,13 @@ tbody tr:hover {
     content: "←";
 }
 
+/* A month/week button that can't be used right now (e.g. "Next month"
+   on the current month): kept in place so the others don't move. */
+.week-nav [aria-disabled="true"] {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
 .button-row {
     display: flex;
     flex-direction: row;
@@ -1005,34 +1017,247 @@ tbody tr:hover {
     flex: 1 1 18rem;
 }
 
-.contact-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+/* A week board's missed jobs, above the days. */
+.week-overdue {
+    border-inline-start: 4px solid var(--color-danger);
 }
 
-.contact-row {
+/* My week, Today: the next job as a large card, what's done greyed out. */
+.today-summary {
+    margin-block: 0.75rem;
+}
+
+.next-job {
+    border-inline-start: 4px solid var(--color-accent);
+}
+
+.next-job__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-muted);
+}
+
+.next-job__time {
+    margin-block: 0.25rem 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.next-job__where {
+    margin-block: 0.25rem;
+}
+
+.next-job .badge-row {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.next-job__actions {
+    flex-wrap: wrap;
+    margin-block-start: 0.75rem;
+}
+
+.today-done {
+    opacity: 0.6;
+}
+
+/* An installation's on-site checklist: one card per machine. */
+.checklist {
+    display: grid;
+    gap: 0.75rem;
+    margin-block-end: 1rem;
+}
+
+.checklist-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+}
+
+.checklist-card--error {
+    border-color: var(--color-danger, #c0392b);
+}
+
+.checklist-card legend {
+    font-weight: 600;
+    padding-inline: 0.35rem;
+}
+
+/* The report form's numbered steps, like the app's. */
+.report-step {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-block: 1.25rem 0.5rem;
+}
+
+.report-step__number {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.9rem;
+    block-size: 1.9rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 700;
+}
+
+.report-step__title {
+    margin: 0;
+}
+
+.report-step .field__help {
+    margin: 0.15rem 0 0;
+}
+
+/* A machine's finding / action: the list, with the "other" box under it. */
+.report-pick select,
+.report-pick input {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 12rem;
+}
+
+.report-pick input {
+    margin-block-start: 0.35rem;
+}
+
+/* Notifications page: the same column widths in all three tables. */
+.notification-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.notification-table__message {
+    inline-size: 50%;
+}
+
+.notification-table__channel {
+    inline-size: 18%;
+}
+
+.role-choices {
+    margin-block: 0.5rem 0;
+    padding: 0;
+    border: none;
+}
+
+.role-choices legend {
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+/* Inputs in a table are stretched to the full width (.table-wrap input);
+   here a tick box sits right next to its words. */
+.notification-table input[type="checkbox"] {
+    inline-size: 1.15rem;
+    min-inline-size: 0;
+    block-size: 1.15rem;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.notification-table .checkbox-label {
+    display: inline-flex;
+    padding-block: 0;
+}
+
+.role-choices > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.15rem 0.75rem;
+}
+
+.role-choices label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+/* My skills: the four level sentences, and the "Rate" button that opens
+   one row's form at a time (a <details>, so no JavaScript). */
+.level-rubric {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.level-rubric dt {
+    font-weight: 600;
+}
+
+.level-rubric dd {
+    margin: 0;
+}
+
+/* The three skill tables share column widths, so their columns line up. */
+.skills-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.skills-table__name {
+    inline-size: 42%;
+}
+
+.skills-table__level {
+    inline-size: 20%;
+}
+
+/* Status at the start, the Rate button at the row's end; an open form
+   drops below both, across the whole cell. */
+.skill-status {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
-    padding-block: 0.6rem;
-    border-block-end: 1px solid var(--color-border);
-}
-
-.contact-row:last-child {
-    border-block-end: none;
-}
-
-.contact-row__name {
-    flex: 1 1 10rem;
-}
-
-.contact-row__actions {
-    display: flex;
-    flex-direction: row;
+    justify-content: space-between;
     gap: 0.5rem;
+}
+
+.skill-status .rate-form {
+    margin-block-start: 0;
+}
+
+.skill-status .rate-form[open] {
+    flex-basis: 100%;
+}
+
+.skill-status .rate-form[open] summary {
+    margin-inline-start: auto;
+    inline-size: fit-content;
+    display: block;
+}
+
+.rate-form {
+    margin-block-start: 0.4rem;
+}
+
+.rate-form summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.rate-form summary::-webkit-details-marker {
+    display: none;
+}
+
+.rate-form[open] summary {
+    margin-block-end: 0.5rem;
 }
 
 /* Dashboard chart: tasks opened vs completed per week (dashboard.html).
@@ -1173,6 +1398,117 @@ tbody tr:hover {
 
 .chart-key--opened { background: var(--chart-opened, #2a78d6); }
 .chart-key--completed { background: var(--chart-completed, #eb6834); }
+
+/* My progress: one series as a line over the year. The line is an SVG
+   stretched over the plot (its stroke kept at 2px); each month's point
+   is an HTML dot so it gets the same hover/focus value as the bars. The
+   months run right to left in Arabic, so the line is mirrored there. */
+.trend-chart__line {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: calc(100% - var(--chart-label-height));
+    overflow: visible;
+    pointer-events: none;
+}
+
+[dir="rtl"] .trend-chart__line {
+    transform: scaleX(-1);
+}
+
+.trend-chart__line polyline {
+    fill: none;
+    stroke: var(--chart-completed);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.trend-chart__column {
+    position: relative;
+    flex: 1 1 auto;
+}
+
+.trend-chart__point {
+    position: absolute;
+    inset-inline-start: 50%;
+    inline-size: 10px;
+    block-size: 10px;
+    margin-inline-start: -5px;
+    margin-block-end: -5px;
+    border-radius: 50%;
+    background: var(--chart-completed);
+    box-shadow: 0 0 0 2px var(--color-surface);
+    cursor: default;
+}
+
+.trend-chart__point:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.trend-chart__point:hover::after,
+.trend-chart__point:focus-visible::after {
+    content: attr(data-tip);
+    position: absolute;
+    inset-block-end: calc(100% + 6px);
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    padding-block: 0.15rem;
+    padding-inline: 0.4rem;
+    border-radius: 4px;
+    background: var(--color-text);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 5;
+}
+
+[dir="rtl"] .trend-chart__point:hover::after,
+[dir="rtl"] .trend-chart__point:focus-visible::after {
+    transform: translateX(50%);
+}
+
+/* Team progress: each technician's year as a small line, months
+   running right to left in Arabic like the big chart. */
+.sparkline {
+    display: block;
+    inline-size: 7rem;
+    block-size: 1.75rem;
+    overflow: visible;
+}
+
+[dir="rtl"] .sparkline {
+    transform: scaleX(-1);
+}
+
+.sparkline polyline {
+    fill: none;
+    stroke: var(--chart-completed, #eb6834);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.trend-summary {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.trend-summary__value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.trend-summary__change {
+    display: block;
+    color: var(--color-text);
+    font-weight: 600;
+}
 
 .chart-table summary {
     cursor: pointer;
@@ -1380,7 +1716,7 @@ tbody tr:hover {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    min-block-size: 6.5rem;
+    min-block-size: 4.75rem;  /* six weeks fit one screen */
     min-inline-size: 0;
     padding: 0.3rem 0.4rem;
     border-block-end: 1px solid var(--color-border);
@@ -1397,6 +1733,101 @@ tbody tr:hover {
 
 .cal-cell--other-month .cal-cell__date {
     color: var(--color-muted);
+}
+
+/* A country's days off, shaded on the week and the month. */
+.cal-day--weekend,
+.cal-cell--weekend {
+    background: var(--color-neutral-bg);
+}
+
+/* The year: twelve small months on one screen, a day with visits filled
+   in (and its count when more than one). */
+.cal-year {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-block-end: 0.75rem;
+}
+
+@media (min-width: 700px) {
+    .cal-year {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* The whole year on one screen. */
+@media (min-width: 1100px) {
+    .cal-year {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+.cal-mini {
+    padding: 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.cal-mini__head {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-block: 0 0.35rem;
+    font-size: 0.85rem;
+}
+
+.cal-mini__head a {
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__head .muted {
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.cal-mini__grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.cal-mini__weekday {
+    color: var(--color-muted);
+}
+
+.cal-mini__day {
+    position: relative;
+    display: block;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__day--weekend {
+    color: var(--color-muted);
+    background: var(--color-neutral-bg);
+}
+
+.cal-mini__day--busy {
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.cal-mini__day--busy sup {
+    font-size: 0.6rem;
+    margin-inline-start: 1px;
+}
+
+.cal-mini__day--today {
+    box-shadow: inset 0 0 0 2px var(--color-danger);
 }
 
 .cal-cell__date {
@@ -1806,6 +2237,28 @@ tbody tr:hover {
 }
 
 .checkbox-label input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+}
+
+/* Django's tick lists (CheckboxSelectMultiple), rendered as <div>s:
+   the box beside its text, like .field ul above. */
+.field div > label:has(> input[type="checkbox"]),
+.field div > label:has(> input[type="radio"]) {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.3rem;
+    color: var(--color-text);
+    font-size: 0.95rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.field label > input[type="checkbox"],
+.field label > input[type="radio"] {
     width: 1.15rem;
     height: 1.15rem;
     flex-shrink: 0;

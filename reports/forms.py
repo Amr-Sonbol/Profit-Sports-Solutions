@@ -3,12 +3,13 @@ import binascii
 
 from django import forms
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.validators import FileExtensionValidator, RegexValidator
+from django.core.validators import FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import Part
 
 from .models import CustomerFeedback, WorkReport
+from .phrases import Recommendation, WorkLine
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -51,19 +52,41 @@ class WorkReportForm(forms.ModelForm):
         required=False, label=_('Send a copy to'),
         help_text=_('The customer receives this report as a PDF by email. Leave blank to send nothing.'),
     )
+    # The standard wording (reports.phrases): ticked, it reads in the
+    # customer's language on the report.
+    work_lines = forms.MultipleChoiceField(
+        choices=WorkLine.choices, required=False, widget=forms.CheckboxSelectMultiple, label=_('Work performed'),
+    )
+    recommendations = forms.MultipleChoiceField(
+        choices=Recommendation.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Recommendations'),
+    )
 
     class Meta:
         model = WorkReport
-        fields = ['findings', 'action_taken', 'resolved', 'labour_hours', 'customer_name', 'signature_waived_reason']
+        fields = [
+            'findings', 'work_lines', 'action_taken', 'resolved', 'customer_name',
+            'signature_waived_reason', 'recommendations', 'recommendation',
+        ]
         widgets = {
             'findings': forms.Textarea(attrs={'rows': 3}),
             'action_taken': forms.Textarea(attrs={'rows': 3}),
+            'recommendation': forms.Textarea(attrs={'rows': 2}),
             'signature_waived_reason': forms.Textarea(attrs={'rows': 2}),
         }
-        labels = {'signature_waived_reason': _('Why the customer could not sign')}
+        labels = {
+            'signature_waived_reason': _('Why the customer could not sign'),
+            # Same wording as the app's report screen.
+            'findings': _('Overall findings (optional)'),
+            'action_taken': _('Other work, one per line'),
+            'recommendation': _('Other recommendation'),
+        }
 
-    def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', **kwargs):
+    def __init__(self, *args, require_signature=False, helpers=(), copy_to_default='', time_on_site=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # The visit's hours (Task.time_on_site) — worked out from the taps,
+        # not typed; a helper's own hours can't exceed them.
+        self.time_on_site = time_on_site
         self.fields['send_copy_to'].initial = (self.instance.copy_sent_to if self.instance.pk else '') or copy_to_default
         # The task type's requires_signature — met by a new upload or one
         # already on file from an earlier filing of this same report.
@@ -100,7 +123,7 @@ class WorkReportForm(forms.ModelForm):
             except ValueError:
                 self.add_error('signature', _('The signature could not be read. Please sign again.'))
                 return cleaned
-        labour_hours = cleaned.get('labour_hours')
+        labour_hours = self.time_on_site
         for assignment in self.helpers:
             hours = cleaned.get(f'helper_hours_{assignment.pk}')
             if hours is not None and labour_hours is not None and hours > labour_hours:
@@ -147,11 +170,7 @@ class PartUsedItemForm(forms.Form):
     # integer overflow, which would otherwise surface as the same kind of
     # unhandled DB error.
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Qty'))
-    unit_cost = forms.DecimalField(required=False, min_value=0, max_digits=10, decimal_places=2, label=_('Unit cost'))
-    currency_code = forms.CharField(
-        required=False, max_length=3, label=_('Currency'),
-        validators=[RegexValidator(r'^[A-Z]{3}$', _('Enter a 3-letter currency code, e.g. AED.'))],
-    )
+    # No price: the managers agree prices with the customer before the visit.
 
     def clean_part_code(self):
         """Once the catalogue has any active part, the code must be one of
@@ -179,11 +198,9 @@ class PartUsedItemForm(forms.Form):
         part = getattr(self, 'catalogue_part', None)
         if part and not cleaned.get('description'):
             cleaned['description'] = part.description
-        if not any(cleaned.get(f) for f in ('part_code', 'quantity', 'unit_cost')):
+        if not any(cleaned.get(f) for f in ('part_code', 'quantity')):
             return cleaned
-        missing = [f for f in ('part_code', 'quantity', 'unit_cost', 'currency_code') if not cleaned.get(f)]
+        missing = [f for f in ('part_code', 'quantity') if not cleaned.get(f)]
         if missing:
-            raise forms.ValidationError(
-                _('Please complete the part code, quantity, unit cost and currency, or leave this row blank.'),
-            )
+            raise forms.ValidationError(_('Please complete the part code and quantity, or leave this row blank.'))
         return cleaned

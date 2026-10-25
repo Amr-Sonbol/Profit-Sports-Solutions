@@ -38,7 +38,7 @@
                         <th>{% translate "Product code" %}</th>
                         <th>{% translate "Serial number" %}</th>
                         <th>{% translate "Quantity" %}</th>
-                        <th>{% translate "Note" %}</th>
+                        <th>{% translate "Colors" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -47,7 +47,7 @@
                         <td>{{ product.product_code }}</td>
                         <td>{{ product.serial_number|default:"—" }}</td>
                         <td>{{ product.quantity }}</td>
-                        <td>{{ product.note|default:"—" }}</td>
+                        <td>{{ product.frame }} / {{ product.arm }} / {{ product.padding }} / {{ product.trim }}</td>
                     </tr>
                     {% empty %}
                     <tr><td colspan="4" class="empty-state">{% translate "No products." %}</td></tr>
@@ -56,7 +56,7 @@
             </table>
         </div>
         {% else %}
-        <p class="field__help">{% translate "For installations and loadings: the same items listed on the delivery note, recorded as structured data. A product code is required for a row to be saved. For each machine, complete its checklist: the custom color of each component and any substitute supplied if the ordered item was unavailable." %}</p>
+        <p class="field__help">{% if is_installation %}{% translate "The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial number can wait — the installers type or scan it on site, where each machine is checked off. The colors are black unless the machine is a custom one." %}{% else %}{% translate "The items on the delivery note: a product code for each line. The colors are black unless the machine is a custom one." %}{% endif %}</p>
         {{ product_formset.management_form }}
         {% if product_formset.non_form_errors %}
             <p class="flash flash--error">{{ product_formset.non_form_errors }}</p>
@@ -68,13 +68,10 @@
                         <th>{% translate "Product code" %}</th>
                         <th>{% translate "Serial number" %}</th>
                         <th>{% translate "Quantity" %}</th>
-                        <th>{% translate "Replacement" %}</th>
                         <th>{% translate "Frame color" %}</th>
                         <th>{% translate "Arm color" %}</th>
                         <th>{% translate "Padding color" %}</th>
                         <th>{% translate "Trim color" %}</th>
-                        <th>{% translate "Comment" %}</th>
-                        <th>{% translate "Note" %}</th>
                         <th>{% translate "Delete" %}</th>
                     </tr>
                 </thead>
@@ -84,17 +81,18 @@
                         <td>{{ product_form.product_code }}</td>
                         <td>{{ product_form.serial_number }}</td>
                         <td>{{ product_form.quantity }}</td>
-                        <td>{{ product_form.replacement }}</td>
                         <td>{{ product_form.frame }}</td>
                         <td>{{ product_form.arm }}</td>
                         <td>{{ product_form.padding }}</td>
                         <td>{{ product_form.trim }}</td>
-                        <td>{{ product_form.comment }}</td>
-                        <td>{{ product_form.note }}</td>
                         <td>{{ product_form.DELETE }}</td>
                     </tr>
                     {% if product_form.errors %}
-                    <tr><td colspan="11"><p class="field__error">{{ product_form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="8">
+                        {% for error in product_form.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                        {% for error in product_form.serial_number.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                        {% for error in product_form.quantity.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>

@@ -656,6 +656,9 @@ class PortalTicketNewTests(CustomerTestCase):
         if machines is None:
             machines = [{'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': 'Belt noise'}]
         for index, machine in enumerate(machines):
+            # A described problem is required; tests about other things get one.
+            if machine and 'description' not in machine:
+                machine = {**machine, 'description': 'Stops after 5 minutes, error E-07, since Monday.'}
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return payload
@@ -818,27 +821,38 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
+    def test_a_machine_needs_its_problem_described(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': '  '},
+        ]))
+        self.assertContains(response, 'Please describe the problem')
+        self.assertFalse(CustomerTicket.objects.exists())
+
     def test_a_machine_needs_a_problem_and_an_identity(self):
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[{'description': 'Squeaks'}]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
-    def test_an_unlisted_machine_needs_its_serial_or_a_sticker_photo(self):
+    def test_an_unlisted_machine_needs_its_typed_serial_a_photo_is_extra(self):
+        # The typed number is how the machine is tracked; a sticker photo
+        # alone isn't enough, but it's kept alongside to check it.
         self.client.login(username='fitnessfirst', password='pass12345')
+        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display'},
+            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
         ]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
         sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'problem': 'display', 'serial_photo': sticker},
         ]))
         machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual(machine.serial_no, 'OB-9')
         self.assertTrue(machine.serial_photo.name.endswith('/sticker.jpg'))
-        self.assertEqual(machine.ticket.serial_numbers, 'serial number on the sticker photo')
 
     def test_a_listed_machine_needs_no_serial(self):
         self.client.login(username='fitnessfirst', password='pass12345')
@@ -1133,3 +1147,33 @@ class CustomerAccountUnlockTests(CustomerTestCase):
         self.assertNotIn('fitnessfirst', locked_usernames())
         response = self.client.post('/customers/portal/login/', {'username': 'fitnessfirst', 'password': 'pass12345'})
         self.assertEqual(response.status_code, 302)
+
+
+class PortalMachineQuestionTests(PortalTicketMachinesTests):
+    # Each machine card asks one thing first — in their list, or new — and
+    # only that answer's fields count.
+
+    def test_the_answer_decides_what_is_needed(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        page = self.client.get('/customers/portal/tickets/new/')
+        self.assertContains(page, 'Is this machine in your list?')
+
+        # "In my list" but nothing picked: asked to pick, nothing about a serial.
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'list', 'model_name': 'typed by mistake', 'problem': 'display'},
+        ]))
+        self.assertContains(response, 'Please choose the machine from your list.')
+        self.assertNotContains(response, 'Please enter the serial number')
+
+        # "New": model and serial; a machine picked earlier is dropped.
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'new', 'asset': str(self.asset.pk), 'model_name': 'Old bike', 'serial_no': 'B-9', 'problem': 'display'},
+        ]))
+        machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual((machine.asset, machine.model_name, machine.serial_no), (None, 'Old bike', 'B-9'))
+
+    def test_a_customer_with_no_machines_is_not_asked(self):
+        from customers.models import Asset
+        Asset.objects.filter(site__customer=self.customer).delete()
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.assertNotContains(self.client.get('/customers/portal/tickets/new/'), 'Is this machine in your list?')

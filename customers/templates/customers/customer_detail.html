@@ -12,6 +12,10 @@
     <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
 </div>
 
+{% if customer.is_internal %}
+<p class="flash flash--info">{% translate "This is our own account in this country: each site below is one of our warehouses, where equipment is received from the factory and loaded for installation. Add each warehouse as a site." %}</p>
+{% endif %}
+
 <div class="section">
     <dl class="detail-grid">
         <div>

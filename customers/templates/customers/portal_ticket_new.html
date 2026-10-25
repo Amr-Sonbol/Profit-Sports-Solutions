@@ -33,9 +33,19 @@
             <fieldset class="machine-card" data-machine-card{% if not forloop.first and not machine.has_changed and not machine.errors %} hidden{% endif %}>
                 <legend>{% blocktranslate with number=forloop.counter %}Machine {{ number }}{% endblocktranslate %}</legend>
                 {% for error in machine.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                {# First the one question — in their list, or new — then only what that needs. #}
+                {% if machine.has_machines %}
+                <div class="field field--wide machine-which{% if machine.which.errors %} field--error{% endif %}" data-machine-which>
+                    <label>{{ machine.which.label }}</label>
+                    {{ machine.which }}
+                </div>
+                {% else %}
+                <input type="hidden" name="{{ machine.which.html_name }}" value="new">
+                {% endif %}
                 <div class="form-grid">
-                    {% for field in machine %}
-                    <div class="field{% if field.name == 'out_of_service' %} field--checkbox{% endif %}{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}">
+                    {% for field in machine %}{% if field.name != 'which' %}
+                    <div class="field{% if field.name == 'out_of_service' %} field--checkbox{% endif %}{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
+                        {% if field.name == 'asset' %}data-show-for="list"{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'serial_photo' %}data-show-for="new"{% endif %}>
                         {% if field.name == 'out_of_service' %}
                         <label>{{ field }} {{ field.label }}</label>
                         {% else %}
@@ -45,7 +55,7 @@
                         {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
                         {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                     </div>
-                    {% endfor %}
+                    {% endif %}{% endfor %}
                 </div>
             </fieldset>
             {% endfor %}

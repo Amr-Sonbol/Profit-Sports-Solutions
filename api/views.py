@@ -1,11 +1,16 @@
 from decimal import Decimal, InvalidOperation
 
-from django.contrib.auth import authenticate
+from django.contrib.auth import SESSION_KEY, authenticate, login
 from django.contrib.auth.models import update_last_login
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.http import HttpResponseRedirect
+from django.utils import translation
+from django.utils.dateparse import parse_datetime
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -13,24 +18,43 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from people.models import PushDevice, RolePermission
-from people.permissions import get_active_country, require_manager, scoped_or_404
+from customers.models import Asset, Customer
+from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
+from people.context_processors import nav_groups, nav_pages
+from customers.accounts import locked_usernames
+from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
+from people.permissions import (
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, require_manager, scoped_or_404,
+)
 from people.push import push_assigned, push_removed
-from reference.models import Part
+from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
+from reports.pdf import hours_text, report_language
+from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, ChangePasswordForm, PauseTaskForm, RemoveAssignmentForm, SetLeadForm,
-    TaskAttachmentUploadForm, TechnicianFirstLoginForm,
+    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
+    CancelTaskForm, CloseTaskForm,
+    CorrectEventTimeForm, NegligenceFlagForm,
+    RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
 from tasks.views import (
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
-    report_saved_message, save_work_report, search_tasks, search_tickets, send_password_changed_email,
+    _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
+    save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
+    save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
+    send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
+    _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
+    dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
+    cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
+    save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
+    lines_to_carry, next_step_sites, save_planned_lines, PRODUCTS_LOCKED_STATUSES,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -38,6 +62,7 @@ from tasks.views import (
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
     CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
+    directions_url,
 )
 
 
@@ -64,28 +89,64 @@ class LoginView(APIView):
         token, _created = Token.objects.get_or_create(user=user)
         # So Staff accounts' "Last sign-in" counts the app, not only the website.
         update_last_login(None, user)
-        return Response({'token': token.key, **_me_payload(user)})
+        return Response({'token': token.key, **_me_payload(user, request)})
 
 
-def _me_payload(user):
+def _me_payload(user, request=None):
     technician = getattr(user, 'technician', None)
     if technician is None:
-        return {'full_name': user.get_username(), 'role': None, 'country': None}
+        return {'full_name': user.get_username(), 'role': None, 'country': None, 'permissions': []}
     return {
         'full_name': technician.full_name,
+        'username': user.get_username(),
+        'email': user.email,
+        'phone': technician.phone,
+        'photo_url': request.build_absolute_uri(technician.photo.url) if technician.photo and request else '',
         'role': technician.role,
         'role_display': technician.get_role_display(),
+        'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
+        # A manager chooses which country the app shows (X-Active-Country).
+        'countries': [
+            {'value': str(country.pk), 'label': country.display_name}
+            for country in Country.objects.filter(is_active=True).order_by('name')
+        ] if technician.is_manager_tier else [],
+        'home_country_id': str(technician.country_id),
+        'language_choices': [{'value': value, 'label': str(label)} for value, label in technician.Language.choices],
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
         'must_change_password': technician.must_change_password,
+        # What this role may do (RolePermission), so the app shows only
+        # the tabs that will open — the API still checks every request.
+        'permissions': sorted(
+            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        ),
     }
 
 
 class MeView(APIView):
     def get(self, request):
-        return Response(_me_payload(request.user))
+        return Response(_me_payload(request.user, request))
+
+    def post(self, request):
+        """Edit my profile, as on the website's My profile (MyProfileForm):
+        photo, language, phone and email — multipart; anything left out
+        stays as it is. Role, country and employment stay office-side.
+        """
+        technician = getattr(request.user, 'technician', None)
+        if technician is None:
+            raise PermissionDenied
+        data = {
+            'language': technician.language, 'phone': technician.phone, 'email': request.user.email,
+            **{field: request.data[field] for field in ('language', 'phone', 'email') if field in request.data},
+        }
+        form = MyProfileForm(data, request.FILES, instance=technician)
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        form.save()
+        return Response(_me_payload(request.user, request))
 
 
 class MyPasswordView(APIView):
@@ -123,7 +184,771 @@ class MyPasswordView(APIView):
         # Their own change, so this phone and any other stay signed in;
         # the token is sent back so the app's flow doesn't depend on that.
         token, _created = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key, **_me_payload(user)})
+        return Response({'token': token.key, **_me_payload(user, request)})
+
+
+def _schedule_item(task):
+    """One task on the app's Today screen: the list fields, plus the
+    person's role, the address and the planned window."""
+    return {
+        **TaskListSerializer(task).data,
+        'my_role': getattr(task, 'my_role', ''),
+        'address': task.site.address,
+        'scheduled_date': task.scheduled_date,
+        'estimated_finish': task.estimated_finish,
+    }
+
+
+class MyTodayView(APIView):
+    """The app's Today screen — the same plan as the website's (My
+    schedule, tasks.views.today_plan): overdue, the next job with the
+    lead's next tap and a map link, the rest of today and what's done.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        plan = today_plan(request.user.technician)
+        next_job = plan['next_job']
+        return Response({
+            'today': plan['today'],
+            'today_count': plan['today_count'],
+            'overdue': [_schedule_item(task) for task in plan['overdue']],
+            'next_job': {
+                **_schedule_item(next_job),
+                'next_action': next_job.next_action,
+                'directions_url': next_job.directions_url,
+            } if next_job else None,
+            'later_today': [_schedule_item(task) for task in plan['later_today']],
+            'done_today': [_schedule_item(task) for task in plan['done_today']],
+        })
+
+
+class MyScheduleView(APIView):
+    """The app's Week / Month / Year — the website's My schedule calendar
+    (tasks.views._calendar_context) of the person's own tasks: ?view=week
+    (&start=YYYY-MM-DD), month (&month=YYYY-MM) or year (&year=YYYY). Weeks
+    start on their country's first working day; days off are marked.
+    Overdue and the tasks with no day come with every view.
+
+    ?technician=<id> shows someone else's — for whoever can view
+    technicians, within the people they oversee in their country (like
+    the website's "View schedule"); anyone else is a 404.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        person_id = request.query_params.get('technician')
+        if person_id:
+            if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
+                return Response({'detail': 'Not allowed.'}, status=status.HTTP_403_FORBIDDEN)
+            technician = get_object_or_404(
+                _people_i_oversee(technician).filter(country=get_active_country(request)),
+                pk=person_id if person_id.isdigit() else 0,
+            )
+        mine, with_role = _my_tasks(technician)
+        context = _calendar_context(request, mine, technician.country)
+        for entry in context['days']:
+            with_role(entry['tasks'])
+
+        def day(entry):
+            return {
+                'date': entry['date'], 'is_today': entry['is_today'], 'is_weekend': entry['is_weekend'],
+                'in_month': entry['in_month'], 'week_start': entry['week_start'],
+                'tasks': [_schedule_item(task) for task in entry['tasks']],
+            }
+
+        view = context['view']
+        payload = {
+            'view': view,
+            'today': context['today'],
+            'person': {'id': technician.pk, 'name': technician.full_name},
+            'overdue': [_schedule_item(task) for task in _overdue(mine, with_role, timezone.localtime().date())],
+            'unscheduled': [_schedule_item(task) for task in with_role(context['unscheduled'])],
+        }
+        if view == 'year':
+            payload.update({
+                'year': context['year'],
+                'months': [
+                    {
+                        'first': month['first'],
+                        'count': month['count'],
+                        'cells': [
+                            None if cell is None else {
+                                'date': cell['date'], 'count': len(cell['tasks']), 'is_today': cell['is_today'],
+                                'is_weekend': cell['is_weekend'], 'week_start': cell['week_start'],
+                            }
+                            for cell in month['cells']
+                        ],
+                    }
+                    for month in context['year_months']
+                ],
+            })
+        elif view == 'month':
+            payload.update({
+                'month': context['month'], 'prev_month': context['prev_month'],
+                'next_month': context['next_month'], 'this_month': context['this_month'],
+                'days': [day(entry) for entry in context['days']],
+            })
+        else:
+            payload.update({
+                'start': context['start'], 'end': context['end'], 'prev_start': context['prev_start'],
+                'next_start': context['next_start'], 'this_week_start': context['this_week_start'],
+                'days': [day(entry) for entry in context['days']],
+            })
+        return Response(payload)
+
+
+# The fields the app's New task screen fills in — the website form's,
+# less adding a new site / brand / task type there (admin and desk work).
+APP_TASK_FIELDS = [
+    'site', 'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority', 'source',
+    'is_warranty', 'billing_type', 'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
+]
+
+
+def require_role_permission_or_403(request, permission):
+    """The signed-in technician, if their role allows `permission`."""
+    if not has_role_permission(request, permission):
+        raise PermissionDenied
+    return request.user.technician
+
+
+def _form_errors(form):
+    return {field: [str(error) for error in errors] for field, errors in form.errors.items()}
+
+
+class TaskCreateView(APIView):
+    """The app's New task — the website's (tasks.views.task_create), with
+    the same form, rules and side effects (create_task): GET the choices
+    for every field, in the viewer's country and language, with the
+    defaults; POST the fields (times as YYYY-MM-DDTHH:MM, local). Needs
+    create_tasks. Converting a ticket stays on the ticket's own page.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def _form(self, request, data=None):
+        if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
+            raise PermissionDenied
+        technician = request.user.technician
+        return TaskCreateForm(data, country=get_active_country(request) or technician.country,
+                              is_admin=technician.role == Technician.Role.ADMIN)
+
+    def get(self, request):
+        form = self._form(request)
+        fields = {}
+        for name in APP_TASK_FIELDS:
+            field = form.fields[name]
+            initial = form[name].initial
+            fields[name] = {
+                'label': str(field.label),
+                'required': name in ('site', 'priority', 'source', 'billing_type', 'reported_at'),
+                'initial': '' if initial is None else str(getattr(initial, 'pk', initial)),
+                **({'choices': [
+                    {'value': str(value), 'label': str(label)} for value, label in field.choices if str(value) != ''
+                ]} if hasattr(field, 'choices') else {}),
+            }
+        return Response({'fields': fields})
+
+    def post(self, request):
+        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS}
+        if str(data['is_warranty']).lower() not in ('true', '1', 'on'):
+            data.pop('is_warranty')
+        form = self._form(request, data)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        task = create_task(request, form, request.user.technician)
+        warning = _weekend_warning(task)
+        return Response(
+            {'id': task.pk, 'task_number': task.task_number, 'warning': str(warning) if warning else ''},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+def _task_line(task):
+    """A task in a customer's or a machine's history."""
+    return {
+        'id': task.pk, 'task_number': task.task_number, 'status_display': task.get_status_display(),
+        'reported_at': task.reported_at, 'site_name': task.site.name,
+        'task_type_name': task.task_type.display_name if task.task_type_id else '',
+    }
+
+
+class CustomersView(APIView):
+    """The app's Customers — the website's list (manage_customers): every
+    active customer in the viewer's country, searchable by name."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        customers = Customer.objects.filter(
+            is_active=True, country=get_active_country(request) or technician.country,
+        ).prefetch_related('sites').order_by('name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            customers = customers.filter(Q(name__icontains=search) | Q(sites__name__icontains=search)).distinct()
+        return Response([
+            {
+                'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+                'is_internal': customer.is_internal,
+                'sites': [site.name for site in customer.sites.all()],
+                'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            }
+            for customer in customers[:200]
+        ])
+
+
+class CustomerView(APIView):
+    """One customer in the app — the website's customer page: contacts,
+    each site (address, contact, access notes, directions, its machines)
+    and their recent tasks."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        customer = scoped_or_404(Customer.objects, pk, technician, get_active_country(request), 'country')
+        sites = customer.sites.prefetch_related('assets__brand').order_by('name')
+        tasks = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
+            '-reported_at',
+        )[:30]
+        return Response({
+            'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+            'is_internal': customer.is_internal,
+            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
+            'contact_email': customer.contact_email, 'billing_address': customer.billing_address,
+            'has_portal': customer.user_id is not None,
+            'sites': [
+                {
+                    'id': site.pk, 'name': site.name, 'address': site.address,
+                    'contact_name': site.effective_contact_name, 'contact_phone': site.effective_contact_phone,
+                    'access_notes': site.access_notes, 'directions_url': directions_url(site),
+                    'machines': [
+                        {'id': asset.pk, 'name': f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip(),
+                         'serial': asset.serial_no, 'status': asset.get_status_display()}
+                        for asset in site.assets.all()
+                    ],
+                }
+                for site in sites
+            ],
+            'tasks': [_task_line(task) for task in tasks],
+        })
+
+
+class MachinesView(APIView):
+    """The app's Machines — the website's list (view_machines): every
+    machine on file in the viewer's country, searchable by serial, model,
+    brand, site or customer."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_MACHINES)
+        assets = Asset.objects.filter(
+            site__customer__country=get_active_country(request) or technician.country,
+        ).select_related('site__customer', 'brand').order_by('site__customer__name', 'site__name', 'model_name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            assets = assets.filter(
+                Q(serial_no__icontains=search) | Q(model_name__icontains=search)
+                | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
+                | Q(site__customer__name__icontains=search)
+            )
+        return Response([_machine(asset) for asset in assets[:100]])
+
+
+def _machine(asset):
+    return {
+        'id': asset.pk, 'name': f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip(),
+        'serial': asset.serial_no, 'status': asset.get_status_display(),
+        'customer_id': asset.site.customer_id, 'customer_name': asset.site.customer.name, 'site_name': asset.site.name,
+    }
+
+
+class MachineView(APIView):
+    """One machine's history in the app — the website's machine page:
+    every visit that recorded it, with what was found and done."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_MACHINES)
+        asset = scoped_or_404(
+            Asset.objects.select_related('site__customer__country', 'brand'),
+            pk, technician, get_active_country(request), 'site__customer__country',
+        )
+        visits = asset.task_assets.select_related('task__site', 'task__task_type').order_by('-task__reported_at')
+        return Response({
+            **_machine(asset),
+            'installed_on': asset.installed_on, 'warranty_end': asset.warranty_end,
+            'history': [
+                {
+                    **_task_line(visit.task),
+                    'outcome': visit.get_outcome_display() if visit.outcome else '',
+                    'finding': Finding(visit.finding_code).label if visit.finding_code else visit.note,
+                    'action': Action(visit.action_code).label if visit.action_code else visit.action,
+                }
+                for visit in visits
+            ],
+        })
+
+
+class HoursView(APIView):
+    """The app's Hours — the website's Hours page (view_technicians): for
+    a month (?month=YYYY-MM), each person this viewer oversees, with the
+    reports they filed, their hours (h:mm), the estimate and the warning
+    counts, and each report behind them."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.VIEW_TECHNICIANS)
+        month = _resolve_report_month(request)
+        rows = _overseen_rows(viewer, _technician_hours_rows(get_active_country(request) or viewer.country, month))
+        return Response({
+            'month': month,
+            'prev_month': _shift_month(month, -1),
+            'next_month': _shift_month(month, 1),
+            'is_this_month': month == timezone.localtime().date().replace(day=1),
+            'total_hours': hours_text(sum(row['hours'] for row in rows)) or '0:00',
+            'total_reports': sum(len(row['reports']) for row in rows),
+            'rows': [
+                {
+                    'id': row['technician'].pk, 'name': row['technician'].full_name,
+                    'reports_count': len(row['reports']), 'hours': hours_text(row['hours']) or '0:00',
+                    'estimated': hours_text(row['estimated']), 'helped_on': row['helped_on'],
+                    'overrun_count': row['overrun_count'], 'above_tapped_count': row['above_tapped_count'],
+                    'away_count': row['away_count'],
+                    'reports': [
+                        {
+                            'task_id': report.task_id, 'task_number': report.task.task_number,
+                            'submitted_at': report.submitted_at, 'hours': hours_text(report.labour_hours) or '0:00',
+                            'customer_name': report.task.site.customer.name,
+                        }
+                        for report in row['reports']
+                    ],
+                }
+                for row in rows
+            ],
+        })
+
+
+class InternalTicketsView(APIView):
+    """The app's Internal tickets — the website's list (anyone above a
+    technician): stock requests, vendor follow-ups and other internal
+    tickets, open ones by default (?status=open|closed|all), newest first.
+    Each opens its website page in the app to reply, hand on or close."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        if technician.role == Technician.Role.TECHNICIAN:
+            raise PermissionDenied
+        tickets = _visible_internal_tickets(technician, get_active_country(request) or technician.country).select_related(
+            'assigned_to',
+        ).order_by('-submitted_at')
+        status_filter = request.query_params.get('status', 'open')
+        if status_filter == 'open':
+            tickets = tickets.filter(status=CustomerTicket.Status.NEW)
+        elif status_filter == 'closed':
+            tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
+        return Response([
+            {
+                'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'kind': ticket.get_kind_display(),
+                'subject': ticket.subject, 'description': ticket.description,
+                'status_display': ticket.get_status_display(), 'submitted_at': ticket.submitted_at,
+                'assigned_to': ticket.assigned_to.full_name if ticket.assigned_to_id else '',
+            }
+            for ticket in tickets[:200]
+        ])
+
+
+class TeamMapView(APIView):
+    """The app's Team map — the website's (view_technicians): where each
+    technician last tapped today, as pins, and what needs a follow-up."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_TECHNICIANS)
+        data = team_map_data(get_active_country(request) or technician.country)
+        return Response({
+            'pins': [{key: str(value) if key in ('detail', 'place') else value for key, value in pin.items()
+                      if key != 'url'} for pin in data['pins']],
+            'attention': [{'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']}
+                          for item in data['attention']],
+            'without_taps': [person.full_name for person in data['technicians'] if person.last_tap is None],
+        })
+
+
+class DashboardView(APIView):
+    """The app's Dashboard (view_dashboard) — a manager's home screen: what
+    needs their action (the website home page's list, each gated by its
+    own permission, with the website page behind it), today's follow-ups
+    (late arrivals, taps away from the site, jobs past their estimate), the
+    team's figures, and the open tasks that need someone first — for the
+    country they chose."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.VIEW_DASHBOARD)
+        country = get_active_country(request) or viewer.country
+        summary = home_summary(request, viewer)
+        technicians, tasks, stats = dashboard_overview(country)
+        follow_ups = team_map_data(country)['attention'] if has_role_permission(
+            request, RolePermission.Permission.VIEW_TECHNICIANS,
+        ) else []
+        return Response({
+            'country': country.display_name,
+            'actions': [
+                {'label': str(item['label']), 'count': item['count'], 'level': item['level'], 'url': item['url']}
+                for item in summary['actions']
+            ],
+            'follow_ups': [
+                {'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']} for item in follow_ups
+            ],
+            'stats': stats,
+            'tasks': [
+                {
+                    'id': task.pk, 'task_number': task.task_number, 'customer_name': task.site.customer.name,
+                    'site_name': task.site.name, 'status_display': task.get_status_display(),
+                    'priority': task.priority, 'priority_display': task.get_priority_display(),
+                    'lead': task.lead_technician.full_name if task.lead_technician else '',
+                    'scheduled_for': task.scheduled_for, 'scheduled_date': task.scheduled_date,
+                }
+                for task in tasks[:15]
+            ],
+        })
+
+
+class StaffAccountsView(APIView):
+    """The app's Staff accounts (manager tier): everyone's login in the
+    chosen country, searchable (?q=), with what's wrong with it — locked
+    out, temporary password, turned off — like the website's page."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        actor = require_manager(request)
+        locked = locked_usernames()
+        people = Technician.objects.filter(country=get_active_country(request)).select_related('user').order_by('full_name')
+        search = request.query_params.get('q', '').strip()
+        if search:
+            people = people.filter(
+                Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+            )
+        now = timezone.now()
+        rows = []
+        for person in people[:200]:
+            status_value = staff_account_status(person, locked, now)
+            rows.append({
+                'id': person.pk, 'name': person.full_name, 'role': person.get_role_display(),
+                'username': person.user.username if person.user_id else '',
+                'status': status_value, 'status_display': str(StaffAccountStatus(status_value).label),
+                'has_login': person.user_id is not None,
+                'is_active': bool(person.user_id and person.user.is_active),
+                'can_manage': person.user_id is not None and can_manage_account(actor, person),
+            })
+        return Response(rows)
+
+
+class StaffAccountView(APIView):
+    """One of the urgent fixes to someone's login from the app (action =
+    temporary_password | unlock | sign_out_phones | disable | enable) — the
+    website's Staff accounts code (urgent_account_action), recorded in the
+    audit log. A temporary password comes back once, to read out."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        actor = require_manager(request)
+        target = get_object_or_404(Technician.objects.select_related('user'), pk=pk)
+        if target.user_id is None or not can_manage_account(actor, target):
+            raise PermissionDenied
+        action = request.data.get('action')
+        if action not in URGENT_ACTIONS:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        message, error, password = urgent_account_action(request._request, actor, target, action)
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'message': str(message), 'password': password})
+
+
+class WebsiteMenuView(APIView):
+    """The app's More tab: every website page this person may open, in the
+    website's own menu groups and order (people.context_processors
+    .nav_pages — the same gates as the pages themselves), in their
+    language. Their own schedule, progress and skills are native screens
+    in the app, so that group is left out.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = request.user.technician
+        allowed = set(
+            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        )
+        with translation.override(technician.language):
+            groups = nav_groups(nav_pages(technician, allowed), '')
+            return Response([
+                {
+                    'heading': str(group['heading'] or ''),
+                    'pages': [{'title': str(page['label']), 'url': page['url'], 'icon': page['icon']}
+                              for page in group['pages']],
+                }
+                for group in groups if group['pages'][0]['group'] != 'mine'
+            ])
+
+
+class WebsiteSessionView(APIView):
+    """Opens a website page inside the app, already signed in: the app
+    calls this once with its token in the Authorization header (never in
+    the address), gets a normal website session in its web view, and is
+    sent on to `next` — a path on this site only. From then on the web
+    view is just the website, with its own permission checks.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        next_url = request.query_params.get('next') or '/'
+        if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()},
+        ):
+            next_url = '/'
+        # The session, not request.user: DRF sets the token's user on the
+        # underlying request too, so that alone can't tell a session apart.
+        if request._request.session.get(SESSION_KEY) != str(request.user.pk):
+            login(request._request, request.user, backend='django.contrib.auth.backends.ModelBackend')
+        # A manager's country chosen in the app: the website's switcher too.
+        chosen = getattr(request, 'api_active_country', None)
+        if chosen is not None:
+            request._request.session[ACTIVE_COUNTRY_SESSION_KEY] = chosen.pk
+        elif request.user.technician.is_manager_tier:
+            request._request.session.pop(ACTIVE_COUNTRY_SESSION_KEY, None)
+        return HttpResponseRedirect(next_url)
+
+
+class MySkillsView(APIView):
+    """The app's My skills — the website's page (tasks.views.my_skills):
+    GET the progress, what the levels mean and every skill / conduct area
+    with its status; POST a self-rating (multipart: kind = skill|conduct,
+    id, level, note, and for a skill the evidence photo or video). Only
+    until a supervisor reviews it, as on the website.
+    """
+
+    permission_classes = [IsTechnician]
+
+    @staticmethod
+    def _summary(request, technician):
+        data = skills_summary(technician)
+        for group in ('basic', 'advanced', 'conduct'):
+            for row in data[group]:
+                if row['evidence_url']:
+                    row['evidence_url'] = request.build_absolute_uri(row['evidence_url'])
+        return data
+
+    def get(self, request):
+        return Response(self._summary(request, request.user.technician))
+
+    def post(self, request):
+        technician = request.user.technician
+        today = timezone.localtime().date()
+        kind = request.data.get('kind')
+        if kind == 'skill':
+            item = get_object_or_404(Skill, pk=request.data.get('id'), is_active=True)
+            current = TechnicianSkill.objects.filter(technician=technician, skill=item).first()
+            form = SelfRateSkillForm(request.data, request.FILES)
+        elif kind == 'conduct':
+            item = get_object_or_404(ConductArea, pk=request.data.get('id'), is_active=True)
+            current = TechnicianConduct.objects.filter(technician=technician, conduct_area=item).first()
+            form = SelfRateLevelForm(request.data)
+        else:
+            return Response({'detail': 'kind must be skill or conduct.'}, status=status.HTTP_400_BAD_REQUEST)
+        if current is not None and current.source != TechnicianSkill.Source.SELF:
+            return Response(
+                {'detail': str(_('A supervisor has reviewed this, so only a supervisor can change it now.'))},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if kind == 'skill':
+            save_skill_self_rating(technician, item, form.cleaned_data, today)
+        else:
+            save_conduct_self_rating(technician, item, form.cleaned_data, today)
+        return Response(self._summary(request, technician))
+
+
+def _person(request, pk):
+    """Someone the viewer oversees, in their country — like the website's
+    technician pages; anyone else is a 404. Needs view_technicians."""
+    if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
+        raise PermissionDenied
+    viewer = request.user.technician
+    return get_object_or_404(_people_i_oversee(viewer).filter(country=get_active_country(request)), pk=pk)
+
+
+class PersonView(APIView):
+    """A person's page in the app (Team → a name): their details,
+    availability, skills (with what the viewer may do — confirm skills,
+    set availability) and work record. The website's technician skills,
+    availability and progress pages in one.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        person = _person(request, pk)
+        skills = MySkillsView._summary(request, person)
+        reliability = _reliability_stats(person)
+        return Response({
+            'id': person.pk,
+            'name': person.full_name,
+            'role': person.get_role_display(),
+            'photo_url': request.build_absolute_uri(person.photo.url) if person.photo else '',
+            'phone': person.phone,
+            'email': person.user.email if person.user_id else '',
+            'country': person.country.display_name,
+            'is_available': person.is_available,
+            'unavailable_reason': person.get_unavailable_reason_display() if not person.is_available else '',
+            'unavailable_reasons': [
+                {'value': value, 'label': str(label)} for value, label in Technician.UnavailableReason.choices
+            ],
+            'can_review_skills': has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS),
+            'can_set_availability': has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS),
+            'skills': skills,
+            'record': {
+                'completed': reliability['total_completed'],
+                'helped': reliability['total_helped'],
+                'on_time_percent': reliability['on_time_percent'],
+                'acceptance_minutes': reliability['acceptance_latency_minutes'],
+            },
+        })
+
+
+class PersonSkillReviewView(APIView):
+    """A supervisor confirming or adjusting one of the person's levels
+    (kind = skill|conduct, id, level, note) — review_skills, like the
+    website's review screen. Returns the person's page again."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        person = _person(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS):
+            raise PermissionDenied
+        form = ReviewLevelForm(request.data)
+        kind = request.data.get('kind')
+        if kind not in ('skill', 'conduct'):
+            return Response({'detail': 'kind must be skill or conduct.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not form.is_valid():
+            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                            status=status.HTTP_400_BAD_REQUEST)
+        today = timezone.localtime().date()
+        if kind == 'skill':
+            skill = get_object_or_404(Skill, pk=request.data.get('id'), is_active=True)
+            save_skill_review(person, skill, request.user.technician, form.cleaned_data, today)
+        else:
+            area = get_object_or_404(ConductArea, pk=request.data.get('id'), is_active=True)
+            save_conduct_review(person, area, request.user.technician, form.cleaned_data, today)
+        return PersonView().get(request, pk)
+
+
+class PersonAvailabilityView(APIView):
+    """Available, or unavailable with a reason (available = true/false,
+    reason) — whoever assigns tasks, like the website's Availability page.
+    Returns the person's page again."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        person = _person(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS):
+            raise PermissionDenied
+        if request.data.get('available') in (True, 'true', '1'):
+            set_availability(person, True)
+        else:
+            form = MarkUnavailableForm(request.data)
+            if not form.is_valid():
+                return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+                                status=status.HTTP_400_BAD_REQUEST)
+            set_availability(person, False, form.cleaned_data['reason'])
+        return PersonView().get(request, pk)
+
+
+class MyProgressView(APIView):
+    """The app's Progress screen — My progress's own figures
+    (tasks.views.progress_context): the year's line, a month (?month=),
+    rank and certification."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        context = progress_context(request, request.user.technician)
+        chart, certification = context['trend_chart'], context['certification']
+        return Response({
+            'trend': {
+                'months': [{'start': p['start'], 'completed': p['completed']} for p in chart['periods']],
+                'top': chart['top'],
+                'this_month': chart['this_month'],
+                'change': chart['change'],
+            },
+            'month': {
+                'first': context['month_first'],
+                'is_this_month': context['is_this_month'],
+                'hours': context['month_hours'],
+                'reports': context['month_report_count'],
+                'over_estimate': context['month_overrun_count'],
+            },
+            'rank': context['rank'],
+            'leaderboard_size': context['leaderboard_size'],
+            'certification': {
+                'certified': certification['non_cardio_certified'] + certification['conduct_certified'],
+                'required': certification['non_cardio_total'] + certification['conduct_total'],
+                'is_certified': certification['is_certified'],
+            },
+        })
+
+
+class TeamProgressView(APIView):
+    """The app's team progress — the website's Team progress
+    (tasks.views.team_progress_rows): the field team this person oversees
+    in their country, by rank, for a month (?month=)."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TECHNICIANS)]
+
+    def get(self, request):
+        viewer = request.user.technician
+        this_month = timezone.localtime().date().replace(day=1)
+        month_first = min(_resolve_report_month(request), this_month)
+        rows = team_progress_rows(viewer, get_active_country(request), month_first)
+        return Response({
+            'month': month_first,
+            'rows': [
+                {
+                    'id': row['technician'].pk,
+                    'name': row['technician'].full_name,
+                    'role': row['technician'].get_role_display(),
+                    'rank': row['rank'],
+                    'completed': row['completed'],
+                    'change': row['change'],
+                    'hours': row['hours'],
+                    'certified': row['certified'],
+                    'required': row['required'],
+                    'is_certified': row['is_certified'],
+                    'months': [p['completed'] for p in row['trend']['periods']],
+                }
+                for row in rows
+            ],
+        })
 
 
 class MyTaskListView(APIView):
@@ -273,6 +1098,95 @@ class MyTaskAttachmentView(APIView):
         return Response(status=status.HTTP_201_CREATED)
 
 
+def _machine_label(asset):
+    return f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip()
+
+
+def _report_machines(task, request):
+    """The report screen's machines: its rows (what's recorded, or the
+    customer's ticket machines before the first filing), the site's
+    machines to add from, the brands for registering a new one, and the
+    outcomes to choose from.
+    """
+    existing, new = report_machine_initial(task)
+    site_assets = {asset.pk: asset for asset in Asset.objects.filter(site=task.site).select_related('brand')}
+    rows = [
+        {
+            'asset_id': row['asset'], 'name': _machine_label(site_assets[row['asset']]),
+            'serial_no': site_assets[row['asset']].serial_no,
+            'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+            'finding_code': row.get('finding_code', ''), 'action_code': row.get('action_code', ''), 'action': row.get('action', ''),
+        }
+        for row in existing if row['asset'] in site_assets
+    ] + [
+        {
+            'ticket_machine_id': row['ticket_machine'], 'brand_id': None, 'model_name': row['model_name'],
+            'serial_no': row['serial_no'], 'outcome': '', 'note': '', 'no_serial': False,
+            'serial_photo_url': request.build_absolute_uri(row['serial_photo_url']) if row['serial_photo_url'] else '',
+            'finding_code': '', 'action_code': '', 'action': '',
+        }
+        for row in new
+    ]
+    return {
+        'machines': rows,
+        'site_machines': [
+            {'id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no}
+            for asset in site_assets.values()
+        ],
+        'brands': [{'id': brand.pk, 'name': brand.name} for brand in Brand.objects.filter(is_active=True)],
+        'outcomes': [{'value': value, 'label': label} for value, label in TaskAsset.Outcome.choices],
+        # The report's standard wording (reports.phrases), to pick from.
+        'findings': [{'value': value, 'label': label} for value, label in Finding.choices],
+        'actions': [{'value': value, 'label': label} for value, label in Action.choices],
+        'work_line_choices': [{'value': value, 'label': label} for value, label in WorkLine.choices],
+        'recommendation_choices': [{'value': value, 'label': label} for value, label in Recommendation.choices],
+        # What the customer reads it in: anything typed should be in this language.
+        'report_language': report_language(task.site.customer),
+    }
+
+
+def _machine_form(task, row):
+    """The web form's validation for one machine row from the app."""
+    if row.get('asset_id'):
+        return ExistingAssetOutcomeForm({
+            'asset': row.get('asset_id'), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+            'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
+            'action': row.get('action', ''),
+        }, site=task.site)
+    return NewAssetForm({
+        'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
+        'serial_no': row.get('serial_no', ''), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+        'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
+        'action': row.get('action', ''), 'no_serial': 'on' if row.get('no_serial') else '',
+        'ticket_machine': row.get('ticket_machine_id') or '',
+    })
+
+
+class TaskLinePhotoView(APIView):
+    """A photo of one machine on the installation checklist (multipart
+    `photo`), straight from the phone's camera — the lead only. Returns
+    its address."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk, line_id):
+        assignment = _get_my_assignment(request, pk)
+        if assignment.role != TaskAssignment.Role.LEAD:
+            raise PermissionDenied
+        line = get_object_or_404(TaskProduct, pk=line_id, task=assignment.task)
+        photo = request.FILES.get('photo')
+        form = TaskProductCheckForm()
+        try:
+            form.fields['photo'].clean(photo)
+        except ValidationError as error:
+            return Response({'photo': error.messages}, status=status.HTTP_400_BAD_REQUEST)
+        if photo is None:
+            return Response({'photo': ['Add a photo.']}, status=status.HTTP_400_BAD_REQUEST)
+        line.photo = photo
+        line.save(update_fields=['photo'])
+        return Response({'photo_url': request.build_absolute_uri(line.photo.url)})
+
+
 class MyTaskReportView(APIView):
     """The lead's work report — findings, parts used, labour hours and the
     customer's signature. GET returns {report: ... or null}; POST
@@ -281,11 +1195,15 @@ class MyTaskReportView(APIView):
 
     POST body (JSON): findings, action_taken, resolved (bool),
     labour_hours, customer_name, parts (list of {part_code, description,
-    quantity, unit_cost, currency_code}), signature (PNG data URL,
+    quantity}), signature (PNG data URL,
     optional — leaving it out keeps the one already on file),
     signature_waived_reason (customer not available to sign — files
     without a signature), helper_hours ({assignment id: hours} for a
-    helper whose hours differ from the report's).
+    helper whose hours differ from the report's), machines (optional —
+    the machines this visit covered, each {asset_id, outcome, note} for
+    one at the site, or {brand_id, model_name, serial_no, outcome, note,
+    ticket_machine_id} to register a new one; leaving it out keeps what's
+    recorded, as an older app sends no machines).
 
     A lead taken off the task before their report reached the server (it
     waited on the phone with no signal) isn't refused: the report goes to
@@ -310,11 +1228,27 @@ class MyTaskReportView(APIView):
             'report': WorkReportSerializer(report).data if report else None,
             # "Send a copy to" starts as wherever the last copy went, else the site's contact.
             'send_copy_to': (report.copy_sent_to if report else '') or task.site.effective_contact_email or '',
+            # The visit's hours, from the taps — shown, never typed (Task.time_on_site);
+            # final once the report has been sent.
+            'time_on_site': hours_text(task.time_on_site()) or None,  # "1:32"
+            'time_is_final': bool(report and report.submitted_at),
             # Each helper's hours box: empty = same as the report's.
             'helpers': [
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
                 for a in _active_helpers(task)
             ],
+            **_report_machines(task, request),
+            # An installation's machines to check off, and what can be chosen for each.
+            'checklist': [
+                {**row, 'photo_url': request.build_absolute_uri(row['photo_url']) if row['photo_url'] else ''}
+                for row in checklist_initial(task)
+            ] if has_checklist(task) else None,
+            'checklist_statuses': [
+                {'value': value, 'label': str(label)}
+                for value, label in TaskProductCheckForm(step=equipment_step(task)).fields['status'].choices if value
+            ],
+            # Which step: receiving, loading or installation (the screen's words follow it).
+            'checklist_step': equipment_step(task),
         })
 
     def post(self, request, pk):
@@ -347,21 +1281,52 @@ class MyTaskReportView(APIView):
 
         data = {
             field: request.data.get(field, '')
-            for field in ('findings', 'action_taken', 'labour_hours', 'customer_name', 'send_copy_to')
+            for field in ('findings', 'action_taken', 'customer_name', 'send_copy_to', 'recommendation')
         }
+        # The standard work lines and recommendations, as lists of codes.
+        data['work_lines'] = list(request.data.get('work_lines') or [])
+        data['recommendations'] = list(request.data.get('recommendations') or [])
         data['resolved'] = str(bool(request.data.get('resolved')))
-        data['signature_drawn'] = request.data.get('signature') or ''
+        # ?preview=1: the "Review report" step — the report as it would be
+        # sent, nothing saved; the customer signs after the review.
+        preview = request.query_params.get('preview') == '1'
+        data['signature_drawn'] = '' if preview else request.data.get('signature') or ''
         waived_reason = request.data.get('signature_waived_reason') or ''
         if waived_reason:
             data['signature_waived'] = 'on'
             data['signature_waived_reason'] = waived_reason
         for assignment_id, hours in (request.data.get('helper_hours') or {}).items():
             data[f'helper_hours_{assignment_id}'] = '' if hours is None else str(hours)
+        # A report saved offline in the app carries when it was filed: the
+        # visit's time stops then, not when the phone was back online.
+        filed_at = parse_datetime(str(request.data.get('filed_at') or ''))
+        if filed_at is not None:
+            filed_at = min(filed_at if timezone.is_aware(filed_at) else timezone.make_aware(filed_at), timezone.now())
         report_form = WorkReportForm(
-            data, instance=getattr(task, 'report', None), require_signature=_requires_signature(task),
-            helpers=_active_helpers(task),
+            data, instance=getattr(task, 'report', None),
+            require_signature=_requires_signature(task) and not preview, helpers=_active_helpers(task),
+            time_on_site=task.time_on_site(until=filed_at),
         )
+        report_form.filed_at = filed_at
         part_forms = [PartUsedItemForm(part) for part in request.data.get('parts') or []]
+        machine_rows = request.data.get('machines')
+        machine_forms = None
+        if isinstance(machine_rows, list):
+            machine_forms = [_machine_form(task, row) for row in machine_rows if isinstance(row, dict)]
+        # An installation: each machine checked off (photos go up on their own, TaskLinePhotoView).
+        checklist_forms = None
+        if has_checklist(task):
+            known = {row['id']: row for row in checklist_initial(task)}
+            checklist_forms = [
+                TaskProductCheckForm(
+                    {key: row.get(key) or '' for key in (
+                        'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
+                        'replacement', 'note',
+                    )},
+                    initial=known.get(row.get('id'), {}), step=equipment_step(task),
+                )
+                for row in request.data.get('checklist') or [] if isinstance(row, dict)
+            ]
 
         errors = {}
         if not report_form.is_valid():
@@ -369,13 +1334,40 @@ class MyTaskReportView(APIView):
         part_errors = [form.errors for form in part_forms if not form.is_valid()]
         if part_errors:
             errors['parts'] = part_errors
+        if machine_forms is not None:
+            machine_errors = [form.errors for form in machine_forms if not form.is_valid()]
+            if machine_errors:
+                errors['machines'] = machine_errors
+        if checklist_forms is not None:
+            checklist_errors = [form.errors for form in checklist_forms if not form.is_valid()]
+            if checklist_errors:
+                errors['checklist'] = checklist_errors
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
+        if preview:
+            html, problems = report_preview(
+                request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
+                None if machine_forms is None else (
+                    [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                    [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+                ),
+                None if checklist_forms is None else [form.cleaned_data for form in checklist_forms],
+            )
+            return Response({'html': html, 'problems': [str(problem) for problem in problems]})
+
         with transaction.atomic():
+            if checklist_forms is not None:
+                save_checklist(task, [form.cleaned_data for form in checklist_forms])
             report = save_work_report(
                 request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
             )
+            if machine_forms is not None:
+                save_task_machines(
+                    task,
+                    [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                    [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+                )
         return Response(
             {
                 'status': task.status,
@@ -459,7 +1451,195 @@ def _team_task_response(request, task):
         ),
         'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
     }
-    return Response(TeamTaskDetailSerializer(task, context=context).data)
+    data = TeamTaskDetailSerializer(task, context=context).data
+    # What a manager can do here, as on the website's task page (TaskManageView).
+    is_manager = technician.is_manager_tier
+    # Its machines (an equipment task), the chain around it, and the follow-up offer.
+    lines = list(task.products.order_by('pk'))
+    left = still_to_install(task)
+    data['equipment'] = {
+        'lines': [
+            {
+                'product_code': line.product_code, 'serial_number': line.serial_number, 'status': line.status,
+                'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
+                'replacement': line.replacement, 'note': line.note, 'added_on_site': line.added_on_site,
+                'photo_url': request.build_absolute_uri(line.photo.url) if line.photo else '',
+            }
+            for line in lines
+        ],
+        'still_to_install': len(left),
+        'can_follow_up': bool(left) and has_role_permission(request, RolePermission.Permission.CREATE_TASKS),
+        'previous_task': {'id': task.previous_task_id, 'task_number': task.previous_task.task_number}
+        if task.previous_task_id else None,
+        'next_tasks': [{'id': other.pk, 'task_number': other.task_number} for other in task.next_tasks.all()],
+        # Receiving / loading: the machines ready to carry on, and where they can go.
+        'next_step': {
+            'lines': [
+                {'id': line.pk, 'label': f'{line.product_code}{" · " + line.serial_number if line.serial_number else ""}'}
+                for line in lines_to_carry(task)
+            ],
+            'steps': [
+                {
+                    'value': step, 'label': str(TaskType.Category(step).label),
+                    'sites': [
+                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}'}
+                        for site in next_step_sites(technician, step)
+                    ],
+                }
+                for step in NEXT_STEPS.get(equipment_step(task), ())
+            ],
+        } if lines_to_carry(task) and has_role_permission(request, RolePermission.Permission.CREATE_TASKS) else None,
+    } if lines or task.previous_task_id else None
+    data['manage'] = {
+        'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
+        'can_close': is_manager and task.status != Task.Status.CLOSED,
+        'can_flag': is_manager and task.status == Task.Status.CLOSED,
+        'correctable_event_ids': [
+            event.pk for event in task.events.all() if is_manager and event.event_type in CORRECTABLE_EVENTS
+        ],
+    }
+    return Response(data)
+
+
+class TaskLinesView(APIView):
+    """Planning a task's machine lines from the app — the website's Edit
+    screen (create_tasks, the task's own supervisor or a manager; locked
+    once done except for managers): GET the lines and whether they can be
+    changed; POST `lines` (product_code, serial_number, quantity, frame,
+    arm, padding, trim), replacing the plan — tasks.views.save_planned_lines,
+    so "× 4" on an equipment step becomes four lines."""
+
+    permission_classes = [IsTechnician]
+
+    def _task(self, request, pk):
+        require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        locked = not request.user.technician.is_manager_tier and task.status in PRODUCTS_LOCKED_STATUSES
+        return task, locked
+
+    def get(self, request, pk):
+        task, locked = self._task(request, pk)
+        return Response({
+            'locked': locked,
+            'one_per_machine': bool(equipment_step(task)),
+            'lines': [
+                {
+                    'product_code': line.product_code, 'serial_number': line.serial_number, 'quantity': line.quantity,
+                    'frame': line.frame, 'arm': line.arm, 'padding': line.padding, 'trim': line.trim,
+                }
+                for line in task.products.order_by('pk')
+            ],
+        })
+
+    def post(self, request, pk):
+        task, locked = self._task(request, pk)
+        if locked:
+            return Response({'detail': str(_('This task has been completed, so its products can only be changed by a '
+                                              'manager or administrator.'))}, status=status.HTTP_400_BAD_REQUEST)
+        forms_ = [
+            TaskProductForm({key: row.get(key, '') for key in (
+                'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim',
+            )})
+            for row in request.data.get('lines') or [] if isinstance(row, dict)
+        ]
+        errors = [form.errors for form in forms_ if not form.is_valid()]
+        if errors:
+            return Response({'lines': errors}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            save_planned_lines(task, [form.cleaned_data for form in forms_])
+        return self.get(request, pk)
+
+
+class TaskNextStepView(APIView):
+    """The chain's next step from the app (create_tasks): step = loading |
+    installation, site (any country for the manager tier), lines = the
+    machines to carry — tasks.views.create_next_step. Returns the new
+    task's id and number."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+        step = request.data.get('step')
+        if step not in NEXT_STEPS.get(equipment_step(task), ()):
+            return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)
+        site = get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
+        task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
+        wanted = {str(value) for value in request.data.get('lines') or []}
+        chosen = [line for line in lines_to_carry(task) if str(line.pk) in wanted]
+        if task_type is None or not chosen:
+            return Response({'detail': str(_('Choose at least one machine to carry to the next step.'))},
+                            status=status.HTTP_400_BAD_REQUEST)
+        next_task = create_next_step(request._request, task, task_type, site, chosen)
+        return Response({'id': next_task.pk, 'task_number': next_task.task_number}, status=status.HTTP_201_CREATED)
+
+
+class TaskFollowUpView(APIView):
+    """A follow-up installation for the machines still to install, from the
+    app's task page (create_tasks) — tasks.views.create_follow_up. Returns
+    the new task's id and number."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
+            raise PermissionDenied
+        if not still_to_install(task):
+            return Response({'detail': str(_('Nothing is left to install on this task.'))}, status=status.HTTP_400_BAD_REQUEST)
+        follow_up = create_follow_up(task, request.user)
+        return Response({'id': follow_up.pk, 'task_number': follow_up.task_number}, status=status.HTTP_201_CREATED)
+
+
+class TaskManageView(APIView):
+    """A manager's actions on a task, as on the website's task page:
+    action = cancel | close | negligence (each with a note), or
+    correct_time (event_id, corrected_at as YYYY-MM-DDTHH:MM local, reason)
+    — the same forms, rules and shared functions. Returns the task again.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        require_manager(request)
+        action = request.data.get('action')
+        note = {'note': request.data.get('note', '')}
+        if action == 'cancel':
+            if task.status not in CANCELLABLE_STATUSES:
+                return Response({'detail': str(_('This task can no longer be cancelled.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = CancelTaskForm(note)
+            if form.is_valid():
+                cancel_task(task, request.user, form.cleaned_data['note'])
+        elif action == 'close':
+            if task.status == Task.Status.CLOSED:
+                return Response({'detail': str(_('This task is already closed.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = CloseTaskForm(note)
+            if form.is_valid():
+                close_task_directly(task, request.user, form.cleaned_data['note'])
+        elif action == 'negligence':
+            if task.status != Task.Status.CLOSED:
+                return Response({'detail': str(_('Only closed tasks can be flagged.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = NegligenceFlagForm(note)
+            if form.is_valid():
+                flag_negligence(task, request.user, form.cleaned_data['note'])
+        elif action == 'correct_time':
+            event = get_object_or_404(task.events, pk=request.data.get('event_id'), event_type__in=CORRECTABLE_EVENTS)
+            earliest, latest = _correction_window(event)
+            form = CorrectEventTimeForm(
+                {'corrected_at': request.data.get('corrected_at', ''), 'reason': request.data.get('reason', '')},
+                earliest=earliest, latest=latest,
+            )
+            if form.is_valid():
+                correct_tap_time(task, event, request.user, form.cleaned_data)
+        else:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        task.refresh_from_db()
+        return _team_task_response(request, task)
 
 
 class TeamTaskDetailView(APIView):
