@@ -126,7 +126,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | code | varchar | stable key, never changes |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `installation` or `maintenance` |
+| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager) and `loading` (at a warehouse). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`) |
 | requires_photos | bool | |
 | requires_signature | bool | |
 | checklist_template | jsonb | the fields the report form shows for this type |
@@ -157,6 +157,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | must_change_password | bool | set when the welcome email goes out (or staff set a temporary password) — cleared once the customer sets their own password and completes their details |
 | invited_at | timestamptz | nullable — when the welcome email was last sent; its link is valid for 7 days, after which the account shows as "Invitation expired" |
 | deactivation_reason | varchar | why this customer was deactivated — contract ended, closed down, etc.; cleared on reactivation |
+| is_internal | bool | the company's own account in a country ("Profit Sports Solutions", one per country, seeded by customers 0017): its sites are our **warehouses**, where equipment is received from the factory and loaded. Shown in the customer list as "Our warehouses"; never a portal login, never offered when opening a customer's ticket or inviting to the portal |
 
 **`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there; every other login (any technician role) lands on the dashboard, the one shared overview screen — nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
 
@@ -718,6 +719,8 @@ One machine's line on an **equipment task** — receiving from the factory, load
 **Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
 
 **Carried along the chain.** A line copied to the next step keeps `source_line`, so a machine's journey (factory → warehouse → site → its repairs) can be followed; `task.previous_task` links the steps themselves.
+
+**The chain can cross countries** — received and loaded at the Riyadh warehouse, installed at a gym in Dubai. On a receiving or loading task's page, whoever can create tasks uses **Create the next step**: loading (at a warehouse — an internal site) or an installation (at a customer's site), in any country for the manager tier (their own otherwise), choosing which machines go — a load can be split across sites. The machines that are done there (received / loaded) and not carried yet are copied with their serial and colours; each step belongs to its own site's country and team (the responsible supervisor carries over only within a country). After an installation, what wasn't installed gets a **follow-up** task instead (same site, linked as the next step).
 
 | Column | Type | Notes |
 |---|---|---|

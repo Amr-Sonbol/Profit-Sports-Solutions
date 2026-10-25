@@ -123,6 +123,16 @@ def changed_after_signing(report):
     return signed != current
 
 
+def _equipment_step(task):
+    from tasks.views import equipment_step
+    return equipment_step(task)
+
+
+def _done_label(task):
+    from tasks.models import STEP_DONE_LABELS
+    return STEP_DONE_LABELS.get(_equipment_step(task), STEP_DONE_LABELS['installation'])
+
+
 def _line_statuses():
     from tasks.models import TaskProduct
     return TaskProduct.Status.choices
@@ -191,10 +201,12 @@ def _template_context(report, content, signature_url, signed_at, changed):
         'parts': content['parts'],
         # An installation report: its machines, and how many weren't installed.
         'equipment': [
-            {**line, 'status_label': translation.gettext('Installed') if line['status'] == 'done' else dict(_line_statuses()).get(line['status'], '')}
+            {**line, 'status_label': _done_label(task) if line['status'] == 'done' else dict(_line_statuses()).get(line['status'], '')}
             for line in content.get('equipment', [])
         ],
         'not_installed': sum(1 for line in content.get('equipment', []) if line['status'] != 'done'),
+        # receiving / loading / installation: the report's words follow the step.
+        'equipment_step': _equipment_step(task),
         'signature_url': signature_url,
         'signed_at': signed_at,
         'changed_after_signing': changed,

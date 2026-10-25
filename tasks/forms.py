@@ -16,7 +16,7 @@ from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.phrases import Action, Finding
 
 from .models import (
-    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, STEP_DONE_LABELS, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
     TaskAsset,
     TaskAttachment, TaskEvent, TaskProduct, TicketEscalation, TicketMachine,
@@ -1052,13 +1052,16 @@ class TaskProductCheckForm(forms.Form):
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, step='installation', **kwargs):
         super().__init__(*args, **kwargs)
         # A photo already on the line counts (it's kept unless replaced).
         self.has_photo = bool(self.initial.get('photo_url'))
+        done = STEP_DONE_LABELS.get(step, STEP_DONE_LABELS['installation'])
         self.fields['status'].choices = [('', _('Choose…'))] + [
-            (value, _('Installed') if value == TaskProduct.Status.DONE else label) for value, label in self.STATUSES
+            (value, done if value == TaskProduct.Status.DONE else label) for value, label in self.STATUSES
         ]
+        if step != 'installation':
+            self.fields['replacement'].label = _('Instead')
 
     def clean(self):
         cleaned = super().clean()
@@ -1067,7 +1070,7 @@ class TaskProductCheckForm(forms.Form):
         cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
         status = cleaned.get('status')
         if status == TaskProduct.Status.DONE and not cleaned['serial_number']:
-            self.add_error('serial_number', _('An installed machine needs its serial number — type or scan it from the plate.'))
+            self.add_error('serial_number', _('This machine needs its serial number — type or scan it from the plate.'))
         if status in (TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM) and not (
             (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
         ):
@@ -1377,8 +1380,9 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
+        # A customer's ticket: never our own warehouses.
         self.fields['site'].queryset = (
-            Site.objects.filter(customer__country=country, customer__is_active=True)
+            Site.objects.filter(customer__country=country, customer__is_active=True, customer__is_internal=False)
             .select_related('customer').order_by('customer__name', 'name')
         )
         for name in ('contact_name', 'contact_phone'):

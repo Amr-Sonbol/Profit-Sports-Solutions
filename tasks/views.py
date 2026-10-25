@@ -1952,6 +1952,23 @@ def task_detail(request, pk):
             messages.success(request, _('Task flagged.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'create_next_step':
+        viewer = require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        step = request.POST.get('step')
+        if step not in NEXT_STEPS.get(equipment_step(task), ()):
+            raise Http404
+        site = get_object_or_404(next_step_sites(viewer, step), pk=request.POST.get('site'))
+        task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
+        chosen = [line for line in lines_to_carry(task) if str(line.pk) in request.POST.getlist('lines')]
+        if task_type is None or not chosen:
+            messages.error(request, _('Choose at least one machine to carry to the next step.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        next_task = create_next_step(request, task, task_type, site, chosen)
+        messages.success(request, _('Next step %(number)s created with %(count)s machines.') % {
+            'number': next_task.task_number, 'count': len(chosen),
+        })
+        return redirect('tasks:task_detail', pk=next_task.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'create_follow_up':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         if not still_to_install(task):
@@ -2029,6 +2046,12 @@ def task_detail(request, pk):
         'still_to_install': still_to_install(task),
         'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
         'next_tasks': task.next_tasks.all(),
+        # Receiving / loading: machines ready to carry on, and where they can go.
+        'lines_to_carry': lines_to_carry(task),
+        'next_step_choices': [
+            (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
+            for step in NEXT_STEPS.get(equipment_step(task), ())
+        ],
         'report': getattr(task, 'report', None),
         'report_changed_after_signing': _report_changed_after_signing(task),
         'feedback': getattr(task, 'feedback', None),
@@ -5271,7 +5294,7 @@ def save_planned_lines(task, rows):
             'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
             **{color: cleaned[color] for color in TaskProductForm.COLORS},
         }
-        if is_installation(task):
+        if equipment_step(task):
             for _unit in range(cleaned['quantity']):
                 TaskProduct.objects.create(task=task, quantity=1, **fields)
         else:
@@ -5282,11 +5305,62 @@ def save_planned_lines(task, rows):
 STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
 
 
+# What can follow each step of the equipment chain.
+NEXT_STEPS = {
+    TaskType.Category.RECEIVING: (TaskType.Category.LOADING, TaskType.Category.INSTALLATION),
+    TaskType.Category.LOADING: (TaskType.Category.INSTALLATION,),
+}
+
+
+def lines_to_carry(task):
+    """A receiving or loading step's machines that are done (received /
+    loaded) and not carried to a next step yet."""
+    if equipment_step(task) not in NEXT_STEPS:
+        return []
+    return list(task.products.filter(status=TaskProduct.Status.DONE, carried_to__isnull=True).order_by('pk'))
+
+
+def next_step_sites(viewer, step):
+    """Where a next step can be: a warehouse (our own sites) for loading, a
+    customer's site for an installation — in every country for the manager
+    tier (the chain crosses borders), the viewer's own otherwise."""
+    sites = Site.objects.filter(customer__is_active=True).select_related('customer__country')
+    sites = sites.filter(customer__is_internal=(step == TaskType.Category.LOADING))
+    if not viewer.is_manager_tier:
+        sites = sites.filter(customer__country=viewer.country)
+    return sites.order_by('customer__country__name', 'customer__name', 'name')
+
+
+def create_next_step(request, task, task_type, site, lines):
+    """The chain's next step (loading, or an installation) at `site` — any
+    country — for exactly these machines: each carried over with its serial
+    and colours (source_line), to check off again there. Returns it."""
+    next_task = Task(
+        site=site, task_type=task_type, brand=task.brand, priority=task.priority, source=Task.Source.INTERNAL,
+        billing_type=task.billing_type, is_warranty=task.is_warranty, reported_at=timezone.now(),
+        created_by=request.user, status=Task.Status.NEW, previous_task=task,
+        # The supervisor carries over only within a country.
+        responsible_supervisor=task.responsible_supervisor if site.customer.country_id == task.site.customer.country_id else None,
+        description=_('Next step after %(number)s: %(count)s machines.') % {'number': task.task_number, 'count': len(lines)},
+    )
+    with transaction.atomic():
+        _save_new_task(next_task)
+        for line in lines:
+            TaskProduct.objects.create(
+                task=next_task, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
+                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
+            )
+        TaskEvent.objects.create(task=next_task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=request.user)
+        TaskNotification.objects.create(task=next_task, created_at=timezone.now())
+    _send_new_task_email_to_staff(request, next_task)
+    return next_task
+
+
 def still_to_install(task):
     """An installation's machines not installed yet (missing, later, never
     checked) once its report is in — what a follow-up task is for. Empty
     once a follow-up was made for them."""
-    if not has_checklist(task) or getattr(task, 'report', None) is None or task.next_tasks.exists():
+    if not (is_installation(task) and has_checklist(task)) or getattr(task, 'report', None) is None             or task.next_tasks.exists():
         return []
     return list(task.products.filter(status__in=STILL_TO_INSTALL))
 
@@ -5317,9 +5391,9 @@ def create_follow_up(task, user):
 
 
 def has_checklist(task):
-    """An equipment task with machine lines to check off on site (for now
-    installations; receiving and loading use the same checklist)."""
-    return is_installation(task) and task.products.exists()
+    """An equipment task (receiving, loading, installation) with machine
+    lines to check off."""
+    return bool(equipment_step(task)) and task.products.exists()
 
 
 def checklist_initial(task):
@@ -5338,6 +5412,13 @@ def checklist_initial(task):
 
 # The on-site checklist: the planned machines plus room to add one found on site.
 ChecklistFormSet = formset_factory(TaskProductCheckForm, extra=1)
+
+
+def make_checklist_formset(task, *args, **kwargs):
+    """The checklist formset for a task's step (its labels follow the step)."""
+    return ChecklistFormSet(
+        *args, initial=checklist_initial(task), prefix='checklist', form_kwargs={'step': equipment_step(task)}, **kwargs,
+    )
 
 
 def checklist_formset_rows(formset):
@@ -5379,7 +5460,18 @@ def save_checklist(task, rows):
 
 def is_installation(task):
     """True for an installation task (its type's category)."""
-    return bool(task.task_type_id and task.task_type.category == TaskType.Category.INSTALLATION)
+    return equipment_step(task) == TaskType.Category.INSTALLATION
+
+
+# The equipment chain's steps, in order (TaskType.Category).
+EQUIPMENT_STEPS = (TaskType.Category.RECEIVING, TaskType.Category.LOADING, TaskType.Category.INSTALLATION)
+
+
+def equipment_step(task):
+    """'receiving', 'loading' or 'installation' for a step of the equipment
+    chain, else ''."""
+    category = task.task_type.category if task.task_type_id else ''
+    return category if category in EQUIPMENT_STEPS else ''
 
 
 def register_installed_machines(task):
@@ -5439,7 +5531,7 @@ def report_problems(report, language):
                 '%(count)s machine on the checklist is not checked yet.',
                 '%(count)s machines on the checklist are not checked yet.', unchecked,
             ) % {'count': unchecked})
-        left = task.products.filter(status__in=STILL_TO_INSTALL).count()
+        left = task.products.filter(status__in=STILL_TO_INSTALL).count() if is_installation(task) else 0
         if left:
             problems.append(ngettext(
                 '%(count)s machine is still to install — a follow-up task can be created for it.',
@@ -5644,9 +5736,7 @@ def _report_form(request, task, technician, back_url):
         )
         new_formset = NewAssetFormSet(request.POST, initial=new_initial, prefix='new')
         part_formset = PartFormSet(request.POST, prefix='parts')
-        checklist_formset = ChecklistFormSet(
-            request.POST, request.FILES, initial=checklist_initial(task), prefix='checklist',
-        ) if has_checklist(task) else None
+        checklist_formset = make_checklist_formset(task, request.POST, request.FILES) if has_checklist(task) else None
 
         if (
             report_form.is_valid() and existing_formset.is_valid()
@@ -5679,9 +5769,7 @@ def _report_form(request, task, technician, back_url):
         )
         new_formset = NewAssetFormSet(initial=new_initial, prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
-        checklist_formset = ChecklistFormSet(
-            initial=checklist_initial(task), prefix='checklist',
-        ) if has_checklist(task) else None
+        checklist_formset = make_checklist_formset(task) if has_checklist(task) else None
 
     from reports.pdf import hours_text, report_language
 
@@ -5698,8 +5786,9 @@ def _report_form(request, task, technician, back_url):
         'has_existing_assets': bool(existing_assets),
         'new_formset': new_formset,
         'part_formset': part_formset,
-        # An installation: the machines are checked off here instead.
+        # An equipment step: the machines are checked off here instead.
         'checklist_formset': checklist_formset,
+        'equipment_step': equipment_step(task),
         # "1:32": the visit's time from the taps (Task.time_on_site).
         'time_on_site': hours_text(time_on_site),
         'time_is_final': report is not None and report.submitted_at is not None,

@@ -79,7 +79,7 @@
     {% else %}<p class="preview-ok">{% translate "Nothing missing was found." %}</p>{% endif %}
 </div>
 {% endif %}
-<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% if equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
+<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% if equipment_step == 'receiving' %}{% translate "Receiving Report" %}{% elif equipment_step == 'loading' %}{% translate "Loading Report" %}{% elif equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
 {% if changed_after_signing %}
@@ -106,7 +106,7 @@
 
 {% if equipment %}
 {# An installation: each machine as checked off on site. #}
-<h2>{% translate "Installed Equipment" %}</h2>
+<h2>{% if equipment_step == 'receiving' %}{% translate "Received Equipment" %}{% elif equipment_step == 'loading' %}{% translate "Loaded Equipment" %}{% else %}{% translate "Installed Equipment" %}{% endif %}</h2>
 <table class="findings">
     <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Colors (frame / arm / padding / trim)" %}</th><th>{% translate "Status" %}</th><th>{% translate "Note" %}</th></tr></thead>
     <tbody>
@@ -157,7 +157,9 @@
 {% endif %}
 
 <h2>{% translate "Overall Condition" %}</h2>
-{% if equipment %}
+{% if equipment and equipment_step != 'installation' %}
+<p>{% if not_installed %}{% blocktranslate count count=not_installed %}{{ count }} machine needs attention — see its status and note above.{% plural %}{{ count }} machines need attention — see their status and notes above.{% endblocktranslate %}{% else %}{% translate "All the machines listed were checked and are in order." %}{% endif %}</p>
+{% elif equipment %}
 <p>{% if not_installed %}{% blocktranslate count count=not_installed %}The installation is partly complete: {{ count }} machine is still to be installed, and a follow-up visit will be arranged.{% plural %}The installation is partly complete: {{ count }} machines are still to be installed, and a follow-up visit will be arranged.{% endblocktranslate %}{% else %}{% translate "The installation is complete and the equipment has been tested and is operating properly." %}{% endif %}</p>
 {% else %}
 <p>{% if content.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>

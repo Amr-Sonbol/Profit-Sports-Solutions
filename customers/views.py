@@ -613,7 +613,7 @@ def customer_accounts(request):
         action = request.POST.get('action')
         if action == 'invite_selected':
             sent, skipped = 0, 0
-            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True)
+            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True, is_internal=False)
             for customer in selected.select_related('user'):
                 if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
                     log_account_action(request, customer, 'Portal welcome email sent')
@@ -696,7 +696,8 @@ def customer_accounts(request):
             })
         return _account_redirect(request)
 
-    customers = Customer.objects.filter(is_active=True).select_related('user', 'country').order_by('name')
+    # Our own account (the warehouses) never gets a portal login.
+    customers = Customer.objects.filter(is_active=True, is_internal=False).select_related('user', 'country').order_by('name')
     country_id = request.GET.get('country', '')
     if country_id:
         customers = customers.filter(country_id=country_id)

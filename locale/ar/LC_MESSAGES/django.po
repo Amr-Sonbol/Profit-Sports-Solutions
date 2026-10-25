@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 13:26+0000\n"
+"POT-Creation-Date: 2026-10-25 15:08+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -101,6 +101,16 @@ msgstr[2] "لا يزال %(count)s جهاز بحاجة إلى تركيب."
 msgstr[3] "لا يزال %(count)s جهاز بحاجة إلى تركيب."
 msgstr[4] "لا يزال %(count)s جهاز بحاجة إلى تركيب."
 msgstr[5] "لا يزال %(count)s جهاز بحاجة إلى تركيب."
+
+#, python-format
+msgid "%(count)s machine needs attention — see its status and note above."
+msgid_plural "%(count)s machines need attention — see their status and notes above."
+msgstr[0] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
+msgstr[1] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
+msgstr[2] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
+msgstr[3] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
+msgstr[4] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
+msgstr[5] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
 
 #, python-format
 msgid "%(count)s machine on the checklist is not checked yet."
@@ -634,6 +644,9 @@ msgstr "جميع حسابات دخول الموظفين في جميع الدول
 msgid "All technicians"
 msgstr "كل الفنيين"
 
+msgid "All the machines listed were checked and are in order."
+msgstr "تمت مراجعة جميع الأجهزة المذكورة وهي سليمة."
+
 msgid "Alone, no callbacks"
 msgstr "بمفرده، دون إعادة زيارات"
 
@@ -645,9 +658,6 @@ msgstr "تُرسل دائمًا، لحماية الحساب"
 
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
-
-msgid "An installed machine needs its serial number — type or scan it from the plate."
-msgstr "الجهاز المُركَّب يحتاج إلى رقمه التسلسلي — اكتبه أو امسحه من اللوحة."
 
 msgid "Any time that day"
 msgstr "في أي وقت من ذلك اليوم"
@@ -961,6 +971,9 @@ msgstr "مدفوعة"
 msgid "Chart period"
 msgstr "فترة الرسم البياني"
 
+msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
+msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
+
 msgid "Check-ins away from the site"
 msgstr "نقرات مسجَّلة خارج الموقع"
 
@@ -969,6 +982,9 @@ msgstr "اختر كلمة مرور جديدة"
 
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
+
+msgid "Choose at least one machine to carry to the next step."
+msgstr "اختر جهازًا واحدًا على الأقل لنقله إلى الخطوة التالية."
 
 msgid "Choose at least one role, or turn this email off."
 msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
@@ -1171,6 +1187,9 @@ msgstr "إنشاء مهام جديدة"
 
 msgid "Create task"
 msgstr "إنشاء مهمة"
+
+msgid "Create the next step"
+msgstr "إنشاء الخطوة التالية"
 
 msgid "Created"
 msgstr "أُنشئت"
@@ -2123,6 +2142,9 @@ msgstr "رُكّب بدلًا منه"
 msgid "Installed on"
 msgstr "تاريخ التركيب"
 
+msgid "Instead"
+msgstr "بدلًا منه"
+
 msgid "Instead:"
 msgstr "بدلًا من:"
 
@@ -2242,6 +2264,21 @@ msgstr "الرابط لم يعد يعمل"
 
 msgid "Link not received or expired: send a new setup link (please verify the email address first). Forgotten password: send a setup link, or set a temporary password and read it to them if email is unavailable. Lost or reassigned phone: sign them out of all devices. Locked out: unlock the account. Extended absence: disable their login."
 msgstr "لم يصل الرابط أو انتهت صلاحيته: أرسل رابط إعداد جديدًا (يُرجى التحقق من البريد الإلكتروني أولًا). نسيان كلمة المرور: أرسل رابط إعداد، أو عيّن كلمة مرور مؤقتة واقرأها له إذا تعذّر البريد الإلكتروني. فقدان الجوال أو تسليمه لشخص آخر: سجّل خروجه من جميع الأجهزة. قفل الحساب: فك القفل. الغياب لفترة طويلة: عطّل تسجيل دخوله."
+
+msgid "Loaded"
+msgstr "تم التحميل"
+
+msgid "Loaded Equipment"
+msgstr "المعدات المُحمَّلة"
+
+msgid "Loading"
+msgstr "التحميل"
+
+msgid "Loading Report"
+msgstr "تقرير التحميل"
+
+msgid "Loading checklist"
+msgstr "قائمة مراجعة التحميل"
 
 msgid "Local courier"
 msgstr "شركة توصيل محلية"
@@ -2545,6 +2582,17 @@ msgstr "الشهر القادم"
 
 msgid "Next scheduled"
 msgstr "الموعد القادم"
+
+msgid "Next step"
+msgstr "الخطوة التالية"
+
+#, python-format
+msgid "Next step %(number)s created with %(count)s machines."
+msgstr "تم إنشاء الخطوة التالية %(number)s بعدد %(count)s أجهزة."
+
+#, python-format
+msgid "Next step after %(number)s: %(count)s machines."
+msgstr "الخطوة التالية بعد %(number)s: %(count)s أجهزة."
 
 msgid "Next step:"
 msgstr "الخطوة التالية:"
@@ -2986,6 +3034,9 @@ msgstr "يلجأ إليه الآخرون عندما تواجههم صعوبة. �
 msgid "Our management team reviewed your request on %(when)s. We will follow up with you here."
 msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(when)s، وسنتابع معكم من هنا."
 
+msgid "Our warehouses"
+msgstr "مستودعاتنا"
+
 msgid "Outcome"
 msgstr "النتيجة"
 
@@ -3393,6 +3444,18 @@ msgstr "تمت إعادة الإسناد إلى %(name)s."
 
 msgid "Received"
 msgstr "تم الاستلام"
+
+msgid "Received Equipment"
+msgstr "المعدات المُستلَمة"
+
+msgid "Receiving Report"
+msgstr "تقرير الاستلام"
+
+msgid "Receiving checklist"
+msgstr "قائمة مراجعة الاستلام"
+
+msgid "Receiving from the factory"
+msgstr "الاستلام من المصنع"
 
 msgid "Recommendation"
 msgstr "التوصية"
@@ -4343,6 +4406,9 @@ msgstr "لا يمكن استخدام الجهاز"
 msgid "The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial number can wait — the installers type or scan it on site, where each machine is checked off. The colors are black unless the machine is a custom one."
 msgstr "الأجهزة الواردة في إذن التسليم. الكمية ٤ تصبح ٤ أسطر، سطر لكل جهاز. يمكن تأجيل الرقم التسلسلي — يكتبه فريق التركيب أو يمسحه في الموقع حيث تتم مراجعة كل جهاز. الألوان سوداء ما لم يكن الجهاز مخصصًا."
 
+msgid "The machines to carry, with their serial numbers and colors:"
+msgstr "الأجهزة المنقولة، بأرقامها التسلسلية وألوانها:"
+
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
@@ -4451,6 +4517,9 @@ msgstr "هذا الوقت لاحق للخطوة التالية في هذه ال�
 msgid "This is not a customer account."
 msgstr "هذا ليس حساب عميل."
 
+msgid "This is our own account in this country: each site below is one of our warehouses, where equipment is received from the factory and loaded for installation. Add each warehouse as a site."
+msgstr "هذا حسابنا الخاص في هذه الدولة: كل موقع أدناه هو أحد مستودعاتنا، حيث تُستلم المعدات من المصنع وتُحمَّل للتركيب. أضف كل مستودع كموقع."
+
 msgid "This is the only administrator able to sign in, so their login cannot be disabled."
 msgstr "هذا هو مسؤول النظام الوحيد القادر على تسجيل الدخول، لذا لا يمكن تعطيل تسجيل دخوله."
 
@@ -4472,6 +4541,9 @@ msgstr "انتهت صلاحية هذا الرابط أو تم استخدامه �
 
 msgid "This machine is registered at another site."
 msgstr "هذا الجهاز مسجّل في موقع آخر."
+
+msgid "This machine needs its serial number — type or scan it from the plate."
+msgstr "هذا الجهاز يحتاج إلى رقمه التسلسلي — اكتبه أو امسحه من اللوحة."
 
 msgid "This month"
 msgstr "هذا الشهر"
@@ -4574,6 +4646,9 @@ msgstr "هذه السنة"
 
 msgid "Thursday"
 msgstr "الخميس"
+
+msgid "Tick each machine as it goes on the truck, and check its serial number. Anything missing or damaged: say what, or add a photo — before the team drives to the site."
+msgstr "حدّد كل جهاز عند تحميله على الشاحنة وتحقق من رقمه التسلسلي. إن كان مفقودًا أو تالفًا: اذكر السبب أو أضف صورة — قبل توجه الفريق إلى الموقع."
 
 msgid "Tick everything you did on this visit."
 msgstr "حدّد كل ما قمت به في هذه الزيارة."
@@ -5542,6 +5617,9 @@ msgstr "عدد المهام المكتملة غير كافٍ (%(have)s من أص
 msgid "insufficient data"
 msgstr "البيانات غير كافية"
 
+msgid "internal (our warehouses)"
+msgstr "داخلي (مستودعاتنا)"
+
 msgid "internal tickets only"
 msgstr "للتذاكر الداخلية فقط"
 
@@ -6102,6 +6180,9 @@ msgstr "مهارات الفني"
 
 msgid "technicians"
 msgstr "الفنيون"
+
+msgid "the company's own account — its sites are our warehouses"
+msgstr "حساب الشركة الخاص — مواقعه هي مستودعاتنا"
 
 msgid "the day planned by the supervisor"
 msgstr "اليوم الذي خطط له المشرف"

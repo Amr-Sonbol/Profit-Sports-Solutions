@@ -8954,7 +8954,7 @@ class InstallationChecklistTests(TaskTestCase):
             'checklist-1-id': self.bike_line.pk, 'checklist-1-product_code': 'EXCITE-BIKE', 'checklist-1-status': 'damaged',
         })
         response = self.client.post(self.report_url, payload)
-        self.assertContains(response, 'An installed machine needs its serial number')
+        self.assertContains(response, 'This machine needs its serial number')
         self.assertContains(response, 'Say what is wrong, or add a photo.')
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
@@ -9006,3 +9006,56 @@ class InstallationChecklistTests(TaskTestCase):
         self.assertIn('Red / Black / Black / Black', html)
         self.assertIn('1 machine is still to be installed', html)
         self.assertNotIn('Findings &amp; Actions', html)
+
+
+class EquipmentChainTests(TaskTestCase):
+    # Received at the Riyadh warehouse, installed at a Dubai gym: the
+    # machines (and their serials) travel from step to step, across borders.
+
+    def setUp(self):
+        super().setUp()
+        self.saudi = Country.objects.create(
+            name='Saudi Arabia', name_ar='السعودية', iso_code='SA', timezone='Asia/Riyadh', currency_code='SAR',
+            weekend_days='4',
+        )
+        ours = Customer.objects.create(country=self.saudi, name='Profit Sports Solutions', segment='other', is_internal=True)
+        self.warehouse = Site.objects.create(customer=ours, name='Riyadh warehouse', address='Riyadh')
+        self.receiving_type = TaskType.objects.create(code='recv', name='Receiving', name_ar='استلام', category='receiving')
+        TaskType.objects.create(code='inst', name='Installation', name_ar='تركيب', category='installation')
+        self.receiving = Task.objects.create(
+            task_number='SA-0001', site=self.warehouse, task_type=self.receiving_type, brand=self.brand,
+            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+        )
+        self.received = TaskProduct.objects.create(task=self.receiving, product_code='EXCITE-RUN', serial_number='TG-1', status='done')
+        TaskProduct.objects.create(task=self.receiving, product_code='EXCITE-BIKE', serial_number='', status='damaged')
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def test_received_machines_go_to_an_installation_in_another_country(self):
+        self.client.login(username='manager1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.receiving.pk}/')
+        self.assertContains(page, 'Create the next step')
+        response = self.client.post(f'/tasks/{self.receiving.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.received.pk],
+        })
+        installation = Task.objects.get(previous_task=self.receiving)
+        self.assertRedirects(response, f'/tasks/{installation.pk}/', fetch_redirect_response=False)
+        self.assertEqual(installation.site, self.site)  # the Dubai gym
+        self.assertTrue(installation.task_number.startswith('AE-'))
+        line = installation.products.get()
+        self.assertEqual((line.serial_number, line.status, line.source_line), ('TG-1', 'pending', self.received))
+        # Carried once: nothing left to carry from the receiving.
+        self.assertNotContains(self.client.get(f'/tasks/{self.receiving.pk}/'), 'Create the next step')
+
+    def test_loading_only_goes_to_a_warehouse_and_the_internal_account_gets_no_tickets(self):
+        from tasks.forms import StaffTicketForm
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post(f'/tasks/{self.receiving.pk}/', {
+            'action': 'create_next_step', 'step': 'loading', 'site': self.site.pk, 'lines': [self.received.pk],
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(self.warehouse, StaffTicketForm(country=self.saudi).fields['site'].queryset)

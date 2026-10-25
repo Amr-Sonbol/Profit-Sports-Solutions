@@ -65,6 +65,13 @@ class Customer(models.Model):
         help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
     )
     is_active = models.BooleanField(_('active'), default=True)
+    # The company's own account in a country: its sites are the warehouses
+    # that equipment is received at and loaded from. Never a portal login,
+    # a ticket or an email to it.
+    is_internal = models.BooleanField(
+        _('internal (our warehouses)'), default=False,
+        help_text=_("the company's own account — its sites are our warehouses"),
+    )
     deactivation_reason = models.CharField(
         _('deactivation reason'), max_length=255, blank=True,
         help_text=_('reason for deactivation, e.g. contract ended or business closed'),

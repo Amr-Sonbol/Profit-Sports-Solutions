@@ -52,7 +52,7 @@ from tasks.views import (
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
-    save_checklist, still_to_install, create_follow_up,
+    save_checklist, still_to_install, create_follow_up, equipment_step,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -1240,9 +1240,11 @@ class MyTaskReportView(APIView):
                 for row in checklist_initial(task)
             ] if has_checklist(task) else None,
             'checklist_statuses': [
-                {'value': value, 'label': str(label)} for value, label in TaskProductCheckForm().fields['status'].choices
-                if value
+                {'value': value, 'label': str(label)}
+                for value, label in TaskProductCheckForm(step=equipment_step(task)).fields['status'].choices if value
             ],
+            # Which step: receiving, loading or installation (the screen's words follow it).
+            'checklist_step': equipment_step(task),
         })
 
     def post(self, request, pk):
@@ -1317,7 +1319,7 @@ class MyTaskReportView(APIView):
                         'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
                         'replacement', 'note',
                     )},
-                    initial=known.get(row.get('id'), {}),
+                    initial=known.get(row.get('id'), {}), step=equipment_step(task),
                 )
                 for row in request.data.get('checklist') or [] if isinstance(row, dict)
             ]

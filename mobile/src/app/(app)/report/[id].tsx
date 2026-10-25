@@ -89,6 +89,22 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
   return errors;
 }
 
+/** The checklist's title and guidance on each step of the equipment chain. */
+const CHECKLIST_TITLES: Record<string, { title: string; hint: string }> = {
+  receiving: {
+    title: 'Receiving checklist',
+    hint: 'Check each machine from the factory against the delivery note — received, missing or damaged — and scan its serial once, here.',
+  },
+  loading: {
+    title: 'Loading checklist',
+    hint: 'Tick each machine as it goes on the truck and check its serial. Missing or damaged: say what, or take a photo.',
+  },
+  installation: {
+    title: 'Installation checklist',
+    hint: 'For each machine: what happened, its serial from the plate (or scan it), and its colours — black unless custom. Damaged or wrong item: say what, or take a photo.',
+  },
+};
+
 export default function ReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -141,6 +157,7 @@ export default function ReportScreen() {
   // An installation: its machines to check off on site (step 1), else null.
   const [checklist, setChecklist] = useState<ChecklistRow[] | null>(null);
   const [checklistStatuses, setChecklistStatuses] = useState<Choice[]>([]);
+  const [checklistStep, setChecklistStep] = useState('installation');
   // The review before sending (see openReview); null while filling in.
   const [review, setReview] = useState<{ html: string; problems: string[]; offline?: boolean } | null>(null);
   const [pickingMachine, setPickingMachine] = useState(false);
@@ -175,6 +192,7 @@ export default function ReportScreen() {
       setReportLanguage(reportResult.data.report_language ?? 'en');
       setChecklist(reportResult.data.checklist ?? null);
       setChecklistStatuses(reportResult.data.checklist_statuses ?? []);
+      setChecklistStep(reportResult.data.checklist_step || 'installation');
       // What the report records, or the machines the customer reported.
       setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
@@ -556,10 +574,7 @@ export default function ReportScreen() {
 
             {checklist ? (
               <>
-                <StepTitle
-                  number={1} title="Installation checklist"
-                  hint="For each machine: what happened, its serial from the plate (or scan it), and its colours — black unless custom. Damaged or wrong item: say what, or take a photo."
-                />
+                <StepTitle number={1} {...CHECKLIST_TITLES[checklistStep] ?? CHECKLIST_TITLES.installation} />
                 <InstallationChecklist
                   taskId={Number(id)} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
                 />

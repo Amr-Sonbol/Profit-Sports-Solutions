@@ -1088,6 +1088,13 @@ class TaskAsset(models.Model):
 # A machine's colours unless it's a custom one.
 DEFAULT_COLOR = 'Black'
 
+# "Done" on each step of the equipment chain (TaskType.Category).
+STEP_DONE_LABELS = {
+    'receiving': _('Received'),
+    'loading': _('Loaded'),
+    'installation': _('Installed'),
+}
+
 
 class TaskProduct(models.Model):
     """One machine's line on an equipment task — receiving from the factory,
@@ -1148,7 +1155,8 @@ class TaskProduct(models.Model):
 
     @property
     def status_label(self):
-        """'Done' in its step's words — installed, by default."""
+        """'Done' in its step's words: received, loaded or installed."""
         if self.status == self.Status.DONE:
-            return _('Installed')
+            category = self.task.task_type.category if self.task.task_type_id else ''
+            return STEP_DONE_LABELS.get(category, STEP_DONE_LABELS['installation'])
         return self.get_status_display()

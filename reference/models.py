@@ -136,6 +136,9 @@ class TaskType(models.Model):
     class Category(models.TextChoices):
         INSTALLATION = 'installation', _('Installation')
         MAINTENANCE = 'maintenance', _('Maintenance')
+        # The equipment chain's steps before an installation.
+        RECEIVING = 'receiving', _('Receiving from the factory')
+        LOADING = 'loading', _('Loading')
 
     code = models.CharField(
         _('code'), max_length=50, unique=True,

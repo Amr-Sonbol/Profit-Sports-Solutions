@@ -38,8 +38,16 @@
     <div class="report-step" data-staff-only>
         <span class="report-step__number">1</span>
         <div>
+            {% if equipment_step == 'receiving' %}
+            <h2 class="report-step__title">{% translate "Receiving checklist" %}</h2>
+            <p class="field__help">{% translate "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site." %}</p>
+            {% elif equipment_step == 'loading' %}
+            <h2 class="report-step__title">{% translate "Loading checklist" %}</h2>
+            <p class="field__help">{% translate "Tick each machine as it goes on the truck, and check its serial number. Anything missing or damaged: say what, or add a photo — before the team drives to the site." %}</p>
+            {% else %}
             <h2 class="report-step__title">{% translate "Installation checklist" %}</h2>
             <p class="field__help">{% translate "For each machine: what happened, its serial number from the plate, and its colors (black unless custom). Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card." %}</p>
+            {% endif %}
         </div>
     </div>
     {# The repair report's machine forms still post (empty) — see the memory note on management forms. #}

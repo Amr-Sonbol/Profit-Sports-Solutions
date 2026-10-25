@@ -126,7 +126,7 @@ export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
               </TouchableOpacity>
             </ThemedView>
             {needsSerial ? (
-              <ThemedText type="small" themeColor="danger">An installed machine needs its serial number — type or scan it.</ThemedText>
+              <ThemedText type="small" themeColor="danger">This machine needs its serial number — type or scan it.</ThemedText>
             ) : null}
 
             <ThemedView style={styles.colors}>
@@ -143,7 +143,7 @@ export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
 
             <TextInput
               style={inputStyle} value={row.replacement} onChangeText={(value) => update(index, { replacement: value })}
-              placeholder="Installed instead (if a different item went in)" placeholderTextColor={theme.textSecondary}
+              placeholder="Instead (if a different item came or went in)" placeholderTextColor={theme.textSecondary}
             />
             <TextInput
               style={[inputStyle, styles.note, needsReason && { borderColor: theme.danger }]} value={row.note} multiline

@@ -463,6 +463,37 @@
     </div>
     <p class="field__help">{% translate "Planned from the task's Edit screen; checked off on site in the installers' report." %}</p>
     {% endif %}
+    {% if lines_to_carry and can_create_follow_up %}
+    {# Receiving / loading: carry the machines that are ready to the next step — any country. #}
+    <form method="post" class="next-step">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_next_step">
+        <h3>{% translate "Create the next step" %}</h3>
+        <div class="form-grid">
+            <div class="field">
+                <label for="next-step">{% translate "Next step" %}</label>
+                <select name="step" id="next-step" data-next-step>
+                    {% for step, label, sites in next_step_choices %}<option value="{{ step }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="next-site">{% translate "Where" %}</label>
+                <select name="site" id="next-site" required>
+                    {% for step, label, sites in next_step_choices %}
+                    <optgroup label="{{ label }}" data-for-step="{{ step }}">
+                        {% for site in sites %}<option value="{{ site.pk }}">{{ site.customer.country.display_name }} — {{ site.customer.name }} — {{ site.name }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <p class="field__help">{% translate "The machines to carry, with their serial numbers and colors:" %}</p>
+        {% for line in lines_to_carry %}
+        <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Create the next step" %}</button>
+    </form>
+    {% endif %}
     {% if still_to_install %}
     <div class="flash flash--warning">
         {% blocktranslate count count=still_to_install|length %}{{ count }} machine is still to install.{% plural %}{{ count }} machines are still to install.{% endblocktranslate %}
@@ -748,4 +779,9 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% load static %}
+<script src="{% static 'js/next-step.js' %}?v={{ css_version }}" defer></script>
 {% endblock %}

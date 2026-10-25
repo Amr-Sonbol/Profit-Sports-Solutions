@@ -94,6 +94,7 @@ export function fetchMyReport(id: number) {
     // An installation: the machines to check off, and what can be chosen for each.
     checklist?: ChecklistRow[] | null;
     checklist_statuses?: Choice[];
+    checklist_step?: 'receiving' | 'loading' | 'installation' | '';
   }>(
     `/api/my-tasks/${id}/report/`,
   );
