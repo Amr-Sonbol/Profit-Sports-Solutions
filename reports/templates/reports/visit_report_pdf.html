@@ -79,7 +79,7 @@
     {% else %}<p class="preview-ok">{% translate "Nothing missing was found." %}</p>{% endif %}
 </div>
 {% endif %}
-<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% translate "Visit Report" %}</h1>
+<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% if equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
 {% if changed_after_signing %}
@@ -104,6 +104,26 @@
 <ul>{% for line in work_lines %}<li><span class="iso" dir="{{ line|text_dir }}">{{ line }}</span></li>{% endfor %}</ul>
 {% endif %}
 
+{% if equipment %}
+{# An installation: each machine as checked off on site. #}
+<h2>{% translate "Installed Equipment" %}</h2>
+<table class="findings">
+    <thead><tr><th>{% translate "Equipment" %}</th><th>{% translate "Serial No." %}</th><th>{% translate "Colors (frame / arm / padding / trim)" %}</th><th>{% translate "Status" %}</th><th>{% translate "Note" %}</th></tr></thead>
+    <tbody>
+        {% for line in equipment %}
+        <tr>
+            <td><span class="iso" dir="ltr">{{ line.code }}</span></td>
+            <td dir="ltr">{{ line.serial|default:"—" }}</td>
+            <td><span class="iso" dir="{{ line.colors.0|text_dir }}">{{ line.colors|join:" / " }}</span></td>
+            <td>{{ line.status_label }}</td>
+            <td>{% if line.instead %}{% translate "Instead:" %} <span class="iso" dir="{{ line.instead|text_dir }}">{{ line.instead }}</span>{% if line.note %}<br>{% endif %}{% endif %}{% if line.note %}<span class="iso" dir="{{ line.note|text_dir }}">{{ line.note }}</span>{% endif %}{% if not line.instead and not line.note %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if not equipment or machines or content.findings %}
 <h2>{% translate "Findings & Actions" %}</h2>
 {% if content.findings %}<p><span class="iso" dir="{{ content.findings|text_dir }}">{{ content.findings|linebreaksbr }}</span></p>{% endif %}
 {% if machines %}
@@ -122,6 +142,7 @@
     </tbody>
 </table>
 {% endif %}
+{% endif %}
 
 {% if parts %}
 <h2>{% translate "Parts Used" %}</h2>
@@ -136,7 +157,11 @@
 {% endif %}
 
 <h2>{% translate "Overall Condition" %}</h2>
+{% if equipment %}
+<p>{% if not_installed %}{% blocktranslate count count=not_installed %}The installation is partly complete: {{ count }} machine is still to be installed, and a follow-up visit will be arranged.{% plural %}The installation is partly complete: {{ count }} machines are still to be installed, and a follow-up visit will be arranged.{% endblocktranslate %}{% else %}{% translate "The installation is complete and the equipment has been tested and is operating properly." %}{% endif %}</p>
+{% else %}
 <p>{% if content.resolved %}{% translate "The reported issue has been resolved and the equipment is operating properly." %}{% else %}{% translate "The reported issue has not yet been fully resolved. A follow-up visit will be arranged." %}{% endif %}</p>
+{% endif %}
 
 {% if recommendations %}
 <h2>{% translate "Recommendation" %}</h2>

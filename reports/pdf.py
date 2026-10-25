@@ -74,10 +74,20 @@ def report_content(report):
     ), key=lambda part: (part['code'], part['description'], part['quantity']))
     # The standard work lines and recommendations, only when there are
     # any — reports signed before they existed still read as unchanged.
+    # An installation's machines as checked off on site — only when there
+    # are any, so other reports signed before this still read as unchanged.
+    from tasks.views import has_checklist
+    equipment = [
+        {
+            'code': line.product_code, 'serial': line.serial_number, 'status': line.status,
+            'colors': [line.frame, line.arm, line.padding, line.trim], 'instead': line.replacement, 'note': line.note,
+        }
+        for line in task.products.order_by('pk')
+    ] if has_checklist(task) else []
     extras = {
         key: value for key, value in (
             ('work_lines', list(report.work_lines)), ('recommendations', list(report.recommendations)),
-            ('recommendation', report.recommendation),
+            ('recommendation', report.recommendation), ('equipment', equipment),
         ) if value
     }
     return {
@@ -111,6 +121,11 @@ def changed_after_signing(report):
     if 'hours' not in signed:
         current.pop('hours')  # signed before the report showed the time on site
     return signed != current
+
+
+def _line_statuses():
+    from tasks.models import TaskProduct
+    return TaskProduct.Status.choices
 
 
 def hours_text(hours):
@@ -174,6 +189,12 @@ def _template_context(report, content, signature_url, signed_at, changed):
         # was shown, or with no taps to work it out from.
         'hours': hours_text(content.get('hours')),
         'parts': content['parts'],
+        # An installation report: its machines, and how many weren't installed.
+        'equipment': [
+            {**line, 'status_label': translation.gettext('Installed') if line['status'] == 'done' else dict(_line_statuses()).get(line['status'], '')}
+            for line in content.get('equipment', [])
+        ],
+        'not_installed': sum(1 for line in content.get('equipment', []) if line['status'] != 'done'),
         'signature_url': signature_url,
         'signed_at': signed_at,
         'changed_after_signing': changed,

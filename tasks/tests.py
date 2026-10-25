@@ -8992,3 +8992,17 @@ class InstallationChecklistTests(TaskTestCase):
         self.assertEqual((line.product_code, line.status, line.source_line), ('EXCITE-BIKE', 'pending', self.bike_line))
         # Once made, it isn't offered again.
         self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Create a follow-up task for them')
+
+    def test_the_customer_gets_an_installation_report(self):
+        from reports.pdf import render_visit_report_html
+        report = self._check([
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+             'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
+            {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'missing', 'serial_number': ''},
+        ])
+        html = render_visit_report_html(report, language='en')
+        self.assertIn('Installation Report', html)
+        self.assertIn('Installed Equipment', html)
+        self.assertIn('Red / Black / Black / Black', html)
+        self.assertIn('1 machine is still to be installed', html)
+        self.assertNotIn('Findings &amp; Actions', html)
