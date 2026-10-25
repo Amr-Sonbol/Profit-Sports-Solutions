@@ -32,6 +32,7 @@ from django.utils.crypto import get_random_string, salted_hmac
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from django.utils.translation import ngettext
 from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
@@ -58,7 +59,7 @@ from .forms import (
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT, NotificationSettingsForm,
     SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
-    TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
+    TaskMessageForm, TaskProductCheckForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
     TicketReplyForm,
 )
@@ -2062,8 +2063,7 @@ def task_edit(request, pk):
     product_initial = [
         {
             'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
-            'replacement': p.replacement, 'frame': p.frame, 'arm': p.arm, 'padding': p.padding,
-            'trim': p.trim, 'comment': p.comment, 'note': p.note,
+            'frame': p.frame, 'arm': p.arm, 'padding': p.padding, 'trim': p.trim,
         }
         for p in task.products.all()
     ]
@@ -2086,17 +2086,7 @@ def task_edit(request, pk):
                         occurred_at=timezone.now(), actor=request.user,
                     )
                 if not products_locked:
-                    updated_task.products.all().delete()
-                    for cleaned in product_formset.cleaned_data:
-                        if cleaned.get('product_code') and not cleaned.get('DELETE'):
-                            TaskProduct.objects.create(
-                                task=updated_task, product_code=cleaned['product_code'],
-                                serial_number=cleaned.get('serial_number', ''), quantity=cleaned['quantity'],
-                                replacement=cleaned.get('replacement', ''), frame=cleaned.get('frame', ''),
-                                arm=cleaned.get('arm', ''), padding=cleaned.get('padding', ''),
-                                trim=cleaned.get('trim', ''), comment=cleaned.get('comment', ''),
-                                note=cleaned.get('note', ''),
-                            )
+                    save_planned_lines(updated_task, product_formset.cleaned_data)
             notices = []
             if (
                 rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
@@ -2128,7 +2118,10 @@ def task_edit(request, pk):
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
         product_formset = None if products_locked else TaskProductFormSet(initial=product_initial, prefix='products')
 
-    context = {'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked}
+    context = {
+        'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked,
+        'is_installation': is_installation(task),
+    }
     return render(request, 'tasks/task_edit.html', context)
 
 
@@ -5223,6 +5216,7 @@ def save_work_report(request, task, technician, report_form, part_rows):
         # copy of something that isn't there.
         transaction.on_commit(lambda: send_visit_report_copy(saved_report, copy_to))
     if saved_report.first_submission:
+        register_installed_machines(task)
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
         # (they're the lead on some tasks too) skips straight to the
@@ -5247,6 +5241,115 @@ def save_work_report(request, task, technician, report_form, part_rows):
                 {'type': 'team_task', 'task_id': task.pk},
             ))
     return saved_report
+
+
+def save_planned_lines(task, rows):
+    """The machine lines as planned on the Edit screen (TaskProductForm
+    rows), replacing the previous plan. On an installation, "BENCH-01 × 4"
+    becomes four lines — one per machine, each with its own serial and
+    status to check off on site."""
+    task.products.all().delete()
+    for cleaned in rows:
+        if not cleaned.get('product_code') or cleaned.get('DELETE'):
+            continue
+        fields = {
+            'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
+            **{color: cleaned[color] for color in TaskProductForm.COLORS},
+        }
+        if is_installation(task):
+            for _unit in range(cleaned['quantity']):
+                TaskProduct.objects.create(task=task, quantity=1, **fields)
+        else:
+            TaskProduct.objects.create(task=task, quantity=cleaned['quantity'], **fields)
+
+
+# Lines that weren't installed and still need to be: the follow-up's.
+STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
+
+
+def has_checklist(task):
+    """An equipment task with machine lines to check off on site (for now
+    installations; receiving and loading use the same checklist)."""
+    return is_installation(task) and task.products.exists()
+
+
+def checklist_initial(task):
+    """The checklist's rows, from the task's lines."""
+    return [
+        {
+            'id': line.pk, 'product_code': line.product_code,
+            'status': '' if line.status == TaskProduct.Status.PENDING else line.status,
+            'serial_number': line.serial_number, 'frame': line.frame, 'arm': line.arm, 'padding': line.padding,
+            'trim': line.trim, 'replacement': line.replacement, 'note': line.note,
+            'photo_url': line.photo.url if line.photo else '', 'added_on_site': line.added_on_site,
+        }
+        for line in task.products.order_by('pk')
+    ]
+
+
+# The on-site checklist: the planned machines plus room to add one found on site.
+ChecklistFormSet = formset_factory(TaskProductCheckForm, extra=1)
+
+
+def checklist_formset_rows(formset):
+    """A valid checklist formset's rows to save — its planned lines, and any
+    machine added on site (an untouched extra row is left out); None
+    without a checklist."""
+    if formset is None:
+        return None
+    return [
+        form.cleaned_data for form in formset
+        if form.cleaned_data.get('product_code') and (form.cleaned_data.get('id') or form.has_changed())
+    ]
+
+
+def save_checklist(task, rows):
+    """What really happened to each machine (TaskProductCheckForm rows,
+    with any new photo as `photo`): planned lines updated by `id`, machines
+    added on site created (and any added earlier but now left out removed)
+    — planned lines are never deleted here, only marked."""
+    lines = {line.pk: line for line in task.products.all()}
+    kept = set()
+    for cleaned in rows:
+        line = lines.get(cleaned.get('id'))
+        if line is None:
+            line = TaskProduct(task=task, added_on_site=True, quantity=1)
+        line.product_code = cleaned['product_code']
+        line.status = cleaned['status']
+        line.serial_number = cleaned['serial_number']
+        for color in TaskProductCheckForm.COLORS:
+            setattr(line, color, cleaned[color])
+        line.replacement = cleaned.get('replacement', '')
+        line.note = cleaned.get('note', '')
+        if cleaned.get('photo'):
+            line.photo = cleaned['photo']
+        line.save()
+        kept.add(line.pk)
+    task.products.filter(added_on_site=True).exclude(pk__in=kept).delete()
+
+
+def is_installation(task):
+    """True for an installation task (its type's category)."""
+    return bool(task.task_type_id and task.task_type.category == TaskType.Category.INSTALLATION)
+
+
+def register_installed_machines(task):
+    """An installation's machines join the customer's machine list at its
+    site — each product line with a serial, under the task's brand, so the
+    customer can pick it in the portal and every visit builds its history.
+    A serial already on file at the site is that machine (not a second
+    one). Called when the installation's report is first sent; needs the
+    task's brand (the review says so when it's missing).
+    """
+    if not is_installation(task) or not task.brand_id:
+        return
+    today = timezone.localdate()
+    for product in task.products.filter(status=TaskProduct.Status.DONE).exclude(serial_number=''):
+        if not Asset.objects.filter(site=task.site, serial_no__iexact=product.serial_number).exists():
+            Asset.objects.create(
+                site=task.site, brand=task.brand, model_name=product.product_code,
+                serial_no=product.serial_number, installed_on=today,
+            )
 
 
 def report_problems(report, language):
@@ -5278,6 +5381,22 @@ def report_problems(report, language):
         typed += [(name, item.note), (name, item.action)]
     if not report.work_lines and not report.action_taken.strip():
         problems.append(_('Pick the work performed.'))
+    task = report.task
+    if has_checklist(task):
+        unchecked = task.products.filter(status=TaskProduct.Status.PENDING).count()
+        if unchecked:
+            problems.append(ngettext(
+                '%(count)s machine on the checklist is not checked yet.',
+                '%(count)s machines on the checklist are not checked yet.', unchecked,
+            ) % {'count': unchecked})
+        left = task.products.filter(status__in=STILL_TO_INSTALL).count()
+        if left:
+            problems.append(ngettext(
+                '%(count)s machine is still to install — a follow-up task can be created for it.',
+                '%(count)s machines are still to install — a follow-up task can be created for them.', left,
+            ) % {'count': left})
+    if is_installation(task) and task.products.exists() and not task.brand_id:
+        problems.append(_("Set the task's brand, so the installed machines are added to the customer's list."))
     expected = 'rtl' if language == 'ar' else 'ltr'
     language_name = _('Arabic') if language == 'ar' else _('English')
     for label, text in typed:
@@ -5288,7 +5407,7 @@ def report_problems(report, language):
     return problems
 
 
-def report_preview(request, task, technician, report_form, part_rows, machine_rows=None):
+def report_preview(request, task, technician, report_form, part_rows, machine_rows=None, checklist_rows=None):
     """(html, problems): the report exactly as it would be sent, saved
     for a moment and rolled back — nothing is kept, sent or notified. For
     the "Review report" step on the website and in the app.
@@ -5298,6 +5417,8 @@ def report_preview(request, task, technician, report_form, part_rows, machine_ro
 
     language = report_language(task.site.customer)
     with transaction.atomic():
+        if checklist_rows is not None:
+            save_checklist(task, [{**row, 'photo': None} for row in checklist_rows])
         saved = save_work_report(request, task, technician, report_form, part_rows)
         if machine_rows is not None:
             save_task_machines(task, *machine_rows)
@@ -5473,18 +5594,25 @@ def _report_form(request, task, technician, back_url):
         )
         new_formset = NewAssetFormSet(request.POST, initial=new_initial, prefix='new')
         part_formset = PartFormSet(request.POST, prefix='parts')
+        checklist_formset = ChecklistFormSet(
+            request.POST, request.FILES, initial=checklist_initial(task), prefix='checklist',
+        ) if has_checklist(task) else None
 
         if (
             report_form.is_valid() and existing_formset.is_valid()
             and new_formset.is_valid() and part_formset.is_valid()
+            and (checklist_formset is None or checklist_formset.is_valid())
         ):
+            checklist_rows = checklist_formset_rows(checklist_formset)
             if preview:
                 html, _problems = report_preview(
                     request, task, technician, report_form, part_formset.cleaned_data,
-                    (existing_formset.cleaned_data, new_formset.cleaned_data),
+                    (existing_formset.cleaned_data, new_formset.cleaned_data), checklist_rows,
                 )
                 return HttpResponse(html)
             with transaction.atomic():
+                if checklist_rows is not None:
+                    save_checklist(task, checklist_rows)
                 saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 
                 save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
@@ -5501,6 +5629,9 @@ def _report_form(request, task, technician, back_url):
         )
         new_formset = NewAssetFormSet(initial=new_initial, prefix='new')
         part_formset = PartFormSet(initial=part_initial, prefix='parts')
+        checklist_formset = ChecklistFormSet(
+            initial=checklist_initial(task), prefix='checklist',
+        ) if has_checklist(task) else None
 
     from reports.pdf import hours_text, report_language
 
@@ -5517,6 +5648,8 @@ def _report_form(request, task, technician, back_url):
         'has_existing_assets': bool(existing_assets),
         'new_formset': new_formset,
         'part_formset': part_formset,
+        # An installation: the machines are checked off here instead.
+        'checklist_formset': checklist_formset,
         # "1:32": the visit's time from the taps (Task.time_on_site).
         'time_on_site': hours_text(time_on_site),
         'time_is_final': report is not None and report.submitted_at is not None,

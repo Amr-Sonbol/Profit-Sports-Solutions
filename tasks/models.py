@@ -51,6 +51,10 @@ def _ticket_internal_note_attachment_path(instance, filename):
 def _task_document_path(instance, filename):
     return f'task_documents/{secrets.token_hex(16)}/{filename}'
 
+
+def _task_product_photo_path(instance, filename):
+    return f'task_product_photos/{secrets.token_hex(16)}/{filename}'
+
 # The paperwork trail for a task — quotation, factory offer, invoice,
 # delivery note. Almost always a PDF export; jpg/png covers a photo of
 # a paper one.
@@ -210,6 +214,13 @@ class Task(models.Model):
         help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
+    # The step before this one in an equipment chain — receiving from the
+    # factory, loading at the warehouse, installing on site, a follow-up
+    # for what wasn't installed — whose machine lines this one carried on.
+    previous_task = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='next_tasks',
+        verbose_name=_('previous step'),
+    )
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
@@ -1074,19 +1085,32 @@ class TaskAsset(models.Model):
         return f'{self.task.task_number} — {self.asset}'
 
 
+# A machine's colours unless it's a custom one.
+DEFAULT_COLOR = 'Black'
+
+
 class TaskProduct(models.Model):
-    """One machine's line on an installation or loading task — the same
-    items as on the delivery note (that part still just needs a product
-    code; the rest is blank for a simple parts line), plus the per-unit
-    checklist a supervisor fills in for an actual machine being installed:
-    custom color per component, and what it got swapped for if the
-    ordered one wasn't available. The delivery note PDF (Task.delivery_note)
-    already holds the same product-code/quantity information as a scanned/
-    exported document; this is the same data kept structured, so it can be
-    searched and listed rather than only read off the file. Entered from
-    the task's Edit screen, replaced wholesale on every save — not an
-    append-only log the way task_event is.
+    """One machine's line on an equipment task — receiving from the factory,
+    loading, installing — from the delivery note: product code, serial,
+    quantity, and the four colours operations cares about (frame, arm,
+    padding, trim; black unless it's a custom one). Planned from the task's
+    Edit screen; checked off by whoever does the step, on site, with what
+    really happened (`status`), what went in instead, a note and a photo,
+    adding a line that wasn't on the paperwork. Carried to the next step
+    (`source_line`), so a machine's journey can be followed; installed
+    ones join the customer's machine list (tasks.views.register_installed_machines).
     """
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', _('Not checked yet')
+        # Received, loaded or installed — depending on the step (status_label).
+        DONE = 'done', _('Done')
+        MISSING = 'missing', _('Missing')
+        DAMAGED = 'damaged', _('Damaged')
+        WRONG_ITEM = 'wrong_item', _('Wrong item delivered')
+        RETURNED = 'returned', _('Returned')
+        LATER = 'later', _('Later')
+
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='products',
         verbose_name=_('task'),
@@ -1094,16 +1118,24 @@ class TaskProduct(models.Model):
     product_code = models.CharField(_('product code'), max_length=100)
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
+    frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)
+    arm = models.CharField(_('arm color'), max_length=100, default=DEFAULT_COLOR)
+    padding = models.CharField(_('padding color'), max_length=100, default=DEFAULT_COLOR)
+    trim = models.CharField(_('trim color'), max_length=100, default=DEFAULT_COLOR)
+    status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.PENDING)
     replacement = models.CharField(
-        _('replacement'), max_length=150, blank=True,
-        help_text=_('the item this replaced, if the ordered item was unavailable'),
+        _('instead'), max_length=150, blank=True,
+        help_text=_('what was received, loaded or installed instead, if not the item listed'),
     )
-    frame = models.CharField(_('frame color'), max_length=100, blank=True)
-    arm = models.CharField(_('arm color'), max_length=100, blank=True)
-    padding = models.CharField(_('padding color'), max_length=100, blank=True)
-    trim = models.CharField(_('trim color'), max_length=100, blank=True)
-    comment = models.TextField(_('comment'), blank=True)
     note = models.TextField(_('note'), blank=True)
+    photo = models.FileField(_('photo'), upload_to=_task_product_photo_path, null=True, blank=True)
+    added_on_site = models.BooleanField(
+        _('added on site'), default=False, help_text=_('not on the delivery note — added by whoever did the step'),
+    )
+    source_line = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='carried_to',
+        verbose_name=_('carried from'), help_text=_("the same machine's line on the step before"),
+    )
 
     class Meta:
         verbose_name = _('task product')
@@ -1113,3 +1145,10 @@ class TaskProduct(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'
+
+    @property
+    def status_label(self):
+        """'Done' in its step's words — installed, by default."""
+        if self.status == self.Status.DONE:
+            return _('Installed')
+        return self.get_status_display()

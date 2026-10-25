@@ -16,10 +16,10 @@ from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.phrases import Action, Finding
 
 from .models import (
-    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
     TaskAsset,
-    TaskAttachment, TaskEvent, TicketEscalation, TicketMachine,
+    TaskAttachment, TaskEvent, TaskProduct, TicketEscalation, TicketMachine,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -1021,29 +1021,81 @@ class NewAssetForm(forms.Form):
         return cleaned
 
 
-class TaskProductForm(forms.Form):
-    """One machine's line on an installation/loading task — product code
-    mandatory, everything else optional. serial_number/quantity are the
-    plain delivery-note fields; replacement/frame/arm/padding/trim/
-    comment/note are the per-unit checklist a supervisor fills in for an
-    actual machine (custom color per component, and what it got swapped
-    for if the ordered one wasn't available) — left blank for a simple
-    parts line that's just a code and a quantity.
+class TaskProductCheckForm(forms.Form):
+    """One machine on the on-site checklist (installation; later receiving
+    and loading): what really happened to it, its serial, its colours, what
+    went in instead, a note and a photo. `id` is the planned line; empty
+    for a machine added on site. Guided, because mistakes here travel: an
+    installed machine needs its serial; a damaged one or a wrong item
+    needs a note or a photo saying what.
     """
+
+    COLORS = ('frame', 'arm', 'padding', 'trim')
+    # What the person on site can choose — "not checked yet" isn't an answer.
+    STATUSES = [choice for choice in TaskProduct.Status.choices if choice[0] != TaskProduct.Status.PENDING]
+
+    id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    product_code = forms.CharField(max_length=100, label=_('Product code'))
+    status = forms.ChoiceField(choices=[('', _('Choose…'))] + STATUSES, label=_('What happened'))
+    serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'), initial=DEFAULT_COLOR)
+    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'), initial=DEFAULT_COLOR)
+    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'), initial=DEFAULT_COLOR)
+    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
+    replacement = forms.CharField(
+        required=False, max_length=150, label=_('Installed instead'),
+        help_text=_('if a different item went in'),
+    )
+    note = forms.CharField(required=False, label=_('Note'), widget=forms.Textarea(attrs={'rows': 2}))
+    photo = forms.FileField(
+        required=False, label=_('Photo'), widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # A photo already on the line counts (it's kept unless replaced).
+        self.has_photo = bool(self.initial.get('photo_url'))
+        self.fields['status'].choices = [('', _('Choose…'))] + [
+            (value, _('Installed') if value == TaskProduct.Status.DONE else label) for value, label in self.STATUSES
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        for color in self.COLORS:
+            cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
+        cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
+        status = cleaned.get('status')
+        if status == TaskProduct.Status.DONE and not cleaned['serial_number']:
+            self.add_error('serial_number', _('An installed machine needs its serial number — type or scan it from the plate.'))
+        if status in (TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM) and not (
+            (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
+        ):
+            self.add_error('note', _('Say what is wrong, or add a photo.'))
+        photo = cleaned.get('photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            self.add_error('photo', _('The photo is too large. The maximum size is 25 MB.'))
+        return cleaned
+
+
+class TaskProductForm(forms.Form):
+    """Planning a line on an equipment task (the Edit screen): product code,
+    serial if already known, quantity, and the machine's four colours —
+    black unless it's a custom one. What really happened to each machine is
+    checked off on site (TaskProductCheckForm); there the serial of an
+    installed machine is required.
+    """
+
+    COLORS = ('frame', 'arm', 'padding', 'trim')
 
     product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
     serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
-    replacement = forms.CharField(
-        required=False, max_length=150, label=_('Replacement'),
-        help_text=_('the item this replaced, if the ordered item was unavailable'),
-    )
-    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'))
-    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'))
-    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'))
-    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'))
-    comment = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Comment'))
-    note = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Note'))
+    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'), initial=DEFAULT_COLOR)
+    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'), initial=DEFAULT_COLOR)
+    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'), initial=DEFAULT_COLOR)
+    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
+
 
     def clean(self):
         cleaned = super().clean()
@@ -1052,16 +1104,16 @@ class TaskProductForm(forms.Form):
         # machine never demands re-filling the row just to clear it.
         if cleaned.get('DELETE'):
             return cleaned
-        row_fields = (
-            'product_code', 'serial_number', 'quantity', 'replacement',
-            'frame', 'arm', 'padding', 'trim', 'comment', 'note',
-        )
-        if not any(cleaned.get(f) for f in row_fields):
+        # The colours start filled in (black), so they alone don't make a row.
+        if not any(cleaned.get(f) for f in ('product_code', 'serial_number', 'quantity')):
             return cleaned
         if not cleaned.get('product_code'):
             raise forms.ValidationError(_('Enter a product code, or leave this row blank.'))
         if not cleaned.get('quantity'):
             cleaned['quantity'] = 1
+        for color in self.COLORS:
+            cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
+        cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
         return cleaned
 
 
@@ -1176,7 +1228,16 @@ class TicketMachineForm(forms.Form):
     problem = forms.ChoiceField(
         choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
     )
-    description = forms.CharField(required=False, label=_('Description'), widget=forms.Textarea(attrs={'rows': 2}))
+    # Guided, so the team can prepare the right parts: the four things to say.
+    description = forms.CharField(
+        required=False, label=_('Describe the problem'),
+        help_text=_('Please say: what happens, since when, any error code on the screen, and how often.'),
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': _('Example: The treadmill stops after about 5 minutes and shows error E-07. '
+                             'It started 3 days ago and happens every time.'),
+        }),
+    )
     out_of_service = forms.BooleanField(required=False, label=_('The machine cannot be used'))
     files = MultipleFileField(
         required=False, label=_('Photos or a short video'),
@@ -1223,6 +1284,10 @@ class TicketMachineForm(forms.Form):
         cleaned = super().clean()
         if not self.has_changed():
             return cleaned
+        if not (cleaned.get('description') or '').strip():
+            self.add_error('description', _(
+                'Please describe the problem: what happens, since when, any error code, and how often.',
+            ))
         which = cleaned.get('which')
         if which not in ('list', 'new'):
             # Not answered (an older page): whatever was filled in says which.

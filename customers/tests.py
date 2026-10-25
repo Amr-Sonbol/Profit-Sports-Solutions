@@ -656,6 +656,9 @@ class PortalTicketNewTests(CustomerTestCase):
         if machines is None:
             machines = [{'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': 'Belt noise'}]
         for index, machine in enumerate(machines):
+            # A described problem is required; tests about other things get one.
+            if machine and 'description' not in machine:
+                machine = {**machine, 'description': 'Stops after 5 minutes, error E-07, since Monday.'}
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return payload
@@ -816,6 +819,14 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[]))
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomerTicket.objects.exists())
+
+    def test_a_machine_needs_its_problem_described(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': '  '},
+        ]))
+        self.assertContains(response, 'Please describe the problem')
         self.assertFalse(CustomerTicket.objects.exists())
 
     def test_a_machine_needs_a_problem_and_an_identity(self):

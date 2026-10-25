@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 11:51+0000\n"
+"POT-Creation-Date: 2026-10-25 13:03+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -81,6 +81,26 @@ msgstr[2] "عملان سُجّلت فيهما نقرات خارج الموقع"
 msgstr[3] "%(count)s أعمال سُجّلت فيها نقرات خارج الموقع"
 msgstr[4] "%(count)s عملاً سُجّلت فيه نقرات خارج الموقع"
 msgstr[5] "%(count)s عمل سُجّلت فيه نقرات خارج الموقع"
+
+#, python-format
+msgid "%(count)s machine is still to install — a follow-up task can be created for it."
+msgid_plural "%(count)s machines are still to install — a follow-up task can be created for them."
+msgstr[0] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+msgstr[1] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+msgstr[2] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+msgstr[3] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+msgstr[4] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+msgstr[5] "لا يزال %(count)s جهاز بحاجة إلى تركيب — يمكن إنشاء مهمة متابعة له."
+
+#, python-format
+msgid "%(count)s machine on the checklist is not checked yet."
+msgid_plural "%(count)s machines on the checklist are not checked yet."
+msgstr[0] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
+msgstr[1] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
+msgstr[2] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
+msgstr[3] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
+msgstr[4] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
+msgstr[5] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
 
 #, python-format
 msgid "%(count)s more than last month"
@@ -290,6 +310,9 @@ msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقا�
 
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
+
+msgid "A machine not on the delivery note (optional)"
+msgstr "جهاز غير مذكور في إذن التسليم (اختياري)"
 
 #, python-format
 msgid "A manager has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
@@ -510,6 +533,9 @@ msgstr "أُضيف"
 msgid "Added as helper"
 msgstr "أُضفت كمساعد"
 
+msgid "Added on site"
+msgstr "أُضيف في الموقع"
+
 msgid "Added to existing customer"
 msgstr "أُضيف إلى عميل موجود"
 
@@ -609,6 +635,9 @@ msgstr "تُرسل دائمًا، لحماية الحساب"
 
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
+
+msgid "An installed machine needs its serial number — type or scan it from the plate."
+msgstr "الجهاز المُركَّب يحتاج إلى رقمه التسلسلي — اكتبه أو امسحه من اللوحة."
 
 msgid "Any time that day"
 msgstr "في أي وقت من ذلك اليوم"
@@ -974,11 +1003,11 @@ msgstr "نادٍ"
 msgid "Code"
 msgstr "الرمز"
 
+msgid "Colors"
+msgstr "الألوان"
+
 msgid "Colour key"
 msgstr "دليل الألوان"
-
-msgid "Comment"
-msgstr "تعليق"
 
 msgid "Comments (optional)"
 msgstr "تعليقات (اختياري)"
@@ -1139,6 +1168,9 @@ msgstr "الحالي"
 msgid "Current password"
 msgstr "كلمة المرور الحالية"
 
+msgid "Current photo"
+msgstr "الصورة الحالية"
+
 msgid "Current tasks"
 msgstr "المهام الحالية"
 
@@ -1243,6 +1275,9 @@ msgstr "العملاء"
 
 msgid "DHL"
 msgstr "DHL"
+
+msgid "Damaged"
+msgstr "تالف"
 
 msgid "Damaged upholstery"
 msgstr "تلف في التنجيد"
@@ -1582,6 +1617,9 @@ msgstr "رفض"
 msgid "Describe the customer complaint and explain why it constitutes negligence rather than an unforeseeable circumstance."
 msgstr "صف شكوى العميل ووضّح لماذا تُعد إهمالاً وليست ظرفاً غير متوقع."
 
+msgid "Describe the problem"
+msgstr "صِف المشكلة"
+
 msgid "Description"
 msgstr "الوصف"
 
@@ -1626,6 +1664,9 @@ msgstr "تمت إضافة المستند."
 
 msgid "Documents"
 msgstr "المستندات"
+
+msgid "Done"
+msgstr "تم"
 
 msgid "Done today"
 msgstr "أُنجزت اليوم"
@@ -1799,6 +1840,9 @@ msgstr "جميع الفنيين في الدولة حسب الترتيب. الم�
 msgid "Evidence"
 msgstr "الدليل"
 
+msgid "Example: The treadmill stops after about 5 minutes and shows error E-07. It started 3 days ago and happens every time."
+msgstr "مثال: جهاز المشي يتوقف بعد حوالي ٥ دقائق ويظهر الخطأ E-07. بدأت المشكلة منذ ٣ أيام وتتكرر في كل مرة."
+
 msgid "Exceeds recorded time"
 msgstr "يتجاوز الوقت المسجَّل"
 
@@ -1871,11 +1915,11 @@ msgstr "لعميل تواصل معنا هاتفياً أو عبر رسالة أ�
 msgid "For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed."
 msgstr "لكل جهاز: اختر ما وجدته وما قمت به وحالته. أضف أي جهاز غير موجود في القائمة."
 
+msgid "For each machine: what happened, its serial number from the plate, and its colors (black unless custom). Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card."
+msgstr "لكل جهاز: ما الذي حدث، ورقمه التسلسلي من اللوحة، وألوانه (أسود ما لم يكن مخصصًا). إذا كان تالفًا أو صنفًا خاطئًا: اذكر السبب أو أضف صورة. الجهاز غير المذكور في إذن التسليم يُضاف في البطاقة الأخيرة."
+
 msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
 msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
-
-msgid "For installations and loadings: the same items listed on the delivery note, recorded as structured data. A product code is required for a row to be saved. For each machine, complete its checklist: the custom color of each component and any substitute supplied if the ordered item was unavailable."
-msgstr "لعمليات التركيب والتحميل: البنود ذاتها الواردة في مذكرة التسليم، مسجَّلة كبيانات منظَّمة. رمز المنتج مطلوب لحفظ أي صف. لكل جهاز، يرجى استكمال قائمة التحقق الخاصة به: اللون المخصص لكل مكوّن، وأي بديل تم توريده في حال عدم توفر الصنف المطلوب."
 
 msgid "Forgot your password?"
 msgstr "هل نسيت كلمة المرور؟"
@@ -2037,6 +2081,15 @@ msgstr "تم الفحص وسليم"
 msgid "Installation"
 msgstr "تركيب"
 
+msgid "Installation checklist"
+msgstr "قائمة مراجعة التركيب"
+
+msgid "Installed"
+msgstr "تم التركيب"
+
+msgid "Installed instead"
+msgstr "رُكّب بدلًا منه"
+
 msgid "Installed on"
 msgstr "تاريخ التركيب"
 
@@ -2103,6 +2156,9 @@ msgstr "آخر تسجيل"
 
 msgid "Last sign-in"
 msgstr "آخر تسجيل دخول"
+
+msgid "Later"
+msgstr "لاحقًا"
 
 msgid "Later today"
 msgstr "لاحقًا اليوم"
@@ -2306,6 +2362,9 @@ msgstr "رسالة إلى العميل (اختياري)"
 
 msgid "Messages"
 msgstr "الرسائل"
+
+msgid "Missing"
+msgstr "مفقود"
 
 #, python-format
 msgid "Missing required column(s): %(columns)s"
@@ -2665,6 +2724,9 @@ msgstr "ليس في الموقع"
 #, python-format
 msgid "Not at the site · %(distance)s"
 msgstr "ليس في الموقع · %(distance)s"
+
+msgid "Not checked yet"
+msgstr "لم يُراجع بعد"
 
 msgid "Not covered"
 msgstr "غير مشمول"
@@ -3085,6 +3147,9 @@ msgstr "يرجى استكمال الرمز والاسم والاسم بالعر�
 msgid "Please complete the part code and quantity, or leave this row blank."
 msgstr "يرجى إكمال رمز القطعة والكمية، أو ترك هذا الصف فارغًا."
 
+msgid "Please describe the problem: what happens, since when, any error code, and how often."
+msgstr "يرجى وصف المشكلة: ما الذي يحدث، ومنذ متى، وأي رمز خطأ، وكم مرة تتكرر."
+
 msgid "Please enter the model of the machine."
 msgstr "يرجى إدخال طراز الجهاز."
 
@@ -3097,6 +3162,9 @@ msgstr "تجدون مرفقًا تقرير الزيارة لموقع <strong>%(s
 
 msgid "Please mark yourself as resumed before submitting the report."
 msgstr "يرجى تسجيل استئناف العمل قبل تقديم التقرير."
+
+msgid "Please say: what happens, since when, any error code on the screen, and how often."
+msgstr "يرجى ذكر: ما الذي يحدث، ومنذ متى، وأي رمز خطأ على الشاشة، وكم مرة يتكرر."
 
 msgid "Please select at least one machine that has not been decided yet."
 msgstr "يُرجى اختيار جهاز واحد على الأقل لم يُتخذ قرار بشأنه بعد."
@@ -3472,6 +3540,9 @@ msgstr "خارج الخدمة"
 msgid "Return to home page"
 msgstr "العودة إلى الصفحة الرئيسية"
 
+msgid "Returned"
+msgstr "مُرتجع"
+
 msgid "Reverses the closure decision and returns the task to awaiting manager approval. The submitted report is not affected."
 msgstr "يتراجع عن قرار الإغلاق ويعيد المهمة إلى حالة انتظار موافقة المدير. لا يتأثر التقرير المقدَّم."
 
@@ -3525,6 +3596,9 @@ msgstr "حفظ كلمة المرور الجديدة"
 
 msgid "Save report"
 msgstr "حفظ التقرير"
+
+msgid "Say what is wrong, or add a photo."
+msgstr "اذكر المشكلة أو أضف صورة."
 
 msgid "Say whether the problem is solved, and add advice for the customer if needed."
 msgstr "حدّد ما إذا كانت المشكلة قد حُلّت، وأضف توصية للعميل عند الحاجة."
@@ -3742,6 +3816,9 @@ msgstr "تعيين كلمة مرور جديدة"
 
 msgid "Set temporary password"
 msgstr "تعيين كلمة مرور مؤقتة"
+
+msgid "Set the task's brand, so the installed machines are added to the customer's list."
+msgstr "حدّد العلامة التجارية للمهمة لتُضاف الأجهزة المُركَّبة إلى قائمة العميل."
 
 msgid "Set time"
 msgstr "تحديد الوقت"
@@ -4172,6 +4249,9 @@ msgstr "حجم الملف كبير جداً. الحد الأقصى هو 5 ميغ
 msgid "The hours on a report are credited to every team member — the lead and all helpers — unless the lead has entered a helper's individual hours. Hours worked prior to a handover are also included."
 msgstr "تُحتسب ساعات التقرير لجميع أعضاء الفريق — القائد وجميع المساعدين — ما لم يُدخل القائد ساعات مستقلة لأحد المساعدين. وتُحتسب كذلك الساعات المنجزة قبل التسليم."
 
+msgid "The items on the delivery note: a product code for each line. The colors are black unless the machine is a custom one."
+msgstr "الأصناف الواردة في إذن التسليم: رمز منتج لكل سطر. الألوان سوداء ما لم يكن الجهاز مخصصًا."
+
 #, python-format
 msgid "The job at %(site)s has exceeded its estimate of %(hours)s hours."
 msgstr "تجاوز العمل في %(site)s التقدير المحدد بـ %(hours)s ساعة."
@@ -4205,6 +4285,9 @@ msgstr "القائمة التي يختار منها الفنيون القطع ع
 msgid "The machine cannot be used"
 msgstr "لا يمكن استخدام الجهاز"
 
+msgid "The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial number can wait — the installers type or scan it on site, where each machine is checked off. The colors are black unless the machine is a custom one."
+msgstr "الأجهزة الواردة في إذن التسليم. الكمية ٤ تصبح ٤ أسطر، سطر لكل جهاز. يمكن تأجيل الرقم التسلسلي — يكتبه فريق التركيب أو يمسحه في الموقع حيث تتم مراجعة كل جهاز. الألوان سوداء ما لم يكن الجهاز مخصصًا."
+
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
@@ -4214,6 +4297,9 @@ msgstr "تمت إعادة تعيين كلمة المرور. سيُطلب منه 
 
 msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tasks."
 msgstr "الشخص المسؤول عن متابعتها. سيتم إشعاره، وستظهر ضمن مهامه الداخلية."
+
+msgid "The photo is too large. The maximum size is 25 MB."
+msgstr "الصورة كبيرة جدًا. الحد الأقصى ٢٥ ميغابايت."
 
 msgid "The photo is too large. The maximum size is 5 MB."
 msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
@@ -4917,6 +5003,9 @@ msgstr "سير متآكل أو منزلق"
 msgid "Written report"
 msgstr "تقرير مكتوب"
 
+msgid "Wrong item delivered"
+msgstr "تم توريد صنف خاطئ"
+
 msgid "Year"
 msgstr "السنة"
 
@@ -5025,6 +5114,9 @@ msgstr "نشط"
 msgid "actor"
 msgstr "الفاعل"
 
+msgid "added on site"
+msgstr "أُضيف في الموقع"
+
 msgid "additional information"
 msgstr "معلومات إضافية"
 
@@ -5105,6 +5197,9 @@ msgstr "يستطيع نقل محرك جهاز مشي أو خزانة أقفال"
 
 msgid "cannot be used"
 msgstr "لا يمكن استخدامه"
+
+msgid "carried from"
+msgstr "منقول من"
 
 msgid "category"
 msgstr "الفئة"
@@ -5376,8 +5471,14 @@ msgctxt "time on site"
 msgid "hours"
 msgstr "ساعة"
 
+msgid "if a different item went in"
+msgstr "إذا تم تركيب صنف مختلف"
+
 msgid "installed on"
 msgstr "تاريخ التركيب"
+
+msgid "instead"
+msgstr "بدلًا من"
 
 msgid "insufficient completed tasks"
 msgstr "عدد المهام المكتملة غير كافٍ"
@@ -5473,6 +5574,9 @@ msgstr "الاسم"
 msgid "name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
+msgid "not on the delivery note — added by whoever did the step"
+msgstr "غير مذكور في إذن التسليم — أضافه من نفّذ الخطوة"
+
 msgid "note"
 msgstr "ملاحظة"
 
@@ -5566,6 +5670,9 @@ msgstr "رابط بوابة الشركة"
 msgid "position"
 msgstr "الترتيب"
 
+msgid "previous step"
+msgstr "الخطوة السابقة"
+
 msgid "priority"
 msgstr "الأولوية"
 
@@ -5619,9 +5726,6 @@ msgstr "التوصيات"
 
 msgid "recorded by"
 msgstr "سجّلها"
-
-msgid "replacement"
-msgstr "البديل"
 
 msgid "report"
 msgstr "التقرير"
@@ -5950,9 +6054,6 @@ msgstr "الفنيون"
 msgid "the day planned by the supervisor"
 msgstr "اليوم الذي خطط له المشرف"
 
-msgid "the item this replaced, if the ordered item was unavailable"
-msgstr "الصنف الذي حل محله، إذا لم يكن الصنف المطلوب متوفراً"
-
 msgid "the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"
 msgstr "لغة تقارير الزيارة لجميع العملاء هنا: العربية في السعودية ومصر، والإنجليزية في غيرهما"
 
@@ -5973,6 +6074,9 @@ msgstr "الجهاز المسجّل، عندما يختاره العميل من 
 
 msgid "the same as last month"
 msgstr "مثل الشهر الماضي"
+
+msgid "the same machine's line on the step before"
+msgstr "سطر الجهاز نفسه في الخطوة السابقة"
 
 msgid "the shipment paperwork; uploaded once the parts arrive"
 msgstr "مستندات الشحنة؛ تُرفع عند وصول القطع"
@@ -6109,6 +6213,9 @@ msgstr "ما أبلغ به العميل"
 
 msgid "what was found, in the report language — when none of the standard findings fits"
 msgstr "ما تم العثور عليه، بلغة التقرير — عندما لا تناسب أي من الملاحظات المعتادة"
+
+msgid "what was received, loaded or installed instead, if not the item listed"
+msgstr "ما تم استلامه أو تحميله أو تركيبه بدلًا من الصنف المذكور"
 
 msgid "when off, a supervisor sends it by hand from the task details instead"
 msgstr "عند إيقافها، يرسلها المشرف يدويًا من تفاصيل المهمة"

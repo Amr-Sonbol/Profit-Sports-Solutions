@@ -33,6 +33,52 @@
     </div>
     {% endif %}
 
+    {% if checklist_formset %}
+    {# An installation: each machine on the delivery note, checked off here. #}
+    <div class="report-step" data-staff-only>
+        <span class="report-step__number">1</span>
+        <div>
+            <h2 class="report-step__title">{% translate "Installation checklist" %}</h2>
+            <p class="field__help">{% translate "For each machine: what happened, its serial number from the plate, and its colors (black unless custom). Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card." %}</p>
+        </div>
+    </div>
+    {# The repair report's machine forms still post (empty) — see the memory note on management forms. #}
+    <div hidden>{{ existing_formset.management_form }}{{ new_formset.management_form }}</div>
+    {{ checklist_formset.management_form }}
+    {% if checklist_formset.non_form_errors %}<p class="flash flash--error">{{ checklist_formset.non_form_errors }}</p>{% endif %}
+    <div class="checklist" data-staff-only>
+        {% for form in checklist_formset %}
+        <fieldset class="checklist-card{% if form.errors %} checklist-card--error{% endif %}">
+            <legend>
+                {% if form.initial.id %}{{ form.initial.product_code }}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}
+                {% else %}{% translate "A machine not on the delivery note (optional)" %}{% endif %}
+            </legend>
+            {{ form.id }}
+            <div class="form-grid">
+                {% if form.initial.id and not form.initial.added_on_site %}
+                <input type="hidden" name="{{ form.product_code.html_name }}" value="{{ form.initial.product_code }}">
+                {% else %}
+                <div class="field{% if form.product_code.errors %} field--error{% endif %}">
+                    <label for="{{ form.product_code.id_for_label }}">{{ form.product_code.label }}</label>{{ form.product_code }}
+                    {% for error in form.product_code.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endif %}
+                {% for field in form %}{% if field.name != 'id' and field.name != 'product_code' %}
+                <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'note' %} field--wide{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {% if field.name == 'photo' %}
+                        {% if form.initial.photo_url %}<a href="{{ form.initial.photo_url }}" target="_blank" rel="noopener">{% translate "Current photo" %}</a>{% endif %}
+                        <input type="file" name="{{ field.html_name }}" id="{{ field.id_for_label }}" accept="image/*">
+                    {% else %}{{ field }}{% endif %}
+                    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endif %}{% endfor %}
+            </div>
+        </fieldset>
+        {% endfor %}
+    </div>
+    {% else %}
     <div class="report-step" data-staff-only>
         <span class="report-step__number">1</span>
         <div>
@@ -117,6 +163,8 @@
             </table>
         </div>
     </div>
+
+    {% endif %}
 
     <div class="report-step">
         <span class="report-step__number">2</span>

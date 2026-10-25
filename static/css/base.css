@@ -1063,6 +1063,29 @@ tbody tr:hover {
     opacity: 0.6;
 }
 
+/* An installation's on-site checklist: one card per machine. */
+.checklist {
+    display: grid;
+    gap: 0.75rem;
+    margin-block-end: 1rem;
+}
+
+.checklist-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+}
+
+.checklist-card--error {
+    border-color: var(--color-danger, #c0392b);
+}
+
+.checklist-card legend {
+    font-weight: 600;
+    padding-inline: 0.35rem;
+}
+
 /* The report form's numbered steps, like the app's. */
 .report-step {
     display: flex;

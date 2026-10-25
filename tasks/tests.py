@@ -716,26 +716,31 @@ class TaskEditTests(TaskTestCase):
         self._replace_products_with('PNL-NEW')
         self.assertEqual(list(self.task.products.values_list('product_code', flat=True)), ['PNL-NEW'])
 
-    def test_product_row_saves_the_installation_checklist_fields(self):
+    def test_product_row_saves_the_four_colours_black_unless_custom(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, self._payload(**{
             **self._management_form('products', 1),
-            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
-            'products-0-quantity': '1', 'products-0-replacement': 'Swapped for BENCH-02 (out of stock)',
-            'products-0-frame': 'Matte black', 'products-0-arm': 'Red',
-            'products-0-padding': 'Charcoal', 'products-0-trim': 'Silver',
-            'products-0-comment': 'Customer requested custom colors.', 'products-0-note': 'Fragile — handle with care.',
+            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1', 'products-0-quantity': '1',
+            'products-0-frame': 'Matte black', 'products-0-arm': 'Red', 'products-0-padding': '', 'products-0-trim': '',
         }))
         self.assertEqual(response.status_code, 302)
-
         product = self.task.products.get()
-        self.assertEqual(product.replacement, 'Swapped for BENCH-02 (out of stock)')
-        self.assertEqual(product.frame, 'Matte black')
-        self.assertEqual(product.arm, 'Red')
-        self.assertEqual(product.padding, 'Charcoal')
-        self.assertEqual(product.trim, 'Silver')
-        self.assertEqual(product.comment, 'Customer requested custom colors.')
-        self.assertEqual(product.note, 'Fragile — handle with care.')
+        self.assertEqual((product.frame, product.arm, product.padding, product.trim), ('Matte black', 'Red', 'Black', 'Black'))
+
+    def test_planning_an_installation_makes_one_line_per_machine(self):
+        self.task_type.category = TaskType.Category.INSTALLATION
+        self.task_type.save(update_fields=['category'])
+        self.task.task_type = self.task_type
+        self.task.save(update_fields=['task_type'])
+        self.client.login(username='supervisor1', password='pass12345')
+        response = self.client.post(self.url, self._payload(**{
+            **self._management_form('products', 1),
+            'products-0-product_code': 'BENCH-01', 'products-0-quantity': '3', 'task_type': str(self.task_type.pk),
+        }))
+        self.assertEqual(response.status_code, 302)
+        lines = list(self.task.products.all())
+        self.assertEqual([(line.product_code, line.quantity, line.status) for line in lines],
+                         [('BENCH-01', 1, TaskProduct.Status.PENDING)] * 3)
 
     def test_deleting_a_product_row_via_checkbox(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -8896,3 +8901,78 @@ class SerialNumberRuleTests(CorporateReportTests):
         self._post(**self._new_machine(serial_no='bk-7788'))
         self.assertEqual(list(self.task.task_assets.values_list('asset_id', flat=True)), [self.asset.pk])
         self.assertEqual(Asset.objects.filter(site=self.site).count(), 1)
+
+
+class InstallationChecklistTests(TaskTestCase):
+    # The installers check off each machine on site: what happened, its
+    # serial, colours, what went in instead, a note and a photo.
+
+    _report_payload = TaskSupervisorApprovalTests._report_payload
+    _assign_lead = TaskSupervisorApprovalTests._assign_lead
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
+            source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=self.supervisor_user.technician,
+        )
+        self.report_url = f'/tasks/my/{self.task.pk}/report/'
+        self._assign_lead(self.technician)
+        self.technician.language = 'en'  # the messages are checked in English
+        self.technician.save(update_fields=['language'])
+        self.client.login(username='tech1', password='pass12345')
+        self.task_type.category = TaskType.Category.INSTALLATION
+        self.task_type.save(update_fields=['category'])
+        self.task.task_type = self.task_type
+        self.task.brand = self.brand
+        self.task.save(update_fields=['task_type', 'brand'])
+        self.run_line = TaskProduct.objects.create(task=self.task, product_code='EXCITE-RUN')
+        self.bike_line = TaskProduct.objects.create(task=self.task, product_code='EXCITE-BIKE')
+
+    def _check(self, rows):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({'findings': '', 'work_lines': ['bolts'],
+                        'checklist-TOTAL_FORMS': str(len(rows)), 'checklist-INITIAL_FORMS': '2',
+                        'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
+        for index, row in enumerate(rows):
+            payload.update({f'checklist-{index}-{key}': value for key, value in row.items()})
+        self.client.post(self.report_url, payload)
+        return WorkReport.objects.filter(task=self.task).first()
+
+    def test_installed_needs_a_serial_and_damaged_needs_a_reason(self):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({
+            'findings': '', 'work_lines': ['bolts'], 'existing-TOTAL_FORMS': '0', 'existing-INITIAL_FORMS': '0',
+            'new-TOTAL_FORMS': '0', 'new-INITIAL_FORMS': '0',
+            'checklist-TOTAL_FORMS': '2', 'checklist-INITIAL_FORMS': '2',
+            'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000',
+            'checklist-0-id': self.run_line.pk, 'checklist-0-product_code': 'EXCITE-RUN', 'checklist-0-status': 'done',
+            'checklist-1-id': self.bike_line.pk, 'checklist-1-product_code': 'EXCITE-BIKE', 'checklist-1-status': 'damaged',
+        })
+        response = self.client.post(self.report_url, payload)
+        self.assertContains(response, 'An installed machine needs its serial number')
+        self.assertContains(response, 'Say what is wrong, or add a photo.')
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+
+    def test_the_checklist_is_saved_and_only_installed_machines_join_the_list(self):
+        self._check([
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+             'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
+            {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
+            {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': 'TG-9'},
+        ])
+        self.run_line.refresh_from_db()
+        self.bike_line.refresh_from_db()
+        self.assertEqual((self.run_line.status, self.run_line.serial_number, self.run_line.frame, self.run_line.arm),
+                         ('done', 'TG-1', 'Red', 'Black'))
+        self.assertEqual(self.bike_line.status, 'later')
+        added = self.task.products.get(product_code='EXCITE-TOP')
+        self.assertTrue(added.added_on_site)
+        self.assertEqual(
+            sorted(Asset.objects.filter(site=self.site).exclude(pk=self.asset.pk).values_list('serial_no', flat=True)),
+            ['TG-1', 'TG-9'],
+        )

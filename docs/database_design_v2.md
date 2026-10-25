@@ -406,6 +406,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | invoice_visible_to_supervisor | bool | default false — a manager-only per-task override; see below |
 | delivery_note | file | nullable — pdf/image, edit screen only — the shipment paperwork, uploaded once the parts arrive |
 | delivery_note_uploaded_at | timestamptz | nullable |
+| previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -710,24 +711,31 @@ Which machines the task covers. Populated by the technician during the work, not
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
 
 ### task_product
-The delivery note's contents, structured — for installation and loading tasks, where stock is delivered ahead of or alongside the visit rather than consumed during it (that's `part_used`, on the work report instead, see §5). Doubles as the per-machine checklist a supervisor fills in for an actual unit being installed, not just a parts line.
+One machine's line on an **equipment task** — receiving from the factory, loading at the warehouse, installing on site (for now, installations; receiving and loading reuse it) — from the delivery note, structured: stock delivered ahead of or alongside the visit, not consumed during it (that's `part_used`, §5). Operations cares about four things beyond the code: the frame, arm, padding and trim colours — black unless it's a custom one.
+
+**Planned, then checked off on site.** A supervisor plans the lines from the task's Edit screen (product code, serial if already known, quantity, colours; replaced wholesale on each save) — on an installation "BENCH-01 × 4" becomes four lines, one per machine. Whoever does the step checks each one off in their report (website and app): what really happened (`status`), the serial from the plate (typed or scanned), the colours, what went in instead, a note and a photo — adding a machine that wasn't on the paperwork (`added_on_site`). An installed machine needs its serial; a damaged one or a wrong item needs a note or a photo. The review lists anything not checked yet and what's still to install.
+
+**Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
+
+**Carried along the chain.** A line copied to the next step keeps `source_line`, so a machine's journey (factory → warehouse → site → its repairs) can be followed; `task.previous_task` links the steps themselves.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
-| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one. Searchable from `task_list`, same box as `asset.serial_no` — so a machine can be traced to the task (and its customer/site) it was installed or loaded under, not just its repair history |
-| quantity | int | default 1 |
-| replacement | varchar | blank — which machine this one was swapped in for, if the one ordered wasn't available |
-| frame | varchar | blank — custom frame color |
-| arm | varchar | blank — custom arm color |
-| padding | varchar | blank — custom padding color |
-| trim | varchar | blank — custom trim color |
-| comment | text | blank |
+| serial_number | varchar | required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
+| quantity | int | default 1; 1 per machine on an installation |
+| frame | varchar | default `Black` |
+| arm | varchar | default `Black` |
+| padding | varchar | default `Black` |
+| trim | varchar | default `Black` |
+| status | varchar | `pending` (not checked yet), `done` (received / loaded / installed — the step's word), `missing`, `damaged`, `wrong_item`, `returned`, `later` |
+| replacement | varchar | blank — what went in instead, if not the item listed |
 | note | text | blank |
-
-**Entered from the task's Edit screen, replaced wholesale on every save** — not an append-only log the way `task_event` is. The same product-code/quantity information already exists as a document (`task.delivery_note`); this is the same content kept structured, so it can be searched and listed rather than only read off a scanned PDF. A row needs at least a `product_code` to save; a blank row is silently dropped, and quantity defaults to 1 when left empty. Ticking a row's own **Delete** checkbox (the formset's `can_delete`) drops it outright instead — for when a machine turns out faulty and the customer returns it — without needing to blank out every one of its fields by hand.
+| photo | file | nullable — unguessable path |
+| added_on_site | bool | not on the delivery note — added by whoever did the step |
+| source_line_id | FK → task_product | nullable — the same machine's line on the step before |
 
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.
