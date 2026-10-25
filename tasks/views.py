@@ -1890,15 +1890,7 @@ def task_detail(request, pk):
         earliest, latest = _correction_window(event)
         correct_form = CorrectEventTimeForm(request.POST, earliest=earliest, latest=latest)
         if correct_form.is_valid():
-            event.corrected_at = correct_form.cleaned_data['corrected_at']
-            event.corrected_by = request.user
-            event.correction_reason = correct_form.cleaned_data['reason']
-            event.save(update_fields=['corrected_at', 'corrected_by', 'correction_reason'])
-            # The visit's hours come from these times (Task.time_on_site).
-            report = getattr(task, 'report', None)
-            if report is not None and report.submitted_at:
-                report.labour_hours = task.time_on_site() or report.labour_hours
-                report.save(update_fields=['labour_hours'])
+            correct_tap_time(task, event, request.user, correct_form.cleaned_data)
             messages.success(request, _('Time corrected.'))
         else:
             messages.error(request, ' '.join(error for errors in correct_form.errors.values() for error in errors))
@@ -1931,13 +1923,7 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
         close_task_form = CloseTaskForm(request.POST)
         if close_task_form.is_valid():
-            task.status = Task.Status.CLOSED
-            task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.CLOSED,
-                occurred_at=timezone.now(), actor=request.user,
-                note=close_task_form.cleaned_data['note'],
-            )
+            close_task_directly(task, request.user, close_task_form.cleaned_data['note'])
             messages.success(request, _('Task closed.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
@@ -1949,15 +1935,7 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
         cancel_task_form = CancelTaskForm(request.POST, prefix='cancel')
         if cancel_task_form.is_valid():
-            task.status = Task.Status.CANCELLED
-            task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.CANCELLED,
-                occurred_at=timezone.now(), actor=request.user,
-                note=cancel_task_form.cleaned_data['note'],
-            )
-            for assignment in task.assignments.filter(is_active=True).select_related('technician'):
-                push_cancelled(assignment.technician, task)
+            cancel_task(task, request.user, cancel_task_form.cleaned_data['note'])
             messages.success(request, _('Task cancelled.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
@@ -1969,11 +1947,7 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
         negligence_form = NegligenceFlagForm(request.POST)
         if negligence_form.is_valid():
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.NEGLIGENCE,
-                occurred_at=timezone.now(), actor=request.user,
-                note=negligence_form.cleaned_data['note'],
-            )
+            flag_negligence(task, request.user, negligence_form.cleaned_data['note'])
             messages.success(request, _('Task flagged.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
@@ -4342,6 +4316,48 @@ def machine_detail(request, pk):
 
     context = {'asset': asset, 'task_assets': task_assets}
     return render(request, 'tasks/machine_detail.html', context)
+
+
+def close_task_directly(task, user, note):
+    """A manager closing a task outright (any status but closed), with a note."""
+    task.status = Task.Status.CLOSED
+    task.save(update_fields=['status'])
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.CLOSED, occurred_at=timezone.now(), actor=user, note=note,
+    )
+
+
+def cancel_task(task, user, note):
+    """A manager cancelling a task before its report (CANCELLABLE_STATUSES),
+    with the reason; everyone on it gets a push."""
+    task.status = Task.Status.CANCELLED
+    task.save(update_fields=['status'])
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.CANCELLED, occurred_at=timezone.now(), actor=user, note=note,
+    )
+    for assignment in task.assignments.filter(is_active=True).select_related('technician'):
+        push_cancelled(assignment.technician, task)
+
+
+def flag_negligence(task, user, note):
+    """A manager flagging a closed task's lead for negligence, with what happened."""
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.NEGLIGENCE, occurred_at=timezone.now(), actor=user, note=note,
+    )
+
+
+def correct_tap_time(task, event, user, cleaned):
+    """A manager correcting a recorded tap's time (CorrectEventTimeForm),
+    with the reason. The visit's hours come from these times
+    (Task.time_on_site), so a filed report's are worked out again."""
+    event.corrected_at = cleaned['corrected_at']
+    event.corrected_by = user
+    event.correction_reason = cleaned['reason']
+    event.save(update_fields=['corrected_at', 'corrected_by', 'correction_reason'])
+    report = getattr(task, 'report', None)
+    if report is not None and report.submitted_at:
+        report.labour_hours = task.time_on_site() or report.labour_hours
+        report.save(update_fields=['labour_hours'])
 
 
 def save_skill_review(technician, skill, supervisor, cleaned, today):

@@ -48,6 +48,8 @@ export interface TaskEvent {
   event_type: string;
   event_type_display: string;
   occurred_at: string;
+  /** A manager's correction of a tap's time, if any — the time that counts. */
+  corrected_at?: string | null;
   actor_name: string;
   note: string;
 }
@@ -240,6 +242,8 @@ export interface TeamTaskDetail extends TaskDetail {
   can_assign: boolean;
   can_supervisor_approve: boolean;
   can_manager_approve: boolean;
+  /** A manager's actions here (api/views.py TaskManageView). */
+  manage?: { can_cancel: boolean; can_close: boolean; can_flag: boolean; correctable_event_ids: number[] };
 }
 
 export interface CataloguePart {

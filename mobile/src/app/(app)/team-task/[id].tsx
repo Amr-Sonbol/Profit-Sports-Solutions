@@ -1,12 +1,13 @@
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  type AssignAction, approveTaskReport, assignTask, fetchAssignmentCandidates, fetchTeamTaskDetail,
+  approveTaskReport, assignTask, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
 } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -30,6 +31,17 @@ type Picking =
   | { kind: 'helper' }
   | { kind: 'lead_reason'; technician: number }
   | { kind: 'remove_reason'; assignment: Assignment };
+
+type ManageAction = 'cancel' | 'close' | 'negligence' | 'correct_time';
+const MANAGE_TITLES: Record<ManageAction, string> = {
+  cancel: 'Cancel this task — why?',
+  close: 'Close this task — note',
+  negligence: 'Flag negligence — what happened?',
+  correct_time: 'Correct the time of this tap',
+};
+const MANAGE_DONE: Record<ManageAction, string> = {
+  cancel: 'Task cancelled.', close: 'Task closed.', negligence: 'Task flagged.', correct_time: 'Time corrected.',
+};
 
 export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -67,6 +79,30 @@ export default function TeamTaskScreen() {
     } finally {
       setIsBusy(false);
     }
+  };
+
+  // A manager's action being filled in: its note, and for a tap the right time.
+  const [managing, setManaging] = useState<{ action: ManageAction; eventId?: number } | null>(null);
+  const [manageNote, setManageNote] = useState('');
+  const [manageTime, setManageTime] = useState<Date | null>(null);
+  const [pickingTime, setPickingTime] = useState<'date' | 'time' | 'datetime' | null>(null);
+
+  const startManaging = (action: ManageAction, eventId?: number, at?: string) => {
+    setManaging({ action, eventId });
+    setManageNote('');
+    setManageTime(at ? new Date(at) : null);
+  };
+
+  const saveManaging = () => {
+    if (!managing || !task) {
+      return;
+    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const local = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const body: Record<string, string | number> = managing.action === 'correct_time'
+      ? { action: 'correct_time', event_id: managing.eventId ?? 0, corrected_at: manageTime ? local(manageTime) : '', reason: manageNote }
+      : { action: managing.action, note: manageNote };
+    run(() => manageTask(task.id, body), MANAGE_DONE[managing.action]).then(() => setManaging(null));
   };
 
   const startPicking = async (kind: 'lead' | 'helper') => {
@@ -345,13 +381,86 @@ export default function TeamTaskScreen() {
             </TouchableOpacity>
           ) : null}
 
+          {task.manage && (task.manage.can_cancel || task.manage.can_close || task.manage.can_flag) ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Manager</ThemedText>
+              <ThemedView style={styles.quickRow}>
+                {task.manage.can_cancel ? (
+                  <SecondaryButton label="Cancel task" onPress={() => startManaging('cancel')} disabled={isBusy} />
+                ) : null}
+                {task.manage.can_close ? (
+                  <SecondaryButton label="Close task" onPress={() => startManaging('close')} disabled={isBusy} />
+                ) : null}
+                {task.manage.can_flag ? (
+                  <SecondaryButton label="Flag negligence" onPress={() => startManaging('negligence')} disabled={isBusy} />
+                ) : null}
+              </ThemedView>
+            </ThemedView>
+          ) : null}
+
+          {managing ? (
+            <ThemedView style={[styles.section, styles.manageBox, { borderColor: theme.primary }]}>
+              <ThemedText type="smallBold">{MANAGE_TITLES[managing.action]}</ThemedText>
+              {managing.action === 'correct_time' ? (
+                <TouchableOpacity
+                  style={[styles.quickButton, { borderColor: theme.primary }]}
+                  onPress={() => setPickingTime(Platform.OS === 'ios' ? 'datetime' : 'date')}
+                >
+                  <ThemedText type="small" themeColor="primary">
+                    {manageTime ? manageTime.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pick the right time'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              <TextInput
+                style={[styles.manageInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                value={manageNote} onChangeText={setManageNote} multiline
+                placeholder={managing.action === 'correct_time' ? 'Reason' : managing.action === 'negligence' ? 'What happened' : 'Note'}
+                placeholderTextColor={theme.textSecondary}
+              />
+              <ThemedView style={styles.quickRow}>
+                <SecondaryButton label="Save" onPress={saveManaging} disabled={isBusy} />
+                <SecondaryButton label="Back" onPress={() => setManaging(null)} />
+              </ThemedView>
+            </ThemedView>
+          ) : null}
+          {pickingTime && manageTime ? (
+            <DateTimePicker
+              value={manageTime} mode={pickingTime} display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                if (event.type === 'dismissed' || !date) {
+                  setPickingTime(null);
+                  return;
+                }
+                const next = new Date(manageTime);
+                if (pickingTime === 'time') {
+                  next.setHours(date.getHours(), date.getMinutes());
+                } else if (pickingTime === 'date') {
+                  next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+                } else {
+                  next.setTime(date.getTime());
+                }
+                setManageTime(next);
+                setPickingTime(pickingTime === 'date' ? 'time' : null);
+              }}
+            />
+          ) : null}
+
           {task.events.length > 0 ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">History</ThemedText>
               {task.events.map((event) => (
-                <ThemedText key={event.id} themeColor="textSecondary" type="small">
-                  {event.event_type_display} — {event.actor_name}
-                </ThemedText>
+                <ThemedView key={event.id} style={styles.eventRow}>
+                  <ThemedText themeColor="textSecondary" type="small" style={styles.eventText}>
+                    {new Date(event.corrected_at ?? event.occurred_at).toLocaleString([], {
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                    })}{event.corrected_at ? ' (corrected)' : ''} · {event.event_type_display} — {event.actor_name}
+                  </ThemedText>
+                  {task.manage?.correctable_event_ids.includes(event.id) ? (
+                    <TouchableOpacity onPress={() => startManaging('correct_time', event.id, event.corrected_at ?? event.occurred_at)}>
+                      <ThemedText type="small" themeColor="primary">Correct time</ThemedText>
+                    </TouchableOpacity>
+                  ) : null}
+                </ThemedView>
               ))}
             </ThemedView>
           ) : null}
@@ -396,6 +505,10 @@ function SecondaryButton({ label, onPress, disabled }: { label: string; onPress:
 }
 
 const styles = StyleSheet.create({
+  manageBox: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three },
+  manageInput: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 60, textAlignVertical: 'top' },
+  eventRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  eventText: { flex: 1 },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
   quickButton: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderWidth: 1, borderRadius: Spacing.two,

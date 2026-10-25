@@ -1506,3 +1506,35 @@ class DashboardApiTests(ManagerChoosesTheCountryTests):
 
     def test_a_technician_has_no_dashboard(self):
         self.assertEqual(self.client.get('/api/dashboard/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class ManagerTaskActionsApiTests(ManagerChoosesTheCountryTests):
+    # Cancel, close, flag and correct a tap's time from the app.
+
+    def test_a_manager_corrects_a_tap_cancels_and_a_supervisor_cannot(self):
+        token = self.token_for('manager1')
+        started = TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=1), actor=self.tech_user,
+        )
+        page = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['manage']['can_cancel'])
+        self.assertIn(started.pk, page['manage']['correctable_event_ids'])
+
+        when = timezone.localtime(timezone.now() - timedelta(minutes=50)).strftime('%Y-%m-%dT%H:%M')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({
+            'action': 'correct_time', 'event_id': started.pk, 'corrected_at': when, 'reason': 'Tapped late',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        started.refresh_from_db()
+        self.assertEqual(started.correction_reason, 'Tapped late')
+
+        supervisor = self.token_for('supervisor1')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({'action': 'cancel', 'note': 'x'}),
+                                    content_type='application/json', **self.auth(supervisor))
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({
+            'action': 'cancel', 'note': 'Customer called it off',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.json()['status'], Task.Status.CANCELLED)

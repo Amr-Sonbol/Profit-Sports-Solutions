@@ -29,7 +29,8 @@ from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, CancelTaskForm, CloseTaskForm,
+    CorrectEventTimeForm, NegligenceFlagForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
@@ -45,7 +46,8 @@ from tasks.views import (
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
-    dashboard_overview, home_summary,
+    dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
+    cancel_task, close_task_directly, correct_tap_time, flag_negligence,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -1329,7 +1331,67 @@ def _team_task_response(request, task):
         ),
         'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
     }
-    return Response(TeamTaskDetailSerializer(task, context=context).data)
+    data = TeamTaskDetailSerializer(task, context=context).data
+    # What a manager can do here, as on the website's task page (TaskManageView).
+    is_manager = technician.is_manager_tier
+    data['manage'] = {
+        'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
+        'can_close': is_manager and task.status != Task.Status.CLOSED,
+        'can_flag': is_manager and task.status == Task.Status.CLOSED,
+        'correctable_event_ids': [
+            event.pk for event in task.events.all() if is_manager and event.event_type in CORRECTABLE_EVENTS
+        ],
+    }
+    return Response(data)
+
+
+class TaskManageView(APIView):
+    """A manager's actions on a task, as on the website's task page:
+    action = cancel | close | negligence (each with a note), or
+    correct_time (event_id, corrected_at as YYYY-MM-DDTHH:MM local, reason)
+    — the same forms, rules and shared functions. Returns the task again.
+    """
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        require_manager(request)
+        action = request.data.get('action')
+        note = {'note': request.data.get('note', '')}
+        if action == 'cancel':
+            if task.status not in CANCELLABLE_STATUSES:
+                return Response({'detail': str(_('This task can no longer be cancelled.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = CancelTaskForm(note)
+            if form.is_valid():
+                cancel_task(task, request.user, form.cleaned_data['note'])
+        elif action == 'close':
+            if task.status == Task.Status.CLOSED:
+                return Response({'detail': str(_('This task is already closed.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = CloseTaskForm(note)
+            if form.is_valid():
+                close_task_directly(task, request.user, form.cleaned_data['note'])
+        elif action == 'negligence':
+            if task.status != Task.Status.CLOSED:
+                return Response({'detail': str(_('Only closed tasks can be flagged.'))}, status=status.HTTP_400_BAD_REQUEST)
+            form = NegligenceFlagForm(note)
+            if form.is_valid():
+                flag_negligence(task, request.user, form.cleaned_data['note'])
+        elif action == 'correct_time':
+            event = get_object_or_404(task.events, pk=request.data.get('event_id'), event_type__in=CORRECTABLE_EVENTS)
+            earliest, latest = _correction_window(event)
+            form = CorrectEventTimeForm(
+                {'corrected_at': request.data.get('corrected_at', ''), 'reason': request.data.get('reason', '')},
+                earliest=earliest, latest=latest,
+            )
+            if form.is_valid():
+                correct_tap_time(task, event, request.user, form.cleaned_data)
+        else:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        task.refresh_from_db()
+        return _team_task_response(request, task)
 
 
 class TeamTaskDetailView(APIView):

@@ -269,3 +269,11 @@ export function fetchTeamMap() {
 export function fetchDashboard() {
   return apiRequest<Dashboard>('/api/dashboard/');
 }
+
+/**
+ * A manager's action on a task: cancel / close / negligence (with a note),
+ * or correct_time (event_id, corrected_at "YYYY-MM-DDTHH:MM", reason).
+ */
+export function manageTask(id: number, body: Record<string, string | number>) {
+  return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/manage/`, { method: 'POST', body });
+}

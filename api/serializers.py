@@ -26,7 +26,7 @@ class TaskEventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskEvent
-        fields = ['id', 'event_type', 'event_type_display', 'occurred_at', 'actor_name', 'note']
+        fields = ['id', 'event_type', 'event_type_display', 'occurred_at', 'corrected_at', 'actor_name', 'note']
 
     def get_actor_name(self, obj):
         technician = getattr(obj.actor, 'technician', None)
