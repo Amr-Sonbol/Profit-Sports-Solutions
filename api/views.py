@@ -1097,7 +1097,7 @@ def _machine_label(asset):
     return f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip()
 
 
-def _report_machines(task):
+def _report_machines(task, request):
     """The report screen's machines: its rows (what's recorded, or the
     customer's ticket machines before the first filing), the site's
     machines to add from, the brands for registering a new one, and the
@@ -1116,7 +1116,8 @@ def _report_machines(task):
     ] + [
         {
             'ticket_machine_id': row['ticket_machine'], 'brand_id': None, 'model_name': row['model_name'],
-            'serial_no': row['serial_no'], 'outcome': '', 'note': '',
+            'serial_no': row['serial_no'], 'outcome': '', 'note': '', 'no_serial': False,
+            'serial_photo_url': request.build_absolute_uri(row['serial_photo_url']) if row['serial_photo_url'] else '',
             'finding_code': '', 'action_code': '', 'action': '',
         }
         for row in new
@@ -1151,7 +1152,7 @@ def _machine_form(task, row):
         'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
         'serial_no': row.get('serial_no', ''), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
         'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
-        'action': row.get('action', ''),
+        'action': row.get('action', ''), 'no_serial': 'on' if row.get('no_serial') else '',
         'ticket_machine': row.get('ticket_machine_id') or '',
     })
 
@@ -1206,7 +1207,7 @@ class MyTaskReportView(APIView):
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
                 for a in _active_helpers(task)
             ],
-            **_report_machines(task),
+            **_report_machines(task, request),
         })
 
     def post(self, request, pk):

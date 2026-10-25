@@ -141,6 +141,10 @@ export interface ReportMachine {
   brand_id?: number | null;
   model_name?: string;
   serial_no: string;
+  /** A new machine with no readable plate — left out on purpose, and flagged. */
+  no_serial?: boolean;
+  /** The customer's photo of the plate, from their ticket. */
+  serial_photo_url?: string;
   outcome: string;
   /** The finding when none of the standard ones fits. */
   note: string;

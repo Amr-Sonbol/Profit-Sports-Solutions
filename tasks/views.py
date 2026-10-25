@@ -5271,6 +5271,10 @@ def report_problems(report, language):
             problems.append(_('%(machine)s: pick a finding.') % {'machine': name})
         if not item.action_code and not item.action.strip():
             problems.append(_('%(machine)s: pick the action taken.') % {'machine': name})
+        if not item.asset.serial_no:
+            problems.append(_('%(machine)s: no serial number — it cannot be tracked until one is recorded.') % {
+                'machine': name,
+            })
         typed += [(name, item.note), (name, item.action)]
     if not report.work_lines and not report.action_taken.strip():
         problems.append(_('Pick the work performed.'))
@@ -5384,7 +5388,11 @@ def report_machine_initial(task):
     return (
         [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
         [
-            {'model_name': machine.model_name, 'serial_no': machine.serial_no, 'ticket_machine': machine.pk}
+            {
+                'model_name': machine.model_name, 'serial_no': machine.serial_no, 'ticket_machine': machine.pk,
+                # The customer's photo of the plate, to type the serial from.
+                'serial_photo_url': machine.serial_photo.url if machine.serial_photo else '',
+            }
             for machine in ticket_machines if not machine.asset_id
         ],
     )
@@ -5410,10 +5418,14 @@ def save_task_machines(task, existing_rows, new_rows):
             TaskAsset.objects.create(task=task, asset=cleaned['asset'], outcome=cleaned['outcome'], **wording(cleaned))
     for cleaned in new_rows:
         if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
-            new_asset = Asset.objects.create(
-                site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'],
-                serial_no=cleaned.get('serial_no', ''),
-            )
+            serial = cleaned.get('serial_no', '')
+            # A serial already on file at this site is that machine, not a
+            # second one — its history stays in one place.
+            new_asset = serial and Asset.objects.filter(site=task.site, serial_no__iexact=serial).first()
+            if not new_asset:
+                new_asset = Asset.objects.create(
+                    site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'], serial_no=serial,
+                )
             TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'], **wording(cleaned))
             if cleaned.get('ticket_machine'):
                 task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=new_asset)

@@ -98,7 +98,13 @@
                     <tr>
                         <td>{{ form.brand }}</td>
                         <td>{{ form.model_name }}</td>
-                        <td>{{ form.serial_no }}</td>
+                        <td>
+                            {{ form.serial_no }}
+                            {# Required: how the machine is tracked; left out only on purpose, then flagged. #}
+                            <label class="checkbox-label">{{ form.no_serial }} {{ form.no_serial.label }}</label>
+                            {% if form.initial.serial_photo_url %}<a href="{{ form.initial.serial_photo_url }}" target="_blank" rel="noopener">{% translate "Customer's photo of the plate" %}</a>{% endif %}
+                            {% for error in form.serial_no.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                        </td>
                         <td class="report-pick">{{ form.finding_code }}{{ form.note }}</td>
                         <td class="report-pick">{{ form.action_code }}{{ form.action }}{{ form.ticket_machine }}</td>
                         <td>{{ form.outcome }}</td>

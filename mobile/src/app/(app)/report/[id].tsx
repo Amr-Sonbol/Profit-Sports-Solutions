@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
@@ -578,10 +578,28 @@ export default function ReportScreen() {
                         onChangeText={(value) => updateMachine(row.key, { model_name: value })}
                       />
                       <TextInput
-                        style={inputStyle} value={row.serial_no} placeholder="Serial number"
+                        style={[inputStyle, !row.serial_no.trim() && !row.no_serial && { borderColor: theme.danger }]}
+                        value={row.serial_no} placeholder="Serial number (from the plate)"
                         placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
                         onChangeText={(value) => updateMachine(row.key, { serial_no: value })}
                       />
+                      {row.serial_photo_url ? (
+                        <TouchableOpacity onPress={() => Linking.openURL(row.serial_photo_url!)}>
+                          <ThemedText type="small" themeColor="primary">See the customer&apos;s photo of the plate ›</ThemedText>
+                        </TouchableOpacity>
+                      ) : null}
+                      <ThemedView style={styles.serialRow}>
+                        <Switch
+                          value={Boolean(row.no_serial)}
+                          onValueChange={(value) => updateMachine(row.key, { no_serial: value })}
+                        />
+                        <ThemedText type="small" style={styles.serialLabel}>No readable serial plate</ThemedText>
+                      </ThemedView>
+                      {!row.serial_no.trim() && !row.no_serial ? (
+                        <ThemedText type="small" themeColor="danger">
+                          The serial number is how this machine is tracked. Type it from the plate, or tick that it has none.
+                        </ThemedText>
+                      ) : null}
                     </>
                   )}
                   <ThemedView style={styles.chipRow}>
@@ -955,6 +973,8 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 const styles = StyleSheet.create({
+  serialRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  serialLabel: { flex: 1 },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },

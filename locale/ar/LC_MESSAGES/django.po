@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-24 23:28+0000\n"
+"POT-Creation-Date: 2026-10-25 11:16+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -185,6 +185,10 @@ msgstr "%(km)s كم"
 #, python-format
 msgid "%(m)s m"
 msgstr "%(m)s م"
+
+#, python-format
+msgid "%(machine)s: no serial number — it cannot be tracked until one is recorded."
+msgstr "%(machine)s: لا يوجد رقم تسلسلي — لا يمكن تتبّع الجهاز حتى يُسجَّل رقمه."
 
 #, python-format
 msgid "%(machine)s: pick a finding."
@@ -1227,6 +1231,9 @@ msgstr[5] "تذاكر العملاء، آخر %(weeks)s أسبوع. تعني \"�
 
 msgid "Customer updated."
 msgstr "تم تحديث بيانات العميل."
+
+msgid "Customer's photo of the plate"
+msgstr "صورة العميل للوحة الرقم التسلسلي"
 
 msgid "Customers"
 msgstr "العملاء"
@@ -2588,6 +2595,9 @@ msgstr "انقطاع الطاقة أو عطل كهربائي"
 
 msgid "No products."
 msgstr "لا توجد منتجات."
+
+msgid "No readable serial plate"
+msgstr "لا توجد لوحة رقم تسلسلي مقروءة"
 
 msgid "No records to display."
 msgstr "لا توجد سجلات لعرضها."
@@ -4572,6 +4582,9 @@ msgstr "النوع"
 
 msgid "Type of ticket"
 msgstr "نوع التذكرة"
+
+msgid "Type the serial number from the machine's plate, or tick “No readable serial plate”."
+msgstr "اكتب الرقم التسلسلي من لوحة الجهاز، أو حدّد «لا توجد لوحة رقم تسلسلي مقروءة»."
 
 msgid "UPS"
 msgstr "UPS"

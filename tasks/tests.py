@@ -8676,7 +8676,7 @@ class TicketMachineFindingsTests(TaskTestCase):
         response = self.client.get(self.report_url)
         self.assertEqual(response.context['existing_formset'].initial, [{'asset': self.asset.pk}])
         self.assertEqual(response.context['new_formset'].initial, [
-            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': self.unlisted.pk},
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': self.unlisted.pk, 'serial_photo_url': ''},
         ])
 
     def test_each_machines_finding_is_saved_and_shown_to_the_customer(self):
@@ -8857,3 +8857,42 @@ class SupervisorCreatesInternalTasksTests(TaskTestCase):
     def test_a_technician_still_cannot(self):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/tickets/open/?kind=stock').status_code, 403)
+
+
+class SerialNumberRuleTests(CorporateReportTests):
+    # A machine is tracked by its serial: a new one needs it, or a
+    # deliberate "No readable serial plate" (then the review flags it);
+    # a serial already at the site is that machine, not a second one.
+
+    def _new_machine(self, **row):
+        return {
+            'new-TOTAL_FORMS': '1', 'new-INITIAL_FORMS': '0', 'new-0-brand': str(self.brand.pk),
+            'new-0-model_name': 'Excite Bike', 'new-0-outcome': 'repaired', 'new-0-finding_code': 'noise_moving_part',
+            'new-0-action_code': 'greased', **{f'new-0-{key}': value for key, value in row.items()},
+        }
+
+    def _post(self, **extra):
+        from reports.models import WorkReport
+        payload = self._report_payload()
+        payload.update({'findings': '', 'work_lines': ['bolts'], 'existing-TOTAL_FORMS': '0',
+                        'existing-INITIAL_FORMS': '0', **extra})
+        self.client.post(self.report_url, payload)
+        return WorkReport.objects.filter(task=self.task).first()
+
+    def test_a_new_machine_without_a_serial_is_not_saved(self):
+        self.assertIsNone(self._post(**self._new_machine(serial_no='')))
+
+    def test_no_readable_plate_is_saved_and_flagged_in_the_review(self):
+        from reports.pdf import report_language
+        from tasks.views import report_problems
+        report = self._post(**self._new_machine(serial_no='', no_serial='on'))
+        self.assertIsNotNone(report)
+        problems = [str(problem) for problem in report_problems(report, report_language(self.customer))]
+        self.assertTrue(any('no serial number' in problem for problem in problems), problems)
+
+    def test_a_serial_already_at_the_site_is_that_machine(self):
+        self.asset.serial_no = 'BK-7788'
+        self.asset.save(update_fields=['serial_no'])
+        self._post(**self._new_machine(serial_no='bk-7788'))
+        self.assertEqual(list(self.task.task_assets.values_list('asset_id', flat=True)), [self.asset.pk])
+        self.assertEqual(Asset.objects.filter(site=self.site).count(), 1)

@@ -985,6 +985,9 @@ class NewAssetForm(forms.Form):
         required=False, max_length=150, label=_('Model'), help_text=_('free text as shown on the plate'),
     )
     serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    # The serial is how a machine is tracked from then on: it can only be
+    # left out on purpose (a missing or worn plate), and that's flagged.
+    no_serial = forms.BooleanField(required=False, label=_('No readable serial plate'))
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
@@ -1010,6 +1013,11 @@ class NewAssetForm(forms.Form):
             raise forms.ValidationError(
                 _('Enter at least a brand, model, and outcome for each new machine, or leave the row blank.'),
             )
+        cleaned['serial_no'] = (cleaned.get('serial_no') or '').strip()
+        if not cleaned['serial_no'] and not cleaned.get('no_serial'):
+            self.add_error('serial_no', _(
+                'Type the serial number from the machine\'s plate, or tick “No readable serial plate”.',
+            ))
         return cleaned
 
 
