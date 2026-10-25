@@ -1151,9 +1151,18 @@ class TicketMachineForm(forms.Form):
     serial of one that isn't in their list, plus what's wrong and photos.
     """
 
-    asset = forms.ChoiceField(required=False, label=_('Machine'))
-    model_name = forms.CharField(required=False, max_length=150, label=_('Model, if not in the list'))
-    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number, if not in the list'))
+    # One question first, so the card only asks for one or the other:
+    # pick the machine from their list, or describe a new one.
+    which = forms.ChoiceField(
+        choices=[('list', _('Yes, pick it from my list')), ('new', _("No, it's a new machine"))],
+        widget=forms.RadioSelect, required=False, label=_('Is this machine in your list?'),
+    )
+    asset = forms.ChoiceField(required=False, label=_('Your machine'))
+    model_name = forms.CharField(required=False, max_length=150, label=_('Model'))
+    serial_no = forms.CharField(
+        required=False, max_length=100, label=_('Serial number'),
+        help_text=_('as written on the silver sticker on the machine'),
+    )
     # The silver serial-number sticker on the machine. No `capture`: phones
     # then offer both "take photo" and "choose from library".
     # The number itself is required (a machine is tracked by it); the photo
@@ -1188,7 +1197,14 @@ class TicketMachineForm(forms.Form):
             if asset.serial_no:
                 label += f' ({asset.serial_no})'
             groups.setdefault(asset.site.name, []).append((str(asset.pk), label))
-        self.fields['asset'].choices = [('', _('Not in the list'))] + list(groups.items())
+        self.fields['asset'].choices = [('', _('Choose…'))] + list(groups.items())
+        # No machines registered yet: every machine is a new one.
+        self.has_machines = bool(self.assets)
+        self.fields['which'].initial = 'list' if self.has_machines else 'new'
+
+    def has_changed(self):
+        # The question alone (its default answer) doesn't make a card filled in.
+        return any(name != 'which' for name in self.changed_data)
 
     def clean_asset(self):
         value = self.cleaned_data['asset']
@@ -1207,9 +1223,20 @@ class TicketMachineForm(forms.Form):
         cleaned = super().clean()
         if not self.has_changed():
             return cleaned
-        if not cleaned.get('asset'):
+        which = cleaned.get('which')
+        if which not in ('list', 'new'):
+            # Not answered (an older page): whatever was filled in says which.
+            typed = cleaned.get('model_name') or (cleaned.get('serial_no') or '').strip()
+            which = 'list' if cleaned.get('asset') else 'new' if typed else ('list' if self.has_machines else 'new')
+        if which == 'list':
+            # Only the picked machine counts — anything typed for a new one is dropped.
+            cleaned['model_name'], cleaned['serial_no'], cleaned['serial_photo'] = '', '', None
+            if not cleaned.get('asset'):
+                self.add_error('asset', _('Please choose the machine from your list.'))
+        else:
+            cleaned['asset'] = None
             if not cleaned.get('model_name'):
-                self.add_error('asset', _('Please choose the machine, or enter its model if it is not in the list.'))
+                self.add_error('model_name', _('Please enter the model of the machine.'))
             if not (cleaned.get('serial_no') or '').strip():
                 self.add_error(
                     'serial_no', _('Please enter the serial number from the silver sticker on the machine.'),

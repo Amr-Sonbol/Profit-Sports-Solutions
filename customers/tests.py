@@ -1136,3 +1136,33 @@ class CustomerAccountUnlockTests(CustomerTestCase):
         self.assertNotIn('fitnessfirst', locked_usernames())
         response = self.client.post('/customers/portal/login/', {'username': 'fitnessfirst', 'password': 'pass12345'})
         self.assertEqual(response.status_code, 302)
+
+
+class PortalMachineQuestionTests(PortalTicketMachinesTests):
+    # Each machine card asks one thing first — in their list, or new — and
+    # only that answer's fields count.
+
+    def test_the_answer_decides_what_is_needed(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        page = self.client.get('/customers/portal/tickets/new/')
+        self.assertContains(page, 'Is this machine in your list?')
+
+        # "In my list" but nothing picked: asked to pick, nothing about a serial.
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'list', 'model_name': 'typed by mistake', 'problem': 'display'},
+        ]))
+        self.assertContains(response, 'Please choose the machine from your list.')
+        self.assertNotContains(response, 'Please enter the serial number')
+
+        # "New": model and serial; a machine picked earlier is dropped.
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'new', 'asset': str(self.asset.pk), 'model_name': 'Old bike', 'serial_no': 'B-9', 'problem': 'display'},
+        ]))
+        machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual((machine.asset, machine.model_name, machine.serial_no), (None, 'Old bike', 'B-9'))
+
+    def test_a_customer_with_no_machines_is_not_asked(self):
+        from customers.models import Asset
+        Asset.objects.filter(site__customer=self.customer).delete()
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.assertNotContains(self.client.get('/customers/portal/tickets/new/'), 'Is this machine in your list?')

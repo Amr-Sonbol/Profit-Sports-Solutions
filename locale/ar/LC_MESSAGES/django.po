@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 11:24+0000\n"
+"POT-Creation-Date: 2026-10-25 11:51+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -933,6 +933,9 @@ msgstr "اختر سببًا لاستبدال الفني الرئيسي الحا�
 
 msgid "Choose at least one role, or turn this email off."
 msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
+
+msgid "Choose…"
+msgstr "اختر…"
 
 #, python-format
 msgid "Clash: %(number)s at %(start)s"
@@ -2083,6 +2086,9 @@ msgstr "الفاتورة"
 msgid "Invoice address"
 msgstr "عنوان الفاتورة"
 
+msgid "Is this machine in your list?"
+msgstr "هل هذا الجهاز موجود في قائمتك؟"
+
 msgid "Job"
 msgstr "المهمة"
 
@@ -2310,9 +2316,6 @@ msgstr "تطبيق الجوال"
 
 msgid "Model"
 msgstr "الموديل"
-
-msgid "Model, if not in the list"
-msgstr "الطراز، إن لم يكن في القائمة"
 
 msgid "Monday"
 msgstr "الإثنين"
@@ -2635,6 +2638,9 @@ msgstr "لا توجد طلبات هذا الشهر."
 msgid "No visits on record."
 msgstr "لا توجد زيارات مسجَّلة."
 
+msgid "No, it's a new machine"
+msgstr "لا، إنه جهاز جديد"
+
 msgid "Noise from a moving part"
 msgstr "صوت صادر من جزء متحرك"
 
@@ -2662,9 +2668,6 @@ msgstr "ليس في الموقع · %(distance)s"
 
 msgid "Not covered"
 msgstr "غير مشمول"
-
-msgid "Not in the list"
-msgstr "غير موجود في القائمة"
 
 msgid "Not in the machine list"
 msgstr "غير موجود في قائمة الأجهزة"
@@ -3070,8 +3073,8 @@ msgstr "يُرجى أن تطلب من مديرك إرسال رابط جديد. �
 msgid "Please check your email"
 msgstr "يرجى مراجعة بريدك الإلكتروني"
 
-msgid "Please choose the machine, or enter its model if it is not in the list."
-msgstr "يُرجى اختيار الجهاز، أو إدخال طرازه إن لم يكن في القائمة."
+msgid "Please choose the machine from your list."
+msgstr "يرجى اختيار الجهاز من قائمتك."
 
 msgid "Please close the task (submit its report) before requesting feedback."
 msgstr "يرجى إغلاق المهمة (تقديم تقريرها) قبل طلب التقييم."
@@ -3081,6 +3084,9 @@ msgstr "يرجى استكمال الرمز والاسم والاسم بالعر�
 
 msgid "Please complete the part code and quantity, or leave this row blank."
 msgstr "يرجى إكمال رمز القطعة والكمية، أو ترك هذا الصف فارغًا."
+
+msgid "Please enter the model of the machine."
+msgstr "يرجى إدخال طراز الجهاز."
 
 msgid "Please enter the serial number from the silver sticker on the machine."
 msgstr "يرجى إدخال الرقم التسلسلي من الملصق الفضي على الجهاز."
@@ -3697,9 +3703,6 @@ msgstr "الرقم التسلسلي"
 
 msgid "Serial number(s)"
 msgstr "الرقم/الأرقام التسلسلية"
-
-msgid "Serial number, if not in the list"
-msgstr "الرقم التسلسلي، إن لم يكن في القائمة"
 
 msgid "Serial plate"
 msgstr "لوحة الرقم التسلسلي"
@@ -4920,6 +4923,9 @@ msgstr "السنة"
 msgid "Yes"
 msgstr "نعم"
 
+msgid "Yes, pick it from my list"
+msgstr "نعم، أختاره من قائمتي"
+
 msgid "You"
 msgstr "أنت"
 
@@ -4957,6 +4963,9 @@ msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقت�
 
 msgid "Your login email"
 msgstr "البريد الإلكتروني لتسجيل الدخول"
+
+msgid "Your machine"
+msgstr "جهازك"
 
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحبًا بك."
@@ -5042,6 +5051,9 @@ msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتها�
 
 msgid "arm color"
 msgstr "لون الذراع"
+
+msgid "as written on the silver sticker on the machine"
+msgstr "كما هو مكتوب على الملصق الفضي على الجهاز"
 
 msgid "asset"
 msgstr "جهاز"
