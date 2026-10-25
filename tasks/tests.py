@@ -8976,3 +8976,19 @@ class InstallationChecklistTests(TaskTestCase):
             sorted(Asset.objects.filter(site=self.site).exclude(pk=self.asset.pk).values_list('serial_no', flat=True)),
             ['TG-1', 'TG-9'],
         )
+
+    def test_what_was_not_installed_gets_a_follow_up_task(self):
+        self._check([
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
+        ])
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertContains(page, 'Create a follow-up task for them')
+        response = self.client.post(f'/tasks/{self.task.pk}/', {'action': 'create_follow_up'})
+        follow_up = Task.objects.get(previous_task=self.task)
+        self.assertRedirects(response, f'/tasks/{follow_up.pk}/', fetch_redirect_response=False)
+        line = follow_up.products.get()
+        self.assertEqual((line.product_code, line.status, line.source_line), ('EXCITE-BIKE', 'pending', self.bike_line))
+        # Once made, it isn't offered again.
+        self.assertNotContains(self.client.get(f'/tasks/{self.task.pk}/'), 'Create a follow-up task for them')

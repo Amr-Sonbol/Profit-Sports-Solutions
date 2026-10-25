@@ -1617,3 +1617,17 @@ class InstallationChecklistApiTests(ApiTestCase):
         self.line.refresh_from_db()
         self.assertEqual(self.line.status, 'damaged')  # its photo said what was wrong
         self.assertTrue(TaskProduct.objects.get(product_code='EXCITE-TOP').added_on_site)
+
+    def test_a_supervisor_makes_the_follow_up_from_the_app(self):
+        from reports.models import WorkReport
+        self.line.status = 'later'
+        self.line.save(update_fields=['status'])
+        WorkReport.objects.create(task=self.task, findings='', action_taken='', resolved=True, labour_hours=1,
+                                  customer_name='Ali', submitted_at=timezone.now())
+        token = self.token_for('supervisor1')
+        page = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertEqual((page['equipment']['still_to_install'], page['equipment']['can_follow_up']), (1, True))
+        response = self.client.post(f'/api/tasks/{self.task.pk}/follow-up/', json.dumps({}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Task.objects.get(pk=response.json()['id']).previous_task, self.task)

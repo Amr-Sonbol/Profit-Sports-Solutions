@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  approveTaskReport, assignTask, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
+  approveTaskReport, assignTask, createFollowUp, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
 } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -379,6 +379,62 @@ export default function TeamTaskScreen() {
                 </ThemedText>
               )}
             </TouchableOpacity>
+          ) : null}
+
+          {task.equipment ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Machines</ThemedText>
+              {task.equipment.previous_task ? (
+                <TouchableOpacity onPress={() => router.push(`/team-task/${task.equipment!.previous_task!.id}`)}>
+                  <ThemedText type="small" themeColor="primary">Previous step: {task.equipment.previous_task.task_number} ›</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              {task.equipment.next_tasks.map((next) => (
+                <TouchableOpacity key={next.id} onPress={() => router.push(`/team-task/${next.id}`)}>
+                  <ThemedText type="small" themeColor="primary">Next step: {next.task_number} ›</ThemedText>
+                </TouchableOpacity>
+              ))}
+              {task.equipment.lines.map((line, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="smallBold">
+                    {line.product_code}{line.serial_number ? ` · ${line.serial_number}` : ''}{line.added_on_site ? ' · added on site' : ''}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor={line.status === 'done' ? 'text' : line.status === 'pending' ? 'textSecondary' : 'danger'}>
+                    {line.status_label} · {line.colors}
+                  </ThemedText>
+                  {line.replacement ? <ThemedText type="small">Instead: {line.replacement}</ThemedText> : null}
+                  {line.note ? <ThemedText type="small" themeColor="textSecondary">{line.note}</ThemedText> : null}
+                  {line.photo_url ? (
+                    <TouchableOpacity onPress={() => Linking.openURL(line.photo_url)}>
+                      <ThemedText type="small" themeColor="primary">Photo ›</ThemedText>
+                    </TouchableOpacity>
+                  ) : null}
+                </ThemedView>
+              ))}
+              {task.equipment.still_to_install ? (
+                <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
+                  <ThemedText type="small">
+                    {task.equipment.still_to_install} {task.equipment.still_to_install === 1 ? 'machine is' : 'machines are'} still to install.
+                  </ThemedText>
+                  {task.equipment.can_follow_up ? (
+                    <SecondaryButton
+                      label="Create a follow-up task for them" disabled={isBusy}
+                      onPress={async () => {
+                        setIsBusy(true);
+                        try {
+                          const created = await createFollowUp(task.id);
+                          router.push(`/team-task/${created.id}`);
+                        } catch (err) {
+                          setError(err instanceof ApiRequestError ? errorText(err) : 'Not created. Please try again.');
+                        } finally {
+                          setIsBusy(false);
+                        }
+                      }}
+                    />
+                  ) : null}
+                </ThemedView>
+              ) : null}
+            </ThemedView>
           ) : null}
 
           {task.manage && (task.manage.can_cancel || task.manage.can_close || task.manage.can_flag) ? (

@@ -1952,6 +1952,17 @@ def task_detail(request, pk):
             messages.success(request, _('Task flagged.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
+    if request.method == 'POST' and request.POST.get('action') == 'create_follow_up':
+        require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        if not still_to_install(task):
+            messages.error(request, _('Nothing is left to install on this task.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        follow_up = create_follow_up(task, request.user)
+        messages.success(request, _('Follow-up task %(number)s created for the machines still to install.') % {
+            'number': follow_up.task_number,
+        })
+        return redirect('tasks:task_detail', pk=follow_up.pk)
+
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_manager(request)
         feedback = getattr(task, 'feedback', None)
@@ -2014,6 +2025,10 @@ def task_detail(request, pk):
         ),
         'task_assets': task.task_assets.select_related('asset'),
         'products': task.products.all(),
+        # An installation's machines not installed yet, and the chain around it.
+        'still_to_install': still_to_install(task),
+        'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
+        'next_tasks': task.next_tasks.all(),
         'report': getattr(task, 'report', None),
         'report_changed_after_signing': _report_changed_after_signing(task),
         'feedback': getattr(task, 'feedback', None),
@@ -5265,6 +5280,40 @@ def save_planned_lines(task, rows):
 
 # Lines that weren't installed and still need to be: the follow-up's.
 STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
+
+
+def still_to_install(task):
+    """An installation's machines not installed yet (missing, later, never
+    checked) once its report is in — what a follow-up task is for. Empty
+    once a follow-up was made for them."""
+    if not has_checklist(task) or getattr(task, 'report', None) is None or task.next_tasks.exists():
+        return []
+    return list(task.products.filter(status__in=STILL_TO_INSTALL))
+
+
+def create_follow_up(task, user):
+    """A follow-up installation for exactly the machines still to install:
+    same site, type, brand and supervisor, linked as the next step, each
+    machine's line carried over (source_line) to check off again. Returns
+    the new task."""
+    lines = still_to_install(task)
+    follow_up = Task(
+        site=task.site, task_type=task.task_type, brand=task.brand, priority=task.priority,
+        source=Task.Source.INTERNAL, billing_type=task.billing_type, is_warranty=task.is_warranty,
+        responsible_supervisor=task.responsible_supervisor, reported_at=timezone.now(), created_by=user,
+        status=Task.Status.NEW, previous_task=task,
+        description=_('Follow-up of %(number)s: the machines still to install.') % {'number': task.task_number},
+    )
+    with transaction.atomic():
+        _save_new_task(follow_up)
+        for line in lines:
+            TaskProduct.objects.create(
+                task=follow_up, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
+                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
+            )
+        TaskEvent.objects.create(task=follow_up, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=user)
+        TaskNotification.objects.create(task=follow_up, created_at=timezone.now())
+    return follow_up
 
 
 def has_checklist(task):

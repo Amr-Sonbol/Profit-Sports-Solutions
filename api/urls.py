@@ -20,6 +20,7 @@ urlpatterns = [
     path('hours/', views.HoursView.as_view(), name='hours'),
     path('internal-tickets/', views.InternalTicketsView.as_view(), name='internal_tickets'),
     path('team-map/', views.TeamMapView.as_view(), name='team_map'),
+    path('tasks/<int:pk>/follow-up/', views.TaskFollowUpView.as_view(), name='task_follow_up'),
     path('tasks/<int:pk>/manage/', views.TaskManageView.as_view(), name='task_manage'),
     path('staff-accounts/', views.StaffAccountsView.as_view(), name='staff_accounts'),
     path('staff-accounts/<int:pk>/', views.StaffAccountView.as_view(), name='staff_account'),

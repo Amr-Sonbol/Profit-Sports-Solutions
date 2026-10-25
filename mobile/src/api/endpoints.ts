@@ -302,3 +302,8 @@ export function uploadLinePhoto(taskId: number, lineId: number, photo: { uri: st
     method: 'POST', body: form, isFormData: true,
   });
 }
+
+/** A follow-up installation for the machines still to install. */
+export function createFollowUp(id: number) {
+  return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/follow-up/`, { method: 'POST', body: {} });
+}

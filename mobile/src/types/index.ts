@@ -248,6 +248,17 @@ export interface TeamTaskDetail extends TaskDetail {
   can_assign: boolean;
   can_supervisor_approve: boolean;
   can_manager_approve: boolean;
+  /** An equipment task's machines, the chain around it, and the follow-up offer. */
+  equipment?: {
+    lines: {
+      product_code: string; serial_number: string; status: string; status_label: string; colors: string;
+      replacement: string; note: string; added_on_site: boolean; photo_url: string;
+    }[];
+    still_to_install: number;
+    can_follow_up: boolean;
+    previous_task: { id: number; task_number: string } | null;
+    next_tasks: { id: number; task_number: string }[];
+  } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
   manage?: { can_cancel: boolean; can_close: boolean; can_flag: boolean; correctable_event_ids: number[] };
 }

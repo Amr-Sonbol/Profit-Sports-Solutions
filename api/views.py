@@ -52,7 +52,7 @@ from tasks.views import (
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
-    save_checklist,
+    save_checklist, still_to_install, create_follow_up,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -1448,6 +1448,25 @@ def _team_task_response(request, task):
     data = TeamTaskDetailSerializer(task, context=context).data
     # What a manager can do here, as on the website's task page (TaskManageView).
     is_manager = technician.is_manager_tier
+    # Its machines (an equipment task), the chain around it, and the follow-up offer.
+    lines = list(task.products.order_by('pk'))
+    left = still_to_install(task)
+    data['equipment'] = {
+        'lines': [
+            {
+                'product_code': line.product_code, 'serial_number': line.serial_number, 'status': line.status,
+                'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
+                'replacement': line.replacement, 'note': line.note, 'added_on_site': line.added_on_site,
+                'photo_url': request.build_absolute_uri(line.photo.url) if line.photo else '',
+            }
+            for line in lines
+        ],
+        'still_to_install': len(left),
+        'can_follow_up': bool(left) and has_role_permission(request, RolePermission.Permission.CREATE_TASKS),
+        'previous_task': {'id': task.previous_task_id, 'task_number': task.previous_task.task_number}
+        if task.previous_task_id else None,
+        'next_tasks': [{'id': other.pk, 'task_number': other.task_number} for other in task.next_tasks.all()],
+    } if lines or task.previous_task_id else None
     data['manage'] = {
         'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
         'can_close': is_manager and task.status != Task.Status.CLOSED,
@@ -1457,6 +1476,23 @@ def _team_task_response(request, task):
         ],
     }
     return Response(data)
+
+
+class TaskFollowUpView(APIView):
+    """A follow-up installation for the machines still to install, from the
+    app's task page (create_tasks) — tasks.views.create_follow_up. Returns
+    the new task's id and number."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
+            raise PermissionDenied
+        if not still_to_install(task):
+            return Response({'detail': str(_('Nothing is left to install on this task.'))}, status=status.HTTP_400_BAD_REQUEST)
+        follow_up = create_follow_up(task, request.user)
+        return Response({'id': follow_up.pk, 'task_number': follow_up.task_number}, status=status.HTTP_201_CREATED)
 
 
 class TaskManageView(APIView):
