@@ -64,7 +64,7 @@ export default function CustomersScreen() {
             >
               <ThemedText type="smallBold">{item.name}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {item.segment} · {item.sites.length} {item.sites.length === 1 ? 'site' : 'sites'}
+                {item.is_internal ? 'Our warehouses' : item.segment} · {item.sites.length} {item.sites.length === 1 ? 'site' : 'sites'}
               </ThemedText>
               {item.sites.length ? <ThemedText type="small" numberOfLines={1}>{item.sites.join(' · ')}</ThemedText> : null}
             </TouchableOpacity>

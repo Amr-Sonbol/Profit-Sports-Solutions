@@ -55,6 +55,11 @@ export default function CustomerScreen() {
           </TouchableOpacity>
           <ThemedText type="title">{customer.name}</ThemedText>
           <ThemedText themeColor="textSecondary">{customer.segment}{customer.has_portal ? ' · has a portal login' : ''}</ThemedText>
+          {customer.is_internal ? (
+            <ThemedText type="small" themeColor="primary">
+              Our own account: each site is one of our warehouses, where equipment is received and loaded.
+            </ThemedText>
+          ) : null}
 
           <ThemedView style={styles.row}>
             {customer.contact_phone ? button('call-outline', `Call ${customer.contact_name || customer.contact_phone}`,

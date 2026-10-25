@@ -444,6 +444,8 @@ export interface CustomerRow {
   id: number;
   name: string;
   segment: string;
+  /** Our own account — its sites are our warehouses. */
+  is_internal?: boolean;
   sites: string[];
   contact_name: string;
   contact_phone: string;
@@ -472,6 +474,7 @@ export interface CustomerPage {
   id: number;
   name: string;
   segment: string;
+  is_internal?: boolean;
   contact_name: string;
   contact_phone: string;
   contact_email: string;
@@ -569,4 +572,15 @@ export interface ChecklistRow {
   note: string;
   photo_url: string;
   added_on_site: boolean;
+}
+
+/** A planned machine line (api/views.py TaskLinesView). */
+export interface PlannedLine {
+  product_code: string;
+  serial_number: string;
+  quantity: number | string;
+  frame: string;
+  arm: string;
+  padding: string;
+  trim: string;
 }

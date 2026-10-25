@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  PlannedLine,
   ChecklistRow,
   StaffAccount,
   Dashboard,
@@ -313,5 +314,17 @@ export function createFollowUp(id: number) {
 export function createNextStep(id: number, step: string, site: string, lines: number[]) {
   return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/next-step/`, {
     method: 'POST', body: { step, site, lines },
+  });
+}
+
+/** A task's planned machine lines, and whether they can be changed. */
+export function fetchTaskLines(id: number) {
+  return apiRequest<{ locked: boolean; one_per_machine: boolean; lines: PlannedLine[] }>(`/api/tasks/${id}/lines/`);
+}
+
+/** Replaces the plan; on an equipment step "× 4" becomes four lines. */
+export function saveTaskLines(id: number, lines: PlannedLine[]) {
+  return apiRequest<{ locked: boolean; one_per_machine: boolean; lines: PlannedLine[] }>(`/api/tasks/${id}/lines/`, {
+    method: 'POST', body: { lines },
   });
 }

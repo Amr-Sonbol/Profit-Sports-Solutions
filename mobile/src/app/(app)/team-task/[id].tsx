@@ -17,6 +17,7 @@ import { hm } from '@/hours';
 import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
 import { when } from '@/task-time';
 import { ChoicePicker } from '@/components/choice-picker';
+import { useSession } from '@/context/auth';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
@@ -124,6 +125,7 @@ export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { me } = useSession();
   const [task, setTask] = useState<TeamTaskDetail | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [picking, setPicking] = useState<Picking | null>(null);
@@ -260,6 +262,15 @@ export default function TeamTaskScreen() {
                 <ThemedText type="small" themeColor="primary" numberOfLines={1}>
                   Call {task.site_contact_name || task.site_contact_phone}
                 </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            {me?.permissions?.includes('create_tasks') ? (
+              <TouchableOpacity
+                style={[styles.quickButton, { borderColor: theme.primary }]}
+                onPress={() => router.push({ pathname: '/plan-lines/[id]', params: { id: String(task.id), title: task.task_number } })}
+              >
+                <Ionicons name="cube-outline" size={16} color={theme.primary} />
+                <ThemedText type="small" themeColor="primary">Plan the machines</ThemedText>
               </TouchableOpacity>
             ) : null}
             {/* Everything else on the website's task page: edit, schedule and delay

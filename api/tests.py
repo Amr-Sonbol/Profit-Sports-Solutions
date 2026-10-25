@@ -1663,3 +1663,16 @@ class NextStepApiTests(ManagerChoosesTheCountryTests):
         installation = Task.objects.get(pk=response.json()['id'])
         self.assertEqual((installation.site, installation.previous_task), (self.site, receiving))
         self.assertEqual(installation.products.get().source_line, line)
+
+
+class PlanLinesApiTests(InstallationChecklistApiTests):
+    def test_a_supervisor_plans_the_machines_from_the_app(self):
+        token = self.token_for('supervisor1')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/lines/', json.dumps({'lines': [
+            {'product_code': 'BENCH-01', 'quantity': 3, 'frame': '', 'arm': 'Red'},
+        ]}), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        lines = response.json()['lines']
+        self.assertEqual([(line['product_code'], line['quantity'], line['arm'], line['frame']) for line in lines],
+                         [('BENCH-01', 1, 'Red', 'Black')] * 3)
+        self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/lines/', **self.auth(self.token_for('tech1'))).status_code, 403)

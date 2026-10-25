@@ -33,7 +33,8 @@ from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, CancelTaskForm, CloseTaskForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
+    CancelTaskForm, CloseTaskForm,
     CorrectEventTimeForm, NegligenceFlagForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
@@ -53,7 +54,7 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, next_step_sites,
+    lines_to_carry, next_step_sites, save_planned_lines, PRODUCTS_LOCKED_STATUSES,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -393,6 +394,7 @@ class CustomersView(APIView):
         return Response([
             {
                 'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+                'is_internal': customer.is_internal,
                 'sites': [site.name for site in customer.sites.all()],
                 'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             }
@@ -416,6 +418,7 @@ class CustomerView(APIView):
         )[:30]
         return Response({
             'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
+            'is_internal': customer.is_internal,
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             'contact_email': customer.contact_email, 'billing_address': customer.billing_address,
             'has_portal': customer.user_id is not None,
@@ -1496,6 +1499,56 @@ def _team_task_response(request, task):
         ],
     }
     return Response(data)
+
+
+class TaskLinesView(APIView):
+    """Planning a task's machine lines from the app — the website's Edit
+    screen (create_tasks, the task's own supervisor or a manager; locked
+    once done except for managers): GET the lines and whether they can be
+    changed; POST `lines` (product_code, serial_number, quantity, frame,
+    arm, padding, trim), replacing the plan — tasks.views.save_planned_lines,
+    so "× 4" on an equipment step becomes four lines."""
+
+    permission_classes = [IsTechnician]
+
+    def _task(self, request, pk):
+        require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        locked = not request.user.technician.is_manager_tier and task.status in PRODUCTS_LOCKED_STATUSES
+        return task, locked
+
+    def get(self, request, pk):
+        task, locked = self._task(request, pk)
+        return Response({
+            'locked': locked,
+            'one_per_machine': bool(equipment_step(task)),
+            'lines': [
+                {
+                    'product_code': line.product_code, 'serial_number': line.serial_number, 'quantity': line.quantity,
+                    'frame': line.frame, 'arm': line.arm, 'padding': line.padding, 'trim': line.trim,
+                }
+                for line in task.products.order_by('pk')
+            ],
+        })
+
+    def post(self, request, pk):
+        task, locked = self._task(request, pk)
+        if locked:
+            return Response({'detail': str(_('This task has been completed, so its products can only be changed by a '
+                                              'manager or administrator.'))}, status=status.HTTP_400_BAD_REQUEST)
+        forms_ = [
+            TaskProductForm({key: row.get(key, '') for key in (
+                'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim',
+            )})
+            for row in request.data.get('lines') or [] if isinstance(row, dict)
+        ]
+        errors = [form.errors for form in forms_ if not form.is_valid()]
+        if errors:
+            return Response({'lines': errors}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            save_planned_lines(task, [form.cleaned_data for form in forms_])
+        return self.get(request, pk)
 
 
 class TaskNextStepView(APIView):
