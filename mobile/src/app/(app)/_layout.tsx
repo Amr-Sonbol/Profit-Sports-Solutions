@@ -102,6 +102,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="team-map" options={{ href: null }} />
       <Tabs.Screen name="staff-accounts" options={{ href: null }} />
       <Tabs.Screen name="plan-lines/[id]" options={{ href: null }} />
+      <Tabs.Screen name="add-user" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -3870,6 +3870,26 @@ def my_profile(request):
     return render(request, 'tasks/my_profile.html', context)
 
 
+def create_staff_user(request, form):
+    """A new staff member from a valid TechnicianCreateForm — and, with an
+    email, their login and a setup link to choose their own password (no
+    password is ever sent), all recorded in the audit log. The website's
+    Add user and the app's (api.views.StaffUserCreateView)."""
+    with transaction.atomic():
+        technician = form.save()
+        email = form.cleaned_data.get('email')
+        if email:
+            user = get_user_model().objects.create_user(username=email, email=email)
+            technician.user = user
+            technician.must_change_password = True
+            technician.save(update_fields=['user', 'must_change_password'])
+    log_account_action(request, technician, f'Staff added ({technician.get_role_display()}, {technician.country.name})')
+    if technician.user_id:
+        send_staff_setup_link(request, technician)
+        log_account_action(request, technician, f'Staff login created; setup link emailed to {technician.user.email}')
+    return technician
+
+
 @login_required
 def technician_create(request):
     """Admin-only — creating a technician record means choosing its role,
@@ -3885,13 +3905,18 @@ def technician_create(request):
     if request.method == 'POST':
         form = TechnicianCreateForm(request.POST)
         if form.is_valid():
-            technician = form.save(commit=False)
-            technician.country = get_active_country(request)
-            technician.save()
-            messages.success(request, _('User added.'))
-            return redirect('tasks:technician_list')
+            technician = create_staff_user(request, form)
+            if technician.user_id:
+                messages.success(request, _('%(name)s added. A setup link has been sent to %(email)s to choose a password.') % {
+                    'name': technician.full_name, 'email': technician.user.email,
+                })
+            else:
+                messages.warning(request, _('%(name)s added without a login — add their email on their page so they can sign in.') % {
+                    'name': technician.full_name,
+                })
+            return redirect('tasks:technician_edit', pk=technician.pk)
     else:
-        form = TechnicianCreateForm()
+        form = TechnicianCreateForm(initial={'country': get_active_country(request)})
 
     return render(request, 'tasks/technician_create.html', {'form': form})
 
@@ -4490,6 +4515,24 @@ def technician_skills(request, pk):
     return render(request, 'tasks/technician_skills.html', context)
 
 
+def move_open_tasks(technician, successor, actor):
+    """Everything `technician` (leaving) is still on, handed over: where
+    they lead, `successor` takes over as lead ("left the company"); where
+    they only helped, they're taken off. Returns how many tasks."""
+    tasks = _tasks_to_reassign(technician)
+    now = timezone.now()
+    for task in tasks:
+        for assignment in task.assignments.filter(technician=technician, is_active=True):
+            if assignment.role == TaskAssignment.Role.LEAD:
+                _set_lead(task, assignment, successor, TaskAssignment.EndReason.LEFT_COMPANY, actor)
+            else:
+                assignment.is_active = False
+                assignment.ended_at = now
+                assignment.end_reason = TaskAssignment.EndReason.LEFT_COMPANY
+                assignment.save(update_fields=['is_active', 'ended_at', 'end_reason'])
+    return len(tasks)
+
+
 def _tasks_to_reassign(technician):
     """Open tasks a (deactivated) person is still on, lead or helper."""
     return list(
@@ -4524,7 +4567,7 @@ def technician_edit(request, pk):
     was_last_admin = is_last_active_admin(technician) if technician.is_active else False
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager, is_admin=is_admin)
-    deactivate_form = DeactivateTechnicianForm()
+    deactivate_form = DeactivateTechnicianForm(technician=technician)
     trip_form = TechnicianTripForm(home_country=technician.country) if is_manager else None
 
     if request.method == 'POST' and request.POST.get('action') == 'add_trip' and is_manager:
@@ -4551,7 +4594,7 @@ def technician_edit(request, pk):
     password_form = NewPasswordForm(user=technician.user) if can_manage and technician.user_id else None
 
     if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
-        deactivate_form = DeactivateTechnicianForm(request.POST)
+        deactivate_form = DeactivateTechnicianForm(request.POST, technician=technician)
         if was_last_admin:
             messages.error(request, _('This is the only administrator able to sign in, so they cannot be '
                                       'deactivated.'))
@@ -4559,6 +4602,13 @@ def technician_edit(request, pk):
         if deactivate_form.is_valid():
             technician.set_active(False, reason=deactivate_form.cleaned_data['reason'])
             log_account_action(request, technician, f'Deactivated: {deactivate_form.cleaned_data["reason"]}')
+            successor = deactivate_form.cleaned_data.get('move_to')
+            if successor:
+                moved = move_open_tasks(technician, successor, request.user)
+                messages.success(request, _('Deactivated. %(count)s open tasks moved to %(name)s.') % {
+                    'count': moved, 'name': successor.full_name,
+                })
+                return redirect('tasks:technician_list')
             if _tasks_to_reassign(technician):
                 messages.success(request, _('Deactivated. Please reassign their open tasks below.'))
                 return redirect('tasks:technician_edit', pk=technician.pk)
@@ -4611,6 +4661,8 @@ def technician_edit(request, pk):
         'login_form': login_form, 'password_form': password_form, 'is_manager': is_manager,
         'trip_form': trip_form, 'trips': technician.trips.select_related('country'),
         'tasks_to_reassign': _tasks_to_reassign(technician) if not technician.is_active else [],
+        # Still active: their open tasks, to move to someone in the same step as deactivating.
+        'open_tasks': _tasks_to_reassign(technician) if technician.is_active else [],
         'today': timezone.localdate(),
     }
     return render(request, 'tasks/technician_edit.html', context)

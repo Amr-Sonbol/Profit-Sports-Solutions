@@ -58,6 +58,7 @@
                     <td>
                         {% include "_avatar.html" with technician=row.technician %}
                         {{ row.technician.full_name }}
+                        {% if not row.technician.user_id %}<span class="badge badge--neutral" title="{% translate "They cannot sign in until a login is created on their page." %}">{% translate "No login yet" %}</span>{% endif %}
                     </td>
                     <td>{{ row.technician.get_role_display }}</td>
                     {% if show_inactive %}

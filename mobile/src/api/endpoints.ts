@@ -328,3 +328,19 @@ export function saveTaskLines(id: number, lines: PlannedLine[]) {
     method: 'POST', body: { lines },
   });
 }
+
+/** Someone who left: deactivated, their open tasks moved to a colleague. */
+export function deactivatePerson(id: number, reason: string, moveTo: string) {
+  return apiRequest<{ moved: number; still_to_reassign: number }>(`/api/people/${id}/deactivate/`, {
+    method: 'POST', body: { reason, move_to: moveTo },
+  });
+}
+
+/** Add a user (admin): every field's label, default and choices. */
+export function fetchNewPersonForm() {
+  return apiRequest<{ fields: Record<string, FormFieldSpec> }>('/api/people/new/');
+}
+
+export function createPerson(values: Record<string, string>) {
+  return apiRequest<{ id: number; name: string; has_login: boolean }>('/api/people/new/', { method: 'POST', body: values });
+}

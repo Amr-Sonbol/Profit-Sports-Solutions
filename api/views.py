@@ -20,11 +20,12 @@ from rest_framework.views import APIView
 
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
+from customers.accounts import locked_usernames, log_account_action
 from people.context_processors import nav_groups, nav_pages
-from customers.accounts import locked_usernames
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, require_manager, scoped_or_404,
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_manager,
+    scoped_or_404,
 )
 from people.push import push_assigned, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
@@ -34,7 +35,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
-    CancelTaskForm, CloseTaskForm,
+    CancelTaskForm, CloseTaskForm, DeactivateTechnicianForm, TechnicianCreateForm,
     CorrectEventTimeForm, NegligenceFlagForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
@@ -54,7 +55,8 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, next_step_sites, save_planned_lines, PRODUCTS_LOCKED_STATUSES,
+    lines_to_carry, next_step_sites, save_planned_lines, PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
+    create_staff_user,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -822,6 +824,16 @@ class PersonView(APIView):
             'unavailable_reasons': [
                 {'value': value, 'label': str(label)} for value, label in Technician.UnavailableReason.choices
             ],
+            # A manager or admin can deactivate them, handing their open tasks to a colleague.
+            'can_deactivate': (
+                request.user.technician.is_manager_tier and person.is_active and person.pk != request.user.technician.pk
+                and can_manage_account(request.user.technician, person) and not is_last_active_admin(person)
+            ),
+            'open_tasks': [task.task_number for task in _tasks_to_reassign(person)] if person.is_active else [],
+            'move_to_choices': [
+                {'value': str(other.pk), 'label': other.full_name}
+                for other in DeactivateTechnicianForm(technician=person).fields['move_to'].queryset
+            ],
             'can_review_skills': has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS),
             'can_set_availability': has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS),
             'skills': skills,
@@ -832,6 +844,68 @@ class PersonView(APIView):
                 'acceptance_minutes': reliability['acceptance_latency_minutes'],
             },
         })
+
+
+class PersonDeactivateView(APIView):
+    """Deactivating someone who left, from their page in the app (manager
+    tier) — reason, and `move_to`: the colleague who takes over their open
+    tasks in the same step (tasks.views.move_open_tasks). Same rules as the
+    website: never the last admin, never yourself, never above you."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        actor = require_manager(request)
+        person = _person(request, pk)
+        if person.pk == actor.pk or not can_manage_account(actor, person) or is_last_active_admin(person):
+            raise PermissionDenied
+        form = DeactivateTechnicianForm(request.data, technician=person)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        person.set_active(False, reason=form.cleaned_data['reason'])
+        log_account_action(request._request, person, f'Deactivated: {form.cleaned_data["reason"]}')
+        moved = move_open_tasks(person, form.cleaned_data['move_to'], request.user) if form.cleaned_data.get('move_to') else 0
+        left = len(_tasks_to_reassign(person))
+        return Response({'moved': moved, 'still_to_reassign': left})
+
+
+class StaffUserCreateView(APIView):
+    """Adding a user from the app — the admin only, the website's one-step
+    Add user (TechnicianCreateForm and
+    tasks.views.create_staff_user): GET the choices; POST role, full_name,
+    country, email, phone, language, employment_type."""
+
+    permission_classes = [IsTechnician]
+
+    FIELDS = ['role', 'full_name', 'country', 'email', 'phone', 'language', 'employment_type', 'hired_on']
+
+    def _admin(self, request):
+        if request.user.technician.role != Technician.Role.ADMIN:
+            raise PermissionDenied
+
+    def get(self, request):
+        self._admin(request)
+        form = TechnicianCreateForm(initial={'country': get_active_country(request)})
+        fields = {}
+        for name in self.FIELDS:
+            field = form.fields[name]
+            initial = form[name].initial
+            fields[name] = {
+                'label': str(field.label), 'required': field.required,
+                'initial': '' if initial is None else str(getattr(initial, 'pk', initial)),
+                **({'choices': [{'value': str(value), 'label': str(label)} for value, label in field.choices if str(value)]}
+                   if hasattr(field, 'choices') else {}),
+            }
+        return Response({'fields': fields})
+
+    def post(self, request):
+        self._admin(request)
+        form = TechnicianCreateForm({name: request.data.get(name, '') for name in self.FIELDS})
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        person = create_staff_user(request._request, form)
+        return Response({'id': person.pk, 'name': person.full_name, 'has_login': person.user_id is not None},
+                        status=status.HTTP_201_CREATED)
 
 
 class PersonSkillReviewView(APIView):

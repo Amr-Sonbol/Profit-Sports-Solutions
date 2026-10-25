@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 15:08+0000\n"
+"POT-Creation-Date: 2026-10-25 19:24+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -127,6 +127,16 @@ msgid "%(count)s more than last month"
 msgstr "أكثر بـ %(count)s من الشهر الماضي"
 
 #, python-format
+msgid "%(count)s open task is still assigned to them:"
+msgid_plural "%(count)s open tasks are still assigned to them:"
+msgstr[0] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+msgstr[1] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+msgstr[2] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+msgstr[3] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+msgstr[4] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+msgstr[5] "لا تزال %(count)s مهمة مفتوحة مُسندة إليه:"
+
+#, python-format
 msgid "%(count)s overdue"
 msgid_plural "%(count)s overdue"
 msgstr[0] "لا توجد متأخرات"
@@ -241,6 +251,14 @@ msgstr "%(machine)s: اختر الإجراء المتخذ."
 #, python-format
 msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
+
+#, python-format
+msgid "%(name)s added without a login — add their email on their page so they can sign in."
+msgstr "تمت إضافة %(name)s بدون حساب دخول — أضف بريده الإلكتروني في صفحته ليتمكن من تسجيل الدخول."
+
+#, python-format
+msgid "%(name)s added. A setup link has been sent to %(email)s to choose a password."
+msgstr "تمت إضافة %(name)s. أُرسل رابط الإعداد إلى %(email)s لاختيار كلمة المرور."
 
 #, python-format
 msgid "%(name)s already has %(jobs)s that day."
@@ -1350,6 +1368,10 @@ msgstr "إيقاف الفني"
 msgid "Deactivated"
 msgstr "موقوف"
 
+#, python-format
+msgid "Deactivated. %(count)s open tasks moved to %(name)s."
+msgstr "تم الإيقاف. نُقلت %(count)s مهام مفتوحة إلى %(name)s."
+
 msgid "Deactivated. Please reassign their open tasks below."
 msgstr "تم إلغاء التفعيل. يرجى إعادة إسناد مهامه المفتوحة أدناه."
 
@@ -2458,6 +2480,9 @@ msgstr "شهري"
 msgid "Monthly report"
 msgstr "التقرير الشهري"
 
+msgid "Move all their open tasks to"
+msgstr "نقل جميع مهامه المفتوحة إلى"
+
 msgid "My account"
 msgstr "حسابي"
 
@@ -2693,6 +2718,9 @@ msgstr "لم يتم إنشاء حساب دخول بعد. أنشئه من سجل�
 
 msgid "No login has been created yet. Once created, a one-time link will be emailed so they can set their own password. No password is sent by email."
 msgstr "لم يتم إنشاء حساب دخول بعد. بعد إنشائه، سيُرسل رابط لمرة واحدة بالبريد الإلكتروني ليعيّن كلمة مروره بنفسه. لا تُرسل أي كلمة مرور بالبريد الإلكتروني."
+
+msgid "No login yet"
+msgstr "لا يوجد حساب دخول بعد"
 
 msgid "No machines are recorded. Add each machine you worked on."
 msgstr "لم تُسجَّل أي أجهزة. أضف كل جهاز عملت عليه."
@@ -4453,6 +4481,9 @@ msgstr "تُرسل رسالة الترحيب باللغة الإنجليزية،
 msgid "The year"
 msgstr "السنة"
 
+msgid "Their login: they get a link to choose their own password. Leave empty only if they have none yet."
+msgstr "حساب دخوله: سيصله رابط لاختيار كلمة مروره. اتركه فارغًا فقط إن لم يكن لديه بريد بعد."
+
 msgid "There are no active supervisors or technicians in this country."
 msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة."
 
@@ -4482,6 +4513,12 @@ msgstr "يمكن رفع هذه الملفات من شاشة تعديل المه�
 
 msgid "These staff members have been deactivated but remain assigned to the following tasks. Please open each task and select a replacement; for a lead, choose the reason “Left the company”."
 msgstr "تم إلغاء تفعيل هؤلاء الموظفين، لكنهم لا يزالون مسندين إلى المهام التالية. يرجى فتح كل مهمة واختيار بديل؛ وبالنسبة لقائد المهمة، اختر السبب «غادر الشركة»."
+
+msgid "They cannot sign in until a login is created on their page."
+msgstr "لا يمكنه تسجيل الدخول حتى يُنشأ له حساب دخول من صفحته."
+
+msgid "They take over as lead; anything they only helped on is simply taken off them."
+msgstr "يصبح الزميل قائد المهمة؛ والمهام التي كان مساعدًا فيها فقط تُزال عنه."
 
 msgid "This account can only be changed by someone at the same level or above."
 msgstr "لا يمكن تعديل هذا الحساب إلا من قِبل شخص في المستوى نفسه أو أعلى."
@@ -4848,9 +4885,6 @@ msgstr "رفع قائمة"
 
 msgid "Use only if the customer subsequently complained about this specific visit and the fault lies with the technician; not every complaint constitutes negligence. This is recorded in their reliability record and is not visible to the technician."
 msgstr "يُستخدم فقط إذا تقدّم العميل لاحقاً بشكوى بخصوص هذه الزيارة تحديداً وكان الخطأ من جانب الفني؛ فليست كل شكوى إهمالاً. يُسجَّل ذلك في سجل موثوقيته ولا يظهر للفني."
-
-msgid "User added."
-msgstr "تمت إضافة المستخدم."
 
 msgid "Username"
 msgstr "اسم المستخدم"

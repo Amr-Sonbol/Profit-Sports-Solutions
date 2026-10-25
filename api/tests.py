@@ -1676,3 +1676,41 @@ class PlanLinesApiTests(InstallationChecklistApiTests):
         self.assertEqual([(line['product_code'], line['quantity'], line['arm'], line['frame']) for line in lines],
                          [('BENCH-01', 1, 'Red', 'Black')] * 3)
         self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/lines/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class AppUsersTests(ManagerChoosesTheCountryTests):
+    # The admin adds a user from the app; a manager deactivates someone,
+    # handing their open tasks to a colleague.
+
+    def test_the_admin_adds_a_user_with_their_country_and_login(self):
+        admin = Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
+            full_name='Amina Admin', language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        token = self.token_for('admin1')
+        fields = self.client.get('/api/people/new/', **self.auth(token)).json()['fields']
+        self.assertIn(str(self.egypt.pk), [choice['value'] for choice in fields['country']['choices']])
+        response = self.client.post('/api/people/new/', json.dumps({
+            'role': 'supervisor', 'full_name': 'Ahmed Egypt', 'country': self.egypt.pk, 'email': 'ahmed@example.com',
+            'language': 'ar', 'employment_type': 'staff',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(response.json()['has_login'])
+        self.assertEqual(Technician.objects.get(full_name='Ahmed Egypt').country, self.egypt)
+        self.assertEqual(self.client.get('/api/people/new/', **self.auth(self.token_for('manager1'))).status_code, 403)
+        self.assertIsNotNone(admin)
+
+    def test_a_manager_deactivates_and_hands_over(self):
+        colleague = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Rami Colleague', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        token = self.token_for('manager1')
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['can_deactivate'])
+        self.assertEqual(page['open_tasks'], [self.task.task_number])
+        response = self.client.post(f'/api/people/{self.technician.pk}/deactivate/', json.dumps({
+            'reason': 'Resigned', 'move_to': colleague.pk,
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.json(), {'moved': 1, 'still_to_reassign': 0})
+        self.assertEqual(self.task.assignments.get(is_active=True).technician, colleague)

@@ -421,6 +421,10 @@ export interface Person {
   unavailable_reasons: Choice[];
   can_review_skills: boolean;
   can_set_availability: boolean;
+  /** A manager can deactivate them, handing their open tasks to a colleague. */
+  can_deactivate?: boolean;
+  open_tasks?: string[];
+  move_to_choices?: Choice[];
   skills: MySkills;
   record: { completed: number; helped: number; on_time_percent: number | null; acceptance_minutes: number | null };
 }

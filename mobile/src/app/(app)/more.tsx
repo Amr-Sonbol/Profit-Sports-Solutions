@@ -12,6 +12,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { WebsiteMenuGroup } from '@/types';
 import { CountryChooser } from '@/components/country-chooser';
+import { useSession } from '@/context/auth';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -48,6 +49,7 @@ const ICONS: Record<string, IconName> = {
 export default function MoreScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const { me } = useSession();
   const [groups, setGroups] = useState<WebsiteMenuGroup[] | null>(null);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -81,6 +83,14 @@ export default function MoreScreen() {
             Everything else from the website, signed in as you.
           </ThemedText>
           <CountryChooser onChange={load} inset={false} />
+          {me?.role === 'admin' ? (
+            <TouchableOpacity
+              style={[styles.page, { backgroundColor: theme.primary }]} onPress={() => router.push('/add-user')}
+            >
+              <Ionicons name="person-add-outline" size={20} color={theme.onPrimary} />
+              <ThemedText style={[styles.pageTitle, { color: theme.onPrimary }]}>Add a user</ThemedText>
+            </TouchableOpacity>
+          ) : null}
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
           {groups === null && !error ? <ActivityIndicator /> : null}
           {groups?.map((group, index) => (

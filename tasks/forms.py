@@ -525,8 +525,22 @@ class DeactivateTechnicianForm(forms.Form):
     """Permanent, unlike MarkUnavailableForm above — resigned, terminated,
     etc. Free text rather than fixed choices: the reasons here vary too
     much to usefully bucket, and this is a one-off note, not reported on.
+    `move_to`: who takes over their open tasks, in the same step, so none
+    is left with someone who can't sign in (`technician` is the one
+    leaving; the choice is offered only when they have open tasks).
     """
     reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
+    move_to = forms.ModelChoiceField(
+        queryset=Technician.objects.none(), required=False, label=_('Move all their open tasks to'),
+        help_text=_('They take over as lead; anything they only helped on is simply taken off them.'),
+    )
+
+    def __init__(self, *args, technician=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if technician is not None:
+            self.fields['move_to'].queryset = Technician.objects.filter(
+                is_active=True, country=technician.country,
+            ).exclude(pk=technician.pk).order_by('full_name')
 
 
 # One plain line for AUTH_PASSWORD_VALIDATORS, instead of Django's own
@@ -780,22 +794,41 @@ class CountryCreateForm(forms.ModelForm):
 
 
 class TechnicianCreateForm(forms.ModelForm):
-    """Country comes from the supervisor creating it, set in the view —
-    never a field here, same scoping every other per-country screen uses.
-    No `user` field: same as a customer, the login is a separate step
-    from the Edit screen afterward, not part of creation itself.
+    """Adding anyone on the staff, in one step: role, name, the country
+    they work in (chosen here, not whichever one the admin happens to be
+    viewing), and their email — which becomes their login, with a setup
+    link to choose their own password (tasks.views.create_staff_user). No
+    email: the person is added without a login, and the admin is told.
     """
+
+    email = forms.EmailField(
+        required=False, label=_('Email'),
+        help_text=_('Their login: they get a link to choose their own password. Leave empty only if they have none yet.'),
+    )
 
     class Meta:
         model = Technician
         # Role first: this one screen adds every kind of staff account.
         fields = [
-            'role', 'full_name', 'phone', 'language', 'employment_type',
+            'role', 'full_name', 'country', 'phone', 'language', 'employment_type',
             'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
             'hired_on': forms.DateInput(attrs={'type': 'date'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['country'].queryset = Country.objects.filter(is_active=True).order_by('name')
+        # The email goes right after the name and country.
+        order = ['role', 'full_name', 'country', 'email']
+        self.order_fields(order + [name for name in self.fields if name not in order])
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if email and get_user_model().objects.filter(username__iexact=email).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
 
 
 class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):

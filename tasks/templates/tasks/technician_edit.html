@@ -137,13 +137,19 @@
     <form method="post" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="deactivate">
-        {% for field in deactivate_form %}
+        {% if open_tasks %}
+        {# Before they go: what they're still on, to hand over in this same step. #}
+        <p class="flash flash--warning">{% blocktranslate count count=open_tasks|length %}{{ count }} open task is still assigned to them:{% plural %}{{ count }} open tasks are still assigned to them:{% endblocktranslate %}
+            {% for task in open_tasks %}<a href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+        {% endif %}
+        {% for field in deactivate_form %}{% if field.name != 'move_to' or open_tasks %}
         <div class="field {% if field.errors %}field--error{% endif %}">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        {% endfor %}
+        {% endif %}{% endfor %}
         <button type="submit" class="button button--danger">{% translate "Deactivate technician" %}</button>
     </form>
 </div>

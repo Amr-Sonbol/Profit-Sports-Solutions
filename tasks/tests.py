@@ -4916,9 +4916,26 @@ class TechnicianCreateTests(TaskTestCase):
         payload = {
             'full_name': 'Nour New', 'phone': '0501112222', 'language': Technician.Language.EN,
             'role': Technician.Role.TECHNICIAN, 'employment_type': Technician.EmploymentType.STAFF,
+            'country': self.country.pk,
         }
         payload.update(overrides)
         return payload
+
+    def test_one_step_with_their_country_and_login(self):
+        # The country is chosen, not whichever one the admin is viewing; the
+        # email becomes their login, with a setup link — no password sent.
+        from django.core import mail
+        qatar = Country.objects.create(name='Qatar', name_ar='قطر', iso_code='QA', timezone='Asia/Qatar', currency_code='QAR')
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(self.url, self._payload(
+            full_name='Hany Warehouse', role=Technician.Role.WAREHOUSE_MANAGER, country=qatar.pk, email='hany@example.com',
+        ))
+        hany = Technician.objects.get(full_name='Hany Warehouse')
+        self.assertEqual((hany.country, hany.user.username, hany.must_change_password), (qatar, 'hany@example.com', True))
+        self.assertFalse(hany.user.has_usable_password())
+        self.assertEqual(mail.outbox[-1].to, ['hany@example.com'])
+        response = self.client.post(self.url, self._payload(full_name='Twin', email='HANY@example.com'))
+        self.assertContains(response, 'An account with this email address already exists.')
 
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
@@ -4976,19 +4993,18 @@ class TechnicianCreateTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Technician.objects.filter(full_name='').count(), 0)
 
-    def test_created_in_the_admins_active_country(self):
+    def test_the_form_starts_on_the_country_being_viewed_but_the_choice_counts(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
 
         self.client.login(username='admin1', password='pass12345')
         self.client.post('/tasks/active-country/', {'country': other_country.pk})
+        self.assertEqual(self.client.get(self.url).context['form']['country'].initial, other_country)
 
-        response = self.client.post(self.url, self._payload())
+        response = self.client.post(self.url, self._payload(country=self.country.pk))
         self.assertEqual(response.status_code, 302)
-
-        technician = Technician.objects.get(full_name='Nour New')
-        self.assertEqual(technician.country, other_country)
+        self.assertEqual(Technician.objects.get(full_name='Nour New').country, self.country)
 
 
 class TechnicianEditTests(TaskTestCase):
@@ -9059,3 +9075,35 @@ class EquipmentChainTests(TaskTestCase):
         })
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(self.warehouse, StaffTicketForm(country=self.saudi).fields['site'].queryset)
+
+
+class DeactivateAndHandOverTests(TaskTestCase):
+    # Someone leaving: their open tasks go to a colleague in the same step.
+
+    def test_their_tasks_move_to_the_colleague(self):
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Maya Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        colleague = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Rami Colleague', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        task = Task.objects.create(
+            task_number='AE-0009', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        TaskAssignment.objects.create(task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+        self.client.login(username='manager1', password='pass12345')
+        url = f'/tasks/technicians/{self.technician.pk}/edit/'
+        self.assertContains(self.client.get(url), 'Move all their open tasks to')
+        response = self.client.post(url, {'action': 'deactivate', 'reason': 'Resigned', 'move_to': colleague.pk})
+        self.assertRedirects(response, '/tasks/technicians/', fetch_redirect_response=False)
+        self.technician.refresh_from_db()
+        self.assertFalse(self.technician.is_active)
+        lead = task.assignments.get(is_active=True)
+        self.assertEqual((lead.technician, lead.role), (colleague, TaskAssignment.Role.LEAD))
+        self.assertEqual(task.assignments.get(technician=self.technician).end_reason, 'left_company')

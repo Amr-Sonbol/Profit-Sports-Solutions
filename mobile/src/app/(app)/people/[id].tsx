@@ -3,17 +3,18 @@ import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity,
+  ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
-import { fetchPerson, reviewPersonSkill, setPersonAvailability } from '@/api/endpoints';
+import { deactivatePerson, fetchPerson, reviewPersonSkill, setPersonAvailability } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { MySkills, Person, SkillRow } from '@/types';
+import { ChoicePicker } from '@/components/choice-picker';
 
 /**
  * Someone on the viewer's team (Team → a name): photo and contacts,
@@ -32,6 +33,10 @@ export default function PersonScreen() {
   const [open, setOpen] = useState('');
   const [choosingReason, setChoosingReason] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  // Deactivating someone who left: why, and who takes over their open tasks.
+  const [leaving, setLeaving] = useState(false);
+  const [reason, setReason] = useState('');
+  const [moveTo, setMoveTo] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -219,6 +224,68 @@ export default function PersonScreen() {
           {group('Basic level', skills.basic)}
           {group('Advanced level', skills.advanced)}
           {group('Conduct', skills.conduct)}
+          {person.can_deactivate ? (
+            <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="smallBold">Left the company?</ThemedText>
+              {!leaving ? (
+                <TouchableOpacity style={[styles.chip, { borderColor: theme.danger }]} onPress={() => setLeaving(true)}>
+                  <ThemedText type="small" themeColor="danger">Deactivate…</ThemedText>
+                </TouchableOpacity>
+              ) : (
+                <ThemedView style={styles.form}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Their login stops working and they are signed out of every phone. Their history stays.
+                  </ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                    value={reason} onChangeText={setReason} placeholder="Reason (e.g. resigned)"
+                    placeholderTextColor={theme.textSecondary}
+                  />
+                  {person.open_tasks?.length ? (
+                    <>
+                      <ThemedText type="small" themeColor="danger">
+                        Still on {person.open_tasks.length} open task{person.open_tasks.length === 1 ? '' : 's'}: {person.open_tasks.join(', ')}
+                      </ThemedText>
+                      <ChoicePicker
+                        label="Move all their open tasks to" choices={person.move_to_choices ?? []}
+                        value={moveTo} onChange={setMoveTo} placeholder="Choose a colleague"
+                      />
+                    </>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.saveButton, { backgroundColor: theme.danger }]} disabled={isBusy}
+                    onPress={() => {
+                      if (!reason.trim()) {
+                        setError('Give a reason.');
+                        return;
+                      }
+                      Alert.alert(`Deactivate ${person.name}?`, 'They will not be able to sign in.', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Deactivate', style: 'destructive', onPress: async () => {
+                            setIsBusy(true);
+                            try {
+                              const result = await deactivatePerson(person.id, reason, moveTo);
+                              Alert.alert('Deactivated', result.still_to_reassign
+                                ? `${result.still_to_reassign} open task(s) still need someone — open each one to reassign.`
+                                : result.moved ? `${result.moved} open task(s) moved.` : 'Done.');
+                              router.back();
+                            } catch (err) {
+                              setError(err instanceof ApiRequestError ? err.message : 'Not done. Please try again.');
+                            } finally {
+                              setIsBusy(false);
+                            }
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <ThemedText type="smallBold" style={{ color: '#fff' }}>Deactivate</ThemedText>
+                  </TouchableOpacity>
+                </ThemedView>
+              )}
+            </ThemedView>
+          ) : null}
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
         </ScrollView>
       </SafeAreaView>
