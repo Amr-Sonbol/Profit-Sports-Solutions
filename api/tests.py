@@ -1491,3 +1491,18 @@ class WebsitePagesFollowTheAppCountryTests(ManagerChoosesTheCountryTests):
         self.assertEqual(self.client.session[ACTIVE_COUNTRY_SESSION_KEY], self.egypt.pk)
         self.client.get('/api/website-session/?next=/tasks/', **self.auth(token))
         self.assertNotIn(ACTIVE_COUNTRY_SESSION_KEY, self.client.session)
+
+
+class DashboardApiTests(ManagerChoosesTheCountryTests):
+    # The manager's home screen in the app.
+
+    def test_a_manager_sees_what_needs_them_and_the_open_tasks(self):
+        self.task.priority = Task.Priority.EMERGENCY
+        self.task.save(update_fields=['priority'])
+        body = self.client.get('/api/dashboard/', **self.auth(self.token_for('manager1'))).json()
+        self.assertEqual(body['stats']['emergency_count'], 1)
+        self.assertEqual(body['tasks'][0]['task_number'], self.task.task_number)
+        self.assertIn('Emergencies', [item['label'] for item in body['actions']])
+
+    def test_a_technician_has_no_dashboard(self):
+        self.assertEqual(self.client.get('/api/dashboard/', **self.auth(self.token_for('tech1'))).status_code, 403)

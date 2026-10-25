@@ -1400,17 +1400,12 @@ def home_summary(request, technician):
     }
 
 
-@login_required
-def dashboard(request):
-    """At a glance: who's available today, and every open task with its
-    lead and schedule. Every role but technician has view_dashboard by
-    default (people migrations 0024 and 0050): a field technician has
-    My schedule and My progress instead.
+def dashboard_overview(active_country):
+    """The dashboard's figures for a country: its technicians (with their
+    open-task counts), every open task in "needs someone first" order
+    (emergencies, then no lead, then no date) and the counts. The website's
+    Dashboard and the app's (api.views.DashboardView).
     """
-    viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
-    chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
-    active_country = get_active_country(request)
-
     technicians = list(Technician.objects.filter(
         is_active=True, country=active_country, role=Technician.Role.TECHNICIAN,
     ).order_by('full_name'))
@@ -1444,6 +1439,21 @@ def dashboard(request):
     tasks.sort(key=lambda t: (
         t.priority != Task.Priority.EMERGENCY, t.lead_technician is not None, not t.is_unscheduled,
     ))
+
+    return technicians, tasks, stats
+
+
+@login_required
+def dashboard(request):
+    """At a glance: who's available today, and every open task with its
+    lead and schedule. Every role but technician has view_dashboard by
+    default (people migrations 0024 and 0050): a field technician has
+    My schedule and My progress instead.
+    """
+    viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
+    chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
+    active_country = get_active_country(request)
+    technicians, tasks, stats = dashboard_overview(active_country)
 
     context = {
         'technicians': technicians,

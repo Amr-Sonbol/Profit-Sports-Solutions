@@ -1,5 +1,6 @@
+import { useEffect, useRef } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { type ColorValue, Platform } from 'react-native';
 
@@ -37,6 +38,18 @@ export default function AppTabsLayout() {
   // A technician's website pages are all their own (schedule, progress,
   // skills, profile) — tabs here already — so More would be empty.
   const showMore = Boolean(me?.role) && me?.role !== 'technician';
+  // A manager's home screen; they have no My progress (field staff's), as on the website.
+  const showDashboard = can('view_dashboard');
+  const isManagerTier = me?.role === 'manager' || me?.role === 'admin';
+  const router = useRouter();
+  const openedDashboard = useRef(false);
+  useEffect(() => {
+    // Open on the Dashboard once, for whoever has one; Schedule stays a tab.
+    if (showDashboard && !openedDashboard.current) {
+      openedDashboard.current = true;
+      router.navigate('/dashboard');
+    }
+  }, [showDashboard, router]);
 
   return (
     <Tabs
@@ -50,8 +63,15 @@ export default function AppTabsLayout() {
         }),
       }}
     >
+      <Tabs.Screen
+        name="dashboard"
+        options={{ title: 'Dashboard', tabBarIcon: tabIcon('speedometer'), href: showDashboard ? undefined : null }}
+      />
       <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
-      <Tabs.Screen name="progress" options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up') }} />
+      <Tabs.Screen
+        name="progress"
+        options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up'), href: isManagerTier ? null : undefined }}
+      />
       <Tabs.Screen
         name="team" options={{ title: 'Team', tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}
       />

@@ -45,6 +45,7 @@ from tasks.views import (
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
+    dashboard_overview, home_summary,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -571,6 +572,47 @@ class TeamMapView(APIView):
             'attention': [{'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']}
                           for item in data['attention']],
             'without_taps': [person.full_name for person in data['technicians'] if person.last_tap is None],
+        })
+
+
+class DashboardView(APIView):
+    """The app's Dashboard (view_dashboard) — a manager's home screen: what
+    needs their action (the website home page's list, each gated by its
+    own permission, with the website page behind it), today's follow-ups
+    (late arrivals, taps away from the site, jobs past their estimate), the
+    team's figures, and the open tasks that need someone first — for the
+    country they chose."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.VIEW_DASHBOARD)
+        country = get_active_country(request) or viewer.country
+        summary = home_summary(request, viewer)
+        technicians, tasks, stats = dashboard_overview(country)
+        follow_ups = team_map_data(country)['attention'] if has_role_permission(
+            request, RolePermission.Permission.VIEW_TECHNICIANS,
+        ) else []
+        return Response({
+            'country': country.display_name,
+            'actions': [
+                {'label': str(item['label']), 'count': item['count'], 'level': item['level'], 'url': item['url']}
+                for item in summary['actions']
+            ],
+            'follow_ups': [
+                {'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']} for item in follow_ups
+            ],
+            'stats': stats,
+            'tasks': [
+                {
+                    'id': task.pk, 'task_number': task.task_number, 'customer_name': task.site.customer.name,
+                    'site_name': task.site.name, 'status_display': task.get_status_display(),
+                    'priority': task.priority, 'priority_display': task.get_priority_display(),
+                    'lead': task.lead_technician.full_name if task.lead_technician else '',
+                    'scheduled_for': task.scheduled_for, 'scheduled_date': task.scheduled_date,
+                }
+                for task in tasks[:15]
+            ],
         })
 
 

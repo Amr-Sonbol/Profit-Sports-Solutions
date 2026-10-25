@@ -498,3 +498,18 @@ export interface TeamMap {
   attention: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   without_taps: string[];
 }
+
+/** The manager's Dashboard (api/views.py DashboardView). */
+export interface Dashboard {
+  country: string;
+  actions: { label: string; count: number | null; level: 'critical' | 'warning'; url: string }[];
+  follow_ups: { text: string; level: 'critical' | 'warning'; task_id: number }[];
+  stats: {
+    available_count: number; technician_count: number; open_task_count: number;
+    unassigned_count: number; unscheduled_count: number; emergency_count: number;
+  };
+  tasks: {
+    id: number; task_number: string; customer_name: string; site_name: string; status_display: string;
+    priority: string; priority_display: string; lead: string; scheduled_for: string | null; scheduled_date: string | null;
+  }[];
+}

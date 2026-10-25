@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  Dashboard,
   TeamMap,
   InternalTicket,
   HoursPage,
@@ -262,4 +263,9 @@ export function fetchInternalTickets(status = 'open') {
 /** Where each technician last tapped today, and what needs a follow-up. */
 export function fetchTeamMap() {
   return apiRequest<TeamMap>('/api/team-map/');
+}
+
+/** The manager's Dashboard, for the chosen country. */
+export function fetchDashboard() {
+  return apiRequest<Dashboard>('/api/dashboard/');
 }
