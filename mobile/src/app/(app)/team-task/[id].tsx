@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  approveTaskReport, assignTask, createFollowUp, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
+  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
 } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { hm } from '@/hours';
 import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
 import { when } from '@/task-time';
+import { ChoicePicker } from '@/components/choice-picker';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
@@ -42,6 +43,82 @@ const MANAGE_TITLES: Record<ManageAction, string> = {
 const MANAGE_DONE: Record<ManageAction, string> = {
   cancel: 'Task cancelled.', close: 'Task closed.', negligence: 'Task flagged.', correct_time: 'Time corrected.',
 };
+
+/**
+ * Receiving / loading: carry the machines that are done to the next step —
+ * loading at a warehouse, or an installation at a customer's site, in any
+ * country for a manager — choosing which go (a load can be split).
+ */
+function NextStepPanel({ taskId, nextStep, onCreated }: {
+  taskId: number;
+  nextStep: NonNullable<NonNullable<TeamTaskDetail['equipment']>['next_step']>;
+  onCreated: (id: number) => void;
+}) {
+  const theme = useTheme();
+  const [step, setStep] = useState(nextStep.steps[0]?.value ?? '');
+  const [site, setSite] = useState('');
+  const [chosen, setChosen] = useState<number[]>(nextStep.lines.map((line) => line.id));
+  const [error, setError] = useState('');
+  const [isBusy, setIsBusy] = useState(false);
+  const sites = nextStep.steps.find((option) => option.value === step)?.sites ?? [];
+
+  const create = async () => {
+    if (!site) {
+      setError('Choose where the next step is.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    try {
+      const created = await createNextStep(taskId, step, site, chosen);
+      Alert.alert('Next step created', `${created.task_number}, with ${chosen.length} machines.`);
+      onCreated(created.id);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Not created. Please try again.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  return (
+    <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
+      <ThemedText type="smallBold">Create the next step</ThemedText>
+      <ThemedView style={styles.quickRow}>
+        {nextStep.steps.map((option) => {
+          const on = step === option.value;
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[styles.quickButton, { borderColor: theme.primary }, on && { backgroundColor: theme.primary }]}
+              onPress={() => {
+                setStep(option.value);
+                setSite('');
+              }}
+            >
+              <ThemedText type="small" style={{ color: on ? theme.onPrimary : theme.primary }}>{option.label}</ThemedText>
+            </TouchableOpacity>
+          );
+        })}
+      </ThemedView>
+      <ChoicePicker label="Where" choices={sites} value={site} onChange={setSite} placeholder="Country — customer — site" />
+      <ThemedText type="small" themeColor="textSecondary">The machines to carry, with their serials and colours:</ThemedText>
+      {nextStep.lines.map((line) => {
+        const on = chosen.includes(line.id);
+        return (
+          <TouchableOpacity
+            key={line.id} style={styles.quickRow}
+            onPress={() => setChosen(on ? chosen.filter((id) => id !== line.id) : [...chosen, line.id])}
+          >
+            <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={theme.primary} />
+            <ThemedText type="small">{line.label}</ThemedText>
+          </TouchableOpacity>
+        );
+      })}
+      {error ? <ThemedText type="small" themeColor="danger">{error}</ThemedText> : null}
+      <SecondaryButton label={`Create the next step (${chosen.length})`} onPress={create} disabled={isBusy || !chosen.length} />
+    </ThemedView>
+  );
+}
 
 export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -411,6 +488,12 @@ export default function TeamTaskScreen() {
                   ) : null}
                 </ThemedView>
               ))}
+              {task.equipment.next_step ? (
+                <NextStepPanel
+                  taskId={task.id} nextStep={task.equipment.next_step}
+                  onCreated={(id) => router.push(`/team-task/${id}`)}
+                />
+              ) : null}
               {task.equipment.still_to_install ? (
                 <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
                   <ThemedText type="small">

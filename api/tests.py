@@ -1631,3 +1631,35 @@ class InstallationChecklistApiTests(ApiTestCase):
                                     content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Task.objects.get(pk=response.json()['id']).previous_task, self.task)
+
+
+class NextStepApiTests(ManagerChoosesTheCountryTests):
+    # "Create the next step" from the app: received in Cairo, installed in Dubai.
+
+    def test_a_manager_carries_received_machines_to_another_country(self):
+        from customers.models import Customer, Site
+        from reference.models import TaskType
+        from tasks.models import TaskProduct
+        ours = Customer.objects.create(country=self.egypt, name='Profit Sports Solutions', segment='other', is_internal=True)
+        warehouse = Site.objects.create(customer=ours, name='Cairo warehouse', address='Cairo')
+        receiving = Task.objects.create(
+            task_number='EG-0001', site=warehouse, priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.COMPLETED,
+            task_type=TaskType.objects.create(code='recv', name='Receiving', name_ar='استلام', category='receiving'),
+        )
+        TaskType.objects.create(code='inst', name='Installation', name_ar='تركيب', category='installation')
+        line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', serial_number='TG-1', status='done')
+        token = self.token_for('manager1')
+        page = self.client.get(f'/api/tasks/{receiving.pk}/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()
+        steps = page['equipment']['next_step']['steps']
+        install = next(step for step in steps if step['value'] == 'installation')
+        self.assertIn(str(self.site.pk), [site['value'] for site in install['sites']])  # the Dubai site
+
+        response = self.client.post(f'/api/tasks/{receiving.pk}/next-step/', json.dumps({
+            'step': 'installation', 'site': self.site.pk, 'lines': [line.pk],
+        }), content_type='application/json', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        installation = Task.objects.get(pk=response.json()['id'])
+        self.assertEqual((installation.site, installation.previous_task), (self.site, receiving))
+        self.assertEqual(installation.products.get().source_line, line)

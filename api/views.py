@@ -27,7 +27,7 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, require_manager, scoped_or_404,
 )
 from people.push import push_assigned, push_removed
-from reference.models import Brand, ConductArea, Country, Part, Skill
+from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
@@ -52,7 +52,8 @@ from tasks.views import (
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
-    save_checklist, still_to_install, create_follow_up, equipment_step,
+    save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
+    lines_to_carry, next_step_sites,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -1468,6 +1469,23 @@ def _team_task_response(request, task):
         'previous_task': {'id': task.previous_task_id, 'task_number': task.previous_task.task_number}
         if task.previous_task_id else None,
         'next_tasks': [{'id': other.pk, 'task_number': other.task_number} for other in task.next_tasks.all()],
+        # Receiving / loading: the machines ready to carry on, and where they can go.
+        'next_step': {
+            'lines': [
+                {'id': line.pk, 'label': f'{line.product_code}{" · " + line.serial_number if line.serial_number else ""}'}
+                for line in lines_to_carry(task)
+            ],
+            'steps': [
+                {
+                    'value': step, 'label': str(TaskType.Category(step).label),
+                    'sites': [
+                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}'}
+                        for site in next_step_sites(technician, step)
+                    ],
+                }
+                for step in NEXT_STEPS.get(equipment_step(task), ())
+            ],
+        } if lines_to_carry(task) and has_role_permission(request, RolePermission.Permission.CREATE_TASKS) else None,
     } if lines or task.previous_task_id else None
     data['manage'] = {
         'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
@@ -1478,6 +1496,31 @@ def _team_task_response(request, task):
         ],
     }
     return Response(data)
+
+
+class TaskNextStepView(APIView):
+    """The chain's next step from the app (create_tasks): step = loading |
+    installation, site (any country for the manager tier), lines = the
+    machines to carry — tasks.views.create_next_step. Returns the new
+    task's id and number."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        viewer = require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+        step = request.data.get('step')
+        if step not in NEXT_STEPS.get(equipment_step(task), ()):
+            return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)
+        site = get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
+        task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
+        wanted = {str(value) for value in request.data.get('lines') or []}
+        chosen = [line for line in lines_to_carry(task) if str(line.pk) in wanted]
+        if task_type is None or not chosen:
+            return Response({'detail': str(_('Choose at least one machine to carry to the next step.'))},
+                            status=status.HTTP_400_BAD_REQUEST)
+        next_task = create_next_step(request._request, task, task_type, site, chosen)
+        return Response({'id': next_task.pk, 'task_number': next_task.task_number}, status=status.HTTP_201_CREATED)
 
 
 class TaskFollowUpView(APIView):

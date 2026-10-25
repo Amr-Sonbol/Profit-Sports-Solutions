@@ -308,3 +308,10 @@ export function uploadLinePhoto(taskId: number, lineId: number, photo: { uri: st
 export function createFollowUp(id: number) {
   return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/follow-up/`, { method: 'POST', body: {} });
 }
+
+/** The chain's next step (loading / installation) at a site, for the machines chosen. */
+export function createNextStep(id: number, step: string, site: string, lines: number[]) {
+  return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/next-step/`, {
+    method: 'POST', body: { step, site, lines },
+  });
+}

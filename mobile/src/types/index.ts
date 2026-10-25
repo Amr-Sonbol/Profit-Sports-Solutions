@@ -258,6 +258,11 @@ export interface TeamTaskDetail extends TaskDetail {
     can_follow_up: boolean;
     previous_task: { id: number; task_number: string } | null;
     next_tasks: { id: number; task_number: string }[];
+    /** Receiving / loading: what can be carried on, and where (any country for managers). */
+    next_step: {
+      lines: { id: number; label: string }[];
+      steps: { value: string; label: string; sites: Choice[] }[];
+    } | null;
   } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
   manage?: { can_cancel: boolean; can_close: boolean; can_flag: boolean; correctable_event_ids: number[] };
