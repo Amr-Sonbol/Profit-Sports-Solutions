@@ -34,6 +34,9 @@ export default function AppTabsLayout() {
   const can = (permission: string) => me?.permissions?.includes(permission) ?? false;
   const showTeam = can('view_tasks') || can('view_technicians');
   const showTickets = can('manage_tickets');
+  // A technician's website pages are all their own (schedule, progress,
+  // skills, profile) — tabs here already — so More would be empty.
+  const showMore = Boolean(me?.role) && me?.role !== 'technician';
 
   return (
     <Tabs
@@ -57,7 +60,9 @@ export default function AppTabsLayout() {
         options={{ title: 'Tickets', tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
       />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
-      <Tabs.Screen name="more" options={{ title: 'More', tabBarIcon: tabIcon('grid') }} />
+      <Tabs.Screen
+        name="more" options={{ title: 'More', tabBarIcon: tabIcon('grid'), href: showMore ? undefined : null }}
+      />
       <Tabs.Screen name="task/[id]" options={{ href: null }} />
       <Tabs.Screen name="report/[id]" options={{ href: null }} />
       <Tabs.Screen name="team-task/[id]" options={{ href: null }} />
