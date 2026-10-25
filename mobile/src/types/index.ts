@@ -178,6 +178,8 @@ export interface ReportHelper {
 }
 
 export interface WorkReportInput {
+  /** An installation's on-site checklist (without its photo address). */
+  checklist?: Omit<ChecklistRow, 'photo_url' | 'added_on_site'>[];
   findings: string;
   action_taken: string;
   // Standard work lines and recommendations (codes), and a typed one.
@@ -533,4 +535,22 @@ export interface StaffAccount {
   has_login: boolean;
   is_active: boolean;
   can_manage: boolean;
+}
+
+/** One machine on an installation's on-site checklist (api/views.py MyTaskReportView). */
+export interface ChecklistRow {
+  /** The planned line; null for a machine added on site. */
+  id: number | null;
+  product_code: string;
+  /** '' until checked: done (installed), missing, damaged, wrong_item, returned, later. */
+  status: string;
+  serial_number: string;
+  frame: string;
+  arm: string;
+  padding: string;
+  trim: string;
+  replacement: string;
+  note: string;
+  photo_url: string;
+  added_on_site: boolean;
 }

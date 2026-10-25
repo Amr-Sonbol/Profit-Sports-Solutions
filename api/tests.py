@@ -1570,3 +1570,50 @@ class StaffAccountEmergencyApiTests(ManagerChoosesTheCountryTests):
         response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'unlock'}),
                                     content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 403)
+
+
+class InstallationChecklistApiTests(ApiTestCase):
+    # The installers' checklist in the app: each machine, and its photo.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import TaskType
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.task_type = TaskType.objects.create(code='install', name='New installation', name_ar='تركيب', category='installation')
+        self.task.brand = self.brand
+        self.task.save(update_fields=['status', 'task_type', 'brand'])
+        from tasks.models import TaskProduct
+        self.line = TaskProduct.objects.create(task=self.task, product_code='EXCITE-RUN')
+
+    def test_the_app_checks_off_a_machine_with_its_photo(self):
+        from tasks.models import TaskProduct
+        token = self.token_for('tech1')
+        screen = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()
+        self.assertEqual([row['product_code'] for row in screen['checklist']], ['EXCITE-RUN'])
+        self.assertIn('done', [choice['value'] for choice in screen['checklist_statuses']])
+
+        photo = SimpleUploadedFile('run.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/lines/{self.line.pk}/photo/', {'photo': photo},
+                                    **self.auth(token))
+        self.assertTrue(response.json()['photo_url'].startswith('http'))
+
+        body = {
+            'findings': '', 'action_taken': '', 'work_lines': ['bolts'], 'resolved': True, 'customer_name': 'Ali',
+            'parts': [], 'signature': SIGNATURE_DATA_URL,
+            'checklist': [
+                {'id': self.line.pk, 'product_code': 'EXCITE-RUN', 'status': 'damaged', 'serial_number': 'TG-5'},
+                {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': ''},
+            ],
+        }
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('checklist', response.json())  # the added one is "installed" without a serial
+
+        body['checklist'][1]['serial_number'] = 'TG-6'
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.status, 'damaged')  # its photo said what was wrong
+        self.assertTrue(TaskProduct.objects.get(product_code='EXCITE-TOP').added_on_site)

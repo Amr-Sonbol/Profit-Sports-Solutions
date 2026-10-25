@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import SESSION_KEY, authenticate, login
 from django.contrib.auth.models import update_last_login
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -33,12 +33,12 @@ from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
     AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
-    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, CancelTaskForm, CloseTaskForm,
+    NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, CancelTaskForm, CloseTaskForm,
     CorrectEventTimeForm, NegligenceFlagForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
 from tasks.views import (
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
@@ -51,7 +51,8 @@ from tasks.views import (
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
-    cancel_task, close_task_directly, correct_tap_time, flag_negligence,
+    cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
+    save_checklist,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
@@ -1157,6 +1158,31 @@ def _machine_form(task, row):
     })
 
 
+class TaskLinePhotoView(APIView):
+    """A photo of one machine on the installation checklist (multipart
+    `photo`), straight from the phone's camera — the lead only. Returns
+    its address."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk, line_id):
+        assignment = _get_my_assignment(request, pk)
+        if assignment.role != TaskAssignment.Role.LEAD:
+            raise PermissionDenied
+        line = get_object_or_404(TaskProduct, pk=line_id, task=assignment.task)
+        photo = request.FILES.get('photo')
+        form = TaskProductCheckForm()
+        try:
+            form.fields['photo'].clean(photo)
+        except ValidationError as error:
+            return Response({'photo': error.messages}, status=status.HTTP_400_BAD_REQUEST)
+        if photo is None:
+            return Response({'photo': ['Add a photo.']}, status=status.HTTP_400_BAD_REQUEST)
+        line.photo = photo
+        line.save(update_fields=['photo'])
+        return Response({'photo_url': request.build_absolute_uri(line.photo.url)})
+
+
 class MyTaskReportView(APIView):
     """The lead's work report — findings, parts used, labour hours and the
     customer's signature. GET returns {report: ... or null}; POST
@@ -1208,6 +1234,15 @@ class MyTaskReportView(APIView):
                 for a in _active_helpers(task)
             ],
             **_report_machines(task, request),
+            # An installation's machines to check off, and what can be chosen for each.
+            'checklist': [
+                {**row, 'photo_url': request.build_absolute_uri(row['photo_url']) if row['photo_url'] else ''}
+                for row in checklist_initial(task)
+            ] if has_checklist(task) else None,
+            'checklist_statuses': [
+                {'value': value, 'label': str(label)} for value, label in TaskProductCheckForm().fields['status'].choices
+                if value
+            ],
         })
 
     def post(self, request, pk):
@@ -1272,6 +1307,20 @@ class MyTaskReportView(APIView):
         machine_forms = None
         if isinstance(machine_rows, list):
             machine_forms = [_machine_form(task, row) for row in machine_rows if isinstance(row, dict)]
+        # An installation: each machine checked off (photos go up on their own, TaskLinePhotoView).
+        checklist_forms = None
+        if has_checklist(task):
+            known = {row['id']: row for row in checklist_initial(task)}
+            checklist_forms = [
+                TaskProductCheckForm(
+                    {key: row.get(key) or '' for key in (
+                        'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
+                        'replacement', 'note',
+                    )},
+                    initial=known.get(row.get('id'), {}),
+                )
+                for row in request.data.get('checklist') or [] if isinstance(row, dict)
+            ]
 
         errors = {}
         if not report_form.is_valid():
@@ -1283,6 +1332,10 @@ class MyTaskReportView(APIView):
             machine_errors = [form.errors for form in machine_forms if not form.is_valid()]
             if machine_errors:
                 errors['machines'] = machine_errors
+        if checklist_forms is not None:
+            checklist_errors = [form.errors for form in checklist_forms if not form.is_valid()]
+            if checklist_errors:
+                errors['checklist'] = checklist_errors
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1293,10 +1346,13 @@ class MyTaskReportView(APIView):
                     [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
                     [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
                 ),
+                None if checklist_forms is None else [form.cleaned_data for form in checklist_forms],
             )
             return Response({'html': html, 'problems': [str(problem) for problem in problems]})
 
         with transaction.atomic():
+            if checklist_forms is not None:
+                save_checklist(task, [form.cleaned_data for form in checklist_forms])
             report = save_work_report(
                 request, task, request.user.technician, report_form, [form.cleaned_data for form in part_forms],
             )

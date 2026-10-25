@@ -14,11 +14,12 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { currentLocation } from '@/location';
+import { InstallationChecklist } from '@/components/installation-checklist';
 import {
   isNetworkError, pendingReportFor, removePendingReport, savePendingReport, withOfflineCopy,
 } from '@/offline';
 import type {
-  Brand, CataloguePart, Choice, ReportHelper, ReportMachine, SiteMachine, TaskDetail, WorkReport,
+  Brand, CataloguePart, ChecklistRow, Choice, ReportHelper, ReportMachine, SiteMachine, TaskDetail, WorkReport,
 } from '@/types';
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
@@ -75,7 +76,7 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
     return errors;
   }
   for (const [field, value] of Object.entries(body as Record<string, unknown>)) {
-    if ((field === 'parts' || field === 'machines') && Array.isArray(value)) {
+    if ((field === 'parts' || field === 'machines' || field === 'checklist') && Array.isArray(value)) {
       const first = value.find((rowErrors) => rowErrors && Object.keys(rowErrors).length > 0);
       if (first) {
         const messages = Object.values(first as Record<string, string[]>).flat();
@@ -137,6 +138,9 @@ export default function ReportScreen() {
   const [recommendation, setRecommendation] = useState('');
   // The customer's report language: anything typed should be in it.
   const [reportLanguage, setReportLanguage] = useState('en');
+  // An installation: its machines to check off on site (step 1), else null.
+  const [checklist, setChecklist] = useState<ChecklistRow[] | null>(null);
+  const [checklistStatuses, setChecklistStatuses] = useState<Choice[]>([]);
   // The review before sending (see openReview); null while filling in.
   const [review, setReview] = useState<{ html: string; problems: string[]; offline?: boolean } | null>(null);
   const [pickingMachine, setPickingMachine] = useState(false);
@@ -169,6 +173,8 @@ export default function ReportScreen() {
       setWorkLineChoices(reportResult.data.work_line_choices ?? []);
       setRecommendationChoices(reportResult.data.recommendation_choices ?? []);
       setReportLanguage(reportResult.data.report_language ?? 'en');
+      setChecklist(reportResult.data.checklist ?? null);
+      setChecklistStatuses(reportResult.data.checklist_statuses ?? []);
       // What the report records, or the machines the customer reported.
       setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
@@ -297,6 +303,9 @@ export default function ReportScreen() {
       helper_hours: helperHours,
       send_copy_to: sendCopyTo.trim(),
       machines: machines.map(machineInput),
+      ...(checklist ? {
+        checklist: checklist.map(({ photo_url: _photo, added_on_site: _added, ...row }) => row),
+      } : {}),
   });
 
   // "Review report": the report exactly as the customer will get it, and
@@ -545,6 +554,19 @@ export default function ReportScreen() {
               </ThemedText>
             </ThemedView>
 
+            {checklist ? (
+              <>
+                <StepTitle
+                  number={1} title="Installation checklist"
+                  hint="For each machine: what happened, its serial from the plate (or scan it), and its colours — black unless custom. Damaged or wrong item: say what, or take a photo."
+                />
+                <InstallationChecklist
+                  taskId={Number(id)} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
+                />
+                {errors.checklist ? <ThemedText themeColor="danger" type="small">{errors.checklist}</ThemedText> : null}
+              </>
+            ) : (
+              <>
             <StepTitle
               number={1} title="Machines"
               hint="For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed."
@@ -690,6 +712,9 @@ export default function ReportScreen() {
                 <ThemedText themeColor="primary">+ Add a machine not in the list</ThemedText>
               </TouchableOpacity>
             </ThemedView>
+
+              </>
+            )}
 
             <StepTitle number={2} title="Work performed" hint="Tick everything you did on this visit." />
             <Field label="Work performed" error={errors.work_lines}>

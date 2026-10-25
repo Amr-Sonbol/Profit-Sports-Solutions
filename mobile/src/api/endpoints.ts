@@ -2,6 +2,7 @@ import { currentLocation } from '@/location';
 
 import { apiRequest } from './client';
 import type {
+  ChecklistRow,
   StaffAccount,
   Dashboard,
   TeamMap,
@@ -90,6 +91,9 @@ export function fetchMyReport(id: number) {
     work_line_choices?: Choice[];
     recommendation_choices?: Choice[];
     report_language?: string;
+    // An installation: the machines to check off, and what can be chosen for each.
+    checklist?: ChecklistRow[] | null;
+    checklist_statuses?: Choice[];
   }>(
     `/api/my-tasks/${id}/report/`,
   );
@@ -287,5 +291,14 @@ export function fetchStaffAccounts(query = '') {
 export function staffAccountAction(id: number, action: string) {
   return apiRequest<{ message: string; password: string }>(`/api/staff-accounts/${id}/`, {
     method: 'POST', body: { action },
+  });
+}
+
+/** A photo of one machine on the installation checklist; returns its address. */
+export function uploadLinePhoto(taskId: number, lineId: number, photo: { uri: string; name: string; type: string }) {
+  const form = new FormData();
+  form.append('photo', photo as unknown as Blob);
+  return apiRequest<{ photo_url: string }>(`/api/my-tasks/${taskId}/lines/${lineId}/photo/`, {
+    method: 'POST', body: form, isFormData: true,
   });
 }

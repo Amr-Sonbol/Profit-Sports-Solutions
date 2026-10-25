@@ -5379,7 +5379,8 @@ def report_problems(report, language):
                 'machine': name,
             })
         typed += [(name, item.note), (name, item.action)]
-    if not report.work_lines and not report.action_taken.strip():
+    # An installation's checklist says what was done; a repair visit picks it.
+    if not report.work_lines and not report.action_taken.strip() and not has_checklist(report.task):
         problems.append(_('Pick the work performed.'))
     task = report.task
     if has_checklist(task):
