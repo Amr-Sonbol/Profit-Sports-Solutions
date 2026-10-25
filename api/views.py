@@ -21,9 +21,9 @@ from rest_framework.views import APIView
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
 from people.context_processors import nav_groups, nav_pages
-from people.permissions import get_active_country, require_manager, scoped_or_404
+from people.permissions import ACTIVE_COUNTRY_SESSION_KEY, get_active_country, require_manager, scoped_or_404
 from people.push import push_assigned, push_removed
-from reference.models import Brand, ConductArea, Part, Skill
+from reference.models import Brand, ConductArea, Country, Part, Skill
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
@@ -97,6 +97,12 @@ def _me_payload(user, request=None):
         'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
+        # A manager chooses which country the app shows (X-Active-Country).
+        'countries': [
+            {'value': str(country.pk), 'label': country.display_name}
+            for country in Country.objects.filter(is_active=True).order_by('name')
+        ] if technician.is_manager_tier else [],
+        'home_country_id': str(technician.country_id),
         'language_choices': [{'value': value, 'label': str(label)} for value, label in technician.Language.choices],
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
@@ -229,7 +235,8 @@ class MyScheduleView(APIView):
             if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
                 return Response({'detail': 'Not allowed.'}, status=status.HTTP_403_FORBIDDEN)
             technician = get_object_or_404(
-                _people_i_oversee(technician).filter(country=technician.country), pk=person_id if person_id.isdigit() else 0,
+                _people_i_oversee(technician).filter(country=get_active_country(request)),
+                pk=person_id if person_id.isdigit() else 0,
             )
         mine, with_role = _my_tasks(technician)
         context = _calendar_context(request, mine, technician.country)
@@ -614,6 +621,12 @@ class WebsiteSessionView(APIView):
         # underlying request too, so that alone can't tell a session apart.
         if request._request.session.get(SESSION_KEY) != str(request.user.pk):
             login(request._request, request.user, backend='django.contrib.auth.backends.ModelBackend')
+        # A manager's country chosen in the app: the website's switcher too.
+        chosen = getattr(request, 'api_active_country', None)
+        if chosen is not None:
+            request._request.session[ACTIVE_COUNTRY_SESSION_KEY] = chosen.pk
+        elif request.user.technician.is_manager_tier:
+            request._request.session.pop(ACTIVE_COUNTRY_SESSION_KEY, None)
         return HttpResponseRedirect(next_url)
 
 
@@ -674,7 +687,7 @@ def _person(request, pk):
     if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
         raise PermissionDenied
     viewer = request.user.technician
-    return get_object_or_404(_people_i_oversee(viewer).filter(country=viewer.country), pk=pk)
+    return get_object_or_404(_people_i_oversee(viewer).filter(country=get_active_country(request)), pk=pk)
 
 
 class PersonView(APIView):
@@ -810,7 +823,7 @@ class TeamProgressView(APIView):
         viewer = request.user.technician
         this_month = timezone.localtime().date().replace(day=1)
         month_first = min(_resolve_report_month(request), this_month)
-        rows = team_progress_rows(viewer, viewer.country, month_first)
+        rows = team_progress_rows(viewer, get_active_country(request), month_first)
         return Response({
             'month': month_first,
             'rows': [

@@ -14,6 +14,9 @@ export interface Me {
   country?: string;
   language?: string;
   language_choices?: Choice[];
+  /** Countries a manager can switch the app to (empty for everyone else). */
+  countries?: Choice[];
+  home_country_id?: string;
   /** What this role may do (RolePermission codes) — decides which tabs show. */
   permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */

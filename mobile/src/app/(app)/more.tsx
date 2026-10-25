@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { WebsiteMenuGroup } from '@/types';
+import { CountryChooser } from '@/components/country-chooser';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -78,6 +79,7 @@ export default function MoreScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             Everything else from the website, signed in as you.
           </ThemedText>
+          <CountryChooser onChange={load} inset={false} />
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
           {groups === null && !error ? <ActivityIndicator /> : null}
           {groups?.map((group, index) => (

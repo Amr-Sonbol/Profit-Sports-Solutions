@@ -1442,3 +1442,52 @@ class AppUsesTheCountryDayTests(ApiTestCase):
             plan = self.client.get('/api/my-today/', **self.auth(token)).json()
         self.assertEqual(plan['today'], '2026-10-25')
         self.assertEqual(plan['today_count'], 1)
+
+
+class ManagerChoosesTheCountryTests(ApiTestCase):
+    # The app's version of the website's country switcher, managers only.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Country
+        self.egypt = Country.objects.create(
+            name='Egypt', name_ar='مصر', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP', weekend_days='4',
+        )
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.cairo_tech = Technician.objects.create(
+            user=User.objects.create_user('cairo1', password='pass12345'), country=self.egypt,
+            full_name='Omar Cairo', language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+    def test_a_manager_switches_country_and_sees_its_team(self):
+        token = self.token_for('manager1')
+        me = self.client.get('/api/me/', **self.auth(token)).json()
+        self.assertIn(str(self.egypt.pk), [country['value'] for country in me['countries']])
+        home = self.client.get('/api/team-progress/', **self.auth(token)).json()
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in home['rows']])
+        egypt = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()
+        self.assertIn(self.cairo_tech.pk, [row['id'] for row in egypt['rows']])
+        self.assertEqual(
+            self.client.get(f'/api/people/{self.cairo_tech.pk}/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk),
+                            **self.auth(token)).status_code, 200,
+        )
+
+    def test_a_supervisor_cannot_switch(self):
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).json()['countries'], [])
+        rows = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()['rows']
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in rows])
+
+
+class WebsitePagesFollowTheAppCountryTests(ManagerChoosesTheCountryTests):
+    def test_a_website_page_opened_in_the_app_shows_the_chosen_country(self):
+        from people.permissions import ACTIVE_COUNTRY_SESSION_KEY
+        token = self.token_for('manager1')
+        self.client.get('/api/website-session/?next=/tasks/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
+        self.assertEqual(self.client.session[ACTIVE_COUNTRY_SESSION_KEY], self.egypt.pk)
+        self.client.get('/api/website-session/?next=/tasks/', **self.auth(token))
+        self.assertNotIn(ACTIVE_COUNTRY_SESSION_KEY, self.client.session)

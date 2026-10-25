@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
-import { ApiRequestError, clearToken, getToken, setToken as persistToken } from '@/api/client';
+import { ApiRequestError, clearToken, getToken, setActiveCountry, setToken as persistToken } from '@/api/client';
 import { fetchMe, login as loginRequest } from '@/api/endpoints';
 import { cacheScreenData, withOfflineCopy } from '@/offline';
 import { registerForPush, unregisterForPush } from '@/push';
@@ -75,6 +75,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signOut = async () => {
     await unregisterForPush();
     await clearToken();
+    await setActiveCountry(null);  // the next person starts in their own country
     setMe(null);
   };
 

@@ -14,6 +14,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskListItem } from '@/types';
 import { useSession } from '@/context/auth';
+import { CountryChooser } from '@/components/country-chooser';
 
 /**
  * Every open task in the viewer's active country — same view_tasks
@@ -35,6 +36,8 @@ export default function TeamTasksScreen() {
   // The team's open tasks, or how each person on it is doing (?view=progress from More → Technicians).
   const params = useLocalSearchParams<{ view?: string }>();
   const [view, setView] = useState<'tasks' | 'progress'>(params.view === 'progress' ? 'progress' : 'tasks');
+  // Bumped when a manager switches country, so the progress list reloads.
+  const [countryVersion, setCountryVersion] = useState(0);
   // Opened again from More with ?view=progress while already mounted: follow it.
   const [seenView, setSeenView] = useState(params.view);
   if (params.view !== seenView) {
@@ -84,6 +87,10 @@ export default function TeamTasksScreen() {
             </TouchableOpacity>
           ) : null}
         </ThemedView>
+        <CountryChooser onChange={() => {
+          setCountryVersion((version) => version + 1);
+          load();
+        }} />
         <ThemedView style={styles.switcher}>
           {(['tasks', 'progress'] as const).map((option) => (
             <TouchableOpacity
@@ -100,7 +107,7 @@ export default function TeamTasksScreen() {
             </TouchableOpacity>
           ))}
         </ThemedView>
-        {view === 'progress' ? <TeamProgressList /> : (
+        {view === 'progress' ? <TeamProgressList key={countryVersion} /> : (
         <>
         <SearchBox value={search} onChangeText={setSearch} placeholder="Search by task, customer, site, PAK or serial number" />
         {error ? (
