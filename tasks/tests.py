@@ -6617,7 +6617,9 @@ class TechnicianHoursTests(TaskTestCase):
         self.assertNotIn(cairo_tech, [r['technician'] for r in response.context['rows']])
 
     def test_earlier_month_is_reachable(self):
-        earlier = timezone.now() - timedelta(days=62)
+        # Mid-month, midday: the same month in UTC and in the country's own time,
+        # whatever time of day the test runs.
+        earlier = (timezone.now() - timedelta(days=62)).replace(day=15, hour=12)
         self._task_with_report('AE-0003', hours='5.00', submitted_at=earlier)
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url, {'month': timezone.localtime(earlier).strftime('%Y-%m')})
