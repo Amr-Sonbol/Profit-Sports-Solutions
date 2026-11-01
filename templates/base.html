@@ -176,7 +176,8 @@
         {% endif %}
     </header>
     <main class="page">
-        {% if request.path != '/' %}
+        {# Not on the login page: nobody's signed in yet, and "back" would only lead to it again. #}
+        {% if request.path != '/' and request.resolver_match.url_name != 'login' %}
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
         <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
         {% endif %}

@@ -103,6 +103,10 @@ class TaskDetailTests(TaskTestCase):
         response = self.client.get(f'/tasks/{self.task.pk}/')
         self.assertEqual(response.status_code, 302)
 
+    def test_the_login_page_has_no_back_link_but_other_pages_do(self):
+        self.assertNotContains(self.client.get('/accounts/login/'), 'page-back')
+        self.assertContains(self.client.get('/accounts/password-reset/'), 'page-back')
+
     def test_technician_gets_403(self):
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get(f'/tasks/{self.task.pk}/')
