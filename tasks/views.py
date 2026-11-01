@@ -2258,6 +2258,9 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
             ticket.reviewed_by = request.user
             ticket.reviewed_at = timezone.now()
             ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
+    if cleaned.get('lead'):
+        # Chosen on the form: assigned as from the assign screen (event, push, status).
+        _set_lead(task, None, cleaned['lead'], '', request.user)
     _send_new_task_email_to_staff(request, task)
     return task
 
@@ -2311,17 +2314,22 @@ def task_create(request):
         if machine_decision not in TicketMachine.TASK_DECISIONS:
             machine_decision = TicketMachine.Decision.VISIT
 
+    can_assign = _has_permission(requesting_technician, RolePermission.Permission.ASSIGN_TASKS)
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin)
+        form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign)
         if form.is_valid():
             task = create_task(request, form, requesting_technician, ticket, selected_machines, machine_decision)
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             weekend_warning = _weekend_warning(task)
             if weekend_warning:
                 messages.warning(request, weekend_warning)
+            lead = form.cleaned_data.get('lead')
+            clash = _clash_warning(lead, task) if lead else ''
+            if clash:
+                messages.warning(request, clash)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin)
+        form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign)
         if selected_machines:
             form.fields['description'].initial = ticket_machines_text(selected_machines)[1]
 

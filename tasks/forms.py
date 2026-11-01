@@ -62,8 +62,15 @@ class TaskCreateForm(forms.ModelForm):
 
     PLAIN_FIELD_NAMES = [
         'required_skill', 'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
-        'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
+        'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor', 'lead',
     ]
+
+    # Who does it, chosen right away — the same people the assign screen
+    # offers (a visitor on a trip is added there afterwards).
+    lead = forms.ModelChoiceField(
+        queryset=Technician.objects.none(), required=False, label=_('Lead'),
+        help_text=_('who does it — anyone in the country; can be left for the assign screen'),
+    )
 
     class Meta:
         model = Task
@@ -78,9 +85,15 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, country, ticket=None, is_admin=False, **kwargs):
+    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_admin = is_admin
+        if can_assign:
+            self.fields['lead'].queryset = Technician.objects.filter(
+                is_active=True, is_available=True, country=country,
+            ).order_by('full_name')
+        else:
+            del self.fields['lead']
         self.fields['site'].queryset = Site.objects.filter(
             customer__is_active=True, customer__country=country,
         ).select_related('customer')
@@ -179,7 +192,7 @@ class TaskCreateForm(forms.ModelForm):
 
     def plain_fields(self):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
-        return [self[name] for name in self.PLAIN_FIELD_NAMES]
+        return [self[name] for name in self.PLAIN_FIELD_NAMES if name in self.fields]
 
     def clean(self):
         cleaned = super().clean()

@@ -806,6 +806,8 @@ Compress photos on upload and never autoplay video. Technicians are on mobile da
 ### task_assignment
 Handles several technicians on one task, and one technician across many tasks.
 
+**The lead can be chosen when the task is created** (website New task, for whoever has `assign_tasks`) — any active, available person in the task's country, whatever their role, so the warehouse manager, a supervisor or a technician can receive or load. It's the same as setting the lead from the assign screen right after (event, push, status `assigned`); left empty, the assign screen is where it's done, and a visitor on a trip is added there.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |

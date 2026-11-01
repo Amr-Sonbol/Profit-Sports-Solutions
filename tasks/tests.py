@@ -1730,6 +1730,24 @@ class TaskCreateTests(TaskTestCase):
         task = Task.objects.get()
         self.assertEqual(task.responsible_supervisor, supervisor)
 
+    def test_the_lead_can_be_chosen_when_creating_a_task(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        with patch('tasks.views.push_assigned') as pushed:
+            response = self.client.post('/tasks/new/', self._base_new_task_payload(
+                site=self.site.pk, lead=self.technician.pk,
+            ))
+        self.assertEqual(response.status_code, 302)
+        task = Task.objects.get()
+        lead = task.assignments.get(is_active=True)
+        self.assertEqual((lead.technician, lead.role, task.status), (self.technician, 'lead', Task.Status.ASSIGNED))
+        self.assertTrue(task.events.filter(event_type=TaskEvent.EventType.ASSIGNED).exists())
+        pushed.assert_called_once()
+
+    def test_no_lead_field_without_permission_to_assign(self):
+        RolePermission.objects.filter(role='supervisor', permission='assign_tasks').update(allowed=False)
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertNotIn('lead', self.client.get('/tasks/new/').context['form'].fields)
+
     def test_creating_a_task_notifies_and_emails_managers_and_admins(self):
         manager_user = User.objects.create_user('manager1', email='dana@example.com', password='pass12345')
         Technician.objects.create(
