@@ -9043,6 +9043,13 @@ class InstallationChecklistTests(TaskTestCase):
         self.client.post(self.report_url, payload)
         return WorkReport.objects.filter(task=self.task).first()
 
+    def test_parts_used_show_their_catalogue_photo(self):
+        from reference.models import Part
+        Part.objects.create(code='BELT-01', description='Treadmill belt', photo='part_photos/abc/BELT-01.png')
+        page = self.client.get(self.report_url)
+        self.assertContains(page, 'data-photo="/media/part_photos/abc/BELT-01.png"')
+        self.assertContains(page, 'js/part-photos.js')
+
     def test_installed_needs_a_serial_and_damaged_needs_a_reason(self):
         from reports.models import WorkReport
         payload = self._report_payload()

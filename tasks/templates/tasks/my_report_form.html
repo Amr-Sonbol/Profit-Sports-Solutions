@@ -274,6 +274,7 @@
                         <th>{% translate "Part code" %}</th>
                         <th>{% translate "Description" %}</th>
                         <th>{% translate "Qty" %}</th>
+                        <th>{% translate "Photo" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -282,9 +283,11 @@
                         <td>{{ form.part_code }}</td>
                         <td>{{ form.description }}</td>
                         <td>{{ form.quantity }}</td>
+                        {# The chosen part's catalogue photo, filled in by part-photos.js. #}
+                        <td><img class="part-photo" alt="" data-part-photo hidden></td>
                     </tr>
                     {% if form.errors %}
-                    <tr><td colspan="3"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="4"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>
@@ -363,12 +366,13 @@
 {% block scripts %}
 {% if catalogue_parts %}
 <datalist id="parts-catalogue">
-    {% for part in catalogue_parts %}<option value="{{ part.code }}">{{ part.description }}</option>{% endfor %}
+    {% for part in catalogue_parts %}<option value="{{ part.code }}"{% if part.photo %} data-photo="{{ part.photo.url }}"{% endif %}>{{ part.description }}</option>{% endfor %}
 </datalist>
 {% endif %}
 {% load static %}
 <script src="{% static 'js/signature-pad.js' %}" defer></script>
 <script src="{% static 'js/tap-location.js' %}" defer></script>
 <script src="{% static 'js/report-picks.js' %}" defer></script>
+{% if catalogue_parts %}<script src="{% static 'js/part-photos.js' %}" defer></script>{% endif %}
 {% if equipment_step == 'receiving' %}<script src="{% static 'js/receiving-count.js' %}" defer></script>{% endif %}
 {% endblock %}

@@ -274,6 +274,8 @@ export interface TeamTaskDetail extends TaskDetail {
 export interface CataloguePart {
   code: string;
   description: string;
+  /** What the part looks like (the Parts screen's photo); '' without one. */
+  photo_url: string;
 }
 
 export interface Candidate {

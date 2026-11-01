@@ -1914,12 +1914,19 @@ class PushDeviceView(APIView):
 
 
 class PartListView(APIView):
-    """The active parts catalogue, for the report screen's picker."""
+    """The active parts catalogue, for the report screen's picker — each
+    part's photo too, so the technician can check it's the right one."""
 
     permission_classes = [IsTechnician]
 
     def get(self, request):
-        return Response(list(Part.objects.filter(is_active=True).values('code', 'description')))
+        return Response([
+            {
+                'code': part.code, 'description': part.description,
+                'photo_url': request.build_absolute_uri(part.photo.url) if part.photo else '',
+            }
+            for part in Part.objects.filter(is_active=True)
+        ])
 
 
 class TicketListView(APIView):

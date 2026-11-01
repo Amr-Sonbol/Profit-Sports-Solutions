@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity,
 } from 'react-native';
@@ -265,6 +266,11 @@ export default function ReportScreen() {
       .filter((part) => part.code.includes(query) || part.description.toUpperCase().includes(query))
       .slice(0, 5);
   };
+
+  // The catalogue photo of a part code as typed, if it has one.
+  const partPhoto = (typed: string): string => (
+    catalogue.find((part) => part.code === typed.trim().toUpperCase())?.photo_url ?? ''
+  );
 
   const updatePart = (index: number, field: keyof PartRow, value: string) => {
     setParts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
@@ -822,11 +828,17 @@ export default function ReportScreen() {
               <ThemedText type="smallBold">Parts used</ThemedText>
               {parts.map((row, index) => (
                 <ThemedView key={index} style={[styles.partCard, { borderColor: theme.backgroundSelected }]}>
-                  <TextInput
-                    style={inputStyle} value={row.part_code} placeholder="Part code"
-                    placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
-                    onChangeText={(value) => updatePart(index, 'part_code', value)}
-                  />
+                  <ThemedView style={styles.partNumbers}>
+                    <TextInput
+                      style={[inputStyle, styles.partNumber]} value={row.part_code} placeholder="Part code"
+                      placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
+                      onChangeText={(value) => updatePart(index, 'part_code', value)}
+                    />
+                    {/* The chosen part's photo, to check it's the right one. */}
+                    {partPhoto(row.part_code) ? (
+                      <Image source={{ uri: partPhoto(row.part_code) }} style={styles.partPhoto} contentFit="cover" />
+                    ) : null}
+                  </ThemedView>
                   {partSuggestions(row.part_code).map((part) => (
                     <TouchableOpacity
                       key={part.code}
@@ -838,10 +850,15 @@ export default function ReportScreen() {
                         }
                       }}
                     >
-                      <ThemedText type="small">
-                        <ThemedText type="smallBold">{part.code}</ThemedText>
-                        {part.description ? ` — ${part.description}` : ''}
-                      </ThemedText>
+                      <ThemedView style={styles.suggestionRow}>
+                        {part.photo_url ? (
+                          <Image source={{ uri: part.photo_url }} style={styles.suggestionPhoto} contentFit="cover" />
+                        ) : null}
+                        <ThemedText type="small" style={styles.partNumber}>
+                          <ThemedText type="smallBold">{part.code}</ThemedText>
+                          {part.description ? ` — ${part.description}` : ''}
+                        </ThemedText>
+                      </ThemedView>
                     </TouchableOpacity>
                   ))}
                   <TextInput
@@ -1046,6 +1063,9 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: Spacing.four, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   partNumbers: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   partNumber: { flex: 1 },
+  partPhoto: { width: 48, height: 48, borderRadius: Spacing.one },
+  suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  suggestionPhoto: { width: 40, height: 40, borderRadius: Spacing.one },
   secondaryButton: { borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, alignItems: 'center' },
   summary: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   centerLink: { alignItems: 'center', paddingVertical: Spacing.two },

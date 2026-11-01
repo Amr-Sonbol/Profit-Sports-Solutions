@@ -723,11 +723,17 @@ class PartListApiTests(ApiTestCase):
     def test_lists_active_parts_only(self):
         from reference.models import Part
 
-        Part.objects.create(code='BELT-01', description='Treadmill belt')
+        Part.objects.create(code='BELT-01', description='Treadmill belt', photo='part_photos/abc/BELT-01.png')
         Part.objects.create(code='OLD-9', is_active=False)
+        Part.objects.create(code='PAD-7')
         token = self.token_for('tech1')
         response = self.client.get('/api/parts/', **self.auth(token))
-        self.assertEqual(response.json(), [{'code': 'BELT-01', 'description': 'Treadmill belt'}])
+        # Each with its photo, so the technician can check it's the right part.
+        self.assertEqual(response.json(), [
+            {'code': 'BELT-01', 'description': 'Treadmill belt',
+             'photo_url': 'http://testserver/media/part_photos/abc/BELT-01.png'},
+            {'code': 'PAD-7', 'description': '', 'photo_url': ''},
+        ])
 
 
 class PushDeviceTests(ApiTestCase):
