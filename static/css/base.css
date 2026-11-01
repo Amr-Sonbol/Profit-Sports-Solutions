@@ -2595,3 +2595,32 @@ tbody tr:hover {
     font-size: 1.5rem;
     letter-spacing: 0.1em;
 }
+
+/* Parts screen: each part's photo, and its description, colour and photo edited in one row. */
+.part-photo {
+    inline-size: 56px;
+    block-size: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+}
+
+.part-edit {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.part-edit input[type="text"] {
+    flex: 1 1 12rem;
+    min-inline-size: 0;
+}
+
+.part-edit__photo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+}

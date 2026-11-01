@@ -251,15 +251,18 @@ export interface TeamTaskDetail extends TaskDetail {
   /** An equipment task's machines, the chain around it, and the follow-up offer. */
   equipment?: {
     lines: {
-      product_code: string; serial_number: string; status: string; status_label: string; colors: string;
+      product_code: string; kind: string; quantity: number; serial_number: string; status: string; status_label: string;
+      colors: string;
       replacement: string; note: string; added_on_site: boolean; photo_url: string;
     }[];
     still_to_install: number;
     can_follow_up: boolean;
     previous_task: { id: number; task_number: string } | null;
     next_tasks: { id: number; task_number: string }[];
-    /** Receiving / loading: what can be carried on, and where (any country for managers). */
+    /** Loading: what can be sent on to an installation, and where — the manager tier only. */
     next_step: {
+      /** The button's words: "Send to installation". */
+      title: string;
       lines: { id: number; label: string }[];
       steps: { value: string; label: string; sites: Choice[] }[];
     } | null;
@@ -560,11 +563,18 @@ export interface StaffAccount {
   can_manage: boolean;
 }
 
-/** One machine on an installation's on-site checklist (api/views.py MyTaskReportView). */
+/** One line on an equipment step's checklist (api/views.py MyTaskReportView). */
 export interface ChecklistRow {
-  /** The planned line; null for a machine added on site. */
+  /** The planned line; null for one added on site. */
   id: number | null;
   product_code: string;
+  /** 'machine' or 'part' (a spare part — receiving only). */
+  kind: string;
+  /** Receiving: how many are listed (1 per machine on loading and installation). */
+  quantity: number | string;
+  /** Receiving, when fewer arrived than listed: how many did, and what happened to the rest. */
+  received?: string;
+  rest_status?: string;
   /** '' until checked: done (installed), missing, damaged, wrong_item, returned, later. */
   status: string;
   serial_number: string;
@@ -580,7 +590,11 @@ export interface ChecklistRow {
 
 /** A planned machine line (api/views.py TaskLinesView). */
 export interface PlannedLine {
+  /** 'machine', or 'part' (a spare part — receiving only: no serial, no colours). */
+  kind: string;
   product_code: string;
+  /** A spare part ordered for one repair: that task's number — held for it in stock. */
+  for_task?: string;
   serial_number: string;
   quantity: number | string;
   frame: string;

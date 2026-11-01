@@ -1055,12 +1055,14 @@ class NewAssetForm(forms.Form):
 
 
 class TaskProductCheckForm(forms.Form):
-    """One machine on the on-site checklist (installation; later receiving
-    and loading): what really happened to it, its serial, its colours, what
-    went in instead, a note and a photo. `id` is the planned line; empty
-    for a machine added on site. Guided, because mistakes here travel: an
-    installed machine needs its serial; a damaged one or a wrong item
-    needs a note or a photo saying what.
+    """One line on a step's checklist (receiving, loading, installation):
+    what really happened to it, its serial, its colours, what went in
+    instead, a note and a photo. `id` is the planned line; empty for one
+    added on site. Guided, because mistakes here travel: an installed
+    machine needs its serial (loading may leave it); a damaged one or a
+    wrong item needs a note or a photo saying what. Receiving counts by
+    code instead — no serial; how many arrived, and what happened to the
+    rest; a spare part has no colours.
     """
 
     COLORS = ('frame', 'arm', 'padding', 'trim')
@@ -1085,8 +1087,15 @@ class TaskProductCheckForm(forms.Form):
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
 
+    # Receiving, when fewer arrived than listed: what happened to the rest.
+    REST_STATUSES = [
+        (TaskProduct.Status.MISSING, TaskProduct.Status.MISSING.label),
+        (TaskProduct.Status.DAMAGED, TaskProduct.Status.DAMAGED.label),
+    ]
+
     def __init__(self, *args, step='installation', **kwargs):
         super().__init__(*args, **kwargs)
+        self.step = step
         # A photo already on the line counts (it's kept unless replaced).
         self.has_photo = bool(self.initial.get('photo_url'))
         done = STEP_DONE_LABELS.get(step, STEP_DONE_LABELS['installation'])
@@ -1095,15 +1104,52 @@ class TaskProductCheckForm(forms.Form):
         ]
         if step != 'installation':
             self.fields['replacement'].label = _('Instead')
+        if step == 'receiving':
+            # Counted against the container's list by code — no serials here.
+            del self.fields['serial_number']
+            self.fields['received'] = forms.IntegerField(
+                required=False, min_value=0, max_value=99999, label=_('How many arrived'),
+                initial=self.initial.get('quantity'),
+                help_text=_('if not all of them — then say what happened to the rest'),
+            )
+            self.fields['rest_status'] = forms.ChoiceField(
+                choices=self.REST_STATUSES, required=False, label=_('The rest'),
+            )
+            if not self.initial.get('id'):
+                # Something that came but wasn't on the list: a machine or a spare part, and how many.
+                self.fields['kind'] = forms.ChoiceField(choices=TaskProduct.Kind.choices, label=_('Kind'))
+                self.fields['quantity'] = forms.IntegerField(
+                    required=False, min_value=1, max_value=99999, label=_('Quantity'),
+                )
+                del self.fields['received']
+                del self.fields['rest_status']
+        if self.initial.get('kind') == TaskProduct.Kind.PART:
+            for color in self.COLORS:
+                del self.fields[color]
+        self.order_fields(['id', 'product_code', 'kind', 'quantity', 'status', 'received', 'rest_status'])
 
     def clean(self):
         cleaned = super().clean()
         for color in self.COLORS:
-            cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
+            if color in self.fields:
+                cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
         cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
         status = cleaned.get('status')
-        if status == TaskProduct.Status.DONE and not cleaned['serial_number']:
-            self.add_error('serial_number', _('This machine needs its serial number — type or scan it from the plate.'))
+        # Only an installed machine must have its serial; loading may leave it for the installers.
+        if self.step == 'installation' and status == TaskProduct.Status.DONE and not cleaned['serial_number']:
+            self.add_error('serial_number', _('This machine needs its serial number — type it from the sticker on the machine.'))
+        if 'quantity' in self.fields and not cleaned.get('quantity'):
+            cleaned['quantity'] = 1
+        # Receiving: the count against the list. Fewer splits the line (save_checklist), more just raises it.
+        planned = self.initial.get('quantity') or cleaned.get('quantity') or 1
+        received = cleaned.get('received')
+        if status != TaskProduct.Status.DONE or received == planned:
+            cleaned['received'] = received = None
+        short = received is not None and received < planned
+        if short and cleaned.get('rest_status') == TaskProduct.Status.DAMAGED and not (
+            (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
+        ):
+            self.add_error('note', _('Say what is wrong with the damaged ones, or add a photo.'))
         if status in (TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM) and not (
             (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
         ):
@@ -1119,11 +1165,16 @@ class TaskProductForm(forms.Form):
     serial if already known, quantity, and the machine's four colours —
     black unless it's a custom one. What really happened to each machine is
     checked off on site (TaskProductCheckForm); there the serial of an
-    installed machine is required.
+    installed machine is required. On a receiving task a line can be a
+    spare part instead (`kind`): a catalogue code and a quantity.
     """
 
     COLORS = ('frame', 'arm', 'padding', 'trim')
 
+    # A spare part only counts on a receiving task (save_planned_lines).
+    kind = forms.ChoiceField(
+        choices=TaskProduct.Kind.choices, required=False, initial=TaskProduct.Kind.MACHINE, label=_('Kind'),
+    )
     product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
     serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
@@ -1131,7 +1182,8 @@ class TaskProductForm(forms.Form):
     arm = forms.CharField(required=False, max_length=100, label=_('Arm color'), initial=DEFAULT_COLOR)
     padding = forms.CharField(required=False, max_length=100, label=_('Padding color'), initial=DEFAULT_COLOR)
     trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
-
+    # A spare part ordered for one repair: that task's number, so the part is held for it.
+    for_task = forms.CharField(required=False, max_length=30, label=_('For task'))
 
     def clean(self):
         cleaned = super().clean()
@@ -1150,6 +1202,24 @@ class TaskProductForm(forms.Form):
         for color in self.COLORS:
             cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
         cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
+        cleaned['kind'] = cleaned.get('kind') or TaskProduct.Kind.MACHINE
+        if cleaned['kind'] == TaskProduct.Kind.PART:
+            # A part has a code from the catalogue (once there is one), never a serial or colours.
+            cleaned['serial_number'] = ''
+            for color in self.COLORS:
+                cleaned[color] = DEFAULT_COLOR
+            catalogue = Part.objects.filter(is_active=True)
+            part = catalogue.filter(code__iexact=cleaned['product_code'].strip()).first()
+            if part:
+                cleaned['product_code'] = part.code
+            elif catalogue.exists():
+                self.add_error('product_code', _('“%(code)s” is not in the parts list.') % {'code': cleaned['product_code']})
+        number = (cleaned.get('for_task') or '').strip()
+        cleaned['for_task'] = None
+        if number and cleaned['kind'] == TaskProduct.Kind.PART:
+            cleaned['for_task'] = Task.objects.filter(task_number__iexact=number).first()
+            if cleaned['for_task'] is None:
+                self.add_error('for_task', _('There is no task %(number)s.') % {'number': number})
         return cleaned
 
 
@@ -1693,7 +1763,12 @@ class TechnicianTripForm(forms.ModelForm):
 class PartForm(forms.ModelForm):
     class Meta:
         model = Part
-        fields = ['code', 'description']
+        fields = ['code', 'description', 'colour', 'photo']
+        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_code(self):
         code = self.cleaned_data['code'].strip().upper()
@@ -1701,12 +1776,49 @@ class PartForm(forms.ModelForm):
             raise forms.ValidationError(_('This code is already in the list.'))
         return code
 
+    def clean_photo(self):
+        photo = self.cleaned_data.get('photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+        return photo
+
 
 class PartImportForm(forms.Form):
     file = forms.FileField(
-        label=_('CSV file'), help_text=_('Two columns: code and description. A header row is permitted.'),
-        validators=[FileExtensionValidator(allowed_extensions=['csv'])],
+        label=_('CSV or Excel file'),
+        help_text=_('A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse '
+                    'stock sheet — Code, Description, the colour, and each part\'s picture placed in its code cell. '
+                    'New codes are added; existing ones get what the sheet has; nothing is deleted.'),
+        validators=[FileExtensionValidator(allowed_extensions=['csv', 'xlsx'])],
     )
+    warehouse = forms.ModelChoiceField(
+        queryset=Site.objects.none(), required=False, label=_('Warehouse for the quantities'),
+        help_text=_("If the sheet has a quantity column: the warehouse it was counted in. Each quantity is "
+                    "recorded as a count there — the opening stock. Leave empty to load the parts only."),
+    )
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['warehouse'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
+
+
+class StockCountForm(forms.Form):
+    """A hand count on the Stock screen: what's on the shelf for one code at
+    a warehouse (tasks.stock.record_count stores the difference)."""
+
+    kind = forms.ChoiceField(choices=TaskProduct.Kind.choices, label=_('Kind'))
+    site = forms.ModelChoiceField(queryset=Site.objects.none(), label=_('Warehouse'))
+    product_code = forms.CharField(max_length=100, label=_('Code'))
+    counted = forms.IntegerField(min_value=0, max_value=99999, label=_('On the shelf'))
+    note = forms.CharField(max_length=500, label=_('Why'), help_text=_('e.g. opening stock, monthly count'))
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['site'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
 
 
 class NotificationSettingsForm(forms.ModelForm):

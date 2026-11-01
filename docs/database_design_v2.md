@@ -75,16 +75,18 @@ Panatta, Skillcore, Digilock, and any future principal. Available in all countri
 No brand name is ever hardcoded in the application. Adding a principal is an office action.
 
 ### part
-The parts catalogue technicians pick from on the work report, instead of typing codes by hand. Code and description only — no prices; the technician still enters the cost on each report (`part_used`).
+The parts catalogue technicians pick from on the work report, instead of typing codes by hand. No prices; the technician still enters the cost on each report (`part_used`). The photo is how people recognise a part — one per code, taken once, not at each delivery.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| code | varchar | unique, stored upper-case |
+| code | varchar | unique, stored upper-case, trimmed (codes copied from the supplier's sheets carry stray line breaks) |
 | description | varchar | optional |
+| colour | varchar | blank — e.g. "Color of frame: MATT BLACK". Information only: another colour is another code, so it's never separate stock |
+| photo | file | nullable — what the part looks like |
 | is_active | bool | switched off rather than deleted — past reports keep their codes |
 
-Maintained from the Parts screen by anyone with `manage_parts` (manager, warehouse_manager and admin by default) — one at a time, or uploaded as a CSV (`code,description`; an existing code just gets its description updated). Seeded from every code already used on a report, so it doesn't start empty. **Once the catalogue has any active part, a report's part code must be one of them** (case-insensitive, saved as the catalogue's spelling, with its description filled in when left blank); while it's empty, codes are free text as before.
+Maintained from the Parts screen by anyone with `manage_parts` (manager, warehouse_manager and admin by default) — one at a time (with its photo), or uploaded as a CSV (`code,description`; an existing code just gets its description updated) or **an Excel sheet laid out like the stock sheet the warehouse keeps** (`Code`, `Description`, colour, and the part's picture placed in its code cell). **The upload is how more parts get added later** — there are more than the first sheet, from other suppliers and countries — so it can be run any number of times: a new code is added, an existing one gets what the sheet has (description, colour, a picture if there is one) and keeps anything the sheet leaves empty, and nothing is ever deleted. If the sheet has a quantity column, choosing a warehouse on the upload records each quantity as a **count** there (`stock_adjustment`) — the opening stock. The warehouse's sheet fills in `Qty` only once something has gone out; until then the quantity is its `Original QTY`, sometimes deliveries added up (`10+147`). Seeded from every code already used on a report, so it doesn't start empty. **Once the catalogue has any active part, a report's part code must be one of them** (case-insensitive, saved as the catalogue's spelling, with its description filled in when left blank); while it's empty, codes are free text as before.
 
 ### skill
 **One skill per repair task — brand-agnostic.** Replacing a pin is the same skill whatever brand it's on; what a technician is actually rated on is whether they can do that specific job, not "how good are they at Panatta in general." This replaced an earlier version of the table where each brand carried its own single skill row (plus a second `Cardio` row for the two brands that needed one) — that framing didn't match how the business evaluates competence, so it's gone.
@@ -126,7 +128,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | code | varchar | stable key, never changes |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager) and `loading` (at a warehouse). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`) |
+| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`) |
 | requires_photos | bool | |
 | requires_signature | bool | |
 | checklist_template | jsonb | the fields the report form shows for this type |
@@ -272,7 +274,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — support_manager, operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default), `customer_accounts` (the Customer accounts screen — support_manager, operations_manager and admin by default), `tickets_all_countries` (reach every country's customer tickets — the ticket list's "All countries" option, opening one, converting one — support_manager, operations_manager and admin by default; without it, `manage_tickets` covers the holder's own country only).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — support_manager, operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default), `customer_accounts` (the Customer accounts screen — support_manager, operations_manager and admin by default), `tickets_all_countries` (reach every country's customer tickets — the ticket list's "All countries" option, opening one, converting one — support_manager, operations_manager and admin by default; without it, `manage_tickets` covers the holder's own country only), `view_stock` (the Stock screen — each warehouse's machines by code — manager, warehouse_manager, operations_manager and admin by default).
 
 **`operations_manager` is who the support desk escalates to — and the Technical Support Manager's own manager.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines`, `decide_escalated_tickets` and, since `0041_grant_manage_tickets_to_operations_manager`, `manage_tickets` too: the whole ticket desk, not only the tickets escalated to it.
 
@@ -716,21 +718,45 @@ Many-to-many because a customer reporting three broken treadmills is one visit, 
 ### task_product
 One machine's line on an **equipment task** — receiving from the factory, loading at the warehouse, installing on site (for now, installations; receiving and loading reuse it) — from the delivery note, structured: stock delivered ahead of or alongside the visit, not consumed during it (that's `part_used`, §5). Operations cares about four things beyond the code: the frame, arm, padding and trim colours — black unless it's a custom one.
 
-**Planned, then checked off on site.** A supervisor plans the lines from the task's Edit screen (product code, serial if already known, quantity, colours; replaced wholesale on each save) — on an installation "BENCH-01 × 4" becomes four lines, one per machine. Whoever does the step checks each one off in their report (website and app): what really happened (`status`), the serial from the plate (typed or scanned), the colours, what went in instead, a note and a photo — adding a machine that wasn't on the paperwork (`added_on_site`). An installed machine needs its serial; a damaged one or a wrong item needs a note or a photo. The review lists anything not checked yet and what's still to install.
+**Planned, then checked off on site.** A supervisor plans the lines from the task's Edit screen (product code, serial if already known, quantity, colours; replaced wholesale on each save) — on a loading or an installation "BENCH-01 × 4" becomes four lines, one per machine. Whoever does the step checks each one off in their report (website and app): what really happened (`status`), the serial typed from the sticker on the machine, the colours, what went in instead, a note and a photo — adding a machine that wasn't on the paperwork (`added_on_site`). A damaged one or a wrong item needs a note or a photo. The review lists anything not checked yet and what's still to install.
+
+**Codes and quantities until someone types the serial.** The container's list and sales both deal in product codes and quantities; the serial is only on the machine's sticker (no barcode — it's typed). So each step asks for exactly what that step can know:
+
+- **Receiving** stays code × quantity — one line per code, never split, no serials: the container is counted against its list, not machine by machine. A count that's off splits the line: *BENCH-01 × 18* done, *BENCH-01 × 2* missing (or damaged).
+- **Loading** is one line per machine. Typing the serial there is **optional** — a big load can go out without them.
+- **Installation** needs every serial. One already typed at loading arrives filled in, so the installer just compares it with the sticker and ticks it (correcting it if a different machine came); one that's still empty is typed now, with a photo of the sticker (`photo`) so the office can check it later.
+
+So each serial is typed once, wherever the machine is first handled one by one.
 
 **Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
 
 **Carried along the chain.** A line copied to the next step keeps `source_line`, so a machine's journey (factory → warehouse → site → its repairs) can be followed; `task.previous_task` links the steps themselves.
 
-**The chain can cross countries** — received and loaded at the Riyadh warehouse, installed at a gym in Dubai. On a receiving or loading task's page, whoever can create tasks uses **Create the next step**: loading (at a warehouse — an internal site) or an installation (at a customer's site), in any country for the manager tier (their own otherwise), choosing which machines go — a load can be split across sites. The machines that are done there (received / loaded) and not carried yet are copied with their serial and colours; each step belongs to its own site's country and team (the responsible supervisor carries over only within a country). After an installation, what wasn't installed gets a **follow-up** task instead (same site, linked as the next step).
+**The chain can cross countries** — received and loaded at the Riyadh warehouse, installed at a gym in Dubai. Machines leave a warehouse only through a **loading** task, planned from that warehouse's stock (below), never carried from one receiving task — a load of BENCH-01 can be from two containers. A receiving sends nothing on. The loading is created at the warehouse like any task, and its machines are planned on its Edit screen (website and app) by **the manager tier only** — taking machines out of stock is the same decision as sending them on; the screen shows what the warehouse holds and suggests its codes. (Installations carried straight from a receiving before this still count as out of that warehouse.) On a loading task's page, **only the manager tier** (managers and the admin — never a supervisor, even within their own country, so no mistakes) sends the machines on: **Send to installation**, at a customer's site in any country, choosing which machines go — a load can be split across sites. The machines loaded and not carried yet are copied with their serial (if typed) and colours; each step belongs to its own site's country and team (the responsible supervisor carries over only within a country). After an installation, what wasn't installed gets a **follow-up** task instead (same site, linked as the next step).
+
+**Straight from the factory to a customer** there's no receiving or loading: the installation is created at the customer's site and planned from the container's list (code × quantity), and the installer checks what arrived and types every serial. It never touches a warehouse's stock.
+
+**Warehouse stock — counted, not stored.** How many of a code a warehouse holds is worked out from the tasks themselves, so it can never drift from them:
+
+> received (`done` receiving lines at that warehouse) − loaded (lines of loading tasks there that aren't cancelled) + counts (`stock_adjustment`, below)
+
+Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it, or removing a line, puts them back. Planning a load shows each code's stock next to it and **warns** when it would go below zero, but doesn't block: the warehouse floor is the truth, and a count corrects the figure.
+
+**Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
+
+> received (`done` part lines on receiving tasks at the country's warehouse) − used (`part_used` on that country's reports) + counts
+
+**Parts ordered for one repair are held for it.** A part line received for a particular task (`for_task`, the repair with the PAK number) counts in the warehouse but shows as **held for that task**, not free, until that task's report uses it; whatever the task leaves unused once it's closed or cancelled becomes free stock.
+
+The **Stock** screen lists each warehouse's machines and parts by code and quantity — parts with their photo, and how many of each are held and for which task — in the active country (a manager switches country from the header, as on every screen), gated on `view_stock` (manager, warehouse_manager, operations_manager and admin by default). Machines are listed per warehouse; spare parts per country, since each country has one parts warehouse.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
-| serial_number | varchar | required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
-| quantity | int | default 1; 1 per machine on an installation |
+| serial_number | varchar | blank on receiving; optional on loading; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
+| quantity | int | default 1; the count of that code on a receiving line, 1 per machine on a loading or an installation |
 | frame | varchar | default `Black` |
 | arm | varchar | default `Black` |
 | padding | varchar | default `Black` |
@@ -741,6 +767,22 @@ One machine's line on an **equipment task** — receiving from the factory, load
 | photo | file | nullable — unguessable path |
 | added_on_site | bool | not on the delivery note — added by whoever did the step |
 | source_line_id | FK → task_product | nullable — the same machine's line on the step before |
+| kind | varchar | `machine` (default) or `part` — a spare part, only on a receiving task; the colour columns don't apply to it |
+| for_task_id | FK → task | nullable — a part line only: the repair it was ordered for, which holds it (above) |
+
+### stock_adjustment
+A hand count of one code at a warehouse — the opening stock when this starts (what's already on the floor was never received in the app), or a recount. Whoever counts types **what's on the shelf**; the row keeps the difference from what the app worked out, so entering the same count twice changes nothing. Added by the manager tier or a warehouse manager from the Stock screen, or by a parts upload with quantities; never edited, a mistake is corrected by another count.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| site_id | FK → site | a warehouse — a site of an `is_internal` customer |
+| kind | varchar | `machine` or `part` — which stock it corrects: a warehouse's machines, or its country's parts |
+| product_code | varchar | a machine's code or a `part.code` |
+| quantity | int | the difference the count made: + found, − short |
+| note | text | why — required when typed, "Opening stock — <file name>" from an upload |
+| created_by_id | FK → user | |
+| created_at | timestamptz | |
 
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.
@@ -1013,7 +1055,7 @@ Each is a real need eventually. None belongs in the first version.
 
 - Warranty claim submission workflow — capture `is_warranty`, `labour_hours` and photos now; claim from an export until the volume justifies a module
 - Reward points — see the warning in section 6; do not tie metrics to pay in year one
-- Parts inventory and stock
+- Prices and stock value — machines and spare parts are counted per warehouse (*Warehouse stock*, under `task_product`), never valued
 - Invoicing — accounting handles it; `billing_type` gives them a clean export
 - Preventive maintenance schedules
 - Technician leave calendar
@@ -1035,7 +1077,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report happens right on that task's own detail page — there's no separate reports queue.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket, warehouse stock (with its counts). Filing/viewing a task's report happens right on that task's own detail page — there's no separate reports queue.
 
 **Manager (web):** roles & permissions, skills list, add a skill, requesting customer feedback — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
@@ -1047,4 +1089,4 @@ Each is a real need eventually. None belongs in the first version.
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Twenty-two screens plus a handful of public/token pages (feedback form, ticket status). That is the whole application.
+Twenty-three screens plus a handful of public/token pages (feedback form, ticket status). That is the whole application.

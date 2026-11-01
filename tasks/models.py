@@ -1100,7 +1100,9 @@ class TaskProduct(models.Model):
     """One machine's line on an equipment task — receiving from the factory,
     loading, installing — from the delivery note: product code, serial,
     quantity, and the four colours operations cares about (frame, arm,
-    padding, trim; black unless it's a custom one). Planned from the task's
+    padding, trim; black unless it's a custom one). A receiving line is a
+    code × quantity, no serial — a machine or a spare part (`kind`); on a
+    loading or an installation each machine is its own line. Planned from the task's
     Edit screen; checked off by whoever does the step, on site, with what
     really happened (`status`), what went in instead, a note and a photo,
     adding a line that wasn't on the paperwork. Carried to the next step
@@ -1118,10 +1120,16 @@ class TaskProduct(models.Model):
         RETURNED = 'returned', _('Returned')
         LATER = 'later', _('Later')
 
+    class Kind(models.TextChoices):
+        MACHINE = 'machine', _('Machine')
+        # Only on a receiving task: code × quantity, never a serial or colours.
+        PART = 'part', _('Spare part')
+
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='products',
         verbose_name=_('task'),
     )
+    kind = models.CharField(_('kind'), max_length=10, choices=Kind.choices, default=Kind.MACHINE)
     product_code = models.CharField(_('product code'), max_length=100)
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
@@ -1143,6 +1151,11 @@ class TaskProduct(models.Model):
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='carried_to',
         verbose_name=_('carried from'), help_text=_("the same machine's line on the step before"),
     )
+    # A spare part ordered for one repair: held for it in the warehouse's stock (tasks.stock).
+    for_task = models.ForeignKey(
+        Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='parts_held',
+        verbose_name=_('for task'), help_text=_('the repair this part was ordered for'),
+    )
 
     class Meta:
         verbose_name = _('task product')
@@ -1160,3 +1173,30 @@ class TaskProduct(models.Model):
             category = self.task.task_type.category if self.task.task_type_id else ''
             return STEP_DONE_LABELS.get(category, STEP_DONE_LABELS['installation'])
         return self.get_status_display()
+
+
+class StockAdjustment(models.Model):
+    """A hand count of one code at a warehouse (docs: stock_adjustment) —
+    the opening stock, or a recount. Whoever counts types what's on the
+    shelf; the row keeps the difference from what the app worked out
+    (tasks.stock.record_count), so the same count twice changes nothing.
+    Never edited: a mistake is corrected by another count.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name='stock_adjustments', verbose_name=_('warehouse'))
+    kind = models.CharField(_('kind'), max_length=10, choices=TaskProduct.Kind.choices, default=TaskProduct.Kind.MACHINE)
+    product_code = models.CharField(_('product code'), max_length=100)
+    quantity = models.IntegerField(_('quantity'), help_text=_('the difference the count made: + found, − short'))
+    note = models.TextField(_('note'))
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name=_('counted by'),
+    )
+    created_at = models.DateTimeField(_('counted at'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('stock count')
+        verbose_name_plural = _('stock counts')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.site} — {self.product_code}: {self.quantity:+d}'

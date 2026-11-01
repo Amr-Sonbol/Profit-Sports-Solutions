@@ -55,7 +55,8 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, next_step_sites, save_planned_lines, PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
+    lines_to_carry, loading_shortfall, next_step_sites, save_planned_lines, warehouse_stock_for_planning,
+    PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
@@ -1393,9 +1394,9 @@ class MyTaskReportView(APIView):
             known = {row['id']: row for row in checklist_initial(task)}
             checklist_forms = [
                 TaskProductCheckForm(
-                    {key: row.get(key) or '' for key in (
+                    {key: '' if row.get(key) is None else row.get(key) for key in (
                         'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
-                        'replacement', 'note',
+                        'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status',
                     )},
                     initial=known.get(row.get('id'), {}), step=equipment_step(task),
                 )
@@ -1534,8 +1535,8 @@ def _team_task_response(request, task):
     data['equipment'] = {
         'lines': [
             {
-                'product_code': line.product_code, 'serial_number': line.serial_number, 'status': line.status,
-                'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
+                'product_code': line.product_code, 'kind': line.kind, 'quantity': line.quantity,
+                'serial_number': line.serial_number, 'status': line.status, 'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
                 'replacement': line.replacement, 'note': line.note, 'added_on_site': line.added_on_site,
                 'photo_url': request.build_absolute_uri(line.photo.url) if line.photo else '',
             }
@@ -1549,7 +1550,8 @@ def _team_task_response(request, task):
         # Receiving / loading: the machines ready to carry on, and where they can go.
         'next_step': {
             'lines': [
-                {'id': line.pk, 'label': f'{line.product_code}{" · " + line.serial_number if line.serial_number else ""}'}
+                {'id': line.pk, 'label': f'{line.product_code}{f" × {line.quantity}" if line.quantity > 1 else ""}'
+                                         f'{" · " + line.serial_number if line.serial_number else ""}'}
                 for line in lines_to_carry(task)
             ],
             'steps': [
@@ -1562,7 +1564,9 @@ def _team_task_response(request, task):
                 }
                 for step in NEXT_STEPS.get(equipment_step(task), ())
             ],
-        } if lines_to_carry(task) and has_role_permission(request, RolePermission.Permission.CREATE_TASKS) else None,
+            # The button's words.
+            'title': str(_('Send to installation')),
+        } if lines_to_carry(task) and technician.is_manager_tier else None,
     } if lines or task.previous_task_id else None
     data['manage'] = {
         'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
@@ -1579,9 +1583,11 @@ class TaskLinesView(APIView):
     """Planning a task's machine lines from the app — the website's Edit
     screen (create_tasks, the task's own supervisor or a manager; locked
     once done except for managers): GET the lines and whether they can be
-    changed; POST `lines` (product_code, serial_number, quantity, frame,
-    arm, padding, trim), replacing the plan — tasks.views.save_planned_lines,
-    so "× 4" on an equipment step becomes four lines."""
+    changed; POST `lines` (kind, product_code, serial_number, quantity,
+    frame, arm, padding, trim, for_task — a part's repair, by task number),
+    replacing the plan — tasks.views.save_planned_lines,
+    so "× 4" on a loading or an installation becomes four lines; receiving
+    keeps code × quantity, and only there can a line be a spare part."""
 
     permission_classes = [IsTechnician]
 
@@ -1589,31 +1595,48 @@ class TaskLinesView(APIView):
         require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
-        locked = not request.user.technician.is_manager_tier and task.status in PRODUCTS_LOCKED_STATUSES
-        return task, locked
+        is_manager = request.user.technician.is_manager_tier
+        # A loading takes machines out of a warehouse's stock: the manager tier's decision.
+        if equipment_step(task) == TaskType.Category.LOADING and not is_manager:
+            return task, str(_('Only a manager plans the machines on a loading.'))
+        if not is_manager and task.status in PRODUCTS_LOCKED_STATUSES:
+            return task, str(_('This task has been completed, so its products can only be changed by a manager or '
+                               'administrator.'))
+        return task, ''
 
-    def get(self, request, pk):
+    def get(self, request, pk, warning=''):
         task, locked = self._task(request, pk)
+        is_loading = equipment_step(task) == TaskType.Category.LOADING
         return Response({
-            'locked': locked,
-            'one_per_machine': bool(equipment_step(task)),
+            'locked': bool(locked),
+            'locked_reason': locked,
+            'one_per_machine': equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION),
+            # Receiving: the container's list by code — machines and spare parts, no serials.
+            'is_receiving': equipment_step(task) == TaskType.Category.RECEIVING,
+            # Loading: what its warehouse holds to plan from, as [{code, quantity}].
+            'stock': [
+                {'code': code, 'quantity': quantity} for code, quantity in warehouse_stock_for_planning(task).items()
+            ] if is_loading else None,
+            # More planned than the warehouse holds: a warning, not a block.
+            'warning': warning,
             'lines': [
                 {
-                    'product_code': line.product_code, 'serial_number': line.serial_number, 'quantity': line.quantity,
+                    'kind': line.kind, 'product_code': line.product_code,
+                    'for_task': line.for_task.task_number if line.for_task_id else '',
+                    'serial_number': line.serial_number, 'quantity': line.quantity,
                     'frame': line.frame, 'arm': line.arm, 'padding': line.padding, 'trim': line.trim,
                 }
-                for line in task.products.order_by('pk')
+                for line in task.products.select_related('for_task').order_by('pk')
             ],
         })
 
     def post(self, request, pk):
         task, locked = self._task(request, pk)
         if locked:
-            return Response({'detail': str(_('This task has been completed, so its products can only be changed by a '
-                                              'manager or administrator.'))}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': locked}, status=status.HTTP_400_BAD_REQUEST)
         forms_ = [
             TaskProductForm({key: row.get(key, '') for key in (
-                'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim',
+                'kind', 'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim', 'for_task',
             )})
             for row in request.data.get('lines') or [] if isinstance(row, dict)
         ]
@@ -1622,7 +1645,8 @@ class TaskLinesView(APIView):
             return Response({'lines': errors}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             save_planned_lines(task, [form.cleaned_data for form in forms_])
-        return self.get(request, pk)
+        warning = loading_shortfall(task) if equipment_step(task) == TaskType.Category.LOADING else ''
+        return self.get(request, pk, warning=str(warning))
 
 
 class TaskNextStepView(APIView):
@@ -1635,7 +1659,7 @@ class TaskNextStepView(APIView):
 
     def post(self, request, pk):
         task = _get_team_task(request, pk)
-        viewer = require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+        viewer = require_manager(request)  # sending machines on is the manager tier's only
         step = request.data.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)

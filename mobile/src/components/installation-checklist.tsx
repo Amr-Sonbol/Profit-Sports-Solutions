@@ -15,24 +15,31 @@ import type { ChecklistRow, Choice } from '@/types';
 
 const COLORS = [['frame', 'Frame'], ['arm', 'Arm'], ['padding', 'Padding'], ['trim', 'Trim']] as const;
 
+const KINDS = [['machine', 'Machine'], ['part', 'Spare part']] as const;
+// Receiving, when fewer arrived than listed: what happened to the rest.
+const REST_STATUSES = [['missing', 'Missing'], ['damaged', 'Damaged']] as const;
+
 export function emptyChecklistRow(): ChecklistRow {
   return {
-    id: null, product_code: '', status: '', serial_number: '', frame: 'Black', arm: 'Black', padding: 'Black',
-    trim: 'Black', replacement: '', note: '', photo_url: '', added_on_site: true,
+    id: null, product_code: '', kind: 'machine', quantity: '1', status: '', serial_number: '', frame: 'Black',
+    arm: 'Black', padding: 'Black', trim: 'Black', replacement: '', note: '', photo_url: '', added_on_site: true,
   };
 }
 
 /**
- * An installation's on-site checklist (the report's step 1): each machine
- * from the delivery note — what happened, its serial (typed or scanned
- * from the plate), its colours (black unless custom), what went in
- * instead, a note and a photo — and machines found on site that weren't
- * on the paperwork. Same rules as the website (tasks.forms
- * .TaskProductCheckForm); this only guides, the server decides.
+ * An equipment step's checklist (the report's step 1): each line from the
+ * delivery note — what happened, its serial (typed from the sticker), its
+ * colours (black unless custom), what went in instead, a note and a
+ * photo — and anything found that wasn't on the paperwork. Receiving
+ * counts by code instead: no serial, how many arrived, and whether the
+ * rest is missing or damaged; a spare part has no colours. Only an
+ * installation needs every serial. Same rules as the website
+ * (tasks.forms.TaskProductCheckForm); this only guides, the server decides.
  */
-export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
-  taskId: number; rows: ChecklistRow[]; statuses: Choice[]; onChange: (rows: ChecklistRow[]) => void;
+export function InstallationChecklist({ taskId, step, rows, statuses, onChange }: {
+  taskId: number; step: string; rows: ChecklistRow[]; statuses: Choice[]; onChange: (rows: ChecklistRow[]) => void;
 }) {
+  const receiving = step === 'receiving';
   const theme = useTheme();
   const [scanning, setScanning] = useState<number | null>(null);
   const [uploading, setUploading] = useState<number | null>(null);
@@ -79,67 +86,114 @@ export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
         {checked} of {rows.length} checked
       </ThemedText>
       {rows.map((row, index) => {
-        const needsSerial = row.status === 'done' && !row.serial_number.trim();
-        const needsReason = (row.status === 'damaged' || row.status === 'wrong_item') && !row.note.trim() && !row.photo_url;
+        const needsSerial = step === 'installation' && row.status === 'done' && !row.serial_number.trim();
+        const listed = Number(row.quantity) || 1;
+        const short = receiving && row.id !== null && row.status === 'done' && (row.received ?? '') !== ''
+          && Number(row.received) < listed;
+        const needsReason = (
+          row.status === 'damaged' || row.status === 'wrong_item' || (short && row.rest_status === 'damaged')
+        ) && !row.note.trim() && !row.photo_url;
         return (
           <ThemedView
             key={row.id ?? `new-${index}`}
             style={[styles.card, { borderColor: !row.status || needsSerial || needsReason ? theme.primary : theme.backgroundSelected }]}
           >
             {row.id && !row.added_on_site ? (
-              <ThemedText type="smallBold">{row.product_code}</ThemedText>
+              <ThemedText type="smallBold">
+                {row.product_code}{listed > 1 ? ` × ${listed}` : ''}{row.kind === 'part' ? ' · Spare part' : ''}
+              </ThemedText>
             ) : (
               <>
-                <ThemedText type="smallBold">{row.added_on_site && row.id ? 'Added on site' : 'Machine not on the delivery note'}</ThemedText>
-                <TextInput
-                  style={inputStyle} value={row.product_code} onChangeText={(value) => update(index, { product_code: value })}
-                  placeholder="Product code / model" placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
-                />
+                <ThemedText type="smallBold">
+                  {row.added_on_site && row.id ? 'Added on site' : receiving ? 'Not on the list' : 'Machine not on the delivery note'}
+                </ThemedText>
+                {receiving && !row.id ? (
+                  <ThemedView style={styles.chips}>
+                    {KINDS.map(([value, label]) => (
+                      <Chip key={value} label={label} on={row.kind === value} onPress={() => update(index, { kind: value })} />
+                    ))}
+                  </ThemedView>
+                ) : null}
+                <ThemedView style={styles.serialRow}>
+                  <TextInput
+                    style={[inputStyle, styles.flex]} value={row.product_code}
+                    onChangeText={(value) => update(index, { product_code: value })}
+                    placeholder="Product code / model" placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
+                  />
+                  {receiving && !row.id ? (
+                    <TextInput
+                      style={[inputStyle, styles.quantity]} value={String(row.quantity)} keyboardType="number-pad"
+                      onChangeText={(value) => update(index, { quantity: value })}
+                      placeholder="Qty" placeholderTextColor={theme.textSecondary}
+                    />
+                  ) : null}
+                </ThemedView>
               </>
             )}
 
             <ThemedView style={styles.chips}>
-              {statuses.map((choice) => {
-                const on = row.status === choice.value;
-                return (
-                  <TouchableOpacity
-                    key={choice.value}
-                    style={[styles.chip, { borderColor: on ? theme.primary : theme.backgroundSelected },
-                      on && { backgroundColor: theme.primary }]}
-                    onPress={() => update(index, { status: choice.value })}
-                  >
-                    <ThemedText type="small" style={on ? { color: theme.onPrimary } : undefined}>{choice.label}</ThemedText>
-                  </TouchableOpacity>
-                );
-              })}
-            </ThemedView>
-
-            <ThemedView style={styles.serialRow}>
-              <TextInput
-                style={[inputStyle, styles.flex, needsSerial && { borderColor: theme.danger }]}
-                value={row.serial_number} onChangeText={(value) => update(index, { serial_number: value })}
-                placeholder="Serial number (from the plate)" placeholderTextColor={theme.textSecondary}
-                autoCapitalize="characters" autoCorrect={false}
-              />
-              <TouchableOpacity style={[styles.iconButton, { borderColor: theme.primary }]} onPress={() => setScanning(index)}>
-                <Ionicons name="barcode-outline" size={22} color={theme.primary} />
-              </TouchableOpacity>
-            </ThemedView>
-            {needsSerial ? (
-              <ThemedText type="small" themeColor="danger">This machine needs its serial number — type or scan it.</ThemedText>
-            ) : null}
-
-            <ThemedView style={styles.colors}>
-              {COLORS.map(([field, label]) => (
-                <ThemedView key={field} style={styles.color}>
-                  <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
-                  <TextInput
-                    style={inputStyle} value={row[field]} onChangeText={(value) => update(index, { [field]: value })}
-                    placeholder="Black" placeholderTextColor={theme.textSecondary}
-                  />
-                </ThemedView>
+              {statuses.map((choice) => (
+                <Chip
+                  key={choice.value} label={choice.label} on={row.status === choice.value}
+                  onPress={() => update(index, { status: choice.value })}
+                />
               ))}
             </ThemedView>
+
+            {receiving && row.id && row.status === 'done' && listed > 1 ? (
+              <>
+                <ThemedView style={styles.serialRow}>
+                  <ThemedText type="small" style={styles.flex}>How many arrived (if not all {listed})</ThemedText>
+                  <TextInput
+                    style={[inputStyle, styles.quantity]} value={row.received ?? ''} keyboardType="number-pad"
+                    onChangeText={(value) => update(index, { received: value })}
+                    placeholder={String(listed)} placeholderTextColor={theme.textSecondary}
+                  />
+                </ThemedView>
+                {short ? (
+                  <ThemedView style={styles.chips}>
+                    <ThemedText type="small">The other {listed - Number(row.received)}:</ThemedText>
+                    {REST_STATUSES.map(([value, label]) => (
+                      <Chip
+                        key={value} label={label} on={(row.rest_status || 'missing') === value}
+                        onPress={() => update(index, { rest_status: value })}
+                      />
+                    ))}
+                  </ThemedView>
+                ) : null}
+              </>
+            ) : null}
+
+            {!receiving ? (
+              <ThemedView style={styles.serialRow}>
+                <TextInput
+                  style={[inputStyle, styles.flex, needsSerial && { borderColor: theme.danger }]}
+                  value={row.serial_number} onChangeText={(value) => update(index, { serial_number: value })}
+                  placeholder={step === 'loading' ? 'Serial number from the sticker (optional)' : 'Serial number from the sticker'}
+                  placeholderTextColor={theme.textSecondary} autoCapitalize="characters" autoCorrect={false}
+                />
+                <TouchableOpacity style={[styles.iconButton, { borderColor: theme.primary }]} onPress={() => setScanning(index)}>
+                  <Ionicons name="barcode-outline" size={22} color={theme.primary} />
+                </TouchableOpacity>
+              </ThemedView>
+            ) : null}
+            {needsSerial ? (
+              <ThemedText type="small" themeColor="danger">This machine needs its serial number — type it from the sticker.</ThemedText>
+            ) : null}
+
+            {row.kind !== 'part' ? (
+              <ThemedView style={styles.colors}>
+                {COLORS.map(([field, label]) => (
+                  <ThemedView key={field} style={styles.color}>
+                    <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
+                    <TextInput
+                      style={inputStyle} value={row[field]} onChangeText={(value) => update(index, { [field]: value })}
+                      placeholder="Black" placeholderTextColor={theme.textSecondary}
+                    />
+                  </ThemedView>
+                ))}
+              </ThemedView>
+            ) : null}
 
             <TextInput
               style={inputStyle} value={row.replacement} onChangeText={(value) => update(index, { replacement: value })}
@@ -171,7 +225,7 @@ export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
       <TouchableOpacity
         style={[styles.addButton, { borderColor: theme.primary }]} onPress={() => onChange([...rows, emptyChecklistRow()])}
       >
-        <ThemedText themeColor="primary">+ A machine not on the delivery note</ThemedText>
+        <ThemedText themeColor="primary">{receiving ? '+ Something not on the list' : '+ A machine not on the delivery note'}</ThemedText>
       </TouchableOpacity>
 
       <BarcodeScanner
@@ -188,8 +242,21 @@ export function InstallationChecklist({ taskId, rows, statuses, onChange }: {
   );
 }
 
+function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <TouchableOpacity
+      style={[styles.chip, { borderColor: on ? theme.primary : theme.backgroundSelected }, on && { backgroundColor: theme.primary }]}
+      onPress={onPress}
+    >
+      <ThemedText type="small" style={on ? { color: theme.onPrimary } : undefined}>{label}</ThemedText>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  list: { gap: Spacing.two, backgroundColor: 'transparent' },
+  quantity: { width: 64 },
+  list:{ gap: Spacing.two, backgroundColor: 'transparent' },
   card: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.two },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one, backgroundColor: 'transparent' },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },

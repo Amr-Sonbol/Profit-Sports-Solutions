@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import get_language
@@ -170,13 +172,21 @@ class TaskType(models.Model):
         return self.display_name
 
 
+def _part_photo_path(instance, filename):
+    return f'part_photos/{secrets.token_hex(16)}/{filename}'
+
+
 class Part(models.Model):
-    """The parts catalogue (docs: part) — code and optional description,
-    no prices. Switched off rather than deleted.
+    """The parts catalogue (docs: part) — code, optional description,
+    colour and a photo of what the part looks like; no prices. Switched off
+    rather than deleted.
     """
 
     code = models.CharField(_('code'), max_length=50, unique=True)
     description = models.CharField(_('description'), max_length=200, blank=True)
+    # Information only: another colour is another code, never separate stock.
+    colour = models.CharField(_('colour'), max_length=200, blank=True)
+    photo = models.FileField(_('photo'), upload_to=_part_photo_path, null=True, blank=True)
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:

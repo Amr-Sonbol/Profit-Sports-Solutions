@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-25 19:24+0000\n"
+"POT-Creation-Date: 2026-11-01 17:52+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -19,8 +19,8 @@ msgid "%(active)s of %(total)s customers have an active portal account."
 msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في البوابة."
 
 #, python-format
-msgid "%(added)s parts added, %(updated)s updated."
-msgstr "أُضيفت %(added)s قطع، وحُدّثت %(updated)s."
+msgid "%(added)s parts added, %(updated)s updated, %(photos)s photos."
+msgstr "أُضيفت %(added)s قطع، وحُدّثت %(updated)s، و%(photos)s صور."
 
 #, python-format
 msgid "%(available)s of %(total)s"
@@ -145,6 +145,10 @@ msgstr[2] "مهمتان متأخرتان"
 msgstr[3] "%(count)s مهام متأخرة"
 msgstr[4] "%(count)s مهمة متأخرة"
 msgstr[5] "%(count)s مهمة متأخرة"
+
+#, python-format
+msgid "%(count)s quantities recorded as stock at %(warehouse)s."
+msgstr "سُجّلت %(count)s كميات كمخزون في %(warehouse)s."
 
 #, python-format
 msgid "%(count)s report exceeding the recorded time"
@@ -332,6 +336,9 @@ msgstr "+%(count)s أخرى"
 msgid "90-day progress"
 msgstr "التقدم خلال 90 يوماً"
 
+msgid "A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse stock sheet — Code, Description, the colour, and each part's picture placed in its code cell. New codes are added; existing ones get what the sheet has; nothing is deleted."
+msgstr "ملف CSV بعمودين: الكود والوصف؛ أو ملف Excel بنفس تنسيق ورقة مخزون المستودع — الكود، والوصف، واللون، وصورة كل قطعة داخل خانة الكود. تُضاف الأكواد الجديدة؛ والموجودة تأخذ ما في الملف؛ ولا يُحذف شيء."
+
 msgid "A brand with this name already exists. Please select it from the list."
 msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. يرجى اختيارها من القائمة."
 
@@ -348,6 +355,9 @@ msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقا�
 
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
+
+msgid "A loading is planned from its warehouse's stock — machines from any container. Planning takes them out of stock at once; more than the warehouse holds is allowed, with a warning."
+msgstr "يُخطَّط التحميل من مخزون المستودع — أجهزة من أي حاوية. التخطيط يُخرجها من المخزون فورًا؛ ويُسمح بأكثر مما في المستودع، مع تنبيه."
 
 msgid "A machine not on the delivery note (optional)"
 msgstr "جهاز غير مذكور في إذن التسليم (اختياري)"
@@ -519,6 +529,9 @@ msgstr "أضف ملاحظة"
 
 msgid "Add a part"
 msgstr "إضافة قطعة"
+
+msgid "Add a photo"
+msgstr "إضافة صورة"
 
 msgid "Add a site"
 msgstr "إضافة فرع"
@@ -910,6 +923,9 @@ msgstr "العلامات التجارية"
 msgid "CSV file"
 msgstr "ملف CSV"
 
+msgid "CSV or Excel file"
+msgstr "ملف CSV أو Excel"
+
 msgid "Cable replaced"
 msgstr "تم استبدال الكابل"
 
@@ -989,9 +1005,6 @@ msgstr "مدفوعة"
 msgid "Chart period"
 msgstr "فترة الرسم البياني"
 
-msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
-msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
-
 msgid "Check-ins away from the site"
 msgstr "نقرات مسجَّلة خارج الموقع"
 
@@ -1052,6 +1065,9 @@ msgstr "الألوان"
 
 msgid "Colors (frame / arm / padding / trim)"
 msgstr "الألوان (الإطار / الذراع / التنجيد / الحواف)"
+
+msgid "Colour"
+msgstr "اللون"
 
 msgid "Colour key"
 msgstr "دليل الألوان"
@@ -1161,6 +1177,13 @@ msgstr "تصحيح الوقت"
 msgid "Count"
 msgstr "العدد"
 
+#, python-format
+msgid "Count recorded: %(code)s %(difference)+d."
+msgstr "سُجّل الجرد: %(code)s %(difference)+d."
+
+msgid "Count what arrived against the container's list, code by code — machines and spare parts. If fewer came than listed, say how many arrived and whether the rest is missing or damaged. No serial numbers here: they are typed when the machines are loaded or installed."
+msgstr "عُدّ ما وصل مقابل قائمة الحاوية، كودًا بكود — الأجهزة وقطع الغيار. إذا وصل أقل من المذكور، اذكر كم وصل وهل الباقي مفقود أو تالف. لا أرقام تسلسلية هنا: تُكتب عند تحميل الأجهزة أو تركيبها."
+
 msgid "Counted toward their hours, as the report will be submitted by the new lead. Leave blank if unknown."
 msgstr "تُحتسب ضمن ساعاته، إذ سيقدّم القائد الجديد التقرير. يُترك فارغاً إذا كانت غير معروفة."
 
@@ -1205,9 +1228,6 @@ msgstr "إنشاء مهام جديدة"
 
 msgid "Create task"
 msgstr "إنشاء مهمة"
-
-msgid "Create the next step"
-msgstr "إنشاء الخطوة التالية"
 
 msgid "Created"
 msgstr "أُنشئت"
@@ -1680,6 +1700,9 @@ msgstr "صِف المشكلة"
 msgid "Description"
 msgstr "الوصف"
 
+msgid "Description and colour"
+msgstr "الوصف واللون"
+
 msgid "Description of the issue"
 msgstr "وصف المشكلة"
 
@@ -1980,11 +2003,14 @@ msgstr "لعميل تواصل معنا هاتفياً أو عبر رسالة أ�
 msgid "For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed."
 msgstr "لكل جهاز: اختر ما وجدته وما قمت به وحالته. أضف أي جهاز غير موجود في القائمة."
 
-msgid "For each machine: what happened, its serial number from the plate, and its colors (black unless custom). Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card."
-msgstr "لكل جهاز: ما الذي حدث، ورقمه التسلسلي من اللوحة، وألوانه (أسود ما لم يكن مخصصًا). إذا كان تالفًا أو صنفًا خاطئًا: اذكر السبب أو أضف صورة. الجهاز غير المذكور في إذن التسليم يُضاف في البطاقة الأخيرة."
+msgid "For each machine: what happened, its serial number from the sticker, and its colors (black unless custom). A serial already filled in came from loading — check it against the sticker. One you type here: add a clear photo of the sticker. Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card."
+msgstr "لكل جهاز: ما الذي حدث، ورقمه التسلسلي من الملصق، وألوانه (أسود ما لم يكن مخصصًا). الرقم المكتوب مسبقًا جاء من التحميل — طابقه مع الملصق. الرقم الذي تكتبه هنا: أضف صورة واضحة للملصق. إذا كان تالفًا أو صنفًا خاطئًا: اذكر السبب أو أضف صورة. الجهاز غير المذكور في إذن التسليم يُضاف في البطاقة الأخيرة."
 
 msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
 msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
+
+msgid "For task"
+msgstr "للمهمة"
 
 msgid "Forgot your password?"
 msgstr "هل نسيت كلمة المرور؟"
@@ -2043,6 +2069,9 @@ msgstr "لم ينفّذ هذا الإصلاح بمفرده من قبل، أو ل
 msgid "Heading to site"
 msgstr "في الطريق إلى الموقع"
 
+msgid "Held for"
+msgstr "محجوزة لـ"
+
 msgid "Helper"
 msgstr "مساعد"
 
@@ -2095,6 +2124,9 @@ msgstr "ساعات العمل: %(hours)s"
 msgid "How"
 msgstr "الوسيلة"
 
+msgid "How many arrived"
+msgstr "كم وصل"
+
 msgid "How the customer reached us"
 msgstr "كيف تواصل معنا العميل"
 
@@ -2116,6 +2148,9 @@ msgstr "اسم IANA، مثال: Asia/Riyadh"
 msgid "ISO code"
 msgstr "رمز ISO"
 
+msgid "If the sheet has a quantity column: the warehouse it was counted in. Each quantity is recorded as a count there — the opening stock. Leave empty to load the parts only."
+msgstr "إذا كان في الملف عمود كمية: المستودع الذي عُدّت فيه. تُسجَّل كل كمية كجرد هناك — المخزون الافتتاحي. اتركه فارغًا لتحميل القطع فقط."
+
 msgid "If this email address belongs to a customer account, a secure link has been sent to it. Please check your inbox; it may take a few minutes to arrive."
 msgstr "إذا كان هذا البريد الإلكتروني مرتبطاً بحساب عميل، فقد تم إرسال رابط آمن إليه. يرجى مراجعة بريدك الوارد؛ فقد يستغرق وصوله بضع دقائق."
 
@@ -2133,6 +2168,9 @@ msgstr "استيراد العملاء"
 
 msgid "In progress"
 msgstr "قيد التنفيذ"
+
+msgid "In this warehouse:"
+msgstr "في هذا المستودع:"
 
 msgid "Inactive"
 msgstr "غير نشط"
@@ -2221,6 +2259,9 @@ msgstr "هل هذا الجهاز موجود في قائمتك؟"
 
 msgid "Job"
 msgstr "المهمة"
+
+msgid "Kind"
+msgstr "النوع"
 
 msgid "Labour hours"
 msgstr "ساعات العمل"
@@ -2480,6 +2521,10 @@ msgstr "شهري"
 msgid "Monthly report"
 msgstr "التقرير الشهري"
 
+#, python-format
+msgid "More planned than %(warehouse)s holds: %(codes)s. Check the warehouse, or record a count on the Stock screen."
+msgstr "المخطَّط أكثر مما في %(warehouse)s: %(codes)s. تحقّق من المستودع، أو سجّل جردًا في شاشة المخزون."
+
 msgid "Move all their open tasks to"
 msgstr "نقل جميع مهامه المفتوحة إلى"
 
@@ -2725,6 +2770,9 @@ msgstr "لا يوجد حساب دخول بعد"
 msgid "No machines are recorded. Add each machine you worked on."
 msgstr "لم تُسجَّل أي أجهزة. أضف كل جهاز عملت عليه."
 
+msgid "No machines in this warehouse."
+msgstr "لا توجد أجهزة في هذا المستودع."
+
 msgid "No machines match your search."
 msgstr "لا توجد أجهزة مطابقة لبحثك."
 
@@ -2781,6 +2829,9 @@ msgstr "لم تتم إضافة أي مواقع."
 
 msgid "No skills have been set up."
 msgstr "لم يتم إعداد أي مهارات."
+
+msgid "No spare parts in stock."
+msgstr "لا توجد قطع غيار في المخزون."
 
 msgid "No staff match the selected filters."
 msgstr "لا يوجد موظفون يطابقون عوامل التصفية المحددة."
@@ -2959,6 +3010,9 @@ msgstr "العنصر"
 msgid "On"
 msgstr "مُفعّلة"
 
+msgid "On the shelf"
+msgstr "على الرف"
+
 msgid "On track to achieve full certification within 90 days."
 msgstr "في المسار الصحيح لتحقيق الاعتماد الكامل خلال 90 يوماً."
 
@@ -2982,6 +3036,9 @@ msgstr "لا يمكن تغيير ذلك بعد تقديم التقرير إلا 
 
 msgid "Only a manager or administrator can change this once work has started."
 msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من قِبل مدير أو مسؤول النظام."
+
+msgid "Only a manager plans the machines on a loading."
+msgstr "المدير فقط يخطّط أجهزة التحميل."
 
 msgid "Only closed tasks can be flagged."
 msgstr "لا يمكن الإبلاغ إلا عن المهام المغلقة."
@@ -3018,6 +3075,10 @@ msgstr "تاريخ الفتح"
 
 msgid "Opened by"
 msgstr "فتحها"
+
+#, python-format
+msgid "Opening stock — %(file)s"
+msgstr "المخزون الافتتاحي — %(file)s"
 
 msgid "Operations Manager"
 msgstr "مدير العمليات"
@@ -3491,6 +3552,12 @@ msgstr "التوصية"
 msgid "Recommendations"
 msgstr "التوصيات"
 
+msgid "Record a count"
+msgstr "تسجيل جرد"
+
+msgid "Record count"
+msgstr "تسجيل الجرد"
+
 msgid "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time."
 msgstr "هل سُجّل ذلك عن طريق الخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك، يمكن للمدير تصحيح الوقت."
 
@@ -3530,6 +3597,9 @@ msgstr "تم الإصلاح"
 
 msgid "Replace lead"
 msgstr "استبدال الفني الرئيسي"
+
+msgid "Replace photo"
+msgstr "استبدال الصورة"
 
 msgid "Replaced"
 msgstr "تم الاستبدال"
@@ -3730,6 +3800,9 @@ msgstr "حفظ كلمة المرور الجديدة"
 msgid "Save report"
 msgstr "حفظ التقرير"
 
+msgid "Say what is wrong with the damaged ones, or add a photo."
+msgstr "اذكر ما المشكلة في التالف، أو أضف صورة."
+
 msgid "Say what is wrong, or add a photo."
 msgstr "اذكر المشكلة أو أضف صورة."
 
@@ -3888,6 +3961,9 @@ msgstr "إرسال رابط إعادة التعيين"
 
 msgid "Send setup link"
 msgstr "إرسال رابط الإعداد"
+
+msgid "Send to installation"
+msgstr "إرسال إلى التركيب"
 
 msgid "Send welcome email"
 msgstr "إرسال رسالة الترحيب"
@@ -4098,8 +4174,17 @@ msgstr "تم التخطي"
 msgid "So they don't still head to the site."
 msgstr "حتى لا يتوجه إلى الموقع دون داعٍ."
 
+msgid "Something not on the list (optional)"
+msgstr "صنف غير مذكور في القائمة (اختياري)"
+
 msgid "Source"
 msgstr "المصدر"
+
+msgid "Spare part"
+msgstr "قطعة غيار"
+
+msgid "Spare parts"
+msgstr "قطع الغيار"
 
 msgid "Staff"
 msgstr "موظف"
@@ -4124,6 +4209,9 @@ msgstr "الحالة"
 
 msgid "Sticker photo"
 msgstr "صورة الملصق"
+
+msgid "Stock"
+msgstr "المخزون"
 
 msgid "Stock request"
 msgstr "طلب مخزون"
@@ -4314,6 +4402,12 @@ msgstr "يعرض الجرس أعلى الصفحة البلاغات والمها�
 msgid "The carrier and tracking number, from the task or the ticket."
 msgstr "شركة الشحن ورقم التتبع، من المهمة أو البلاغ."
 
+msgid "The container's list: each code and how many — machines and spare parts. No serial numbers here; the warehouse counts what arrived against this list. The colors are for machines, black unless custom. A spare part ordered for one repair: type that task's number under “For task”, and the part is held for it."
+msgstr "قائمة الحاوية: كل كود وكميته — الأجهزة وقطع الغيار. لا أرقام تسلسلية هنا؛ يعدّ المستودع ما وصل مقابل هذه القائمة. الألوان للأجهزة فقط، سوداء ما لم تكن مخصصة. قطعة غيار طُلبت لإصلاح معيّن: اكتب رقم تلك المهمة تحت «للمهمة»، فتُحجز القطعة لها."
+
+msgid "The count matches — nothing to change."
+msgstr "الجرد مطابق — لا شيء يتغيّر."
+
 msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
 msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
 
@@ -4431,8 +4525,8 @@ msgstr "القائمة التي يختار منها الفنيون القطع ع
 msgid "The machine cannot be used"
 msgstr "لا يمكن استخدام الجهاز"
 
-msgid "The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial number can wait — the installers type or scan it on site, where each machine is checked off. The colors are black unless the machine is a custom one."
-msgstr "الأجهزة الواردة في إذن التسليم. الكمية ٤ تصبح ٤ أسطر، سطر لكل جهاز. يمكن تأجيل الرقم التسلسلي — يكتبه فريق التركيب أو يمسحه في الموقع حيث تتم مراجعة كل جهاز. الألوان سوداء ما لم يكن الجهاز مخصصًا."
+msgid "The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial number can wait — the installers type it from the sticker on site, where each machine is checked off. The colors are black unless the machine is a custom one."
+msgstr "الأجهزة الواردة في إذن التسليم. الكمية ٤ تصبح ٤ أسطر، سطر لكل جهاز. يمكن تأجيل الرقم التسلسلي — يكتبه فريق التركيب من الملصق في الموقع حيث تتم مراجعة كل جهاز. الألوان سوداء ما لم يكن الجهاز مخصصًا."
 
 msgid "The machines to carry, with their serial numbers and colors:"
 msgstr "الأجهزة المنقولة، بأرقامها التسلسلية وألوانها:"
@@ -4458,6 +4552,9 @@ msgstr "تم حل المشكلة المُبلّغ عنها والمعدات تع
 
 msgid "The reported issue has not yet been fully resolved. A follow-up visit will be arranged."
 msgstr "لم يتم حل المشكلة المُبلّغ عنها بالكامل بعد. سيتم ترتيب زيارة متابعة."
+
+msgid "The rest"
+msgstr "الباقي"
 
 msgid "The schedule for all countries. This view is not affected by the country selector above."
 msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
@@ -4499,6 +4596,10 @@ msgstr "يوجد بالفعل طلب قيد الانتظار لهذه المهم
 msgid "There is no day-only schedule awaiting a time."
 msgstr "لا توجد جدولة باليوم فقط بانتظار تحديد الوقت."
 
+#, python-format
+msgid "There is no task %(number)s."
+msgstr "لا توجد مهمة برقم %(number)s."
+
 msgid "There is nothing awaiting your action."
 msgstr "لا يوجد ما ينتظر إجراءً منك."
 
@@ -4529,6 +4630,9 @@ msgstr "لم يعد بالإمكان التراجع عن ذلك. يرجى مطا
 msgid "This code is already in the list."
 msgstr "هذا الرمز موجود في القائمة مسبقاً."
 
+msgid "This country has no warehouse yet. Our warehouses are the sites of our own account in Customers."
+msgstr "لا يوجد مستودع في هذه الدولة بعد. مستودعاتنا هي مواقع حسابنا الخاص في العملاء."
+
 msgid "This customer already has a site with this name"
 msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً"
 
@@ -4544,6 +4648,9 @@ msgstr "تقرير هذا العميل باللغة العربية. استخدم
 
 msgid "This customer's report is in English. Use the lists where you can; write anything you type in English."
 msgstr "تقرير هذا العميل باللغة الإنجليزية. استخدم القوائم قدر الإمكان، واكتب أي نص إضافي باللغة الإنجليزية."
+
+msgid "This file could not be read. Save it again as .xlsx or .csv and retry."
+msgstr "تعذّرت قراءة هذا الملف. احفظه مجددًا بصيغة ‎.xlsx أو ‎.csv ثم أعد المحاولة."
 
 msgid "This is earlier than the previous step on this task."
 msgstr "هذا الوقت سابق للخطوة السابقة في هذه المهمة."
@@ -4579,8 +4686,8 @@ msgstr "انتهت صلاحية هذا الرابط أو تم استخدامه �
 msgid "This machine is registered at another site."
 msgstr "هذا الجهاز مسجّل في موقع آخر."
 
-msgid "This machine needs its serial number — type or scan it from the plate."
-msgstr "هذا الجهاز يحتاج إلى رقمه التسلسلي — اكتبه أو امسحه من اللوحة."
+msgid "This machine needs its serial number — type it from the sticker on the machine."
+msgstr "هذا الجهاز يحتاج إلى رقمه التسلسلي — اكتبه من الملصق الموجود على الجهاز."
 
 msgid "This month"
 msgstr "هذا الشهر"
@@ -4684,8 +4791,8 @@ msgstr "هذه السنة"
 msgid "Thursday"
 msgstr "الخميس"
 
-msgid "Tick each machine as it goes on the truck, and check its serial number. Anything missing or damaged: say what, or add a photo — before the team drives to the site."
-msgstr "حدّد كل جهاز عند تحميله على الشاحنة وتحقق من رقمه التسلسلي. إن كان مفقودًا أو تالفًا: اذكر السبب أو أضف صورة — قبل توجه الفريق إلى الموقع."
+msgid "Tick each machine as it goes on the truck. Typing its serial number from the sticker is optional here — the installers type any that are left. Anything missing or damaged: say what, or add a photo — before the team drives to the site."
+msgstr "حدّد كل جهاز عند تحميله على الشاحنة. كتابة رقمه التسلسلي من الملصق اختيارية هنا — يكتب فريق التركيب ما تبقى. إن كان شيء مفقودًا أو تالفًا: اذكر السبب أو أضف صورة — قبل توجه الفريق إلى الموقع."
 
 msgid "Tick everything you did on this visit."
 msgstr "حدّد كل ما قمت به في هذه الزيارة."
@@ -4827,9 +4934,6 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
-msgid "Two columns: code and description. A header row is permitted."
-msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
-
 msgid "Type"
 msgstr "النوع"
 
@@ -4838,6 +4942,9 @@ msgstr "نوع التذكرة"
 
 msgid "Type the serial number from the machine's plate, or tick “No readable serial plate”."
 msgstr "اكتب الرقم التسلسلي من لوحة الجهاز، أو حدّد «لا توجد لوحة رقم تسلسلي مقروءة»."
+
+msgid "Type what is on the shelf. The app keeps the difference from its own figure, so the same count twice changes nothing."
+msgstr "اكتب ما هو موجود على الرف. يحفظ التطبيق الفرق عن رقمه، لذا فإن تكرار الجرد نفسه لا يغيّر شيئًا."
 
 msgid "UPS"
 msgstr "UPS"
@@ -4944,6 +5051,9 @@ msgstr "عرض قائمة المهام وتفاصيلها وعرض الأسبو�
 msgid "View technician roster and boards"
 msgstr "عرض قائمة الفنيين ولوحاتهم"
 
+msgid "View warehouse stock"
+msgstr "عرض مخزون المستودعات"
+
 msgid "Viewing"
 msgstr "تعرض بيانات"
 
@@ -4992,8 +5102,14 @@ msgstr "زائر من %(country)s"
 msgid "Waiting for supervisor review"
 msgstr "بانتظار مراجعة المشرف"
 
+msgid "Warehouse"
+msgstr "المستودع"
+
 msgid "Warehouse Manager"
 msgstr "مدير المستودع"
+
+msgid "Warehouse for the quantities"
+msgstr "مستودع الكميات"
 
 msgid "Warranty"
 msgstr "ضمان"
@@ -5131,6 +5247,9 @@ msgstr "من"
 msgid "Who receives it"
 msgstr "من يستلمها"
 
+msgid "Why"
+msgstr "السبب"
+
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
 
@@ -5151,6 +5270,9 @@ msgstr "تقرير العمل"
 
 msgid "Work resumed"
 msgstr "تم استئناف العمل"
+
+msgid "Worked out from the tasks: what was received, less what was loaded (machines) or used on a report (spare parts), plus hand counts. A loading task takes its machines out as soon as it is planned."
+msgstr "يُحسب من المهام: ما تم استلامه، ناقص ما تم تحميله (الأجهزة) أو استخدامه في تقرير (قطع الغيار)، زائد الجرد اليدوي. مهمة التحميل تُخرج أجهزتها بمجرد التخطيط لها."
 
 msgid "Working in another country for specified dates. During a trip, they may be assigned tasks there; their home country, hours and figures remain unchanged."
 msgstr "يعمل في دولة أخرى خلال تواريخ محددة. يمكن إسناد مهام إليه هناك خلال الرحلة، بينما تظل دولته الأصلية وساعاته وأرقامه دون تغيير."
@@ -5374,6 +5496,9 @@ msgstr "سبب الإغلاق"
 msgid "code"
 msgstr "الرمز"
 
+msgid "colour"
+msgstr "اللون"
+
 msgid "comma-separated weekday numbers, where Monday = 0 (e.g. 4,5 for Friday–Saturday)"
 msgstr "أرقام أيام الأسبوع مفصولة بفواصل، حيث الاثنين = 0 (مثل 4,5 للجمعة والسبت)"
 
@@ -5428,6 +5553,12 @@ msgstr "تصحيح من قِبل مدير أو مسؤول النظام"
 
 msgid "correction reason"
 msgstr "سبب التصحيح"
+
+msgid "counted at"
+msgstr "وقت الجرد"
+
+msgid "counted by"
+msgstr "أجرى الجرد"
 
 msgid "countries"
 msgstr "الدول"
@@ -5516,6 +5647,9 @@ msgstr "مثال: ازدحام مروري على شارع الشيخ زايد؛ 
 msgid "e.g. gym closed, no key available, customer absent"
 msgstr "مثال: النادي مغلق، أو المفتاح غير متوفر، أو العميل غير موجود"
 
+msgid "e.g. opening stock, monthly count"
+msgstr "مثلًا: مخزون افتتاحي، جرد شهري"
+
 msgid "email"
 msgstr "البريد الإلكتروني"
 
@@ -5598,6 +5732,12 @@ msgstr "الملاحظة"
 msgid "findings"
 msgstr "النتائج"
 
+msgid "for"
+msgstr "لـ"
+
+msgid "for task"
+msgstr "للمهمة"
+
 msgid "for the portal login, if this customer has one"
 msgstr "لتسجيل الدخول إلى البوابة، إن كان لهذا العميل حساب"
 
@@ -5634,6 +5774,9 @@ msgstr "ساعة"
 
 msgid "if a different item went in"
 msgstr "إذا تم تركيب صنف مختلف"
+
+msgid "if not all of them — then say what happened to the rest"
+msgstr "إذا لم يصل الكل — اذكر ما حدث للباقي"
 
 msgid "installed on"
 msgstr "تاريخ التركيب"
@@ -5746,6 +5889,9 @@ msgstr "ملاحظة"
 
 msgid "note to the customer"
 msgstr "ملاحظة للعميل"
+
+msgid "nothing in stock"
+msgstr "لا شيء في المخزون"
 
 msgid "notification settings"
 msgstr "إعدادات الإشعارات"
@@ -6106,6 +6252,12 @@ msgstr "تاريخ البدء"
 msgid "status"
 msgstr "الحالة"
 
+msgid "stock count"
+msgstr "جرد المخزون"
+
+msgid "stock counts"
+msgstr "عمليات جرد المخزون"
+
 msgid "storage kind"
 msgstr "نوع التخزين"
 
@@ -6221,6 +6373,9 @@ msgstr "حساب الشركة الخاص — مواقعه هي مستودعات�
 msgid "the day planned by the supervisor"
 msgstr "اليوم الذي خطط له المشرف"
 
+msgid "the difference the count made: + found, − short"
+msgstr "الفرق الذي أحدثه الجرد: + زيادة، − نقص"
+
 msgid "the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"
 msgstr "لغة تقارير الزيارة لجميع العملاء هنا: العربية في السعودية ومصر، والإنجليزية في غيرهما"
 
@@ -6238,6 +6393,9 @@ msgstr "الشخص الذي يتولى هذه التذكرة: مشرف أو مد
 
 msgid "the registered machine, when the customer picked one from their list"
 msgstr "الجهاز المسجّل، عندما يختاره العميل من قائمته"
+
+msgid "the repair this part was ordered for"
+msgstr "الإصلاح الذي طُلبت له هذه القطعة"
 
 msgid "the same as last month"
 msgstr "مثل الشهر الماضي"
@@ -6366,6 +6524,9 @@ msgstr "المورّد"
 msgid "visit report language"
 msgstr "لغة تقرير الزيارة"
 
+msgid "warehouse"
+msgstr "المستودع"
+
 msgid "warranty end"
 msgstr "نهاية الضمان"
 
@@ -6424,6 +6585,10 @@ msgid "— Report"
 msgstr "— التقرير"
 
 #, python-format
+msgid "“%(code)s” is not in the parts list."
+msgstr "«%(code)s» غير موجود في قائمة القطع."
+
+#, python-format
 msgid "“%(code)s” is not in the parts list. Please select one from the list or request that it be added."
 msgstr "«%(code)s» غير موجود في قائمة القطع. يرجى اختيار قطعة من القائمة أو طلب إضافتها."
 
@@ -6443,3 +6608,12 @@ msgstr "← العودة إلى العملاء النشطين"
 
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
+
+#~ msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
+#~ msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
+
+#~ msgid "Send to loading or installation"
+#~ msgstr "إرسال إلى التحميل أو التركيب"
+
+#~ msgid "Two columns: code and description. A header row is permitted."
+#~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."

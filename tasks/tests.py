@@ -7422,6 +7422,71 @@ class PartsCatalogueTests(TaskTestCase):
         self.assertEqual(self.Part.objects.get(code='PAD-7').description, 'Seat pad')
         self.assertFalse(self.Part.objects.filter(code='CODE').exists())
 
+    def _stock_sheet(self, rows, picture_cell=None):
+        """An .xlsx laid out like the warehouse's stock sheet: Code,
+        Description, a colour column with no header, Qty; a picture placed
+        in a code cell."""
+        import io
+        import openpyxl
+        from openpyxl.drawing.image import Image as SheetImage
+        from PIL import Image
+
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.append(['Code', 'Description', None, None, 'Qty'])
+        sheet.append(['SPARE PARTS'])
+        for row in rows:
+            sheet.append(row)
+        if picture_cell:
+            picture = io.BytesIO()
+            Image.new('RGB', (8, 8), 'red').save(picture, format='PNG')
+            sheet.add_image(SheetImage(picture), picture_cell)
+        data = io.BytesIO()
+        book.save(data)
+        return SimpleUploadedFile('Stock.xlsx', data.getvalue())
+
+    def test_excel_sheet_adds_parts_with_their_colour_and_picture(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            upload = self._stock_sheet([
+                ['rxp00010\n', 'Securing pin housing end cap', None, 'Color of frame: MATT BLACK', 4],
+                ['7SA037', 'Lever with button', None, None, 14],
+            ], picture_cell='A3')
+            self.client.login(username='warehouse1', password='pass12345')
+            response = self.client.post('/tasks/parts/', {'action': 'import', 'file': upload}, follow=True)
+            self.assertContains(response, '2 parts added, 0 updated, 1 photos.')
+            pin = self.Part.objects.get(code='RXP00010')
+            self.assertEqual((pin.description, pin.colour), ('Securing pin housing end cap', 'Color of frame: MATT BLACK'))
+            self.assertTrue(pin.photo.name.endswith('RXP00010.png'))
+            self.assertFalse(self.Part.objects.get(code='7SA037').photo)
+            self.assertFalse(self.Part.objects.filter(code__contains='SPARE').exists())  # a heading, not a part
+
+    def test_uploading_the_same_sheet_again_stores_no_second_photo(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.login(username='warehouse1', password='pass12345')
+            for expected in ('1 parts added, 0 updated, 1 photos.', '0 parts added, 0 updated, 0 photos.'):
+                upload = self._stock_sheet([['RXP00010', 'Securing pin housing end cap']], picture_cell='A3')
+                response = self.client.post('/tasks/parts/', {'action': 'import', 'file': upload}, follow=True)
+                self.assertContains(response, expected)
+
+    def test_uploading_again_keeps_what_the_sheet_leaves_empty(self):
+        self.Part.objects.create(code='7SA037', description='Lever with button', colour='Black', is_active=False)
+        self.client.login(username='warehouse1', password='pass12345')
+        self.client.post('/tasks/parts/', {'action': 'import', 'file': self._stock_sheet([['7SA037', None]])})
+        part = self.Part.objects.get()
+        self.assertEqual((part.description, part.colour, part.is_active), ('Lever with button', 'Black', True))
+
+    def test_a_part_gets_its_colour_and_photo_from_the_list(self):
+        part = self.Part.objects.create(code='BELT-01')
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.login(username='warehouse1', password='pass12345')
+            self.client.post('/tasks/parts/', {
+                'action': 'edit', 'part_id': part.pk, 'description': 'Treadmill belt', 'colour': 'Grey',
+                'photo': SimpleUploadedFile('belt.jpg', b'jpeg', content_type='image/jpeg'),
+            })
+            part.refresh_from_db()
+            self.assertEqual((part.description, part.colour), ('Treadmill belt', 'Grey'))
+            self.assertTrue(part.photo)
+
     def test_report_parts_must_come_from_the_catalogue(self):
         from reports.forms import PartUsedItemForm
 
@@ -9025,8 +9090,9 @@ class InstallationChecklistTests(TaskTestCase):
 
 
 class EquipmentChainTests(TaskTestCase):
-    # Received at the Riyadh warehouse, installed at a Dubai gym: the
-    # machines (and their serials) travel from step to step, across borders.
+    # Loaded at the Riyadh warehouse, installed at a Dubai gym: the machines
+    # (and their serials) travel from step to step, across borders. A
+    # receiving only adds to stock; it sends nothing on.
 
     def setUp(self):
         super().setUp()
@@ -9036,45 +9102,277 @@ class EquipmentChainTests(TaskTestCase):
         )
         ours = Customer.objects.create(country=self.saudi, name='Profit Sports Solutions', segment='other', is_internal=True)
         self.warehouse = Site.objects.create(customer=ours, name='Riyadh warehouse', address='Riyadh')
-        self.receiving_type = TaskType.objects.create(code='recv', name='Receiving', name_ar='استلام', category='receiving')
+        receiving_type = TaskType.objects.create(code='recv', name='Receiving', name_ar='استلام', category='receiving')
+        loading_type = TaskType.objects.create(code='load', name='Loading', name_ar='تحميل', category='loading')
         TaskType.objects.create(code='inst', name='Installation', name_ar='تركيب', category='installation')
-        self.receiving = Task.objects.create(
-            task_number='SA-0001', site=self.warehouse, task_type=self.receiving_type, brand=self.brand,
-            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE,
-            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
-        )
-        self.received = TaskProduct.objects.create(task=self.receiving, product_code='EXCITE-RUN', serial_number='TG-1', status='done')
-        TaskProduct.objects.create(task=self.receiving, product_code='EXCITE-BIKE', serial_number='', status='damaged')
+        self.receiving = self._task('SA-0001', receiving_type)
+        TaskProduct.objects.create(task=self.receiving, product_code='EXCITE-RUN', quantity=2, status='done')
+        self.loading = self._task('SA-0002', loading_type)
+        self.loaded = TaskProduct.objects.create(task=self.loading, product_code='EXCITE-RUN', serial_number='TG-1', status='done')
+        TaskProduct.objects.create(task=self.loading, product_code='EXCITE-RUN', status='damaged')
         self.manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Dana Manager', language='en',
             role=Technician.Role.MANAGER, employment_type='staff',
         )
 
-    def test_received_machines_go_to_an_installation_in_another_country(self):
+    def _task(self, number, task_type):
+        return Task.objects.create(
+            task_number=number, site=self.warehouse, task_type=task_type, brand=self.brand,
+            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.COMPLETED,
+        )
+
+    def test_loaded_machines_go_to_an_installation_in_another_country(self):
         self.client.login(username='manager1', password='pass12345')
-        page = self.client.get(f'/tasks/{self.receiving.pk}/')
-        self.assertContains(page, 'Create the next step')
-        response = self.client.post(f'/tasks/{self.receiving.pk}/', {
-            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.received.pk],
+        self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
+        response = self.client.post(f'/tasks/{self.loading.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk],
         })
-        installation = Task.objects.get(previous_task=self.receiving)
+        installation = Task.objects.get(previous_task=self.loading)
         self.assertRedirects(response, f'/tasks/{installation.pk}/', fetch_redirect_response=False)
         self.assertEqual(installation.site, self.site)  # the Dubai gym
         self.assertTrue(installation.task_number.startswith('AE-'))
         line = installation.products.get()
-        self.assertEqual((line.serial_number, line.status, line.source_line), ('TG-1', 'pending', self.received))
-        # Carried once: nothing left to carry from the receiving.
-        self.assertNotContains(self.client.get(f'/tasks/{self.receiving.pk}/'), 'Create the next step')
+        self.assertEqual((line.serial_number, line.status, line.source_line), ('TG-1', 'pending', self.loaded))
+        # Carried once: nothing left to carry from the loading.
+        self.assertNotContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
 
-    def test_loading_only_goes_to_a_warehouse_and_the_internal_account_gets_no_tickets(self):
+    def test_a_receiving_sends_nothing_on_and_the_internal_account_gets_no_tickets(self):
         from tasks.forms import StaffTicketForm
         self.client.login(username='manager1', password='pass12345')
+        self.assertNotContains(self.client.get(f'/tasks/{self.receiving.pk}/'), 'Send to')
+        line = self.receiving.products.get()
         response = self.client.post(f'/tasks/{self.receiving.pk}/', {
-            'action': 'create_next_step', 'step': 'loading', 'site': self.site.pk, 'lines': [self.received.pk],
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [line.pk],
         })
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(self.warehouse, StaffTicketForm(country=self.saudi).fields['site'].queryset)
+
+    def test_only_managers_send_machines_on(self):
+        self.loading.site = self.site  # even in the supervisor's own country
+        self.loading.save(update_fields=['site'])
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertNotContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
+        response = self.client.post(f'/tasks/{self.loading.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk],
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Task.objects.filter(previous_task=self.loading).exists())
+
+    def test_a_loading_is_planned_from_the_warehouse_stock(self):
+        from .views import loading_shortfall, warehouse_stock_for_planning
+        # 2 received, 2 on this loading: none left, but this loading can still plan its own 2.
+        self.assertEqual(warehouse_stock_for_planning(self.loading), {'EXCITE-RUN': 2})
+        self.assertEqual(loading_shortfall(self.loading), '')
+        TaskProduct.objects.create(task=self.loading, product_code='EXCITE-RUN')
+        self.assertIn('EXCITE-RUN (1 short)', loading_shortfall(self.loading))
+
+    def test_only_a_manager_plans_a_loading(self):
+        # A warehouse in the supervisor's own country, so they can open the task at all.
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
+        self.loading.site = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
+        self.loading.status = Task.Status.NEW
+        self.loading.save(update_fields=['site', 'status'])
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
+        self.assertContains(page, 'Only a manager plans the machines on a loading.')
+        self.client.login(username='manager1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
+        self.assertContains(page, 'In this warehouse:')
+        self.assertNotContains(page, 'Only a manager plans the machines on a loading.')
+
+
+class ReceivingByCountTests(TaskTestCase):
+    # A container comes with codes and quantities, not serials: receiving
+    # counts by code (machines and spare parts); the serial is typed once,
+    # at loading (optional) or installation (required).
+
+    def setUp(self):
+        super().setUp()
+        self.task_type.category = TaskType.Category.RECEIVING
+        self.task_type.save(update_fields=['category'])
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, task_type=self.task_type, priority=Task.Priority.NORMAL,
+            source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
+            created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+        )
+
+    def _plan(self, rows):
+        from .forms import TaskProductForm
+        from .views import save_planned_lines
+        forms_ = [TaskProductForm(row) for row in rows]
+        if all(form.is_valid() for form in forms_):
+            save_planned_lines(self.task, [form.cleaned_data for form in forms_])
+        return forms_
+
+    def _check(self, rows, step='receiving'):
+        from .forms import TaskProductCheckForm
+        from .views import checklist_initial, save_checklist
+        known = {row['id']: row for row in checklist_initial(self.task)}
+        forms_ = [TaskProductCheckForm(row, initial=known.get(row.get('id'), {}), step=step) for row in rows]
+        if all(form.is_valid() for form in forms_):
+            save_checklist(self.task, [form.cleaned_data for form in forms_])
+        return forms_
+
+    def test_receiving_keeps_code_and_quantity_and_takes_spare_parts(self):
+        self._plan([
+            {'kind': 'machine', 'product_code': 'BENCH-01', 'quantity': '20', 'serial_number': 'IGNORED'},
+            {'kind': 'part', 'product_code': 'RXP00010', 'quantity': '5', 'frame': 'Red'},
+        ])
+        bench, part = self.task.products.order_by('pk')
+        self.assertEqual((bench.kind, bench.quantity, bench.serial_number), ('machine', 20, ''))
+        self.assertEqual((part.kind, part.quantity, part.frame), ('part', 5, 'Black'))
+
+    def test_a_spare_part_must_be_in_the_catalogue_once_there_is_one(self):
+        from reference.models import Part
+        Part.objects.create(code='RXP00010', description='Securing pin housing end cap')
+        forms_ = self._plan([{'kind': 'part', 'product_code': 'NOPE', 'quantity': '1'}])
+        self.assertIn('product_code', forms_[0].errors)
+        self._plan([{'kind': 'part', 'product_code': 'rxp00010', 'quantity': '1'}])
+        self.assertEqual(self.task.products.get().product_code, 'RXP00010')
+
+    def test_a_short_count_splits_the_line(self):
+        line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01', quantity=20)
+        row = {'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done', 'received': '18', 'rest_status': 'damaged'}
+        forms_ = self._check([row])
+        self.assertIn('note', forms_[0].errors)  # damaged ones need a word or a photo
+        self._check([{**row, 'note': 'Two frames bent'}])
+        lines = list(self.task.products.order_by('pk').values_list('quantity', 'status', 'note'))
+        self.assertEqual(lines, [(18, 'done', 'Two frames bent'), (2, 'damaged', 'Two frames bent')])
+
+    def test_none_arrived_marks_the_whole_line(self):
+        line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01', quantity=4)
+        self._check([{'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done', 'received': '0'}])
+        self.assertEqual(list(self.task.products.values_list('quantity', 'status')), [(4, 'missing')])
+
+    def test_receiving_asks_no_serial_and_something_extra_is_counted_too(self):
+        line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01', quantity=2)
+        forms_ = self._check([
+            {'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done'},
+            {'product_code': 'RXP00011', 'kind': 'part', 'quantity': '3', 'status': 'done'},
+        ])
+        self.assertNotIn('serial_number', forms_[0].fields)
+        extra = self.task.products.get(added_on_site=True)
+        self.assertEqual((extra.kind, extra.quantity), ('part', 3))
+        line.refresh_from_db()
+        self.assertEqual((line.quantity, line.status), (2, 'done'))
+
+    def test_the_serial_is_optional_at_loading_and_required_at_installation(self):
+        line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01')
+        row = {'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done', 'serial_number': ''}
+        self.assertTrue(self._check([row], step='loading')[0].is_valid())
+        self.assertIn('serial_number', self._check([row], step='installation')[0].errors)
+
+    def test_received_lines_stay_in_the_warehouse(self):
+        # Loading is planned from the warehouse's stock instead (EquipmentChainTests).
+        from .views import lines_to_carry
+        TaskProduct.objects.create(task=self.task, product_code='BENCH-01', quantity=3, status='done')
+        self.assertEqual(lines_to_carry(self.task), [])
+
+
+class WarehouseStockTests(TaskTestCase):
+    # Stock is worked out from the tasks: received − loaded (machines) or
+    # used on reports (parts), plus hand counts; parts ordered for a repair
+    # are held for it until it's done.
+
+    def setUp(self):
+        super().setUp()
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
+        self.warehouse = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
+        self.receiving = self._task('AE-0101', 'receiving', self.warehouse)
+        self.manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=self.manager_user, country=self.country, full_name='Dana Manager', language='en',
+            role=Technician.Role.MANAGER, employment_type='staff',
+        )
+
+    def _task(self, number, category, site, status=Task.Status.IN_PROGRESS):
+        task_type, _created = TaskType.objects.get_or_create(
+            code=category, defaults={'name': category, 'name_ar': category, 'category': category},
+        )
+        return Task.objects.create(
+            task_number=number, site=site, task_type=task_type, priority=Task.Priority.NORMAL,
+            source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
+            created_by=self.supervisor_user, status=status,
+        )
+
+    def test_machines_are_received_less_loaded_and_a_cancelled_load_gives_them_back(self):
+        from .stock import machine_stock
+        TaskProduct.objects.create(task=self.receiving, product_code='BENCH-01', quantity=20, status='done')
+        TaskProduct.objects.create(task=self.receiving, product_code='BENCH-01', quantity=2, status='missing')
+        loading = self._task('AE-0102', 'loading', self.warehouse, status=Task.Status.NEW)
+        for _unit in range(3):
+            TaskProduct.objects.create(task=loading, product_code='bench-01')  # planned is enough
+        cancelled = self._task('AE-0103', 'loading', self.warehouse, status=Task.Status.CANCELLED)
+        TaskProduct.objects.create(task=cancelled, product_code='BENCH-01')
+        self.assertEqual(machine_stock(self.warehouse), {'BENCH-01': 17})
+
+    def test_a_count_keeps_the_difference_and_the_same_count_changes_nothing(self):
+        from .stock import machine_stock, record_count
+        TaskProduct.objects.create(task=self.receiving, product_code='BENCH-01', quantity=20, status='done')
+        adjustment = record_count(self.warehouse, 'machine', 'BENCH-01', 18, 'Monthly count', self.manager_user)
+        self.assertEqual(adjustment.quantity, -2)
+        self.assertIsNone(record_count(self.warehouse, 'machine', 'bench-01', 18, 'Again', self.manager_user))
+        self.assertEqual(machine_stock(self.warehouse), {'BENCH-01': 18})
+
+    def test_parts_are_used_on_reports_and_held_for_their_repair(self):
+        from .stock import part_rows
+        repair = self._task('AE-0104', 'maintenance', self.site)
+        TaskProduct.objects.create(task=self.receiving, kind='part', product_code='RXP00010', quantity=10, status='done')
+        TaskProduct.objects.create(
+            task=self.receiving, kind='part', product_code='RXP00010', quantity=5, status='done', for_task=repair,
+        )
+        # Another job's report used 3; the repair's own report used 2 of its 5.
+        other_report = WorkReport.objects.create(
+            task=self._task('AE-0105', 'maintenance', self.site), findings='Belt worn out', action_taken='Replaced belt', resolved=True,
+            labour_hours='1.50', customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+        PartUsed.objects.create(report=other_report, part_code='rxp00010', quantity=3)
+        repair_report = WorkReport.objects.create(
+            task=repair, findings='Pin broken', action_taken='Replaced', resolved=True, labour_hours='1.00',
+            customer_name='Ali Manager', submitted_at=timezone.now(),
+        )
+        PartUsed.objects.create(report=repair_report, part_code='RXP00010', quantity=2)
+        row = part_rows(self.country)[0]
+        self.assertEqual((row['code'], row['quantity'], row['held'], row['free']), ('RXP00010', 10, [(repair, 3)], 7))
+        # Once the repair is closed, what it didn't use goes free.
+        repair.status = Task.Status.CLOSED
+        repair.save(update_fields=['status'])
+        row = part_rows(self.country)[0]
+        self.assertEqual((row['quantity'], row['held'], row['free']), (10, [], 10))
+
+    def test_the_stock_screen_and_who_counts(self):
+        TaskProduct.objects.create(task=self.receiving, product_code='BENCH-01', quantity=4, status='done')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/stock/').status_code, 403)
+        self.client.login(username='manager1', password='pass12345')
+        page = self.client.get('/tasks/stock/')
+        self.assertContains(page, 'Machines — Dubai warehouse')
+        self.assertContains(page, 'BENCH-01')
+        response = self.client.post('/tasks/stock/', {
+            'kind': 'machine', 'site': self.warehouse.pk, 'product_code': 'BENCH-01', 'counted': 5, 'note': 'Found one',
+        }, follow=True)
+        self.assertContains(response, 'Count recorded: BENCH-01 +1.')
+
+    def test_a_part_line_names_the_repair_it_was_ordered_for(self):
+        from .forms import TaskProductForm
+        repair = self._task('AE-0104', 'maintenance', self.site)
+        form = TaskProductForm({'kind': 'part', 'product_code': 'RXP00010', 'quantity': '2', 'for_task': 'ae-0104'})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['for_task'], repair)
+        form = TaskProductForm({'kind': 'part', 'product_code': 'RXP00010', 'quantity': '2', 'for_task': 'AE-9999'})
+        self.assertIn('for_task', form.errors)
+
+    def test_the_sheet_quantities_become_the_opening_stock(self):
+        from .stock import part_stock
+        upload = PartsCatalogueTests._stock_sheet(self, [['7SA037', 'Lever with button', None, None, 14]])
+        self.client.login(username='manager1', password='pass12345')
+        response = self.client.post('/tasks/parts/', {
+            'action': 'import', 'file': upload, 'warehouse': self.warehouse.pk,
+        }, follow=True)
+        self.assertContains(response, '1 quantities recorded as stock at Dubai warehouse.')
+        self.assertEqual(part_stock(self.country), {'7SA037': 14})
 
 
 class DeactivateAndHandOverTests(TaskTestCase):

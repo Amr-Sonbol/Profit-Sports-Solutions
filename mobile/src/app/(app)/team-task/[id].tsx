@@ -72,7 +72,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     setError('');
     try {
       const created = await createNextStep(taskId, step, site, chosen);
-      Alert.alert('Next step created', `${created.task_number}, with ${chosen.length} machines.`);
+      Alert.alert('Sent on', `${created.task_number}, with ${chosen.length} machines.`);
       onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Not created. Please try again.');
@@ -83,7 +83,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
 
   return (
     <ThemedView style={[styles.manageBox, { borderColor: theme.primary }]}>
-      <ThemedText type="smallBold">Create the next step</ThemedText>
+      <ThemedText type="smallBold">{nextStep.title}</ThemedText>
       <ThemedView style={styles.quickRow}>
         {nextStep.steps.map((option) => {
           const on = step === option.value;
@@ -116,7 +116,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
         );
       })}
       {error ? <ThemedText type="small" themeColor="danger">{error}</ThemedText> : null}
-      <SecondaryButton label={`Create the next step (${chosen.length})`} onPress={create} disabled={isBusy || !chosen.length} />
+      <SecondaryButton label={`${nextStep.title} (${chosen.length})`} onPress={create} disabled={isBusy || !chosen.length} />
     </ThemedView>
   );
 }

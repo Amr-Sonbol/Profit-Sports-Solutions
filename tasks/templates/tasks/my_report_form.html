@@ -34,19 +34,19 @@
     {% endif %}
 
     {% if checklist_formset %}
-    {# An installation: each machine on the delivery note, checked off here. #}
+    {# An equipment step: each line on the delivery note, checked off here. #}
     <div class="report-step" data-staff-only>
         <span class="report-step__number">1</span>
         <div>
             {% if equipment_step == 'receiving' %}
             <h2 class="report-step__title">{% translate "Receiving checklist" %}</h2>
-            <p class="field__help">{% translate "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site." %}</p>
+            <p class="field__help">{% translate "Count what arrived against the container's list, code by code — machines and spare parts. If fewer came than listed, say how many arrived and whether the rest is missing or damaged. No serial numbers here: they are typed when the machines are loaded or installed." %}</p>
             {% elif equipment_step == 'loading' %}
             <h2 class="report-step__title">{% translate "Loading checklist" %}</h2>
-            <p class="field__help">{% translate "Tick each machine as it goes on the truck, and check its serial number. Anything missing or damaged: say what, or add a photo — before the team drives to the site." %}</p>
+            <p class="field__help">{% translate "Tick each machine as it goes on the truck. Typing its serial number from the sticker is optional here — the installers type any that are left. Anything missing or damaged: say what, or add a photo — before the team drives to the site." %}</p>
             {% else %}
             <h2 class="report-step__title">{% translate "Installation checklist" %}</h2>
-            <p class="field__help">{% translate "For each machine: what happened, its serial number from the plate, and its colors (black unless custom). Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card." %}</p>
+            <p class="field__help">{% translate "For each machine: what happened, its serial number from the sticker, and its colors (black unless custom). A serial already filled in came from loading — check it against the sticker. One you type here: add a clear photo of the sticker. Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card." %}</p>
             {% endif %}
         </div>
     </div>
@@ -56,9 +56,10 @@
     {% if checklist_formset.non_form_errors %}<p class="flash flash--error">{{ checklist_formset.non_form_errors }}</p>{% endif %}
     <div class="checklist" data-staff-only>
         {% for form in checklist_formset %}
-        <fieldset class="checklist-card{% if form.errors %} checklist-card--error{% endif %}">
+        <fieldset class="checklist-card{% if form.errors %} checklist-card--error{% endif %}"{% if form.initial.quantity %} data-listed="{{ form.initial.quantity }}"{% endif %}>
             <legend>
-                {% if form.initial.id %}{{ form.initial.product_code }}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}
+                {% if form.initial.id %}<span dir="ltr">{{ form.initial.product_code }}{% if form.initial.quantity > 1 %} × {{ form.initial.quantity }}{% endif %}</span>{% if form.initial.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}
+                {% elif equipment_step == 'receiving' %}{% translate "Something not on the list (optional)" %}
                 {% else %}{% translate "A machine not on the delivery note (optional)" %}{% endif %}
             </legend>
             {{ form.id }}
@@ -72,7 +73,7 @@
                 </div>
                 {% endif %}
                 {% for field in form %}{% if field.name != 'id' and field.name != 'product_code' %}
-                <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'note' %} field--wide{% endif %}">
+                <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'note' %} field--wide{% endif %}" data-field="{{ field.name }}">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                     {% if field.name == 'photo' %}
                         {% if form.initial.photo_url %}<a href="{{ form.initial.photo_url }}" target="_blank" rel="noopener">{% translate "Current photo" %}</a>{% endif %}
@@ -369,4 +370,5 @@
 <script src="{% static 'js/signature-pad.js' %}" defer></script>
 <script src="{% static 'js/tap-location.js' %}" defer></script>
 <script src="{% static 'js/report-picks.js' %}" defer></script>
+{% if equipment_step == 'receiving' %}<script src="{% static 'js/receiving-count.js' %}" defer></script>{% endif %}
 {% endblock %}

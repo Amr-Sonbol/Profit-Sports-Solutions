@@ -199,6 +199,8 @@ def nav_pages(technician, allowed):
         add('customers:customer_accounts', _('Customer accounts'), 'user-check', 'customers')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
         add('tasks:part_list', _('Parts'), 'package', 'customers')
+    if RolePermission.Permission.VIEW_STOCK in allowed:
+        add('tasks:stock', _('Stock'), 'archive', 'customers')
     if RolePermission.Permission.VIEW_MACHINES in allowed:
         add('tasks:machine_list', _('Machines'), 'dumbbell', 'customers')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:

@@ -318,13 +318,26 @@ export function createNextStep(id: number, step: string, site: string, lines: nu
 }
 
 /** A task's planned machine lines, and whether they can be changed. */
+type TaskLines = {
+  locked: boolean;
+  /** Why it can't be changed: done (managers only), or a loading (planned by a manager). */
+  locked_reason: string;
+  one_per_machine: boolean;
+  is_receiving: boolean;
+  /** Loading: what its warehouse holds to plan from. */
+  stock: { code: string; quantity: number }[] | null;
+  /** After saving a loading: more planned than the warehouse holds (not a block). */
+  warning: string;
+  lines: PlannedLine[];
+};
+
 export function fetchTaskLines(id: number) {
-  return apiRequest<{ locked: boolean; one_per_machine: boolean; lines: PlannedLine[] }>(`/api/tasks/${id}/lines/`);
+  return apiRequest<TaskLines>(`/api/tasks/${id}/lines/`);
 }
 
-/** Replaces the plan; on an equipment step "× 4" becomes four lines. */
+/** Replaces the plan; on a loading or an installation "× 4" becomes four lines. */
 export function saveTaskLines(id: number, lines: PlannedLine[]) {
-  return apiRequest<{ locked: boolean; one_per_machine: boolean; lines: PlannedLine[] }>(`/api/tasks/${id}/lines/`, {
+  return apiRequest<TaskLines>(`/api/tasks/${id}/lines/`, {
     method: 'POST', body: { lines },
   });
 }

@@ -1,3 +1,4 @@
+import bisect
 import csv
 import logging
 from collections import defaultdict
@@ -15,6 +16,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.staticfiles.finders import find as find_static_file
 from django.core import signing
 from django.core.exceptions import PermissionDenied
+from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
@@ -58,12 +60,13 @@ from .forms import (
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT, NotificationSettingsForm,
-    SkillCreateForm, StaffAttachmentUploadForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
+    SkillCreateForm, StaffAttachmentUploadForm, StockCountForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
     TaskMessageForm, TaskProductCheckForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
     TicketReplyForm,
 )
 from .location import record_tap
+from .stock import machine_stock, part_rows, record_count, stock_key
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
@@ -1953,7 +1956,8 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'create_next_step':
-        viewer = require_permission(request, RolePermission.Permission.CREATE_TASKS)
+        # Managers only: sending equipment on (often to another country) is theirs to decide.
+        viewer = require_manager(request)
         step = request.POST.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             raise Http404
@@ -2048,6 +2052,8 @@ def task_detail(request, pk):
         'next_tasks': task.next_tasks.all(),
         # Receiving / loading: machines ready to carry on, and where they can go.
         'lines_to_carry': lines_to_carry(task),
+        # Sending the machines on is the manager tier's only — not a supervisor's.
+        'can_send_on': requesting_technician.is_manager_tier,
         'next_step_choices': [
             (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
             for step in NEXT_STEPS.get(equipment_step(task), ())
@@ -2096,14 +2102,19 @@ def task_edit(request, pk):
     previous_scheduled_for = task.scheduled_for
     previous_scheduled_date = task.scheduled_date
     products_locked = not is_manager and task.status in PRODUCTS_LOCKED_STATUSES
+    # A loading takes machines out of a warehouse's stock: the manager tier's decision, like sending them on.
+    is_loading = equipment_step(task) == TaskType.Category.LOADING
+    loading_locked = is_loading and not is_manager
+    products_locked = products_locked or loading_locked
 
     TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS, can_delete=True)
     product_initial = [
         {
-            'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
+            'kind': p.kind, 'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
             'frame': p.frame, 'arm': p.arm, 'padding': p.padding, 'trim': p.trim,
+            'for_task': p.for_task.task_number if p.for_task_id else '',
         }
-        for p in task.products.all()
+        for p in task.products.select_related('for_task').order_by('pk')
     ]
 
     if request.method == 'POST':
@@ -2125,6 +2136,9 @@ def task_edit(request, pk):
                     )
                 if not products_locked:
                     save_planned_lines(updated_task, product_formset.cleaned_data)
+            short = loading_shortfall(updated_task) if is_loading and not products_locked else ''
+            if short:
+                messages.warning(request, short)
             notices = []
             if (
                 rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
@@ -2156,9 +2170,16 @@ def task_edit(request, pk):
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
         product_formset = None if products_locked else TaskProductFormSet(initial=product_initial, prefix='products')
 
+    if is_loading and product_formset is not None:
+        # The codes in stock, suggested as the code is typed.
+        for product_form in product_formset:
+            product_form.fields['product_code'].widget.attrs['list'] = 'warehouse-codes'
     context = {
         'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked,
-        'is_installation': is_installation(task),
+        'loading_locked': loading_locked,
+        'is_installation': is_installation(task), 'is_receiving': equipment_step(task) == TaskType.Category.RECEIVING,
+        # A loading is planned from what its warehouse holds (without this task's own lines).
+        'warehouse_stock': warehouse_stock_for_planning(task) if is_loading else None,
     }
     return render(request, 'tasks/task_edit.html', context)
 
@@ -4985,40 +5006,73 @@ def brand_create(request):
 
 @login_required
 def part_list(request):
-    """The parts catalogue (docs: part) — add one, upload a CSV, edit a
-    description, switch one off or back on. Gated by manage_parts, so the
+    """The parts catalogue (docs: part) — add one (with its photo), upload
+    a CSV or the warehouse's Excel sheet, edit a description, colour or
+    photo, switch one off or back on. Gated by manage_parts, so the
     warehouse manager can keep it up to date, not just the manager tier.
     """
     require_permission(request, RolePermission.Permission.MANAGE_PARTS)
+    country = get_active_country(request)
     add_form = PartForm()
-    import_form = PartImportForm()
+    import_form = PartImportForm(country=country)
 
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'add':
-            add_form = PartForm(request.POST)
+            add_form = PartForm(request.POST, request.FILES)
             if add_form.is_valid():
                 add_form.save()
                 messages.success(request, _('Part added.'))
                 return redirect('tasks:part_list')
         elif action == 'import':
-            import_form = PartImportForm(request.POST, request.FILES)
+            import_form = PartImportForm(request.POST, request.FILES, country=country)
             if import_form.is_valid():
-                added, updated = _import_parts(import_form.cleaned_data['file'])
-                messages.success(
-                    request, _('%(added)s parts added, %(updated)s updated.') % {'added': added, 'updated': updated},
-                )
-                return redirect('tasks:part_list')
-        elif action in ('toggle_active', 'edit_description'):
+                upload = import_form.cleaned_data['file']
+                try:
+                    rows = list(
+                        _part_rows_from_xlsx(upload) if upload.name.lower().endswith('.xlsx') else _part_rows_from_csv(upload)
+                    )
+                except Exception:  # anything openpyxl can't read as a workbook
+                    import_form.add_error('file', _('This file could not be read. Save it again as .xlsx or .csv and retry.'))
+                else:
+                    with transaction.atomic():
+                        added, updated, photos = _import_parts(rows)
+                        warehouse = import_form.cleaned_data['warehouse']
+                        counted = 0
+                        if warehouse:
+                            # Each quantity is what's on that warehouse's shelf: the opening stock.
+                            note = _('Opening stock — %(file)s') % {'file': upload.name}
+                            for code, _description, _colour, _picture, quantity in rows:
+                                if quantity is not None:
+                                    record_count(warehouse, TaskProduct.Kind.PART, code, quantity, note, request.user)
+                                    counted += 1
+                    messages.success(request, _('%(added)s parts added, %(updated)s updated, %(photos)s photos.') % {
+                        'added': added, 'updated': updated, 'photos': photos,
+                    })
+                    if counted:
+                        messages.success(request, _('%(count)s quantities recorded as stock at %(warehouse)s.') % {
+                            'count': counted, 'warehouse': warehouse.name,
+                        })
+                    return redirect('tasks:part_list')
+        elif action == 'toggle_active':
             part = get_object_or_404(Part, pk=request.POST.get('part_id'))
-            if action == 'toggle_active':
-                part.is_active = not part.is_active
-                part.save(update_fields=['is_active'])
-            else:
-                part.description = request.POST.get('description', '').strip()[:200]
-                part.save(update_fields=['description'])
+            part.is_active = not part.is_active
+            part.save(update_fields=['is_active'])
             messages.success(request, _('Part updated.'))
             return redirect('tasks:part_list')
+        elif action == 'edit':
+            part = get_object_or_404(Part, pk=request.POST.get('part_id'))
+            edit_form = PartForm(
+                {'code': part.code, 'description': request.POST.get('description', ''),
+                 'colour': request.POST.get('colour', '')},
+                request.FILES, instance=part,
+            )
+            if edit_form.is_valid():
+                edit_form.save()
+                messages.success(request, _('Part updated.'))
+            else:
+                messages.error(request, ' '.join(str(error) for errors in edit_form.errors.values() for error in errors))
+            return redirect(f"{reverse('tasks:part_list')}?{request.GET.urlencode()}")
 
     search = request.GET.get('q', '').strip()
     parts = Part.objects.all()
@@ -5032,29 +5086,169 @@ def part_list(request):
     return render(request, 'tasks/part_list.html', context)
 
 
-def _import_parts(uploaded_file):
-    """Rows of code, description. A new code is added; an existing one gets
-    its description updated (and is switched back on). A first row whose
-    code reads "code" is taken as a header and skipped.
-    """
+def _part_rows_from_csv(uploaded_file):
+    """A CSV's rows of code, description (a first row reading "code" is a
+    header) as (code, description, colour, picture, quantity) — no colour,
+    picture or quantity."""
     text = uploaded_file.read().decode('utf-8-sig', errors='replace')
-    added = updated = 0
     for index, row in enumerate(csv.reader(text.splitlines())):
-        if not row or not row[0].strip():
+        if not row or not row[0].strip() or (index == 0 and row[0].strip().upper() == 'CODE'):
             continue
-        code = row[0].strip().upper()[:50]
-        if index == 0 and code == 'CODE':
+        yield row[0], row[1] if len(row) > 1 else '', '', None, None
+
+
+def _part_rows_from_xlsx(uploaded_file):
+    """The warehouse's stock sheet (docs/Stock.xlsx's layout) as (code,
+    description, colour, picture, quantity) rows: the columns found by
+    their header — Code, Description, Colour, Qty — and each part's picture
+    by the row it sits in. The colour column has no header there, so a
+    column of "Color of …" values counts as one. The sheet's Qty is filled
+    in only once something went out; until then it's the "Original QTY",
+    sometimes deliveries added up ("10+147"). A heading row (a "code" with
+    spaces, like SPARE PARTS) is skipped. Pictures are (bytes, extension);
+    no quantity is None."""
+    import openpyxl  # only the upload needs it
+
+    def text(value):
+        return '' if value is None else str(value).strip()
+
+    sheet = openpyxl.load_workbook(uploaded_file).worksheets[0]
+    rows = list(sheet.iter_rows(values_only=True))
+    header_index = next(
+        (i for i, row in enumerate(rows[:10]) if any(text(cell).lower() == 'code' for cell in row)), None,
+    )
+    if header_index is None:
+        return []
+    headers = [text(cell).lower() for cell in rows[header_index]]
+    code_col = headers.index('code')
+    description_col = headers.index('description') if 'description' in headers else None
+    quantity_col = headers.index('qty') if 'qty' in headers else None
+    original_col = headers.index('original qty') if 'original qty' in headers else None
+    colour_col = next((i for i, name in enumerate(headers) if name in ('colour', 'color')), None)
+    body = rows[header_index + 1:]
+    if colour_col is None:
+        colour_col = next((
+            i for i in range(len(headers))
+            if any(text(row[i]).lower().startswith(('color of', 'colour of')) for row in body if i < len(row))
+        ), None)
+
+    # Each picture's row (0-based): from its cell anchor, or for one placed
+    # freely on the sheet, the row its middle sits in.
+    default_height = sheet.sheet_format.defaultRowHeight or 15
+    tops, y = [], 0
+    for number in range(1, len(rows) + 2):
+        tops.append(y)
+        y += (sheet.row_dimensions[number].ht or default_height) * 12700  # points → EMU
+    pictures = {}
+    for image in sheet._images:
+        anchor = image.anchor
+        if hasattr(anchor, '_from'):
+            row = anchor._from.row
+        else:
+            row = bisect.bisect_right(tops, anchor.pos.y + anchor.ext.height / 2) - 1
+        pictures.setdefault(row, (image._data(), image.format or 'png'))
+
+    def cell(row, col):
+        return text(row[col]) if col is not None and col < len(row) else ''
+
+    def quantity(row):
+        value = cell(row, quantity_col) or cell(row, original_col)
+        try:
+            return sum(int(float(number)) for number in value.split('+')) if value else None
+        except ValueError:
+            return None
+
+    found = []
+    for offset, row in enumerate(body):
+        code = cell(row, code_col)
+        if not code or ' ' in code:
             continue
-        description = row[1].strip()[:200] if len(row) > 1 else ''
-        part, created = Part.objects.get_or_create(code=code, defaults={'description': description})
+        found.append((
+            code, cell(row, description_col), cell(row, colour_col), pictures.get(header_index + 1 + offset),
+            quantity(row),
+        ))
+    return found
+
+
+def _import_parts(rows):
+    """(code, description, colour, picture, quantity) rows into the catalogue — run
+    any number of times, it's how more parts are added later. A new code is
+    added; an existing one gets what the row has (description, colour, a
+    picture) and keeps anything the row leaves empty, and is switched back
+    on. Nothing is deleted. Returns how many were added, updated, and got a
+    photo."""
+    added = updated = photos = 0
+    for code, description, colour, picture, _quantity in rows:
+        code = code.strip().upper()[:50]
+        description, colour = description.strip()[:200], colour.strip()[:200]
+        part, created = Part.objects.get_or_create(code=code, defaults={'description': description, 'colour': colour})
+        changed = not part.is_active or (description and description != part.description) or (
+            colour and colour != part.colour
+        )
+        part.description = description or part.description
+        part.colour = colour or part.colour
+        part.is_active = True
+        new_picture = picture and not _same_file(part.photo, picture[0])
+        if new_picture:
+            data, extension = picture
+            part.photo.save(f'{code}.{extension}', ContentFile(data), save=False)
+            photos += 1
         if created:
             added += 1
-        elif description != part.description or not part.is_active:
-            part.description = description or part.description
-            part.is_active = True
-            part.save(update_fields=['description', 'is_active'])
+        elif changed or new_picture:
             updated += 1
-    return added, updated
+        part.save()
+    return added, updated, photos
+
+
+def _same_file(field_file, data):
+    """Whether a stored file already holds exactly these bytes — so
+    uploading the same sheet again doesn't store every picture twice."""
+    if not field_file:
+        return False
+    try:
+        with field_file.open('rb') as current:
+            return current.read() == data
+    except OSError:
+        return False
+
+
+@login_required
+def stock(request):
+    """Warehouse stock (docs: Warehouse stock) in the active country: each
+    warehouse's machines by code, and the country's spare parts — with
+    their photo, and how many are held for which repair. Gated by
+    view_stock. Counting (what's on the shelf) is for whoever runs the
+    stock: the warehouse manager and the manager tier.
+    """
+    technician = require_permission(request, RolePermission.Permission.VIEW_STOCK)
+    country = get_active_country(request)
+    can_count = technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER
+    count_form = StockCountForm(country=country)
+    if request.method == 'POST':
+        if not can_count:
+            raise PermissionDenied
+        count_form = StockCountForm(request.POST, country=country)
+        if count_form.is_valid():
+            data = count_form.cleaned_data
+            adjustment = record_count(
+                data['site'], data['kind'], data['product_code'], data['counted'], data['note'], request.user,
+            )
+            if adjustment:
+                messages.success(request, _('Count recorded: %(code)s %(difference)+d.') % {
+                    'code': adjustment.product_code, 'difference': adjustment.quantity,
+                })
+            else:
+                messages.success(request, _('The count matches — nothing to change.'))
+            return redirect('tasks:stock')
+
+    warehouses = Site.objects.filter(customer__is_internal=True, customer__country=country).order_by('name')
+    context = {
+        'country': country, 'can_count': can_count, 'count_form': count_form,
+        'warehouses': [(site, machine_stock(site)) for site in warehouses],
+        'parts': part_rows(country) if country else [],
+    }
+    return render(request, 'tasks/stock.html', context)
 
 
 @login_required
@@ -5335,10 +5529,13 @@ def save_work_report(request, task, technician, report_form, part_rows):
 
 def save_planned_lines(task, rows):
     """The machine lines as planned on the Edit screen (TaskProductForm
-    rows), replacing the previous plan. On an installation, "BENCH-01 × 4"
-    becomes four lines — one per machine, each with its own serial and
-    status to check off on site."""
+    rows), replacing the previous plan. On a loading or an installation,
+    "BENCH-01 × 4" becomes four lines — one per machine, each with its own
+    serial and status to check off on site. Receiving keeps code ×
+    quantity (counted against the container's list), and only there can a
+    line be a spare part."""
     task.products.all().delete()
+    step = equipment_step(task)
     for cleaned in rows:
         if not cleaned.get('product_code') or cleaned.get('DELETE'):
             continue
@@ -5346,7 +5543,12 @@ def save_planned_lines(task, rows):
             'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
             **{color: cleaned[color] for color in TaskProductForm.COLORS},
         }
-        if equipment_step(task):
+        if step == TaskType.Category.RECEIVING:
+            TaskProduct.objects.create(
+                task=task, quantity=cleaned['quantity'], **{**fields, 'serial_number': ''},
+                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE, for_task=cleaned.get('for_task'),
+            )
+        elif step:
             for _unit in range(cleaned['quantity']):
                 TaskProduct.objects.create(task=task, quantity=1, **fields)
         else:
@@ -5357,25 +5559,50 @@ def save_planned_lines(task, rows):
 STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
 
 
-# What can follow each step of the equipment chain.
+# What can follow each step of the equipment chain. A receiving only adds
+# to the warehouse's stock; a loading is planned from that stock (its Edit
+# screen), so machines from two containers can go on one truck.
 NEXT_STEPS = {
-    TaskType.Category.RECEIVING: (TaskType.Category.LOADING, TaskType.Category.INSTALLATION),
     TaskType.Category.LOADING: (TaskType.Category.INSTALLATION,),
 }
 
 
+def warehouse_stock_for_planning(task):
+    """{code: quantity} a loading can take from its warehouse — the stock
+    with this loading's own planned machines put back."""
+    stock = defaultdict(int, machine_stock(task.site))
+    for code in task.products.filter(kind=TaskProduct.Kind.MACHINE).values_list('product_code', flat=True):
+        stock[stock_key(code)] += 1
+    return {code: quantity for code, quantity in sorted(stock.items()) if quantity > 0}
+
+
+def loading_shortfall(task):
+    """A warning when a loading plans more of a code than its warehouse
+    holds — not a block: the warehouse floor is the truth, and a count
+    corrects the figure."""
+    short = {code: -quantity for code, quantity in machine_stock(task.site).items() if quantity < 0}
+    if not short:
+        return ''
+    return _('More planned than %(warehouse)s holds: %(codes)s. Check the warehouse, or record a count on the Stock '
+             'screen.') % {
+        'warehouse': task.site.name, 'codes': ', '.join(f'{code} ({quantity} short)' for code, quantity in short.items()),
+    }
+
+
 def lines_to_carry(task):
-    """A receiving or loading step's machines that are done (received /
-    loaded) and not carried to a next step yet."""
+    """A loading's machines that are loaded and not carried to an
+    installation yet."""
     if equipment_step(task) not in NEXT_STEPS:
         return []
-    return list(task.products.filter(status=TaskProduct.Status.DONE, carried_to__isnull=True).order_by('pk'))
+    return list(task.products.filter(
+        status=TaskProduct.Status.DONE, kind=TaskProduct.Kind.MACHINE, carried_to__isnull=True,
+    ).order_by('pk'))
 
 
 def next_step_sites(viewer, step):
     """Where a next step can be: a warehouse (our own sites) for loading, a
     customer's site for an installation — in every country for the manager
-    tier (the chain crosses borders), the viewer's own otherwise."""
+    tier (the chain crosses borders; only they send machines on)."""
     sites = Site.objects.filter(customer__is_active=True).select_related('customer__country')
     sites = sites.filter(customer__is_internal=(step == TaskType.Category.LOADING))
     if not viewer.is_manager_tier:
@@ -5393,15 +5620,19 @@ def create_next_step(request, task, task_type, site, lines):
         created_by=request.user, status=Task.Status.NEW, previous_task=task,
         # The supervisor carries over only within a country.
         responsible_supervisor=task.responsible_supervisor if site.customer.country_id == task.site.customer.country_id else None,
-        description=_('Next step after %(number)s: %(count)s machines.') % {'number': task.task_number, 'count': len(lines)},
+        description=_('Next step after %(number)s: %(count)s machines.') % {
+            'number': task.task_number, 'count': sum(line.quantity for line in lines),
+        },
     )
     with transaction.atomic():
         _save_new_task(next_task)
+        # A received line is code × quantity: one line per machine from here on.
         for line in lines:
-            TaskProduct.objects.create(
-                task=next_task, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
-                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
-            )
+            for _unit in range(line.quantity):
+                TaskProduct.objects.create(
+                    task=next_task, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
+                    frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
+                )
         TaskEvent.objects.create(task=next_task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=request.user)
         TaskNotification.objects.create(task=next_task, created_at=timezone.now())
     _send_new_task_email_to_staff(request, next_task)
@@ -5452,7 +5683,7 @@ def checklist_initial(task):
     """The checklist's rows, from the task's lines."""
     return [
         {
-            'id': line.pk, 'product_code': line.product_code,
+            'id': line.pk, 'product_code': line.product_code, 'kind': line.kind, 'quantity': line.quantity,
             'status': '' if line.status == TaskProduct.Status.PENDING else line.status,
             'serial_number': line.serial_number, 'frame': line.frame, 'arm': line.arm, 'padding': line.padding,
             'trim': line.trim, 'replacement': line.replacement, 'note': line.note,
@@ -5489,24 +5720,48 @@ def save_checklist(task, rows):
     """What really happened to each machine (TaskProductCheckForm rows,
     with any new photo as `photo`): planned lines updated by `id`, machines
     added on site created (and any added earlier but now left out removed)
-    — planned lines are never deleted here, only marked."""
+    — planned lines are never deleted here, only marked. On receiving, a
+    count short of the list splits the line: those that arrived, and the
+    rest as its own line, missing or damaged."""
     lines = {line.pk: line for line in task.products.all()}
     kept = set()
     for cleaned in rows:
         line = lines.get(cleaned.get('id'))
         if line is None:
-            line = TaskProduct(task=task, added_on_site=True, quantity=1)
+            line = TaskProduct(
+                task=task, added_on_site=True, quantity=cleaned.get('quantity') or 1,
+                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE,
+            )
         line.product_code = cleaned['product_code']
         line.status = cleaned['status']
         line.serial_number = cleaned['serial_number']
         for color in TaskProductCheckForm.COLORS:
-            setattr(line, color, cleaned[color])
+            setattr(line, color, cleaned.get(color, getattr(line, color)))
         line.replacement = cleaned.get('replacement', '')
         line.note = cleaned.get('note', '')
         if cleaned.get('photo'):
             line.photo = cleaned['photo']
+        rest = None
+        received = cleaned.get('received')
+        if received is not None and received < line.quantity:
+            rest = TaskProduct(
+                task=task, kind=line.kind, for_task_id=line.for_task_id, product_code=line.product_code,
+                quantity=line.quantity - received,
+                status=cleaned.get('rest_status') or TaskProduct.Status.MISSING, note=line.note,
+                **{color: getattr(line, color) for color in TaskProductCheckForm.COLORS},
+            )
+            if received == 0:
+                line.status = rest.status
+                rest = None
+            else:
+                line.quantity = received
+        elif received is not None:
+            line.quantity = received
         line.save()
         kept.add(line.pk)
+        if rest is not None:
+            rest.photo = line.photo.name or None
+            rest.save()
     task.products.filter(added_on_site=True).exclude(pk__in=kept).delete()
 
 

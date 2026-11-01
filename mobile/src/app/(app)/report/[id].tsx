@@ -93,15 +93,15 @@ function fieldErrorsFrom(body: unknown): FieldErrors {
 const CHECKLIST_TITLES: Record<string, { title: string; hint: string }> = {
   receiving: {
     title: 'Receiving checklist',
-    hint: 'Check each machine from the factory against the delivery note — received, missing or damaged — and scan its serial once, here.',
+    hint: 'Count what arrived against the container list, code by code — machines and spare parts. If fewer came, say how many, and whether the rest is missing or damaged. No serials here.',
   },
   loading: {
     title: 'Loading checklist',
-    hint: 'Tick each machine as it goes on the truck and check its serial. Missing or damaged: say what, or take a photo.',
+    hint: 'Tick each machine as it goes on the truck. Its serial from the sticker is optional here — the installers type any left. Missing or damaged: say what, or take a photo.',
   },
   installation: {
     title: 'Installation checklist',
-    hint: 'For each machine: what happened, its serial from the plate (or scan it), and its colours — black unless custom. Damaged or wrong item: say what, or take a photo.',
+    hint: 'For each machine: what happened, its serial from the sticker (one filled in came from loading — check it), and its colours — black unless custom. A serial you type: take a clear photo of the sticker. Damaged or wrong item: say what, or take a photo.',
   },
 };
 
@@ -576,7 +576,7 @@ export default function ReportScreen() {
               <>
                 <StepTitle number={1} {...CHECKLIST_TITLES[checklistStep] ?? CHECKLIST_TITLES.installation} />
                 <InstallationChecklist
-                  taskId={Number(id)} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
+                  taskId={Number(id)} step={checklistStep} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
                 />
                 {errors.checklist ? <ThemedText themeColor="danger" type="small">{errors.checklist}</ThemedText> : null}
               </>

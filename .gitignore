@@ -9,3 +9,6 @@ media/
 
 # Local test logins (never committed)
 test-accounts.local.txt
+
+# Real stock and customer data from the warehouse (never committed)
+docs/Stock.xlsx

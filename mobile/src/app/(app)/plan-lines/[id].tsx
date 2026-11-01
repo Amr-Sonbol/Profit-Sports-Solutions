@@ -1,7 +1,7 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,15 +16,22 @@ import type { PlannedLine } from '@/types';
 const COLORS = [['frame', 'Frame'], ['arm', 'Arm'], ['padding', 'Padding'], ['trim', 'Trim']] as const;
 
 function emptyLine(): PlannedLine {
-  return { product_code: '', serial_number: '', quantity: '1', frame: 'Black', arm: 'Black', padding: 'Black', trim: 'Black' };
+  return {
+    kind: 'machine', product_code: '', serial_number: '', quantity: '1', frame: 'Black', arm: 'Black', padding: 'Black',
+    trim: 'Black',
+  };
 }
+
+const KINDS = [['machine', 'Machine'], ['part', 'Spare part']] as const;
 
 /**
  * A task's machines from the delivery note — the website's Edit screen's
  * product lines: product code, serial if already known, quantity and the
- * four colours (black unless custom). On a receiving, loading or
- * installation step "× 4" becomes four lines, one per machine, to check
- * off on site. Locked once the task is done, except for managers.
+ * four colours (black unless custom). On a loading or an installation
+ * "× 4" becomes four lines, one per machine, to check off on site.
+ * Receiving is the container's list instead: code × quantity, machines
+ * and spare parts, no serials. Locked once the task is done, except for
+ * managers.
  */
 export default function PlanLinesScreen() {
   const { id, title } = useLocalSearchParams<{ id: string; title?: string }>();
@@ -32,7 +39,10 @@ export default function PlanLinesScreen() {
   const theme = useTheme();
   const [lines, setLines] = useState<PlannedLine[] | null>(null);
   const [locked, setLocked] = useState(false);
+  const [lockedReason, setLockedReason] = useState('');
+  const [stock, setStock] = useState<{ code: string; quantity: number }[] | null>(null);
   const [perMachine, setPerMachine] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
 
@@ -40,7 +50,10 @@ export default function PlanLinesScreen() {
     fetchTaskLines(Number(id)).then((data) => {
       setLines(data.lines.length ? data.lines.map((line) => ({ ...line, quantity: String(line.quantity) })) : [emptyLine()]);
       setLocked(data.locked);
+      setLockedReason(data.locked_reason);
+      setStock(data.stock);
       setPerMachine(data.one_per_machine);
+      setReceiving(data.is_receiving);
       setError('');
     }).catch((err) => setError(err instanceof ApiRequestError ? err.message : 'Could not load the machines.'));
   }, [id]));
@@ -54,7 +67,12 @@ export default function PlanLinesScreen() {
     setError('');
     try {
       const filled = (lines ?? []).filter((line) => line.product_code.trim());
-      await saveTaskLines(Number(id), filled);
+      const saved = await saveTaskLines(Number(id), filled);
+      if (saved.warning) {
+        // A loading planned beyond the warehouse's stock: saved, but say so.
+        Alert.alert('Check the warehouse', saved.warning, [{ text: 'OK', onPress: () => router.back() }]);
+        return;
+      }
       router.back();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Not saved. Please try again.');
@@ -76,17 +94,38 @@ export default function PlanLinesScreen() {
             <ThemedText type="title">Machines</ThemedText>
             {title ? <ThemedText themeColor="textSecondary">{title}</ThemedText> : null}
             <ThemedText type="small" themeColor="textSecondary">
-              {perMachine
-                ? 'The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial can wait — it is typed or scanned on site. Colours are black unless custom.'
-                : 'The items on the delivery note: a product code for each line. Colours are black unless custom.'}
+              {receiving
+                ? 'The container\'s list: each code and how many — machines and spare parts. No serial numbers here; the warehouse counts what arrived. Colours are for machines, black unless custom.'
+                : perMachine
+                  ? 'The machines from the delivery note. A quantity of 4 becomes 4 lines, one per machine. The serial can wait — it is typed from the sticker on site. Colours are black unless custom.'
+                  : 'The items on the delivery note: a product code for each line. Colours are black unless custom.'}
             </ThemedText>
-            {locked ? (
-              <ThemedText themeColor="danger">This task is done, so only a manager can change its machines.</ThemedText>
+            {locked ? <ThemedText themeColor="danger">{lockedReason}</ThemedText> : null}
+            {stock ? (
+              <ThemedText type="small">
+                In this warehouse: {stock.length ? stock.map((row) => `${row.code} × ${row.quantity}`).join(' · ') : 'nothing in stock'}
+              </ThemedText>
             ) : null}
             {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
             {lines === null && !error ? <ActivityIndicator /> : null}
             {(lines ?? []).map((line, index) => (
               <ThemedView key={index} style={[styles.card, { borderColor: theme.backgroundSelected }]}>
+                {receiving ? (
+                  <ThemedView style={styles.row}>
+                    {KINDS.map(([value, label]) => {
+                      const on = (line.kind || 'machine') === value;
+                      return (
+                        <TouchableOpacity
+                          key={value} disabled={locked} onPress={() => update(index, { kind: value })}
+                          style={[styles.chip, { borderColor: on ? theme.primary : theme.backgroundSelected },
+                            on && { backgroundColor: theme.primary }]}
+                        >
+                          <ThemedText type="small" style={on ? { color: theme.onPrimary } : undefined}>{label}</ThemedText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ThemedView>
+                ) : null}
                 <ThemedView style={styles.row}>
                   <TextInput
                     style={[inputStyle, styles.flex]} value={line.product_code} editable={!locked}
@@ -99,24 +138,36 @@ export default function PlanLinesScreen() {
                     placeholder="Qty" placeholderTextColor={theme.textSecondary}
                   />
                 </ThemedView>
-                <TextInput
-                  style={inputStyle} value={line.serial_number} editable={!locked}
-                  onChangeText={(value) => update(index, { serial_number: value })}
-                  placeholder="Serial number (if already known)" placeholderTextColor={theme.textSecondary}
-                  autoCapitalize="characters"
-                />
-                <ThemedView style={styles.row}>
-                  {COLORS.map(([field, label]) => (
-                    <ThemedView key={field} style={styles.color}>
-                      <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
-                      <TextInput
-                        style={inputStyle} value={line[field]} editable={!locked}
-                        onChangeText={(value) => update(index, { [field]: value })}
-                        placeholder="Black" placeholderTextColor={theme.textSecondary}
-                      />
-                    </ThemedView>
-                  ))}
-                </ThemedView>
+                {receiving && line.kind === 'part' ? (
+                  <TextInput
+                    style={inputStyle} value={line.for_task ?? ''} editable={!locked}
+                    onChangeText={(value) => update(index, { for_task: value })}
+                    placeholder="For task (if ordered for one repair)" placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
+                  />
+                ) : null}
+                {!receiving ? (
+                  <TextInput
+                    style={inputStyle} value={line.serial_number} editable={!locked}
+                    onChangeText={(value) => update(index, { serial_number: value })}
+                    placeholder="Serial number (if already known)" placeholderTextColor={theme.textSecondary}
+                    autoCapitalize="characters"
+                  />
+                ) : null}
+                {line.kind !== 'part' ? (
+                  <ThemedView style={styles.row}>
+                    {COLORS.map(([field, label]) => (
+                      <ThemedView key={field} style={styles.color}>
+                        <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
+                        <TextInput
+                          style={inputStyle} value={line[field]} editable={!locked}
+                          onChangeText={(value) => update(index, { [field]: value })}
+                          placeholder="Black" placeholderTextColor={theme.textSecondary}
+                        />
+                      </ThemedView>
+                    ))}
+                  </ThemedView>
+                ) : null}
                 {!locked ? (
                   <TouchableOpacity onPress={() => setLines((current) => (current ?? []).filter((_, i) => i !== index))}>
                     <ThemedText type="small" themeColor="danger">Remove</ThemedText>
@@ -130,7 +181,7 @@ export default function PlanLinesScreen() {
                   style={[styles.addButton, { borderColor: theme.primary }]}
                   onPress={() => setLines((current) => [...(current ?? []), emptyLine()])}
                 >
-                  <ThemedText themeColor="primary">+ Another machine</ThemedText>
+                  <ThemedText themeColor="primary">{receiving ? '+ Another code' : '+ Another machine'}</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={save} disabled={isBusy}
@@ -157,6 +208,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: Spacing.one, backgroundColor: 'transparent' },
   input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, fontSize: 15 },
   quantity: { width: 64 },
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
   color: { flex: 1, gap: 2, backgroundColor: 'transparent' },
   addButton: { borderWidth: 1, borderStyle: 'dashed', borderRadius: Spacing.two, padding: Spacing.three, alignItems: 'center' },
   saveButton: { borderRadius: Spacing.two, padding: Spacing.three, alignItems: 'center' },
