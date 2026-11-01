@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
@@ -6,7 +5,6 @@ import { ActivityIndicator, Alert, StyleSheet, TextInput, TouchableOpacity } fro
 
 import { ApiRequestError } from '@/api/client';
 import { uploadLinePhoto } from '@/api/endpoints';
-import { BarcodeScanner } from '@/components/barcode-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -41,7 +39,6 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
 }) {
   const receiving = step === 'receiving';
   const theme = useTheme();
-  const [scanning, setScanning] = useState<number | null>(null);
   const [uploading, setUploading] = useState<number | null>(null);
 
   const update = (index: number, changes: Partial<ChecklistRow>) => {
@@ -165,17 +162,12 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
             ) : null}
 
             {!receiving ? (
-              <ThemedView style={styles.serialRow}>
-                <TextInput
-                  style={[inputStyle, styles.flex, needsSerial && { borderColor: theme.danger }]}
-                  value={row.serial_number} onChangeText={(value) => update(index, { serial_number: value })}
-                  placeholder={step === 'loading' ? 'Serial number from the sticker (optional)' : 'Serial number from the sticker'}
-                  placeholderTextColor={theme.textSecondary} autoCapitalize="characters" autoCorrect={false}
-                />
-                <TouchableOpacity style={[styles.iconButton, { borderColor: theme.primary }]} onPress={() => setScanning(index)}>
-                  <Ionicons name="barcode-outline" size={22} color={theme.primary} />
-                </TouchableOpacity>
-              </ThemedView>
+              <TextInput
+                style={[inputStyle, needsSerial && { borderColor: theme.danger }]}
+                value={row.serial_number} onChangeText={(value) => update(index, { serial_number: value })}
+                placeholder={step === 'loading' ? 'Serial number from the sticker (optional)' : 'Serial number from the sticker'}
+                placeholderTextColor={theme.textSecondary} autoCapitalize="characters" autoCorrect={false}
+              />
             ) : null}
             {needsSerial ? (
               <ThemedText type="small" themeColor="danger">This machine needs its serial number — type it from the sticker.</ThemedText>
@@ -227,17 +219,6 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
       >
         <ThemedText themeColor="primary">{receiving ? '+ Something not on the list' : '+ A machine not on the delivery note'}</ThemedText>
       </TouchableOpacity>
-
-      <BarcodeScanner
-        visible={scanning !== null}
-        onClose={() => setScanning(null)}
-        onScanned={(text) => {
-          if (scanning !== null) {
-            update(scanning, { serial_number: text });
-          }
-          setScanning(null);
-        }}
-      />
     </ThemedView>
   );
 }
@@ -264,7 +245,6 @@ const styles = StyleSheet.create({
   note: { minHeight: 50, textAlignVertical: 'top' },
   flex: { flex: 1 },
   serialRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
-  iconButton: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   colors: { flexDirection: 'row', gap: Spacing.one, backgroundColor: 'transparent' },
   color: { flex: 1, gap: 2, backgroundColor: 'transparent' },
   photo: { width: 56, height: 56, borderRadius: Spacing.one },
