@@ -1,6 +1,7 @@
 import bisect
 import csv
 import logging
+import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
@@ -20,7 +21,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import (
     Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
@@ -920,11 +921,33 @@ def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachmen
     )
 
 
+def _in_background(work):
+    """Run `work` once the request's changes are saved, on its own thread, so
+    the person doesn't wait for the mail server (or a PDF) — and nothing is
+    sent for a change that was rolled back. At once under the test runner
+    (settings.SEND_EMAILS_IN_BACKGROUND). Returns what `work` returned when
+    run at once, else None."""
+    if not settings.SEND_EMAILS_IN_BACKGROUND:
+        return work()
+
+    def run():
+        try:
+            work()
+        except Exception:  # noqa: BLE001 — nobody is waiting for it; log it, so it reaches Sentry
+            logger.exception('Background work failed')
+        finally:
+            connection.close()  # the thread's own database connection
+
+    transaction.on_commit(lambda: threading.Thread(target=run).start())
+    return None
+
+
 # What one email can carry in files: mail servers commonly refuse much more.
 MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
-def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None):
+def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None,
+                             background=True):
     """Every outbound notification email in this app goes through here
     — a plain-text body for clients that don't render HTML, and a
     matching styled HTML alternative (tasks/templates/tasks/email/)
@@ -937,7 +960,11 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     (filename, bytes, mimetype) tuple for a generated one (the visit
     report PDF), or a list of files (a message's). Files past
     MAX_EMAIL_ATTACHMENT_BYTES in all are left out — the email links to
-    where they are anyway. Returns whether the email went out.
+    where they are anyway.
+
+    The email is built here (files read now), then sent in the background
+    (_in_background) unless `background` is False — for work that already
+    runs there. Returns whether it went out, or True once it's handed over.
 
     The logo is embedded inline (a cid: reference, not a plain URL) —
     this renders outside any request, and an email client fetches remote
@@ -971,12 +998,18 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
                 email.attach(file.name.rsplit('/', 1)[-1], file.read())
             finally:
                 file.close()
-    try:
-        email.send()
-    except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
-        logger.exception('Notification email failed: %s', subject)
-        return False
-    return True
+    def deliver():
+        try:
+            email.send()
+        except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
+            logger.exception('Notification email failed: %s', subject)
+            return False
+        return True
+
+    if background:
+        sent = _in_background(deliver)
+        return True if sent is None else sent
+    return deliver()
 
 
 def send_visit_report_copy(report, email_address):
@@ -1014,9 +1047,10 @@ def send_visit_report_copy(report, email_address):
             'Best regards,\n'
             'Profit Sports Solutions\n',
         ) % context
+        # Already in the background (see save_work_report): send it from here.
         sent = _send_notification_email(
             subject, message, 'tasks/email/visit_report.html', context, [email_address],
-            attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'),
+            attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
         )
     if sent:
         report.copy_sent_to = email_address
@@ -1714,6 +1748,7 @@ def task_detail(request, pk):
     task = _scoped_or_404(
         Task.objects.select_related(
             'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
+            'responsible_supervisor',
         ).prefetch_related('report__parts_used'),
         pk, requesting_technician, get_active_country(request), 'site__customer__country',
     )
@@ -2031,7 +2066,7 @@ def task_detail(request, pk):
     )
     active_helpers = [a for a in assignments if a.role == TaskAssignment.Role.HELPER and a.is_active]
 
-    events = task.events.select_related('actor', 'corrected_by')
+    events = task.events.select_related('actor__technician', 'corrected_by__technician')
     if not requesting_technician.is_manager_tier:
         # Negligence flags are a manager-tier reliability signal — never
         # shown to the technician being flagged, or to a supervisor
@@ -2064,7 +2099,7 @@ def task_detail(request, pk):
             if source_ticket and task.ticket_machines.exists()
             else source_ticket.attachments.all() if source_ticket else []
         ),
-        'task_assets': task.task_assets.select_related('asset'),
+        'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
         'products': task.products.all(),
         # An installation's machines not installed yet, and the chain around it.
         'still_to_install': still_to_install(task),
@@ -4415,7 +4450,7 @@ def machine_list(request):
     search = request.GET.get('q', '').strip()
     assets = Asset.objects.filter(site__customer__country=active_country).select_related(
         'site__customer', 'brand',
-    ).order_by('site__customer__name', 'site__name', 'model_name')
+    ).order_by('site__customer__name', 'site__name', 'model_name', 'pk')  # pk: a fixed order for same-model machines, page to page
     if search:
         assets = assets.filter(
             Q(serial_no__icontains=search) | Q(model_name__icontains=search) | Q(code__icontains=search)
@@ -5579,7 +5614,8 @@ def save_work_report(request, task, technician, report_form, part_rows):
     if saved_report.first_submission and copy_to:
         # Only once the report is safely saved, so a rollback never sends a
         # copy of something that isn't there.
-        transaction.on_commit(lambda: send_visit_report_copy(saved_report, copy_to))
+        # Drawing the PDF and sending it both happen in the background.
+        transaction.on_commit(lambda: _in_background(lambda: send_visit_report_copy(saved_report, copy_to)))
     if saved_report.first_submission:
         register_installed_machines(task)
         notify_customer.report_ready(task)

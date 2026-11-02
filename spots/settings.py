@@ -132,6 +132,12 @@ AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
 # @override_settings.
 AXES_ENABLED = 'test' not in sys.argv
 
+# Emails go out on a background thread once the page's changes are saved, so
+# nobody waits on the mail server (or a visit report's PDF) — tasks.views
+# ._in_background. Under the test runner they're sent at once instead, so a
+# test can read them from mail.outbox.
+SEND_EMAILS_IN_BACKGROUND = 'test' not in sys.argv
+
 ROOT_URLCONF = 'spots.urls'
 
 TEMPLATES = [

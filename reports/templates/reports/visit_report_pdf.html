@@ -79,7 +79,8 @@
     {% else %}<p class="preview-ok">{% translate "Nothing missing was found." %}</p>{% endif %}
 </div>
 {% endif %}
-<h1>{% if task.task_type %}{{ task.task_type.display_name }} — {% endif %}{% if equipment_step == 'receiving' %}{% translate "Receiving Report" %}{% elif equipment_step == 'loading' %}{% translate "Loading Report" %}{% elif equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
+{# The visit's type stays in the details below; the heading stays general. #}
+<h1>{% if equipment_step == 'receiving' %}{% translate "Receiving Report" %}{% elif equipment_step == 'loading' %}{% translate "Loading Report" %}{% elif equipment %}{% translate "Installation Report" %}{% else %}{% translate "Visit Report" %}{% endif %}</h1>
 <p class="reference">{{ task.task_number }}</p>
 <p class="date">{{ report.submitted_at|date:"j F Y" }}</p>
 {% if changed_after_signing %}

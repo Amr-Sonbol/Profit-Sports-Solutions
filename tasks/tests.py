@@ -100,6 +100,24 @@ class TaskDetailTests(TaskTestCase):
             quantity=1, unit_cost='120.00', currency_code='AED',
         )
 
+    def test_a_longer_history_and_more_machines_cost_no_more_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.client.login(username='supervisor1', password='pass12345')
+        url = f'/tasks/{self.task.pk}/'
+        self.client.get(url)
+        with CaptureQueriesContext(connection) as before:
+            self.client.get(url)
+        for actor in (self.tech_user, self.supervisor_user, self.tech_user):
+            TaskEvent.objects.create(
+                task=self.task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=actor,
+            )
+            asset = Asset.objects.create(site=self.site, brand=self.brand, model_name='Excite Run 700')
+            TaskAsset.objects.create(task=self.task, asset=asset, outcome=TaskAsset.Outcome.REPAIRED)
+        with self.assertNumQueries(len(before)):
+            self.client.get(url)
+
     def test_anonymous_is_redirected_to_login(self):
         response = self.client.get(f'/tasks/{self.task.pk}/')
         self.assertEqual(response.status_code, 302)
@@ -2784,6 +2802,21 @@ class TicketReviewTests(TaskTestCase):
         ]
         self.assertEqual(len(pdf_names), 1)
         self.assertTrue(pdf_names[0].startswith('quote'))
+
+    @override_settings(SEND_EMAILS_IN_BACKGROUND=True)
+    def test_the_email_goes_out_after_the_page_answers(self):
+        import threading
+        self.ticket.contact_email = 'ali@fitnessfirst.example'
+        self.ticket.save(update_fields=['contact_email'])
+        self.client.login(username='support1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, {'action': 'add_reply', 'message': 'On our way.'})
+        self.assertEqual(response.status_code, 302)
+        for thread in threading.enumerate():
+            if thread is not threading.current_thread():
+                thread.join(timeout=10)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_a_reply_takes_several_files_up_to_the_limit(self):
