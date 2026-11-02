@@ -523,9 +523,9 @@ def _portal_visits(customer):
 @login_required(login_url='customers:portal_login')
 def portal_home(request):
     """A logged-in customer's start page: their next visit, how many
-    requests are open, visits coming up and reports — each opening its own
-    page (Requests, Visits) — and any finished visit waiting for their
-    rating. The lists themselves live on those pages, not here.
+    requests are open, visits coming up and machines — each opening its own
+    page — and what needs their attention (the bell's items, visits waiting
+    for a rating). The lists themselves live on those pages, not here.
     """
     customer, setup = _portal_customer(request)
     if setup:
@@ -539,7 +539,6 @@ def portal_home(request):
         'next_visit': next((v for v in upcoming if v.day), None),
         'open_count': sum(1 for ticket in tickets if ticket.is_open),
         'upcoming_count': len(upcoming),
-        'report_count': sum(1 for visit in history if visit.has_report),
         'machine_count': Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).count(),
         'to_rate': [visit for visit in history if visit.to_rate and visit.pk not in in_bell][:3],
     })

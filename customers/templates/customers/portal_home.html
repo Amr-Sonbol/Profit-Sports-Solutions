@@ -19,9 +19,6 @@
         {% include "_stat_tile.html" with value=open_count label=open_label url=requests_url %}
         {% url 'customers:portal_visits' as visits_url %}{% translate "Visits coming up" as upcoming_label %}
         {% include "_stat_tile.html" with value=upcoming_count label=upcoming_label url=visits_url %}
-        {% translate "Reports" as reports_label %}
-        {% url 'customers:portal_history' as history_url %}
-        {% include "_stat_tile.html" with value=report_count label=reports_label url=history_url %}
         {% url 'customers:portal_machines' as machines_url %}{% translate "Machines" as machines_label %}
         {% include "_stat_tile.html" with value=machine_count label=machines_label url=machines_url %}
     </div>

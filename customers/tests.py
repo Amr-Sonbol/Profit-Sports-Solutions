@@ -687,7 +687,8 @@ class PortalProgressTests(CustomerTestCase):
             task=visit, findings='Belt worn out', action_taken='Replaced belt', resolved=True,
             labour_hours='1.50', customer_name='Ali', submitted_at=timezone.now(),
         )
-        self.assertEqual(self.client.get('/customers/portal/').context['report_count'], 1)
+        # Home counts what's going on, not reports: a new one reaches them through the bell.
+        self.assertNotIn('report_count', self.client.get('/customers/portal/').context)
         page = self.client.get('/customers/portal/history/')
         self.assertEqual([v.task_number for v in page.context['history']], ['AE-0905'])
         self.assertContains(page, f'/customers/portal/visits/{visit.pk}/report.pdf')
