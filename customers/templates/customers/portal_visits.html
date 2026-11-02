@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Visits" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{% translate "Visits" %}</h1>
+            <p class="muted">{% translate "The visits coming up. Finished visits and their reports are under History." %}</p>
+        </div>
+    </div>
+
+    <section class="section" id="upcoming">
+        <h2>{% translate "Coming up" %}</h2>
+        {% if upcoming %}
+        <ul class="action-list">
+            {% for visit in upcoming %}
+            <li>
+                <a href="{% url 'customers:portal_visit' visit.pk %}" class="action-row portal-row">
+                    <span class="portal-row__day">{% if visit.day %}{{ visit.day|date:"j M" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
+                    <span class="portal-row__main">
+                        <strong>{{ visit.task_type.display_name|default:_("Service visit") }}</strong>
+                        <span class="muted">{{ visit.site.name }}</span>
+                    </span>
+                    <span class="badge {{ visit.progress.1 }}">{{ visit.progress.0 }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-state">{% translate "No visits are planned at the moment." %}</p>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}

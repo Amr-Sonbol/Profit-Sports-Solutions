@@ -1,86 +1,80 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "My account" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "Home" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="page__header">
-    <h1>{{ customer.name }}</h1>
-    <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "New ticket" %}</a>
-</div>
-
-<div class="section">
-    <h2>{% translate "Your tickets" %}</h2>
-    {% if tickets %}
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% translate "Ticket" %}</th>
-                    <th>{% translate "Submitted" %}</th>
-                    <th>{% translate "Site" %}</th>
-                    <th>{% translate "Status" %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ticket in tickets %}
-                <tr>
-                    <td><a href="{% url 'tasks:ticket_status' ticket.token %}">{{ ticket.ticket_number }}</a></td>
-                    <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
-                    <td>{{ ticket.site_description }}</td>
-                    <td>
-                        {% if ticket.status == 'new' %}
-                        <span class="badge badge--neutral">{% translate "Received" %}</span>
-                        {% elif ticket.status == 'converted' %}
-                        <span class="badge badge--good">{% translate "Scheduled" %}</span>
-                        {% else %}
-                        <span class="badge badge--muted">{% translate "Closed" %}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{{ customer.name }}</h1>
+            <p class="muted">{% translate "Report a problem, follow your requests and visits, and download your reports." %}</p>
+        </div>
+        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "Report a problem" %}</a>
     </div>
-    {% else %}
-    <p class="empty-state">{% translate "You have not submitted any tickets." %}</p>
-    {% endif %}
-</div>
 
-<div class="section">
-    <h2>{% translate "Service history" %}</h2>
-    {% if visits %}
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% translate "Date" %}</th>
-                    <th>{% translate "Site" %}</th>
-                    <th>{% translate "Type" %}</th>
-                    <th>{% translate "Status" %}</th>
-                    <th>{% translate "Report" %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for visit in visits %}
-                <tr>
-                    <td>{{ visit.scheduled_for|date:"SHORT_DATE_FORMAT"|default:visit.reported_at|date:"SHORT_DATE_FORMAT" }}</td>
-                    <td>{{ visit.site.name }}</td>
-                    <td>{{ visit.task_type.display_name|default:"—" }}</td>
-                    <td><span class="badge badge--status-{{ visit.status }}">{{ visit.get_status_display }}</span></td>
-                    <td>
-                        {% if visit.has_report %}
-                        <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener">{% translate "Download (PDF)" %}</a>
-                        {% if visit.report_changed %}· <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener">{% translate "Signed version" %}</a>{% endif %}
-                        {% else %}<span class="muted">—</span>{% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    {# Each number opens its own page. #}
+    <div class="stat-row">
+        {% url 'customers:portal_requests' as requests_url %}{% translate "Open requests" as open_label %}
+        {% include "_stat_tile.html" with value=open_count label=open_label url=requests_url %}
+        {% url 'customers:portal_visits' as visits_url %}{% translate "Visits coming up" as upcoming_label %}
+        {% include "_stat_tile.html" with value=upcoming_count label=upcoming_label url=visits_url %}
+        {% translate "Reports" as reports_label %}
+        {% url 'customers:portal_history' as history_url %}
+        {% include "_stat_tile.html" with value=report_count label=reports_label url=history_url %}
+        {% url 'customers:portal_machines' as machines_url %}{% translate "Machines" as machines_label %}
+        {% include "_stat_tile.html" with value=machine_count label=machines_label url=machines_url %}
     </div>
-    {% else %}
-    <p class="empty-state">{% translate "No visits on record." %}</p>
+
+    <section class="section portal-next">
+        <h2>{% translate "Your next visit" %}</h2>
+        {% if next_visit %}
+        <a href="{% url 'customers:portal_visit' next_visit.pk %}" class="portal-next__body portal-next__link">
+            <div class="portal-next__day">
+                <span class="portal-next__weekday">{{ next_visit.day|date:"l" }}</span>
+                <span class="portal-next__date">{{ next_visit.day|date:"j F Y" }}</span>
+                <span class="muted">{% if next_visit.scheduled_for %}{{ next_visit.scheduled_for|time:"TIME_FORMAT" }}{% else %}{% translate "Time to be confirmed" %}{% endif %}</span>
+            </div>
+            <div class="portal-next__what">
+                <strong>{{ next_visit.task_type.display_name|default:_("Service visit") }}</strong>
+                <span class="muted">{{ next_visit.site.name }}</span>
+            </div>
+            <span class="badge {{ next_visit.progress.1 }}">{{ next_visit.progress.0 }}</span>
+        </a>
+        {% else %}
+        <p class="empty-state">{% translate "No visit is booked at the moment. We will let you know as soon as one is." %}</p>
+        {% endif %}
+    </section>
+
+    {% if portal_bell or to_rate %}
+    <section class="section">
+        <h2>{% translate "Needs your attention" %}</h2>
+        <ul class="action-list">
+            {% for item in portal_bell %}
+            <li>
+                <a href="{{ item.url }}" class="action-row action-row--warning portal-row">
+                    <span class="portal-row__main">
+                        <strong>{{ item.text }}</strong>
+                        <span class="muted">{{ item.about }}</span>
+                    </span>
+                    <span class="muted">{{ item.created_at|date:"j M" }}</span>
+                </a>
+            </li>
+            {% endfor %}
+            {% for visit in to_rate %}
+            <li>
+                <a href="{% url 'customers:portal_visit' visit.pk %}#rate" class="action-row portal-row">
+                    <span class="portal-row__day">{% if visit.day %}{{ visit.day|date:"j M Y" }}{% else %}{{ visit.reported_at|date:"j M Y" }}{% endif %}</span>
+                    <span class="portal-row__main">
+                        <strong>{{ visit.task_type.display_name|default:_("Service visit") }}</strong>
+                        <span class="muted">{{ visit.site.name }}</span>
+                    </span>
+                    <span class="badge badge--booked">{% translate "Rate this visit" %}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
     {% endif %}
 </div>
 {% endblock %}

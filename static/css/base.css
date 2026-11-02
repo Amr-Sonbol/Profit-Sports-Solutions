@@ -754,6 +754,11 @@ tbody tr:hover {
     font-size: 0.85rem;
 }
 
+/* The bubble keeps a message's line breaks (pre-wrap); the links' own markup shouldn't. */
+.chat-bubble .chat-attachment {
+    white-space: normal;
+}
+
 .muted {
     color: var(--color-muted);
 }
@@ -2623,4 +2628,322 @@ tbody tr:hover {
     flex-direction: column;
     gap: 0.2rem;
     font-size: 0.85rem;
+}
+
+/* Customer portal (customers/templates/customers/portal_*.html): the same
+   rows and tiles as the staff home page, laid out for a customer — the
+   next visit up front, then requests, visits to come and the history. */
+.badge--booked {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--color-text);
+}
+
+.portal .page__header p {
+    margin-block: 0.2rem 0;
+    margin-inline: 0;
+}
+
+.portal-next__body {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.portal-next__day {
+    display: flex;
+    flex-direction: column;
+    padding-inline-end: 1rem;
+    border-inline-end: 1px solid var(--color-border);
+}
+
+.portal-next__weekday {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.portal-next__date {
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.portal-next__what {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+/* A request or a visit: wraps onto a second line on a phone instead of squeezing. */
+.portal-row {
+    flex-wrap: wrap;
+}
+
+.portal-row__day {
+    flex: 0 0 6.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.portal-row__main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.portal-row__links {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.empty-state .button {
+    margin-block-start: 0.5rem;
+}
+
+.portal-row__meta {
+    font-size: 0.85rem;
+}
+
+.badge--warning { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.portal-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block-start: 0.75rem;
+}
+
+.portal-text {
+    white-space: pre-line;
+}
+
+.portal-list {
+    margin-block: 0.25rem 0.75rem;
+    padding-inline-start: 1.25rem;
+}
+
+.portal-stars {
+    font-size: 1.2rem;
+    letter-spacing: 0.1em;
+    color: var(--color-warning);
+}
+
+/* The next visit is one link to its page. */
+.portal-next__link {
+    color: var(--color-text);
+    text-decoration: none;
+    border-radius: 6px;
+}
+
+.portal-next__link:hover {
+    background: var(--color-hover);
+}
+
+/* The customer menu's main action, above its links. */
+.nav-cta {
+    display: block;
+    margin-block: 0.25rem 0.75rem;
+    text-align: center;
+}
+
+/* A request's way to its visit (templates/_progress_steps.html): one
+   segment per step, filled up to where it has got. */
+.progress-steps {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+}
+
+.progress-steps__step {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-block-start: 0.35rem;
+    border-block-start: 4px solid var(--color-border);
+    color: var(--color-muted);
+}
+
+.progress-steps__step--done {
+    border-block-start-color: var(--color-success);
+}
+
+.progress-steps__step--current {
+    border-block-start-color: var(--color-text);
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.portal .tabs {
+    margin-block-end: 0.75rem;
+}
+
+.portal-row__main .progress-steps {
+    margin-block-start: 0.4rem;
+}
+
+/* "Report a problem" in steps (static/js/report-steps.js). */
+.report-steps__bar {
+    margin-block-end: 0.75rem;
+}
+
+.report-steps__nav {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-block-start: 1rem;
+}
+
+.section > .progress-steps {
+    margin-block-end: 1rem;
+}
+
+/* An attached file (templates/_attachment.html): paperclip, its name, download. */
+.attachment {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding-block: 0.2rem;
+    padding-inline: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    font-size: 0.85rem;
+}
+
+.attachment .icon {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+}
+
+.attachment__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attachment__download {
+    display: inline-flex;
+    color: var(--color-muted);
+}
+
+.attachment__download:hover {
+    color: var(--color-text);
+}
+
+/* Several files on one message: side by side, onto more lines as needed. */
+.attachment-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+/* A message box (templates/_composer.html): the text, the chosen files,
+   and the paperclip and send button on its bottom edge — all one box. */
+.composer__box {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.composer__box:focus-within {
+    border-color: var(--color-text);
+}
+
+.composer__box--error {
+    border-color: var(--color-danger);
+}
+
+.composer__box textarea {
+    display: block;
+    inline-size: 100%;
+    border: 0;
+    background: transparent;
+    resize: vertical;
+    padding-block: 0.6rem;
+    padding-inline: 0.75rem;
+}
+
+.composer__box textarea:focus {
+    outline: none;
+}
+
+.composer__files {
+    margin: 0;
+    padding-block: 0 0.4rem;
+    padding-inline: 0.75rem;
+    list-style: none;
+}
+
+.composer__bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-block: 0.4rem;
+    padding-inline: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.composer__attach {
+    position: relative;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    padding-block: 0.3rem;
+    padding-inline: 0.5rem;
+    border-radius: 6px;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.composer__attach:hover,
+.composer__attach:focus-within {
+    color: var(--color-text);
+    background: var(--color-hover);
+}
+
+.composer__attach .icon {
+    inline-size: 18px;
+    block-size: 18px;
+}
+
+/* The file input stays in the label (a click on the paperclip opens it) but out of sight. */
+.composer__attach input[type="file"] {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.attachment__remove {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.attachment__remove:hover {
+    color: var(--color-danger);
 }

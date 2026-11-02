@@ -11,6 +11,7 @@ from django.contrib.messages import get_messages
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone, translation
 
 from customers.models import Asset, Customer, Site
@@ -2701,20 +2702,23 @@ class TicketReviewTests(TaskTestCase):
         self.assertContains(response, 'Waiting on the part.')
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-    def test_support_manager_can_attach_a_file_to_an_internal_note(self):
-        photo = SimpleUploadedFile('vendor_quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+    def test_support_manager_can_attach_files_to_an_internal_note(self):
+        quote = SimpleUploadedFile('vendor_quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
+        photo = SimpleUploadedFile('part.jpg', b'jpeg', content_type='image/jpeg')
 
         self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
-            'action': 'add_internal_note', 'message': 'Vendor quote attached.', 'attachment': photo,
+            'action': 'add_internal_note', 'message': 'Vendor quote attached.', 'attachments': [quote, photo],
         })
         self.assertEqual(response.status_code, 302)
 
         note = TicketInternalNote.objects.get(ticket=self.ticket)
-        self.assertTrue(note.attachment.name.endswith('.pdf'))
+        self.assertEqual(sorted(f.name.rsplit('/', 1)[-1] for f in note.all_files), ['part.jpg', 'vendor_quote.pdf'])
 
+        # Each shows by its own name, with the paperclip.
         response = self.client.get(self.url)
-        self.assertContains(response, 'vendor_quote')
+        self.assertContains(response, '>vendor_quote.pdf</a>')
+        self.assertContains(response, '>part.jpg</a>')
 
     def test_admin_can_add_internal_note(self):
         admin_user = User.objects.create_user('admin1', password='pass12345')
@@ -2763,7 +2767,7 @@ class TicketReviewTests(TaskTestCase):
 
         self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
-            'action': 'add_reply', 'message': 'Please see the attached quotation.', 'attachment': quote_file,
+            'action': 'add_reply', 'message': 'Please see the attached quotation.', 'attachments': [quote_file],
         })
         self.assertEqual(response.status_code, 302)
 
@@ -2780,6 +2784,17 @@ class TicketReviewTests(TaskTestCase):
         ]
         self.assertEqual(len(pdf_names), 1)
         self.assertTrue(pdf_names[0].startswith('quote'))
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_a_reply_takes_several_files_up_to_the_limit(self):
+        self.client.login(username='support1', password='pass12345')
+        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(11)]
+        response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Too many', 'attachments': files})
+        self.assertContains(response, 'Please attach at most 10 files.')
+        self.assertFalse(TicketReply.objects.exists())
+        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(3)]
+        self.client.post(self.url, {'action': 'add_reply', 'message': 'Three photos', 'attachments': files})
+        self.assertEqual(len(TicketReply.objects.get().all_files), 3)
 
     def test_customer_reply_creates_a_new_reply_notification(self):
         portal_user = User.objects.create_user('fitnessfirst_portal2', password='pass12345')
@@ -6349,12 +6364,13 @@ class MyReportFormTests(TaskTestCase):
         payload['new-0-brand'] = str(self.brand.pk)
         payload['new-0-model_name'] = 'Excite Run 900'
         payload['new-0-serial_no'] = 'SN-42'
+        payload['new-0-code'] = ' EXC-900 '
         payload['new-0-outcome'] = TaskAsset.Outcome.INSPECTED_OK
         self.client.post(self.url, payload)
 
         new_asset = Asset.objects.get(model_name='Excite Run 900')
         self.assertEqual(new_asset.site, self.site)
-        self.assertEqual(new_asset.serial_no, 'SN-42')
+        self.assertEqual((new_asset.serial_no, new_asset.code), ('SN-42', 'EXC-900'))
         task_asset = TaskAsset.objects.get(asset=new_asset)
         self.assertEqual(task_asset.outcome, TaskAsset.Outcome.INSPECTED_OK)
 
@@ -7905,7 +7921,12 @@ class StaffOpenedTicketTests(TaskTestCase):
         bell = self.client.get('/').context['unseen_notifications']
         self.assertTrue(any(item['kind'] == 'internal_ticket' for item in bell))
 
-        self.client.post(f'/tasks/tickets/internal/{ticket.pk}/', {'action': 'add_note', 'message': 'Ordered'})
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.post(f'/tasks/tickets/internal/{ticket.pk}/', {
+                'action': 'add_note', 'message': 'Ordered',
+                'attachments': [SimpleUploadedFile('po.pdf', b'%PDF-1.4', content_type='application/pdf')],
+            })
+            self.assertContains(self.client.get(f'/tasks/tickets/internal/{ticket.pk}/'), '>po.pdf</a>')
         self.client.post(f'/tasks/tickets/internal/{ticket.pk}/', {'action': 'close', 'close_reason': 'Delivered'})
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, 'closed')
@@ -8527,16 +8548,20 @@ class SidebarPerUserTests(TaskTestCase):
         active = [page['url'] for group in response.context['nav_groups'] for page in group['pages'] if page['active']]
         self.assertEqual(active, ['/tasks/'])
 
-    def test_customers_get_header_links_and_no_sidebar(self):
+    def test_customers_get_the_same_sidebar_with_their_own_pages(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
         self.customer.user = portal_user
         self.customer.save(update_fields=['user'])
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/customers/portal/')
-        self.assertNotContains(response, 'site-header__nav"')
-        self.assertNotContains(response, 'nav-toggle')
-        self.assertContains(response, 'site-header__links')
+        self.assertContains(response, 'site-header__nav"')
+        self.assertContains(response, 'nav-toggle')
+        self.assertNotContains(response, 'site-header__links')
+        self.assertEqual([item['label'] for item in response.context['portal_nav']],
+                         ['Home', 'Requests', 'Visits', 'History', 'Machines', 'Settings'])
         self.assertContains(response, 'aria-current="page"')
+        # None of the staff pages.
+        self.assertNotContains(response, f'href="{reverse("tasks:my_week")}"')
 
     def test_a_forbidden_page_looks_like_a_missing_one(self):
         self.client.login(username='tech1', password='pass12345')
@@ -8786,7 +8811,8 @@ class TicketMachineFindingsTests(TaskTestCase):
         response = self.client.get(self.report_url)
         self.assertEqual(response.context['existing_formset'].initial, [{'asset': self.asset.pk}])
         self.assertEqual(response.context['new_formset'].initial, [
-            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': self.unlisted.pk, 'serial_photo_url': ''},
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'code': '', 'ticket_machine': self.unlisted.pk,
+             'serial_photo_url': ''},
         ])
 
     def test_each_machines_finding_is_saved_and_shown_to_the_customer(self):
@@ -9085,8 +9111,8 @@ class InstallationChecklistTests(TaskTestCase):
         added = self.task.products.get(product_code='EXCITE-TOP')
         self.assertTrue(added.added_on_site)
         self.assertEqual(
-            sorted(Asset.objects.filter(site=self.site).exclude(pk=self.asset.pk).values_list('serial_no', flat=True)),
-            ['TG-1', 'TG-9'],
+            sorted(Asset.objects.filter(site=self.site).exclude(pk=self.asset.pk).values_list('serial_no', 'code')),
+            [('TG-1', 'EXCITE-RUN'), ('TG-9', 'EXCITE-TOP')],
         )
 
     def test_what_was_not_installed_gets_a_follow_up_task(self):

@@ -487,7 +487,7 @@ class MachineView(APIView):
         visits = asset.task_assets.select_related('task__site', 'task__task_type').order_by('-task__reported_at')
         return Response({
             **_machine(asset),
-            'installed_on': asset.installed_on, 'warranty_end': asset.warranty_end,
+            'installed_on': asset.installed_on, 'code': asset.code,
             'history': [
                 {
                     **_task_line(visit.task),
@@ -1230,7 +1230,8 @@ def _machine_form(task, row):
         }, site=task.site)
     return NewAssetForm({
         'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
-        'serial_no': row.get('serial_no', ''), 'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
+        'serial_no': row.get('serial_no', ''), 'code': row.get('code', ''), 'outcome': row.get('outcome', ''),
+        'note': row.get('note', ''),
         'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
         'action': row.get('action', ''), 'no_serial': 'on' if row.get('no_serial') else '',
         'ticket_machine': row.get('ticket_machine_id') or '',

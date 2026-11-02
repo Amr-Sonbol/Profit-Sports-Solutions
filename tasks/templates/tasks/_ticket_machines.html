@@ -25,7 +25,8 @@ internal: what the customer reported, and their own files.
                 </td>
                 <td>
                     <span dir="ltr">{{ machine.serial|default:"—" }}</span>
-                    {% if machine.serial_photo %}<br><a href="{{ machine.serial_photo.url }}" target="_blank" rel="noopener">{% translate "Sticker photo" %}</a>{% endif %}
+                    {% if machine.product_code %}<br><span class="muted" dir="ltr">{{ machine.product_code }}</span>{% endif %}
+                    {% if machine.serial_photo %}<br>{% include "_attachment.html" with file=machine.serial_photo %}{% endif %}
                 </td>
                 <td class="cell-wrap">
                     {{ machine.get_problem_display }}
@@ -34,7 +35,7 @@ internal: what the customer reported, and their own files.
                 </td>
                 <td>
                     {% for attachment in machine.attachments.all %}
-                    <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% blocktranslate with number=forloop.counter %}File {{ number }}{% endblocktranslate %}</a>{% if not forloop.last %}<br>{% endif %}
+                    {% include "_attachment.html" with file=attachment.file %}{% if not forloop.last %}<br>{% endif %}
                     {% empty %}<span class="muted">—</span>
                     {% endfor %}
                 </td>

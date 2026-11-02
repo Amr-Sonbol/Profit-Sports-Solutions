@@ -143,6 +143,7 @@
                         <th>{% translate "Brand" %}</th>
                         <th>{% translate "Model" %}</th>
                         <th>{% translate "Serial number" %}</th>
+                        <th>{% translate "Code" %}</th>
                         <th>{% translate "Finding" %}</th>
                         <th>{% translate "Action Taken" %}</th>
                         <th>{% translate "Outcome" %}</th>
@@ -160,12 +161,13 @@
                             {% if form.initial.serial_photo_url %}<a href="{{ form.initial.serial_photo_url }}" target="_blank" rel="noopener">{% translate "Customer's photo of the plate" %}</a>{% endif %}
                             {% for error in form.serial_no.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                         </td>
+                        <td>{{ form.code }}</td>
                         <td class="report-pick">{{ form.finding_code }}{{ form.note }}</td>
                         <td class="report-pick">{{ form.action_code }}{{ form.action }}{{ form.ticket_machine }}</td>
                         <td>{{ form.outcome }}</td>
                     </tr>
                     {% if form.errors %}
-                    <tr><td colspan="6"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
+                    <tr><td colspan="7"><p class="field__error">{{ form.non_field_errors }}</p></td></tr>
                     {% endif %}
                     {% endfor %}
                 </tbody>

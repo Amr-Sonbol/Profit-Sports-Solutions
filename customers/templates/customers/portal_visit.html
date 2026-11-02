@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ visit.task_type.display_name|default:_("Service visit") }} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            {% if upcoming %}<a href="{% url 'customers:portal_visits' %}" class="back-link">{% translate "Back to visits" %}</a>
+            {% else %}<a href="{% url 'customers:portal_history' %}" class="back-link">{% translate "Back to history" %}</a>{% endif %}
+            <h1>{{ visit.task_type.display_name|default:_("Service visit") }}</h1>
+            <p class="muted">{{ visit.site.name }} · <span dir="ltr">{{ visit.task_number }}</span></p>
+        </div>
+        <span class="badge {{ progress.1 }}">{{ progress.0 }}</span>
+    </div>
+
+    <section class="section">
+        <dl class="detail-grid">
+            <div>
+                <dt>{% translate "Date" %}</dt>
+                <dd>{% if report %}{{ report.submitted_at|date:"l j F Y" }}{% elif booked %}{{ day|date:"l j F Y" }}{% else %}{% translate "Date to be set" %}{% endif %}</dd>
+            </div>
+            {% if not report and booked and visit.scheduled_for %}
+            <div>
+                <dt>{% translate "Time" %}</dt>
+                <dd>{{ visit.scheduled_for|time:"TIME_FORMAT" }}</dd>
+            </div>
+            {% endif %}
+            {% if report %}
+            <div>
+                <dt>{% translate "Problem solved" %}</dt>
+                <dd>{% if report.resolved %}{% translate "Yes" %}{% else %}{% translate "Not yet — a follow-up is needed" %}{% endif %}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Signed by" %}</dt>
+                <dd>{{ report.customer_name|default:"—" }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+        {% if report %}
+        <p class="portal-actions">
+            <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener" class="button">{% translate "Download the report (PDF)" %}</a>
+            {% if report_changed %}<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener" class="button button--secondary">{% translate "The version you signed" %}</a>{% endif %}
+        </p>
+        {% else %}
+        <p class="field__help">{% translate "The visit report appears here once the technician has finished, and you can download it." %}</p>
+        {% endif %}
+    </section>
+
+    {% if requests %}
+    <section class="section">
+        <h2>{% translate "From your request" %}</h2>
+        <ul class="action-list">
+            {% for ticket in requests %}
+            <li>
+                <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
+                    <span class="portal-row__main">
+                        <strong dir="ltr">{{ ticket.ticket_number }}</strong>
+                        <span class="muted">{{ ticket.submitted_at|date:"j M Y" }}</span>
+                    </span>
+                    <span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if machines %}
+    <section class="section">
+        <h2>{% translate "Machines" %}</h2>
+        <ul class="action-list">
+            {% for machine in machines %}
+            <li class="action-row portal-row">
+                <span class="portal-row__main">
+                    <a href="{% url 'customers:portal_machine' machine.asset.pk %}"><strong>{{ machine.asset.brand.name }} {{ machine.asset.model_name }}</strong></a>
+                    {% if machine.asset.serial_no %}<span class="muted" dir="ltr">{{ machine.asset.serial_no }}</span>{% endif %}
+                    {% if machine.finding %}<span>{% translate "Found:" %} {{ machine.finding }}</span>{% endif %}
+                    {% if machine.action %}<span>{% translate "Done:" %} {{ machine.action }}</span>{% endif %}
+                    {% if machine.note %}<span class="muted">{{ machine.note }}</span>{% endif %}
+                </span>
+                {% if report %}<span class="badge badge--neutral">{{ machine.outcome }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if feedback or can_rate %}
+    <section class="section" id="rate">
+        <h2>{% translate "How was this visit?" %}</h2>
+        {% if feedback %}
+        <p><span class="portal-stars" aria-hidden="true">{% for n in "12345" %}{% if forloop.counter <= feedback.rating %}★{% else %}☆{% endif %}{% endfor %}</span>
+            {% blocktranslate with rating=feedback.rating %}You rated it {{ rating }} out of 5.{% endblocktranslate %}</p>
+        {% if feedback.comment %}<p class="portal-text">{{ feedback.comment }}</p>{% endif %}
+        {% else %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <p class="muted">{{ rating_form.rating.label }}</p>
+            <div class="rating-choice">{{ rating_form.rating }}</div>
+            {% for error in rating_form.rating.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            <div class="field">
+                <label for="{{ rating_form.comment.id_for_label }}">{{ rating_form.comment.label }}</label>
+                {{ rating_form.comment }}
+            </div>
+            <button type="submit" class="button">{% translate "Send my rating" %}</button>
+        </form>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% if report %}
+    <section class="section">
+        <h2>{% translate "Work done" %}</h2>
+        {% if report.findings %}<p class="portal-text">{{ report.findings }}</p>{% endif %}
+        {% if work_lines or report.action_taken %}
+        <ul class="portal-list">
+            {% for line in work_lines %}<li>{{ line }}</li>{% endfor %}
+            {% for line in report.action_taken.splitlines %}{% if line.strip %}<li>{{ line }}</li>{% endif %}{% endfor %}
+        </ul>
+        {% endif %}
+        {% if parts %}
+        <h3>{% translate "Parts used" %}</h3>
+        <ul class="portal-list">
+            {% for part in parts %}<li>{{ part.quantity }} × <span dir="ltr">{{ part.part_code }}</span>{% if part.description %} — {{ part.description }}{% endif %}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if recommendations or report.recommendation %}
+        <h3>{% translate "Our recommendations" %}</h3>
+        <ul class="portal-list">
+            {% for line in recommendations %}<li>{{ line }}</li>{% endfor %}
+            {% if report.recommendation %}<li>{{ report.recommendation }}</li>{% endif %}
+        </ul>
+        {% endif %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

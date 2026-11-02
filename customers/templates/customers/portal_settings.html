@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Settings" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{% translate "Settings" %}</h1>
+            <p class="muted">{% blocktranslate with email=user.email|default:user.get_username %}You sign in as {{ email }}. To change it, please contact us.{% endblocktranslate %}</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <h2>{% translate "Your details" %}</h2>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="details">
+            {% for field in details_form %}
+            <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'billing_address' or field.name == 'shipping_address' %} field--wide{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="field field--submit">
+                <button type="submit" class="button">{% translate "Save my details" %}</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="section">
+        <h2>{% translate "Change your password" %}</h2>
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="password">
+            {% for field in password_form %}
+            <div class="field{% if field.errors %} field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            {% include "_show_password.html" %}
+            <div class="field field--submit">
+                <button type="submit" class="button">{% translate "Change password" %}</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

@@ -52,7 +52,7 @@ export default function MachineScreen() {
             <ThemedText themeColor="primary">{machine.customer_name} — {machine.site_name} ›</ThemedText>
           </TouchableOpacity>
           {machine.installed_on ? <ThemedText type="small">Installed {day(machine.installed_on)}</ThemedText> : null}
-          {machine.warranty_end ? <ThemedText type="small">Warranty until {day(machine.warranty_end)}</ThemedText> : null}
+          {machine.code ? <ThemedText type="small">Code {machine.code}</ThemedText> : null}
 
           <ThemedText type="subtitle">History</ThemedText>
           {machine.history.length ? machine.history.map((visit) => (

@@ -149,6 +149,8 @@ TEMPLATES = [
                 'people.context_processors.active_country',
                 'people.context_processors.notification_bell',
                 'spots.context_processors.static_version',
+                'spots.context_processors.page_back',
+                'spots.context_processors.portal_nav',
             ],
         },
     },

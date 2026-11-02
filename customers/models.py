@@ -188,8 +188,9 @@ class Asset(models.Model):
         _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    # The product code (e.g. BENCH-01) — on the delivery note and the sticker, beside the serial.
+    code = models.CharField(_('code'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)
-    warranty_end = models.DateField(_('warranty end'), null=True, blank=True)
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.ACTIVE)
 
     class Meta:
@@ -204,3 +205,39 @@ class Asset(models.Model):
 
     def __str__(self):
         return f'{self.site.name} — {self.brand.name} {self.model_name}'
+
+
+class CustomerNotification(models.Model):
+    """One item in a customer's portal bell: a visit report ready (and to
+    rate), our team's reply to their request, or a visit booked or moved.
+    Written where each happens (customers.notify); cleared once the
+    customer opens what it's about."""
+
+    class Kind(models.TextChoices):
+        REPORT_READY = 'report_ready', _('Visit report ready')
+        REPLY = 'reply', _('Reply to a request')
+        VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='notifications', verbose_name=_('customer'),
+    )
+    kind = models.CharField(_('kind'), max_length=20, choices=Kind.choices)
+    task = models.ForeignKey(
+        'tasks.Task', on_delete=models.CASCADE, null=True, blank=True, related_name='customer_notifications',
+        verbose_name=_('visit'),
+    )
+    ticket = models.ForeignKey(
+        'tasks.CustomerTicket', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='customer_notifications', verbose_name=_('request'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('customer notification')
+        verbose_name_plural = _('customer notifications')
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['customer', 'seen_at'])]
+
+    def __str__(self):
+        return f'{self.customer} — {self.get_kind_display()}'

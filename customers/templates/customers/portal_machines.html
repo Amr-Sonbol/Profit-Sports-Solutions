@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My machines" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{% translate "My machines" %}</h1>
+            <p class="muted">{% translate "Every machine we look after at your sites. Open one to see its service history, or report a problem with it." %}</p>
+        </div>
+    </div>
+
+    {% for site, machines in sites %}
+    <section class="section">
+        <h2>{{ site.name }}</h2>
+        <ul class="action-list">
+            {% for machine in machines %}
+            <li>
+                <a href="{% url 'customers:portal_machine' machine.pk %}" class="action-row portal-row">
+                    <span class="portal-row__main">
+                        <strong>{{ machine.brand.name }} {{ machine.model_name }}</strong>
+                        <span class="muted" dir="ltr">{% if machine.code %}{{ machine.code }} · {% endif %}{% if machine.serial_no %}{{ machine.serial_no }}{% endif %}</span>
+                        {% if not machine.serial_no %}<span class="muted">{% translate "No serial number on record" %}</span>{% endif %}
+                    </span>
+                    <span class="portal-row__meta muted">
+                        {% if machine.last_service %}{% blocktranslate with date=machine.last_service|date:"j M Y" %}Last serviced {{ date }}{% endblocktranslate %}
+                        {% elif machine.installed_on %}{% blocktranslate with date=machine.installed_on|date:"j M Y" %}Installed {{ date }}{% endblocktranslate %}{% endif %}
+                    </span>
+                    {% if machine.status == 'faulty' %}<span class="badge badge--warning">{% translate "Needs attention" %}</span>{% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% empty %}
+    <section class="section">
+        <div class="empty-state">
+            <p>{% translate "Your machines appear here after our first visit, once the technician has recorded them." %}</p>
+            <a href="{% url 'customers:portal_ticket_new' %}" class="button button--secondary">{% translate "Report a problem" %}</a>
+        </div>
+    </section>
+    {% endfor %}
+</div>
+{% endblock %}

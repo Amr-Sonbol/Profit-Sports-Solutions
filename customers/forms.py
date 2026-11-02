@@ -253,3 +253,29 @@ class QuickInviteForm(forms.Form):
                 'their row instead.',
             ) % {'name': name.strip()})
         return cleaned
+
+
+class CustomerSettingsForm(forms.ModelForm):
+    """The portal's Settings: the customer's own contact details and
+    addresses, and the language the portal shows in (the header's EN/AR
+    switch sets the same field). Their login email is changed by staff
+    (Customer accounts), not here."""
+
+    class Meta:
+        model = Customer
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address', 'language']
+        labels = {
+            'contact_name': _('Contact name'), 'contact_phone': _('Contact phone number'),
+            'contact_email': _('Contact email'), 'billing_address': _('Invoice address'),
+            'shipping_address': _('Delivery address'), 'language': _('Language'),
+        }
+        help_texts = {
+            'contact_email': _('Where we send updates about your requests.'),
+            'billing_address': _('The address invoices should be issued to.'),
+            'shipping_address': _('Where spare and replacement parts should be delivered.'),
+            'language': _('The language this portal shows in.'),
+        }
+        widgets = {
+            'billing_address': forms.Textarea(attrs={'rows': 2}),
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
+        }

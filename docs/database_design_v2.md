@@ -207,8 +207,8 @@ One physical machine. **Created by the technician at the first service visit, no
 | brand_id | FK → brand | |
 | model_name | varchar | free text from the plate |
 | serial_no | varchar | nullable |
+| code | varchar | blank — the product code (e.g. BENCH-01), on the delivery note and the sticker beside the serial; optional when a technician records a machine, the line's product code for one installed |
 | installed_on | date | nullable |
-| warranty_end | date | nullable |
 | status | varchar | active, faulty, retired |
 
 **Why the technician creates it.** Nobody else sees the machine. The delivery note is a PDF with model codes and quantities, not serials, so there is nothing to import. The serial is only on the plate.
@@ -560,10 +560,10 @@ The back-and-forth on a ticket, either side, in order.
 | sender | varchar | staff, customer |
 | sent_by_id | FK → user | always set — staff, or the customer's own portal login (every ticket now requires signing in to submit, so there's no anonymous side to this any more) |
 | message | text | |
-| attachment | file | nullable — photo, short video, or PDF, same allowlist/25 MB limit as `customer_ticket_attachment` |
+| attachment | file | nullable — the one file older messages had; a message's files are now `ticket_reply_file` rows |
 | sent_at | timestamptz | |
 
-**Every staff reply's attachment (if any) rides along on the "New reply on your ticket" email itself, attached, not just linked** — there's no separate "quotation" flow; staff write whatever the customer needs to know in the message text and attach the file, same as any other reply.
+**A message can carry several files** (`ticket_reply_file`: `reply_id`, `file` — photos, short videos or PDFs, up to 10 per message, 25 MB each, the same allowlist as `customer_ticket_attachment`). They're added in the message box itself (the paperclip, as often as needed; each chosen file a chip with ×) and shown everywhere by their own name. **Every staff reply's files ride along on the "New reply on your ticket" email itself, attached, not just linked** — up to 20 MB in all; any beyond are reached through the email's link — there's no separate "quotation" flow; staff write whatever the customer needs to know in the message text and attach the file, same as any other reply.
 
 **Open while the ticket is still new, or converted but the resulting task isn't finished yet** (`_ticket_is_open`, `tasks/views.py`) — closed once dismissed, once the ticket itself is closed directly, or once that task itself reaches `closed`. Not tied to `customer_ticket.status` alone: "converted" can mean the work just started, and the customer should still be able to ask about it. A **cancelled** task does *not* close the conversation — cancellation isn't a resolution, so the issue is still open and staff still needs to be able to talk to the customer about it. Once actually closed, the thread becomes read-only on both the staff review screen and the customer's own `ticket_status` page.
 
@@ -580,7 +580,7 @@ A progress note on a ticket, visible only to whoever can manage it — separate 
 | ticket_id | FK → customer_ticket | |
 | author_id | FK → user | nullable |
 | message | text | |
-| attachment | file | nullable — same allowlist/25 MB limit as `customer_ticket_attachment`; manager-tier only, same as the note itself |
+| attachment | file | nullable — the one file older notes had; a note's files are now `ticket_internal_note_file` rows (`note_id`, `file`; same limits as a message's), on customer and internal tickets alike |
 | created_at | timestamptz | |
 
 **A running log, not a single overwritable field** — each note is its own row, timestamped and attributed, so a manager can see how the state of a ticket evolved over time rather than just its latest value.
@@ -680,6 +680,7 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | asset_id | FK → asset | null — set when the customer picked one of their registered machines at the ticket's site |
 | model_name | varchar | blank — typed when the machine isn't in their list |
 | serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
+| code | varchar | blank — its product code, if the customer knows it (an unlisted machine); carried into the technician's new-machine row |
 | serial_photo | file | blank — a photo of the machine's silver serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
 | problem | varchar | not_working, noise, display, cables, other |
 | description | text | blank |
@@ -728,7 +729,7 @@ One machine's line on an **equipment task** — receiving from the factory, load
 
 So each serial is typed once, wherever the machine is first handled one by one.
 
-**Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
+**Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` and `code` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
 
 **Carried along the chain.** A line copied to the next step keeps `source_line`, so a machine's journey (factory → warehouse → site → its repairs) can be followed; `task.previous_task` links the steps themselves.
 
@@ -959,7 +960,7 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | currency_code | char(3), blank | with unit_cost: never store an amount without its currency |
 
 ### customer_feedback
-A rating request sent to the customer once their task is closed (report filed). Not automatic — a supervisor sends it deliberately, from the task's own detail page.
+A customer's rating of a visit. Either requested by email once the task is closed (report filed) — not automatic, a manager sends it deliberately from the task's own detail page — or given by the customer from their portal, on the visit's page, once its report is in. One record per task either way: rating in the portal answers an emailed request already sent, and the link then shows it as answered.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -967,12 +968,12 @@ A rating request sent to the customer once their task is closed (report filed). 
 | task_id | FK → task | one per task |
 | token | varchar | random, unique — the public link's only credential |
 | requested_at | timestamptz | updated on every resend |
-| requested_by_id | FK → user | which supervisor sent it |
+| requested_by_id | FK → user | nullable — who sent the request; empty when the customer rated from the portal unasked |
 | rating | int | nullable — 1–5, until the customer answers |
 | comment | text | nullable |
 | submitted_at | timestamptz | nullable |
 
-**The customer is never a user of this system.** The link is the only thing standing in for a login — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
+**The emailed link needs no login.** It stands in for one — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
 
 **Sending is manual, every time, and manager-only.** No automatic email fires on close — a manager decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered. A fixed floor like `approve_report`/`close_directly`, not a `role_permission` row — a supervisor, even one who owns the task, can't send it.
 
@@ -1087,7 +1088,7 @@ Each is a real need eventually. None belongs in the first version.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and a ticket's own status page, reached by its token, which doubles as a no-login fallback for checking on or replying to a ticket without staying signed in. Submitting a new ticket itself always requires the portal login below — the old public ticket form now just redirects there.
 
-**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page listing every ticket they've submitted and a summary-only service history, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that).
+**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page with their next visit up front, their requests (tickets) and visits still to come, and the service history with each visit's report PDF — progress always in the customer's words (*Received → Being arranged → Visit booked → Done*, `customers/progress.py`), never the team's statuses; a booked day that has passed without the work being done reads as being arranged again, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that). Also **My machines** (each machine at their sites with its code, serial and service history, and *Report a problem with this machine*, which opens the form with it chosen), **a page per visit** (when, the request it came from, and once reported what they signed — machines with what was found and done, work done, parts without prices, recommendations; never the hours — plus the PDF and the signed copy, and rating the visit, which answers an emailed feedback request if one was sent), a request's page listing **the visit(s) it became**, and **Settings** (contact details, addresses, language, password — the login email stays with the office).
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 

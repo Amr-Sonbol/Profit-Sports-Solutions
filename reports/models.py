@@ -155,9 +155,10 @@ class PartUsed(models.Model):
 
 
 class CustomerFeedback(models.Model):
-    """A rating request sent to the customer once their task is closed.
-    Reached through `token`, not a login — the customer is never a user of
-    this system, so the link is the only thing standing in for one.
+    """A customer's rating of a visit: asked for by email once their task
+    is closed and answered through `token` (no login), or given straight
+    from their portal (customers.views.portal_visit) — the same record
+    either way, so the emailed link then shows it as already answered.
     """
 
     RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
@@ -168,9 +169,10 @@ class CustomerFeedback(models.Model):
     )
     token = models.CharField(_('token'), max_length=43, unique=True, editable=False)
     requested_at = models.DateTimeField(_('requested at'))
+    # Empty when the customer rated the visit from their portal without being asked.
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='feedback_requests_sent',
-        verbose_name=_('requested by'),
+        verbose_name=_('requested by'), null=True, blank=True,
     )
     rating = models.PositiveSmallIntegerField(_('rating'), choices=RATING_CHOICES, null=True, blank=True)
     comment = models.TextField(_('comment'), blank=True)

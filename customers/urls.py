@@ -19,6 +19,13 @@ urlpatterns = [
     path('portal/account/<str:token>/', views.portal_account_link, name='portal_account_link'),
     path('portal/first-login/', views.portal_first_login, name='portal_first_login'),
     path('portal/', views.portal_home, name='portal_home'),
+    path('portal/requests/', views.portal_requests, name='portal_requests'),
+    path('portal/visits/', views.portal_visits, name='portal_visits'),
+    path('portal/history/', views.portal_history, name='portal_history'),
     path('portal/tickets/new/', views.portal_ticket_new, name='portal_ticket_new'),
+    path('portal/machines/', views.portal_machines, name='portal_machines'),
+    path('portal/settings/', views.portal_settings, name='portal_settings'),
+    path('portal/machines/<int:pk>/', views.portal_machine, name='portal_machine'),
+    path('portal/visits/<int:pk>/', views.portal_visit, name='portal_visit'),
     path('portal/visits/<int:pk>/report.pdf', views.portal_visit_report_pdf, name='portal_visit_report_pdf'),
 ]

@@ -30,8 +30,8 @@
             <dd>{{ asset.installed_on|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd>
         </div>
         <div>
-            <dt>{% translate "Warranty end" %}</dt>
-            <dd>{{ asset.warranty_end|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd>
+            <dt>{% translate "Code" %}</dt>
+            <dd dir="ltr">{{ asset.code|default:"—" }}</dd>
         </div>
     </dl>
 </div>

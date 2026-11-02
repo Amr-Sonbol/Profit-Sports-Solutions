@@ -1031,6 +1031,7 @@ class NewAssetForm(forms.Form):
         required=False, max_length=150, label=_('Model'), help_text=_('free text as shown on the plate'),
     )
     serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    code = forms.CharField(required=False, max_length=100, label=_('Code'), help_text=_('optional — e.g. BENCH-01'))
     # The serial is how a machine is tracked from then on: it can only be
     # left out on purpose (a missing or worn plate), and that's flagged.
     no_serial = forms.BooleanField(required=False, label=_('No readable serial plate'))
@@ -1314,6 +1315,10 @@ class CustomerPortalTicketForm(forms.ModelForm):
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        sites = list(customer.sites.all()[:2])
+        if len(sites) == 1:
+            # Only one site: already chosen.
+            self.fields['site'].initial = sites[0].pk
 
 
 class TicketMachineForm(forms.Form):
@@ -1325,7 +1330,7 @@ class TicketMachineForm(forms.Form):
     # One question first, so the card only asks for one or the other:
     # pick the machine from their list, or describe a new one.
     which = forms.ChoiceField(
-        choices=[('list', _('Yes, pick it from my list')), ('new', _("No, it's a new machine"))],
+        choices=[('list', _('Yes, pick it from my list')), ('new', _("No, it's not in my list yet"))],
         widget=forms.RadioSelect, required=False, label=_('Is this machine in your list?'),
     )
     asset = forms.ChoiceField(required=False, label=_('Your machine'))
@@ -1333,6 +1338,10 @@ class TicketMachineForm(forms.Form):
     serial_no = forms.CharField(
         required=False, max_length=100, label=_('Serial number'),
         help_text=_('as written on the silver sticker on the machine'),
+    )
+    code = forms.CharField(
+        required=False, max_length=100, label=_('Code (optional)'),
+        help_text=_('the product code on the sticker, if there is one'),
     )
     # The silver serial-number sticker on the machine. No `capture`: phones
     # then offer both "take photo" and "choose from library".
@@ -1543,8 +1552,40 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
         )
 
 
-class InternalTicketNoteForm(forms.Form):
-    message = forms.CharField(label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3}))
+def message_files_field(label):
+    """The files sent with a message — any number up to the limit, each a
+    photo, video or PDF of at most 25 MB."""
+    return MultipleFileField(
+        required=False, label=label,
+        help_text=_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each') % {
+            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
+        },
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+
+class MessageFilesMixin:
+    """Checks a message's `attachments`: how many, and each one's size."""
+
+    def clean_attachments(self):
+        files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
+        for upload in files:
+            if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(
+                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
+                )
+        return files
+
+
+class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
+    message = forms.CharField(
+        label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write a note…')}),
+    )
+    attachments = message_files_field(_('Files'))
 
 
 class ReassignInternalTicketForm(forms.Form):
@@ -1574,41 +1615,25 @@ class CloseTicketForm(forms.Form):
     )
 
 
-class TicketReplyForm(forms.Form):
+class TicketReplyForm(MessageFilesMixin, forms.Form):
     """One message — same shape for staff replying and a customer
     replying back, on either the staff review screen or the customer's
     own portal. Which side sent it is recorded by the view, not here.
     """
-    message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
-    attachment = forms.FileField(
-        required=False, label=_('Photo, video, or PDF'),
-        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    message = forms.CharField(
+        label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write your message…')}),
     )
-
-    def clean_attachment(self):
-        attachment = self.cleaned_data['attachment']
-        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
-        return attachment
+    attachments = message_files_field(_('Photos, videos or PDFs'))
 
 
-class TicketInternalNoteForm(forms.Form):
+class TicketInternalNoteForm(MessageFilesMixin, forms.Form):
     """A manager-tier-only progress note — never seen by the customer or
     by a supervisor/technician, unlike TicketReplyForm.
     """
-    message = forms.CharField(label=_('Note'), widget=forms.Textarea(attrs={'rows': 3}))
-    attachment = forms.FileField(
-        required=False, label=_('Attachment'),
-        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    message = forms.CharField(
+        label=_('Note'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write a note for the team…')}),
     )
-
-    def clean_attachment(self):
-        attachment = self.cleaned_data['attachment']
-        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
-        return attachment
+    attachments = message_files_field(_('Files'))
 
 
 class TaskMessageForm(forms.Form):

@@ -483,6 +483,31 @@ class TicketReply(models.Model):
     def __str__(self):
         return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
 
+    @property
+    def all_files(self):
+        """Every file sent with it: the single `attachment` older messages
+        had, then its `files` (TicketReplyFile)."""
+        return ([self.attachment] if self.attachment else []) + [item.file for item in self.files.all()]
+
+
+class TicketReplyFile(models.Model):
+    """One of the files sent with a message — as many as the sender
+    attached (TicketReply.attachment held the one file older ones had)."""
+
+    reply = models.ForeignKey(TicketReply, on_delete=models.CASCADE, related_name='files', verbose_name=_('reply'))
+    file = models.FileField(
+        _('file'), upload_to=_ticket_reply_attachment_path,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    class Meta:
+        verbose_name = _('reply file')
+        verbose_name_plural = _('reply files')
+        ordering = ['pk']
+
+    def __str__(self):
+        return self.file.name
+
 
 class TicketNotification(models.Model):
     """A new ticket, or a new customer reply on an existing one — for the
@@ -676,6 +701,29 @@ class TicketInternalNote(models.Model):
     def __str__(self):
         return f'{self.ticket} — {self.created_at}'
 
+    @property
+    def all_files(self):
+        """Every file added with it: older notes' single `attachment`, then its `files`."""
+        return ([self.attachment] if self.attachment else []) + [item.file for item in self.files.all()]
+
+
+class TicketInternalNoteFile(models.Model):
+    """One of the files added with an internal note."""
+
+    note = models.ForeignKey(TicketInternalNote, on_delete=models.CASCADE, related_name='files', verbose_name=_('note'))
+    file = models.FileField(
+        _('file'), upload_to=_ticket_internal_note_attachment_path,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    class Meta:
+        verbose_name = _('note file')
+        verbose_name_plural = _('note files')
+        ordering = ['pk']
+
+    def __str__(self):
+        return self.file.name
+
 
 # A photo of a machine's serial-number sticker: pictures only, not video.
 SERIAL_PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic']
@@ -719,6 +767,7 @@ class TicketMachine(models.Model):
         _('model'), max_length=150, blank=True, help_text=_('typed by the customer when the machine is not in their list'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    code = models.CharField(_('code'), max_length=100, blank=True, help_text=_('the product code, if the customer knows it'))
     serial_photo = models.FileField(
         _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
@@ -773,6 +822,10 @@ class TicketMachine(models.Model):
     @property
     def serial(self):
         return self.asset.serial_no if self.asset_id else self.serial_no
+
+    @property
+    def product_code(self):
+        return self.asset.code if self.asset_id else self.code
 
 
 class CustomerTicketAttachment(models.Model):

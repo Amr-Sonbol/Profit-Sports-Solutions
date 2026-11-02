@@ -1,5 +1,6 @@
 import csv
 import io
+from datetime import date
 
 from axes.utils import reset as axes_reset
 from django.contrib import messages
@@ -9,7 +10,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -22,10 +23,11 @@ from django.utils.translation import gettext as _
 from people.models import RolePermission, Technician
 from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
 from reference.models import Country
-from tasks.forms import CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
-from tasks.models import CustomerTicketAttachment, Task, TicketMachine, TicketNotification
+from tasks.forms import ChangePasswordForm, CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
+from tasks.models import CustomerTicket, CustomerTicketAttachment, Task, TicketMachine, TicketNotification
 from tasks.views import (
-    save_new_ticket, send_new_ticket_email_to_staff, send_ticket_confirmation_to_customer, ticket_machines_text,
+    save_new_ticket, send_new_ticket_email_to_staff, send_password_changed_email, send_ticket_confirmation_to_customer,
+    ticket_machines_text,
 )
 
 from .accounts import (
@@ -34,9 +36,14 @@ from .accounts import (
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
-    CustomerImportForm, DeactivateCustomerForm, PortalPasswordHelpForm, QuickInviteForm, SiteCreateForm, SiteEditForm,
+    CustomerImportForm, CustomerSettingsForm, DeactivateCustomerForm, PortalPasswordHelpForm, QuickInviteForm,
+    SiteCreateForm, SiteEditForm,
 )
-from .models import Customer, Site
+from .models import Asset, Customer, Site
+from . import notify
+from .progress import (
+    DONE_STATUSES, VISIT_BOOKED, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress,
+)
 
 # Only the name is required: a file of just customer_name and
 # customer_contact_email is enough to invite everyone, and each customer
@@ -466,26 +473,116 @@ def portal_first_login(request):
     return render(request, 'customers/portal_first_login.html', {'form': form})
 
 
-@login_required(login_url='customers:portal_login')
-def portal_home(request):
-    """A logged-in customer's own tickets and service history: date, site,
-    type and status, plus the visit report PDF once one is filed — the
-    same customer-facing document emailed to them (no hours or prices).
-    Never the internal report detail staff sees on the task page.
-    """
+def _portal_customer(request):
+    """The signed-in customer, or a redirect to finish their first sign-in."""
     customer = require_customer(request)
-    if customer.must_change_password:
-        return redirect('customers:portal_first_login')
-    tickets = customer.tickets.order_by('-submitted_at')
-    visits = list(Task.objects.filter(site__customer=customer).select_related('site', 'task_type', 'report').order_by(
-        '-scheduled_for', '-reported_at',
-    ))
+    return customer, redirect('customers:portal_first_login') if customer.must_change_password else None
+
+
+def _portal_requests(customer):
+    """The customer's requests (tickets), newest first, each with its
+    progress in their words (customers.progress) and whether it's open."""
+    tickets = list(customer.tickets.select_related('task').order_by('-submitted_at'))
+    for ticket in tickets:
+        ticket.progress = ticket_progress(ticket)
+        ticket.steps = progress_steps(ticket.progress)
+        ticket.is_open = ticket.status == CustomerTicket.Status.NEW or (
+            ticket.status == CustomerTicket.Status.CONVERTED and ticket.task_id and is_upcoming(ticket.task)
+        )
+    return tickets
+
+
+def _portal_visits(customer):
+    """The customer's visits as (coming up, history): coming up soonest
+    first and those without a date yet last; history newest first, each
+    with its report PDF (the customer-facing document emailed to them, no
+    hours or prices) and whether it's waiting for their rating."""
     from reports.pdf import changed_after_signing
+
+    visits = list(Task.objects.filter(site__customer=customer).select_related('site', 'task_type', 'report', 'feedback'))
     for visit in visits:
         report = getattr(visit, 'report', None)
+        feedback = getattr(visit, 'feedback', None)
+        visit.to_rate = report is not None and visit.status in DONE_STATUSES and not (feedback and feedback.submitted_at)
+        visit.rating = feedback.rating if feedback and feedback.submitted_at else None
         visit.has_report = report is not None
         visit.report_changed = report is not None and changed_after_signing(report)
-    return render(request, 'customers/portal_home.html', {'customer': customer, 'tickets': tickets, 'visits': visits})
+        visit.progress = visit_progress(visit)
+        visit.day = visit_day(visit)
+        if is_upcoming(visit) and visit.day and visit.day < timezone.localdate():
+            # Its day passed without the work being done: a new date is coming, not this one.
+            visit.day = None
+    upcoming = sorted((v for v in visits if is_upcoming(v)), key=lambda v: (v.day is None, v.day or date.max))
+    history = sorted(
+        (v for v in visits if not is_upcoming(v)),
+        key=lambda v: v.day or timezone.localtime(v.reported_at).date(), reverse=True,
+    )
+    return upcoming, history
+
+
+@login_required(login_url='customers:portal_login')
+def portal_home(request):
+    """A logged-in customer's start page: their next visit, how many
+    requests are open, visits coming up and reports — each opening its own
+    page (Requests, Visits) — and any finished visit waiting for their
+    rating. The lists themselves live on those pages, not here.
+    """
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    tickets = _portal_requests(customer)
+    upcoming, history = _portal_visits(customer)
+    # Needs your attention: the bell's items, then visits still to rate it doesn't already mention.
+    in_bell = set(customer.notifications.filter(seen_at__isnull=True, task__isnull=False).values_list('task_id', flat=True))
+    return render(request, 'customers/portal_home.html', {
+        'customer': customer,
+        'next_visit': next((v for v in upcoming if v.day), None),
+        'open_count': sum(1 for ticket in tickets if ticket.is_open),
+        'upcoming_count': len(upcoming),
+        'report_count': sum(1 for visit in history if visit.has_report),
+        'machine_count': Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).count(),
+        'to_rate': [visit for visit in history if visit.to_rate and visit.pk not in in_bell][:3],
+    })
+
+
+@login_required(login_url='customers:portal_login')
+def portal_requests(request):
+    """Every problem the customer has reported, newest first, with how far
+    each has got."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    tickets = _portal_requests(customer)
+    # Two tabs: still open, and closed (done, resolved or closed).
+    showing_closed = request.GET.get('show') == 'closed'
+    return render(request, 'customers/portal_requests.html', {
+        'tickets': [ticket for ticket in tickets if ticket.is_open != showing_closed],
+        'showing_closed': showing_closed,
+        'open_count': sum(1 for ticket in tickets if ticket.is_open),
+        'closed_count': sum(1 for ticket in tickets if not ticket.is_open),
+    })
+
+
+@login_required(login_url='customers:portal_login')
+def portal_visits(request):
+    """The customer's visits still to come: soonest first, those without a
+    date yet last."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    upcoming, _history = _portal_visits(customer)
+    return render(request, 'customers/portal_visits.html', {'upcoming': upcoming})
+
+
+@login_required(login_url='customers:portal_login')
+def portal_history(request):
+    """The customer's service history: every finished (or cancelled) visit,
+    newest first, with its report and whether it's waiting for a rating."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    _upcoming, history = _portal_visits(customer)
+    return render(request, 'customers/portal_history.html', {'history': history})
 
 
 @login_required(login_url='customers:portal_login')
@@ -516,6 +613,156 @@ def portal_visit_report_pdf(request, pk):
     suffix = '-signed' if signed_version else ''
     response['Content-Disposition'] = f'inline; filename="{task.task_number}-visit-report{suffix}.pdf"'
     return response
+
+
+@login_required(login_url='customers:portal_login')
+def portal_settings(request):
+    """The customer's own settings: contact details, addresses and language
+    (CustomerSettingsForm), and their password — the current one first,
+    and an email saying it changed, the same as staff get. Their login
+    email stays with the office (Customer accounts)."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    details_form = CustomerSettingsForm(instance=customer)
+    password_form = ChangePasswordForm(user=request.user)
+    # Django focuses the current-password box, which would scroll past the details.
+    password_form.fields['old_password'].widget.attrs.pop('autofocus', None)
+    if request.method == 'POST' and request.POST.get('action') == 'details':
+        details_form = CustomerSettingsForm(request.POST, instance=customer)
+        if details_form.is_valid():
+            details_form.save()
+            messages.success(request, _('Your details have been saved.'))
+            return redirect('customers:portal_settings')
+    elif request.method == 'POST' and request.POST.get('action') == 'password':
+        password_form = ChangePasswordForm(user=request.user, data=request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            update_session_auth_hash(request, request.user)
+            send_password_changed_email(request.user)
+            messages.success(request, _('Password changed.'))
+            return redirect('customers:portal_settings')
+    return render(request, 'customers/portal_settings.html', {
+        'customer': customer, 'details_form': details_form, 'password_form': password_form,
+    })
+
+
+@login_required(login_url='customers:portal_login')
+def portal_visit(request, pk):
+    """One of the customer's visits: when and where, how far it has got,
+    the request it came from, and — once the report is in — what the
+    customer signed: each machine with what was found and done, the work
+    done, the parts (no prices) and the recommendations, with the PDF and
+    the signed copy. No hours: the same rule as the rest of the portal.
+    A finished visit can be rated here (CustomerFeedback — the same record
+    an emailed request uses, so one already sent is answered by this).
+    """
+    from reports.forms import CustomerFeedbackForm
+    from reports.models import CustomerFeedback
+    from reports.pdf import changed_after_signing
+    from reports.phrases import Recommendation, WorkLine
+
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    task = get_object_or_404(Task.objects.select_related('site', 'task_type'), pk=pk, site__customer=customer)
+    notify.seen(customer, task=task)
+    report = getattr(task, 'report', None)
+    feedback = getattr(task, 'feedback', None)
+    can_rate = report is not None and task.status in DONE_STATUSES and not (feedback and feedback.submitted_at)
+    rating_form = CustomerFeedbackForm()
+    if request.method == 'POST' and can_rate:
+        rating_form = CustomerFeedbackForm(request.POST)
+        if rating_form.is_valid():
+            now = timezone.now()
+            if feedback is None:
+                feedback = CustomerFeedback(task=task, requested_at=now)
+            feedback.rating = rating_form.cleaned_data['rating']
+            feedback.comment = rating_form.cleaned_data['comment']
+            feedback.submitted_at = now
+            feedback.save()
+            messages.success(request, _('Thank you for rating this visit.'))
+            return redirect('customers:portal_visit', pk=task.pk)
+    requests = list(
+        customer.tickets.filter(Q(task=task) | Q(machines__task=task)).select_related('task').distinct()
+        .order_by('submitted_at'),
+    )
+    for ticket in requests:
+        ticket.progress = ticket_progress(ticket)
+    context = {
+        'visit': task, 'day': visit_day(task), 'progress': visit_progress(task), 'report': report,
+        # Back to the list it's on: still to come, or history.
+        'upcoming': is_upcoming(task),
+        'feedback': feedback if feedback and feedback.submitted_at else None, 'can_rate': can_rate,
+        'rating_form': rating_form,
+        'booked': visit_progress(task) == VISIT_BOOKED,
+        'requests': requests,
+        'machines': [
+            {
+                'asset': line.asset, 'outcome': line.get_outcome_display(),
+                'finding': line.get_finding_code_display(),
+                'action': line.get_action_code_display() or line.action, 'note': line.note,
+            }
+            for line in task.task_assets.select_related('asset__brand').order_by('asset__model_name')
+        ],
+    }
+    if report is not None:
+        context.update({
+            'work_lines': [WorkLine(code).label for code in report.work_lines if code in WorkLine.values],
+            'recommendations': [
+                Recommendation(code).label for code in report.recommendations if code in Recommendation.values
+            ],
+            'parts': report.parts_used.all(),
+            'report_changed': changed_after_signing(report),
+        })
+    return render(request, 'customers/portal_visit.html', context)
+
+
+@login_required(login_url='customers:portal_login')
+def portal_machines(request):
+    """Every machine at the customer's sites, by site: model, serial, when
+    it was installed and last serviced. Retired ones are left out."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    machines = list(
+        Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED)
+        .select_related('site', 'brand').annotate(last_service=Max('task_assets__task__report__submitted_at'))
+        .order_by('site__name', 'model_name'),
+    )
+    sites = {}
+    for machine in machines:
+        sites.setdefault(machine.site, []).append(machine)
+    return render(request, 'customers/portal_machines.html', {'customer': customer, 'sites': sites.items()})
+
+
+@login_required(login_url='customers:portal_login')
+def portal_machine(request, pk):
+    """One of the customer's machines: its details and warranty, every visit
+    that covered it (what was done, the report), and any request about it
+    still open — with "Report a problem with this machine". Anyone else's
+    machine is simply not found."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    machine = get_object_or_404(Asset.objects.select_related('site', 'brand'), pk=pk, site__customer=customer)
+    visits = []
+    for line in machine.task_assets.select_related('task__task_type', 'task__report').order_by('-task__reported_at'):
+        task = line.task
+        visits.append({
+            'task': task, 'outcome': line.get_outcome_display(), 'progress': visit_progress(task),
+            'day': visit_day(task) or timezone.localtime(task.reported_at).date(),
+            'has_report': getattr(task, 'report', None) is not None,
+        })
+    open_requests = [
+        machine_line.ticket for machine_line in machine.ticket_machines.select_related('ticket__task')
+        if machine_line.ticket.status in (CustomerTicket.Status.NEW, CustomerTicket.Status.CONVERTED)
+    ]
+    for ticket in open_requests:
+        ticket.progress = ticket_progress(ticket)
+    return render(request, 'customers/portal_machine.html', {
+        'machine': machine, 'visits': visits, 'open_requests': open_requests,
+    })
 
 
 @login_required(login_url='customers:portal_login')
@@ -559,6 +806,7 @@ def portal_ticket_new(request):
                         ticket=ticket, asset=line['asset'], position=position,
                         model_name='' if line['asset'] else line['model_name'],
                         serial_no='' if line['asset'] else line['serial_no'],
+                        code='' if line['asset'] else line.get('code', '').strip(),
                         serial_photo=None if line['asset'] else line['serial_photo'],
                         problem=line['problem'], description=line['description'],
                         out_of_service=line['out_of_service'],
@@ -581,7 +829,16 @@ def portal_ticket_new(request):
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             'contact_email': customer.contact_email, 'shipping_address': customer.shipping_address,
         })
-        machines = TicketMachineFormSet(prefix='machines', form_kwargs={'customer': customer})
+        machine_initial = []
+        # From a machine's page ("Report a problem with this machine"): it and its site are chosen.
+        chosen = Asset.objects.filter(
+            pk=request.GET.get('machine', '') if request.GET.get('machine', '').isdigit() else None,
+            site__customer=customer,
+        ).exclude(status=Asset.Status.RETIRED).first()
+        if chosen is not None:
+            form.fields['site'].initial = chosen.site_id
+            machine_initial = [{'which': 'list', 'asset': str(chosen.pk)}]
+        machines = TicketMachineFormSet(prefix='machines', initial=machine_initial, form_kwargs={'customer': customer})
 
     return render(request, 'customers/portal_ticket_new.html', {'form': form, 'machines': machines})
 

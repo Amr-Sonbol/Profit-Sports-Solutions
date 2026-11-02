@@ -121,6 +121,16 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   );
 }
 
+/** A file's own name from its address: ".../ticket_attachments/3f9c/IMG_0001.jpg?x" → "IMG_0001.jpg". */
+function fileName(url: string): string {
+  const last = url.split('?')[0].split('/').pop() ?? url;
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
 export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -326,10 +336,14 @@ export default function TeamTaskScreen() {
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
               {task.attachments.map((attachment) => (
-                <TouchableOpacity key={attachment.id} onPress={() => Linking.openURL(attachment.url)}>
-                  <ThemedText type="small" themeColor="primary">
-                    {attachment.purpose_display} — {attachment.media_type_display} ›
+                <TouchableOpacity
+                  key={attachment.id} style={styles.attachment} onPress={() => Linking.openURL(attachment.url)}
+                >
+                  <Ionicons name="attach" size={18} color={theme.primary} />
+                  <ThemedText type="small" themeColor="primary" numberOfLines={1} style={styles.attachmentName}>
+                    {fileName(attachment.url)}
                   </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">{attachment.purpose_display}</ThemedText>
                 </TouchableOpacity>
               ))}
             </ThemedView>
@@ -655,6 +669,8 @@ function SecondaryButton({ label, onPress, disabled }: { label: string; onPress:
 }
 
 const styles = StyleSheet.create({
+  attachment: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, backgroundColor: 'transparent' },
+  attachmentName: { flexShrink: 1 },
   manageBox: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three },
   manageInput: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 60, textAlignVertical: 'top' },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },

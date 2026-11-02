@@ -98,9 +98,7 @@
         <ul class="plain-list">
             {% for attachment in ticket_general_attachments %}
             <li>
-                {{ attachment.file.name }}
-                <a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ attachment.file.url }}" download>{% translate "Download" %}</a>
+                {% include "_attachment.html" with file=attachment.file %}
             </li>
             {% endfor %}
         </ul>
@@ -128,12 +126,11 @@
             </div>
             <div class="chat-bubble">
                 <p>{{ reply.message }}</p>
-                {% if reply.attachment %}
-                <p class="chat-attachment">
-                    <a href="{{ reply.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                    | <a href="{{ reply.attachment.url }}" download>{% translate "Download" %}</a>
+                {% with files=reply.all_files %}{% if files %}
+                <p class="chat-attachment attachment-list">
+                    {% for file in files %}{% include "_attachment.html" with file=file %}{% endfor %}
                 </p>
-                {% endif %}
+                {% endif %}{% endwith %}
             </div>
         </div>
         {% endfor %}
@@ -142,26 +139,7 @@
     <p class="empty-state">{% translate "No messages." %}</p>
     {% endif %}
     {% if can_manage and can_reply %}
-    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="add_reply">
-        {% if reply_form.non_field_errors %}
-            <p class="flash flash--error">{{ reply_form.non_field_errors }}</p>
-        {% endif %}
-        <div class="field {% if reply_form.message.errors %}field--error{% endif %}">
-            <label for="{{ reply_form.message.id_for_label }}">{{ reply_form.message.label }}</label>
-            {{ reply_form.message }}
-            {% for error in reply_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        <div class="field {% if reply_form.attachment.errors %}field--error{% endif %}">
-            <label for="{{ reply_form.attachment.id_for_label }}">{{ reply_form.attachment.label }}</label>
-            {{ reply_form.attachment }}
-            {% for error in reply_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        <div class="field field--submit">
-            <button type="submit" class="button button--secondary">{% translate "Send reply" %}</button>
-        </div>
-    </form>
+    {% translate "Send reply" as send_label %}{% include "_composer.html" with form=reply_form action="add_reply" button=send_label %}
     {% if can_escalate %}
     <p><a href="#escalation">{% blocktranslate with role=escalation_role %}Requires further attention? Escalate to the {{ role }}{% endblocktranslate %}</a></p>
     {% elif pending_escalation %}
@@ -182,38 +160,18 @@
         <li>
             <span class="muted">{{ note.created_at|date:"SHORT_DATETIME_FORMAT" }}{% if note.author %} — {{ note.author.technician.full_name|default:note.author.get_username }}{% endif %}</span>
             <p>{{ note.message }}</p>
-            {% if note.attachment %}
-            <p>
-                <a href="{{ note.attachment.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ note.attachment.url }}" download>{% translate "Download" %}</a>
+            {% with files=note.all_files %}{% if files %}
+            <p class="chat-attachment attachment-list">
+                {% for file in files %}{% include "_attachment.html" with file=file %}{% endfor %}
             </p>
-            {% endif %}
+            {% endif %}{% endwith %}
         </li>
         {% endfor %}
     </ul>
     {% else %}
     <p class="empty-state">{% translate "No internal notes." %}</p>
     {% endif %}
-    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="add_internal_note">
-        {% if internal_note_form.non_field_errors %}
-            <p class="flash flash--error">{{ internal_note_form.non_field_errors }}</p>
-        {% endif %}
-        <div class="field {% if internal_note_form.message.errors %}field--error{% endif %}">
-            <label for="{{ internal_note_form.message.id_for_label }}">{{ internal_note_form.message.label }}</label>
-            {{ internal_note_form.message }}
-            {% for error in internal_note_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        <div class="field {% if internal_note_form.attachment.errors %}field--error{% endif %}">
-            <label for="{{ internal_note_form.attachment.id_for_label }}">{{ internal_note_form.attachment.label }}</label>
-            {{ internal_note_form.attachment }}
-            {% for error in internal_note_form.attachment.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        <div class="field field--submit">
-            <button type="submit" class="button button--secondary">{% translate "Add note" %}</button>
-        </div>
-    </form>
+    {% translate "Add note" as note_label %}{% include "_composer.html" with form=internal_note_form action="add_internal_note" button=note_label %}
 </div>
 {% endif %}
 

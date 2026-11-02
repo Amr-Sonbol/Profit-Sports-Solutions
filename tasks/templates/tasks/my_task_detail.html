@@ -170,7 +170,7 @@
                     <img src="{{ attachment.url }}" alt="{{ attachment.get_purpose_display }}" class="attachment-thumb">
                 </a>
             {% else %}
-                <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+                {% include "_attachment.html" with file=attachment.url %}
             {% endif %}
         </li>
         {% endfor %}

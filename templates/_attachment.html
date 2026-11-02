@@ -1,0 +1,6 @@
+{% comment %}One attached file, wherever one is shown: a paperclip, the file's own name (opens it), and a download button. `file` is the stored file (a FileField's value) or a file's address.{% endcomment %}{% load i18n files %}
+<span class="attachment">
+    {% include "_icon.html" with name='paperclip' %}
+    {% firstof file.url file as href %}<a href="{{ href }}" target="_blank" rel="noopener" class="attachment__name" dir="auto">{{ file|filename }}</a>
+    <a href="{{ href }}" download class="attachment__download" aria-label="{% translate 'Download' %}" title="{% translate 'Download' %}">{% include "_icon.html" with name='download' %}</a>
+</span>

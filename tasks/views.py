@@ -39,6 +39,8 @@ from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
 from customers.models import Asset, Customer, Site
+from customers import notify as notify_customer
+from customers.progress import VISIT_BOOKED, progress_steps, ticket_progress, visit_day, visit_progress
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
@@ -70,7 +72,8 @@ from .stock import machine_stock, part_rows, record_count, stock_key
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
-    TaskProduct, TicketEscalation, TicketInternalNote, TicketMachine, TicketNotification, TicketReply,
+    TaskProduct, TicketEscalation, TicketInternalNote, TicketInternalNoteFile, TicketMachine, TicketNotification,
+    TicketReply, TicketReplyFile,
 )
 
 logger = logging.getLogger(__name__)
@@ -917,6 +920,10 @@ def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachmen
     )
 
 
+# What one email can carry in files: mail servers commonly refuse much more.
+MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+
+
 def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None):
     """Every outbound notification email in this app goes through here
     — a plain-text body for clients that don't render HTML, and a
@@ -928,7 +935,9 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     attachment, when given, is a real file on the ticket/task itself
     (e.g. a quotation) — attached as-is, not just linked — or a
     (filename, bytes, mimetype) tuple for a generated one (the visit
-    report PDF). Returns whether the email went out.
+    report PDF), or a list of files (a message's). Files past
+    MAX_EMAIL_ATTACHMENT_BYTES in all are left out — the email links to
+    where they are anyway. Returns whether the email went out.
 
     The logo is embedded inline (a cid: reference, not a plain URL) —
     this renders outside any request, and an email client fetches remote
@@ -952,11 +961,16 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     if isinstance(attachment, tuple):
         email.attach(*attachment)
     elif attachment:
-        attachment.open('rb')
-        try:
-            email.attach(attachment.name.rsplit('/', 1)[-1], attachment.read())
-        finally:
-            attachment.close()
+        total = 0
+        for file in attachment if isinstance(attachment, list) else [attachment]:
+            if total + file.size > MAX_EMAIL_ATTACHMENT_BYTES:
+                continue
+            total += file.size
+            file.open('rb')
+            try:
+                email.attach(file.name.rsplit('/', 1)[-1], file.read())
+            finally:
+                file.close()
     try:
         email.send()
     except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
@@ -1750,6 +1764,7 @@ def task_detail(request, pk):
                     task=task, event_type=TaskEvent.EventType.RESCHEDULED,
                     occurred_at=timezone.now(), actor=request.user,
                 )
+                notify_customer.visit_booked(task)
                 messages.success(request, _('Time set.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
@@ -1795,6 +1810,7 @@ def task_detail(request, pk):
             task=task, event_type=TaskEvent.EventType.RESCHEDULED,
             occurred_at=timezone.now(), actor=request.user,
         )
+        notify_customer.visit_booked(task)
         TaskEvent.objects.create(
             task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_APPROVED,
             occurred_at=timezone.now(), actor=request.user,
@@ -2134,6 +2150,7 @@ def task_edit(request, pk):
                         task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
                         occurred_at=timezone.now(), actor=request.user,
                     )
+                    notify_customer.visit_booked(updated_task)
                 if not products_locked:
                     save_planned_lines(updated_task, product_formset.cleaned_data)
             short = loading_shortfall(updated_task) if is_loading and not products_locked else ''
@@ -2240,6 +2257,7 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
             occurred_at=timezone.now(), actor=request.user,
         )
         TaskNotification.objects.create(task=task, created_at=timezone.now())
+        notify_customer.visit_booked(task)
         if selected_machines:
             TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected_machines]).update(
                 decision=machine_decision, task=task, decided_by=request.user, decided_at=timezone.now(),
@@ -2503,7 +2521,7 @@ def _send_reply_to_customer(request, reply):
             'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
             'reply_message': reply.message, 'link': link,
         },
-        [ticket.contact_email], attachment=reply.attachment,
+        [ticket.contact_email], attachment=reply.all_files,
     )
 
 
@@ -2699,15 +2717,17 @@ def ticket_status(request, token):
         raise PermissionDenied
     can_reply = _ticket_is_open(ticket)
     reply_form = TicketReplyForm()
+    notify_customer.seen(customer, ticket=ticket)
 
     if request.method == 'POST' and can_reply:
         reply_form = TicketReplyForm(request.POST, request.FILES)
         if reply_form.is_valid():
             reply = TicketReply.objects.create(
                 ticket=ticket, sender=TicketReply.Sender.CUSTOMER, sent_by=request.user,
-                message=reply_form.cleaned_data['message'],
-                attachment=reply_form.cleaned_data['attachment'], sent_at=timezone.now(),
+                message=reply_form.cleaned_data['message'], sent_at=timezone.now(),
             )
+            for upload in reply_form.cleaned_data['attachments']:
+                TicketReplyFile.objects.create(reply=reply, file=upload)
             TicketNotification.objects.create(
                 ticket=ticket, kind=TicketNotification.Kind.NEW_REPLY, created_at=timezone.now(),
             )
@@ -2717,12 +2737,35 @@ def ticket_status(request, token):
 
     context = {
         'ticket': ticket, 'can_reply': can_reply, 'reply_form': reply_form,
-        'replies': ticket.replies.select_related('sent_by'),
+        # Where it's got to, in the customer's words — the same as on their portal home —
+        # and the visit's day only while it's still ahead.
+        'progress': ticket_progress(ticket),
+        'steps': progress_steps(ticket_progress(ticket)),
+        'booked': ticket.task_id and visit_progress(ticket.task) == VISIT_BOOKED,
+        # The visit(s) it became — one, or one per group of machines — each with its report once in.
+        'visits': _ticket_visits(ticket),
+        'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         # Only what the customer may see is used from these: the dates and
         # customer_message — never reason, decision or decision_note.
         'escalations': ticket.escalations.order_by('escalated_at'),
     }
     return render(request, 'tasks/ticket_status.html', context)
+
+
+def _ticket_visits(ticket):
+    """The visits a customer's ticket became (its task, and those its
+    machines were split into), for the ticket page: progress, day, report."""
+    tasks = {machine.task_id: machine.task for machine in ticket.machines.select_related('task__task_type', 'task__report')
+             if machine.task_id}
+    if ticket.task_id:
+        tasks.setdefault(ticket.task_id, ticket.task)
+    visits = []
+    for task in sorted(tasks.values(), key=lambda task: task.reported_at):
+        visits.append({
+            'task': task, 'progress': visit_progress(task), 'day': visit_day(task),
+            'booked': visit_progress(task) == VISIT_BOOKED, 'has_report': getattr(task, 'report', None) is not None,
+        })
+    return visits
 
 
 @login_required
@@ -2945,11 +2988,12 @@ def ticket_review(request, pk):
         if action == 'add_internal_note' and can_manage:
             internal_note_form = TicketInternalNoteForm(request.POST, request.FILES)
             if internal_note_form.is_valid():
-                TicketInternalNote.objects.create(
+                note = TicketInternalNote.objects.create(
                     ticket=ticket, author=request.user,
-                    message=internal_note_form.cleaned_data['message'],
-                    attachment=internal_note_form.cleaned_data['attachment'], created_at=timezone.now(),
+                    message=internal_note_form.cleaned_data['message'], created_at=timezone.now(),
                 )
+                for upload in internal_note_form.cleaned_data['attachments']:
+                    TicketInternalNoteFile.objects.create(note=note, file=upload)
                 messages.success(request, _('Note added.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
@@ -2958,11 +3002,12 @@ def ticket_review(request, pk):
             if reply_form.is_valid():
                 reply = TicketReply.objects.create(
                     ticket=ticket, sender=TicketReply.Sender.STAFF, sent_by=request.user,
-                    message=reply_form.cleaned_data['message'],
-                    attachment=reply_form.cleaned_data['attachment'],
-                    sent_at=timezone.now(),
+                    message=reply_form.cleaned_data['message'], sent_at=timezone.now(),
                 )
+                for upload in reply_form.cleaned_data['attachments']:
+                    TicketReplyFile.objects.create(reply=reply, file=upload)
                 _send_reply_to_customer(request, reply)
+                notify_customer.staff_replied(ticket)
                 messages.success(request, _('Reply sent.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
@@ -3053,7 +3098,7 @@ def ticket_review(request, pk):
         'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
-        'replies': ticket.replies.select_related('sent_by'),
+        'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         'escalations': escalations, 'pending_escalation': pending_escalation,
         'can_escalate': can_escalate, 'escalate_form': escalate_form,
         'escalation_role': Technician.Role(technician.escalates_to_role).label if technician.escalates_to_role else '',
@@ -3061,7 +3106,7 @@ def ticket_review(request, pk):
     }
     if can_manage:
         context['internal_note_form'] = internal_note_form
-        context['internal_notes'] = ticket.internal_notes.select_related('author')
+        context['internal_notes'] = ticket.internal_notes.select_related('author').prefetch_related('files')
     return render(request, 'tasks/ticket_review.html', context)
 
 
@@ -4369,7 +4414,7 @@ def machine_list(request):
     ).order_by('site__customer__name', 'site__name', 'model_name')
     if search:
         assets = assets.filter(
-            Q(serial_no__icontains=search) | Q(model_name__icontains=search)
+            Q(serial_no__icontains=search) | Q(model_name__icontains=search) | Q(code__icontains=search)
             | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
             | Q(site__customer__name__icontains=search)
         )
@@ -5509,6 +5554,7 @@ def save_work_report(request, task, technician, report_form, part_rows):
         transaction.on_commit(lambda: send_visit_report_copy(saved_report, copy_to))
     if saved_report.first_submission:
         register_installed_machines(task)
+        notify_customer.report_ready(task)
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
         # (they're the lead on some tasks too) skips straight to the
@@ -5803,7 +5849,7 @@ def register_installed_machines(task):
     for product in task.products.filter(status=TaskProduct.Status.DONE).exclude(serial_number=''):
         if not Asset.objects.filter(site=task.site, serial_no__iexact=product.serial_number).exists():
             Asset.objects.create(
-                site=task.site, brand=task.brand, model_name=product.product_code,
+                site=task.site, brand=task.brand, model_name=product.product_code, code=product.product_code,
                 serial_no=product.serial_number, installed_on=today,
             )
 
@@ -5968,7 +6014,8 @@ def report_machine_initial(task):
         [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
         [
             {
-                'model_name': machine.model_name, 'serial_no': machine.serial_no, 'ticket_machine': machine.pk,
+                'model_name': machine.model_name, 'serial_no': machine.serial_no, 'code': machine.code,
+                'ticket_machine': machine.pk,
                 # The customer's photo of the plate, to type the serial from.
                 'serial_photo_url': machine.serial_photo.url if machine.serial_photo else '',
             }
@@ -6004,6 +6051,7 @@ def save_task_machines(task, existing_rows, new_rows):
             if not new_asset:
                 new_asset = Asset.objects.create(
                     site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'], serial_no=serial,
+                    code=(cleaned.get('code') or '').strip(),
                 )
             TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'], **wording(cleaned))
             if cleaned.get('ticket_machine'):
@@ -6262,12 +6310,14 @@ def internal_ticket(request, pk):
         # opener when the assignee is the one acting.
         other = opener if technician == ticket.assigned_to else ticket.assigned_to
         if action == 'add_note':
-            note_form = InternalTicketNoteForm(request.POST)
+            note_form = InternalTicketNoteForm(request.POST, request.FILES)
             if note_form.is_valid():
-                TicketInternalNote.objects.create(
+                note = TicketInternalNote.objects.create(
                     ticket=ticket, author=request.user, message=note_form.cleaned_data['message'],
                     created_at=timezone.now(),
                 )
+                for upload in note_form.cleaned_data['attachments']:
+                    TicketInternalNoteFile.objects.create(note=note, file=upload)
                 if other and other != technician:
                     _push_internal_ticket(other, ticket, _('New note on an internal task'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
@@ -6301,7 +6351,7 @@ def internal_ticket(request, pk):
     return render(request, 'tasks/internal_ticket.html', {
         'ticket': ticket,
         'is_open': is_open,
-        'notes': ticket.internal_notes.select_related('author__technician').order_by('created_at'),
+        'notes': ticket.internal_notes.select_related('author__technician').prefetch_related('files').order_by('created_at'),
         'attachments': ticket.attachments.all(),
         'note_form': note_form,
         'reassign_form': reassign_form,

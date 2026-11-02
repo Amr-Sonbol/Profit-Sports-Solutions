@@ -626,6 +626,11 @@ export default function ReportScreen() {
                         placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
                         onChangeText={(value) => updateMachine(row.key, { serial_no: value })}
                       />
+                      <TextInput
+                        style={inputStyle} value={row.code ?? ''} placeholder="Code (optional), e.g. BENCH-01"
+                        placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
+                        onChangeText={(value) => updateMachine(row.key, { code: value })}
+                      />
                       {row.serial_photo_url ? (
                         <TouchableOpacity onPress={() => Linking.openURL(row.serial_photo_url!)}>
                           <ThemedText type="small" themeColor="primary">See the customer&apos;s photo of the plate ›</ThemedText>

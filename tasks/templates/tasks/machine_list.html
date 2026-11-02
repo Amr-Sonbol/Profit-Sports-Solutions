@@ -34,7 +34,7 @@
                 <tr>
                     <td>{{ asset.site.customer.name }} — {{ asset.site.name }}</td>
                     <td>{{ asset.brand.name }}</td>
-                    <td>{{ asset.model_name }}</td>
+                    <td>{{ asset.model_name }}{% if asset.code %}<br><span class="muted" dir="ltr">{{ asset.code }}</span>{% endif %}</td>
                     <td>{{ asset.serial_no|default:"—" }}</td>
                     <td>
                         <span class="badge badge--status-{% if asset.status == 'active' %}completed{% elif asset.status == 'faulty' %}blocked{% else %}muted{% endif %}">

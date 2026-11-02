@@ -141,6 +141,8 @@ export interface ReportMachine {
   brand_id?: number | null;
   model_name?: string;
   serial_no: string;
+  /** The product code (e.g. BENCH-01), beside the serial — optional. */
+  code?: string;
   /** A new machine with no readable plate — left out on purpose, and flagged. */
   no_serial?: boolean;
   /** The customer's photo of the plate, from their ticket. */
@@ -499,7 +501,8 @@ export interface CustomerPage {
 
 export interface MachinePage extends MachineRow {
   installed_on: string | null;
-  warranty_end: string | null;
+  /** The product code (e.g. BENCH-01), beside the serial; '' if not recorded. */
+  code: string;
   history: (HistoryTask & { outcome: string; finding: string; action: string })[];
 }
 

@@ -6,7 +6,7 @@
 {% block content %}
 <div class="auth-card">
     <h1>{% translate "Customer portal" %}</h1>
-    <p class="muted">{% translate "Track your reports and service history." %}</p>
+    <p class="muted">{% translate "Report a problem, follow your requests and visits, and download your reports." %}</p>
 
     <form method="post" novalidate>
         {% csrf_token %}
@@ -14,7 +14,7 @@
             <p class="flash flash--error">{{ form.non_field_errors }}</p>
         {% endif %}
         <div class="field">
-            <label for="{{ form.username.id_for_label }}">{% translate "Username" %}</label>
+            <label for="{{ form.username.id_for_label }}">{% translate "Email" %}</label>
             {{ form.username }}
         </div>
         <div class="field">
