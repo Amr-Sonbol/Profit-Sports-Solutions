@@ -44,7 +44,7 @@ def portal_nav(request):
         ('customers:portal_requests', _('Requests'), 'ticket', {'portal_requests', 'portal_ticket_new', 'ticket_status'}),
         ('customers:portal_visits', _('Visits'), 'calendar', {'portal_visits'}),
         ('customers:portal_history', _('History'), 'file-text', {'portal_history'}),
-        ('customers:portal_machines', _('Machines'), 'dumbbell', {'portal_machines', 'portal_machine'}),
+        ('customers:portal_machines', _('Machines'), 'dumbbell', {'portal_machines', 'portal_machine', 'portal_machine_add'}),
         ('customers:portal_settings', _('Settings'), 'user', {'portal_settings'}),
     ]
     return {
@@ -52,13 +52,15 @@ def portal_nav(request):
             {'url': reverse(url_name), 'label': label, 'icon': icon, 'active': name in names}
             for url_name, label, icon, names in sections
         ],
-        'portal_bell': portal_bell(request.user.customer),
+        'portal_bell': (bell := portal_bell(request.user.customer)),
+        'portal_bell_new': sum(1 for item in bell if item['new']),
     }
 
 
 def portal_bell(customer):
-    """The customer's unseen notifications (customers.notify), newest first,
-    each as the words, what it's about and where it leads."""
+    """The customer's latest notifications (customers.notify), newest first —
+    new ones and those already opened — each as the words, what it's about,
+    where it leads, and whether it's new."""
     from django.urls import reverse
     from django.utils.translation import gettext as _
 
@@ -68,7 +70,7 @@ def portal_bell(customer):
     from customers.progress import visit_day
 
     items = []
-    for note in customer.notifications.filter(seen_at__isnull=True).select_related('task__site', 'ticket')[:20]:
+    for note in customer.notifications.select_related('task__site', 'ticket')[:20]:
         if note.kind == CustomerNotification.Kind.REPLY and note.ticket_id:
             items.append({
                 'text': _('New reply from our team'), 'about': note.ticket.ticket_number,
@@ -87,7 +89,7 @@ def portal_bell(customer):
             })
         else:
             continue
-        items[-1]['created_at'] = note.created_at
+        items[-1].update(created_at=note.created_at, new=note.seen_at is None)
     return items
 
 

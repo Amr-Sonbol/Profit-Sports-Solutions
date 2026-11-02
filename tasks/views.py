@@ -1386,6 +1386,10 @@ def home_summary(request, technician):
         add(_('New customer tickets'), CustomerTicket.objects.filter(
             kind=CustomerTicket.Kind.CUSTOMER, status=CustomerTicket.Status.NEW, country=country,
         ).count(), reverse('tasks:ticket_list'))
+    if {RolePermission.Permission.MANAGE_CUSTOMERS, RolePermission.Permission.VIEW_MACHINES} <= allowed:
+        add(_('Machines added by customers, to confirm'), Asset.objects.filter(
+            status=Asset.Status.PENDING, site__customer__country=country,
+        ).count(), f"{reverse('tasks:machine_list')}?status=pending")
     if technician.role != Technician.Role.TECHNICIAN:
         add(_('Internal tasks assigned to you'), CustomerTicket.objects.filter(
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
@@ -4419,9 +4423,17 @@ def machine_list(request):
             | Q(site__customer__name__icontains=search)
         )
 
+    # Added by customers and not confirmed yet (?status=pending).
+    pending_count = assets.filter(status=Asset.Status.PENDING).count()
+    showing_pending = request.GET.get('status') == 'pending'
+    if showing_pending:
+        assets = assets.filter(status=Asset.Status.PENDING)
+
     paginator = Paginator(assets, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
-    return render(request, 'tasks/machine_list.html', {'page_obj': page_obj, 'search': search})
+    return render(request, 'tasks/machine_list.html', {
+        'page_obj': page_obj, 'search': search, 'pending_count': pending_count, 'showing_pending': showing_pending,
+    })
 
 
 @login_required
@@ -4444,7 +4456,23 @@ def machine_detail(request, pk):
         'task__site', 'task__ticket',
     ).order_by('-task__reported_at')
 
-    context = {'asset': asset, 'task_assets': task_assets}
+    # A machine a customer added: whoever manages customers confirms it (checked
+    # against the sticker photo) or removes it, if nothing has been recorded on it.
+    can_confirm = asset.status == Asset.Status.PENDING and _has_permission(
+        requesting_technician, RolePermission.Permission.MANAGE_CUSTOMERS,
+    )
+    if request.method == 'POST' and can_confirm:
+        if request.POST.get('action') == 'confirm':
+            asset.status = Asset.Status.ACTIVE
+            asset.save(update_fields=['status'])
+            messages.success(request, _('Machine confirmed. It is on the customer\'s list as one of ours.'))
+            return redirect('tasks:machine_detail', pk=asset.pk)
+        if request.POST.get('action') == 'remove' and not task_assets.exists():
+            asset.delete()
+            messages.success(request, _('Machine removed from the customer\'s list.'))
+            return redirect(f"{reverse('tasks:machine_list')}?status=pending")
+
+    context = {'asset': asset, 'task_assets': task_assets, 'can_confirm': can_confirm}
     return render(request, 'tasks/machine_detail.html', context)
 
 
@@ -6042,6 +6070,10 @@ def save_task_machines(task, existing_rows, new_rows):
     for cleaned in existing_rows:
         if cleaned.get('asset') and cleaned.get('outcome'):
             TaskAsset.objects.create(task=task, asset=cleaned['asset'], outcome=cleaned['outcome'], **wording(cleaned))
+            if cleaned['asset'].status == Asset.Status.PENDING:
+                # One the customer added, seen at the visit: one of ours now.
+                cleaned['asset'].status = Asset.Status.ACTIVE
+                cleaned['asset'].save(update_fields=['status'])
     for cleaned in new_rows:
         if cleaned.get('brand') and cleaned.get('model_name') and cleaned.get('outcome'):
             serial = cleaned.get('serial_no', '')

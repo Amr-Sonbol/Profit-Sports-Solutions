@@ -25,6 +25,7 @@ urlpatterns = [
     path('portal/tickets/new/', views.portal_ticket_new, name='portal_ticket_new'),
     path('portal/machines/', views.portal_machines, name='portal_machines'),
     path('portal/settings/', views.portal_settings, name='portal_settings'),
+    path('portal/machines/add/', views.portal_machine_add, name='portal_machine_add'),
     path('portal/machines/<int:pk>/', views.portal_machine, name='portal_machine'),
     path('portal/visits/<int:pk>/', views.portal_visit, name='portal_visit'),
     path('portal/visits/<int:pk>/report.pdf', views.portal_visit_report_pdf, name='portal_visit_report_pdf'),

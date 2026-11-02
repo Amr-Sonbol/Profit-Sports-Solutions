@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -168,6 +170,10 @@ class Site(models.Model):
         return bool(self.contact_name or self.contact_phone or self.contact_email)
 
 
+def _asset_sticker_path(instance, filename):
+    return f'asset_stickers/{secrets.token_hex(16)}/{filename}'
+
+
 class Asset(models.Model):
     """One physical machine. Created by the technician at the first service visit."""
 
@@ -175,6 +181,9 @@ class Asset(models.Model):
         ACTIVE = 'active', _('Active')
         FAULTY = 'faulty', _('Faulty')
         RETIRED = 'retired', _('Retired')
+        # Added by the customer from their portal: theirs to see, ours once a
+        # technician records it at a visit or the office confirms it.
+        PENDING = 'pending', _('Waiting for confirmation')
 
     site = models.ForeignKey(
         Site, on_delete=models.PROTECT, related_name='assets',
@@ -192,6 +201,8 @@ class Asset(models.Model):
     code = models.CharField(_('code'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    # The customer's photo of the sticker, when they added it themselves — what the office checks it against.
+    sticker_photo = models.FileField(_('sticker photo'), upload_to=_asset_sticker_path, null=True, blank=True)
 
     class Meta:
         verbose_name = _('asset')

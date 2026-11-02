@@ -200,6 +200,8 @@ A hotel group is one customer with many sites.
 ### asset
 One physical machine. **Created by the technician at the first service visit, not at installation.**
 
+**A customer can add one too, waiting for confirmation.** From their portal (*Machines → Add a machine*: site, brand, model, serial, optional code, a photo of the sticker) it joins their list at once as `pending`, and they can already report a problem with it. It becomes one of ours (`active`) when a technician records it on a visit's report, or when someone with `manage_customers` confirms it on its Machines page against the sticker photo — or removes it, while nothing has been recorded on it. The office sees how many are waiting on its home page (*Machines added by customers, to confirm*) and under the Machines screen's own tab. The same serial twice at a site is refused.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
@@ -209,7 +211,8 @@ One physical machine. **Created by the technician at the first service visit, no
 | serial_no | varchar | nullable |
 | code | varchar | blank — the product code (e.g. BENCH-01), on the delivery note and the sticker beside the serial; optional when a technician records a machine, the line's product code for one installed |
 | installed_on | date | nullable |
-| status | varchar | active, faulty, retired |
+| status | varchar | active, faulty, retired, or pending — added by the customer, waiting for confirmation |
+| sticker_photo | file | nullable — the customer's photo of the sticker, when they added it |
 
 **Why the technician creates it.** Nobody else sees the machine. The delivery note is a PDF with model codes and quantities, not serials, so there is nothing to import. The serial is only on the plate.
 

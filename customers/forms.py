@@ -2,11 +2,14 @@ from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.utils.translation import gettext_lazy as _
 
-from reference.models import Country
+from django.core.validators import FileExtensionValidator
+
+from reference.models import Brand, Country
 from tasks.forms import new_password_fields
+from tasks.models import MAX_TICKET_ATTACHMENT_BYTES, SERIAL_PHOTO_EXTENSIONS
 from tasks.location import parse_coordinates
 
-from .models import Customer, Site
+from .models import Asset, Customer, Site
 
 
 class CreateLoginForm(forms.Form):
@@ -278,4 +281,50 @@ class CustomerSettingsForm(forms.ModelForm):
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
+        }
+
+
+class CustomerMachineForm(forms.ModelForm):
+    """A customer adding one of their own machines from the portal: where it
+    is, its brand, model, serial and code, and a photo of its sticker. It
+    joins their list waiting for confirmation (Asset.Status.PENDING) — ours
+    once a technician records it at a visit or the office confirms it."""
+
+    class Meta:
+        model = Asset
+        fields = ['site', 'brand', 'model_name', 'serial_no', 'code', 'sticker_photo']
+        labels = {
+            'model_name': _('Model'), 'serial_no': _('Serial number'), 'code': _('Code (optional)'),
+            'sticker_photo': _('Photo of the sticker'),
         }
+        help_texts = {
+            'model_name': _('as written on the machine'),
+            'serial_no': _('as written on the silver sticker on the machine'),
+            'code': _('the product code on the sticker, if there is one'),
+            'sticker_photo': _('so our team can check the details — take a photo or upload one'),
+        }
+        widgets = {'sticker_photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, customer, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['site'].queryset = customer.sites.order_by('name')
+        sites = list(self.fields['site'].queryset[:2])
+        if len(sites) == 1:
+            self.fields['site'].initial = sites[0].pk
+        self.fields['brand'].queryset = Brand.objects.filter(is_active=True).order_by('name')
+        self.fields['serial_no'].required = True
+        self.fields['sticker_photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+
+    def clean_sticker_photo(self):
+        photo = self.cleaned_data.get('sticker_photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+        return photo
+
+    def clean(self):
+        cleaned = super().clean()
+        serial, site = (cleaned.get('serial_no') or '').strip(), cleaned.get('site')
+        if serial and site and Asset.objects.filter(site=site, serial_no__iexact=serial).exists():
+            self.add_error('serial_no', _('This machine is already in your list.'))
+        cleaned['serial_no'] = serial
+        return cleaned

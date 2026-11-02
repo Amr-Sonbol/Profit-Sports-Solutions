@@ -36,7 +36,8 @@ from .accounts import (
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
-    CustomerImportForm, CustomerSettingsForm, DeactivateCustomerForm, PortalPasswordHelpForm, QuickInviteForm,
+    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalPasswordHelpForm,
+    QuickInviteForm,
     SiteCreateForm, SiteEditForm,
 )
 from .models import Asset, Customer, Site
@@ -733,6 +734,25 @@ def portal_machines(request):
     for machine in machines:
         sites.setdefault(machine.site, []).append(machine)
     return render(request, 'customers/portal_machines.html', {'customer': customer, 'sites': sites.items()})
+
+
+@login_required(login_url='customers:portal_login')
+def portal_machine_add(request):
+    """A customer adding one of their own machines (CustomerMachineForm). It
+    joins their list at once, waiting for confirmation — a technician
+    recording it at a visit, or the office checking it from the sticker
+    photo, makes it one of ours (tasks.views.machine_detail)."""
+    customer, setup = _portal_customer(request)
+    if setup:
+        return setup
+    form = CustomerMachineForm(request.POST or None, request.FILES or None, customer=customer)
+    if request.method == 'POST' and form.is_valid():
+        machine = form.save(commit=False)
+        machine.status = Asset.Status.PENDING
+        machine.save()
+        messages.success(request, _('Machine added. Our team will confirm it — you can already report a problem with it.'))
+        return redirect('customers:portal_machine', pk=machine.pk)
+    return render(request, 'customers/portal_machine_add.html', {'form': form})
 
 
 @login_required(login_url='customers:portal_login')

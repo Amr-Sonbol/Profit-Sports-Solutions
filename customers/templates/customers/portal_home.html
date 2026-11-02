@@ -43,11 +43,11 @@
         {% endif %}
     </section>
 
-    {% if portal_bell or to_rate %}
+    {% if portal_bell_new or to_rate %}
     <section class="section">
         <h2>{% translate "Needs your attention" %}</h2>
         <ul class="action-list">
-            {% for item in portal_bell %}
+            {% for item in portal_bell %}{% if item.new %}
             <li>
                 <a href="{{ item.url }}" class="action-row action-row--warning portal-row">
                     <span class="portal-row__main">
@@ -57,7 +57,7 @@
                     <span class="muted">{{ item.created_at|date:"j M" }}</span>
                 </a>
             </li>
-            {% endfor %}
+            {% endif %}{% endfor %}
             {% for visit in to_rate %}
             <li>
                 <a href="{% url 'customers:portal_visit' visit.pk %}#rate" class="action-row portal-row">

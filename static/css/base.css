@@ -2947,3 +2947,16 @@ tbody tr:hover {
 .attachment__remove:hover {
     color: var(--color-danger);
 }
+
+/* With a bell, the language switch sits right beside it at the end of the
+   header (the bell takes the push to the end), so its list opens under both. */
+.notif-dropdown ~ .lang-switch__group--header {
+    margin-inline-start: 0;
+}
+
+/* A customer's bell lists recent notifications; the new ones stand out. */
+.notif-item--new {
+    font-weight: 600;
+    border-inline-start: 3px solid var(--color-danger);
+    padding-inline-start: 0.5rem;
+}

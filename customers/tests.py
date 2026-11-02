@@ -940,7 +940,10 @@ class PortalBellTests(CustomerTestCase):
         self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.client.get(f'/customers/portal/visits/{self.visit.pk}/')
         self.assertFalse(CustomerNotification.objects.filter(seen_at__isnull=True).exists())
-        self.assertNotContains(self.client.get('/customers/portal/'), 'notif-bell__badge')
+        page = self.client.get('/customers/portal/')
+        self.assertNotContains(page, 'notif-bell__badge')
+        # Still in the list, just no longer new.
+        self.assertEqual([item['new'] for item in page.context['portal_bell']], [False] * 3)
 
     def test_our_own_account_and_customers_without_a_login_get_nothing(self):
         from tasks.models import Task
@@ -992,6 +995,73 @@ class PortalBellTests(CustomerTestCase):
         self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'done', 'current', 'todo'])
         self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 4)
         self.assertIsNone(progress_steps(CLOSED))
+
+
+class CustomerAddsMachineTests(CustomerTestCase):
+    # A customer adds a machine; it waits for confirmation — by the office
+    # from the sticker photo, or by a technician recording it at a visit.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Brand
+        from people.models import RolePermission
+        self.brand = Brand.objects.create(name='Technogym')
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        for permission in ('manage_customers', 'view_machines'):
+            RolePermission.objects.update_or_create(role='admin', permission=permission, defaults={'allowed': True})
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def _add(self, **overrides):
+        return self.client.post('/customers/portal/machines/add/', {
+            'site': self.site.pk, 'brand': self.brand.pk, 'model_name': 'Excite Run 700', 'serial_no': ' TG-77 ',
+            'code': 'EXC-700', **overrides,
+        })
+
+    def test_an_added_machine_waits_for_confirmation(self):
+        response = self._add()
+        machine = Asset.objects.get()
+        self.assertRedirects(response, f'/customers/portal/machines/{machine.pk}/', fetch_redirect_response=False)
+        self.assertEqual((machine.status, machine.serial_no, machine.code), ('pending', 'TG-77', 'EXC-700'))
+        self.assertContains(self.client.get('/customers/portal/machines/'), 'Waiting for confirmation')
+        # They can already report a problem with it.
+        form = self.client.get(f'/customers/portal/tickets/new/?machine={machine.pk}').context['machines'][0]
+        self.assertEqual(form.initial['asset'], str(machine.pk))
+
+    def test_the_same_serial_twice_or_someone_elses_site_is_refused(self):
+        self._add()
+        self.assertContains(self._add(), 'This machine is already in your list.')
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        far = Site.objects.create(customer=other, name='Far', address='x')
+        response = self._add(site=far.pk, serial_no='OTHER-1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Asset.objects.count(), 1)
+
+    def test_the_office_sees_it_and_confirms_or_removes_it(self):
+        self._add()
+        self._add(serial_no='TG-78')
+        first, second = Asset.objects.order_by('pk')
+        self.client.login(username='admin1', password='pass12345')
+        home = self.client.get('/')
+        self.assertTrue(any(item['count'] == 2 for item in home.context['actions']))
+        listed = self.client.get('/tasks/machines/?status=pending')
+        self.assertEqual([a.pk for a in listed.context['page_obj']], [first.pk, second.pk])
+        self.client.post(f'/tasks/machines/{first.pk}/', {'action': 'confirm'})
+        first.refresh_from_db()
+        self.assertEqual(first.status, 'active')
+        self.client.post(f'/tasks/machines/{second.pk}/', {'action': 'remove'})
+        self.assertFalse(Asset.objects.filter(pk=second.pk).exists())
+
+    def test_only_whoever_manages_customers_confirms(self):
+        from people.models import RolePermission
+        self._add()
+        machine = Asset.objects.get()
+        RolePermission.objects.filter(role='admin', permission='manage_customers').update(allowed=False)
+        self.client.login(username='admin1', password='pass12345')
+        self.assertNotContains(self.client.get(f'/tasks/machines/{machine.pk}/'), 'Confirm the machine')
+        self.client.post(f'/tasks/machines/{machine.pk}/', {'action': 'confirm'})
+        machine.refresh_from_db()
+        self.assertEqual(machine.status, 'pending')
 
 
 class PortalTicketNewTests(CustomerTestCase):

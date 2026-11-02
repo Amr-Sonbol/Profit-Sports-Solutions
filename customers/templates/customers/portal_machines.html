@@ -10,6 +10,7 @@
             <h1>{% translate "My machines" %}</h1>
             <p class="muted">{% translate "Every machine we look after at your sites. Open one to see its service history, or report a problem with it." %}</p>
         </div>
+        <a href="{% url 'customers:portal_machine_add' %}" class="button button--secondary">{% translate "Add a machine" %}</a>
     </div>
 
     {% for site, machines in sites %}
@@ -28,7 +29,8 @@
                         {% if machine.last_service %}{% blocktranslate with date=machine.last_service|date:"j M Y" %}Last serviced {{ date }}{% endblocktranslate %}
                         {% elif machine.installed_on %}{% blocktranslate with date=machine.installed_on|date:"j M Y" %}Installed {{ date }}{% endblocktranslate %}{% endif %}
                     </span>
-                    {% if machine.status == 'faulty' %}<span class="badge badge--warning">{% translate "Needs attention" %}</span>{% endif %}
+                    {% if machine.status == 'pending' %}<span class="badge badge--neutral">{% translate "Waiting for confirmation" %}</span>
+                    {% elif machine.status == 'faulty' %}<span class="badge badge--warning">{% translate "Needs attention" %}</span>{% endif %}
                 </a>
             </li>
             {% endfor %}
@@ -37,8 +39,8 @@
     {% empty %}
     <section class="section">
         <div class="empty-state">
-            <p>{% translate "Your machines appear here after our first visit, once the technician has recorded them." %}</p>
-            <a href="{% url 'customers:portal_ticket_new' %}" class="button button--secondary">{% translate "Report a problem" %}</a>
+            <p>{% translate "Your machines appear here after our first visit, once the technician has recorded them — or add one yourself." %}</p>
+            <a href="{% url 'customers:portal_machine_add' %}" class="button button--secondary">{% translate "Add a machine" %}</a>
         </div>
     </section>
     {% endfor %}

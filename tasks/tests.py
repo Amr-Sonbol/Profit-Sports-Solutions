@@ -6339,6 +6339,17 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(task_asset.outcome, TaskAsset.Outcome.REPAIRED)
         self.assertEqual(Asset.objects.count(), 1)
 
+    def test_recording_a_machine_the_customer_added_confirms_it(self):
+        self.asset.status = Asset.Status.PENDING
+        self.asset.save(update_fields=['status'])
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['existing-0-asset'] = str(self.asset.pk)
+        payload['existing-0-outcome'] = TaskAsset.Outcome.INSPECTED_OK
+        self.client.post(self.url, payload)
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.status, Asset.Status.ACTIVE)
+
     def test_incomplete_existing_asset_row_is_rejected(self):
         self.client.login(username='tech1', password='pass12345')
         payload = self._base_payload()

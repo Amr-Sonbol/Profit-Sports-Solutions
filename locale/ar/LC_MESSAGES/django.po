@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-02 10:51+0000\n"
+"POT-Creation-Date: 2026-11-02 20:22+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -537,6 +537,9 @@ msgstr "الوقت الفعلي للحدوث"
 msgid "Add a contact email"
 msgstr "إضافة بريد إلكتروني للتواصل"
 
+msgid "Add a machine"
+msgstr "إضافة جهاز"
+
 msgid "Add a note"
 msgstr "أضف ملاحظة"
 
@@ -585,6 +588,9 @@ msgstr "إضافة الفرع"
 msgid "Add skill"
 msgstr "إضافة مهارة"
 
+msgid "Add the machine"
+msgstr "إضافة الجهاز"
+
 msgid "Add trip"
 msgstr "إضافة رحلة"
 
@@ -596,6 +602,12 @@ msgstr "أُضيف"
 
 msgid "Added as helper"
 msgstr "أُضفت كمساعد"
+
+msgid "Added by customers, to confirm"
+msgstr "أضافها العملاء، بانتظار التأكيد"
+
+msgid "Added by the customer"
+msgstr "أضافه العميل"
 
 msgid "Added on site"
 msgstr "أُضيف في الموقع"
@@ -1029,6 +1041,9 @@ msgstr "فترة الرسم البياني"
 msgid "Check and send"
 msgstr "المراجعة والإرسال"
 
+msgid "Check the details against the customer's photo of the sticker. A technician recording this machine at a visit confirms it too."
+msgstr "طابق البيانات مع صورة الملصق التي أرسلها العميل. ويؤكد الجهاز أيضًا تسجيل الفني له في زيارة."
+
 msgid "Check-ins away from the site"
 msgstr "نقرات مسجَّلة خارج الموقع"
 
@@ -1144,6 +1159,9 @@ msgstr "تأكيد إعادة الإسناد"
 
 msgid "Confirm technician skill levels"
 msgstr "اعتماد مستويات مهارات الفنيين"
+
+msgid "Confirm the machine"
+msgstr "تأكيد الجهاز"
 
 msgid "Confirmed"
 msgstr "معتمد"
@@ -2317,6 +2335,9 @@ msgstr "عنوان الفاتورة"
 msgid "Is this machine in your list?"
 msgstr "هل هذا الجهاز موجود في قائمتك؟"
 
+msgid "It joins your list at once, waiting for our team to confirm it — at the next visit, or from the photo of its sticker."
+msgstr "يُضاف إلى قائمتك فورًا، بانتظار تأكيد فريقنا — في الزيارة القادمة، أو من صورة الملصق."
+
 msgid "Job"
 msgstr "المهمة"
 
@@ -2463,17 +2484,29 @@ msgstr "الجهاز"
 msgid "Machine %(number)s"
 msgstr "الجهاز %(number)s"
 
+msgid "Machine added. Our team will confirm it — you can already report a problem with it."
+msgstr "تمت إضافة الجهاز. سيؤكده فريقنا — ويمكنك الإبلاغ عن مشكلة فيه من الآن."
+
 msgid "Machine calibrated"
 msgstr "تمت معايرة الجهاز"
 
+msgid "Machine confirmed. It is on the customer's list as one of ours."
+msgstr "تم تأكيد الجهاز. أصبح في قائمة العميل ضمن أجهزتنا."
+
 msgid "Machine disassembled and the affected part greased"
 msgstr "تم فك الجهاز وتشحيم الجزء المتأثر"
+
+msgid "Machine removed from the customer's list."
+msgstr "تمت إزالة الجهاز من قائمة العميل."
 
 msgid "Machine serial number"
 msgstr "الرقم التسلسلي للجهاز"
 
 msgid "Machines"
 msgstr "الأجهزة"
+
+msgid "Machines added by customers, to confirm"
+msgstr "أجهزة أضافها العملاء، بانتظار التأكيد"
 
 msgid "Machines at this site"
 msgstr "الأجهزة في هذا الموقع"
@@ -2867,6 +2900,9 @@ msgstr "لا توجد إشعارات جديدة."
 msgid "No notes."
 msgstr "لا توجد ملاحظات."
 
+msgid "No notifications yet."
+msgstr "لا توجد إشعارات بعد."
+
 msgid "No one assigned"
 msgstr "لم يُسند إلى أحد"
 
@@ -2887,6 +2923,9 @@ msgstr "لم تتم إضافة أي قطع. يرجى إضافتها أعلاه �
 
 msgid "No parts match your search."
 msgstr "لا توجد قطع مطابقة لبحثك."
+
+msgid "No photo of the sticker."
+msgstr "لا توجد صورة للملصق."
 
 msgid "No photos."
 msgstr "لا توجد صور."
@@ -3375,6 +3414,9 @@ msgstr "تمت إضافة الصورة."
 msgid "Photo of the serial number sticker (optional)"
 msgstr "صورة ملصق الرقم التسلسلي (اختياري)"
 
+msgid "Photo of the sticker"
+msgstr "صورة الملصق"
+
 msgid "Photo or video"
 msgstr "صورة أو فيديو"
 
@@ -3687,6 +3729,9 @@ msgstr "الموثوقية"
 msgid "Remove"
 msgstr "إزالة"
 
+msgid "Remove it"
+msgstr "إزالته"
+
 msgid "Removed from a task"
 msgstr "أُزيل من مهمة"
 
@@ -3783,9 +3828,6 @@ msgstr "تاريخ الإبلاغ"
 
 msgid "Reported serial numbers"
 msgstr "الأرقام التسلسلية المُبلَّغ عنها"
-
-msgid "Reports"
-msgstr "التقارير"
 
 msgid "Reports awaiting your approval"
 msgstr "تقارير بانتظار موافقتك"
@@ -4844,6 +4886,9 @@ msgstr "انتهت صلاحية هذا الرابط أو سبق استخدامه
 msgid "This link has expired or has already been used. Please request a new one below, or contact us if you require assistance."
 msgstr "انتهت صلاحية هذا الرابط أو تم استخدامه مسبقاً. يرجى طلب رابط جديد أدناه، أو التواصل معنا إذا احتجتم إلى المساعدة."
 
+msgid "This machine is already in your list."
+msgstr "هذا الجهاز موجود في قائمتك بالفعل."
+
 msgid "This machine is registered at another site."
 msgstr "هذا الجهاز مسجّل في موقع آخر."
 
@@ -5273,6 +5318,9 @@ msgstr "الزيارات"
 msgid "Visits coming up"
 msgstr "الزيارات القادمة"
 
+msgid "Waiting for confirmation"
+msgstr "بانتظار التأكيد"
+
 msgid "Waiting for supervisor review"
 msgstr "بانتظار مراجعة المشرف"
 
@@ -5499,6 +5547,9 @@ msgstr "نعم، أختاره من قائمتي"
 msgid "You"
 msgstr "أنت"
 
+msgid "You added this machine. Our team confirms it at the next visit, or from the photo of its sticker."
+msgstr "أضفت هذا الجهاز. يؤكده فريقنا في الزيارة القادمة، أو من صورة الملصق."
+
 msgid "You are no longer assigned to this task, so your report has been sent to the team as a message."
 msgstr "لم تعد مسنداً إلى هذه المهمة، لذا أُرسل تقريرك إلى الفريق كرسالة."
 
@@ -5545,8 +5596,8 @@ msgstr "البريد الإلكتروني لتسجيل الدخول"
 msgid "Your machine"
 msgstr "جهازك"
 
-msgid "Your machines appear here after our first visit, once the technician has recorded them."
-msgstr "تظهر أجهزتك هنا بعد زيارتنا الأولى، عندما يسجّلها الفني."
+msgid "Your machines appear here after our first visit, once the technician has recorded them — or add one yourself."
+msgstr "تظهر أجهزتك هنا بعد زيارتنا الأولى، عندما يسجّلها الفني — أو أضف جهازًا بنفسك."
 
 msgid "Your next visit"
 msgstr "زيارتك القادمة"
@@ -5641,6 +5692,9 @@ msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتها�
 
 msgid "arm color"
 msgstr "لون الذراع"
+
+msgid "as written on the machine"
+msgstr "كما هو مكتوب على الجهاز"
 
 msgid "as written on the silver sticker on the machine"
 msgstr "كما هو مكتوب على الملصق الفضي على الجهاز"
@@ -6480,6 +6534,9 @@ msgstr "المهارة"
 msgid "skills"
 msgstr "المهارات"
 
+msgid "so our team can check the details — take a photo or upload one"
+msgstr "ليتمكن فريقنا من التحقق من البيانات — التقط صورة أو حمّل واحدة"
+
 msgid "source"
 msgstr "المصدر"
 
@@ -6497,6 +6554,9 @@ msgstr "تاريخ البدء"
 
 msgid "status"
 msgstr "الحالة"
+
+msgid "sticker photo"
+msgstr "صورة الملصق"
 
 msgid "stock count"
 msgstr "جرد المخزون"
@@ -6896,11 +6956,11 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Profit Sports Solutions"
 #~ msgstr "Profit Sports Solutions"
 
+#~ msgid "Reports"
+#~ msgstr "التقارير"
+
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"
-
-#~ msgid "Sticker photo"
-#~ msgstr "صورة الملصق"
 
 #~ msgid "Submit"
 #~ msgstr "إرسال"

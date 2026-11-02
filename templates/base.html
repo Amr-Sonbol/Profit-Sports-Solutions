@@ -108,7 +108,7 @@
                     <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
                     <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
-                {% if portal_bell %}<span class="notif-bell__badge">{{ portal_bell|length }}</span>{% endif %}
+                {% if portal_bell_new %}<span class="notif-bell__badge">{{ portal_bell_new }}</span>{% endif %}
             </label>
             <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
             <div class="notif-dropdown">
@@ -116,14 +116,14 @@
                 {% if portal_bell %}
                 <ul class="plain-list">
                     {% for item in portal_bell %}
-                    <li>
+                    <li{% if item.new %} class="notif-item--new"{% endif %}>
                         <a href="{{ item.url }}">{{ item.text }} <span class="muted">({{ item.about }})</span></a>
                         <span class="muted">{{ item.created_at|date:"j M" }}, {{ item.created_at|time:"TIME_FORMAT" }}</span>
                     </li>
                     {% endfor %}
                 </ul>
                 {% else %}
-                <p class="empty-state">{% translate "No new notifications." %}</p>
+                <p class="empty-state">{% translate "No notifications yet." %}</p>
                 {% endif %}
             </div>
         {% endif %}
