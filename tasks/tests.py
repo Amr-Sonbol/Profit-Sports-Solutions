@@ -582,6 +582,26 @@ class TaskEditTests(TaskTestCase):
             self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists(),
         )
 
+    def test_first_edit_of_a_timed_visit_without_its_day_is_no_reschedule(self):
+        # A visit made from a customer's request has its time but not yet
+        # scheduled_date; saving the form fills that in — the customer
+        # mustn't be told their visit was rescheduled.
+        self.task.scheduled_for = dubai_time(2026, 9, 21, 10)
+        self.task.save(update_fields=['scheduled_for'])
+        self.site.contact_email = 'manager@fitnessfirst.example'
+        self.site.save()
+        settings = NotificationSettings.load()
+        settings.auto_notify_on_reschedule = True
+        settings.save()
+
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, self._payload(scheduled_for='2026-09-21T10:00', priority=Task.Priority.LOW))
+
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.scheduled_date, date(2026, 9, 21))
+        self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists())
+        self.assertEqual(len(mail.outbox), 0)
+
     def test_min_level_above_scale_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, self._payload(min_level='5'))

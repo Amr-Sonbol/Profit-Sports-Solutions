@@ -2180,9 +2180,12 @@ def task_edit(request, pk):
         if form.is_valid() and (products_locked or product_formset.is_valid()):
             with transaction.atomic():
                 updated_task = form.save()
+                # The time moved — or, booked by day only, the day did. Saving
+                # fills scheduled_date in from an unchanged time (a visit made
+                # from a request has none yet): that's no reschedule.
                 rescheduled = (
                     updated_task.scheduled_for != previous_scheduled_for
-                    or updated_task.scheduled_date != previous_scheduled_date
+                    or (updated_task.scheduled_for is None and updated_task.scheduled_date != previous_scheduled_date)
                 )
                 if rescheduled:
                     TaskEvent.objects.create(
