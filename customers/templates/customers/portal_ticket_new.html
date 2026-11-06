@@ -64,6 +64,10 @@
             {% for machine in machines %}
             <fieldset class="machine-card" data-machine-card{% if not forloop.first and not machine.has_changed and not machine.errors %} hidden{% endif %}>
                 <legend>{% blocktranslate with number=forloop.counter %}Machine {{ number }}{% endblocktranslate %}</legend>
+                {# Closes a card added by mistake; shown only while more than one card is open (ticket-machines.js). #}
+                <button type="button" class="machine-card__remove" data-remove-machine hidden title="{% translate 'Remove this machine' %}">
+                    {% include "_icon.html" with name="x" %}<span class="visually-hidden">{% translate "Remove this machine" %}</span>
+                </button>
                 {% for error in machine.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                 {# First the one question — in their list, or new — then only what that needs. #}
                 {% if machine.has_machines %}

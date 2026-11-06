@@ -6,7 +6,6 @@ from axes.utils import reset as axes_reset
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -36,14 +35,14 @@ from .accounts import (
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
-    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalPasswordHelpForm,
-    QuickInviteForm,
+    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalLoginForm,
+    PortalPasswordHelpForm, QuickInviteForm,
     SiteCreateForm, SiteEditForm,
 )
 from .models import Asset, Customer, Site
 from . import notify
 from .progress import (
-    DONE_STATUSES, VISIT_BOOKED, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress,
+    DONE_STATUSES, is_booked, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress,
 )
 
 # Only the name is required: a file of just customer_name and
@@ -407,14 +406,15 @@ def portal_login(request):
     """A customer's own login page — same underlying auth as the staff
     one (django.contrib.auth), just branded for them and rejecting
     anything that isn't a customer account, like a staff login typed in
-    here by mistake.
+    here by mistake — with the same message as a wrong password
+    (PortalLoginForm), so it never says which accounts exist.
     """
     if request.user.is_authenticated:
         return _portal_landing(request.user) if hasattr(request.user, 'customer') else redirect('home')
 
     next_url = request.POST.get('next') or request.GET.get('next') or ''
 
-    form = AuthenticationForm(request, data=request.POST or None)
+    form = PortalLoginForm(request, data=request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.get_user()
         if hasattr(user, 'customer'):
@@ -424,7 +424,7 @@ def portal_login(request):
             if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 return redirect(next_url)
             return redirect('customers:portal_home')
-        form.add_error(None, _('This is not a customer account.'))
+        form.add_error(None, form.error_messages['invalid_login'])
 
     return render(request, 'customers/portal_login.html', {'form': form, 'next': next_url})
 
@@ -695,7 +695,7 @@ def portal_visit(request, pk):
         'upcoming': is_upcoming(task),
         'feedback': feedback if feedback and feedback.submitted_at else None, 'can_rate': can_rate,
         'rating_form': rating_form,
-        'booked': visit_progress(task) == VISIT_BOOKED,
+        'booked': is_booked(visit_progress(task)),
         'requests': requests,
         'machines': [
             {

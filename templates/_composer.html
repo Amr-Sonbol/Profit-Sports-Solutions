@@ -8,7 +8,7 @@ hidden action, if the page has several; `button` the send label.
 {% load static %}<form method="post" enctype="multipart/form-data" class="composer" novalidate data-remove-label="{% translate 'Remove' %}">
     {% csrf_token %}
     {% if action %}<input type="hidden" name="action" value="{{ action }}">{% endif %}
-    {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors }}</p>{% endif %}
+    {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
     <div class="composer__box{% if form.errors %} composer__box--error{% endif %}">
         <label for="{{ form.message.id_for_label }}" class="visually-hidden">{{ form.message.label }}</label>
         {{ form.message }}

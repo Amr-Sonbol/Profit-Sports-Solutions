@@ -375,7 +375,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="upload_document">
         {% if staff_upload_form.non_field_errors %}
-            <p class="flash flash--error">{{ staff_upload_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ staff_upload_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if staff_upload_form.file.errors %}field--error{% endif %}">
             <label for="{{ staff_upload_form.file.id_for_label }}">{{ staff_upload_form.file.label }}</label>
@@ -644,7 +644,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="close_directly">
         {% if close_task_form.non_field_errors %}
-            <p class="flash flash--error">{{ close_task_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ close_task_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if close_task_form.note.errors %}field--error{% endif %}">
             <label for="{{ close_task_form.note.id_for_label }}">{{ close_task_form.note.label }}</label>
@@ -676,7 +676,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="flag_negligence">
         {% if negligence_form.non_field_errors %}
-            <p class="flash flash--error">{{ negligence_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ negligence_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if negligence_form.note.errors %}field--error{% endif %}">
             <label for="{{ negligence_form.note.id_for_label }}">{{ negligence_form.note.label }}</label>
@@ -715,7 +715,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="add_message">
         {% if message_form.non_field_errors %}
-            <p class="flash flash--error">{{ message_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ message_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if message_form.message.errors %}field--error{% endif %}">
             <label for="{{ message_form.message.id_for_label }}">{{ message_form.message.label }}</label>

@@ -447,7 +447,9 @@ class PortalLoginTests(CustomerTestCase):
         response = self.client.post('/customers/portal/login/', {
             'username': 'supervisor1', 'password': 'pass12345',
         }, follow=True)
-        self.assertContains(response, 'a customer account')
+        # The same message as a wrong password: it never says the account exists.
+        self.assertContains(response, 'The email or password is incorrect.')
+        self.assertNotContains(response, 'customer account')
 
     def test_open_redirect_is_blocked(self):
         response = self.client.post(
@@ -663,7 +665,7 @@ class PortalProgressTests(CustomerTestCase):
         page = self.client.get('/customers/portal/')
         self.assertEqual(page.context['next_visit'].task_number, 'AE-0902')
         self.assertContains(page, 'Your next visit')
-        self.assertContains(page, 'Visit booked')
+        self.assertContains(page, 'Visit scheduled on')
         visits = self.client.get('/customers/portal/visits/')
         self.assertEqual([v.task_number for v in visits.context['upcoming']], ['AE-0902', 'AE-0901', 'AE-0903'])
         self.assertContains(visits, 'Date to be set')
@@ -677,7 +679,7 @@ class PortalProgressTests(CustomerTestCase):
         page = self.client.get('/customers/portal/')
         self.assertIsNone(page.context['next_visit'])
         visits = self.client.get('/customers/portal/visits/')
-        self.assertNotContains(visits, 'Visit booked')
+        self.assertNotContains(visits, 'Visit scheduled')
         self.assertContains(visits, 'Being arranged')
 
     def test_done_visits_are_history_with_their_report(self):
@@ -704,9 +706,9 @@ class PortalProgressTests(CustomerTestCase):
             contact_phone='0501234567', description='Belt noise', submitted_at=timezone.now(),
             status=CustomerTicket.Status.CONVERTED, task=visit,
         )
-        self.assertContains(self.client.get('/customers/portal/requests/'), 'Visit booked')
+        self.assertContains(self.client.get('/customers/portal/requests/'), 'Visit scheduled on')
         page = self.client.get(f'/tasks/tickets/status/{ticket.token}/')
-        self.assertContains(page, 'Visit booked')
+        self.assertContains(page, 'Visit scheduled on')
         self.assertContains(page, 'A technician is scheduled to visit on')
 
     def test_no_back_link_on_the_portal_home_or_login(self):

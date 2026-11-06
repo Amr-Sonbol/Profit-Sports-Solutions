@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model, password_validation
+from django.contrib.auth.forms import AuthenticationForm
 from django.utils.translation import gettext_lazy as _
 
 from django.core.validators import FileExtensionValidator
@@ -10,6 +11,16 @@ from tasks.models import MAX_TICKET_ATTACHMENT_BYTES, SERIAL_PHOTO_EXTENSIONS
 from tasks.location import parse_coordinates
 
 from .models import Asset, Customer, Site
+
+
+class PortalLoginForm(AuthenticationForm):
+    """The portal's login: one plain message for a wrong email, a wrong
+    password or a staff login alike, so it never says which accounts exist."""
+
+    error_messages = {
+        **AuthenticationForm.error_messages,
+        'invalid_login': _('The email or password is incorrect. Please check them and try again.'),
+    }
 
 
 class CreateLoginForm(forms.Form):
@@ -281,9 +292,9 @@ class CustomerSettingsForm(forms.ModelForm):
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
-        }
-
-
+        }
+
+
 class CustomerMachineForm(forms.ModelForm):
     """A customer adding one of their own machines from the portal: where it
     is, its brand, model, serial and code, and a photo of its sticker. It

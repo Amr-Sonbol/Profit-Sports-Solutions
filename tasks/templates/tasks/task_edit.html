@@ -15,7 +15,7 @@
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="form-grid">
             {% for field in form %}

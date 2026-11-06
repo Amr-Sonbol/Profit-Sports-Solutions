@@ -5,6 +5,7 @@ same thing never reads differently on two screens. Each is (label,
 badge class).
 """
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
 
 from tasks.models import CustomerTicket, Task
@@ -13,7 +14,7 @@ DONE_STATUSES = (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, T
 
 RECEIVED = (_('Received'), 'badge--neutral')
 BEING_ARRANGED = (_('Being arranged'), 'badge--neutral')
-VISIT_BOOKED = (_('Visit booked'), 'badge--booked')
+VISIT_BOOKED = (_('Visit scheduled'), 'badge--booked')
 ON_SITE = (_('Technician on site'), 'badge--status-in_progress')
 DONE = (_('Done'), 'badge--good')
 RESOLVED = (_('Resolved'), 'badge--good')
@@ -38,8 +39,22 @@ def visit_progress(task):
         return ON_SITE
     day = visit_day(task)
     if day and day >= timezone.localdate():
-        return VISIT_BOOKED
+        # The day itself, in the customer's language, and the time when there is one
+        # (their own timezone): "Visit scheduled on 12 November at 10 a.m.".
+        date = date_format(day, 'j F')
+        if task.scheduled_for:
+            label = _('Visit scheduled on %(date)s at %(time)s') % {
+                'date': date, 'time': date_format(timezone.localtime(task.scheduled_for), 'P'),
+            }
+        else:
+            label = _('Visit scheduled on %(date)s') % {'date': date}
+        return (label, VISIT_BOOKED[1])
     return BEING_ARRANGED
+
+
+def is_booked(progress):
+    """Whether a progress word is a scheduled visit (its label carries the day)."""
+    return progress[1] == VISIT_BOOKED[1]
 
 
 def ticket_progress(ticket):
@@ -61,7 +76,7 @@ def is_upcoming(task):
 
 # The progress bar's steps, and where each progress word sits on it. Closed
 # and cancelled aren't on the way to a visit, so they have no bar.
-STEPS = (_('Received'), _('Being arranged'), _('Visit booked'), _('Done'))
+STEPS = (_('Received'), _('Being arranged'), _('Visit scheduled'), _('Done'))
 # Pairs, not a dict: the lazy labels' hashes change with the language.
 STEP_OF = ((RECEIVED, 0), (BEING_ARRANGED, 1), (VISIT_BOOKED, 2), (ON_SITE, 2), (DONE, 3), (RESOLVED, 3))
 
@@ -69,7 +84,7 @@ STEP_OF = ((RECEIVED, 0), (BEING_ARRANGED, 1), (VISIT_BOOKED, 2), (ON_SITE, 2), 
 def progress_steps(progress):
     """The bar for a progress word: [(label, state)] with state 'done',
     'current' or 'todo' — or None when it isn't on the way to a visit."""
-    current = next((index for step, index in STEP_OF if step is progress), None)
+    current = 2 if is_booked(progress) else next((index for step, index in STEP_OF if step is progress), None)
     if current is None:
         return None
     return [

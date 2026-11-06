@@ -2394,10 +2394,44 @@ tbody tr:hover {
 
 /* Portal ticket form: one card per machine (static/js/ticket-machines.js). */
 .machine-card {
+    position: relative;
     margin: 0 0 0.75rem;
     padding: 0.75rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
+}
+
+/* The card's X: top corner at the end of the line (flips with dir). */
+.machine-card__remove {
+    position: absolute;
+    inset-block-start: 0.4rem;
+    inset-inline-end: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    cursor: pointer;
+}
+
+.machine-card__remove[hidden] {
+    display: none;
+}
+
+.machine-card__remove .icon {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+.machine-card__remove:hover,
+.machine-card__remove:focus-visible {
+    background: var(--color-danger);
+    color: #fff;
 }
 
 .machine-card legend {

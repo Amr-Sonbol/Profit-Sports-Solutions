@@ -41,7 +41,7 @@ from rest_framework.authtoken.models import Token
 from customers.accounts import log_account_action
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
-from customers.progress import VISIT_BOOKED, progress_steps, ticket_progress, visit_day, visit_progress
+from customers.progress import is_booked, progress_steps, ticket_progress, visit_day, visit_progress
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
@@ -2783,7 +2783,7 @@ def ticket_status(request, token):
         # and the visit's day only while it's still ahead.
         'progress': ticket_progress(ticket),
         'steps': progress_steps(ticket_progress(ticket)) if ticket.heads_for_a_visit else None,
-        'booked': ticket.task_id and visit_progress(ticket.task) == VISIT_BOOKED,
+        'booked': ticket.task_id and is_booked(visit_progress(ticket.task)),
         # The visit(s) it became — one, or one per group of machines — each with its report once in.
         'visits': _ticket_visits(ticket),
         'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
@@ -2805,7 +2805,7 @@ def _ticket_visits(ticket):
     for task in sorted(tasks.values(), key=lambda task: task.reported_at):
         visits.append({
             'task': task, 'progress': visit_progress(task), 'day': visit_day(task),
-            'booked': visit_progress(task) == VISIT_BOOKED, 'has_report': getattr(task, 'report', None) is not None,
+            'booked': is_booked(visit_progress(task)), 'has_report': getattr(task, 'report', None) is not None,
         })
     return visits
 
