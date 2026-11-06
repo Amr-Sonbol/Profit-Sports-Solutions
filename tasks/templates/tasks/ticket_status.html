@@ -47,7 +47,7 @@
         </div>
         <div>
             <dt>{% translate "Request type" %}</dt>
-            <dd>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</dd>
+            <dd>{{ ticket.request_type }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</dd>
         </div>
     </dl>
     {% with machines=ticket.machines.all %}{% if machines %}

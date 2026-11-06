@@ -1079,6 +1079,8 @@ class PortalTicketNewTests(CustomerTestCase):
         payload = {
             'site': self.site.pk, 'contact_name': 'Ali', 'contact_phone': '0501234567',
             'contact_email': '', 'notes': '',
+            # What it's about and what they need: machines with a problem, unless a test says otherwise.
+            'about': 'machines', 'need': 'repair',
             'machines-TOTAL_FORMS': '10', 'machines-INITIAL_FORMS': '0',
             'machines-MIN_NUM_FORMS': '0', 'machines-MAX_NUM_FORMS': '10',
         }

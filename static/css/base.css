@@ -3227,11 +3227,15 @@ tbody tr:hover {
     outline: 1px solid var(--color-accent);
 }
 
-/* The dot in black, the portal's ink, not the browser's blue. */
 .topic-choice input {
-    accent-color: var(--color-text);
     inline-size: 1.1rem;
     block-size: 1.1rem;
+}
+
+/* Every choice dot and tick box in the portal's ink, not the browser's blue. */
+.theme-portal input[type="radio"],
+.theme-portal input[type="checkbox"] {
+    accent-color: var(--color-text);
 }
 
 .theme-portal .topic-choice {

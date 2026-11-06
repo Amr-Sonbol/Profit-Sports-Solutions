@@ -312,15 +312,23 @@ class CustomerTicket(models.Model):
         VENDOR = 'vendor', _('Vendor follow-up')
         OTHER = 'other', _('Other internal')
 
-    # What a customer's request is about — the first thing the portal asks
-    # after the site. Only "A problem with a machine" has machine cards;
-    # the rest are a message (and, for Other, the customer's own subject).
-    class Topic(models.TextChoices):
-        MACHINE_PROBLEM = 'machine_problem', _('A problem with a machine')
-        VISIT = 'visit', _('Maintenance or a visit')
+    # A customer's request, asked as two questions on the portal: what it's
+    # about, and what they need. Machines with a problem or spare parts are
+    # told through machine cards (ticket_machine); everything else is a
+    # message, and Flooring, Accessories, Lockers and Something else name the
+    # area, the items, the lockers or the matter in `subject`.
+    class About(models.TextChoices):
+        MACHINES = 'machines', _('Machines')
+        FLOORING = 'flooring', _('Flooring')
+        ACCESSORIES = 'accessories', _('Accessories')
+        LOCKERS = 'lockers', _('Lockers')
+        OTHER = 'other', _('Something else')
+
+    class Need(models.TextChoices):
+        REPAIR = 'repair', _('Fix a problem')
         PARTS = 'parts', _('Spare parts or a quotation')
-        ASSISTANCE = 'assistance', _('I need assistance')
-        OTHER = 'other', _('Other')
+        VISIT = 'visit', _('A maintenance visit')
+        ASSISTANCE = 'assistance', _('Advice or assistance')
 
     # How a customer ticket reached us — the same values as Task.Source,
     # so a task made from it keeps the channel.
@@ -335,7 +343,8 @@ class CustomerTicket(models.Model):
     # customer, nothing ever sent to one — and go to whoever they're
     # assigned to (docs: customer_ticket).
     kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
-    topic = models.CharField(_('request type'), max_length=20, choices=Topic.choices, default=Topic.MACHINE_PROBLEM)
+    about = models.CharField(_('about'), max_length=20, choices=About.choices, default=About.MACHINES)
+    need = models.CharField(_('need'), max_length=20, choices=Need.choices, default=Need.REPAIR)
     source = models.CharField(_('source'), max_length=10, choices=Source.choices, default=Source.PORTAL)
     opened_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
@@ -344,7 +353,10 @@ class CustomerTicket(models.Model):
     )
     subject = models.CharField(
         _('subject'), max_length=200, blank=True,
-        help_text=_("an internal ticket's subject, or a customer's own words for an Other request"),
+        help_text=_(
+            "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) "
+            "or the items (Accessories)"
+        ),
     )
     vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
 
@@ -453,6 +465,11 @@ class CustomerTicket(models.Model):
         if not self.token:
             self.token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
+
+    @property
+    def request_type(self):
+        """What it's about and what they need, as one line: "Machines · Spare parts or a quotation"."""
+        return f'{self.get_about_display()} · {self.get_need_display()}'
 
     @property
     def heads_for_a_visit(self):

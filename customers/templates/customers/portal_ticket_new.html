@@ -11,7 +11,7 @@
     </div>
 </div>
 
-{# Four steps (static/js/report-steps.js): where, what they need, the details, check and send. Without the script, one page. #}
+{# Four steps (static/js/report-steps.js): where, what it's about and what they need, the details, check and send. Without the script, one page. #}
 <form method="post" enctype="multipart/form-data" novalidate data-report-steps>
     {% csrf_token %}
     {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
@@ -37,26 +37,37 @@
         </div>
     </div>
 
-    <div class="section" data-step data-step-require="{{ form.topic.html_name }}">
-        <h2>{% translate "What do you need?" %}</h2>
-        <div class="field {% if form.topic.errors %}field--error{% endif %}">
+    {# Two questions: what it's about, and what they need (report-steps.js shows only what that pair asks for). #}
+    <div class="section" data-step data-step-require="{{ form.about.html_name }} {{ form.need.html_name }}">
+        {% for question in form %}{% if question.name == 'about' or question.name == 'need' %}
+        <h2>{{ question.label }}</h2>
+        <div class="field {% if question.errors %}field--error{% endif %}">
             <div class="topic-choices">
-                {% for choice in form.topic %}
+                {% for choice in question %}
                 <label class="topic-choice">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>
                 {% endfor %}
             </div>
-            {% for error in form.topic.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            <p class="field__error" hidden data-step-required>{% translate "Please choose one." %}</p>
+            {% for error in question.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        {# Other: what it's about, right here under the choice (report-steps.js shows it and asks for it). #}
+        {% if question.name == 'about' %}
+        {# Flooring, Accessories, Lockers, Something else: a short "what", right under the choice. #}
         {% with field=form.subject %}
-        <div class="field topic-other{% if field.errors %} field--error{% endif %}" data-topic-other{% if form.topic.value != 'other' %} hidden{% endif %}>
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        <div class="field topic-other{% if field.errors %} field--error{% endif %}" data-topic-other data-show-about="flooring accessories lockers other"{% if form.about.value != 'flooring' and form.about.value != 'accessories' and form.about.value != 'lockers' and form.about.value != 'other' %} hidden{% endif %}>
+            <label for="{{ field.id_for_label }}" data-show-about="other">{{ field.label }}</label>
+            <label for="{{ field.id_for_label }}" data-show-about="flooring">{% translate "Which area?" %}</label>
+            <label for="{{ field.id_for_label }}" data-show-about="accessories">{% translate "Which items?" %}</label>
+            <label for="{{ field.id_for_label }}" data-show-about="lockers">{% translate "Which lockers?" %}</label>
             {{ field }}
+            <p class="field__help" data-show-about="flooring">{% translate "For example: free-weights area, next to the racks." %}</p>
+            <p class="field__help" data-show-about="accessories">{% translate "For example: 3 adjustable dumbbells." %}</p>
+            <p class="field__help" data-show-about="lockers">{% translate "For example: lockers 12 and 14, men's changing room." %}</p>
             {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-            <p class="field__error" hidden data-topic-other-required>{% translate "Please say in a few words what it is about." %}</p>
+            <p class="field__error" hidden data-topic-other-required>{% translate "Please fill this in before continuing." %}</p>
         </div>
         {% endwith %}
+        {% endif %}
+        {% endif %}{% endfor %}
+        <p class="field__error" hidden data-step-required>{% translate "Please answer both questions." %}</p>
         <div class="report-steps__nav" hidden data-steps-nav>
             <button type="button" class="button button--secondary" data-step-back>{% translate "Back" %}</button>
             <button type="button" class="button" data-step-next>{% translate "Next" %}</button>
@@ -64,11 +75,10 @@
     </div>
 
     <div class="section" data-step>
-    {# A machine problem: one card per machine. #}
-    {# A machine problem or spare parts: one card per machine; parts asks which parts instead of the problem. #}
-    <div data-show-topic="machine_problem parts">
-        <h2 data-show-topic="machine_problem">{% translate "Which machines, and what's wrong?" %}</h2>
-        <h2 data-show-topic="parts">{% translate "Which machines, and which parts?" %}</h2>
+    {# Machines with a problem or spare parts: one card per machine; parts asks which parts instead of the problem. #}
+    <div data-show-mode="machines">
+        <h2 data-show-need="repair">{% translate "Which machines, and what's wrong?" %}</h2>
+        <h2 data-show-need="parts">{% translate "Which machines, and which parts?" %}</h2>
         <p class="field__help">{% translate "Add each machine separately, with its own photos, so our team can prepare the right parts for each one." %}</p>
         {{ machines.management_form }}
         <div class="machine-cards" data-machine-cards>
@@ -80,25 +90,18 @@
                     {% include "_icon.html" with name="x" %}<span class="visually-hidden">{% translate "Remove this machine" %}</span>
                 </button>
                 {% for error in machine.non_field_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                {# First the one question — in their list, or new — then only what that needs. #}
-                {% if machine.has_machines %}
-                <div class="field field--wide machine-which{% if machine.which.errors %} field--error{% endif %}" data-machine-which>
-                    <label>{{ machine.which.label }}</label>
-                    {{ machine.which }}
-                </div>
-                {% else %}
-                <input type="hidden" name="{{ machine.which.html_name }}" value="new">
-                {% endif %}
+                {# Which machine: theirs from the dropdown, or its last option "My machine isn't listed" for a new one's details. No machines yet: straight to those. #}
+                {% if not machine.has_machines %}<input type="hidden" name="{{ machine.which.html_name }}" value="new">{% endif %}
                 <div class="form-grid">
                     {% for field in machine %}{% if field.name != 'which' %}
                     <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
-                        {% if field.name == 'asset' %}data-show-for="list"{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' or field.name == 'serial_photo' %}data-show-for="new"{% elif field.name == 'problem' %}data-show-topic="machine_problem"{% elif field.name == 'description' %}data-parts-placeholder="{% translate 'Example: Two replacement running belts and one safety key for this treadmill.' %}"{% endif %}>
+                        {% if field.name == 'asset' %}{% if not machine.has_machines %}hidden{% endif %}{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' or field.name == 'serial_photo' %}data-show-for="new"{% elif field.name == 'problem' %}data-show-need="repair"{% elif field.name == 'description' %}data-parts-placeholder="{% translate 'Example: Two replacement running belts and one safety key for this treadmill.' %}"{% endif %}>
                         {% if field.name == 'description' %}
-                        <label for="{{ field.id_for_label }}" data-show-topic="machine_problem">{{ field.label }}</label>
-                        <label for="{{ field.id_for_label }}" data-show-topic="parts">{% translate "Which parts do you need?" %}</label>
+                        <label for="{{ field.id_for_label }}" data-show-need="repair">{{ field.label }}</label>
+                        <label for="{{ field.id_for_label }}" data-show-need="parts">{% translate "Which parts do you need?" %}</label>
                         {{ field }}
-                        <p class="field__help" data-show-topic="machine_problem">{{ field.help_text }}</p>
-                        <p class="field__help" data-show-topic="parts">{% translate "The part names or numbers if you know them, and how many of each." %}</p>
+                        <p class="field__help" data-show-need="repair">{{ field.help_text }}</p>
+                        <p class="field__help" data-show-need="parts">{% translate "The part names or numbers if you know them, and how many of each." %}</p>
                         {% else %}
                         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
@@ -113,8 +116,8 @@
         </div>
         <button type="button" class="button button--secondary" data-add-machine hidden>{% translate "Add another machine" %}</button>
     </div>
-    {# Anything else: a message and its files (Other's subject is asked on the step before). #}
-    <div data-show-topic="visit assistance other">
+    {# Anything else: a message and its files (the short "what" is asked on the step before). #}
+    <div data-show-mode="message">
         <h2>{% translate "Tell us what you need" %}</h2>
         {% for field in form %}{% if field.name == 'message' or field.name == 'attachments' %}
         <div class="field {% if field.errors %}field--error{% endif %}">

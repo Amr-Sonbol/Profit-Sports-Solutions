@@ -2864,7 +2864,8 @@ def ticket_list(request):
     pak = request.GET.get('pak', '').strip()
     customer_id = request.GET.get('customer', '')
     date = parse_date(request.GET.get('date', '') or '')
-    topic = request.GET.get('topic', '')
+    about = request.GET.get('about', '')
+    need = request.GET.get('need', '')
     active_country = get_active_country(request)
 
     tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER).select_related(
@@ -2898,20 +2899,24 @@ def ticket_list(request):
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
-    if topic in CustomerTicket.Topic.values:
-        tickets = tickets.filter(topic=topic)
+    if about in CustomerTicket.About.values:
+        tickets = tickets.filter(about=about)
+    if need in CustomerTicket.Need.values:
+        tickets = tickets.filter(need=need)
     tickets = tickets.order_by('-submitted_at')
 
     filter_params = {
         key: value for key, value in {
             'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
-            'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '', 'topic': topic,
+            'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '', 'about': about,
+            'need': need,
         }.items() if value
     }
 
     context = {
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
-        'topic': topic, 'topic_choices': CustomerTicket.Topic.choices,
+        'about': about, 'about_choices': CustomerTicket.About.choices,
+        'need': need, 'need_choices': CustomerTicket.Need.choices,
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
         'customers': customers.order_by('name'),

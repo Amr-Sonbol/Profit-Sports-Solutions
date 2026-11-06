@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-06 23:16+0000\n"
+"POT-Creation-Date: 2026-11-06 23:36+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -377,6 +377,9 @@ msgstr "يُخطَّط التحميل من مخزون المستودع — أج�
 msgid "A machine not on the delivery note (optional)"
 msgstr "جهاز غير مذكور في إذن التسليم (اختياري)"
 
+msgid "A maintenance visit"
+msgstr "زيارة صيانة"
+
 #, python-format
 msgid "A manager has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
 msgstr "قام أحد المديرين بتعيين كلمة مرور مؤقتة لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s). سيُطلب منك اختيار كلمة مرورك عند تسجيل الدخول التالي، وقد تم تسجيل خروجك من تطبيق الجوال."
@@ -433,9 +436,6 @@ msgstr ""
 #, python-format
 msgid "A password link has been sent to %(email)s."
 msgstr "تم إرسال رابط كلمة المرور إلى %(email)s."
-
-msgid "A problem with a machine"
-msgstr "مشكلة في جهاز"
 
 #, python-format
 msgid "A setup link has been sent to %(email)s."
@@ -500,6 +500,9 @@ msgstr ""
 msgid "A welcome email with a secure activation link has been sent to %(email)s."
 msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آمناً إلى %(email)s."
 
+msgid "About"
+msgstr "الموضوع"
+
 msgid "Accept task"
 msgstr "قبول المهمة"
 
@@ -508,6 +511,9 @@ msgstr "مقبولة"
 
 msgid "Access notes"
 msgstr "ملاحظات الدخول"
+
+msgid "Accessories"
+msgstr "الإكسسوارات"
 
 msgid "Account"
 msgstr "الحساب"
@@ -650,6 +656,9 @@ msgstr "المهارات المتقدمة المعتمدة"
 
 msgid "Advice given"
 msgstr "تم تقديم المشورة"
+
+msgid "Advice or assistance"
+msgstr "نصيحة أو مساعدة"
 
 msgid "After"
 msgstr "بعد"
@@ -2148,8 +2157,14 @@ msgstr "النتائج والإجراءات"
 msgid "Findings: %(text)s"
 msgstr "الملاحظات: %(text)s"
 
+msgid "Fix a problem"
+msgstr "إصلاح مشكلة"
+
 msgid "Flag negligence"
 msgstr "الإبلاغ عن إهمال"
+
+msgid "Flooring"
+msgstr "الأرضيات"
 
 #, python-format
 msgid "Follow-up of %(number)s: the machines still to install."
@@ -2170,6 +2185,15 @@ msgstr "لكل جهاز: اختر ما وجدته وما قمت به وحالت�
 
 msgid "For each machine: what happened, its serial number from the sticker, and its colors (black unless custom). A serial already filled in came from loading — check it against the sticker. One you type here: add a clear photo of the sticker. Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card."
 msgstr "لكل جهاز: ما الذي حدث، ورقمه التسلسلي من الملصق، وألوانه (أسود ما لم يكن مخصصًا). الرقم المكتوب مسبقًا جاء من التحميل — طابقه مع الملصق. الرقم الذي تكتبه هنا: أضف صورة واضحة للملصق. إذا كان تالفًا أو صنفًا خاطئًا: اذكر السبب أو أضف صورة. الجهاز غير المذكور في إذن التسليم يُضاف في البطاقة الأخيرة."
+
+msgid "For example: 3 adjustable dumbbells."
+msgstr "مثال: 3 دمبلز قابلة للتعديل."
+
+msgid "For example: free-weights area, next to the racks."
+msgstr "مثال: منطقة الأوزان الحرة، بجوار الحوامل."
+
+msgid "For example: lockers 12 and 14, men's changing room."
+msgstr "مثال: الخزانتان 12 و14، غرفة تبديل الملابس للرجال."
 
 msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
 msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
@@ -2325,9 +2349,6 @@ msgstr "كيف تقيّم الزيارة؟"
 msgid "I have arrived"
 msgstr "لقد وصلت"
 
-msgid "I need assistance"
-msgstr "أحتاج إلى مساعدة"
-
 msgid "IANA name, e.g. Asia/Riyadh"
 msgstr "اسم IANA، مثال: Asia/Riyadh"
 
@@ -2447,9 +2468,6 @@ msgstr "الفاتورة"
 msgid "Invoice address"
 msgstr "عنوان الفاتورة"
 
-msgid "Is this machine in your list?"
-msgstr "هل هذا الجهاز موجود في قائمتك؟"
-
 msgid "It joins your list at once, waiting for our team to confirm it — at the next visit, or from the photo of its sticker."
 msgstr "يُضاف إلى قائمتك فورًا، بانتظار تأكيد فريقنا — في الزيارة القادمة، أو من صورة الملصق."
 
@@ -2552,6 +2570,9 @@ msgstr "شركة توصيل محلية"
 msgid "Locked"
 msgstr "مُقفل"
 
+msgid "Lockers"
+msgstr "الخزائن"
+
 msgid "Log in"
 msgstr "تسجيل الدخول"
 
@@ -2650,9 +2671,6 @@ msgstr "إدارة قائمة قطع الغيار"
 msgid "Maintenance"
 msgstr "صيانة"
 
-msgid "Maintenance or a visit"
-msgstr "صيانة أو زيارة"
-
 msgid "Manage"
 msgstr "إدارة"
 
@@ -2746,6 +2764,9 @@ msgstr "المخطَّط أكثر مما في %(warehouse)s: %(codes)s. تحقّ
 msgid "Move all their open tasks to"
 msgstr "نقل جميع مهامه المفتوحة إلى"
 
+msgid "My machine isn't listed"
+msgstr "جهازي غير موجود في القائمة"
+
 msgid "My machines"
 msgstr "أجهزتي"
 
@@ -2769,6 +2790,9 @@ msgstr "الاسم"
 
 msgid "Name (Arabic)"
 msgstr "الاسم (بالعربية)"
+
+msgid "Need"
+msgstr "الاحتياج"
 
 msgid "Needed for certification"
 msgstr "مطلوب للاعتماد"
@@ -3119,9 +3143,6 @@ msgstr "لا توجد زيارات مخطط لها حاليًا."
 
 msgid "No visits recorded for this machine yet."
 msgstr "لا توجد زيارات مسجلة لهذا الجهاز بعد."
-
-msgid "No, it's not in my list yet"
-msgstr "لا، ليس في قائمتي بعد"
 
 msgid "Noise from a moving part"
 msgstr "صوت صادر من جزء متحرك"
@@ -3592,6 +3613,9 @@ msgstr "يرجى إضافة رقم تتبع الشحنة قبل إشعار ال�
 msgid "Please add at least one machine."
 msgstr "يُرجى إضافة جهاز واحد على الأقل."
 
+msgid "Please answer both questions."
+msgstr "يُرجى الإجابة عن السؤالين."
+
 msgid "Please ask your manager to send you a new link. If you have already set your password, you may sign in."
 msgstr "يُرجى أن تطلب من مديرك إرسال رابط جديد. إذا كنت قد عيّنت كلمة المرور بالفعل، يمكنك تسجيل الدخول."
 
@@ -3601,9 +3625,6 @@ msgstr "يرجى إرفاق %(count)d ملفات كحد أقصى."
 
 msgid "Please check your email"
 msgstr "يرجى مراجعة بريدك الإلكتروني"
-
-msgid "Please choose one."
-msgstr "يُرجى اختيار أحدها."
 
 msgid "Please choose the machine from your list."
 msgstr "يرجى اختيار الجهاز من قائمتك."
@@ -3626,6 +3647,9 @@ msgstr "يرجى إدخال طراز الجهاز."
 msgid "Please enter the serial number shown on the machine's sticker."
 msgstr "يُرجى إدخال الرقم التسلسلي الموضح على ملصق الجهاز."
 
+msgid "Please fill this in before continuing."
+msgstr "يُرجى تعبئة هذا الحقل قبل المتابعة."
+
 #, python-format
 msgid "Please find attached the visit report for <strong>%(site)s</strong>, dated <strong>%(date)s</strong> (reference %(number)s)."
 msgstr "تجدون مرفقًا تقرير الزيارة لموقع <strong>%(site)s</strong> بتاريخ <strong>%(date)s</strong> (المرجع %(number)s)."
@@ -3635,6 +3659,15 @@ msgstr "يرجى تسجيل استئناف العمل قبل تقديم التق
 
 msgid "Please say in a few words what it is about."
 msgstr "يُرجى أن توضح في كلمات قليلة موضوع الطلب."
+
+msgid "Please say which area of the floor."
+msgstr "يُرجى ذكر منطقة الأرضية المعنية."
+
+msgid "Please say which items."
+msgstr "يُرجى ذكر القطع المعنية."
+
+msgid "Please say which lockers."
+msgstr "يُرجى ذكر الخزائن المعنية."
 
 msgid "Please say which parts you need for this machine."
 msgstr "يُرجى ذكر القطع التي تحتاج إليها لهذا الجهاز."
@@ -4530,6 +4563,9 @@ msgstr "تم التخطي"
 
 msgid "So they don't still head to the site."
 msgstr "حتى لا يتوجه إلى الموقع دون داعٍ."
+
+msgid "Something else"
+msgstr "شيء آخر"
 
 msgid "Something not on the list (optional)"
 msgstr "صنف غير مذكور في القائمة (اختياري)"
@@ -5606,7 +5642,7 @@ msgid "What happened"
 msgstr "ماذا حدث"
 
 msgid "What is it about?"
-msgstr "ما موضوعه؟"
+msgstr "ما موضوع الطلب؟"
 
 msgid "What is this?"
 msgstr "ما هذا؟"
@@ -5665,11 +5701,23 @@ msgstr "المكان الذي تُسلَّم إليه قطع الغيار وال
 msgid "Where we send updates about your requests."
 msgstr "العنوان الذي نرسل إليه تحديثات طلباتك."
 
+msgid "Which area?"
+msgstr "أي منطقة؟"
+
 msgid "Which branch is this about?"
 msgstr "بأي فرع يتعلق هذا الطلب؟"
 
 msgid "Which emails and phone notifications the system sends, and to whom, is set on its own page."
 msgstr "تُضبط رسائل البريد الإلكتروني وإشعارات الهاتف التي يرسلها النظام، ومستلموها، من صفحة مستقلة."
+
+msgid "Which items?"
+msgstr "أي قطع؟"
+
+msgid "Which lockers?"
+msgstr "أي خزائن؟"
+
+msgid "Which machine?"
+msgstr "أي جهاز؟"
 
 msgid "Which machines, and what's wrong?"
 msgstr "ما الأجهزة، وما المشكلة؟"
@@ -5746,9 +5794,6 @@ msgstr "السنة"
 msgid "Yes"
 msgstr "نعم"
 
-msgid "Yes, pick it from my list"
-msgstr "نعم، أختاره من قائمتي"
-
 msgid "You"
 msgstr "أنت"
 
@@ -5812,9 +5857,6 @@ msgstr "لون ناديك. تستخدمه أزرار البوابة والعنا
 
 msgid "Your login email"
 msgstr "البريد الإلكتروني لتسجيل الدخول"
-
-msgid "Your machine"
-msgstr "جهازك"
 
 msgid "Your machines appear here after our first visit, once the technician has recorded them — or add one yourself."
 msgstr "تظهر أجهزتك هنا بعد زيارتنا الأولى، عندما يسجّلها الفني — أو أضف جهازًا بنفسك."
@@ -5893,6 +5935,9 @@ msgstr "صورة لملصق الرقم التسلسلي على الجهاز، ب
 msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"
 
+msgid "about"
+msgstr "الموضوع"
+
 #, python-format
 msgid "about %(hours)s h"
 msgstr "نحو %(hours)s ساعة"
@@ -5933,8 +5978,8 @@ msgstr "يتيح للعميل الاطلاع على حالة هذه التذكر
 msgid "an amount must never be stored without its currency"
 msgstr "لا يجوز تخزين أي مبلغ دون عملته"
 
-msgid "an internal ticket's subject, or a customer's own words for an Other request"
-msgstr "موضوع التذكرة الداخلية، أو كلمات العميل نفسه لطلب من نوع «أخرى»"
+msgid "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) or the items (Accessories)"
+msgstr "موضوع التذكرة الداخلية؛ وفي طلب العميل: موضوعه («أخرى») أو المنطقة («الأرضيات») أو القطع («الإكسسوارات»)"
 
 msgid "approximate duration of the job; shown as an estimated finish time"
 msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتهاء متوقع"
@@ -6393,6 +6438,9 @@ msgstr "الاسم"
 msgid "name (Arabic)"
 msgstr "الاسم (بالعربية)"
 
+msgid "need"
+msgstr "الاحتياج"
+
 msgid "not on the delivery note — added by whoever did the step"
 msgstr "غير مذكور في إذن التسليم — أضافه من نفّذ الخطوة"
 
@@ -6585,9 +6633,6 @@ msgstr "الأرقام التسلسلية المُبلَّغ عنها"
 
 msgid "request"
 msgstr "الطلب"
-
-msgid "request type"
-msgstr "نوع الطلب"
 
 msgid "requested at"
 msgstr "طُلب في"
@@ -7161,6 +7206,9 @@ msgstr "← العودة إلى العملاء النشطين"
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
 
+#~ msgid "A problem with a machine"
+#~ msgstr "مشكلة في جهاز"
+
 #~ msgid "Attachment"
 #~ msgstr "مرفق"
 
@@ -7214,6 +7262,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "How the matter was resolved without a task, for example advice given or resolved by phone."
 #~ msgstr "كيفية حل الطلب دون إنشاء مهمة، مثل تقديم المشورة أو الحل عبر الهاتف."
 
+#~ msgid "Is this machine in your list?"
+#~ msgstr "هل هذا الجهاز موجود في قائمتك؟"
+
 #~ msgid "More colors"
 #~ msgstr "المزيد من الألوان"
 
@@ -7223,11 +7274,17 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Navy"
 #~ msgstr "كحلي"
 
+#~ msgid "No, it's not in my list yet"
+#~ msgstr "لا، ليس في قائمتي بعد"
+
 #~ msgid "Orange"
 #~ msgstr "برتقالي"
 
 #~ msgid "Pink"
 #~ msgstr "وردي"
+
+#~ msgid "Please choose one."
+#~ msgstr "يُرجى اختيار أحدها."
 
 #~ msgid "Preview"
 #~ msgstr "معاينة"
@@ -7298,6 +7355,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Yellow"
 #~ msgstr "أصفر"
 
+#~ msgid "Yes, pick it from my list"
+#~ msgstr "نعم، أختاره من قائمتي"
+
 #~ msgid "You have not reported any problems yet."
 #~ msgstr "لم تُبلغ عن أي مشكلة بعد."
 
@@ -7307,6 +7367,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Your color"
 #~ msgstr "لونك"
+
+#~ msgid "Your machine"
+#~ msgstr "جهازك"
 
 #~ msgid "Your requests, visits and reports in one place."
 #~ msgstr "طلباتك وزياراتك وتقاريرك في مكان واحد."
@@ -7325,6 +7388,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "internal tickets only"
 #~ msgstr "للتذاكر الداخلية فقط"
+
+#~ msgid "request type"
+#~ msgstr "نوع الطلب"
 
 #~ msgid "the sticker on the machine: take a photo or upload one"
 #~ msgstr "الملصق على الجهاز: التقط صورة أو ارفع صورة"

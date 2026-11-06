@@ -824,11 +824,12 @@ def portal_machine(request, pk):
 def portal_ticket_new(request):
     """A logged-in customer's new request — the customer and site are
     already known, so it's linked to this customer immediately, no
-    matching needed. Where, then what they need (CustomerTicket.Topic).
+    matching needed. Where, then what it's about and what they need
+    (CustomerTicket.About, CustomerTicket.Need).
     A machine problem has each machine as its own card
     (TicketMachineFormSet) with its own photos; the ticket's description
     and serial numbers are written from them, so everything that reads
-    those keeps working. Any other topic is a message, which becomes the
+    those keeps working. Anything else is a message, which becomes the
     description, with its files on the ticket itself.
     """
     customer = require_customer(request)
@@ -839,7 +840,7 @@ def portal_ticket_new(request):
         form = CustomerPortalTicketForm(request.POST, request.FILES, customer=customer)
         machines = TicketMachineFormSet(
             request.POST, request.FILES, prefix='machines',
-            form_kwargs={'customer': customer, 'for_parts': request.POST.get('topic') == CustomerTicket.Topic.PARTS},
+            form_kwargs={'customer': customer, 'for_parts': request.POST.get('need') == CustomerTicket.Need.PARTS},
         )
         # The machine cards only count for a machine problem or spare parts.
         machines_ok = form.is_valid() and (not form.uses_machines or machines.is_valid())
@@ -907,7 +908,8 @@ def portal_ticket_new(request):
         ).exclude(status=Asset.Status.RETIRED).first()
         if chosen is not None:
             form.fields['site'].initial = chosen.site_id
-            form.fields['topic'].initial = CustomerTicket.Topic.MACHINE_PROBLEM
+            form.fields['about'].initial = CustomerTicket.About.MACHINES
+            form.fields['need'].initial = CustomerTicket.Need.REPAIR
             machine_initial = [{'which': 'list', 'asset': str(chosen.pk)}]
         machines = TicketMachineFormSet(prefix='machines', initial=machine_initial, form_kwargs={'customer': customer})
 

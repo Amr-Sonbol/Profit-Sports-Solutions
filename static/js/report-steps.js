@@ -1,9 +1,9 @@
 // Portal "New request" (customers/portal_ticket_new.html) in four steps:
-// where, what they need, the details, check and send. One step shows at a
+// where, what it's about and what they need, the details, check and send. One step shows at a
 // time, with the bar above saying which; a step marked data-step-skip is
 // passed over, and one with data-step-require="<radio name>" waits for a
-// choice. The details show only what the chosen need asks for
-// (data-show-topic="<topic> ..."). After a refused send, it opens on the
+// choice. The details show only what the chosen pair asks for
+// (data-show-about / -need / -mode, below). After a refused send, it opens on the
 // first step with a mistake. Without this script the form is simply one
 // page — nothing is lost.
 (function () {
@@ -51,8 +51,10 @@
         return element && !element.closest('[hidden]');
     }
 
+    // The field's label as shown: some boxes have one per request type, the others hidden.
     function labelOf(field) {
-        var label = field && form.querySelector('label[for="' + field.id + '"]');
+        var labels = field ? Array.prototype.slice.call(form.querySelectorAll('label[for="' + field.id + '"]')) : [];
+        var label = labels.filter(function (each) { return !each.hidden; })[0] || labels[0];
         return label ? label.textContent.trim() : '';
     }
 
@@ -88,9 +90,11 @@
         if (site && site.selectedIndex > -1 && site.value) {
             row(labelOf(site), [site.options[site.selectedIndex].text], site);
         }
-        var topic = form.querySelector('input[name$="topic"]:checked');
-        if (topic) {
-            row(summary.getAttribute('data-label-type'), [topic.closest('label').textContent.trim()], topic);
+        var about = checkedValue('about', true);
+        var need = checkedValue('need', true);
+        if (about && need) {
+            row(summary.getAttribute('data-label-type'), [about.closest('label').textContent.trim() + ' · '
+                + need.closest('label').textContent.trim()], about);
         }
         form.querySelectorAll('[data-machine-card]').forEach(function (card) {
             if (!shown(card)) {
@@ -98,7 +102,7 @@
             }
             var lines = [];
             var asset = card.querySelector('select[name$="-asset"]');
-            if (shown(asset) && asset.value) {
+            if (shown(asset) && asset.value && asset.value !== 'new') {
                 lines.push(asset.options[asset.selectedIndex].text);
             }
             ['model_name', 'serial_no', 'code'].forEach(function (name) {
@@ -128,11 +132,28 @@
         summary.hidden = !list.children.length;
     }
 
-    // The details for the chosen need only; with none chosen yet, all of them.
+    // The chosen answer to "what is it about?" or "what do you need?" — its
+    // value, or (asInput) the radio itself; null until chosen.
+    function checkedValue(name, asInput) {
+        var input = form.querySelector('input[name$="' + name + '"]:checked');
+        return asInput ? input : (input ? input.value : null);
+    }
+
+    // Show only what the pair asks for: data-show-about / data-show-need list
+    // the answers an element is for, data-show-mode is "machines" (machines
+    // with a problem or spare parts: the machine cards) or "message"
+    // (everything else). Hidden until its question is answered.
     function showTopic() {
-        var checked = form.querySelector('input[name$="topic"]:checked');
-        form.querySelectorAll('[data-show-topic]').forEach(function (element) {
-            element.hidden = !!checked && element.getAttribute('data-show-topic').split(' ').indexOf(checked.value) === -1;
+        var about = checkedValue('about');
+        var need = checkedValue('need');
+        var mode = about && need
+            ? (about === 'machines' && (need === 'repair' || need === 'parts') ? 'machines' : 'message') : null;
+        var answers = { 'data-show-about': about, 'data-show-need': need, 'data-show-mode': mode };
+        Object.keys(answers).forEach(function (attribute) {
+            form.querySelectorAll('[' + attribute + ']').forEach(function (element) {
+                element.hidden = !answers[attribute]
+                    || element.getAttribute(attribute).split(' ').indexOf(answers[attribute]) === -1;
+            });
         });
         // Spare parts: the machine card's text box gets its own example.
         form.querySelectorAll('[data-parts-placeholder]').forEach(function (wrapper) {
@@ -140,24 +161,20 @@
             if (!box.hasAttribute('data-problem-placeholder')) {
                 box.setAttribute('data-problem-placeholder', box.placeholder);
             }
-            box.placeholder = checked && checked.value === 'parts'
+            box.placeholder = need === 'parts'
                 ? wrapper.getAttribute('data-parts-placeholder') : box.getAttribute('data-problem-placeholder');
         });
     }
 
-    // Other: its "what is it about?" box, right under the choices.
+    // Flooring, Accessories, Lockers, Something else: the short "what" box under the choices.
     var other = form.querySelector('[data-topic-other]');
 
-    function showOther() {
-        var checked = form.querySelector('input[name$="topic"]:checked');
-        if (other) {
-            other.hidden = !checked || checked.value !== 'other';
-        }
-    }
-
     function move(direction) {
-        var required = steps[current].getAttribute('data-step-require');
-        if (direction > 0 && required && !form.querySelector('input[name="' + required + '"]:checked')) {
+        var required = (steps[current].getAttribute('data-step-require') || '').split(' ').filter(Boolean);
+        var unanswered = required.some(function (name) {
+            return !form.querySelector('input[name="' + name + '"]:checked');
+        });
+        if (direction > 0 && unanswered) {
             steps[current].querySelector('[data-step-required]').hidden = false;
             return;
         }
@@ -179,18 +196,16 @@
         }
     }
 
-    form.querySelectorAll('input[name$="topic"]').forEach(function (radio) {
+    form.querySelectorAll('input[name$="about"], input[name$="need"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
             form.querySelectorAll('[data-step-required]').forEach(function (note) { note.hidden = true; });
             showTopic();
-            showOther();
-            if (other && !other.hidden) {
+            if (other && !other.hidden && /about$/.test(radio.name)) {
                 other.querySelector('input').focus();
             }
         });
     });
     showTopic();
-    showOther();
 
     form.querySelectorAll('[data-steps-bar], [data-steps-nav]').forEach(function (element) {
         element.hidden = false;

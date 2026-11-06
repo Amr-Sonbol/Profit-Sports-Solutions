@@ -1328,50 +1328,74 @@ class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
     """A logged-in customer sending a request about one of their own
     sites. The company name, site, and address are never typed here at
     all; a portal login already knows who they are and where their sites
-    are (set directly in the view). The topic decides the rest: a machine
-    problem's machines and photos come from TicketMachineFormSet alongside
-    it; any other topic is a message (`message`, saved as the ticket's
-    description) with its files, and Other has the customer's own subject.
+    are (set directly in the view). Two questions decide the rest — what
+    it's about and what they need: machines with a problem or spare parts
+    come from TicketMachineFormSet alongside it; everything else is a
+    message (`message`, saved as the ticket's description) with its files,
+    and Flooring, Accessories, Lockers and Something else name the area,
+    items, lockers or matter in `subject`.
     """
 
     message = forms.CharField(label=_('Your message'), required=False, widget=forms.Textarea(attrs={'rows': 5}))
 
     class Meta:
         model = CustomerTicket
-        fields = ['topic', 'subject', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes']
+        fields = [
+            'about', 'need', 'subject', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes',
+        ]
         widgets = {
-            'topic': forms.RadioSelect,
+            'about': forms.RadioSelect,
+            'need': forms.RadioSelect,
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
-        labels = {'topic': _('What do you need?'), 'subject': _('What is it about?'), 'notes': _('Anything else we should know')}
+        labels = {
+            'about': _('What is it about?'), 'need': _('What do you need?'), 'subject': _('What is it about?'),
+            'notes': _('Anything else we should know'),
+        }
+
+    # The "about"s asked a short "what" right under the choice, kept as `subject`.
+    SUBJECT_ABOUTS = {
+        CustomerTicket.About.FLOORING: _('Please say which area of the floor.'),
+        CustomerTicket.About.ACCESSORIES: _('Please say which items.'),
+        CustomerTicket.About.LOCKERS: _('Please say which lockers.'),
+        CustomerTicket.About.OTHER: _('Please say in a few words what it is about.'),
+    }
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
         self.fields['attachments'] = message_files_field(_('Files'))
-        # Chosen by the customer every time: no type is assumed.
-        self.fields['topic'].choices = CustomerTicket.Topic.choices
-        self.fields['topic'].initial = None
+        # Chosen by the customer every time: nothing is assumed.
+        for name, choices in (('about', CustomerTicket.About.choices), ('need', CustomerTicket.Need.choices)):
+            self.fields[name].choices = choices
+            self.fields[name].initial = None
         sites = list(customer.sites.all()[:2])
         if len(sites) == 1:
             # Only one site: already chosen (still shown, so "where" is clear).
             self.fields['site'].initial = sites[0].pk
 
+    @staticmethod
+    def machine_cards_for(about, need):
+        """Machines with a problem or spare parts: told through machine cards."""
+        return about == CustomerTicket.About.MACHINES and need in (
+            CustomerTicket.Need.REPAIR, CustomerTicket.Need.PARTS,
+        )
+
     @property
     def uses_machines(self):
-        """A machine problem or spare parts: told through machine cards."""
-        return self.cleaned_data.get('topic') in (CustomerTicket.Topic.MACHINE_PROBLEM, CustomerTicket.Topic.PARTS)
+        return self.machine_cards_for(self.cleaned_data.get('about'), self.cleaned_data.get('need'))
 
     def clean(self):
         cleaned = super().clean()
-        topic = cleaned.get('topic')
-        if topic and topic not in (CustomerTicket.Topic.MACHINE_PROBLEM, CustomerTicket.Topic.PARTS):
+        about, need = cleaned.get('about'), cleaned.get('need')
+        if about and need and not self.machine_cards_for(about, need):
             if not cleaned.get('message', '').strip():
                 self.add_error('message', _('Please tell us what you need.'))
-            if topic == CustomerTicket.Topic.OTHER and not cleaned.get('subject', '').strip():
-                self.add_error('subject', _('Please say in a few words what it is about.'))
-        if topic != CustomerTicket.Topic.OTHER:
+        if about in self.SUBJECT_ABOUTS:
+            if not cleaned.get('subject', '').strip():
+                self.add_error('subject', self.SUBJECT_ABOUTS[about])
+        else:
             cleaned['subject'] = ''
         return cleaned
 
@@ -1382,13 +1406,15 @@ class TicketMachineForm(forms.Form):
     serial of one that isn't in their list, plus what's wrong and photos.
     """
 
-    # One question first, so the card only asks for one or the other:
-    # pick the machine from their list, or describe a new one.
+    # Which machine: one of theirs from the dropdown, or its last option,
+    # NEW_MACHINE ("My machine isn't listed"), for the model and serial of
+    # one we don't have yet. `which` is "new" only for a customer with no
+    # machines at all (no dropdown); otherwise the dropdown says it.
+    NEW_MACHINE = 'new'
     which = forms.ChoiceField(
-        choices=[('list', _('Yes, pick it from my list')), ('new', _("No, it's not in my list yet"))],
-        widget=forms.RadioSelect, required=False, label=_('Is this machine in your list?'),
+        choices=[('list', 'list'), ('new', 'new')], widget=forms.HiddenInput, required=False,
     )
-    asset = forms.ChoiceField(required=False, label=_('Your machine'))
+    asset = forms.ChoiceField(required=False, label=_('Which machine?'))
     model_name = forms.CharField(required=False, max_length=150, label=_('Model'))
     serial_no = forms.CharField(
         required=False, max_length=100, label=_('Serial number'),
@@ -1445,7 +1471,9 @@ class TicketMachineForm(forms.Form):
             if asset.serial_no:
                 label += f' ({asset.serial_no})'
             groups.setdefault(asset.site.name, []).append((str(asset.pk), label))
-        self.fields['asset'].choices = [('', _('Choose…'))] + list(groups.items())
+        self.fields['asset'].choices = [('', _('Choose…'))] + list(groups.items()) + [
+            (self.NEW_MACHINE, _("My machine isn't listed")),
+        ]
         # No machines registered yet: every machine is a new one.
         self.has_machines = bool(self.assets)
         self.fields['which'].initial = 'list' if self.has_machines else 'new'
@@ -1456,6 +1484,7 @@ class TicketMachineForm(forms.Form):
 
     def clean_asset(self):
         value = self.cleaned_data['asset']
+        self.new_machine = value == self.NEW_MACHINE
         return self.assets.get(value) if value else None
 
     def clean_files(self):
@@ -1475,7 +1504,7 @@ class TicketMachineForm(forms.Form):
             self.add_error('description', _('Please say which parts you need for this machine.') if self.for_parts else _(
                 'Please describe the problem: what happens, since when, any error code, and how often.',
             ))
-        which = cleaned.get('which')
+        which = 'new' if getattr(self, 'new_machine', False) else cleaned.get('which')
         if which not in ('list', 'new'):
             # Not answered (an older page): whatever was filled in says which.
             typed = cleaned.get('model_name') or (cleaned.get('serial_no') or '').strip()

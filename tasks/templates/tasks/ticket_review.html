@@ -71,7 +71,7 @@
     {% endif %}
     <div class="description">
         <dt>{% translate "Request type" %}</dt>
-        <p><span class="badge">{{ ticket.get_topic_display }}</span>{% if ticket.subject %} {{ ticket.subject }}{% endif %}</p>
+        <p><span class="badge">{{ ticket.request_type }}</span>{% if ticket.subject %} {{ ticket.subject }}{% endif %}</p>
     </div>
     {% with machines=ticket.machines.all %}
     {% if machines %}

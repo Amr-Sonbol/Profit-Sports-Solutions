@@ -19,11 +19,20 @@
         </select>
     </div>
     <div class="field">
-        <label for="filter-topic">{% translate "Request type" %}</label>
-        <select id="filter-topic" name="topic">
+        <label for="filter-about">{% translate "About" %}</label>
+        <select id="filter-about" name="about">
             <option value="">{% translate "All" %}</option>
-            {% for value, label in topic_choices %}
-            <option value="{{ value }}" {% if topic == value %}selected{% endif %}>{{ label }}</option>
+            {% for value, label in about_choices %}
+            <option value="{{ value }}" {% if about == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label for="filter-need">{% translate "Need" %}</label>
+        <select id="filter-need" name="need">
+            <option value="">{% translate "All" %}</option>
+            {% for value, label in need_choices %}
+            <option value="{{ value }}" {% if need == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </div>
@@ -89,7 +98,7 @@
                 <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                 {% if all_countries %}<td>{{ ticket.country.display_name }}</td>{% endif %}
-                <td>{{ ticket.get_topic_display }}{% if ticket.subject %}<br><span class="muted">{{ ticket.subject }}</span>{% endif %}</td>
+                <td>{{ ticket.request_type }}{% if ticket.subject %}<br><span class="muted">{{ ticket.subject }}</span>{% endif %}</td>
                 <td>{{ ticket.company_name }}</td>
                 <td>{{ ticket.site_description }}</td>
                 <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>

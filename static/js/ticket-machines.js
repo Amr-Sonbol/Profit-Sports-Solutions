@@ -8,8 +8,8 @@
 //
 // Each card's machine list is narrowed to the chosen site, so a customer
 // with several sites only sees the machines at the one they picked. Each
-// card asks "Is this machine in your list?" first and shows only the
-// fields for that answer.
+// card's dropdown ends with "My machine isn't listed", which shows the
+// fields for a new machine's details.
 (function () {
     var cards = Array.prototype.slice.call(document.querySelectorAll('[data-machine-card]'));
     var addButton = document.querySelector('[data-add-machine]');
@@ -100,21 +100,23 @@
         });
     }
 
-    // "Is this machine in your list?" — show only what the answer needs:
-    // the list to pick from, or the model, serial and sticker photo.
+    // Which machine: one of theirs, or "My machine isn't listed" (the
+    // dropdown's "new"), which asks for the model, serial and sticker photo.
+    // A customer with no machines has no dropdown: always a new one.
     function showForAnswer(card) {
-        var picked = card.querySelector('[data-machine-which] input:checked');
-        var hidden = card.querySelector('input[type="hidden"][name$="-which"]');
-        var answer = picked ? picked.value : (hidden ? hidden.value : 'list');
+        var select = card.querySelector('select[name$="-asset"]');
+        var noMachines = card.querySelector('input[type="hidden"][name$="-which"][value="new"]');
+        var answer = noMachines || (select && select.value === 'new') ? 'new' : 'list';
         Array.prototype.forEach.call(card.querySelectorAll('[data-show-for]'), function (field) {
             field.hidden = field.getAttribute('data-show-for') !== answer;
         });
     }
 
     cards.forEach(function (card) {
-        Array.prototype.forEach.call(card.querySelectorAll('[data-machine-which] input'), function (input) {
-            input.addEventListener('change', function () { showForAnswer(card); });
-        });
+        var select = card.querySelector('select[name$="-asset"]');
+        if (select) {
+            select.addEventListener('change', function () { showForAnswer(card); });
+        }
         showForAnswer(card);
     });
 

@@ -26,7 +26,7 @@
                 <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
                     <span class="portal-row__main">
                         <strong dir="ltr">{{ ticket.ticket_number }}</strong>
-                        <span>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</span>
+                        <span>{{ ticket.request_type }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</span>
                         <span class="muted">{{ ticket.site_description }} · {{ ticket.submitted_at|date:"j M Y" }}</span>
                         {% if ticket.is_open %}{% include "_progress_steps.html" with steps=ticket.steps label=ticket.progress.0 %}{% endif %}
                     </span>
