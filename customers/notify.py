@@ -1,5 +1,6 @@
 """Writing a customer's portal bell (CustomerNotification) where each thing
-happens: a report filed, our team's reply, a visit booked or moved. Only
+happens: a report filed, our team's reply, a visit booked or moved, a
+request resolved. Only
 for a customer with a portal login — never our own account (the
 warehouses) — and one item per thing: booking the same visit again
 replaces the unseen item rather than stacking another.
@@ -32,6 +33,11 @@ def visit_booked(task):
 def staff_replied(ticket):
     """Our team answered one of their requests."""
     _notify(ticket.customer, CustomerNotification.Kind.REPLY, ticket=ticket)
+
+
+def request_closed(ticket):
+    """We resolved one of their requests, visit or not: our answer is on it."""
+    _notify(ticket.customer, CustomerNotification.Kind.REQUEST_CLOSED, ticket=ticket)
 
 
 def seen(customer, task=None, ticket=None):

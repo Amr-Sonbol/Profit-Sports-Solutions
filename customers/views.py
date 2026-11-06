@@ -30,13 +30,13 @@ from tasks.views import (
 )
 
 from .accounts import (
-    LINK_VALID_DAYS, AccountStatus, account_status, locked_usernames, log_account_action, send_password_link,
-    send_welcome, user_for_link_token,
+    LINK_VALID_DAYS, AccountStatus, account_status, email_change_for_token, locked_usernames, log_account_action,
+    send_email_change_link, send_email_changed_notice, send_password_link, send_welcome, user_for_link_token,
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
-    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalLoginForm,
-    PortalPasswordHelpForm, QuickInviteForm,
+    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
+    PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm, QuickInviteForm,
     SiteCreateForm, SiteEditForm,
 )
 from .models import Asset, Customer, Site
@@ -482,9 +482,11 @@ def _portal_customer(request):
 
 def _portal_requests(customer):
     """The customer's requests (tickets), newest first, each with its
-    progress in their words (customers.progress) and whether it's open."""
-    tickets = list(customer.tickets.select_related('task').order_by('-submitted_at'))
+    progress in their words (customers.progress), whether it's open, and
+    the visit whose report it has (`report_visit`), if any."""
+    tickets = list(customer.tickets.select_related('task__report').order_by('-submitted_at'))
     for ticket in tickets:
+        ticket.report_visit = ticket.task if ticket.task_id and getattr(ticket.task, 'report', None) else None
         ticket.progress = ticket_progress(ticket)
         ticket.steps = progress_steps(ticket.progress) if ticket.heads_for_a_visit else None
         ticket.is_open = ticket.status == CustomerTicket.Status.NEW or (
@@ -565,24 +567,33 @@ def portal_requests(request):
 
 @login_required(login_url='customers:portal_login')
 def portal_visits(request):
-    """The customer's visits still to come: soonest first, those without a
-    date yet last."""
+    """The customer's visits, in two tabs like Requests: upcoming (soonest
+    first, those without a date yet last) and past (finished or cancelled,
+    newest first). Reports and ratings live on Reports."""
     customer, setup = _portal_customer(request)
     if setup:
         return setup
-    upcoming, _history = _portal_visits(customer)
-    return render(request, 'customers/portal_visits.html', {'upcoming': upcoming})
+    upcoming, past = _portal_visits(customer)
+    showing_past = request.GET.get('show') == 'past'
+    return render(request, 'customers/portal_visits.html', {
+        'visits': past if showing_past else upcoming, 'showing_past': showing_past,
+        'upcoming_count': len(upcoming), 'past_count': len(past),
+    })
 
 
 @login_required(login_url='customers:portal_login')
-def portal_history(request):
-    """The customer's service history: every finished (or cancelled) visit,
-    newest first, with its report and whether it's waiting for a rating."""
+def portal_reports(request):
+    """Every visit report the customer has, newest first, each one click
+    from its PDF."""
     customer, setup = _portal_customer(request)
     if setup:
         return setup
-    _upcoming, history = _portal_visits(customer)
-    return render(request, 'customers/portal_history.html', {'history': history})
+    upcoming, history = _portal_visits(customer)
+    reports = sorted(
+        (v for v in upcoming + history if v.has_report),
+        key=lambda v: v.report.submitted_at or v.reported_at, reverse=True,
+    )
+    return render(request, 'customers/portal_reports.html', {'reports': reports})
 
 
 @login_required(login_url='customers:portal_login')
@@ -618,13 +629,16 @@ def portal_visit_report_pdf(request, pk):
 @login_required(login_url='customers:portal_login')
 def portal_settings(request):
     """The customer's own settings: contact details, addresses and language
-    (CustomerSettingsForm), and their password — the current one first,
+    (CustomerSettingsForm), their portal color (PortalColorForm, its own
+    section and button), and their password — the current one first,
     and an email saying it changed, the same as staff get. Their login
     email stays with the office (Customer accounts)."""
     customer, setup = _portal_customer(request)
     if setup:
         return setup
     details_form = CustomerSettingsForm(instance=customer)
+    color_form = PortalColorForm(instance=customer)
+    email_form = PortalEmailChangeForm(user=request.user)
     password_form = ChangePasswordForm(user=request.user)
     # Django focuses the current-password box, which would scroll past the details.
     password_form.fields['old_password'].widget.attrs.pop('autofocus', None)
@@ -633,6 +647,21 @@ def portal_settings(request):
         if details_form.is_valid():
             details_form.save()
             messages.success(request, _('Your details have been saved.'))
+            return redirect('customers:portal_settings')
+    elif request.method == 'POST' and request.POST.get('action') == 'email':
+        email_form = PortalEmailChangeForm(request.POST, user=request.user)
+        if email_form.is_valid():
+            new_email = email_form.cleaned_data['email']
+            send_email_change_link(request, customer, new_email)
+            messages.success(request, _(
+                'We have sent a confirmation link to %(email)s. Your sign-in email changes once you open it.'
+            ) % {'email': new_email})
+            return redirect('customers:portal_settings')
+    elif request.method == 'POST' and request.POST.get('action') == 'color':
+        color_form = PortalColorForm(request.POST, instance=customer)
+        if color_form.is_valid():
+            color_form.save()
+            messages.success(request, _('Your color has been saved.'))
             return redirect('customers:portal_settings')
     elif request.method == 'POST' and request.POST.get('action') == 'password':
         password_form = ChangePasswordForm(user=request.user, data=request.POST)
@@ -643,7 +672,14 @@ def portal_settings(request):
             messages.success(request, _('Password changed.'))
             return redirect('customers:portal_settings')
     return render(request, 'customers/portal_settings.html', {
-        'customer': customer, 'details_form': details_form, 'password_form': password_form,
+        'customer': customer, 'details_form': details_form, 'color_form': color_form,
+        'email_form': email_form, 'password_form': password_form,
+        # "Your details" in three groups, each under its own title.
+        'details_groups': [
+            (_('Contact'), ('contact_name', 'contact_phone', 'contact_email')),
+            (_('Addresses'), ('billing_address', 'shipping_address')),
+            (_('Language'), ('language',)),
+        ],
     })
 
 
@@ -838,7 +874,6 @@ def portal_ticket_new(request):
                         code='' if line['asset'] else line.get('code', '').strip(),
                         serial_photo=None if line['asset'] else line['serial_photo'],
                         problem=line['problem'], description=line['description'],
-                        out_of_service=line['out_of_service'],
                     )
                     for uploaded_file in line['files']:
                         CustomerTicketAttachment.objects.create(
@@ -1018,6 +1053,29 @@ def customer_accounts(request):
         'return_query': request.GET.urlencode(), 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
         'quick_invite_form': QuickInviteForm(),
     })
+
+
+def portal_email_confirm(request, token):
+    """Where the link sent to a customer's new sign-in email lands: it
+    switches their login to it, tells the old address, and records it in
+    the Audit log. Works once, for EMAIL_CHANGE_VALID_DAYS."""
+    user, new_email = email_change_for_token(token)
+    if user is None:
+        messages.error(request, _('This confirmation link has expired or was already used. Please request a new one.'))
+    else:
+        old_email = user.email
+        user.username = user.email = new_email
+        user.save(update_fields=['username', 'email'])
+        log_account_action(
+            request, user.customer, f'Portal sign-in email changed by the customer from {old_email} to {new_email}',
+            user=user,
+        )
+        if old_email:
+            send_email_changed_notice(user.customer, old_email)
+        messages.success(request, _('Your sign-in email is now %(email)s.') % {'email': new_email})
+    if request.user.is_authenticated and hasattr(request.user, 'customer'):
+        return redirect('customers:portal_settings')
+    return redirect('customers:portal_login')
 
 
 def portal_account_link(request, token):

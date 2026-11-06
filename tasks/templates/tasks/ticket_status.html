@@ -1,21 +1,41 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{{ ticket.ticket_number }} — {% translate "Ticket status" %}{% endblock %}
+{% block title %}{{ ticket.ticket_number }} — {% translate "Request" %}{% endblock %}
 
 {% block content %}
 <div class="page__header">
     <div>
         <a href="{% url 'customers:portal_requests' %}" class="back-link">{% translate "Back to requests" %}</a>
-        <h1><span dir="ltr">{{ ticket.ticket_number }}</span> — {{ ticket.company_name }}</h1>
-    </div>
-    <div class="badge-row">
-        <span class="badge {{ progress.1 }}">{{ progress.0 }}</span>
+        <h1><span dir="ltr">{{ ticket.ticket_number }}</span></h1>
     </div>
 </div>
 
-<div class="section">
+{# The status first: where it stands in large type, what it means and what happens next, and the visit's progress when there is one. #}
+<section class="section status-card status-card--{{ ticket.status }}">
+    <p class="status-card__label">{{ progress.0 }}</p>
+    {% if ticket.status == 'new' %}
+    <p>{% translate "Thank you for contacting us. Our team is reviewing your request and will reply here." %}</p>
+    {% elif ticket.status == 'converted' %}
+        {% if booked and ticket.task.scheduled_for %}
+        <p>{% blocktranslate with date=ticket.task.scheduled_for|date:"l j F Y, TIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}</p>
+        {% elif booked %}
+        <p>{% blocktranslate with date=ticket.task.scheduled_date|date:"l j F Y" %}A technician is scheduled to visit on {{ date }}. We will confirm the time.{% endblocktranslate %}</p>
+        {% else %}
+        <p>{% translate "We are arranging a visit for this request and will contact you to agree a date." %}</p>
+        {% endif %}
+    {% elif ticket.status == 'closed' %}
+    {# Our answer (the close reason), when we gave one. #}
+    {% if ticket.close_reason %}<p class="status-card__answer pre-line">{{ ticket.close_reason }}</p>{% endif %}
+    <p class="muted">{% translate "If you need anything further, please send us a new request." %}</p>
+    {% elif ticket.status == 'dismissed' %}
+    <p>{% translate "This request has been reviewed and closed. Please contact us if you require further assistance." %}</p>
+    {% endif %}
     {% translate "Progress" as progress_label %}{% include "_progress_steps.html" with steps=steps label=progress_label %}
+</section>
+
+<div class="section">
+    <h2>{% translate "Your request" %}</h2>
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Site / location" %}</dt>
@@ -25,11 +45,11 @@
             <dt>{% translate "Submitted" %}</dt>
             <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
         </div>
+        <div>
+            <dt>{% translate "Request type" %}</dt>
+            <dd>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</dd>
+        </div>
     </dl>
-    <div class="description">
-        <dt>{% translate "Request type" %}</dt>
-        <p>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</p>
-    </div>
     {% with machines=ticket.machines.all %}{% if machines %}
     <div class="description">
         <dt>{% translate "Machines to service" %}</dt>
@@ -42,23 +62,6 @@
         {% for attachment in ticket.attachments.all %}{% if not attachment.machine_id %}<p>{% include "_attachment.html" with file=attachment.file %}</p>{% endif %}{% endfor %}
     </div>
     {% endif %}{% endwith %}
-    <div class="description">
-        {% if ticket.status == 'new' %}
-        <p>{% translate "Thank you for contacting us. Our team is reviewing your request." %}</p>
-        {% elif ticket.status == 'converted' %}
-            {% if booked and ticket.task.scheduled_for %}
-            <p>{% blocktranslate with date=ticket.task.scheduled_for|date:"l j F Y, TIME_FORMAT" %}A technician is scheduled to visit on {{ date }}.{% endblocktranslate %}</p>
-            {% elif booked %}
-            <p>{% blocktranslate with date=ticket.task.scheduled_date|date:"l j F Y" %}A technician is scheduled to visit on {{ date }}. We will confirm the time.{% endblocktranslate %}</p>
-            {% else %}
-            <p>{% translate "We are arranging a visit for this request and will contact you to agree a date." %}</p>
-            {% endif %}
-        {% elif ticket.status == 'closed' %}
-        <p>{% translate "This ticket has been resolved. Please contact us if you require further assistance." %}</p>
-        {% elif ticket.status == 'dismissed' %}
-        <p>{% translate "This ticket has been reviewed and closed. Please contact us if you require further assistance." %}</p>
-        {% endif %}
-    </div>
     {% for escalation in escalations %}
     <div class="flash flash--info">
         {% if escalation.decided_at and escalation.decision != 'forwarded' %}

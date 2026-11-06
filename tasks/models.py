@@ -457,8 +457,10 @@ class CustomerTicket(models.Model):
     @property
     def heads_for_a_visit(self):
         """Whether the customer's way to a visit (Received → … → Done) fits:
-        a machine problem or a visit asked for, or anything we made one of."""
-        return self.topic in (self.Topic.MACHINE_PROBLEM, self.Topic.VISIT) or self.status == self.Status.CONVERTED
+        only once we've made a visit of it. Until then a request is just a
+        request: we may answer it, send parts or close it without a visit,
+        so nothing promises one."""
+        return self.status == self.Status.CONVERTED and self.task_id is not None
 
     def __str__(self):
         return f'{self.ticket_number} — {self.company_name}'
@@ -791,11 +793,10 @@ class TicketMachine(models.Model):
     serial_photo = models.FileField(
         _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
-        help_text=_("a photo of the machine's silver serial-number sticker, instead of or as well as typing it"),
+        help_text=_("a photo of the machine's serial-number sticker, instead of or as well as typing it"),
     )
     problem = models.CharField(_('problem'), max_length=20, choices=Problem.choices)
     description = models.TextField(_('description'), blank=True)
-    out_of_service = models.BooleanField(_('cannot be used'), default=False)
     position = models.PositiveSmallIntegerField(_('position'), default=0)
     decision = models.CharField(
         _('decision'), max_length=20, choices=Decision.choices, blank=True,

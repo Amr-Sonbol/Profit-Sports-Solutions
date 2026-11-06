@@ -2439,6 +2439,280 @@ tbody tr:hover {
     font-weight: 600;
 }
 
+/* Portal ticket form, "Check and send": what they filled in (report-steps.js). */
+/* A request's status, first on its page: large status words, what it means,
+   and the visit's progress; the edge says open (their color), resolved
+   (green) or closed without action (grey). */
+.status-card {
+    padding-block: 1.1rem;
+    padding-inline: 1.25rem;
+    border-inline-start: 6px solid var(--brand, var(--color-text));
+}
+
+.status-card--closed {
+    border-inline-start-color: var(--color-success);
+}
+
+.status-card--dismissed {
+    border-inline-start-color: var(--color-border);
+}
+
+.status-card__label {
+    margin-block: 0 0.4rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.status-card--closed .status-card__label {
+    color: var(--color-success);
+}
+
+.status-card p {
+    margin-block: 0 0.5rem;
+}
+
+/* Our answer when we resolved it: set apart like a quoted reply. */
+.status-card__answer {
+    padding-block: 0.6rem;
+    padding-inline: 0.85rem;
+    border-radius: 4px;
+    background: var(--color-bg);
+}
+
+.status-card .progress-steps {
+    margin-block: 0.85rem 0;
+}
+
+/* Portal Settings: roomy sections, each with a short intro, its fields in
+   titled groups, and its button in a footer at the row's end. */
+.settings .section {
+    padding-block: 1.25rem;
+    padding-inline: 1.25rem;
+    margin-block-end: 1rem;
+}
+
+.settings .section h2 {
+    margin-block-end: 0.25rem;
+    font-size: 1.15rem;
+}
+
+.settings__intro {
+    margin-block: 0 1.25rem;
+    color: var(--color-muted);
+}
+
+.settings__group {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.settings__group + .settings__group {
+    margin-block-start: 1.25rem;
+    padding-block-start: 1.25rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.settings__group legend {
+    margin-block-end: 0.75rem;
+    padding: 0;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.settings .form-grid {
+    margin-block-end: 0;
+}
+
+/* Fields one under the other, at a comfortable width (the password). */
+.settings__stack {
+    display: grid;
+    gap: 1rem;
+    max-inline-size: 26rem;
+}
+
+/* A form's buttons: under a thin line, at the end of the row. */
+.form-actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-block-start: 1.5rem;
+    padding-block-start: 1rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+/* Portal Settings: choosing the portal color (brand-color.js). */
+.color-choice {
+    margin: 0;
+}
+
+
+
+
+
+
+.color-choice__own label {
+    display: block;
+    margin-block-end: 0.3rem;
+    font-weight: 600;
+}
+
+
+.color-choice__own input[data-color-code] {
+    max-inline-size: 9rem;
+    font-family: ui-monospace, Consolas, monospace;
+    text-transform: uppercase;
+}
+
+/* The bar and its Save button, side by side (stacked on a narrow phone). */
+.color-choice__bar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-block: 0.6rem 1rem;
+}
+
+/* The main way to choose: a wide bar of their color that opens the full
+   picker, with its words beside it. Any color, no fixed list. */
+.color-choice__pick {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    flex: 1 1 16rem;
+    max-inline-size: 26rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.color-choice__pick:hover,
+.color-choice__pick:focus-within {
+    border-color: var(--color-text);
+}
+
+.color-choice__native {
+    flex: 0 0 9rem;
+    block-size: 3rem;
+    padding: 0;
+    border: 1px solid rgb(0 0 0 / 0.15);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.color-choice__native::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-choice__native::-webkit-color-swatch {
+    border: 0;
+    border-radius: 3px;
+}
+
+.color-choice__native::-moz-color-swatch {
+    border: 0;
+    border-radius: 3px;
+}
+
+
+
+.color-choice__save {
+    flex: none;
+    align-self: stretch;
+}
+
+.request-summary {
+    margin-block-end: 1.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg);
+}
+
+.request-summary h3 {
+    margin-block: 0 0.5rem;
+}
+
+.request-summary__list {
+    margin: 0;
+}
+
+.request-summary__row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.request-summary__row:first-child {
+    border-block-start: 0;
+}
+
+.request-summary__row dt {
+    flex: 0 0 9rem;
+    font-weight: 600;
+}
+
+.request-summary__row dd {
+    flex: 1;
+    margin: 0;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.request-summary__edit {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.request-summary__edit .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+}
+
+.request-summary__edit:hover,
+.request-summary__edit:focus-visible {
+    background: var(--color-hover);
+}
+
+@media (max-width: 600px) {
+    .request-summary__row {
+        flex-wrap: wrap;
+    }
+
+    .request-summary__row dt {
+        flex-basis: calc(100% - 2.75rem);
+    }
+
+    .request-summary__row dd {
+        flex-basis: 100%;
+        order: 3;
+    }
+}
+
 .machine-card .form-grid {
     margin-block-end: 0;
 }
@@ -2719,6 +2993,46 @@ tbody tr:hover {
     flex: 0 0 6.5rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+}
+
+/* A list row with icon buttons beside it (a report's download): the row
+   stays one link, the icons sit outside it at the end. */
+.row-with-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.row-with-actions > .action-row {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A small square icon button; its words are in the hover title. */
+.icon-button {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.icon-button .icon {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+    background: var(--color-text);
+    color: var(--color-surface);
 }
 
 .portal-row__main {
@@ -3019,4 +3333,277 @@ tbody tr:hover {
     font-weight: 600;
     border-inline-start: 3px solid var(--color-danger);
     padding-inline-start: 0.5rem;
+}
+
+/* ===== The customer portal's look, "sporty and bold", on every page a
+   logged-in customer sees (body.theme-portal, set in base.html).
+   Built from the logo: black, italic condensed lettering, sharp corners,
+   and the customer's own color (--brand, from base.html) as the accent,
+   with black or white text on it, whichever reads better. ===== */
+.theme-portal {
+    --sporty-volt: var(--brand, #c8c8c8);
+    --sporty-on-volt: var(--brand-text, #000000);
+    --sporty-ink: #0a0a0a;
+    --sporty-radius: 2px;
+}
+
+/* The page's top band: one fixed height on every page, so nothing jumps
+   when moving between pages. Only the back link and the title sit in it,
+   the title always at the same spot; the description, buttons and badges
+   flow below it on the page's own background. */
+.theme-portal {
+    --band-size: 5.5rem;
+}
+
+.theme-portal .page__header {
+    position: relative;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+    padding: 0;
+}
+
+/* The black band itself, behind the title. */
+.theme-portal .page__header::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    block-size: var(--band-size);
+    border-radius: var(--sporty-radius);
+    background: var(--sporty-ink);
+}
+
+/* A short slash in their color at the band's top far corner, leaning like
+   the logo, the same size on every page; the title stays clear of it. */
+.theme-portal .page__header::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    block-size: 2.5rem;
+    inset-inline-end: 1.5rem;
+    inline-size: 1.75rem;
+    background: var(--sporty-volt);
+    transform: skewX(-18deg);
+    pointer-events: none;
+}
+
+html[dir="rtl"] .theme-portal .page__header::after {
+    transform: skewX(18deg);
+}
+
+.theme-portal .page__header > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* The title alone in the band, centred in its height, at the same spot on
+   every page; the back link and description follow below the band. */
+.theme-portal .page__header > div:first-child {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    box-sizing: border-box;
+    inline-size: 100%;
+    padding-block-start: calc((var(--band-size) - 2.25rem) / 2);
+    padding-inline: 1.5rem 5rem;
+}
+
+/* One line, cut with "…" when long, so the band never grows. */
+.theme-portal .page__header h1 {
+    order: -1;
+    max-inline-size: 100%;
+    margin-block: 0 calc((var(--band-size) - 2.25rem) / 2 + 0.6rem);
+    block-size: 2.25rem;
+    overflow: hidden;
+    color: #fff;
+    font-size: 1.9rem;
+    line-height: 2.25rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Below the band, the back link and description line up with the page. */
+.theme-portal .page__header > div:first-child > :not(h1) {
+    margin-block: 0;
+    margin-inline-start: -1.5rem;
+}
+
+.theme-portal .page__header > :not(div:first-child) {
+    margin-inline-start: 0;
+}
+
+/* Buttons: like the list rows — white, with a thick edge in their color
+   on the start side; square, bold caps. The main one has a black outline,
+   secondary ones a grey one; danger keeps its red. */
+.theme-portal .button {
+    border-radius: var(--sporty-radius);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.theme-portal .button:not(.button--danger) {
+    border: 1px solid var(--sporty-ink);
+    border-inline-start: 5px solid var(--sporty-volt);
+    background: var(--color-surface);
+    color: var(--sporty-ink);
+}
+
+.theme-portal .button--secondary {
+    border-color: var(--color-border);
+    border-inline-start-color: var(--sporty-volt);
+}
+
+.theme-portal .button:not(.button--danger):hover,
+.theme-portal .button:not(.button--danger):focus-visible {
+    background: var(--color-hover);
+    color: var(--sporty-ink);
+}
+
+/* Section titles: condensed caps with a short volt bar before them. */
+.theme-portal h2 {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+html[dir="rtl"] .theme-portal h2 {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+}
+
+.theme-portal h2::before {
+    content: "";
+    flex: none;
+    inline-size: 1.25rem;
+    block-size: 0.35rem;
+    background: var(--sporty-volt);
+    box-shadow: 0 0 0 1px var(--sporty-ink);
+    transform: skewX(-18deg);
+}
+
+/* The numbers: big italic figures on square tiles with a black top bar. */
+.theme-portal .stat-row {
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+}
+
+.theme-portal .stat-tile {
+    padding-block: 1rem 0.85rem;
+    border: 0;
+    border-block-start: 5px solid var(--sporty-ink);
+    border-radius: var(--sporty-radius);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+    text-align: start;
+    padding-inline: 1rem;
+}
+
+.theme-portal .stat-tile--link:hover,
+.theme-portal .stat-tile--link:focus-visible {
+    border-block-start-color: var(--sporty-volt);
+    background: var(--sporty-ink);
+}
+
+.theme-portal .stat-tile--link:hover .stat-tile__value,
+.theme-portal .stat-tile--link:hover .stat-tile__label,
+.theme-portal .stat-tile--link:focus-visible .stat-tile__value,
+.theme-portal .stat-tile--link:focus-visible .stat-tile__label {
+    color: #fff;
+}
+
+.theme-portal .stat-tile__value {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-size: 2.75rem;
+    font-weight: 800;
+    line-height: 1;
+    font-style: italic;
+}
+
+.theme-portal .stat-tile__label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+}
+
+/* Next visit: a white card with a thick black edge and a big date. */
+.theme-portal .portal-next__body {
+    padding: 1rem;
+    border: 0;
+    background: var(--color-surface);
+    border-inline-start: 6px solid var(--sporty-ink);
+    border-radius: var(--sporty-radius);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+.theme-portal .portal-next__date {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    font-style: italic;
+    text-transform: uppercase;
+}
+
+/* Rows that need attention: square, with a volt edge. */
+.theme-portal .action-row {
+    border-radius: var(--sporty-radius);
+}
+
+.theme-portal .action-row--warning {
+    border-inline-start: 5px solid var(--color-warning);
+}
+
+.theme-portal .badge {
+    border-radius: var(--sporty-radius);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+}
+
+/* Their color in a few small places only, as markers of "you are here":
+   the current menu item's edge, the active tab's underline, the
+   current step of a request's progress, and list rows' start edge. */
+.theme-portal .nav-link--active,
+.theme-portal .nav-link--active:hover {
+    border-inline-start: 4px solid var(--sporty-volt);
+}
+
+.theme-portal .tabs a {
+    border-radius: var(--sporty-radius);
+}
+
+.theme-portal .tabs a.is-active {
+    border-color: var(--sporty-ink);
+    background: var(--sporty-ink);
+    box-shadow: inset 0 -3px 0 var(--sporty-volt);
+}
+
+.theme-portal .progress-steps__step--current {
+    border-block-start-color: var(--sporty-volt);
+}
+
+/* Every list row's thick start edge (reports, requests, visits). */
+.theme-portal .action-row {
+    border-inline-start-color: var(--sporty-volt);
+}
+
+@media (max-width: 600px) {
+    .theme-portal .page__header > div:first-child {
+        padding-inline: 1rem 3.5rem;
+    }
+
+    .theme-portal .page__header > div:first-child > :not(h1) {
+        margin-inline-start: -1rem;
+    }
+
+    .theme-portal .page__header::after {
+        inset-inline-end: 0.75rem;
+    }
 }

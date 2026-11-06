@@ -8,31 +8,40 @@
     <div class="page__header">
         <div>
             <h1>{% translate "Visits" %}</h1>
-            <p class="muted">{% translate "The visits coming up. Finished visits and their reports are under History." %}</p>
+            <p class="muted">{% translate "Your visits coming up and those already done. Their reports are under Reports." %}</p>
         </div>
     </div>
 
-    <section class="section" id="upcoming">
-        <h2>{% translate "Coming up" %}</h2>
-        {% if upcoming %}
+    <nav class="tabs" aria-label="{% translate 'Visits' %}">
+        <a href="?" {% if not showing_past %}class="is-active" aria-current="page"{% endif %}>{% translate "Upcoming" %} ({{ upcoming_count }})</a>
+        <a href="?show=past" {% if showing_past %}class="is-active" aria-current="page"{% endif %}>{% translate "Past" %} ({{ past_count }})</a>
+    </nav>
+
+    <section class="section">
+        {% if visits %}
         <ul class="action-list">
-            {% for visit in upcoming %}
-            <li>
-                <a href="{% url 'customers:portal_visit' visit.pk %}" class="action-row portal-row">
-                    <span class="portal-row__day">{% if visit.day %}{{ visit.day|date:"j M" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
+            {% for visit in visits %}
+            <li class="row-with-actions">
+                <a href="{% url 'customers:portal_visit' visit.pk %}{% if visit.to_rate %}#rate{% endif %}" class="action-row portal-row">
+                    <span class="portal-row__day">{% if visit.day %}{{ visit.day|date:"j M Y" }}{% elif showing_past %}{{ visit.reported_at|date:"j M Y" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
                     <span class="portal-row__main">
                         <strong>{{ visit.task_type.display_name|default:_("Service visit") }}</strong>
                         <span class="muted">{{ visit.site.name }}</span>
                     </span>
+                    {# The customer's stars, or a nudge to give them. #}
+                    {% if visit.to_rate %}<span class="badge badge--warning">{% translate "Rate this visit" %}</span>
+                    {% elif visit.rating %}<span class="portal-stars" title="{% blocktranslate with rating=visit.rating %}You rated it {{ rating }} out of 5.{% endblocktranslate %}">{% for n in "12345" %}{% if forloop.counter <= visit.rating %}★{% else %}☆{% endif %}{% endfor %}</span>{% endif %}
                     <span class="badge {{ visit.progress.1 }}">{{ visit.progress.0 }}</span>
                 </a>
+                {% if visit.has_report %}{% include "customers/_report_download.html" with visit=visit changed=visit.report_changed %}{% endif %}
             </li>
             {% endfor %}
         </ul>
+        {% elif showing_past %}
+        <p class="empty-state">{% translate "No past visits yet." %}</p>
         {% else %}
         <p class="empty-state">{% translate "No visits are planned at the moment." %}</p>
         {% endif %}
     </section>
-
 </div>
 {% endblock %}

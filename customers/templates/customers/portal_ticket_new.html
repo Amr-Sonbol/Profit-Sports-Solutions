@@ -80,14 +80,10 @@
                 {% endif %}
                 <div class="form-grid">
                     {% for field in machine %}{% if field.name != 'which' %}
-                    <div class="field{% if field.name == 'out_of_service' %} field--checkbox{% endif %}{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
+                    <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
                         {% if field.name == 'asset' %}data-show-for="list"{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' or field.name == 'serial_photo' %}data-show-for="new"{% endif %}>
-                        {% if field.name == 'out_of_service' %}
-                        <label>{{ field }} {{ field.label }}</label>
-                        {% else %}
                         <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
-                        {% endif %}
                         {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
                         {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                     </div>
@@ -118,6 +114,17 @@
 
     <div class="section" data-step>
         <h2>{% translate "Check and send" %}</h2>
+        {# What they filled in, written by report-steps.js on reaching this step; each part's pencil goes back to its step. #}
+        <section class="request-summary" hidden data-request-summary data-label-type="{% translate 'Request type' %}">
+            <h3>{% translate "Your request" %}</h3>
+            <dl class="request-summary__list" data-summary-list></dl>
+            <template data-summary-edit>
+                <button type="button" class="request-summary__edit" title="{% translate 'Edit' %}">
+                    {% include "_icon.html" with name="edit" %}<span class="visually-hidden">{% translate "Edit" %}</span>
+                </button>
+            </template>
+        </section>
+        <h3>{% translate "Your contact details" %}</h3>
         <p class="field__help">{% translate "We use these details to contact you about this request. They are filled in from your account; change them here if needed." %}</p>
         <div class="form-grid">
             {% for field in form %}{% if field.name == 'contact_name' or field.name == 'contact_phone' or field.name == 'contact_email' or field.name == 'shipping_address' or field.name == 'notes' %}
@@ -131,7 +138,7 @@
         </div>
         <div class="report-steps__nav">
             <button type="button" class="button button--secondary" hidden data-steps-nav data-step-back>{% translate "Back" %}</button>
-            <button type="submit" class="button">{% translate "Send to our team" %}</button>
+            <button type="submit" class="button">{% translate "Submit request" %}</button>
         </div>
     </div>
 </form>

@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
@@ -232,6 +234,33 @@ class ChangeLoginEmailForm(forms.Form):
         return email
 
 
+class PortalEmailChangeForm(forms.Form):
+    """A customer changing their own sign-in email: the new address and
+    their current password. Nothing changes until they open the link sent
+    to the new address (accounts.send_email_change_link)."""
+
+    email = forms.EmailField(label=_('New sign-in email'))
+    password = forms.CharField(label=_('Your current password'), strip=False, widget=forms.PasswordInput)
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self):
+        email = self.cleaned_data['email'].strip()
+        if email.lower() == self.user.username.lower():
+            raise forms.ValidationError(_('This is already your sign-in email.'))
+        if get_user_model().objects.filter(username__iexact=email).exclude(pk=self.user.pk).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
+
+    def clean_password(self):
+        password = self.cleaned_data['password']
+        if not self.user.check_password(password):
+            raise forms.ValidationError(_('Your password is not correct.'))
+        return password
+
+
 class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
 
@@ -295,6 +324,31 @@ class CustomerSettingsForm(forms.ModelForm):
         }
 
 
+class PortalColorForm(forms.ModelForm):
+    """The portal's Settings, its own section: the customer's color for
+    their portal (buttons and highlights), any color at all."""
+
+    class Meta:
+        model = Customer
+        fields = ['brand_color']
+        labels = {'brand_color': _("Or type your brand's color code")}
+        help_texts = {'brand_color': _('From your logo or brand guide, e.g. #0B1F4D.')}
+        widgets = {
+            'brand_color': forms.TextInput(attrs={
+                'maxlength': 7, 'dir': 'ltr', 'spellcheck': 'false', 'autocomplete': 'off', 'placeholder': '#RRGGBB',
+                'data-color-code': '',
+            }),
+        }
+
+    def clean_brand_color(self):
+        # "0B1F4D" or "#0B1F4D", as brand guides write it: stored as "#0b1f4d".
+        color = self.cleaned_data['brand_color'].strip().lower()
+        color = color if color.startswith('#') else f'#{color}'
+        if not re.fullmatch(r'#[0-9a-f]{6}', color):
+            raise forms.ValidationError(_('Enter a color code like #0B1F4D, or choose your color above.'))
+        return color
+
+
 class CustomerMachineForm(forms.ModelForm):
     """A customer adding one of their own machines from the portal: where it
     is, its brand, model, serial and code, and a photo of its sticker. It
@@ -305,14 +359,14 @@ class CustomerMachineForm(forms.ModelForm):
         model = Asset
         fields = ['site', 'brand', 'model_name', 'serial_no', 'code', 'sticker_photo']
         labels = {
-            'model_name': _('Model'), 'serial_no': _('Serial number'), 'code': _('Code (optional)'),
+            'model_name': _('Model'), 'serial_no': _('Serial number'), 'code': _('Product code (optional)'),
             'sticker_photo': _('Photo of the sticker'),
         }
         help_texts = {
-            'model_name': _('as written on the machine'),
-            'serial_no': _('as written on the silver sticker on the machine'),
-            'code': _('the product code on the sticker, if there is one'),
-            'sticker_photo': _('so our team can check the details — take a photo or upload one'),
+            'model_name': _('As shown on the machine.'),
+            'serial_no': _("As shown on the machine's sticker."),
+            'code': _('The product code shown on the sticker, if available.'),
+            'sticker_photo': _('A clear photo helps our team confirm the details. Take a photo or upload one.'),
         }
         widgets = {'sticker_photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
 

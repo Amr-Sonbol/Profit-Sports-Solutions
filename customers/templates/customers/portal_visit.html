@@ -7,8 +7,7 @@
 <div class="portal">
     <div class="page__header">
         <div>
-            {% if upcoming %}<a href="{% url 'customers:portal_visits' %}" class="back-link">{% translate "Back to visits" %}</a>
-            {% else %}<a href="{% url 'customers:portal_history' %}" class="back-link">{% translate "Back to history" %}</a>{% endif %}
+            <a href="{% url 'customers:portal_visits' %}{% if not upcoming %}?show=past{% endif %}" class="back-link">{% translate "Back to visits" %}</a>
             <h1>{{ visit.task_type.display_name|default:_("Service visit") }}</h1>
             <p class="muted">{{ visit.site.name }} · <span dir="ltr">{{ visit.task_number }}</span></p>
         </div>
@@ -44,7 +43,7 @@
             {% if report_changed %}<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener" class="button button--secondary">{% translate "The version you signed" %}</a>{% endif %}
         </p>
         {% else %}
-        <p class="field__help">{% translate "The visit report appears here once the technician has finished, and you can download it." %}</p>
+        <p class="field__help">{% translate "The visit report appears here once our team has finished, and you can download it." %}</p>
         {% endif %}
     </section>
 

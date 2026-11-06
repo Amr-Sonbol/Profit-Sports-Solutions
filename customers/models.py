@@ -1,6 +1,7 @@
 import secrets
 
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -29,6 +30,12 @@ class Customer(models.Model):
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
         help_text=_('for the portal login, if this customer has one'),
+    )
+    # Their portal in their own gym's color (buttons, highlights); grey until they choose.
+    brand_color = models.CharField(
+        _('portal color'), max_length=7, default='#c8c8c8',
+        validators=[RegexValidator(r'^#[0-9a-fA-F]{6}$', _('Choose a color.'))],
+        help_text=_("the customer's own color for their portal, as #RRGGBB"),
     )
     contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
@@ -87,6 +94,20 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def brand_text_color(self):
+        """Black or white, whichever reads better on their portal color
+        (WCAG relative luminance)."""
+        def channel(hex_pair):
+            value = int(hex_pair, 16) / 255
+            return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+        color = self.brand_color.lstrip('#')
+        red, green, blue = (channel(color[i:i + 2]) for i in (0, 2, 4))
+        luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        # Contrast with black (L + 0.05) / 0.05 against white 1.05 / (L + 0.05).
+        return '#000000' if (luminance + 0.05) ** 2 > 0.0525 else '#ffffff'
 
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login
@@ -220,7 +241,8 @@ class Asset(models.Model):
 
 class CustomerNotification(models.Model):
     """One item in a customer's portal bell: a visit report ready (and to
-    rate), our team's reply to their request, or a visit booked or moved.
+    rate), our team's reply to their request, a visit booked or moved, or
+    a request resolved (with our answer).
     Written where each happens (customers.notify); cleared once the
     customer opens what it's about."""
 
@@ -228,6 +250,7 @@ class CustomerNotification(models.Model):
         REPORT_READY = 'report_ready', _('Visit report ready')
         REPLY = 'reply', _('Reply to a request')
         VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
+        REQUEST_CLOSED = 'request_closed', _('Request resolved')
 
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name='notifications', verbose_name=_('customer'),

@@ -23,15 +23,15 @@ def static_version(request):
 # setup, and the portal's own top pages (its header links).
 NO_BACK_LINK = {
     'login', 'portal_login', 'portal_first_login', 'portal_account_link', 'portal_home', 'portal_requests',
-    'portal_visits', 'portal_history', 'portal_machines', 'portal_settings',
+    'portal_visits', 'portal_reports', 'portal_machines', 'portal_settings',
 }
 
 
 def portal_nav(request):
-    """A customer's header links — Home, Requests, Visits, History,
+    """A customer's header links — Home, Requests, Visits, Reports,
     Machines, Settings — with the current section marked: a request's or a
-    machine's own page counts as its list's (a visit's page is marked by
-    the view, upcoming or history)."""
+    machine's own page counts as its list's, and a visit's page counts as
+    Visits."""
     if not hasattr(getattr(request, 'user', None), 'customer'):
         return {}
     from django.urls import reverse
@@ -42,8 +42,8 @@ def portal_nav(request):
     sections = [
         ('customers:portal_home', _('Home'), 'home', {'portal_home'}),
         ('customers:portal_requests', _('Requests'), 'ticket', {'portal_requests', 'portal_ticket_new', 'ticket_status'}),
-        ('customers:portal_visits', _('Visits'), 'calendar', {'portal_visits'}),
-        ('customers:portal_history', _('History'), 'file-text', {'portal_history'}),
+        ('customers:portal_visits', _('Visits'), 'calendar', {'portal_visits', 'portal_visit'}),
+        ('customers:portal_reports', _('Reports'), 'download', {'portal_reports'}),
         ('customers:portal_machines', _('Machines'), 'dumbbell', {'portal_machines', 'portal_machine', 'portal_machine_add'}),
         ('customers:portal_settings', _('Settings'), 'user', {'portal_settings'}),
     ]
@@ -74,6 +74,11 @@ def portal_bell(customer):
         if note.kind == CustomerNotification.Kind.REPLY and note.ticket_id:
             items.append({
                 'text': _('New reply from our team'), 'about': note.ticket.ticket_number,
+                'url': reverse('tasks:ticket_status', args=[note.ticket.token]),
+            })
+        elif note.kind == CustomerNotification.Kind.REQUEST_CLOSED and note.ticket_id:
+            items.append({
+                'text': _('Your request has been resolved'), 'about': note.ticket.ticket_number,
                 'url': reverse('tasks:ticket_status', args=[note.ticket.token]),
             })
         elif note.task_id:

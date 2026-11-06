@@ -616,7 +616,7 @@ class PortalVisitReportTests(CustomerTestCase):
 
     def test_the_customer_downloads_their_own_report(self):
         self.client.login(username='fitnessfirst', password='pass12345')
-        self.assertContains(self.client.get('/customers/portal/history/'), self.url)
+        self.assertContains(self.client.get('/customers/portal/reports/'), self.url)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
@@ -673,14 +673,14 @@ class PortalProgressTests(CustomerTestCase):
         self.assertNotContains(page, 'Assigned')
         self.assertNotContains(visits, 'Assigned')
 
-    def test_a_booked_day_that_passed_is_being_arranged_again(self):
+    def test_a_booked_day_that_passed_is_rescheduling(self):
         from datetime import timedelta
         self._visit('AE-0904', scheduled_for=timezone.now() - timedelta(days=30))
         page = self.client.get('/customers/portal/')
         self.assertIsNone(page.context['next_visit'])
         visits = self.client.get('/customers/portal/visits/')
         self.assertNotContains(visits, 'Visit scheduled')
-        self.assertContains(visits, 'Being arranged')
+        self.assertContains(visits, 'Rescheduling')
 
     def test_done_visits_are_history_with_their_report(self):
         from reports.models import WorkReport
@@ -691,11 +691,11 @@ class PortalProgressTests(CustomerTestCase):
         )
         # Home counts what's going on, not reports: a new one reaches them through the bell.
         self.assertNotIn('report_count', self.client.get('/customers/portal/').context)
-        page = self.client.get('/customers/portal/history/')
-        self.assertEqual([v.task_number for v in page.context['history']], ['AE-0905'])
+        page = self.client.get('/customers/portal/visits/?show=past')
+        self.assertEqual([v.task_number for v in page.context['visits']], ['AE-0905'])
         self.assertContains(page, f'/customers/portal/visits/{visit.pk}/report.pdf')
         self.assertContains(page, 'Done')
-        self.assertContains(self.client.get(f'/customers/portal/visits/{visit.pk}/'), 'Back to history')
+        self.assertContains(self.client.get(f'/customers/portal/visits/{visit.pk}/'), '?show=past')
 
     def test_a_ticket_reads_as_its_visit_does(self):
         from datetime import timedelta
@@ -827,14 +827,14 @@ class PortalVisitPageTests(CustomerTestCase):
         from reports.models import CustomerFeedback
         self.assertNotContains(self.client.get(self.url), 'How was this visit?')  # not done yet
         self._finish()
-        self.assertContains(self.client.get('/customers/portal/history/'), 'Rate this visit')
+        self.assertContains(self.client.get('/customers/portal/reports/'), 'Rate this visit')
         response = self.client.post(self.url, {'rating': '5', 'comment': 'Quick and tidy'})
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
         feedback = CustomerFeedback.objects.get(task=self.visit)
         self.assertEqual((feedback.rating, feedback.comment, feedback.requested_by), (5, 'Quick and tidy', None))
         page = self.client.get(self.url)
         self.assertContains(page, 'You rated it 5 out of 5.')
-        self.assertNotContains(self.client.get('/customers/portal/history/'), 'Rate this visit')
+        self.assertNotContains(self.client.get('/customers/portal/reports/'), 'Rate this visit')
         self.client.post(self.url, {'rating': '1'})  # no second go
         feedback.refresh_from_db()
         self.assertEqual(feedback.rating, 5)
@@ -1222,19 +1222,18 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
     def test_a_registered_machine_can_be_picked(self):
         self.client.login(username='fitnessfirst', password='pass12345')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'asset': str(self.asset.pk), 'problem': 'not_working', 'out_of_service': 'on'},
+            {'asset': str(self.asset.pk), 'problem': 'not_working'},
             {'model_name': 'Old bike', 'serial_no': 'B-9', 'code': 'BK-9', 'problem': 'display'},
         ]))
         ticket = CustomerTicket.objects.get()
         first, second = ticket.machines.all()
         self.assertEqual((first.product_code, second.product_code), ('', 'BK-9'))
-        self.assertEqual((first.asset, first.machine_name, first.serial, first.out_of_service),
-                         (self.asset, 'Technogym Excite Run 700', 'TG-77', True))
+        self.assertEqual((first.asset, first.machine_name, first.serial),
+                         (self.asset, 'Technogym Excite Run 700', 'TG-77'))
         self.assertEqual((second.asset, second.machine_name, second.serial), (None, 'Old bike', 'B-9'))
         # The ticket's text fields are written from the machines for everything that reads them.
         self.assertEqual(ticket.serial_numbers, 'TG-77' + chr(10) + 'B-9')
         self.assertIn('Technogym Excite Run 700 (TG-77): Not working', ticket.description)
-        self.assertIn('cannot be used', ticket.description)
 
     def test_reporting_from_a_machines_page_has_it_chosen_and_sends(self):
         self.client.login(username='fitnessfirst', password='pass12345')

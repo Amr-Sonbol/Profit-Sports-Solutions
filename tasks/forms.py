@@ -1391,19 +1391,19 @@ class TicketMachineForm(forms.Form):
     model_name = forms.CharField(required=False, max_length=150, label=_('Model'))
     serial_no = forms.CharField(
         required=False, max_length=100, label=_('Serial number'),
-        help_text=_('as written on the silver sticker on the machine'),
+        help_text=_("As shown on the machine's sticker."),
     )
     code = forms.CharField(
-        required=False, max_length=100, label=_('Code (optional)'),
-        help_text=_('the product code on the sticker, if there is one'),
+        required=False, max_length=100, label=_('Product code (optional)'),
+        help_text=_('The product code shown on the sticker, if available.'),
     )
-    # The silver serial-number sticker on the machine. No `capture`: phones
+    # The serial-number sticker on the machine. No `capture`: phones
     # then offer both "take photo" and "choose from library".
     # The number itself is required (a machine is tracked by it); the photo
     # helps the technician check it.
     serial_photo = forms.FileField(
-        required=False, label=_('Photo of the serial number sticker (optional)'),
-        help_text=_('the silver sticker on the machine: take a photo or upload one'),
+        required=False, label=_('Photo of the sticker (optional)'),
+        help_text=_('A clear photo helps our team confirm the details. Take a photo or upload one.'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
@@ -1420,7 +1420,6 @@ class TicketMachineForm(forms.Form):
                              'It started 3 days ago and happens every time.'),
         }),
     )
-    out_of_service = forms.BooleanField(required=False, label=_('The machine cannot be used'))
     files = MultipleFileField(
         required=False, label=_('Photos or a short video'),
         help_text=_('showing the issue and the serial number'),
@@ -1486,7 +1485,7 @@ class TicketMachineForm(forms.Form):
                 self.add_error('model_name', _('Please enter the model of the machine.'))
             if not (cleaned.get('serial_no') or '').strip():
                 self.add_error(
-                    'serial_no', _('Please enter the serial number from the silver sticker on the machine.'),
+                    'serial_no', _("Please enter the serial number shown on the machine's sticker."),
                 )
         photo = cleaned.get('serial_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
@@ -1635,8 +1634,11 @@ class CloseTicketForm(forms.Form):
     that just never needed a task, not an invalid one.
     """
     close_reason = forms.CharField(
-        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_('How the matter was resolved without a task, for example advice given or resolved by phone.'),
+        label=_('Answer to the customer'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_(
+            'How the request was resolved, for example advice given, parts sent or resolved by phone. The customer '
+            'sees this on their request and receives it by email.'
+        ),
     )
 
 

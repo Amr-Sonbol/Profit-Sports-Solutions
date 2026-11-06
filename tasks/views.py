@@ -253,8 +253,6 @@ def ticket_machines_text(machines):
             if serial:
                 serials.append(serial)
             entry = f"{machine.machine_name}{f' ({serial})' if serial else ''}: {machine.get_problem_display()}"
-            if machine.out_of_service:
-                entry += f" — {_('cannot be used')}"
             if machine.description:
                 entry += f"\n  {machine.description}"
             described.append(entry)
@@ -2567,6 +2565,41 @@ def _send_reply_to_customer(request, reply):
     )
 
 
+def _send_request_closed(request, ticket):
+    """Tell the customer their request was resolved, with our answer (the
+    close reason) — best-effort, under the same Notifications switch as
+    our replies, and only when they gave an email."""
+    if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
+        return
+    if not ticket.contact_email:
+        return
+    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    with translation.override('en'):
+        subject = _('Your request %(number)s has been resolved — %(site)s') % {
+            'number': ticket.ticket_number, 'site': ticket.site_description,
+        }
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'Your request %(number)s has been resolved:\n\n'
+            '%(answer)s\n\n'
+            'You can view it here. If you need anything further, please send us a new request from the portal.\n'
+            '%(link)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {
+            'contact': ticket.contact_name, 'number': ticket.ticket_number,
+            'answer': ticket.close_reason, 'link': link,
+        }
+    _send_notification_email(
+        subject, message, 'tasks/email/request_closed.html',
+        {
+            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
+            'answer': ticket.close_reason, 'link': link,
+        },
+        [ticket.contact_email],
+    )
+
+
 def _send_reply_to_staff(request, reply):
     """Best-effort, and only when the ticket is assigned to someone with
     a login and an email on file — there's no fixed office address to
@@ -3107,6 +3140,10 @@ def ticket_review(request, pk):
                 ticket.reviewed_by = request.user
                 ticket.reviewed_at = timezone.now()
                 ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+                if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+                    # The reason is our answer: on their request page, in their bell and by email.
+                    notify_customer.request_closed(ticket)
+                    _send_request_closed(request, ticket)
                 messages.success(request, _('Ticket closed.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 

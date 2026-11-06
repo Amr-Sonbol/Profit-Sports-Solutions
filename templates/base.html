@@ -11,7 +11,8 @@
     {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
     <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
-<body>
+{# A customer sees the portal's look (theme-portal in base.css) in their own color (Customer.brand_color, validated as #RRGGBB). #}
+<body{% if user.customer %} class="theme-portal" style="--brand: {{ user.customer.brand_color }}; --brand-text: {{ user.customer.brand_text_color }}"{% endif %}>
     <header class="site-header">
         {% if user.technician or user.customer %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>

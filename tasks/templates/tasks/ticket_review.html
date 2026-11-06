@@ -362,7 +362,7 @@
                     <tr>
                         <td>{% if not machine.decision %}<input type="checkbox" name="machines" value="{{ machine.pk }}" aria-label="{{ machine.machine_name }}">{% endif %}</td>
                         <td class="cell-wrap">{{ machine.machine_name }}<br><span class="muted" dir="ltr">{{ machine.serial|default:"—" }}</span></td>
-                        <td class="cell-wrap">{{ machine.get_problem_display }}{% if machine.out_of_service %}<br><span class="badge badge--status-blocked">{% translate "Cannot be used" %}</span>{% endif %}</td>
+                        <td class="cell-wrap">{{ machine.get_problem_display }}</td>
                         <td class="cell-wrap">
                             {% if machine.decision %}
                             {{ machine.get_decision_display }}

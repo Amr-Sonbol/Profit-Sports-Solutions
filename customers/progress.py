@@ -13,8 +13,10 @@ from tasks.models import CustomerTicket, Task
 DONE_STATUSES = (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED)
 
 RECEIVED = (_('Received'), 'badge--neutral')
-BEING_ARRANGED = (_('Being arranged'), 'badge--neutral')
+BEING_ARRANGED = (_("Being arranged — we'll confirm the date with you soon"), 'badge--neutral')
 VISIT_BOOKED = (_('Visit scheduled'), 'badge--booked')
+# A booked day that passed with the work not done: we owe them a new date.
+RESCHEDULING = (_("Rescheduling — we'll contact you with a new date"), 'badge--warning')
 ON_SITE = (_('Technician on site'), 'badge--status-in_progress')
 DONE = (_('Done'), 'badge--good')
 RESOLVED = (_('Resolved'), 'badge--good')
@@ -30,7 +32,7 @@ def visit_day(task):
 
 def visit_progress(task):
     """A visit (task) as the customer sees it. A booked day that has
-    passed with the work not done is being arranged again, not booked."""
+    passed with the work not done is rescheduling, not booked."""
     if task.status == Task.Status.CANCELLED:
         return CANCELLED
     if task.status in DONE_STATUSES:
@@ -49,6 +51,8 @@ def visit_progress(task):
         else:
             label = _('Visit scheduled on %(date)s') % {'date': date}
         return (label, VISIT_BOOKED[1])
+    if day:
+        return RESCHEDULING
     return BEING_ARRANGED
 
 
@@ -78,7 +82,7 @@ def is_upcoming(task):
 # and cancelled aren't on the way to a visit, so they have no bar.
 STEPS = (_('Received'), _('Being arranged'), _('Visit scheduled'), _('Done'))
 # Pairs, not a dict: the lazy labels' hashes change with the language.
-STEP_OF = ((RECEIVED, 0), (BEING_ARRANGED, 1), (VISIT_BOOKED, 2), (ON_SITE, 2), (DONE, 3), (RESOLVED, 3))
+STEP_OF = ((RECEIVED, 0), (BEING_ARRANGED, 1), (RESCHEDULING, 1), (VISIT_BOOKED, 2), (ON_SITE, 2), (DONE, 3), (RESOLVED, 3))
 
 
 def progress_steps(progress):

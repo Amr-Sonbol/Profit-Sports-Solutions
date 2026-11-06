@@ -22,7 +22,7 @@
         {% if tickets %}
         <ul class="action-list">
             {% for ticket in tickets %}
-            <li>
+            <li class="row-with-actions">
                 <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
                     <span class="portal-row__main">
                         <strong dir="ltr">{{ ticket.ticket_number }}</strong>
@@ -32,6 +32,8 @@
                     </span>
                     <span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span>
                 </a>
+                {# Finished: its report, one click away. #}
+                {% if ticket.report_visit %}{% include "customers/_report_download.html" with visit=ticket.report_visit %}{% endif %}
             </li>
             {% endfor %}
         </ul>

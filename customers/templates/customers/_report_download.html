@@ -1,0 +1,5 @@
+{% load i18n %}{% comment %}
+A visit's report as icon buttons (hover shows the words): the PDF, and the
+copy the customer signed when the report has changed since (`changed`).
+{% endcomment %}<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener" class="icon-button" title="{% translate 'Download the report (PDF)' %}">{% include "_icon.html" with name="download" %}<span class="visually-hidden">{% translate "Download the report (PDF)" %}</span></a>{% if changed %}
+<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener" class="icon-button" title="{% translate 'The version you signed' %}">{% include "_icon.html" with name="file-text" %}<span class="visually-hidden">{% translate "The version you signed" %}</span></a>{% endif %}

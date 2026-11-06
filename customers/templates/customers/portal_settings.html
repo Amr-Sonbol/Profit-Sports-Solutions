@@ -1,54 +1,119 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% translate "Settings" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="portal">
+{# Four sections, each its own form with its button in the same place: a footer at the row's end. #}
+<div class="portal settings">
     <div class="page__header">
         <div>
             <h1>{% translate "Settings" %}</h1>
-            <p class="muted">{% blocktranslate with email=user.email|default:user.get_username %}You sign in as {{ email }}. To change it, please contact us.{% endblocktranslate %}</p>
         </div>
     </div>
 
     <section class="section">
         <h2>{% translate "Your details" %}</h2>
-        <form method="post" class="form-grid" novalidate>
+        <p class="settings__intro">{% translate "How we reach you, and where we send invoices and parts." %}</p>
+        <form method="post" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="details">
-            {% for field in details_form %}
-            <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'billing_address' or field.name == 'shipping_address' %} field--wide{% endif %}">
+            {% if details_form.non_field_errors %}<p class="flash flash--error">{{ details_form.non_field_errors|join:" " }}</p>{% endif %}
+            {# Contact, addresses, language: the groups come from the view (details_groups). #}
+            {% for title, names in details_groups %}
+            <fieldset class="settings__group">
+                <legend>{{ title }}</legend>
+                <div class="form-grid">
+                    {% for field in details_form %}{% if field.name in names %}
+                    <div class="field{% if field.errors %} field--error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                        {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                    </div>
+                    {% endif %}{% endfor %}
+                </div>
+            </fieldset>
+            {% endfor %}
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Save my details" %}</button>
+            </div>
+        </form>
+    </section>
+
+    {# Their portal color: any from the picker, or their brand's exact code (brand-color.js keeps the two in step). #}
+    <section class="section">
+        <h2>{% translate "Your portal color" %}</h2>
+        <p class="settings__intro">{% translate "Your gym's color. The portal's buttons and highlights use it." %}</p>
+        {% with field=color_form.brand_color %}
+        <form method="post" class="color-choice{% if field.errors %} field--error{% endif %}" novalidate data-color-choice>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="color">
+            <div class="color-choice__bar">
+                <label class="color-choice__pick">
+                    <input type="color" value="{{ field.value|default:'#c8c8c8' }}" class="color-choice__native" data-color-native>
+                    <span>{% translate "Choose your color" %}</span>
+                </label>
+                <button type="submit" class="button color-choice__save">{% translate "Save color" %}</button>
+            </div>
+            <div class="color-choice__own">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
-                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                <p class="field__help">{{ field.help_text }}</p>
                 {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            {% endfor %}
-            <div class="field field--submit">
-                <button type="submit" class="button">{% translate "Save my details" %}</button>
+        </form>
+        {% endwith %}
+    </section>
+
+    {# Changing the sign-in email: the new address and their password; it switches once they open the link sent there. #}
+    <section class="section">
+        <h2>{% translate "Sign-in email" %}</h2>
+        <p class="settings__intro">{% blocktranslate with email=user.email|default:user.get_username %}You sign in with <strong dir="ltr">{{ email }}</strong>. To change it, enter the new address and your password: we send a confirmation link there, and the change happens once you open it.{% endblocktranslate %}</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="email">
+            <div class="settings__stack">
+                {% for field in email_form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Send confirmation link" %}</button>
             </div>
         </form>
     </section>
 
     <section class="section">
         <h2>{% translate "Change your password" %}</h2>
-        <form method="post" class="form-grid" novalidate>
+        <p class="settings__intro">{% translate "Enter your current password, then the new one twice." %}</p>
+        <form method="post" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="password">
-            {% for field in password_form %}
-            <div class="field{% if field.errors %} field--error{% endif %}">
-                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                {{ field }}
-                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
-                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            {% if password_form.non_field_errors %}<p class="flash flash--error">{{ password_form.non_field_errors|join:" " }}</p>{% endif %}
+            <div class="settings__stack">
+                {% for field in password_form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+                {% include "_show_password.html" %}
             </div>
-            {% endfor %}
-            {% include "_show_password.html" %}
-            <div class="field field--submit">
+            <div class="form-actions">
                 <button type="submit" class="button">{% translate "Change password" %}</button>
             </div>
         </form>
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/brand-color.js' %}?v={{ css_version }}" defer></script>
 {% endblock %}

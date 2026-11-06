@@ -30,7 +30,7 @@ internal: what the customer reported, and their own files.
                 </td>
                 <td class="cell-wrap">
                     {{ machine.get_problem_display }}
-                    {% if machine.out_of_service %}<br><span class="badge badge--status-blocked">{% translate "Cannot be used" %}</span>{% endif %}
+                    
                     {% if machine.description %}<br><span class="muted pre-line">{{ machine.description }}</span>{% endif %}
                 </td>
                 <td>

@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views
 
@@ -18,10 +19,13 @@ urlpatterns = [
     path('portal/password-help/', views.portal_password_help, name='portal_password_help'),
     path('portal/account/<str:token>/', views.portal_account_link, name='portal_account_link'),
     path('portal/first-login/', views.portal_first_login, name='portal_first_login'),
+    path('portal/email/confirm/<str:token>/', views.portal_email_confirm, name='portal_email_confirm'),
     path('portal/', views.portal_home, name='portal_home'),
     path('portal/requests/', views.portal_requests, name='portal_requests'),
     path('portal/visits/', views.portal_visits, name='portal_visits'),
-    path('portal/history/', views.portal_history, name='portal_history'),
+    # History became Reports (and Visits' Past tab); old links still land.
+    path('portal/history/', RedirectView.as_view(pattern_name='customers:portal_reports')),
+    path('portal/reports/', views.portal_reports, name='portal_reports'),
     path('portal/tickets/new/', views.portal_ticket_new, name='portal_ticket_new'),
     path('portal/machines/', views.portal_machines, name='portal_machines'),
     path('portal/settings/', views.portal_settings, name='portal_settings'),

@@ -154,6 +154,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | billing_address | text | optional — where invoices are addressed; the customer completes it at first sign-in |
 | shipping_address | text | optional — where replacement parts should be delivered, if different from the site itself (a warehouse or head office); the customer completes it at first sign-in |
 | language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
+| brand_color | varchar(7) | `#RRGGBB`, default `#c8c8c8` (grey) — the customer's own color for their portal's buttons and highlights, chosen in portal Settings; text on it is black or white, whichever reads better (`Customer.brand_text_color`) |
 | user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
 | must_change_password | bool | set when the welcome email goes out (or staff set a temporary password) — cleared once the customer sets their own password and completes their details |
@@ -602,6 +603,21 @@ A new ticket, or a new customer reply on an existing one — feeds the ticket ha
 
 **A shared team inbox, not per-user.** There's one row per event, not one per (event, viewer) pair — opening a ticket clears its notifications for every manager/admin at once, the same way any one of them acting on a ticket already handles it for the whole team. Created in `portal_ticket_new` (a new ticket) and `ticket_status` (a customer's own reply) — never for a staff reply, since staff already know they just sent one. Also fires a best-effort email to every manager/admin in the ticket's country (`send_new_ticket_email_to_staff`), separate from the bell.
 
+### customer_notification
+One item in a customer's portal bell, written where each thing happens (`customers/notify.py`) and only for a customer with a portal login (never our own internal account).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| customer_id | FK → customer | |
+| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`) |
+| task_id | FK → task | nullable — the visit it's about |
+| ticket_id | FK → customer_ticket | nullable — the request it's about |
+| created_at | timestamptz | |
+| seen_at | timestamptz | nullable — set once the customer opens what it's about |
+
+**One item per thing.** Notifying the same thing again replaces its unseen item rather than stacking another. Closing a customer request (`ticket_review`, action `close`) also emails the customer our answer, under the same Notifications switch as our replies (`reply_to_customer_email`).
+
 ### ticket_escalation
 One step up the escalation chain, and its outcome. The chain is strict — no skipping levels — and lives in `people.models.ESCALATION_CHAIN`: **Country Support Manager → Technical Support Manager → Operations Manager**, who decides (nothing above them). A separate record rather than a ticket status: escalation is a step *within* an open ticket, not a replacement for `new`, and this keeps who escalated, why, and what was decided at every level.
 
@@ -685,10 +701,9 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | model_name | varchar | blank — typed when the machine isn't in their list |
 | serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
 | code | varchar | blank — its product code, if the customer knows it (an unlisted machine); carried into the technician's new-machine row |
-| serial_photo | file | blank — a photo of the machine's silver serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
+| serial_photo | file | blank — a photo of the machine's serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
 | problem | varchar | not_working, noise, display, cables, other |
 | description | text | blank |
-| out_of_service | bool | "cannot be used" — the customer's own flag, for the office to prioritise |
 | position | smallint | order the customer added them |
 | decision | varchar | blank until decided — visit, ship_part (both handled by a task), advice, not_covered (no task) |
 | task_id | FK → task | null — the task handling this machine, for visit / ship_part |
