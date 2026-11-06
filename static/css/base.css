@@ -1,3 +1,9 @@
+/* Anything marked hidden stays hidden, whatever display a component sets
+   (a heading styled as flex, say) — scripts show and hide with it. */
+[hidden] {
+    display: none !important;
+}
+
 :root {
     color-scheme: light;
     /* Black and white, straight from the logo — the accent is black too.
@@ -2440,6 +2446,50 @@ tbody tr:hover {
 }
 
 /* Portal ticket form, "Check and send": what they filled in (report-steps.js). */
+/* The customer's sidebar: whose portal it is (initials in their color,
+   the gym's name, "Customer portal"). */
+.portal-account {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.65rem;
+    padding-block: 0.4rem 0.9rem;
+    margin-block-end: 0.75rem;
+    border-block-end: 1px solid var(--color-border);
+}
+
+.portal-account__badge {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    border-radius: 2px;
+    background: var(--brand, var(--color-text));
+    color: var(--brand-text, #fff);
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+
+.portal-account__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.portal-account__name strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.portal-account__name span {
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
 /* A request's status, first on its page: large status words, what it means,
    and the visit's progress; the edge says open (their color), resolved
    (green) or closed without action (grey). */
@@ -3175,6 +3225,23 @@ tbody tr:hover {
 .topic-choice:has(input:checked) {
     border-color: var(--color-accent);
     outline: 1px solid var(--color-accent);
+}
+
+/* The dot in black, the portal's ink, not the browser's blue. */
+.topic-choice input {
+    accent-color: var(--color-text);
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+.theme-portal .topic-choice {
+    border-radius: 2px;
+}
+
+/* Other's "what is it about?" box, right under the choices. */
+.topic-other {
+    max-inline-size: 30rem;
+    margin-block-start: 1rem;
 }
 
 .section > .progress-steps {

@@ -134,6 +134,25 @@
         form.querySelectorAll('[data-show-topic]').forEach(function (element) {
             element.hidden = !!checked && element.getAttribute('data-show-topic').split(' ').indexOf(checked.value) === -1;
         });
+        // Spare parts: the machine card's text box gets its own example.
+        form.querySelectorAll('[data-parts-placeholder]').forEach(function (wrapper) {
+            var box = wrapper.querySelector('textarea');
+            if (!box.hasAttribute('data-problem-placeholder')) {
+                box.setAttribute('data-problem-placeholder', box.placeholder);
+            }
+            box.placeholder = checked && checked.value === 'parts'
+                ? wrapper.getAttribute('data-parts-placeholder') : box.getAttribute('data-problem-placeholder');
+        });
+    }
+
+    // Other: its "what is it about?" box, right under the choices.
+    var other = form.querySelector('[data-topic-other]');
+
+    function showOther() {
+        var checked = form.querySelector('input[name$="topic"]:checked');
+        if (other) {
+            other.hidden = !checked || checked.value !== 'other';
+        }
     }
 
     function move(direction) {
@@ -141,6 +160,15 @@
         if (direction > 0 && required && !form.querySelector('input[name="' + required + '"]:checked')) {
             steps[current].querySelector('[data-step-required]').hidden = false;
             return;
+        }
+        if (direction > 0 && other && steps[current].contains(other) && !other.hidden) {
+            var subject = other.querySelector('input');
+            var missing = !subject.value.trim();
+            other.querySelector('[data-topic-other-required]').hidden = !missing;
+            if (missing) {
+                subject.focus();
+                return;
+            }
         }
         var next = current + direction;
         while (steps[next] && steps[next].hasAttribute('data-step-skip')) {
@@ -155,9 +183,14 @@
         radio.addEventListener('change', function () {
             form.querySelectorAll('[data-step-required]').forEach(function (note) { note.hidden = true; });
             showTopic();
+            showOther();
+            if (other && !other.hidden) {
+                other.querySelector('input').focus();
+            }
         });
     });
     showTopic();
+    showOther();
 
     form.querySelectorAll('[data-steps-bar], [data-steps-nav]').forEach(function (element) {
         element.hidden = false;

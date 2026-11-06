@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-06 22:59+0000\n"
+"POT-Creation-Date: 2026-11-06 23:16+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2071,8 +2071,8 @@ msgstr "كل جهاز نعتني به في مواقعك. افتح أي جهاز 
 msgid "Every message the system sends, when, and to whom. Automatic messages can be switched off here. Messages someone sends with a button are listed for reference, and the security emails are always sent."
 msgstr "جميع الرسائل التي يرسلها النظام، ومتى، ولمن. يمكن إيقاف الرسائل التلقائية من هنا. أما الرسائل التي تُرسل بزر فمدرجة للاطلاع، ورسائل الأمان تُرسل دائمًا."
 
-msgid "Every problem you have reported, and how far each has got."
-msgstr "كل مشكلة أبلغت عنها، وإلى أين وصلت كل منها."
+msgid "Every request you have sent us, and how far each has got."
+msgstr "كل طلب أرسلته إلينا، وإلى أين وصل."
 
 msgid "Every technician in the country, by rank. Completed means the work report was submitted; the line is their last year, month by month."
 msgstr "جميع الفنيين في الدولة حسب الترتيب. المنجزة تعني أنه تم تقديم تقرير العمل؛ والخط يمثّل سنتهم الماضية شهرًا بشهر."
@@ -2085,6 +2085,9 @@ msgstr "الدليل"
 
 msgid "Example: The treadmill stops after about 5 minutes and shows error E-07. It started 3 days ago and happens every time."
 msgstr "مثال: جهاز المشي يتوقف بعد حوالي 5 دقائق ويظهر الخطأ E-07. بدأت المشكلة منذ 3 أيام وتتكرر في كل مرة."
+
+msgid "Example: Two replacement running belts and one safety key for this treadmill."
+msgstr "مثال: سيرا جري بديلان ومفتاح أمان واحد لجهاز المشي هذا."
 
 msgid "Exceeds recorded time"
 msgstr "يتجاوز الوقت المسجَّل"
@@ -3633,6 +3636,9 @@ msgstr "يرجى تسجيل استئناف العمل قبل تقديم التق
 msgid "Please say in a few words what it is about."
 msgstr "يُرجى أن توضح في كلمات قليلة موضوع الطلب."
 
+msgid "Please say which parts you need for this machine."
+msgstr "يُرجى ذكر القطع التي تحتاج إليها لهذا الجهاز."
+
 msgid "Please say: what happens, since when, any error code on the screen, and how often."
 msgstr "يرجى ذكر: ما الذي يحدث، ومنذ متى، وأي رمز خطأ على الشاشة، وكم مرة يتكرر."
 
@@ -4894,6 +4900,9 @@ msgstr "الأجهزة الواردة في إذن التسليم. الكمية 4
 msgid "The machines to carry, with their serial numbers and colors:"
 msgstr "الأجهزة المنقولة، بأرقامها التسلسلية وألوانها:"
 
+msgid "The part names or numbers if you know them, and how many of each."
+msgstr "أسماء القطع أو أرقامها إن كنت تعرفها، والكمية المطلوبة من كل منها."
+
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
@@ -5664,6 +5673,12 @@ msgstr "تُضبط رسائل البريد الإلكتروني وإشعارات
 
 msgid "Which machines, and what's wrong?"
 msgstr "ما الأجهزة، وما المشكلة؟"
+
+msgid "Which machines, and which parts?"
+msgstr "ما الأجهزة، وما القطع؟"
+
+msgid "Which parts do you need?"
+msgstr "ما القطع التي تحتاج إليها؟"
 
 msgid "Who"
 msgstr "من"

@@ -154,8 +154,14 @@
             {# A customer gets the same menu as the staff: a sidebar on a computer, slide-in on a phone. #}
             <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
-                <p class="site-header__profile-link">{{ user.customer.name }}</p>
-                <a href="{% url 'customers:portal_ticket_new' %}" class="button nav-cta">{% translate "New request" %}</a>
+                {# Whose portal this is. "New request" is on Home and Requests. #}
+                <div class="portal-account">
+                    <span class="portal-account__badge" aria-hidden="true">{{ portal_initials }}</span>
+                    <span class="portal-account__name">
+                        <strong>{{ user.customer.name }}</strong>
+                        <span>{% translate "Customer portal" %}</span>
+                    </span>
+                </div>
                 {% for item in portal_nav %}
                 <a href="{{ item.url }}" class="nav-link{% if item.active %} nav-link--active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
                     {% include "_icon.html" with name=item.icon %}

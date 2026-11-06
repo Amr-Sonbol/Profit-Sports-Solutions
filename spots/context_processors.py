@@ -52,6 +52,8 @@ def portal_nav(request):
             {'url': reverse(url_name), 'label': label, 'icon': icon, 'active': name in names}
             for url_name, label, icon, names in sections
         ],
+        # The sidebar's account header: up to two initials of the gym's name.
+        'portal_initials': ''.join(word[0] for word in request.user.customer.name.split()[:2]).upper(),
         'portal_bell': (bell := portal_bell(request.user.customer)),
         'portal_bell_new': sum(1 for item in bell if item['new']),
     }

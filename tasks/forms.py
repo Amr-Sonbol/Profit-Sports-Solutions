@@ -1359,13 +1359,14 @@ class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
             self.fields['site'].initial = sites[0].pk
 
     @property
-    def is_machine_problem(self):
-        return self.cleaned_data.get('topic') == CustomerTicket.Topic.MACHINE_PROBLEM
+    def uses_machines(self):
+        """A machine problem or spare parts: told through machine cards."""
+        return self.cleaned_data.get('topic') in (CustomerTicket.Topic.MACHINE_PROBLEM, CustomerTicket.Topic.PARTS)
 
     def clean(self):
         cleaned = super().clean()
         topic = cleaned.get('topic')
-        if topic and topic != CustomerTicket.Topic.MACHINE_PROBLEM:
+        if topic and topic not in (CustomerTicket.Topic.MACHINE_PROBLEM, CustomerTicket.Topic.PARTS):
             if not cleaned.get('message', '').strip():
                 self.add_error('message', _('Please tell us what you need.'))
             if topic == CustomerTicket.Topic.OTHER and not cleaned.get('subject', '').strip():
@@ -1427,8 +1428,13 @@ class TicketMachineForm(forms.Form):
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
-    def __init__(self, *args, customer, **kwargs):
+    def __init__(self, *args, customer, for_parts=False, **kwargs):
         super().__init__(*args, **kwargs)
+        # A spare-parts request: the same machine, but which parts instead of a problem.
+        self.for_parts = for_parts
+        self.fields['problem'].choices = [
+            choice for choice in self.fields['problem'].choices if choice[0] != TicketMachine.Problem.PARTS
+        ]
         assets = Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).select_related(
             'site', 'brand',
         ).order_by('site__name', 'brand__name', 'model_name')
@@ -1466,7 +1472,7 @@ class TicketMachineForm(forms.Form):
         if not self.has_changed():
             return cleaned
         if not (cleaned.get('description') or '').strip():
-            self.add_error('description', _(
+            self.add_error('description', _('Please say which parts you need for this machine.') if self.for_parts else _(
                 'Please describe the problem: what happens, since when, any error code, and how often.',
             ))
         which = cleaned.get('which')
@@ -1492,7 +1498,9 @@ class TicketMachineForm(forms.Form):
             self.add_error('serial_photo', _('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
                 'name': photo.name,
             })
-        if not cleaned.get('problem'):
+        if self.for_parts:
+            cleaned['problem'] = TicketMachine.Problem.PARTS
+        elif not cleaned.get('problem'):
             self.add_error('problem', _('Please select the problem.'))
         return cleaned
 

@@ -767,6 +767,8 @@ class TicketMachine(models.Model):
         DISPLAY = 'display', _('Display or electronics')
         CABLES = 'cables', _('Cables, belts or pulleys')
         OTHER = 'other', _('Other')
+        # Set by itself on a spare-parts request's machines; never offered as a problem.
+        PARTS = 'parts', _('Spare parts')
 
     class Decision(models.TextChoices):
         # Both of these are handled through a task (task below).

@@ -702,7 +702,7 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
 | code | varchar | blank — its product code, if the customer knows it (an unlisted machine); carried into the technician's new-machine row |
 | serial_photo | file | blank — a photo of the machine's serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
-| problem | varchar | not_working, noise, display, cables, other |
+| problem | varchar | not_working, noise, display, cables, other — or `parts`, set by itself on a spare-parts request's machines (never offered as a problem); `description` then says which parts |
 | description | text | blank |
 | position | smallint | order the customer added them |
 | decision | varchar | blank until decided — visit, ship_part (both handled by a task), advice, not_covered (no task) |
