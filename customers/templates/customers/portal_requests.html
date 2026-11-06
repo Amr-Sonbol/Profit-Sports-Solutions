@@ -10,7 +10,7 @@
             <h1>{% translate "Requests" %}</h1>
             <p class="muted">{% translate "Every problem you have reported, and how far each has got." %}</p>
         </div>
-        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "Report a problem" %}</a>
+        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "New request" %}</a>
     </div>
 
     <nav class="tabs" aria-label="{% translate 'Requests' %}">
@@ -26,6 +26,7 @@
                 <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
                     <span class="portal-row__main">
                         <strong dir="ltr">{{ ticket.ticket_number }}</strong>
+                        <span>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</span>
                         <span class="muted">{{ ticket.site_description }} · {{ ticket.submitted_at|date:"j M Y" }}</span>
                         {% if ticket.is_open %}{% include "_progress_steps.html" with steps=ticket.steps label=ticket.progress.0 %}{% endif %}
                     </span>
@@ -38,8 +39,8 @@
         <p class="empty-state">{% translate "No closed requests yet." %}</p>
         {% else %}
         <div class="empty-state">
-            <p>{% translate "No open requests. Report a problem whenever you need us." %}</p>
-            <a href="{% url 'customers:portal_ticket_new' %}" class="button button--secondary">{% translate "Report a problem" %}</a>
+            <p>{% translate "No open requests. Send us a request whenever you need us." %}</p>
+            <a href="{% url 'customers:portal_ticket_new' %}" class="button button--secondary">{% translate "New request" %}</a>
         </div>
         {% endif %}
     </section>

@@ -486,7 +486,7 @@ def _portal_requests(customer):
     tickets = list(customer.tickets.select_related('task').order_by('-submitted_at'))
     for ticket in tickets:
         ticket.progress = ticket_progress(ticket)
-        ticket.steps = progress_steps(ticket.progress)
+        ticket.steps = progress_steps(ticket.progress) if ticket.heads_for_a_visit else None
         ticket.is_open = ticket.status == CustomerTicket.Status.NEW or (
             ticket.status == CustomerTicket.Status.CONVERTED and ticket.task_id and is_upcoming(ticket.task)
         )
@@ -786,12 +786,14 @@ def portal_machine(request, pk):
 
 @login_required(login_url='customers:portal_login')
 def portal_ticket_new(request):
-    """A logged-in customer reporting an issue — the customer and site
-    are already known, so this skips straight to the issue itself and
-    links the ticket to this customer immediately, no matching needed.
-    Each machine is its own card (TicketMachineFormSet) with its own
-    photos; the ticket's description and serial numbers are written from
-    them, so everything that reads those keeps working.
+    """A logged-in customer's new request — the customer and site are
+    already known, so it's linked to this customer immediately, no
+    matching needed. Where, then what they need (CustomerTicket.Topic).
+    A machine problem has each machine as its own card
+    (TicketMachineFormSet) with its own photos; the ticket's description
+    and serial numbers are written from them, so everything that reads
+    those keeps working. Any other topic is a message, which becomes the
+    description, with its files on the ticket itself.
     """
     customer = require_customer(request)
     if customer.must_change_password:
@@ -800,15 +802,21 @@ def portal_ticket_new(request):
     if request.method == 'POST':
         form = CustomerPortalTicketForm(request.POST, request.FILES, customer=customer)
         machines = TicketMachineFormSet(request.POST, request.FILES, prefix='machines', form_kwargs={'customer': customer})
-        if form.is_valid() and machines.is_valid():
+        # The machine cards only count for a machine problem.
+        machines_ok = form.is_valid() and (not form.is_machine_problem or machines.is_valid())
+        if machines_ok and form.is_machine_problem:
             site = form.cleaned_data['site']
             for machine_form in machines:
                 asset = machine_form.cleaned_data.get('asset')
                 if asset is not None and asset.site_id != site.pk:
                     machine_form.add_error('asset', _('This machine is registered at another site.'))
-        if form.is_valid() and machines.is_valid():
+            machines_ok = machines.is_valid()
+        if form.is_valid() and machines_ok:
             site = form.cleaned_data['site']
-            lines = [machine_form.cleaned_data for machine_form in machines if machine_form.has_changed()]
+            lines = (
+                [machine_form.cleaned_data for machine_form in machines if machine_form.has_changed()]
+                if form.is_machine_problem else []
+            )
             with transaction.atomic():
                 ticket = form.save(commit=False)
                 ticket.customer = customer
@@ -819,6 +827,8 @@ def portal_ticket_new(request):
                 ticket.site_description = site.name
                 ticket.site_address = site.address
                 ticket.submitted_at = timezone.now()
+                if not form.is_machine_problem:
+                    ticket.description = form.cleaned_data['message'].strip()
                 save_new_ticket(ticket)
                 for position, line in enumerate(lines):
                     machine = TicketMachine.objects.create(
@@ -834,8 +844,11 @@ def portal_ticket_new(request):
                         CustomerTicketAttachment.objects.create(
                             ticket=ticket, machine=machine, file=uploaded_file, uploaded_at=timezone.now(),
                         )
-                ticket.serial_numbers, ticket.description = ticket_machines_text(ticket.machines.all())
-                ticket.save(update_fields=['serial_numbers', 'description'])
+                if form.is_machine_problem:
+                    ticket.serial_numbers, ticket.description = ticket_machines_text(ticket.machines.all())
+                    ticket.save(update_fields=['serial_numbers', 'description'])
+                for uploaded_file in form.cleaned_data['attachments'] if not form.is_machine_problem else []:
+                    CustomerTicketAttachment.objects.create(ticket=ticket, file=uploaded_file, uploaded_at=timezone.now())
                 TicketNotification.objects.create(
                     ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
                 )
@@ -856,6 +869,7 @@ def portal_ticket_new(request):
         ).exclude(status=Asset.Status.RETIRED).first()
         if chosen is not None:
             form.fields['site'].initial = chosen.site_id
+            form.fields['topic'].initial = CustomerTicket.Topic.MACHINE_PROBLEM
             machine_initial = [{'which': 'list', 'asset': str(chosen.pk)}]
         machines = TicketMachineFormSet(prefix='machines', initial=machine_initial, form_kwargs={'customer': customer})
 

@@ -26,10 +26,20 @@
             <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
         </div>
     </dl>
+    <div class="description">
+        <dt>{% translate "Request type" %}</dt>
+        <p>{{ ticket.get_topic_display }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</p>
+    </div>
     {% with machines=ticket.machines.all %}{% if machines %}
     <div class="description">
         <dt>{% translate "Machines to service" %}</dt>
         {% include "tasks/_ticket_machines.html" with show_status=True %}
+    </div>
+    {% elif ticket.description %}
+    <div class="description">
+        <dt>{% translate "Your message" %}</dt>
+        <p class="pre-line">{{ ticket.description }}</p>
+        {% for attachment in ticket.attachments.all %}{% if not attachment.machine_id %}<p>{% include "_attachment.html" with file=attachment.file %}</p>{% endif %}{% endfor %}
     </div>
     {% endif %}{% endwith %}
     <div class="description">

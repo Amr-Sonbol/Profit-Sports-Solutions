@@ -312,6 +312,16 @@ class CustomerTicket(models.Model):
         VENDOR = 'vendor', _('Vendor follow-up')
         OTHER = 'other', _('Other internal')
 
+    # What a customer's request is about — the first thing the portal asks
+    # after the site. Only "A problem with a machine" has machine cards;
+    # the rest are a message (and, for Other, the customer's own subject).
+    class Topic(models.TextChoices):
+        MACHINE_PROBLEM = 'machine_problem', _('A problem with a machine')
+        VISIT = 'visit', _('Maintenance or a visit')
+        PARTS = 'parts', _('Spare parts or a quotation')
+        ASSISTANCE = 'assistance', _('I need assistance')
+        OTHER = 'other', _('Other')
+
     # How a customer ticket reached us — the same values as Task.Source,
     # so a task made from it keeps the channel.
     class Source(models.TextChoices):
@@ -325,13 +335,17 @@ class CustomerTicket(models.Model):
     # customer, nothing ever sent to one — and go to whoever they're
     # assigned to (docs: customer_ticket).
     kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
+    topic = models.CharField(_('request type'), max_length=20, choices=Topic.choices, default=Topic.MACHINE_PROBLEM)
     source = models.CharField(_('source'), max_length=10, choices=Source.choices, default=Source.PORTAL)
     opened_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='tickets_opened', verbose_name=_('opened by'),
         help_text=_('the staff member who opened it; empty if opened by the customer'),
     )
-    subject = models.CharField(_('subject'), max_length=200, blank=True, help_text=_('internal tickets only'))
+    subject = models.CharField(
+        _('subject'), max_length=200, blank=True,
+        help_text=_("an internal ticket's subject, or a customer's own words for an Other request"),
+    )
     vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
 
     ticket_number = models.CharField(
@@ -439,6 +453,12 @@ class CustomerTicket(models.Model):
         if not self.token:
             self.token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
+
+    @property
+    def heads_for_a_visit(self):
+        """Whether the customer's way to a visit (Received → … → Done) fits:
+        a machine problem or a visit asked for, or anything we made one of."""
+        return self.topic in (self.Topic.MACHINE_PROBLEM, self.Topic.VISIT) or self.status == self.Status.CONVERTED
 
     def __str__(self):
         return f'{self.ticket_number} — {self.company_name}'

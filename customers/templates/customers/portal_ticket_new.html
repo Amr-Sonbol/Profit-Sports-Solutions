@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% load i18n static %}
 
-{% block title %}{% translate "Report a problem" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "New request" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
     <div>
         <a href="{% url 'customers:portal_requests' %}" class="back-link">{% translate "Back to requests" %}</a>
-        <h1>{% translate "Report a problem" %}</h1>
+        <h1>{% translate "New request" %}</h1>
     </div>
 </div>
 
-{# Three steps (static/js/report-steps.js): where, what's wrong, check and send. Without the script, one page. #}
+{# Four steps (static/js/report-steps.js): where, what they need, the details, check and send. Without the script, one page. #}
 <form method="post" enctype="multipart/form-data" novalidate data-report-steps>
     {% csrf_token %}
     {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
@@ -19,12 +19,14 @@
 
     <ol class="progress-steps report-steps__bar" hidden data-steps-bar>
         <li class="progress-steps__step" data-step-label>{% translate "1. Where" %}</li>
-        <li class="progress-steps__step" data-step-label>{% translate "2. What's wrong" %}</li>
-        <li class="progress-steps__step" data-step-label>{% translate "3. Check and send" %}</li>
+        <li class="progress-steps__step" data-step-label>{% translate "2. What you need" %}</li>
+        <li class="progress-steps__step" data-step-label>{% translate "3. Details" %}</li>
+        <li class="progress-steps__step" data-step-label>{% translate "4. Check and send" %}</li>
     </ol>
 
-    <div class="section" data-step{% if form.site.field.queryset.count == 1 and not form.site.errors %} data-step-skip{% endif %}>
-        <h2>{% translate "Where is the problem?" %}</h2>
+    {# Shown even with one branch (already chosen), so the customer sees what "where" means. #}
+    <div class="section" data-step>
+        <h2>{% translate "Which branch is this about?" %}</h2>
         <div class="field {% if form.site.errors %}field--error{% endif %}">
             <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
             {{ form.site }}
@@ -35,8 +37,27 @@
         </div>
     </div>
 
+    <div class="section" data-step data-step-require="{{ form.topic.html_name }}">
+        <h2>{% translate "What do you need?" %}</h2>
+        <div class="field {% if form.topic.errors %}field--error{% endif %}">
+            <div class="topic-choices">
+                {% for choice in form.topic %}
+                <label class="topic-choice">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>
+                {% endfor %}
+            </div>
+            {% for error in form.topic.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            <p class="field__error" hidden data-step-required>{% translate "Please choose one." %}</p>
+        </div>
+        <div class="report-steps__nav" hidden data-steps-nav>
+            <button type="button" class="button button--secondary" data-step-back>{% translate "Back" %}</button>
+            <button type="button" class="button" data-step-next>{% translate "Next" %}</button>
+        </div>
+    </div>
+
     <div class="section" data-step>
-        <h2>{% translate "What's wrong?" %}</h2>
+    {# A machine problem: one card per machine. #}
+    <div data-show-topic="machine_problem">
+        <h2>{% translate "Which machines, and what's wrong?" %}</h2>
         <p class="field__help">{% translate "Add each machine separately, with its own photos, so our team can prepare the right parts for each one." %}</p>
         {{ machines.management_form }}
         <div class="machine-cards" data-machine-cards>
@@ -72,6 +93,19 @@
             {% endfor %}
         </div>
         <button type="button" class="button button--secondary" data-add-machine hidden>{% translate "Add another machine" %}</button>
+    </div>
+    {# Anything else: a message and its files; Other says first what it's about. #}
+    <div data-show-topic="visit parts assistance other">
+        <h2>{% translate "Tell us what you need" %}</h2>
+        {% for field in form %}{% if field.name == 'subject' or field.name == 'message' or field.name == 'attachments' %}
+        <div class="field {% if field.errors %}field--error{% endif %}"{% if field.name == 'subject' %} data-show-topic="other"{% endif %}>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}{% endfor %}
+    </div>
         <div class="report-steps__nav" hidden data-steps-nav>
             <button type="button" class="button button--secondary" data-step-back>{% translate "Back" %}</button>
             <button type="button" class="button" data-step-next>{% translate "Next" %}</button>
@@ -82,7 +116,7 @@
         <h2>{% translate "Check and send" %}</h2>
         <p class="field__help">{% translate "We use these details to contact you about this request. They are filled in from your account; change them here if needed." %}</p>
         <div class="form-grid">
-            {% for field in form %}{% if field.name != 'site' %}
+            {% for field in form %}{% if field.name == 'contact_name' or field.name == 'contact_phone' or field.name == 'contact_email' or field.name == 'shipping_address' or field.name == 'notes' %}
             <div class="field {% if field.errors %}field--error{% endif %}">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}

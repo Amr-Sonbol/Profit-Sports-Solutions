@@ -2790,7 +2790,7 @@ tbody tr:hover {
     margin-block-start: 0.4rem;
 }
 
-/* "Report a problem" in steps (static/js/report-steps.js). */
+/* "New request" in steps (static/js/report-steps.js). */
 .report-steps__bar {
     margin-block-end: 0.75rem;
 }
@@ -2801,6 +2801,32 @@ tbody tr:hover {
     justify-content: flex-end;
     gap: 0.5rem;
     margin-block-start: 1rem;
+}
+
+/* "What do you need?": the request types as cards to pick from. */
+.topic-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 0.5rem;
+}
+
+.topic-choice {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    padding-block: 0.85rem;
+    padding-inline: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.topic-choice:has(input:checked) {
+    border-color: var(--color-accent);
+    outline: 1px solid var(--color-accent);
 }
 
 .section > .progress-steps {

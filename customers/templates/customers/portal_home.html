@@ -8,9 +8,9 @@
     <div class="page__header">
         <div>
             <h1>{{ customer.name }}</h1>
-            <p class="muted">{% translate "Report a problem, follow your requests and visits, and download your reports." %}</p>
+            <p class="muted">{% translate "Send us a request, follow your requests and visits, and download your reports." %}</p>
         </div>
-        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "Report a problem" %}</a>
+        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "New request" %}</a>
     </div>
 
     {# Each number opens its own page. #}

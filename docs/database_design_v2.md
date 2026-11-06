@@ -520,9 +520,10 @@ A complaint or request from a customer — or an internal matter staff need to f
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | kind | varchar | `customer` (default), `stock` (stock request), `vendor` (vendor follow-up), `other` (other internal) |
+| topic | varchar | what a customer's request is about, chosen first on the portal: `machine_problem` (default — the only one with machine cards), `visit`, `parts`, `assistance`, `other`; the rest are a message, saved as `description`, with files on the ticket itself |
 | source | varchar | customer tickets: `portal` (default), `phone`, `whatsapp`, `email` — the same values as `task.source`, so a task made from it keeps the channel |
 | opened_by_id | FK → user | nullable — the staff member who opened it; empty when the customer did |
-| subject | varchar | internal tickets only |
+| subject | varchar | an internal ticket's subject, or a customer's own words for an `other` request |
 | vendor_name | varchar | vendor follow-ups only (required there) |
 | status | varchar | new, converted, dismissed, closed |
 | assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager, operations manager or admin), read from `role_permission` directly, not hardcoded |

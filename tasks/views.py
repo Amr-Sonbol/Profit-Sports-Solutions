@@ -2782,7 +2782,7 @@ def ticket_status(request, token):
         # Where it's got to, in the customer's words — the same as on their portal home —
         # and the visit's day only while it's still ahead.
         'progress': ticket_progress(ticket),
-        'steps': progress_steps(ticket_progress(ticket)),
+        'steps': progress_steps(ticket_progress(ticket)) if ticket.heads_for_a_visit else None,
         'booked': ticket.task_id and visit_progress(ticket.task) == VISIT_BOOKED,
         # The visit(s) it became — one, or one per group of machines — each with its report once in.
         'visits': _ticket_visits(ticket),
@@ -2831,6 +2831,7 @@ def ticket_list(request):
     pak = request.GET.get('pak', '').strip()
     customer_id = request.GET.get('customer', '')
     date = parse_date(request.GET.get('date', '') or '')
+    topic = request.GET.get('topic', '')
     active_country = get_active_country(request)
 
     tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER).select_related(
@@ -2864,17 +2865,20 @@ def ticket_list(request):
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
+    if topic in CustomerTicket.Topic.values:
+        tickets = tickets.filter(topic=topic)
     tickets = tickets.order_by('-submitted_at')
 
     filter_params = {
         key: value for key, value in {
             'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
-            'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '',
+            'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '', 'topic': topic,
         }.items() if value
     }
 
     context = {
         'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
+        'topic': topic, 'topic_choices': CustomerTicket.Topic.choices,
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
         'customers': customers.order_by('name'),

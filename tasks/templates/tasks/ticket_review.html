@@ -69,6 +69,10 @@
         <p>{{ ticket.shipping_address }}</p>
     </div>
     {% endif %}
+    <div class="description">
+        <dt>{% translate "Request type" %}</dt>
+        <p><span class="badge">{{ ticket.get_topic_display }}</span>{% if ticket.subject %} {{ ticket.subject }}{% endif %}</p>
+    </div>
     {% with machines=ticket.machines.all %}
     {% if machines %}
     <div class="description">
@@ -76,13 +80,15 @@
         {% include "tasks/_ticket_machines.html" %}
     </div>
     {% else %}
+    {% if ticket.serial_numbers %}
     <div class="description">
         <dt>{% translate "Serial number(s)" %}</dt>
         <p class="pre-line">{{ ticket.serial_numbers }}</p>
     </div>
+    {% endif %}
     <div class="description">
-        <dt>{% translate "Description" %}</dt>
-        <p>{{ ticket.description }}</p>
+        <dt>{% translate "Message" %}</dt>
+        <p class="pre-line">{{ ticket.description }}</p>
     </div>
     {% endif %}
     {% endwith %}

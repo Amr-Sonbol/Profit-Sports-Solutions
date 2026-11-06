@@ -1264,6 +1264,35 @@ class MultipleFileField(forms.FileField):
         return not self.disabled and bool(data)
 
 
+def message_files_field(label):
+    """The files sent with a message — any number up to the limit, each a
+    photo, video or PDF of at most 25 MB."""
+    return MultipleFileField(
+        required=False, label=label,
+        help_text=_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each') % {
+            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
+        },
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+
+class MessageFilesMixin:
+    """Checks a message's `attachments`: how many, and each one's size."""
+
+    def clean_attachments(self):
+        files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
+        for upload in files:
+            if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(
+                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
+                )
+        return files
+
+
 class TicketAttachmentsForm(forms.Form):
     """The photos/video box shared by both ways a ticket is opened."""
 
@@ -1295,30 +1324,55 @@ class SiteNameChoiceField(forms.ModelChoiceField):
         return site.name
 
 
-class CustomerPortalTicketForm(forms.ModelForm):
-    """A logged-in customer reporting an issue at one of their own
+class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
+    """A logged-in customer sending a request about one of their own
     sites. The company name, site, and address are never typed here at
     all; a portal login already knows who they are and where their sites
-    are (set directly in the view). The machines and their photos come
-    from TicketMachineFormSet alongside it.
+    are (set directly in the view). The topic decides the rest: a machine
+    problem's machines and photos come from TicketMachineFormSet alongside
+    it; any other topic is a message (`message`, saved as the ticket's
+    description) with its files, and Other has the customer's own subject.
     """
+
+    message = forms.CharField(label=_('Your message'), required=False, widget=forms.Textarea(attrs={'rows': 5}))
 
     class Meta:
         model = CustomerTicket
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes']
+        fields = ['topic', 'subject', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes']
         widgets = {
+            'topic': forms.RadioSelect,
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
-        labels = {'notes': _('Anything else we should know')}
+        labels = {'topic': _('What do you need?'), 'subject': _('What is it about?'), 'notes': _('Anything else we should know')}
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        self.fields['attachments'] = message_files_field(_('Files'))
+        # Chosen by the customer every time: no type is assumed.
+        self.fields['topic'].choices = CustomerTicket.Topic.choices
+        self.fields['topic'].initial = None
         sites = list(customer.sites.all()[:2])
         if len(sites) == 1:
-            # Only one site: already chosen.
+            # Only one site: already chosen (still shown, so "where" is clear).
             self.fields['site'].initial = sites[0].pk
+
+    @property
+    def is_machine_problem(self):
+        return self.cleaned_data.get('topic') == CustomerTicket.Topic.MACHINE_PROBLEM
+
+    def clean(self):
+        cleaned = super().clean()
+        topic = cleaned.get('topic')
+        if topic and topic != CustomerTicket.Topic.MACHINE_PROBLEM:
+            if not cleaned.get('message', '').strip():
+                self.add_error('message', _('Please tell us what you need.'))
+            if topic == CustomerTicket.Topic.OTHER and not cleaned.get('subject', '').strip():
+                self.add_error('subject', _('Please say in a few words what it is about.'))
+        if topic != CustomerTicket.Topic.OTHER:
+            cleaned['subject'] = ''
+        return cleaned
 
 
 class TicketMachineForm(forms.Form):
@@ -1550,35 +1604,6 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
         self.fields['assigned_to'].label_from_instance = (
             lambda technician: f'{technician.full_name} — {technician.get_role_display()}'
         )
-
-
-def message_files_field(label):
-    """The files sent with a message — any number up to the limit, each a
-    photo, video or PDF of at most 25 MB."""
-    return MultipleFileField(
-        required=False, label=label,
-        help_text=_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each') % {
-            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
-        },
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
-    )
-
-
-class MessageFilesMixin:
-    """Checks a message's `attachments`: how many, and each one's size."""
-
-    def clean_attachments(self):
-        files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
-        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
-            raise forms.ValidationError(
-                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
-            )
-        for upload in files:
-            if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(
-                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
-                )
-        return files
 
 
 class InternalTicketNoteForm(MessageFilesMixin, forms.Form):

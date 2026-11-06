@@ -154,7 +154,7 @@
             <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
                 <p class="site-header__profile-link">{{ user.customer.name }}</p>
-                <a href="{% url 'customers:portal_ticket_new' %}" class="button nav-cta">{% translate "Report a problem" %}</a>
+                <a href="{% url 'customers:portal_ticket_new' %}" class="button nav-cta">{% translate "New request" %}</a>
                 {% for item in portal_nav %}
                 <a href="{{ item.url }}" class="nav-link{% if item.active %} nav-link--active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
                     {% include "_icon.html" with name=item.icon %}
