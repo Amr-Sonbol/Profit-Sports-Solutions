@@ -2142,6 +2142,17 @@ tbody tr:hover {
     opacity: 0;
 }
 
+/* Square numbers, like the portal; the chosen one gets the customer's color
+   underneath (signed in), as the active tab does. Also on the emailed
+   rating page, which has no sign-in. */
+.rating-choice label {
+    border-radius: 2px;
+}
+
+.rating-choice label:has(input:checked) {
+    box-shadow: inset 0 -3px 0 var(--brand, var(--color-accent));
+}
+
 .rating-choice label:hover {
     border-color: var(--color-accent);
 }

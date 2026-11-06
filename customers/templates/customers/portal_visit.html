@@ -98,12 +98,18 @@
             {% csrf_token %}
             <p class="muted">{{ rating_form.rating.label }}</p>
             <div class="rating-choice">{{ rating_form.rating }}</div>
+            <div class="rating-scale-labels">
+                <span>{% translate "Poor" %}</span>
+                <span>{% translate "Excellent" %}</span>
+            </div>
             {% for error in rating_form.rating.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             <div class="field">
                 <label for="{{ rating_form.comment.id_for_label }}">{{ rating_form.comment.label }}</label>
                 {{ rating_form.comment }}
             </div>
-            <button type="submit" class="button">{% translate "Send my rating" %}</button>
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Send my rating" %}</button>
+            </div>
         </form>
         {% endif %}
     </section>
