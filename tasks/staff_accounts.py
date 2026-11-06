@@ -95,6 +95,56 @@ def staff_setup(request, token):
     return render(request, 'tasks/staff_setup.html', {'form': form, 'person': person})
 
 
+# What can't wait for a desk: a lost phone, a locked-out or forgotten
+# password, someone who must not get in. The Staff accounts page and the
+# app (api.views.StaffAccountView) both use urgent_account_action.
+URGENT_ACTIONS = ('temporary_password', 'unlock', 'sign_out_phones', 'disable', 'enable')
+
+
+def urgent_account_action(request, actor, target, action):
+    """Do one of URGENT_ACTIONS to `target`'s login (check
+    can_manage_account first). Returns (message, error, password): the
+    temporary password is returned once, for reading out over the phone —
+    never emailed, never stored anywhere readable.
+    """
+    user = target.user
+    if action == 'temporary_password' and user.is_active:
+        password = _generate_temporary_password()
+        user.set_password(password)
+        user.save(update_fields=['password'])
+        target.must_change_password = True
+        target.save(update_fields=['must_change_password'])
+        sign_out_of_mobile_app(user)
+        send_password_changed_email(user, temporary=True)
+        unlock_login(user.username)
+        log_account_action(request, target, 'Staff temporary password set; signed out of the mobile app')
+        return '', '', password
+    if action == 'unlock':
+        unlock_login(user.username)
+        log_account_action(request, target, 'Staff login unlocked')
+        return _('%(name)s has been unlocked.') % {'name': target.full_name}, '', ''
+    if action == 'sign_out_phones':
+        sign_out_of_mobile_app(user)
+        log_account_action(request, target, 'Staff signed out of the mobile app on every phone')
+        return _('%(name)s has been signed out of the mobile app on all devices.') % {'name': target.full_name}, '', ''
+    if action == 'disable' and user.is_active:
+        if target.pk == actor.pk:
+            return '', _('You cannot disable your own login.'), ''
+        if is_last_active_admin(target):
+            return '', _('This is the only administrator able to sign in, so their login cannot be disabled.'), ''
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        sign_out_of_mobile_app(user)
+        log_account_action(request, target, 'Staff login turned off')
+        return _('Login disabled for %(name)s.') % {'name': target.full_name}, '', ''
+    if action == 'enable' and not user.is_active:
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        log_account_action(request, target, 'Staff login turned on')
+        return _('Login enabled for %(name)s.') % {'name': target.full_name}, '', ''
+    return '', '', ''
+
+
 @login_required
 def staff_accounts(request):
     """Every staff login, every country, for the manager tier: who has no
@@ -113,54 +163,22 @@ def staff_accounts(request):
         if user is None:
             return _redirect_back(request)
 
-        if action == 'temporary_password' and user.is_active:
-            # Shown once, right here, for reading out over the phone —
-            # never emailed, never stored anywhere readable.
-            password = _generate_temporary_password()
-            user.set_password(password)
-            user.save(update_fields=['password'])
-            target.must_change_password = True
-            target.save(update_fields=['must_change_password'])
-            sign_out_of_mobile_app(user)
-            send_password_changed_email(user, temporary=True)
-            unlock_login(user.username)
-            log_account_action(request, target, 'Staff temporary password set; signed out of the mobile app')
-            return render(request, 'tasks/staff_account_password.html', {
-                'person': target, 'password': password, 'return_query': request.POST.get('return_query', ''),
-            })
-        if action == 'send_setup_link' and user.is_active:
+        if action in URGENT_ACTIONS:
+            message, error, password = urgent_account_action(request, actor, target, action)
+            if password:
+                return render(request, 'tasks/staff_account_password.html', {
+                    'person': target, 'password': password, 'return_query': request.POST.get('return_query', ''),
+                })
+            if message:
+                messages.success(request, message)
+            if error:
+                messages.error(request, error)
+        elif action == 'send_setup_link' and user.is_active:
             if send_staff_setup_link(request, target):
                 log_account_action(request, target, f'Staff setup link emailed to {user.email}')
                 messages.success(request, _('A setup link has been sent to %(email)s.') % {'email': user.email})
             else:
                 messages.error(request, _('No email address is recorded for this login. Please add one first.'))
-        elif action == 'unlock':
-            unlock_login(user.username)
-            log_account_action(request, target, 'Staff login unlocked')
-            messages.success(request, _('%(name)s has been unlocked.') % {'name': target.full_name})
-        elif action == 'sign_out_phones':
-            sign_out_of_mobile_app(user)
-            log_account_action(request, target, 'Staff signed out of the mobile app on every phone')
-            messages.success(request, _('%(name)s has been signed out of the mobile app on all devices.') % {
-                'name': target.full_name,
-            })
-        elif action == 'disable' and user.is_active:
-            if target.pk == actor.pk:
-                messages.error(request, _('You cannot disable your own login.'))
-            elif is_last_active_admin(target):
-                messages.error(request, _('This is the only administrator able to sign in, so their login '
-                                          'cannot be disabled.'))
-            else:
-                user.is_active = False
-                user.save(update_fields=['is_active'])
-                sign_out_of_mobile_app(user)
-                log_account_action(request, target, 'Staff login turned off')
-                messages.success(request, _('Login disabled for %(name)s.') % {'name': target.full_name})
-        elif action == 'enable' and not user.is_active:
-            user.is_active = True
-            user.save(update_fields=['is_active'])
-            log_account_action(request, target, 'Staff login turned on')
-            messages.success(request, _('Login enabled for %(name)s.') % {'name': target.full_name})
         elif action == 'change_email':
             form = ChangeLoginEmailForm(request.POST, user=user)
             if form.is_valid():

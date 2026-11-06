@@ -26,12 +26,21 @@ class SeedRolePermissionsTests(TestCase):
             RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
             RolePermission.Permission.MANAGE_PARTS, RolePermission.Permission.OPEN_TICKETS,
             RolePermission.Permission.TICKETS_ALL_COUNTRIES, RolePermission.Permission.CUSTOMER_ACCOUNTS,
+            RolePermission.Permission.VIEW_STOCK,
         }
         for permission in other_permissions:
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
             )
             self.assertEqual(allowed_roles, expected_allowed_roles, permission)
+
+    def test_view_stock_is_whoever_runs_or_plans_the_stock(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_STOCK, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'admin'})
 
     def test_view_tasks_also_includes_the_warehouse_manager(self):
         # The warehouse manager needs to search tasks by PAK reference and
@@ -76,15 +85,17 @@ class SeedRolePermissionsTests(TestCase):
         )
         self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
-    def test_view_dashboard_is_available_to_every_role(self):
-        # The dashboard is now everyone's landing page after signing in
-        # (spots.views.home) — every role needs to be able to see it.
+    def test_view_dashboard_is_for_managers_and_above(self):
+        # Technicians and supervisors have My week and My progress instead
+        # (migration 0050_dashboard_for_managers_only).
         allowed_roles = set(
             RolePermission.objects.filter(
                 permission=RolePermission.Permission.VIEW_DASHBOARD, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {r for r, _ in Technician.Role.choices})
+        self.assertEqual(
+            allowed_roles, {r for r, _ in Technician.Role.choices} - {Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR},
+        )
 
     def test_view_machines_is_every_office_role_but_technician(self):
         allowed_roles = set(
@@ -161,7 +172,7 @@ class ActiveCountryContextTests(TestCase):
             self.client.logout()
 
     def test_everyone_else_gets_no_switcher(self):
-        for username in ('tech1', 'supervisor1', 'support1'):
+        for username in ('support1',):
             self.client.login(username=username, password='pass12345')
             response = self.client.get('/tasks/dashboard/')
             self.assertNotIn('switchable_countries', response.context, username)

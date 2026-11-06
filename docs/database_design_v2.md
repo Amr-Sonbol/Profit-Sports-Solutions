@@ -49,9 +49,12 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 | timezone | varchar | IANA name, e.g. `Asia/Riyadh` |
 | currency_code | char(3) | |
 | weekend_days | varchar | comma-separated weekday numbers, Monday = 0 — `4,5` is Friday–Saturday (the default), `5,6` Saturday–Sunday |
+| report_language | varchar(2) | default `en` — the language of every customer's visit report in this country, whatever the customer picked: `ar` in Saudi Arabia and Egypt, `en` everywhere else |
 | is_active | bool | |
 
-**`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia, Egypt, Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.
+**`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia and Egypt are Friday only; Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.
+
+**It also sets where each country's week starts:** the first working day after the weekend (`Country.first_workday`) — Saturday in Saudi Arabia and Egypt, Sunday with a Friday–Saturday weekend, Monday in the UAE. Every week view (My week, a technician's board, the schedule calendar's week and month, My progress's week) starts there and marks the weekend days; the all-countries calendar keeps Monday. **The team works weekends for emergencies only.** So an emergency's 24-hour alarm counts weekend hours too, and saving a task that isn't an emergency onto a day off shows a reminder; it's never blocked.
 
 **`task_prefix` exists because the company doesn't use ISO codes at all.** Every seeded country has its own locally-used abbreviation set here — EGY, BAH, QAT, UAE, KSA, OMN, USA, CAN, KWT — none of them the two-letter ISO code. `iso_code` itself is left alone regardless: it stays the real ISO code, in case something else ever needs it to actually be one, and new countries still need `task_prefix` filled in explicitly (it has no default) or their task numbers fall back to that ISO code.
 
@@ -72,16 +75,18 @@ Panatta, Skillcore, Digilock, and any future principal. Available in all countri
 No brand name is ever hardcoded in the application. Adding a principal is an office action.
 
 ### part
-The parts catalogue technicians pick from on the work report, instead of typing codes by hand. Code and description only — no prices; the technician still enters the cost on each report (`part_used`).
+The parts catalogue technicians pick from on the work report, instead of typing codes by hand. No prices; the technician still enters the cost on each report (`part_used`). The photo is how people recognise a part — one per code, taken once, not at each delivery.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| code | varchar | unique, stored upper-case |
+| code | varchar | unique, stored upper-case, trimmed (codes copied from the supplier's sheets carry stray line breaks) |
 | description | varchar | optional |
+| colour | varchar | blank — e.g. "Color of frame: MATT BLACK". Information only: another colour is another code, so it's never separate stock |
+| photo | file | nullable — what the part looks like |
 | is_active | bool | switched off rather than deleted — past reports keep their codes |
 
-Maintained from the Parts screen by anyone with `manage_parts` (manager, warehouse_manager and admin by default) — one at a time, or uploaded as a CSV (`code,description`; an existing code just gets its description updated). Seeded from every code already used on a report, so it doesn't start empty. **Once the catalogue has any active part, a report's part code must be one of them** (case-insensitive, saved as the catalogue's spelling, with its description filled in when left blank); while it's empty, codes are free text as before.
+Maintained from the Parts screen by anyone with `manage_parts` (manager, warehouse_manager and admin by default) — one at a time (with its photo), or uploaded as a CSV (`code,description`; an existing code just gets its description updated) or **an Excel sheet laid out like the stock sheet the warehouse keeps** (`Code`, `Description`, colour, and the part's picture placed in its code cell). **The upload is how more parts get added later** — there are more than the first sheet, from other suppliers and countries — so it can be run any number of times: a new code is added, an existing one gets what the sheet has (description, colour, a picture if there is one) and keeps anything the sheet leaves empty, and nothing is ever deleted. If the sheet has a quantity column, choosing a warehouse on the upload records each quantity as a **count** there (`stock_adjustment`) — the opening stock. The warehouse's sheet fills in `Qty` only once something has gone out; until then the quantity is its `Original QTY`, sometimes deliveries added up (`10+147`). Seeded from every code already used on a report, so it doesn't start empty. **Once the catalogue has any active part, a report's part code must be one of them** (case-insensitive, saved as the catalogue's spelling, with its description filled in when left blank); while it's empty, codes are free text as before.
 
 ### skill
 **One skill per repair task — brand-agnostic.** Replacing a pin is the same skill whatever brand it's on; what a technician is actually rated on is whether they can do that specific job, not "how good are they at Panatta in general." This replaced an earlier version of the table where each brand carried its own single skill row (plus a second `Cardio` row for the two brands that needed one) — that framing didn't match how the business evaluates competence, so it's gone.
@@ -123,7 +128,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | code | varchar | stable key, never changes |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `installation` or `maintenance` |
+| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`) |
 | requires_photos | bool | |
 | requires_signature | bool | |
 | checklist_template | jsonb | the fields the report form shows for this type |
@@ -149,11 +154,13 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | billing_address | text | optional — where invoices are addressed; the customer completes it at first sign-in |
 | shipping_address | text | optional — where replacement parts should be delivered, if different from the site itself (a warehouse or head office); the customer completes it at first sign-in |
 | language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
+| brand_color | varchar(7) | `#RRGGBB`, default `#c8c8c8` (grey) — the customer's own color for their portal's buttons and highlights, chosen in portal Settings; text on it is black or white, whichever reads better (`Customer.brand_text_color`) |
 | user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
 | must_change_password | bool | set when the welcome email goes out (or staff set a temporary password) — cleared once the customer sets their own password and completes their details |
 | invited_at | timestamptz | nullable — when the welcome email was last sent; its link is valid for 7 days, after which the account shows as "Invitation expired" |
 | deactivation_reason | varchar | why this customer was deactivated — contract ended, closed down, etc.; cleared on reactivation |
+| is_internal | bool | the company's own account in a country ("Profit Sports Solutions", one per country, seeded by customers 0017): its sites are our **warehouses**, where equipment is received from the factory and loaded. Shown in the customer list as "Our warehouses"; never a portal login, never offered when opening a customer's ticket or inviting to the portal |
 
 **`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there; every other login (any technician role) lands on the dashboard, the one shared overview screen — nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
 
@@ -194,6 +201,8 @@ A hotel group is one customer with many sites.
 ### asset
 One physical machine. **Created by the technician at the first service visit, not at installation.**
 
+**A customer can add one too, waiting for confirmation.** From their portal (*Machines → Add a machine*: site, brand, model, serial, optional code, a photo of the sticker) it joins their list at once as `pending`, and they can already report a problem with it. It becomes one of ours (`active`) when a technician records it on a visit's report, or when someone with `manage_customers` confirms it on its Machines page against the sticker photo — or removes it, while nothing has been recorded on it. The office sees how many are waiting on its home page (*Machines added by customers, to confirm*) and under the Machines screen's own tab. The same serial twice at a site is refused.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
@@ -201,9 +210,10 @@ One physical machine. **Created by the technician at the first service visit, no
 | brand_id | FK → brand | |
 | model_name | varchar | free text from the plate |
 | serial_no | varchar | nullable |
+| code | varchar | blank — the product code (e.g. BENCH-01), on the delivery note and the sticker beside the serial; optional when a technician records a machine, the line's product code for one installed |
 | installed_on | date | nullable |
-| warranty_end | date | nullable |
-| status | varchar | active, faulty, retired |
+| status | varchar | active, faulty, retired, or pending — added by the customer, waiting for confirmation |
+| sticker_photo | file | nullable — the customer's photo of the sticker, when they added it |
 
 **Why the technician creates it.** Nobody else sees the machine. The delivery note is a PDF with model codes and quantities, not serials, so there is nothing to import. The serial is only on the plate.
 
@@ -246,6 +256,8 @@ Covers technicians, supervisors, and managers. One table, different roles.
 
 **`photo` and `language` are the two fields a technician can change about their own record, from My profile.** Everything else on this table (role, country, employment type, availability) is an office-side decision made by a supervisor or manager elsewhere. A supervisor/manager with `manage_technicians` can also set someone else's photo, name, phone, or email from the roster's edit screen; `country` and `employment_type`/`has_transport`/`can_carry_large`/`hired_on` on that same screen are manager-only, not just `manage_technicians`. `role` is narrower still — admin-only — since it's a privilege grant: whoever creates the login next inherits whatever role the record already has. Creating a technician record in the first place, from the roster's own "Add technician" screen, is admin-only for the same reason — country comes from whoever's adding it (their active country), same as customer creation. No `user` is created or linked at that point — a manager or admin creates the login as a separate, manager-tier step from that same Edit screen afterward, not part of creation itself (unchanged — the login itself grants no role beyond whatever the record already has, which by then only an admin could have set).
 
+**Adding someone is one step (admin only, website or app):** role, name, the **country** they work in — chosen on the form (it starts on the country being viewed, but the choice counts) — and their **email**, which creates their login and sends the setup link at once. Without an email they're added with no login, marked "No login yet" in the Users list, and the admin is told. **Leaving is never a deletion:** a manager or admin deactivates them with a reason (never the last admin, never themselves, never someone above them), and in the same step can move all their open tasks to a colleague — they take over as lead ("left the company"); helper assignments are simply ended. Their history stays; they can be reactivated.
+
 **Creating a login only asks for an email** — it becomes both the `user.username` and `user.email`, one thing to remember instead of a separate invented username. No password is emailed: the login starts with no usable password and gets a one-time setup link (`tasks:staff_setup`, signed like the customer portal link; it works once and expires after 7 days), recorded in `setup_link_sent_at`. Staff accounts can resend the link, change the email first, or, when email won't work at all, set a temporary password shown once on screen for reading out. That sets `must_change_password`, so the person is walked to a one-time "set your password" screen (`tasks:first_login`, or the app's own) the first time they sign in. Everything else about their own record stays editable any time from My profile.
 
 **Relocating a technician to another country, from that same edit screen, is manager-only — not just `manage_technicians`.** It's the only other place in the app (besides the header's active-country switcher, also `require_manager`) where one action reaches across a country boundary; letting any supervisor do it would mean one country's supervisor could move a technician into a country they have nothing to do with. A supervisor with `manage_technicians` still sees and uses the same screen, just without the country field.
@@ -266,7 +278,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 
 Unique on (role, permission).
 
-**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — support_manager, operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default), `customer_accounts` (the Customer accounts screen — support_manager, operations_manager and admin by default), `tickets_all_countries` (reach every country's customer tickets — the ticket list's "All countries" option, opening one, converting one — support_manager, operations_manager and admin by default; without it, `manage_tickets` covers the holder's own country only).
+**Permissions:** `view_dashboard`, `view_tasks`, `create_tasks`, `assign_tasks`, `view_technicians`, `review_skills`, `manage_tickets`, `manage_technicians` (edit a technician's details and profile photo — not role, and not adding one, both admin-only), `manage_customers` (view and edit customers and sites — not adding one, admin-only), `view_machines` (the Machines screen and its task/ticket history — supervisor, manager, support_manager, admin by default), `decide_escalated_tickets` (decide a ticket escalated to you — support_manager, operations_manager and admin by default), `manage_parts` (the parts catalogue — manager, warehouse_manager and admin by default), `customer_accounts` (the Customer accounts screen — support_manager, operations_manager and admin by default), `tickets_all_countries` (reach every country's customer tickets — the ticket list's "All countries" option, opening one, converting one — support_manager, operations_manager and admin by default; without it, `manage_tickets` covers the holder's own country only), `view_stock` (the Stock screen — each warehouse's machines by code — manager, warehouse_manager, operations_manager and admin by default).
 
 **`operations_manager` is who the support desk escalates to — and the Technical Support Manager's own manager.** It gets `view_dashboard`, `view_tasks`, `view_technicians`, `view_machines`, `decide_escalated_tickets` and, since `0041_grant_manage_tickets_to_operations_manager`, `manage_tickets` too: the whole ticket desk, not only the tickets escalated to it.
 
@@ -325,7 +337,7 @@ The same two tables, minus `evidence` — a conduct area (cleanliness, punctuali
 
 ### How a level gets set
 
-**Step one: the technician does the repair and shows it.** The first time a skill has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later — but only alongside a photo or short video of himself actually performing that repair. This is proof to review, not a claim to take on trust. Conduct areas skip the evidence — there's nothing to film for punctuality or cleanliness — and use the same four sentences on their own.
+**Step one: the technician does the repair and shows it.** The first time a skill has no row yet, its owner can self-rate it using the same four sentences a supervisor will use later — but only alongside a photo or short video of himself actually performing that repair. This is proof to review, not a claim to take on trust. Until a supervisor reviews it, the technician can replace their own self-rating (a better video, a corrected level); each one is kept in the assessment history. Once a supervisor has reviewed it, only a supervisor changes it. Conduct areas skip the evidence — there's nothing to film for punctuality or cleanliness — and use the same four sentences on their own.
 
 **Step two: the supervisor confirms it against the evidence, not opinion.** For a skill, they watch or view what was uploaded and judge it against the same rubric below. For a conduct area, it's whatever's observable for that area — cleanliness of the last few jobs, whether procedure was followed, and so on.
 
@@ -403,6 +415,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | invoice_visible_to_supervisor | bool | default false — a manager-only per-task override; see below |
 | delivery_note | file | nullable — pdf/image, edit screen only — the shipment paperwork, uploaded once the parts arrive |
 | delivery_note_uploaded_at | timestamptz | nullable |
+| previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | schedule_notified_by_id | FK → user | nullable |
 
@@ -421,6 +434,14 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 **`estimated_finish` (`scheduled_for` + `estimated_hours`) is computed, not stored.** It only exists when both inputs are known, and it's shown wherever a technician's schedule is — My week, and the supervisor's board for that technician — never persisted as its own column, so there's nothing to keep in sync if either input changes.
 
+**A week board (My week, and a supervisor's view of someone's) places each task by its day.** That's `scheduled_for`'s local date, or `scheduled_date` when only the day is set — shown as "any time that day", after the timed tasks. Cancelled tasks never show. An **Overdue** list comes first whatever week is shown: tasks still to be done (`new`, `assigned`, `accepted`, `in_progress`, `blocked`) whose day is before today, so a missed job never drops out of sight. "Unscheduled" is only what has neither field.
+
+**Each level sees the people below it** (`tasks.views.overseen_roles`): an admin everyone — the list is called **Users**; any manager the supervisors and technicians (**My team**); a supervisor the technicians (**Technicians**). That one rule decides the list, Team progress, and opening anyone's progress, schedule, skills or edit page; someone outside it is a 404. **For each of them, the viewer sees the same pages, in their country.** A technician's **board** is My schedule's calendar of their tasks (week, month, year, overdue), and their **Progress** page is My progress itself — the year's line, the month picker, reliability, skills, rank. **Team progress** puts every technician side by side for a month: rank, tasks completed (against the month before), hours, certification and a small line of their year. Managers and admins have My schedule too (tasks they're on or responsible for); My progress and My skills stay the field team's.
+
+**The app shows the same plan and figures** (`/api/my-today/`, `/api/my-progress/`, `/api/team-progress/`): My Tasks opens on Today (overdue, the next job with its tap and Directions, the rest of today, what's done); a Progress tab has the year's line, a month's figures, rank and certification; the Team tab's Progress view is Team progress, by the same oversight rule.
+
+**My schedule (formerly My week) opens on Today.** Its other tabs — Week, Month, Year — are the same calendar as the Schedule page, of just the person's own tasks (each marked with their role), with Overdue under the toolbar. **The Year view** (on both) shows twelve small months on one screen, each day with tasks filled in and counted (every task type, not only visits) — so recurring work, such as preventive maintenance every three months scheduled by a supervisor or manager, shows as a pattern across the year. **Today:** Today's tasks by the same rule, split into the **next job** (one already in progress first, otherwise the earliest still to do), shown as a card with the lead's next tap (accept / heading to site / arrived / start, location recorded as on the task page) and a map link (the site's coordinates, else its name and address); then the rest still to do; then those done. Overdue sits above it, as on the week. The week itself is one tap away (`?view=week`).
+
 `promised_at` and `scheduled_for` are different. The first is the customer's deadline, the second is the slot you planned. A task due Tuesday and a task planned for Tuesday are not the same thing.
 
 **A manager scheduling a task picks one of two modes, every time.** Day and exact time — `scheduled_for` is set directly, `schedule_time_locked` becomes true, and from then on only a manager can change it. Or day only — `scheduled_date` is set, `scheduled_for` stays empty, and any supervisor who can already edit the task can add the exact time themselves (`set_schedule_time`, `tasks/views.py`) without needing anyone's approval; that fills in `scheduled_for` and leaves the task unlocked. A supervisor scheduling their own task from scratch is never affected by any of this — no manager has locked anything yet, so they set `scheduled_for` directly, exactly as before this existed.
@@ -437,7 +458,7 @@ This is deliberately lighter than an earlier version of the same idea, which had
 
 **`responsible_supervisor` is who owns getting the task staffed — separate from, and set independently of, who's actually assigned to do the work.** Optional at creation, and picked from the same pool `customer_ticket.assigned_to` draws from (any active supervisor or manager in the country, never a technician). It has real teeth: once set, only that supervisor or a manager can edit the task, open its assign screen, or act on it from task detail (notify the customer) — see `role_permission` above for the rest of the access model this sits alongside. Requesting feedback is a separate, narrower restriction on top of this one: manager-only regardless of ownership, see `customer_feedback` below. An unowned task (still the default for anything created before this existed) stays open to whoever the usual permission already let in, and any supervisor can claim it from the edit screen — the same screen a manager uses to reassign an owned one. No history is kept on it, unlike the lead, which the `task_event` log already tracks.
 
-**Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`.** Off (the default): a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On: the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
+**Telling the customer about a schedule is controlled by one global switch, `notification_settings.auto_notify_on_reschedule`, on the Notifications page.** Off: a supervisor clicks "Notify customer" from task detail, once `scheduled_for` and the site's `contact_email` are both set, and an email goes out immediately — the deliberate, manual path this started as. On (the default): the same email fires by itself the moment an edit changes `scheduled_for` (still only when a `contact_email` exists). Either way `schedule_notified_at`/`_by` record that it happened and who/what did it, and the manual button becomes "Notify again" for a resend. An edit that doesn't change `scheduled_for` never notifies, in either mode — only a change to the scheduled time counts as a reschedule.
 
 **A delay notice is a different message, always manual.** When the team is running behind — traffic, a previous job overrunning — a supervisor sends a short apology from task detail with a required reason, logged as a `delay_notice` task_event (the reason lives in the event's own `note`, so no extra columns on `task` are needed; a task can have any number of these over time, unlike the single schedule-confirmation email).
 
@@ -458,12 +479,24 @@ A phone that can receive push notifications for a technician (any role) — regi
 Sent through Expo's push service (`people/push.py`), best-effort and fail-silent like email — a failed push never blocks the action behind it; a token Expo reports as no longer registered is deleted. **Sent when:** a technician is made lead or helper on a task; a technician's report is waiting on the task's responsible supervisor; a ticket is escalated to someone; a task message names someone. Never for their own actions. Off entirely unless `EXPO_PUSH_ENABLED` is on (it is by default; tests and local runs without phones simply have no devices registered).
 
 ### notification_settings
-A single row (`pk=1`, created on first use), manager-controlled from the same Roles & permissions screen as the permission matrix — not per-country, one switch for the whole app.
+A single row (`pk=1`, created on first use), set by an admin on its own **Notifications** page (`/tasks/notifications/`, admin-only like Roles) — not per-country, one set of switches for the whole app. The page lists every message the system sends, when and how; the automatic ones have a switch here. Messages someone sends with a button (visit confirmed, running late, parts shipped, feedback request, the visit report copy) and the security emails (password changed, staff set-up link, customer welcome/password link) are listed with no switch — they're always available or always sent. The 🔔 bell is not affected by any of this.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | always `1` |
-| auto_notify_on_reschedule | bool | default `false` |
+| ticket_received_email | bool | default `true` — the customer's "ticket received" email |
+| reply_to_customer_email | bool | default `true` — the office's reply to their ticket, by email |
+| auto_notify_on_reschedule | bool | default `true` — off, a supervisor sends it by hand instead (below) |
+| new_ticket_email | bool | default `true` |
+| new_ticket_roles | varchar[] | who gets it, in the ticket's country; default the roles that can `manage_tickets` |
+| new_task_email | bool | default `true` |
+| new_task_roles | varchar[] | who gets it, in the task's country; default `manager`, `admin` |
+| reply_to_staff_email | bool | default `true` — a customer's reply, to the person the ticket is assigned to |
+| escalation_emails | bool | default `true` — to whom a ticket is escalated, and back with the decision |
+| shipment_to_supervisor_email | bool | default `true` — a task's tracking number, to its responsible supervisor |
+| push_assigned / push_removed / push_cancelled | bool | default `true` — the technician's phone notifications |
+
+An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off.
 
 ### customer_ticket
 A complaint or request from a customer — or an internal matter staff need to follow up (see `kind`). A customer ticket is submitted either by a signed-in customer picking one of their own registered sites, or by staff on the customer's behalf when they phoned, messaged or emailed (`open_tickets`, "New ticket"). There's no anonymous path: a brand-new customer reaches the company outside the app and staff registers them — `/tasks/tickets/new/`, the old public no-login form, now just redirects to the portal login. `customer_id`/`site_id` are still nullable columns rather than required ones, so any ticket already in the database from before this changed stays valid as-is; every ticket submitted from now on always has both set.
@@ -488,9 +521,11 @@ A complaint or request from a customer — or an internal matter staff need to f
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | kind | varchar | `customer` (default), `stock` (stock request), `vendor` (vendor follow-up), `other` (other internal) |
+| about | varchar | what a customer's request is about, the first of two questions on the portal: `machines` (default), `flooring`, `accessories`, `lockers`, `other` (something else) |
+| need | varchar | what they need, the second question: `repair` (fix a problem, default), `parts` (spare parts or a quotation), `visit` (a maintenance visit), `assistance` (advice or assistance). `machines` with `repair` or `parts` is told through machine cards (`ticket_machine`); every other pair is a message, saved as `description`, with files on the ticket itself. Replaced a single `topic` (migrations 0070–0072 converted it) |
 | source | varchar | customer tickets: `portal` (default), `phone`, `whatsapp`, `email` — the same values as `task.source`, so a task made from it keeps the channel |
 | opened_by_id | FK → user | nullable — the staff member who opened it; empty when the customer did |
-| subject | varchar | internal tickets only |
+| subject | varchar | an internal ticket's subject; on a customer's request, the short "what" asked under `about`: the area (`flooring`), the items (`accessories`), the lockers (`lockers`) or what it's about (`other`) |
 | vendor_name | varchar | vendor follow-ups only (required there) |
 | status | varchar | new, converted, dismissed, closed |
 | assigned_to_id | FK → technician | nullable — who's handling it: whoever's role currently has `manage_tickets` (today, technical support manager, operations manager or admin), read from `role_permission` directly, not hardcoded |
@@ -531,10 +566,10 @@ The back-and-forth on a ticket, either side, in order.
 | sender | varchar | staff, customer |
 | sent_by_id | FK → user | always set — staff, or the customer's own portal login (every ticket now requires signing in to submit, so there's no anonymous side to this any more) |
 | message | text | |
-| attachment | file | nullable — photo, short video, or PDF, same allowlist/25 MB limit as `customer_ticket_attachment` |
+| attachment | file | nullable — the one file older messages had; a message's files are now `ticket_reply_file` rows |
 | sent_at | timestamptz | |
 
-**Every staff reply's attachment (if any) rides along on the "New reply on your ticket" email itself, attached, not just linked** — there's no separate "quotation" flow; staff write whatever the customer needs to know in the message text and attach the file, same as any other reply.
+**A message can carry several files** (`ticket_reply_file`: `reply_id`, `file` — photos, short videos or PDFs, up to 10 per message, 25 MB each, the same allowlist as `customer_ticket_attachment`). They're added in the message box itself (the paperclip, as often as needed; each chosen file a chip with ×) and shown everywhere by their own name. **Every staff reply's files ride along on the "New reply on your ticket" email itself, attached, not just linked** — up to 20 MB in all; any beyond are reached through the email's link — there's no separate "quotation" flow; staff write whatever the customer needs to know in the message text and attach the file, same as any other reply.
 
 **Open while the ticket is still new, or converted but the resulting task isn't finished yet** (`_ticket_is_open`, `tasks/views.py`) — closed once dismissed, once the ticket itself is closed directly, or once that task itself reaches `closed`. Not tied to `customer_ticket.status` alone: "converted" can mean the work just started, and the customer should still be able to ask about it. A **cancelled** task does *not* close the conversation — cancellation isn't a resolution, so the issue is still open and staff still needs to be able to talk to the customer about it. Once actually closed, the thread becomes read-only on both the staff review screen and the customer's own `ticket_status` page.
 
@@ -551,7 +586,7 @@ A progress note on a ticket, visible only to whoever can manage it — separate 
 | ticket_id | FK → customer_ticket | |
 | author_id | FK → user | nullable |
 | message | text | |
-| attachment | file | nullable — same allowlist/25 MB limit as `customer_ticket_attachment`; manager-tier only, same as the note itself |
+| attachment | file | nullable — the one file older notes had; a note's files are now `ticket_internal_note_file` rows (`note_id`, `file`; same limits as a message's), on customer and internal tickets alike |
 | created_at | timestamptz | |
 
 **A running log, not a single overwritable field** — each note is its own row, timestamped and attributed, so a manager can see how the state of a ticket evolved over time rather than just its latest value.
@@ -568,6 +603,21 @@ A new ticket, or a new customer reply on an existing one — feeds the ticket ha
 | seen_at | timestamptz | nullable — set the moment any manager/admin opens the ticket (`ticket_review`) |
 
 **A shared team inbox, not per-user.** There's one row per event, not one per (event, viewer) pair — opening a ticket clears its notifications for every manager/admin at once, the same way any one of them acting on a ticket already handles it for the whole team. Created in `portal_ticket_new` (a new ticket) and `ticket_status` (a customer's own reply) — never for a staff reply, since staff already know they just sent one. Also fires a best-effort email to every manager/admin in the ticket's country (`send_new_ticket_email_to_staff`), separate from the bell.
+
+### customer_notification
+One item in a customer's portal bell, written where each thing happens (`customers/notify.py`) and only for a customer with a portal login (never our own internal account).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| customer_id | FK → customer | |
+| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`) |
+| task_id | FK → task | nullable — the visit it's about |
+| ticket_id | FK → customer_ticket | nullable — the request it's about |
+| created_at | timestamptz | |
+| seen_at | timestamptz | nullable — set once the customer opens what it's about |
+
+**One item per thing.** Notifying the same thing again replaces its unseen item rather than stacking another. Closing a customer request (`ticket_review`, action `close`) also emails the customer our answer, under the same Notifications switch as our replies (`reply_to_customer_email`).
 
 ### ticket_escalation
 One step up the escalation chain, and its outcome. The chain is strict — no skipping levels — and lives in `people.models.ESCALATION_CHAIN`: **Country Support Manager → Technical Support Manager → Operations Manager**, who decides (nothing above them). A separate record rather than a ticket status: escalation is a step *within* an open ticket, not a replacement for `new`, and this keeps who escalated, why, and what was decided at every level.
@@ -651,10 +701,10 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | asset_id | FK → asset | null — set when the customer picked one of their registered machines at the ticket's site |
 | model_name | varchar | blank — typed when the machine isn't in their list |
 | serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
-| serial_photo | file | blank — a photo of the machine's silver serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
-| problem | varchar | not_working, noise, display, cables, other |
+| code | varchar | blank — its product code, if the customer knows it (an unlisted machine); carried into the technician's new-machine row |
+| serial_photo | file | blank — a photo of the machine's serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
+| problem | varchar | not_working, noise, display, cables, other — or `parts`, set by itself on a spare-parts request's machines (never offered as a problem); `description` then says which parts |
 | description | text | blank |
-| out_of_service | bool | "cannot be used" — the customer's own flag, for the office to prioritise |
 | position | smallint | order the customer added them |
 | decision | varchar | blank until decided — visit, ship_part (both handled by a task), advice, not_covered (no task) |
 | task_id | FK → task | null — the task handling this machine, for visit / ship_part |
@@ -677,28 +727,83 @@ Which machines the task covers. Populated by the technician during the work, not
 | task_id | FK → task | |
 | asset_id | FK → asset | |
 | outcome | varchar | repaired, replaced, not_repairable, inspected_ok |
+| finding_code | varchar | blank — a standard finding (`reports.phrases.Finding`), printed in the report's language |
+| note | varchar(255) | blank — any other finding, typed in the report's language |
+| action_code | varchar | blank — a standard action (`reports.phrases.Action`) |
+| action | varchar(255) | blank — any other action, typed in the report's language |
+
+**A task made from a portal ticket starts its report from that ticket's machines** (`ticket_machine.task`): the listed ones are already picked, waiting for an outcome; an unlisted one is a new-machine row with its model and serial filled in, and registering it there sets `ticket_machine.asset`. The customer's ticket page then shows each machine's outcome and note. The frozen signed copy includes a machine's `note` only when it has one, so reports signed before notes existed don't read as changed.
 
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
 
 ### task_product
-The delivery note's contents, structured — for installation and loading tasks, where stock is delivered ahead of or alongside the visit rather than consumed during it (that's `part_used`, on the work report instead, see §5). Doubles as the per-machine checklist a supervisor fills in for an actual unit being installed, not just a parts line.
+One machine's line on an **equipment task** — receiving from the factory, loading at the warehouse, installing on site (for now, installations; receiving and loading reuse it) — from the delivery note, structured: stock delivered ahead of or alongside the visit, not consumed during it (that's `part_used`, §5). Operations cares about four things beyond the code: the frame, arm, padding and trim colours — black unless it's a custom one.
+
+**Planned, then checked off on site.** A supervisor plans the lines from the task's Edit screen (product code, serial if already known, quantity, colours; replaced wholesale on each save) — on a loading or an installation "BENCH-01 × 4" becomes four lines, one per machine. Whoever does the step checks each one off in their report (website and app): what really happened (`status`), the serial typed from the sticker on the machine, the colours, what went in instead, a note and a photo — adding a machine that wasn't on the paperwork (`added_on_site`). A damaged one or a wrong item needs a note or a photo. The review lists anything not checked yet and what's still to install.
+
+**Codes and quantities until someone types the serial.** The container's list and sales both deal in product codes and quantities; the serial is only on the machine's sticker (no barcode — it's typed). So each step asks for exactly what that step can know:
+
+- **Receiving** stays code × quantity — one line per code, never split, no serials: the container is counted against its list, not machine by machine. A count that's off splits the line: *BENCH-01 × 18* done, *BENCH-01 × 2* missing (or damaged).
+- **Loading** is one line per machine. Typing the serial there is **optional** — a big load can go out without them.
+- **Installation** needs every serial. One already typed at loading arrives filled in, so the installer just compares it with the sticker and ticks it (correcting it if a different machine came); one that's still empty is typed now, with a photo of the sticker (`photo`) so the office can check it later.
+
+So each serial is typed once, wherever the machine is first handled one by one.
+
+**Installed machines join the customer's list.** When the report is first sent, each `done` line with a serial becomes an `asset` at the task's site (under the task's brand, `model_name` and `code` = the product code, `installed_on` = that day) — a serial already on file at the site is that machine, not a second one. Without a brand on the task nothing can be added, and the review says so.
+
+**Carried along the chain.** A line copied to the next step keeps `source_line`, so a machine's journey (factory → warehouse → site → its repairs) can be followed; `task.previous_task` links the steps themselves.
+
+**The chain can cross countries** — received and loaded at the Riyadh warehouse, installed at a gym in Dubai. Machines leave a warehouse only through a **loading** task, planned from that warehouse's stock (below), never carried from one receiving task — a load of BENCH-01 can be from two containers. A receiving sends nothing on. The loading is created at the warehouse like any task, and its machines are planned on its Edit screen (website and app) by **the manager tier only** — taking machines out of stock is the same decision as sending them on; the screen shows what the warehouse holds and suggests its codes. (Installations carried straight from a receiving before this still count as out of that warehouse.) On a loading task's page, **only the manager tier** (managers and the admin — never a supervisor, even within their own country, so no mistakes) sends the machines on: **Send to installation**, at a customer's site in any country, choosing which machines go — a load can be split across sites. The machines loaded and not carried yet are copied with their serial (if typed) and colours; each step belongs to its own site's country and team (the responsible supervisor carries over only within a country). After an installation, what wasn't installed gets a **follow-up** task instead (same site, linked as the next step).
+
+**Straight from the factory to a customer** there's no receiving or loading: the installation is created at the customer's site and planned from the container's list (code × quantity), and the installer checks what arrived and types every serial. It never touches a warehouse's stock.
+
+**Warehouse stock — counted, not stored.** How many of a code a warehouse holds is worked out from the tasks themselves, so it can never drift from them:
+
+> received (`done` receiving lines at that warehouse) − loaded (lines of loading tasks there that aren't cancelled) + counts (`stock_adjustment`, below)
+
+Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it, or removing a line, puts them back. Planning a load shows each code's stock next to it and **warns** when it would go below zero, but doesn't block: the warehouse floor is the truth, and a count corrects the figure.
+
+**Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
+
+> received (`done` part lines on receiving tasks at the country's warehouse) − used (`part_used` on that country's reports) + counts
+
+**Parts ordered for one repair are held for it.** A part line received for a particular task (`for_task`, the repair with the PAK number) counts in the warehouse but shows as **held for that task**, not free, until that task's report uses it; whatever the task leaves unused once it's closed or cancelled becomes free stock.
+
+The **Stock** screen lists each warehouse's machines and parts by code and quantity — parts with their photo, and how many of each are held and for which task — in the active country (a manager switches country from the header, as on every screen), gated on `view_stock` (manager, warehouse_manager, operations_manager and admin by default). Machines are listed per warehouse; spare parts per country, since each country has one parts warehouse.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
-| serial_number | varchar | blank — delivery notes are usually just model codes and quantities, per `asset`'s own note above; a serial is a bonus when the paperwork actually has one. Searchable from `task_list`, same box as `asset.serial_no` — so a machine can be traced to the task (and its customer/site) it was installed or loaded under, not just its repair history |
-| quantity | int | default 1 |
-| replacement | varchar | blank — which machine this one was swapped in for, if the one ordered wasn't available |
-| frame | varchar | blank — custom frame color |
-| arm | varchar | blank — custom arm color |
-| padding | varchar | blank — custom padding color |
-| trim | varchar | blank — custom trim color |
-| comment | text | blank |
+| serial_number | varchar | blank on receiving; optional on loading; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
+| quantity | int | default 1; the count of that code on a receiving line, 1 per machine on a loading or an installation |
+| frame | varchar | default `Black` |
+| arm | varchar | default `Black` |
+| padding | varchar | default `Black` |
+| trim | varchar | default `Black` |
+| status | varchar | `pending` (not checked yet), `done` (received / loaded / installed — the step's word), `missing`, `damaged`, `wrong_item`, `returned`, `later` |
+| replacement | varchar | blank — what went in instead, if not the item listed |
 | note | text | blank |
+| photo | file | nullable — unguessable path |
+| added_on_site | bool | not on the delivery note — added by whoever did the step |
+| source_line_id | FK → task_product | nullable — the same machine's line on the step before |
+| kind | varchar | `machine` (default) or `part` — a spare part, only on a receiving task; the colour columns don't apply to it |
+| for_task_id | FK → task | nullable — a part line only: the repair it was ordered for, which holds it (above) |
 
-**Entered from the task's Edit screen, replaced wholesale on every save** — not an append-only log the way `task_event` is. The same product-code/quantity information already exists as a document (`task.delivery_note`); this is the same content kept structured, so it can be searched and listed rather than only read off a scanned PDF. A row needs at least a `product_code` to save; a blank row is silently dropped, and quantity defaults to 1 when left empty. Ticking a row's own **Delete** checkbox (the formset's `can_delete`) drops it outright instead — for when a machine turns out faulty and the customer returns it — without needing to blank out every one of its fields by hand.
+### stock_adjustment
+A hand count of one code at a warehouse — the opening stock when this starts (what's already on the floor was never received in the app), or a recount. Whoever counts types **what's on the shelf**; the row keeps the difference from what the app worked out, so entering the same count twice changes nothing. Added by the manager tier or a warehouse manager from the Stock screen, or by a parts upload with quantities; never edited, a mistake is corrected by another count.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| site_id | FK → site | a warehouse — a site of an `is_internal` customer |
+| kind | varchar | `machine` or `part` — which stock it corrects: a warehouse's machines, or its country's parts |
+| product_code | varchar | a machine's code or a `part.code` |
+| quantity | int | the difference the count made: + found, − short |
+| note | text | why — required when typed, "Opening stock — <file name>" from an upload |
+| created_by_id | FK → user | |
+| created_at | timestamptz | |
 
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.
@@ -721,6 +826,8 @@ Compress photos on upload and never autoplay video. Technicians are on mobile da
 
 ### task_assignment
 Handles several technicians on one task, and one technician across many tasks.
+
+**The lead can be chosen when the task is created** (website New task, for whoever has `assign_tasks`) — any active, available person in the task's country, whatever their role, so the warehouse manager, a supervisor or a technician can receive or load. It's the same as setting the lead from the assign screen right after (event, push, status `assigned`); left empty, the assign screen is where it's done, and a visitor on a trip is added there.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -829,14 +936,19 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 ## 5. Reports
 
 ### work_report
+**The visit report follows the company's PPM report and reads fully in its customer's language** (Arabic in Saudi Arabia and Egypt, English elsewhere — `country.report_language`). Everything standard is stored as a code and printed in that language: the work performed, each machine's finding and action, the recommendations, "Performed by" (the company's technical team), the scope (the brand's equipment) and the next visit (the site's next booked task). Only machine names and codes stay as entered; anything else the technician types, the form and the app ask them to write in the report's language. No hours or prices on it.
+
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
 | task_id | FK → task | one per task |
-| findings | text | what the technician found |
-| action_taken | text | |
+| findings | text | blank — overall findings, if needed (each machine has its own) |
+| work_lines | varchar[] | standard work performed (`reports.phrases.WorkLine`), printed in the report's language |
+| action_taken | text | blank — other work, one per line |
+| recommendations | varchar[] | standard recommendations (`reports.phrases.Recommendation`) |
+| recommendation | text | blank — another recommendation, typed |
 | resolved | bool | |
-| labour_hours | decimal | |
+| labour_hours | decimal | worked out, never typed: from the lead's first "Started" tap (app or website) to the first "Completed" (the report first sent), less "Paused"→"Resumed" — waiting for review, rejections and later corrections add nothing. To the minute, kept as hours with two decimals (1:32 → 1.53, exact to the minute when shown again as h:mm); at least a minute. A report filed offline counts until it was filed on the phone. A manager correcting a tap time recomputes it. Shown to the customer as "Time on site" and part of what they sign |
 | customer_name | varchar | who signed |
 | signature_url | varchar | |
 | signature_waived_reason | text | blank — filled in when the customer wasn't available to sign |
@@ -864,11 +976,11 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | part_code | varchar | a `part.code` once the catalogue is in use — kept as text, so a later catalogue change never rewrites history |
 | description | varchar | |
 | quantity | int | |
-| unit_cost | decimal | |
-| currency_code | char(3) | never store an amount without its currency |
+| unit_cost | decimal, nullable | not asked for any more — managers agree prices with the customer before the visit; kept for older reports |
+| currency_code | char(3), blank | with unit_cost: never store an amount without its currency |
 
 ### customer_feedback
-A rating request sent to the customer once their task is closed (report filed). Not automatic — a supervisor sends it deliberately, from the task's own detail page.
+A customer's rating of a visit. Either requested by email once the task is closed (report filed) — not automatic, a manager sends it deliberately from the task's own detail page — or given by the customer from their portal, on the visit's page, once its report is in. One record per task either way: rating in the portal answers an emailed request already sent, and the link then shows it as answered.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -876,12 +988,12 @@ A rating request sent to the customer once their task is closed (report filed). 
 | task_id | FK → task | one per task |
 | token | varchar | random, unique — the public link's only credential |
 | requested_at | timestamptz | updated on every resend |
-| requested_by_id | FK → user | which supervisor sent it |
+| requested_by_id | FK → user | nullable — who sent the request; empty when the customer rated from the portal unasked |
 | rating | int | nullable — 1–5, until the customer answers |
 | comment | text | nullable |
 | submitted_at | timestamptz | nullable |
 
-**The customer is never a user of this system.** The link is the only thing standing in for a login — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
+**The emailed link needs no login.** It stands in for one — reached at `/reports/feedback/<token>/`, no authentication, no supervisor-facing chrome. Requires a `contact_email` on the site; there's no fallback channel yet if one isn't on file.
 
 **Sending is manual, every time, and manager-only.** No automatic email fires on close — a manager decides per task whether asking makes sense, and can resend the same link (it doesn't expire or rotate) if the customer never answered. A fixed floor like `approve_report`/`close_directly`, not a `role_permission` row — a supervisor, even one who owns the task, can't send it.
 
@@ -966,7 +1078,7 @@ Each is a real need eventually. None belongs in the first version.
 
 - Warranty claim submission workflow — capture `is_warranty`, `labour_hours` and photos now; claim from an export until the volume justifies a module
 - Reward points — see the warning in section 6; do not tie metrics to pay in year one
-- Parts inventory and stock
+- Prices and stock value — machines and spare parts are counted per warehouse (*Warehouse stock*, under `task_product`), never valued
 - Invoicing — accounting handles it; `billing_type` gives them a clean export
 - Preventive maintenance schedules
 - Technician leave calendar
@@ -988,7 +1100,7 @@ Each is a real need eventually. None belongs in the first version.
 
 ## 10. The screens
 
-**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket. Filing/viewing a task's report happens right on that task's own detail page — there's no separate reports queue.
+**Supervisor (web):** dashboard, task list and week view, create task, edit task, assign, technician roster, add a technician, a technician's board, review a technician's skills, edit a technician's photo, customers list, add a customer, a customer's sites (add one), tickets list, review a ticket, warehouse stock (with its counts). Filing/viewing a task's report happens right on that task's own detail page — there's no separate reports queue.
 
 **Manager (web):** roles & permissions, skills list, add a skill, requesting customer feedback — everything else a manager sees is whatever the matrix currently grants a manager, which starts out as everything on the supervisor list above.
 
@@ -996,8 +1108,8 @@ Each is a real need eventually. None belongs in the first version.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and a ticket's own status page, reached by its token, which doubles as a no-login fallback for checking on or replying to a ticket without staying signed in. Submitting a new ticket itself always requires the portal login below — the old public ticket form now just redirects there.
 
-**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page listing every ticket they've submitted and a summary-only service history, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that).
+**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page with their next visit up front, their requests (tickets) and visits still to come, and the service history with each visit's report PDF — progress always in the customer's words (*Received → Being arranged → Visit booked → Done*, `customers/progress.py`), never the team's statuses; a booked day that has passed without the work being done reads as being arranged again, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that). Also **My machines** (each machine at their sites with its code, serial and service history, and *Report a problem with this machine*, which opens the form with it chosen), **a page per visit** (when, the request it came from, and once reported what they signed — machines with what was found and done, work done, parts without prices, recommendations; never the hours — plus the PDF and the signed copy, and rating the visit, which answers an emailed feedback request if one was sent), a request's page listing **the visit(s) it became**, and **Settings** (contact details, addresses, language, password — the login email stays with the office).
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 
-Twenty-two screens plus a handful of public/token pages (feedback form, ticket status). That is the whole application.
+Twenty-three screens plus a handful of public/token pages (feedback form, ticket status). That is the whole application.

@@ -11,7 +11,7 @@
 
 <div class="section">
     <h2>{% translate "Add a part" %}</h2>
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" enctype="multipart/form-data" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="add">
         {% for field in add_form %}
@@ -58,8 +58,9 @@
         <table>
             <thead>
                 <tr>
+                    <th>{% translate "Photo" %}</th>
                     <th>{% translate "Code" %}</th>
-                    <th>{% translate "Description" %}</th>
+                    <th>{% translate "Description and colour" %}</th>
                     <th>{% translate "Status" %}</th>
                     <th></th>
                 </tr>
@@ -67,14 +68,22 @@
             <tbody>
                 {% for part in page_obj %}
                 <tr>
-                    <td><strong>{{ part.code }}</strong></td>
                     <td>
-                        <form method="post" class="inline-form" novalidate>
+                        {% if part.photo %}<a href="{{ part.photo.url }}" target="_blank" rel="noopener"><img src="{{ part.photo.url }}" alt="{{ part.code }}" class="part-photo" loading="lazy"></a>{% else %}<span class="muted">—</span>{% endif %}
+                    </td>
+                    <td dir="ltr"><strong>{{ part.code }}</strong></td>
+                    <td>
+                        <form method="post" enctype="multipart/form-data" class="part-edit" novalidate>
                             {% csrf_token %}
-                            <input type="hidden" name="action" value="edit_description">
+                            <input type="hidden" name="action" value="edit">
                             <input type="hidden" name="part_id" value="{{ part.pk }}">
                             <input type="text" name="description" value="{{ part.description }}" maxlength="200"
-                                   aria-label="{% translate 'Description' %}">
+                                   aria-label="{% translate 'Description' %}" placeholder="{% translate 'Description' %}">
+                            <input type="text" name="colour" value="{{ part.colour }}" maxlength="200"
+                                   aria-label="{% translate 'Colour' %}" placeholder="{% translate 'Colour' %}">
+                            <label class="part-edit__photo">{% if part.photo %}{% translate "Replace photo" %}{% else %}{% translate "Add a photo" %}{% endif %}
+                                <input type="file" name="photo" accept="image/*">
+                            </label>
                             <button type="submit" class="button button--secondary">{% translate "Save" %}</button>
                         </form>
                     </td>

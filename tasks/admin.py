@@ -27,6 +27,7 @@ class TaskAssetInline(admin.TabularInline):
 
 class TaskProductInline(admin.TabularInline):
     model = TaskProduct
+    fk_name = 'task'
     extra = 0
 
 

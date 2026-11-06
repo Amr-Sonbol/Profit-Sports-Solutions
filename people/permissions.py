@@ -40,6 +40,10 @@ def get_active_country(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return None
+    # The app's choice (api.authentication, for the manager tier only).
+    chosen_in_app = getattr(request, 'api_active_country', None)
+    if chosen_in_app is not None:
+        return chosen_in_app
     if technician.is_manager_tier:
         active_id = request.session.get(ACTIVE_COUNTRY_SESSION_KEY)
         if active_id:

@@ -74,3 +74,15 @@ class FeedbackFormTests(TestCase):
         self.feedback.refresh_from_db()
         self.assertEqual(self.feedback.rating, 5)
         self.assertEqual(self.feedback.comment, 'Great.')
+
+
+class ReportTextDirectionTests(TestCase):
+    # Typed-in text keeps its own direction in the PDF, so "24 Fitness"
+    # isn't turned into "Fitness 24" inside an Arabic report.
+
+    def test_text_dir_follows_the_first_letter(self):
+        from reports.templatetags.report_text import text_dir
+        self.assertEqual(text_dir('24 Fitness'), 'ltr')
+        self.assertEqual(text_dir('صالة ٢٤'), 'rtl')
+        self.assertEqual(text_dir('  123 '), 'ltr')
+        self.assertEqual(text_dir(None), 'ltr')

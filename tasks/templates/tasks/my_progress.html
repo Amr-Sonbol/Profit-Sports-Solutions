@@ -1,11 +1,22 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
-{% block title %}{% translate "My progress" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% if viewing_other %}{% blocktranslate with name=technician.full_name %}Progress — {{ name }}{% endblocktranslate %}{% else %}{% translate "My progress" %}{% endif %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
+    {% if viewing_other %}
+    <div>
+        <a href="{% url 'tasks:team_progress' %}" class="back-link">{% translate "Team progress" %}</a>
+        <h1>{% include "_avatar.html" with technician=technician %} {{ technician.full_name }}</h1>
+    </div>
+    <div class="badge-row">
+        <a href="{% url 'tasks:technician_board' technician.pk %}" class="button button--secondary">{% translate "View schedule" %}</a>
+        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' technician.pk %}" class="button button--secondary">{% translate "Review skills" %}</a>{% endif %}
+    </div>
+    {% else %}
     <h1>{% translate "My progress" %}</h1>
+    {% endif %}
 </div>
 
 {% if ninety_day %}
@@ -24,7 +35,7 @@
     {% if ninety_day.on_track %}
     <p class="muted">{% translate "On track to achieve full certification within 90 days." %}</p>
     {% else %}
-    <p class="muted">{% translate "Progress is behind the 90-day target. Please discuss next steps with your supervisor." %}</p>
+    <p class="muted">{% if viewing_other %}{% translate "Progress is behind the 90-day target." %}{% else %}{% translate "Progress is behind the 90-day target. Please discuss next steps with your supervisor." %}{% endif %}</p>
     {% endif %}
 </div>
 {% endif %}
@@ -46,7 +57,7 @@
             <dd>{{ certification.conduct_certified }} / {{ certification.conduct_total }}</dd>
         </div>
         <div>
-            <dt>{% translate "Ranking in your country" %}</dt>
+            <dt>{% if viewing_other %}{% translate "Ranking in the country" %}{% else %}{% translate "Ranking in your country" %}{% endif %}</dt>
             <dd>
                 {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
             </dd>
@@ -55,7 +66,7 @@
     {% if certification.cardio_ready %}
     <p class="muted">{% translate "Certified in advanced skills." %}</p>
     {% endif %}
-    <p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>
+    {% if not viewing_other %}<p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>{% endif %}
 </div>
 
 <div class="section">
@@ -72,12 +83,26 @@
     </dl>
 </div>
 
-<div class="section">
-    <h2>{% translate "This month" %}</h2>
+<div class="section" id="month">
+    {# Same three buttons in the same places as the Hours page; one that can't be used is greyed out, not hidden. #}
+    <nav class="week-nav">
+        <a href="?month={{ prev_month|date:'Y-m' }}#month" class="back-link">{% translate "Previous month" %}</a>
+        {% if is_this_month %}
+        <span class="button button--secondary" aria-disabled="true">{% translate "This month" %}</span>
+        {% else %}
+        <a href="?#month" class="button button--secondary">{% translate "This month" %}</a>
+        {% endif %}
+        {% if next_month %}
+        <a href="?month={{ next_month|date:'Y-m' }}#month" class="forward-link">{% translate "Next month" %}</a>
+        {% else %}
+        <span class="forward-link" aria-disabled="true">{% translate "Next month" %}</span>
+        {% endif %}
+    </nav>
+    <h2>{{ month_first|date:"F Y" }}</h2>
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Labour hours" %}</dt>
-            <dd>{{ month_hours }}</dd>
+            <dd>{{ month_hours|hm }}</dd>
         </div>
         <div>
             <dt>{% translate "Reports filed" %}</dt>
@@ -91,6 +116,8 @@
         {% endif %}
     </dl>
 </div>
+
+{% include "tasks/_trend_chart.html" with chart=trend_chart %}
 
 <div class="section">
     <h2>{% translate "Reliability" %}</h2>

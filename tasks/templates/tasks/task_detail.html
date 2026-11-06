@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n report_text %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -250,8 +250,7 @@
             <dt>{% translate "Quotation" %}</dt>
             <dd>
                 {% if task.quotation %}
-                <a href="{{ task.quotation.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ task.quotation.url }}" download>{% translate "Download" %}</a>
+                {% include "_attachment.html" with file=task.quotation %}
                 {% if task.quotation_uploaded_at %}<span class="muted">{{ task.quotation_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
                 {% else %}—{% endif %}
             </dd>
@@ -260,8 +259,7 @@
             <dt>{% translate "Factory offer" %}</dt>
             <dd>
                 {% if task.factory_offer %}
-                <a href="{{ task.factory_offer.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ task.factory_offer.url }}" download>{% translate "Download" %}</a>
+                {% include "_attachment.html" with file=task.factory_offer %}
                 {% if task.factory_offer_uploaded_at %}<span class="muted">{{ task.factory_offer_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
                 {% else %}—{% endif %}
             </dd>
@@ -271,8 +269,7 @@
             <dt>{% translate "Invoice" %}</dt>
             <dd>
                 {% if task.invoice %}
-                <a href="{{ task.invoice.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ task.invoice.url }}" download>{% translate "Download" %}</a>
+                {% include "_attachment.html" with file=task.invoice %}
                 {% if task.invoice_uploaded_at %}<span class="muted">{{ task.invoice_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
                 {% else %}—{% endif %}
             </dd>
@@ -282,8 +279,7 @@
             <dt>{% translate "Delivery note" %}</dt>
             <dd>
                 {% if task.delivery_note %}
-                <a href="{{ task.delivery_note.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
-                | <a href="{{ task.delivery_note.url }}" download>{% translate "Download" %}</a>
+                {% include "_attachment.html" with file=task.delivery_note %}
                 {% if task.delivery_note_uploaded_at %}<span class="muted">{{ task.delivery_note_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
                 {% else %}—{% endif %}
             </dd>
@@ -327,9 +323,10 @@
 {% if task.status == 'closed' %}
 <div class="section">
     <h2>{% translate "Customer feedback" %}</h2>
-    {% if feedback.requested_at %}
+    {% if feedback %}
     <p class="muted">
-        {% blocktranslate with time=feedback.requested_at|date:"SHORT_DATETIME_FORMAT" %}Requested on {{ time }}{% endblocktranslate %}
+        {% if feedback.requested_by_id %}{% blocktranslate with time=feedback.requested_at|date:"SHORT_DATETIME_FORMAT" %}Requested on {{ time }}{% endblocktranslate %}
+        {% else %}{% translate "Given by the customer in their portal, without being asked." %}{% endif %}
     </p>
     {% if feedback.submitted_at %}
     <p>
@@ -342,7 +339,7 @@
     {% else %}
     <p class="empty-state">{% translate "Not yet requested." %}</p>
     {% endif %}
-    {% if user.technician.is_manager_tier %}
+    {% if user.technician.is_manager_tier and not feedback.submitted_at %}
     {% if task.site.contact_email %}
     <form method="post" novalidate>
         {% csrf_token %}
@@ -365,7 +362,7 @@
         {% for attachment in attachments %}
         <li>
             <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
-            <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+            {% include "_attachment.html" with file=attachment.url %}
             <span class="muted">{% blocktranslate with source=attachment.get_source_display time=attachment.uploaded_at|date:"SHORT_DATETIME_FORMAT" %}{{ source }} — {{ time }}{% endblocktranslate %}</span>
         </li>
         {% endfor %}
@@ -378,7 +375,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="upload_document">
         {% if staff_upload_form.non_field_errors %}
-            <p class="flash flash--error">{{ staff_upload_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ staff_upload_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if staff_upload_form.file.errors %}field--error{% endif %}">
             <label for="{{ staff_upload_form.file.id_for_label }}">{{ staff_upload_form.file.label }}</label>
@@ -403,7 +400,7 @@
     <ul class="plain-list">
         {% for ticket_attachment in ticket_attachments %}
         <li>
-            <a href="{{ ticket_attachment.file.url }}" target="_blank" rel="noopener">{% translate "View" %}</a>
+            {% include "_attachment.html" with file=ticket_attachment.file %}
             <span class="muted">{{ ticket_attachment.uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>
         </li>
         {% endfor %}
@@ -419,50 +416,93 @@
         <li>
             {{ task_asset.asset }}
             <span class="badge badge--muted">{{ task_asset.get_outcome_display }}</span>
+            {% if task_asset.note %}<br><span class="muted">{{ task_asset.note }}</span>{% endif %}
         </li>
         {% endfor %}
     </ul>
 </div>
 {% endif %}
 
-{% if products %}
+{% if products or task.previous_task %}
 <div class="section">
-    <h2>{% translate "Products" %}</h2>
+    <h2>{% translate "Machines" %}</h2>
+    {# The equipment chain: the step before, and the ones after. #}
+    {% if task.previous_task %}<p>{% translate "Previous step:" %} <a href="{% url 'tasks:task_detail' task.previous_task.pk %}">{{ task.previous_task.task_number }}</a></p>{% endif %}
+    {% for next_task in next_tasks %}<p>{% translate "Next step:" %} <a href="{% url 'tasks:task_detail' next_task.pk %}">{{ next_task.task_number }}</a> — {{ next_task.get_status_display }}</p>{% endfor %}
+    {% if products %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>{% translate "Product code" %}</th>
                     <th>{% translate "Serial number" %}</th>
-                    <th>{% translate "Quantity" %}</th>
-                    <th>{% translate "Replacement" %}</th>
-                    <th>{% translate "Frame color" %}</th>
-                    <th>{% translate "Arm color" %}</th>
-                    <th>{% translate "Padding color" %}</th>
-                    <th>{% translate "Trim color" %}</th>
-                    <th>{% translate "Comment" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Colors" %}</th>
+                    <th>{% translate "Installed instead" %}</th>
                     <th>{% translate "Note" %}</th>
+                    <th>{% translate "Photo" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for product in products %}
                 <tr>
-                    <td>{{ product.product_code }}</td>
+                    <td>{{ product.product_code }}{% if product.quantity > 1 %} × {{ product.quantity }}{% endif %}{% if product.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% if product.for_task %} {% translate "for" %} <a href="{% url 'tasks:task_detail' product.for_task.pk %}" dir="ltr">{{ product.for_task.task_number }}</a>{% endif %}{% endif %}{% if product.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}</td>
                     <td>{{ product.serial_number|default:"—" }}</td>
-                    <td>{{ product.quantity }}</td>
+                    <td>{{ product.status_label }}</td>
+                    <td>{{ product.frame }} / {{ product.arm }} / {{ product.padding }} / {{ product.trim }}</td>
                     <td>{{ product.replacement|default:"—" }}</td>
-                    <td>{{ product.frame|default:"—" }}</td>
-                    <td>{{ product.arm|default:"—" }}</td>
-                    <td>{{ product.padding|default:"—" }}</td>
-                    <td>{{ product.trim|default:"—" }}</td>
-                    <td>{{ product.comment|default:"—" }}</td>
-                    <td>{{ product.note|default:"—" }}</td>
+                    <td class="cell-wrap">{{ product.note|default:"—" }}</td>
+                    <td>{% if product.photo %}{% include "_attachment.html" with file=product.photo %}{% else %}—{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <p class="field__help">{% translate "These can be edited from the task's Edit screen." %}</p>
+    <p class="field__help">{% translate "Planned from the task's Edit screen; checked off on site in the installers' report." %}</p>
+    {% endif %}
+    {% if lines_to_carry and can_send_on %}
+    {# Loading: carry the loaded machines to an installation — any country. #}
+    <form method="post" class="next-step">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_next_step">
+        <h3>{% translate "Send to installation" %}</h3>
+        <div class="form-grid">
+            <div class="field">
+                <label for="next-step">{% translate "Next step" %}</label>
+                <select name="step" id="next-step" data-next-step>
+                    {% for step, label, sites in next_step_choices %}<option value="{{ step }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="next-site">{% translate "Where" %}</label>
+                <select name="site" id="next-site" required>
+                    {% for step, label, sites in next_step_choices %}
+                    <optgroup label="{{ label }}" data-for-step="{{ step }}">
+                        {% for site in sites %}<option value="{{ site.pk }}">{{ site.customer.country.display_name }} — {{ site.customer.name }} — {{ site.name }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <p class="field__help">{% translate "The machines to carry, with their serial numbers and colors:" %}</p>
+        {% for line in lines_to_carry %}
+        <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.quantity > 1 %} × {{ line.quantity }}{% endif %}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>
+        {% endfor %}
+        <button type="submit" class="button">{% translate "Send to installation" %}</button>
+    </form>
+    {% endif %}
+    {% if still_to_install %}
+    <div class="flash flash--warning">
+        {% blocktranslate count count=still_to_install|length %}{{ count }} machine is still to install.{% plural %}{{ count }} machines are still to install.{% endblocktranslate %}
+        {% if can_create_follow_up %}
+        <form method="post" class="inline-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_follow_up">
+            <button type="submit" class="button">{% translate "Create a follow-up task for them" %}</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -509,11 +549,11 @@
         <div>
             <dt>{% translate "Labour hours" %}</dt>
             <dd>
-                {{ report.labour_hours }}
-                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
+                {{ report.labour_hours|hm }}
+                {% if task.estimated_hours %}<span class="muted">({% blocktranslate with hours=task.estimated_hours|hm %}est. {{ hours }} h{% endblocktranslate %})</span>{% endif %}
                 {% if report.is_overrun %}<span class="badge badge--bad">{% translate "Significantly over estimate" %}</span>{% endif %}
                 {% with tapped=report.tapped_hours %}{% if tapped is not None %}
-                <span class="muted">({% blocktranslate with hours=tapped %}taps: {{ hours }} h{% endblocktranslate %})</span>
+                <span class="muted">({% blocktranslate with hours=tapped|hm %}taps: {{ hours }} h{% endblocktranslate %})</span>
                 {% endif %}{% endwith %}
                 {% if report.is_above_tapped %}<span class="badge badge--status-in_progress">{% translate "Exceeds recorded time" %}</span>{% endif %}
             </dd>
@@ -558,7 +598,6 @@
                     <th>{% translate "Part" %}</th>
                     <th>{% translate "Description" %}</th>
                     <th>{% translate "Qty" %}</th>
-                    <th>{% translate "Unit cost" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -567,7 +606,6 @@
                     <td>{{ part.part_code }}</td>
                     <td>{{ part.description|default:"—" }}</td>
                     <td>{{ part.quantity }}</td>
-                    <td>{{ part.unit_cost }} {{ part.currency_code }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -606,7 +644,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="close_directly">
         {% if close_task_form.non_field_errors %}
-            <p class="flash flash--error">{{ close_task_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ close_task_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if close_task_form.note.errors %}field--error{% endif %}">
             <label for="{{ close_task_form.note.id_for_label }}">{{ close_task_form.note.label }}</label>
@@ -638,7 +676,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="flag_negligence">
         {% if negligence_form.non_field_errors %}
-            <p class="flash flash--error">{{ negligence_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ negligence_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if negligence_form.note.errors %}field--error{% endif %}">
             <label for="{{ negligence_form.note.id_for_label }}">{{ negligence_form.note.label }}</label>
@@ -677,7 +715,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="add_message">
         {% if message_form.non_field_errors %}
-            <p class="flash flash--error">{{ message_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ message_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if message_form.message.errors %}field--error{% endif %}">
             <label for="{{ message_form.message.id_for_label }}">{{ message_form.message.label }}</label>
@@ -738,4 +776,9 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% load static %}
+<script src="{% static 'js/next-step.js' %}?v={{ css_version }}" defer></script>
 {% endblock %}

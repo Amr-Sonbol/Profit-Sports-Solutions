@@ -31,6 +31,8 @@ class TechnicianLocaleMiddleware:
 
         if person is not None:
             translation.deactivate()
-            timezone.deactivate()
+        # Always: an app request activates its timezone only after the
+        # token is read (api.authentication), past this point.
+        timezone.deactivate()
 
         return response

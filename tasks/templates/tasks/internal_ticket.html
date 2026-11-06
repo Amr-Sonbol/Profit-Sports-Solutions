@@ -6,13 +6,13 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tickets" %}</a>
+        <a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tasks" %}</a>
         <h1><span class="task-number">{{ ticket.ticket_number }}</span></h1>
     </div>
     <div class="badge-row">
         <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
         {% if is_open %}<span class="badge badge--neutral">{% translate "Open" %}</span>
-        {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Converted to task" %}</span>
+        {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Scheduled as a task" %}</span>
         {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
     </div>
 </div>
@@ -33,7 +33,7 @@
     {% if attachments %}
     <ul class="plain-list">
         {% for attachment in attachments %}
-        <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{% blocktranslate with number=forloop.counter %}Attachment {{ number }}{% endblocktranslate %}</a></li>
+        <li>{% include "_attachment.html" with file=attachment.file %}</li>
         {% endfor %}
     </ul>
     {% endif %}
@@ -56,6 +56,9 @@
             <strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>
             <span class="muted">{{ note.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             <p class="timeline__note">{{ note.message|linebreaksbr }}</p>
+            {% with files=note.all_files %}{% if files %}
+            <p class="attachment-list">{% for file in files %}{% include "_attachment.html" with file=file %}{% endfor %}</p>
+            {% endif %}{% endwith %}
         </li>
         {% endfor %}
     </ul>
@@ -64,25 +67,14 @@
     {% endif %}
 
     {% if is_open %}
-    <form method="post" class="form-grid" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="action" value="add_note">
-        <div class="field {% if note_form.message.errors %}field--error{% endif %}">
-            <label for="{{ note_form.message.id_for_label }}">{{ note_form.message.label }}</label>
-            {{ note_form.message }}
-            {% for error in note_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        <div class="field field--submit">
-            <button type="submit" class="button">{% translate "Add note" %}</button>
-        </div>
-    </form>
+    {% translate "Add note" as note_label %}{% include "_composer.html" with form=note_form action="add_note" button=note_label %}
     {% endif %}
 </div>
 
 {% if can_convert %}
 <div class="section">
     <h2>{% translate "Convert to a field task" %}</h2>
-    <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Convert to task" %}</a>
+    <a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Schedule as a task" %}</a>
 </div>
 {% endif %}
 
@@ -115,7 +107,7 @@
             {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">
-            <button type="submit" class="button">{% translate "Close ticket" %}</button>
+            <button type="submit" class="button">{% translate "Close internal task" %}</button>
         </div>
     </form>
 </div>

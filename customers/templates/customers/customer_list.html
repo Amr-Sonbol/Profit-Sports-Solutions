@@ -51,7 +51,7 @@
             <tbody>
                 {% for customer in customers %}
                 <tr>
-                    <td>{{ customer.name }}</td>
+                    <td>{{ customer.name }}{% if customer.is_internal %} <span class="badge badge--neutral">{% translate "Our warehouses" %}</span>{% endif %}</td>
                     <td>{{ customer.get_segment_display }}</td>
                     <td>{{ customer.sites.all|length }}</td>
                     <td>

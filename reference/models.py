@@ -1,3 +1,6 @@
+import secrets
+
+from django.conf import settings
 from django.db import models
 from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
@@ -23,6 +26,10 @@ class Country(models.Model):
         _('weekend days'), max_length=13, default='4,5',
         help_text=_('comma-separated weekday numbers, where Monday = 0 (e.g. 4,5 for Friday–Saturday)'),
     )
+    report_language = models.CharField(
+        _('visit report language'), max_length=2, choices=settings.LANGUAGES, default='en',
+        help_text=_("the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:
@@ -38,6 +45,17 @@ class Country(models.Model):
     def weekend_weekdays(self):
         """weekend_days as a set of ints (Monday = 0), for date.weekday()."""
         return {int(day) for day in self.weekend_days.split(',') if day.strip()}
+
+    @property
+    def first_workday(self):
+        """The weekday its week starts on (Monday = 0): the first working
+        day after the weekend — Saturday with a Friday weekend, Sunday with
+        Friday–Saturday, Monday with Saturday–Sunday (or no weekend).
+        """
+        weekend = self.weekend_weekdays
+        return next(
+            (day for day in range(7) if day not in weekend and (day - 1) % 7 in weekend), 0,
+        )
 
     def __str__(self):
         return self.display_name
@@ -120,6 +138,9 @@ class TaskType(models.Model):
     class Category(models.TextChoices):
         INSTALLATION = 'installation', _('Installation')
         MAINTENANCE = 'maintenance', _('Maintenance')
+        # The equipment chain's steps before an installation.
+        RECEIVING = 'receiving', _('Receiving from the factory')
+        LOADING = 'loading', _('Loading')
 
     code = models.CharField(
         _('code'), max_length=50, unique=True,
@@ -151,13 +172,21 @@ class TaskType(models.Model):
         return self.display_name
 
 
+def _part_photo_path(instance, filename):
+    return f'part_photos/{secrets.token_hex(16)}/{filename}'
+
+
 class Part(models.Model):
-    """The parts catalogue (docs: part) — code and optional description,
-    no prices. Switched off rather than deleted.
+    """The parts catalogue (docs: part) — code, optional description,
+    colour and a photo of what the part looks like; no prices. Switched off
+    rather than deleted.
     """
 
     code = models.CharField(_('code'), max_length=50, unique=True)
     description = models.CharField(_('description'), max_length=200, blank=True)
+    # Information only: another colour is another code, never separate stock.
+    colour = models.CharField(_('colour'), max_length=200, blank=True)
+    photo = models.FileField(_('photo'), upload_to=_part_photo_path, null=True, blank=True)
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:

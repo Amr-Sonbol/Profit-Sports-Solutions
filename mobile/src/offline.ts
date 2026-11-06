@@ -39,7 +39,8 @@ function writeJson(name: string, value: unknown) {
     if (!file.exists) {
       file.create();
     }
-    file.write(JSON.stringify(value));
+    // writeSync: write() is async from SDK 58, and callers read the file straight back.
+    file.writeSync(JSON.stringify(value));
   } catch {
     // Storage full or unavailable — offline support just doesn't kick in.
   }

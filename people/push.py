@@ -10,7 +10,7 @@ from django.conf import settings
 from django.utils import translation
 from django.utils.translation import gettext as _
 
-from .models import PushDevice
+from .models import NotificationSettings, PushDevice
 
 EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 TIMEOUT_SECONDS = 5
@@ -61,6 +61,8 @@ def push_in_their_language(technician, title_fn, body_fn, data=None):
 
 
 def push_assigned(technician, task, is_lead):
+    if not NotificationSettings.load().push_assigned:  # the admin's Notifications page
+        return
     push_in_their_language(
         technician,
         lambda: _('New task assigned') if is_lead else _('Added as helper'),
@@ -72,6 +74,8 @@ def push_assigned(technician, task, is_lead):
 def push_removed(technician, task):
     """Tells someone they've been taken off a task, so they don't still
     head to the site. Skipped for someone who has left the company."""
+    if not NotificationSettings.load().push_removed:  # the admin's Notifications page
+        return
     if not technician.is_active:
         return
     push_in_their_language(
@@ -86,6 +90,8 @@ def push_removed(technician, task):
 
 def push_cancelled(technician, task):
     """Tells someone still on a task that it was cancelled."""
+    if not NotificationSettings.load().push_cancelled:  # the admin's Notifications page
+        return
     push_in_their_language(
         technician,
         lambda: _('Task cancelled'),

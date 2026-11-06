@@ -16,6 +16,10 @@ from django.utils.translation import gettext_lazy
 
 LINK_VALID_DAYS = 7
 LINK_SALT = 'customers.portal-link'
+# A customer changing their own sign-in email confirms the new address
+# through a link sent there; it works once (it names the current one).
+EMAIL_CHANGE_VALID_DAYS = 2
+EMAIL_CHANGE_SALT = 'customers.email-change'
 
 # Arab League members (ISO 3166 codes): customers there get each account
 # email in English and Arabic; everyone else gets English only.
@@ -104,14 +108,22 @@ def _in_languages(languages, build):
 
 
 def _send_link_email(request, customer, subject_msgid, body_msgid, button_msgid):
-    from tasks.views import _send_notification_email
-
     user = customer.user
     link = request.build_absolute_uri(reverse('customers:portal_account_link', args=[make_link_token(user)]))
-    contact = customer.contact_name or customer.name
-    values = {'contact': contact, 'link': link, 'username': user.username, 'days': LINK_VALID_DAYS}
+    _send_account_email(
+        customer, user.email, subject_msgid, body_msgid, button_msgid,
+        {'link': link, 'username': user.username, 'days': LINK_VALID_DAYS}, link,
+    )
+
+
+def _send_account_email(customer, recipient, subject_msgid, body_msgid, button_msgid, values, link=None):
+    """One account email in the customer's languages; `link`, when given,
+    shows as a button in the HTML version."""
+    from tasks.views import _send_notification_email
+
+    values = {'contact': customer.contact_name or customer.name, **values}
     versions = _in_languages(email_languages(customer), lambda: {
-        'subject': str(subject_msgid), 'body': str(body_msgid) % values, 'button': str(button_msgid),
+        'subject': str(subject_msgid), 'body': str(body_msgid) % values, 'button': str(button_msgid or ''),
     })
     subject = ' | '.join(version['subject'] for _code, version in versions)
     text = '\n\n— — —\n\n'.join(version['body'] for _code, version in versions)
@@ -121,7 +133,7 @@ def _send_link_email(request, customer, subject_msgid, body_msgid, button_msgid)
         'paragraphs': version['body'].strip().split('\n\n'),
     } for code, version in versions]
     _send_notification_email(
-        subject, text, 'customers/email/portal_link.html', {'sections': sections, 'link': link}, [user.email],
+        subject, text, 'customers/email/portal_link.html', {'sections': sections, 'link': link}, [recipient],
     )
 
 
@@ -185,11 +197,78 @@ def send_password_link(request, customer):
     _send_link_email(request, customer, RESET_SUBJECT, RESET_BODY, RESET_BUTTON)
 
 
-def log_account_action(request, customer, message):
+EMAIL_CHANGE_SUBJECT = gettext_lazy('Confirm your new sign-in email for the Profit Sports Solutions portal')
+EMAIL_CHANGE_BODY = gettext_lazy(
+    'Dear %(contact)s,\n\n'
+    'A request was made to use this address to sign in to your customer portal account. To confirm it, please '
+    'use the secure link below; it is valid for %(days)s days and can be used once.\n\n'
+    '%(link)s\n\n'
+    'Until you confirm, you keep signing in with your current email. If you did not request this, please '
+    'disregard this email.\n\n'
+    'Best regards,\n'
+    'Profit Sports Solutions\n'
+)
+EMAIL_CHANGE_BUTTON = gettext_lazy('Confirm my new email')
+EMAIL_CHANGED_SUBJECT = gettext_lazy('Your Profit Sports Solutions portal sign-in email was changed')
+EMAIL_CHANGED_BODY = gettext_lazy(
+    'Dear %(contact)s,\n\n'
+    'The sign-in email for your customer portal account was changed to %(new_email)s. From now on, please sign '
+    'in with that address.\n\n'
+    'If you did not make this change, please contact us straight away.\n\n'
+    'Best regards,\n'
+    'Profit Sports Solutions\n'
+)
+
+
+def make_email_change_token(user, new_email):
+    return signing.dumps({'u': user.pk, 'o': user.username, 'e': new_email}, salt=EMAIL_CHANGE_SALT)
+
+
+def email_change_for_token(token):
+    """(the login, its new email) for a confirmation link, or (None, None)
+    if it's tampered with, older than EMAIL_CHANGE_VALID_DAYS, already
+    used (the login's email is no longer the one it was made for), the
+    login is disabled, or the new email has since been taken."""
+    try:
+        data = signing.loads(token, salt=EMAIL_CHANGE_SALT, max_age=timedelta(days=EMAIL_CHANGE_VALID_DAYS))
+    except signing.BadSignature:
+        return None, None
+    User = get_user_model()
+    user = User.objects.filter(pk=data.get('u'), is_active=True).select_related('customer').first()
+    new_email = data.get('e', '')
+    if user is None or not hasattr(user, 'customer') or user.username != data.get('o'):
+        return None, None
+    if User.objects.filter(username__iexact=new_email).exclude(pk=user.pk).exists():
+        return None, None
+    return user, new_email
+
+
+def send_email_change_link(request, customer, new_email):
+    """Email the confirmation link to the new address; nothing changes until
+    it's opened."""
+    link = request.build_absolute_uri(
+        reverse('customers:portal_email_confirm', args=[make_email_change_token(customer.user, new_email)]),
+    )
+    _send_account_email(
+        customer, new_email, EMAIL_CHANGE_SUBJECT, EMAIL_CHANGE_BODY, EMAIL_CHANGE_BUTTON,
+        {'link': link, 'days': EMAIL_CHANGE_VALID_DAYS}, link,
+    )
+
+
+def send_email_changed_notice(customer, old_email):
+    """Tell the old address its sign-in email was changed, in case it
+    wasn't them."""
+    _send_account_email(
+        customer, old_email, EMAIL_CHANGED_SUBJECT, EMAIL_CHANGED_BODY, None, {'new_email': customer.user.email},
+    )
+
+
+def log_account_action(request, customer, message, user=None):
     """Record a portal-account action in the Audit log (Django's LogEntry,
-    the same table the audit log screen reads)."""
+    the same table the audit log screen reads) — by the signed-in user, or
+    `user` when the customer acted through an emailed link, signed out."""
     from django.contrib.admin.models import CHANGE, LogEntry
 
     LogEntry.objects.log_actions(
-        user_id=request.user.pk, queryset=[customer], action_flag=CHANGE, change_message=message, single_object=True,
+        user_id=(user or request.user).pk, queryset=[customer], action_flag=CHANGE, change_message=message, single_object=True,
     )

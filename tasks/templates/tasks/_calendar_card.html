@@ -1,11 +1,15 @@
 {% load i18n %}{% comment %}One task on the calendar (tasks/_calendar.html): a card whose coloured edge is its status; a dot marks high or emergency priority.{% endcomment %}
-<a href="{% url 'tasks:task_detail' task.pk %}" class="cal-card cal-card--{{ task.status }}" title="{{ task.task_number }} · {{ task.get_status_display }} · {{ task.get_priority_display }}">
+<a href="{% url task_url|default:'tasks:task_detail' task.pk %}" class="cal-card cal-card--{{ task.status }}" title="{{ task.task_number }} · {{ task.get_status_display }} · {{ task.get_priority_display }}">
     <span class="cal-card__time">
         {% if task.scheduled_for %}{{ task.scheduled_for|time:"TIME_FORMAT" }}{% elif task.scheduled_date %}{% translate "Time to be confirmed" %}{% else %}<span class="task-number">{{ task.task_number }}</span>{% endif %}
         {% if task.priority == 'emergency' or task.priority == 'high' %}<span class="cal-dot cal-dot--{{ task.priority }}" aria-hidden="true"></span>{% endif %}
     </span>
     <span class="cal-card__customer">{{ task.site.customer.name }}</span>
     <span class="cal-card__detail">{{ task.site.name }}{% if show_country %} · {{ task.site.customer.country.display_name }}{% endif %}</span>
+    {% if task.my_role %}
+    <span class="cal-card__detail">{% if task.my_role == 'lead' %}{% translate "Lead" %}{% elif task.my_role == 'helper' %}{% translate "Helper" %}{% else %}{% translate "Responsible" %}{% endif %}</span>
+    {% else %}
     <span class="cal-card__detail">{% if task.lead_technician %}{{ task.lead_technician.full_name }}{% else %}{% translate "No lead technician" %}{% endif %}</span>
+    {% endif %}
     <span class="visually-hidden">{{ task.task_number }}, {{ task.get_status_display }}, {{ task.get_priority_display }}</span>
 </a>

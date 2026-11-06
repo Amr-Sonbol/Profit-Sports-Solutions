@@ -1,5 +1,6 @@
 import secrets
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import FileExtensionValidator
@@ -9,6 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
+from reports.phrases import Action, Finding
 from spots.indexes import contains_search_index
 
 # A customer's own phone photos/videos of the fault — kept separate from
@@ -48,6 +50,10 @@ def _ticket_internal_note_attachment_path(instance, filename):
 
 def _task_document_path(instance, filename):
     return f'task_documents/{secrets.token_hex(16)}/{filename}'
+
+
+def _task_product_photo_path(instance, filename):
+    return f'task_product_photos/{secrets.token_hex(16)}/{filename}'
 
 # The paperwork trail for a task — quotation, factory offer, invoice,
 # delivery note. Almost always a PDF export; jpg/png covers a photo of
@@ -208,6 +214,13 @@ class Task(models.Model):
         help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
+    # The step before this one in an equipment chain — receiving from the
+    # factory, loading at the warehouse, installing on site, a follow-up
+    # for what wasn't installed — whose machine lines this one carried on.
+    previous_task = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='next_tasks',
+        verbose_name=_('previous step'),
+    )
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
@@ -236,6 +249,45 @@ class Task(models.Model):
             return None
         return self.scheduled_for + timedelta(hours=float(self.estimated_hours))
 
+    def time_on_site(self, until=None):
+        """The visit's hours, worked out from the lead's taps — never typed:
+        from their first "Start" (in the app or on the website) until the
+        report was first sent ("Completed"), less any "Paused" until
+        "Resumed". Waiting for review, a rejection or a later correction
+        adds nothing. Before the first sending it runs to `until` (when the
+        report is being filed; now by default). A manager's corrected tap
+        time counts in place of the original. To the minute, as hours with
+        two decimals (1:32 -> 1.53, which reads back as 1:32 — see
+        reports.pdf.hours_text); at least a minute; None before "Start".
+        Same rule as WorkReport.tapped_hours.
+        """
+        from django.utils import timezone
+
+        kinds = TaskEvent.EventType
+        events = sorted(
+            (event.effective_at, event.event_type)
+            for event in self.events.filter(event_type__in=[
+                kinds.STARTED, kinds.PAUSED, kinds.RESUMED, kinds.COMPLETED,
+            ])
+        )
+        start = next((at for at, kind in events if kind == kinds.STARTED), None)
+        if start is None:
+            return None
+        end = next((at for at, kind in events if kind == kinds.COMPLETED and at > start), None)
+        end = end or max(until or timezone.now(), start)
+        paused, paused_at = timedelta(0), None
+        for at, kind in events:
+            if not start < at < end:
+                continue
+            if kind == kinds.PAUSED and paused_at is None:
+                paused_at = at
+            elif kind == kinds.RESUMED and paused_at is not None:
+                paused, paused_at = paused + (at - paused_at), None
+        if paused_at is not None:
+            paused += end - paused_at
+        minutes = max(round((end - start - paused).total_seconds() / 60), 1)
+        return (Decimal(minutes) / 60).quantize(Decimal('0.01'))
+
     def __str__(self):
         return self.task_number
 
@@ -260,6 +312,24 @@ class CustomerTicket(models.Model):
         VENDOR = 'vendor', _('Vendor follow-up')
         OTHER = 'other', _('Other internal')
 
+    # A customer's request, asked as two questions on the portal: what it's
+    # about, and what they need. Machines with a problem or spare parts are
+    # told through machine cards (ticket_machine); everything else is a
+    # message, and Flooring, Accessories, Lockers and Something else name the
+    # area, the items, the lockers or the matter in `subject`.
+    class About(models.TextChoices):
+        MACHINES = 'machines', _('Machines')
+        FLOORING = 'flooring', _('Flooring')
+        ACCESSORIES = 'accessories', _('Accessories')
+        LOCKERS = 'lockers', _('Lockers')
+        OTHER = 'other', _('Something else')
+
+    class Need(models.TextChoices):
+        REPAIR = 'repair', _('Fix a problem')
+        PARTS = 'parts', _('Spare parts or a quotation')
+        VISIT = 'visit', _('A maintenance visit')
+        ASSISTANCE = 'assistance', _('Advice or assistance')
+
     # How a customer ticket reached us — the same values as Task.Source,
     # so a task made from it keeps the channel.
     class Source(models.TextChoices):
@@ -273,13 +343,21 @@ class CustomerTicket(models.Model):
     # customer, nothing ever sent to one — and go to whoever they're
     # assigned to (docs: customer_ticket).
     kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
+    about = models.CharField(_('about'), max_length=20, choices=About.choices, default=About.MACHINES)
+    need = models.CharField(_('need'), max_length=20, choices=Need.choices, default=Need.REPAIR)
     source = models.CharField(_('source'), max_length=10, choices=Source.choices, default=Source.PORTAL)
     opened_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='tickets_opened', verbose_name=_('opened by'),
         help_text=_('the staff member who opened it; empty if opened by the customer'),
     )
-    subject = models.CharField(_('subject'), max_length=200, blank=True, help_text=_('internal tickets only'))
+    subject = models.CharField(
+        _('subject'), max_length=200, blank=True,
+        help_text=_(
+            "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) "
+            "or the items (Accessories)"
+        ),
+    )
     vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
 
     ticket_number = models.CharField(
@@ -388,6 +466,19 @@ class CustomerTicket(models.Model):
             self.token = secrets.token_urlsafe(32)
         super().save(*args, **kwargs)
 
+    @property
+    def request_type(self):
+        """What it's about and what they need, as one line: "Machines · Spare parts or a quotation"."""
+        return f'{self.get_about_display()} · {self.get_need_display()}'
+
+    @property
+    def heads_for_a_visit(self):
+        """Whether the customer's way to a visit (Received → … → Done) fits:
+        only once we've made a visit of it. Until then a request is just a
+        request: we may answer it, send parts or close it without a visit,
+        so nothing promises one."""
+        return self.status == self.Status.CONVERTED and self.task_id is not None
+
     def __str__(self):
         return f'{self.ticket_number} — {self.company_name}'
 
@@ -430,6 +521,31 @@ class TicketReply(models.Model):
 
     def __str__(self):
         return f'{self.ticket} — {self.get_sender_display()} @ {self.sent_at}'
+
+    @property
+    def all_files(self):
+        """Every file sent with it: the single `attachment` older messages
+        had, then its `files` (TicketReplyFile)."""
+        return ([self.attachment] if self.attachment else []) + [item.file for item in self.files.all()]
+
+
+class TicketReplyFile(models.Model):
+    """One of the files sent with a message — as many as the sender
+    attached (TicketReply.attachment held the one file older ones had)."""
+
+    reply = models.ForeignKey(TicketReply, on_delete=models.CASCADE, related_name='files', verbose_name=_('reply'))
+    file = models.FileField(
+        _('file'), upload_to=_ticket_reply_attachment_path,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    class Meta:
+        verbose_name = _('reply file')
+        verbose_name_plural = _('reply files')
+        ordering = ['pk']
+
+    def __str__(self):
+        return self.file.name
 
 
 class TicketNotification(models.Model):
@@ -624,6 +740,29 @@ class TicketInternalNote(models.Model):
     def __str__(self):
         return f'{self.ticket} — {self.created_at}'
 
+    @property
+    def all_files(self):
+        """Every file added with it: older notes' single `attachment`, then its `files`."""
+        return ([self.attachment] if self.attachment else []) + [item.file for item in self.files.all()]
+
+
+class TicketInternalNoteFile(models.Model):
+    """One of the files added with an internal note."""
+
+    note = models.ForeignKey(TicketInternalNote, on_delete=models.CASCADE, related_name='files', verbose_name=_('note'))
+    file = models.FileField(
+        _('file'), upload_to=_ticket_internal_note_attachment_path,
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+    class Meta:
+        verbose_name = _('note file')
+        verbose_name_plural = _('note files')
+        ordering = ['pk']
+
+    def __str__(self):
+        return self.file.name
+
 
 # A photo of a machine's serial-number sticker: pictures only, not video.
 SERIAL_PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic']
@@ -645,6 +784,8 @@ class TicketMachine(models.Model):
         DISPLAY = 'display', _('Display or electronics')
         CABLES = 'cables', _('Cables, belts or pulleys')
         OTHER = 'other', _('Other')
+        # Set by itself on a spare-parts request's machines; never offered as a problem.
+        PARTS = 'parts', _('Spare parts')
 
     class Decision(models.TextChoices):
         # Both of these are handled through a task (task below).
@@ -667,14 +808,14 @@ class TicketMachine(models.Model):
         _('model'), max_length=150, blank=True, help_text=_('typed by the customer when the machine is not in their list'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    code = models.CharField(_('code'), max_length=100, blank=True, help_text=_('the product code, if the customer knows it'))
     serial_photo = models.FileField(
         _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
-        help_text=_("a photo of the machine's silver serial-number sticker, instead of or as well as typing it"),
+        help_text=_("a photo of the machine's serial-number sticker, instead of or as well as typing it"),
     )
     problem = models.CharField(_('problem'), max_length=20, choices=Problem.choices)
     description = models.TextField(_('description'), blank=True)
-    out_of_service = models.BooleanField(_('cannot be used'), default=False)
     position = models.PositiveSmallIntegerField(_('position'), default=0)
     decision = models.CharField(
         _('decision'), max_length=20, choices=Decision.choices, blank=True,
@@ -710,8 +851,21 @@ class TicketMachine(models.Model):
         return self.model_name
 
     @property
+    def result(self):
+        """The visit's outcome for this machine (a TaskAsset), once the
+        task's report records it; None before that.
+        """
+        if not (self.task_id and self.asset_id):
+            return None
+        return self.task.task_assets.filter(asset_id=self.asset_id).first()
+
+    @property
     def serial(self):
         return self.asset.serial_no if self.asset_id else self.serial_no
+
+    @property
+    def product_code(self):
+        return self.asset.code if self.asset_id else self.code
 
 
 class CustomerTicketAttachment(models.Model):
@@ -1002,6 +1156,15 @@ class TaskAsset(models.Model):
         verbose_name=_('asset'),
     )
     outcome = models.CharField(_('outcome'), max_length=20, choices=Outcome.choices)
+    note = models.CharField(
+        _('finding'), max_length=255, blank=True,
+        help_text=_('what was found, in the report language — when none of the standard findings fits'),
+    )
+    # The standard finding and action (reports.phrases), shown in the
+    # report's language; `note` and `action` for anything else.
+    finding_code = models.CharField(_('standard finding'), max_length=20, choices=Finding.choices, blank=True)
+    action_code = models.CharField(_('standard action'), max_length=20, choices=Action.choices, blank=True)
+    action = models.CharField(_('action taken'), max_length=255, blank=True)
 
     class Meta:
         verbose_name = _('task asset')
@@ -1015,36 +1178,77 @@ class TaskAsset(models.Model):
         return f'{self.task.task_number} — {self.asset}'
 
 
+# A machine's colours unless it's a custom one.
+DEFAULT_COLOR = 'Black'
+
+# "Done" on each step of the equipment chain (TaskType.Category).
+STEP_DONE_LABELS = {
+    'receiving': _('Received'),
+    'loading': _('Loaded'),
+    'installation': _('Installed'),
+}
+
+
 class TaskProduct(models.Model):
-    """One machine's line on an installation or loading task — the same
-    items as on the delivery note (that part still just needs a product
-    code; the rest is blank for a simple parts line), plus the per-unit
-    checklist a supervisor fills in for an actual machine being installed:
-    custom color per component, and what it got swapped for if the
-    ordered one wasn't available. The delivery note PDF (Task.delivery_note)
-    already holds the same product-code/quantity information as a scanned/
-    exported document; this is the same data kept structured, so it can be
-    searched and listed rather than only read off the file. Entered from
-    the task's Edit screen, replaced wholesale on every save — not an
-    append-only log the way task_event is.
+    """One machine's line on an equipment task — receiving from the factory,
+    loading, installing — from the delivery note: product code, serial,
+    quantity, and the four colours operations cares about (frame, arm,
+    padding, trim; black unless it's a custom one). A receiving line is a
+    code × quantity, no serial — a machine or a spare part (`kind`); on a
+    loading or an installation each machine is its own line. Planned from the task's
+    Edit screen; checked off by whoever does the step, on site, with what
+    really happened (`status`), what went in instead, a note and a photo,
+    adding a line that wasn't on the paperwork. Carried to the next step
+    (`source_line`), so a machine's journey can be followed; installed
+    ones join the customer's machine list (tasks.views.register_installed_machines).
     """
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', _('Not checked yet')
+        # Received, loaded or installed — depending on the step (status_label).
+        DONE = 'done', _('Done')
+        MISSING = 'missing', _('Missing')
+        DAMAGED = 'damaged', _('Damaged')
+        WRONG_ITEM = 'wrong_item', _('Wrong item delivered')
+        RETURNED = 'returned', _('Returned')
+        LATER = 'later', _('Later')
+
+    class Kind(models.TextChoices):
+        MACHINE = 'machine', _('Machine')
+        # Only on a receiving task: code × quantity, never a serial or colours.
+        PART = 'part', _('Spare part')
+
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='products',
         verbose_name=_('task'),
     )
+    kind = models.CharField(_('kind'), max_length=10, choices=Kind.choices, default=Kind.MACHINE)
     product_code = models.CharField(_('product code'), max_length=100)
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
+    frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)
+    arm = models.CharField(_('arm color'), max_length=100, default=DEFAULT_COLOR)
+    padding = models.CharField(_('padding color'), max_length=100, default=DEFAULT_COLOR)
+    trim = models.CharField(_('trim color'), max_length=100, default=DEFAULT_COLOR)
+    status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.PENDING)
     replacement = models.CharField(
-        _('replacement'), max_length=150, blank=True,
-        help_text=_('the item this replaced, if the ordered item was unavailable'),
+        _('instead'), max_length=150, blank=True,
+        help_text=_('what was received, loaded or installed instead, if not the item listed'),
     )
-    frame = models.CharField(_('frame color'), max_length=100, blank=True)
-    arm = models.CharField(_('arm color'), max_length=100, blank=True)
-    padding = models.CharField(_('padding color'), max_length=100, blank=True)
-    trim = models.CharField(_('trim color'), max_length=100, blank=True)
-    comment = models.TextField(_('comment'), blank=True)
     note = models.TextField(_('note'), blank=True)
+    photo = models.FileField(_('photo'), upload_to=_task_product_photo_path, null=True, blank=True)
+    added_on_site = models.BooleanField(
+        _('added on site'), default=False, help_text=_('not on the delivery note — added by whoever did the step'),
+    )
+    source_line = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='carried_to',
+        verbose_name=_('carried from'), help_text=_("the same machine's line on the step before"),
+    )
+    # A spare part ordered for one repair: held for it in the warehouse's stock (tasks.stock).
+    for_task = models.ForeignKey(
+        Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='parts_held',
+        verbose_name=_('for task'), help_text=_('the repair this part was ordered for'),
+    )
 
     class Meta:
         verbose_name = _('task product')
@@ -1054,3 +1258,38 @@ class TaskProduct(models.Model):
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'
+
+    @property
+    def status_label(self):
+        """'Done' in its step's words: received, loaded or installed."""
+        if self.status == self.Status.DONE:
+            category = self.task.task_type.category if self.task.task_type_id else ''
+            return STEP_DONE_LABELS.get(category, STEP_DONE_LABELS['installation'])
+        return self.get_status_display()
+
+
+class StockAdjustment(models.Model):
+    """A hand count of one code at a warehouse (docs: stock_adjustment) —
+    the opening stock, or a recount. Whoever counts types what's on the
+    shelf; the row keeps the difference from what the app worked out
+    (tasks.stock.record_count), so the same count twice changes nothing.
+    Never edited: a mistake is corrected by another count.
+    """
+
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name='stock_adjustments', verbose_name=_('warehouse'))
+    kind = models.CharField(_('kind'), max_length=10, choices=TaskProduct.Kind.choices, default=TaskProduct.Kind.MACHINE)
+    product_code = models.CharField(_('product code'), max_length=100)
+    quantity = models.IntegerField(_('quantity'), help_text=_('the difference the count made: + found, − short'))
+    note = models.TextField(_('note'))
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name=_('counted by'),
+    )
+    created_at = models.DateTimeField(_('counted at'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('stock count')
+        verbose_name_plural = _('stock counts')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.site} — {self.product_code}: {self.quantity:+d}'

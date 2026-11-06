@@ -11,9 +11,10 @@
     {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
     <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
-<body>
+{# A customer sees the portal's look (theme-portal in base.css) in their own color (Customer.brand_color, validated as #RRGGBB). #}
+<body{% if user.customer %} class="theme-portal" style="--brand: {{ user.customer.brand_color }}; --brand-text: {{ user.customer.brand_text_color }}"{% endif %}>
     <header class="site-header">
-        {% if user.technician %}
+        {% if user.technician or user.customer %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
             <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}" role="button" tabindex="0" aria-expanded="false">
                 <span></span><span></span><span></span>
@@ -65,7 +66,7 @@
                         </a>
                         {% elif notification.kind == 'internal_ticket' %}
                         <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
-                            {% translate "Internal ticket assigned to you" %}
+                            {% translate "Internal task assigned to you" %}
                             — {{ notification.ticket.subject }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
@@ -100,6 +101,32 @@
                 <p class="empty-state">{% translate "No new notifications." %}</p>
                 {% endif %}
             </div>
+        {% elif user.customer %}
+            {# A customer's bell (spots.context_processors.portal_nav): reports to rate, replies, visits booked. #}
+            <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
+            <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                {% if portal_bell_new %}<span class="notif-bell__badge">{{ portal_bell_new }}</span>{% endif %}
+            </label>
+            <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
+            <div class="notif-dropdown">
+                <h2>{% translate "Notifications" %}</h2>
+                {% if portal_bell %}
+                <ul class="plain-list">
+                    {% for item in portal_bell %}
+                    <li{% if item.new %} class="notif-item--new"{% endif %}>
+                        <a href="{{ item.url }}">{{ item.text }} <span class="muted">({{ item.about }})</span></a>
+                        <span class="muted">{{ item.created_at|date:"j M" }}, {{ item.created_at|time:"TIME_FORMAT" }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-state">{% translate "No notifications yet." %}</p>
+                {% endif %}
+            </div>
         {% endif %}
         <div class="lang-switch__group lang-switch__group--header">
             <form method="post" action="{% url 'set_language' %}">
@@ -113,19 +140,40 @@
                 <button type="submit" name="language" value="ar" class="lang-switch__option {% if LANGUAGE_CODE == 'ar' %}lang-switch__option--active{% endif %}">AR</button>
             </form>
         </div>
-        {% if user.is_authenticated and not user.technician %}
-            {# Customers (and any login without a staff record) have a page or two, not a menu: their links sit in the header. #}
+        {% if user.is_authenticated and not user.technician and not user.customer %}
+            {# A login with neither a staff record nor a customer account: just who it is, and logging out. #}
             <nav class="site-header__links">
-                {% if user.customer %}
-                {% url 'customers:portal_home' as portal_url %}
-                <a href="{{ portal_url }}" class="nav-link{% if request.path == portal_url %} nav-link--active{% endif %}"{% if request.path == portal_url %} aria-current="page"{% endif %}>{% translate "My account" %}</a>
-                {% else %}
                 <span class="site-header__user">{{ user.get_username }}</span>
-                {% endif %}
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="link-button">{% translate "Log out" %}</button>
                 </form>
+            </nav>
+        {% endif %}
+        {% if user.customer %}
+            {# A customer gets the same menu as the staff: a sidebar on a computer, slide-in on a phone. #}
+            <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
+            <nav class="site-header__nav">
+                {# Whose portal this is. "New request" is on Home and Requests. #}
+                <div class="portal-account">
+                    <span class="portal-account__badge" aria-hidden="true">{{ portal_initials }}</span>
+                    <span class="portal-account__name">
+                        <strong>{{ user.customer.name }}</strong>
+                        <span>{% translate "Customer portal" %}</span>
+                    </span>
+                </div>
+                {% for item in portal_nav %}
+                <a href="{{ item.url }}" class="nav-link{% if item.active %} nav-link--active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+                    {% include "_icon.html" with name=item.icon %}
+                    <span>{{ item.label }}</span>
+                </a>
+                {% endfor %}
+                <div class="site-header__nav-footer">
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="link-button">{% translate "Log out" %}</button>
+                    </form>
+                </div>
             </nav>
         {% endif %}
         {% if user.technician %}
@@ -176,7 +224,8 @@
         {% endif %}
     </header>
     <main class="page">
-        {% if request.path != '/' %}
+        {# Not where there's nowhere to go back to (spots.context_processors.page_back). #}
+        {% if show_page_back %}
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
         <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
         {% endif %}
@@ -186,7 +235,7 @@
         {% block content %}{% endblock %}
     </main>
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
-{% if user.technician %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>{% endif %}
+{% if user.technician or user.customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -3,18 +3,23 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyTasks } from '@/api/endpoints';
+import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
+import { TodayPlanView } from '@/components/today-plan';
+import { type ScheduleMode, ScheduleView } from '@/components/schedule-view';
 import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskListItem } from '@/types';
+import type { TaskListItem, TodayPlan } from '@/types';
 
 export default function MyTasksScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
+  const [today, setToday] = useState<TodayPlan | null>(null);
+  // Today (the next job first) or the calendar: week, month, year.
+  const [mode, setMode] = useState<'today' | ScheduleMode>('today');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState('');
@@ -25,9 +30,13 @@ export default function MyTasksScreen() {
   const load = useCallback(async () => {
     setPending(await sendPendingReports());
     try {
-      const { data, offline } = await withOfflineCopy('my-tasks', fetchMyTasks);
-      setTasks(data);
-      setIsOffline(offline);
+      const [list, plan] = await Promise.all([
+        withOfflineCopy('my-tasks', fetchMyTasks),
+        withOfflineCopy('my-today', fetchMyToday),
+      ]);
+      setTasks(list.data);
+      setToday(plan.data);
+      setIsOffline(list.offline || plan.offline);
       setError('');
     } catch {
       setError('Could not load your tasks.');
@@ -53,7 +62,7 @@ export default function MyTasksScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ThemedText type="title" style={styles.heading}>
-          My Tasks
+          My schedule
         </ThemedText>
         {isOffline ? (
           <ThemedText themeColor="danger" type="small" style={styles.notice}>
@@ -75,13 +84,44 @@ export default function MyTasksScreen() {
             </ThemedText>
           </TouchableOpacity>
         ))}
+        {mode !== 'today' ? (
+          <ScheduleView
+            mode={mode}
+            onModeChange={setMode}
+            onToday={() => setMode('today')}
+            taskRoute={(id) => `/task/${id}`}
+          />
+        ) : (
         <FlatList
           data={tasks ?? []}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+          // Today first (the next job, its tap and Directions), then every open task.
+          ListHeaderComponent={today ? (
+            <>
+              <ThemedView style={styles.tabs}>
+                {(['today', 'week', 'month', 'year'] as const).map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.tab, { borderColor: theme.backgroundSelected },
+                      mode === option && { backgroundColor: theme.primary, borderColor: theme.primary },
+                    ]}
+                    onPress={() => setMode(option)}
+                  >
+                    <ThemedText type="small" style={mode === option ? { color: theme.onPrimary } : undefined}>
+                      {option[0]!.toUpperCase() + option.slice(1)}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </ThemedView>
+              <TodayPlanView plan={today} onChanged={load} />
+              <ThemedText type="smallBold">All my open tasks</ThemedText>
+            </>
+          ) : undefined}
           ListEmptyComponent={
-            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : null
+            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : undefined
           }
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -101,6 +141,7 @@ export default function MyTasksScreen() {
             </TouchableOpacity>
           )}
         />
+        )}
       </SafeAreaView>
     </ThemedView>
   );
@@ -118,4 +159,6 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   row: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
+  tabs: { flexDirection: 'row', gap: Spacing.two, paddingBottom: Spacing.three, backgroundColor: 'transparent' },
+  tab: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
 });

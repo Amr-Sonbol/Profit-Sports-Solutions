@@ -39,6 +39,8 @@ export async function registerForPush(): Promise<void> {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Default',
+        // Exported: SDK 58's compiled enum just hides it from the import plugin.
+        // eslint-disable-next-line import/namespace
         importance: Notifications.AndroidImportance.HIGH,
       });
     }

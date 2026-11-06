@@ -170,7 +170,7 @@
                     <img src="{{ attachment.url }}" alt="{{ attachment.get_purpose_display }}" class="attachment-thumb">
                 </a>
             {% else %}
-                <a href="{{ attachment.url }}" target="_blank" rel="noopener">{{ attachment.get_media_type_display }}</a>
+                {% include "_attachment.html" with file=attachment.url %}
             {% endif %}
         </li>
         {% endfor %}
@@ -239,7 +239,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="add_message">
         {% if message_form.non_field_errors %}
-            <p class="flash flash--error">{{ message_form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ message_form.non_field_errors|join:" " }}</p>
         {% endif %}
         <div class="field {% if message_form.message.errors %}field--error{% endif %}">
             <label for="{{ message_form.message.id_for_label }}">{{ message_form.message.label }}</label>

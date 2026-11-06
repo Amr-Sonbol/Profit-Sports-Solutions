@@ -43,7 +43,8 @@
         {
           "locationWhenInUsePermission": "Your location is checked only when you tap a step on a job (arrived, start work, report), to confirm you were at the customer’s site. It is never tracked in between."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

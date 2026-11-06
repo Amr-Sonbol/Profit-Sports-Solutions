@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ machine.brand.name }} {{ machine.model_name }} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <a href="{% url 'customers:portal_machines' %}" class="back-link">{% translate "Back to my machines" %}</a>
+            <h1>{{ machine.brand.name }} {{ machine.model_name }}</h1>
+            <p class="muted">{{ machine.site.name }}{% if machine.status == 'pending' %} · <span class="badge badge--neutral">{% translate "Waiting for confirmation" %}</span>{% endif %}</p>
+            {% if machine.status == 'pending' %}<p class="field__help">{% translate "You added this machine. Our team confirms it at the next visit, or from the photo of its sticker." %}</p>{% endif %}
+        </div>
+        <a href="{% url 'customers:portal_ticket_new' %}?machine={{ machine.pk }}" class="button">{% translate "Report a problem with this machine" %}</a>
+    </div>
+
+    <section class="section">
+        <dl class="detail-grid">
+            <div>
+                <dt>{% translate "Code" %}</dt>
+                <dd>{% if machine.code %}<span dir="ltr">{{ machine.code }}</span>{% else %}—{% endif %}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Serial number" %}</dt>
+                <dd>{% if machine.serial_no %}<span dir="ltr">{{ machine.serial_no }}</span>{% else %}—{% endif %}</dd>
+            </div>
+            <div>
+                <dt>{% translate "Installed" %}</dt>
+                <dd>{{ machine.installed_on|date:"j F Y"|default:"—" }}</dd>
+            </div>
+            {% if machine.status == 'faulty' %}
+            <div>
+                <dt>{% translate "Condition" %}</dt>
+                <dd><span class="badge badge--warning">{% translate "Needs attention" %}</span></dd>
+            </div>
+            {% endif %}
+        </dl>
+    </section>
+
+    {% if open_requests %}
+    <section class="section">
+        <h2>{% translate "Open requests for this machine" %}</h2>
+        <ul class="action-list">
+            {% for ticket in open_requests %}
+            <li>
+                <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
+                    <span class="portal-row__main">
+                        <strong dir="ltr">{{ ticket.ticket_number }}</strong>
+                        <span class="muted">{{ ticket.submitted_at|date:"j M Y" }}</span>
+                    </span>
+                    <span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    <section class="section">
+        <h2>{% translate "Service history" %}</h2>
+        {% if visits %}
+        <ul class="action-list">
+            {% for visit in visits %}
+            <li class="action-row portal-row">
+                <span class="portal-row__day">{{ visit.day|date:"j M Y" }}</span>
+                <span class="portal-row__main">
+                    <a href="{% url 'customers:portal_visit' visit.task.pk %}"><strong>{{ visit.task.task_type.display_name|default:_("Service visit") }}</strong></a>
+                    <span class="muted">{{ visit.outcome }}</span>
+                </span>
+                {% if visit.has_report %}
+                <span class="portal-row__links">
+                    <a href="{% url 'customers:portal_visit_report_pdf' visit.task.pk %}" target="_blank" rel="noopener">{% translate "Report (PDF)" %}</a>
+                </span>
+                {% endif %}
+                <span class="badge {{ visit.progress.1 }}">{{ visit.progress.0 }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-state">{% translate "No visits recorded for this machine yet." %}</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

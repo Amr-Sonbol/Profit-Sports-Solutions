@@ -447,7 +447,9 @@ class PortalLoginTests(CustomerTestCase):
         response = self.client.post('/customers/portal/login/', {
             'username': 'supervisor1', 'password': 'pass12345',
         }, follow=True)
-        self.assertContains(response, 'a customer account')
+        # The same message as a wrong password: it never says the account exists.
+        self.assertContains(response, 'The email or password is incorrect.')
+        self.assertNotContains(response, 'customer account')
 
     def test_open_redirect_is_blocked(self):
         response = self.client.post(
@@ -565,7 +567,7 @@ class PortalHomeTests(CustomerTestCase):
         )
 
         self.client.login(username='fitnessfirst', password='pass12345')
-        response = self.client.get('/customers/portal/')
+        response = self.client.get('/customers/portal/requests/')
         self.assertContains(response, 'Marina Branch')
         self.assertNotContains(response, 'Faraway Branch')
 
@@ -585,7 +587,7 @@ class PortalHomeTests(CustomerTestCase):
         )
 
         self.client.login(username='fitnessfirst', password='pass12345')
-        response = self.client.get('/customers/portal/')
+        response = self.client.get('/customers/portal/requests/')
         self.assertContains(response, 'Marina Branch')
         self.assertContains(response, 'JBR Branch')
 
@@ -614,7 +616,7 @@ class PortalVisitReportTests(CustomerTestCase):
 
     def test_the_customer_downloads_their_own_report(self):
         self.client.login(username='fitnessfirst', password='pass12345')
-        self.assertContains(self.client.get('/customers/portal/'), self.url)
+        self.assertContains(self.client.get('/customers/portal/reports/'), self.url)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
@@ -637,6 +639,433 @@ class PortalVisitReportTests(CustomerTestCase):
         self.assertIn(self.client.get(self.url).status_code, (302, 403, 404))
 
 
+class PortalProgressTests(CustomerTestCase):
+    # The portal home in the customer's words: the next visit up front,
+    # progress as Received → Being arranged → Visit booked → Done.
+
+    def setUp(self):
+        super().setUp()
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def _visit(self, number, status='assigned', **dates):
+        from tasks.models import Task
+        return Task.objects.create(
+            task_number=number, site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=status, **dates,
+        )
+
+    def test_the_next_visit_is_the_soonest_booked_day_still_ahead(self):
+        from datetime import timedelta
+        self._visit('AE-0901', scheduled_for=timezone.now() + timedelta(days=9))
+        self._visit('AE-0902', scheduled_for=timezone.now() + timedelta(days=2))
+        self._visit('AE-0903')  # no date yet
+        page = self.client.get('/customers/portal/')
+        self.assertEqual(page.context['next_visit'].task_number, 'AE-0902')
+        self.assertContains(page, 'Your next visit')
+        self.assertContains(page, 'Visit scheduled on')
+        visits = self.client.get('/customers/portal/visits/')
+        self.assertEqual([v.task_number for v in visits.context['upcoming']], ['AE-0902', 'AE-0901', 'AE-0903'])
+        self.assertContains(visits, 'Date to be set')
+        # The team's words never reach the customer.
+        self.assertNotContains(page, 'Assigned')
+        self.assertNotContains(visits, 'Assigned')
+
+    def test_a_booked_day_that_passed_is_rescheduling(self):
+        from datetime import timedelta
+        self._visit('AE-0904', scheduled_for=timezone.now() - timedelta(days=30))
+        page = self.client.get('/customers/portal/')
+        self.assertIsNone(page.context['next_visit'])
+        visits = self.client.get('/customers/portal/visits/')
+        self.assertNotContains(visits, 'Visit scheduled')
+        self.assertContains(visits, 'Rescheduling')
+
+    def test_done_visits_are_history_with_their_report(self):
+        from reports.models import WorkReport
+        visit = self._visit('AE-0905', status='closed', scheduled_for=timezone.now())
+        WorkReport.objects.create(
+            task=visit, findings='Belt worn out', action_taken='Replaced belt', resolved=True,
+            labour_hours='1.50', customer_name='Ali', submitted_at=timezone.now(),
+        )
+        # Home counts what's going on, not reports: a new one reaches them through the bell.
+        self.assertNotIn('report_count', self.client.get('/customers/portal/').context)
+        page = self.client.get('/customers/portal/visits/?show=past')
+        self.assertEqual([v.task_number for v in page.context['visits']], ['AE-0905'])
+        self.assertContains(page, f'/customers/portal/visits/{visit.pk}/report.pdf')
+        self.assertContains(page, 'Done')
+        self.assertContains(self.client.get(f'/customers/portal/visits/{visit.pk}/'), '?show=past')
+
+    def test_a_ticket_reads_as_its_visit_does(self):
+        from datetime import timedelta
+        visit = self._visit('AE-0906', scheduled_for=timezone.now() + timedelta(days=3))
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0009', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Belt noise', submitted_at=timezone.now(),
+            status=CustomerTicket.Status.CONVERTED, task=visit,
+        )
+        self.assertContains(self.client.get('/customers/portal/requests/'), 'Visit scheduled on')
+        page = self.client.get(f'/tasks/tickets/status/{ticket.token}/')
+        self.assertContains(page, 'Visit scheduled on')
+        self.assertContains(page, 'A technician is scheduled to visit on')
+
+    def test_no_back_link_on_the_portal_home_or_login(self):
+        self.assertNotContains(self.client.get('/customers/portal/'), 'page-back')
+        self.assertContains(self.client.get('/customers/portal/tickets/new/'), 'Back to requests')
+        for page in ('requests/', 'visits/', 'history/', 'machines/', 'settings/'):
+            self.assertNotContains(self.client.get(f'/customers/portal/{page}'), 'page-back')
+        self.client.logout()
+        page = self.client.get('/customers/portal/login/')
+        self.assertNotContains(page, 'page-back')
+        self.assertContains(page, '>Email<')
+
+    def test_a_customer_with_one_site_has_it_chosen_already(self):
+        form = self.client.get('/customers/portal/tickets/new/').context['form']
+        self.assertEqual(form.fields['site'].initial, self.site.pk)
+        Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        form = self.client.get('/customers/portal/tickets/new/').context['form']
+        self.assertIsNone(form.fields['site'].initial)
+
+
+class PortalVisitPageTests(CustomerTestCase):
+    # A page per visit: when, the request it came from, and once reported,
+    # what the customer signed — without the hours.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Brand
+        from tasks.models import Task
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.machine = Asset.objects.create(
+            site=self.site, brand=Brand.objects.create(name='Technogym'), model_name='Excite Run 700', serial_no='TG-77',
+        )
+        self.visit = Task.objects.create(
+            task_number='AE-0960', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        self.url = f'/customers/portal/visits/{self.visit.pk}/'
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def test_before_the_visit_it_says_when_and_what_it_came_from(self):
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0060', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Noise', submitted_at=timezone.now(),
+            status=CustomerTicket.Status.CONVERTED, task=self.visit,
+        )
+        page = self.client.get(self.url)
+        self.assertContains(page, 'Date to be set')
+        self.assertContains(page, ticket.ticket_number)
+        self.assertContains(page, 'The visit report appears here')
+        self.assertContains(self.client.get('/customers/portal/visits/'), self.url)
+
+    def test_after_the_visit_it_shows_what_was_signed_but_not_the_hours(self):
+        from reports.models import PartUsed, WorkReport
+        from tasks.models import Task, TaskAsset
+        self.visit.status = Task.Status.CLOSED
+        self.visit.save(update_fields=['status'])
+        TaskAsset.objects.create(
+            task=self.visit, asset=self.machine, outcome=TaskAsset.Outcome.REPAIRED, finding_code='belt',
+            action_code='belt_replaced',
+        )
+        report = WorkReport.objects.create(
+            task=self.visit, findings='Belt worn out', action_taken='Cleaned the motor bay', resolved=True,
+            labour_hours='3.25', customer_name='Ali Manager', submitted_at=timezone.now(),
+            work_lines=['bolts'], recommendations=['regular_ppm'],
+        )
+        PartUsed.objects.create(report=report, part_code='BELT-01', description='Running belt', quantity=1)
+        page = self.client.get(self.url)
+        for text in ('Belt worn out', 'Cleaned the motor bay', 'All bolts checked and tightened.',
+                     'Worn or slipping belt', 'Belt replaced', 'Repaired', 'BELT-01', 'Ali Manager',
+                     'We recommend keeping to the scheduled preventive maintenance visits.',
+                     f'/customers/portal/visits/{self.visit.pk}/report.pdf'):
+            self.assertContains(page, text)
+        self.assertNotContains(page, '3.25')
+        self.assertContains(page, 'Done')
+
+    def test_the_request_page_links_each_visit_it_became_and_its_report(self):
+        from reports.models import WorkReport
+        from tasks.models import Task, TicketMachine
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0061', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Two machines', submitted_at=timezone.now(),
+            status=CustomerTicket.Status.CONVERTED, task=self.visit,
+        )
+        # Its second machine went to a visit of its own, already done.
+        second = Task.objects.create(
+            task_number='AE-0962', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.CLOSED,
+        )
+        WorkReport.objects.create(
+            task=second, findings='Display loose', action_taken='Fixed', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(),
+        )
+        TicketMachine.objects.create(ticket=ticket, position=0, model_name='Bike', problem='display', description='x', task=self.visit)
+        TicketMachine.objects.create(ticket=ticket, position=1, model_name='Rower', problem='noise', description='y', task=second)
+        page = self.client.get(f'/tasks/tickets/status/{ticket.token}/')
+        self.assertContains(page, 'Your visits')
+        self.assertContains(page, f'/customers/portal/visits/{self.visit.pk}/')
+        self.assertContains(page, f'/customers/portal/visits/{second.pk}/report.pdf')
+
+    def _finish(self):
+        from reports.models import WorkReport
+        from tasks.models import Task
+        self.visit.status = Task.Status.CLOSED
+        self.visit.save(update_fields=['status'])
+        WorkReport.objects.create(
+            task=self.visit, findings='Belt worn', action_taken='Replaced', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(),
+        )
+
+    def test_a_finished_visit_can_be_rated_once(self):
+        from reports.models import CustomerFeedback
+        self.assertNotContains(self.client.get(self.url), 'How was this visit?')  # not done yet
+        self._finish()
+        self.assertContains(self.client.get('/customers/portal/reports/'), 'Rate this visit')
+        response = self.client.post(self.url, {'rating': '5', 'comment': 'Quick and tidy'})
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        feedback = CustomerFeedback.objects.get(task=self.visit)
+        self.assertEqual((feedback.rating, feedback.comment, feedback.requested_by), (5, 'Quick and tidy', None))
+        page = self.client.get(self.url)
+        self.assertContains(page, 'You rated it 5 out of 5.')
+        self.assertNotContains(self.client.get('/customers/portal/reports/'), 'Rate this visit')
+        self.client.post(self.url, {'rating': '1'})  # no second go
+        feedback.refresh_from_db()
+        self.assertEqual(feedback.rating, 5)
+
+    def test_rating_in_the_portal_answers_an_emailed_request(self):
+        from reports.models import CustomerFeedback
+        self._finish()
+        requested = CustomerFeedback.objects.create(task=self.visit, requested_at=timezone.now(), requested_by=self.admin_user)
+        self.client.post(self.url, {'rating': '4'})
+        requested.refresh_from_db()
+        self.assertEqual((requested.rating, requested.requested_by), (4, self.admin_user))
+        self.assertIsNotNone(requested.submitted_at)
+
+    def test_someone_elses_visit_is_not_found(self):
+        from tasks.models import Task
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        theirs = Task.objects.create(
+            task_number='AE-0961', site=Site.objects.create(customer=other, name='Far', address='x'),
+            priority=Task.Priority.NORMAL, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+        )
+        self.assertEqual(self.client.get(f'/customers/portal/visits/{theirs.pk}/').status_code, 404)
+
+
+class PortalSettingsTests(CustomerTestCase):
+    # A customer keeps their own details, language and password up to date.
+
+    def setUp(self):
+        super().setUp()
+        self.customer.user = User.objects.create_user('ali@fitnessfirst.ae', email='ali@fitnessfirst.ae', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='ali@fitnessfirst.ae', password='pass12345')
+
+    def test_details_and_language_are_saved(self):
+        response = self.client.post('/customers/portal/settings/', {
+            'action': 'details', 'contact_name': 'Sara', 'contact_phone': '0509999999',
+            'contact_email': 'sara@fitnessfirst.ae', 'billing_address': 'Dubai Marina', 'shipping_address': 'Al Quoz',
+            'language': 'ar',
+        })
+        self.assertRedirects(response, '/customers/portal/settings/', fetch_redirect_response=False)
+        self.customer.refresh_from_db()
+        self.assertEqual((self.customer.contact_name, self.customer.contact_email, self.customer.language),
+                         ('Sara', 'sara@fitnessfirst.ae', 'ar'))
+
+    def test_the_password_needs_the_current_one_and_says_it_changed(self):
+        new = {'action': 'password', 'new_password1': 'Gym-Belt-2026!', 'new_password2': 'Gym-Belt-2026!'}
+        response = self.client.post('/customers/portal/settings/', {**new, 'old_password': 'wrong'})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.get(username='ali@fitnessfirst.ae').check_password('Gym-Belt-2026!'))
+        response = self.client.post('/customers/portal/settings/', {**new, 'old_password': 'pass12345'})
+        self.assertRedirects(response, '/customers/portal/settings/', fetch_redirect_response=False)
+        self.assertTrue(User.objects.get(username='ali@fitnessfirst.ae').check_password('Gym-Belt-2026!'))
+        self.assertEqual(len(mail.outbox), 1)
+        # Still signed in on this device.
+        self.assertEqual(self.client.get('/customers/portal/settings/').status_code, 200)
+
+    def test_the_login_email_is_shown_not_editable(self):
+        page = self.client.get('/customers/portal/settings/')
+        self.assertContains(page, 'You sign in as ali@fitnessfirst.ae')
+        self.assertNotIn('username', page.context['details_form'].fields)
+
+    def test_staff_and_unfinished_accounts_cannot_use_it(self):
+        self.customer.must_change_password = True
+        self.customer.save(update_fields=['must_change_password'])
+        self.assertRedirects(
+            self.client.get('/customers/portal/settings/'), '/customers/portal/first-login/', fetch_redirect_response=False,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertIn(self.client.get('/customers/portal/settings/').status_code, (302, 403))
+
+
+class PortalBellTests(CustomerTestCase):
+    # The customer's bell: a report ready to rate, our team's reply, a visit
+    # booked — each cleared once they open what it's about.
+
+    def setUp(self):
+        super().setUp()
+        from tasks.models import Task
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.visit = Task.objects.create(
+            task_number='AE-0970', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_date=timezone.localdate(),
+        )
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0070', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Noise', submitted_at=timezone.now(),
+        )
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def test_each_event_rings_the_bell_once_and_opening_it_clears_it(self):
+        from .models import CustomerNotification
+        from . import notify
+        notify.visit_booked(self.visit)
+        notify.visit_booked(self.visit)  # booked again: still one item
+        notify.report_ready(self.visit)
+        notify.staff_replied(self.ticket)
+        page = self.client.get('/customers/portal/')
+        self.assertEqual(len(page.context['portal_bell']), 3)
+        self.assertContains(page, 'notif-bell__badge')
+        self.assertContains(page, 'New reply from our team')
+        self.assertContains(page, 'Your visit report is ready — please rate the visit')
+        self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
+        self.client.get(f'/customers/portal/visits/{self.visit.pk}/')
+        self.assertFalse(CustomerNotification.objects.filter(seen_at__isnull=True).exists())
+        page = self.client.get('/customers/portal/')
+        self.assertNotContains(page, 'notif-bell__badge')
+        # Still in the list, just no longer new.
+        self.assertEqual([item['new'] for item in page.context['portal_bell']], [False] * 3)
+
+    def test_our_own_account_and_customers_without_a_login_get_nothing(self):
+        from tasks.models import Task
+        from .models import CustomerNotification
+        from . import notify
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
+        warehouse_visit = Task.objects.create(
+            task_number='AE-0971', site=Site.objects.create(customer=ours, name='Warehouse', address='x'),
+            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CONTRACT,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            scheduled_date=timezone.localdate(),
+        )
+        notify.visit_booked(warehouse_visit)
+        other = Customer.objects.create(country=self.country, name='No Login Gym', segment='gym')
+        notify.staff_replied(CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0071', customer=other, company_name='No Login Gym',
+            site_description='x', site_address='x', contact_name='x', contact_phone='x', description='x',
+            submitted_at=timezone.now(),
+        ))
+        self.assertFalse(CustomerNotification.objects.exists())
+
+    def test_our_teams_reply_rings_it(self):
+        from .models import CustomerNotification
+        manager = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=manager, country=self.country, full_name='Sam Support', language='en',
+            role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.client.login(username='support1', password='pass12345')
+        self.client.post(f'/tasks/tickets/{self.ticket.pk}/', {'action': 'add_reply', 'message': 'We are on it.'})
+        self.assertTrue(CustomerNotification.objects.filter(kind='reply', ticket=self.ticket).exists())
+
+    def test_requests_are_in_open_and_closed_tabs_with_their_progress(self):
+        CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0072', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Old', submitted_at=timezone.now(),
+            status=CustomerTicket.Status.CLOSED,
+        )
+        open_page = self.client.get('/customers/portal/requests/')
+        self.assertEqual([t.ticket_number for t in open_page.context['tickets']], ['AE-T0070'])
+        self.assertContains(open_page, 'progress-steps__step--current')
+        closed_page = self.client.get('/customers/portal/requests/?show=closed')
+        self.assertEqual([t.ticket_number for t in closed_page.context['tickets']], ['AE-T0072'])
+
+    def test_the_progress_bar_follows_the_words(self):
+        from .progress import CLOSED, DONE, RECEIVED, VISIT_BOOKED, progress_steps
+        self.assertEqual([state for _label, state in progress_steps(RECEIVED)], ['current', 'todo', 'todo', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'done', 'current', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 4)
+        self.assertIsNone(progress_steps(CLOSED))
+
+
+class CustomerAddsMachineTests(CustomerTestCase):
+    # A customer adds a machine; it waits for confirmation — by the office
+    # from the sticker photo, or by a technician recording it at a visit.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Brand
+        from people.models import RolePermission
+        self.brand = Brand.objects.create(name='Technogym')
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        for permission in ('manage_customers', 'view_machines'):
+            RolePermission.objects.update_or_create(role='admin', permission=permission, defaults={'allowed': True})
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def _add(self, **overrides):
+        return self.client.post('/customers/portal/machines/add/', {
+            'site': self.site.pk, 'brand': self.brand.pk, 'model_name': 'Excite Run 700', 'serial_no': ' TG-77 ',
+            'code': 'EXC-700', **overrides,
+        })
+
+    def test_an_added_machine_waits_for_confirmation(self):
+        response = self._add()
+        machine = Asset.objects.get()
+        self.assertRedirects(response, f'/customers/portal/machines/{machine.pk}/', fetch_redirect_response=False)
+        self.assertEqual((machine.status, machine.serial_no, machine.code), ('pending', 'TG-77', 'EXC-700'))
+        self.assertContains(self.client.get('/customers/portal/machines/'), 'Waiting for confirmation')
+        # They can already report a problem with it.
+        form = self.client.get(f'/customers/portal/tickets/new/?machine={machine.pk}').context['machines'][0]
+        self.assertEqual(form.initial['asset'], str(machine.pk))
+
+    def test_the_same_serial_twice_or_someone_elses_site_is_refused(self):
+        self._add()
+        self.assertContains(self._add(), 'This machine is already in your list.')
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        far = Site.objects.create(customer=other, name='Far', address='x')
+        response = self._add(site=far.pk, serial_no='OTHER-1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Asset.objects.count(), 1)
+
+    def test_the_office_sees_it_and_confirms_or_removes_it(self):
+        self._add()
+        self._add(serial_no='TG-78')
+        first, second = Asset.objects.order_by('pk')
+        self.client.login(username='admin1', password='pass12345')
+        home = self.client.get('/')
+        self.assertTrue(any(item['count'] == 2 for item in home.context['actions']))
+        listed = self.client.get('/tasks/machines/?status=pending')
+        self.assertEqual([a.pk for a in listed.context['page_obj']], [first.pk, second.pk])
+        self.client.post(f'/tasks/machines/{first.pk}/', {'action': 'confirm'})
+        first.refresh_from_db()
+        self.assertEqual(first.status, 'active')
+        self.client.post(f'/tasks/machines/{second.pk}/', {'action': 'remove'})
+        self.assertFalse(Asset.objects.filter(pk=second.pk).exists())
+
+    def test_only_whoever_manages_customers_confirms(self):
+        from people.models import RolePermission
+        self._add()
+        machine = Asset.objects.get()
+        RolePermission.objects.filter(role='admin', permission='manage_customers').update(allowed=False)
+        self.client.login(username='admin1', password='pass12345')
+        self.assertNotContains(self.client.get(f'/tasks/machines/{machine.pk}/'), 'Confirm the machine')
+        self.client.post(f'/tasks/machines/{machine.pk}/', {'action': 'confirm'})
+        machine.refresh_from_db()
+        self.assertEqual(machine.status, 'pending')
+
+
 class PortalTicketNewTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
@@ -650,12 +1079,17 @@ class PortalTicketNewTests(CustomerTestCase):
         payload = {
             'site': self.site.pk, 'contact_name': 'Ali', 'contact_phone': '0501234567',
             'contact_email': '', 'notes': '',
+            # What it's about and what they need: machines with a problem, unless a test says otherwise.
+            'about': 'machines', 'need': 'repair',
             'machines-TOTAL_FORMS': '10', 'machines-INITIAL_FORMS': '0',
             'machines-MIN_NUM_FORMS': '0', 'machines-MAX_NUM_FORMS': '10',
         }
         if machines is None:
             machines = [{'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': 'Belt noise'}]
         for index, machine in enumerate(machines):
+            # A described problem is required; tests about other things get one.
+            if machine and 'description' not in machine:
+                machine = {**machine, 'description': 'Stops after 5 minutes, error E-07, since Monday.'}
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return payload
@@ -790,18 +1224,39 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
     def test_a_registered_machine_can_be_picked(self):
         self.client.login(username='fitnessfirst', password='pass12345')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'asset': str(self.asset.pk), 'problem': 'not_working', 'out_of_service': 'on'},
-            {'model_name': 'Old bike', 'serial_no': 'B-9', 'problem': 'display'},
+            {'asset': str(self.asset.pk), 'problem': 'not_working'},
+            {'model_name': 'Old bike', 'serial_no': 'B-9', 'code': 'BK-9', 'problem': 'display'},
         ]))
         ticket = CustomerTicket.objects.get()
         first, second = ticket.machines.all()
-        self.assertEqual((first.asset, first.machine_name, first.serial, first.out_of_service),
-                         (self.asset, 'Technogym Excite Run 700', 'TG-77', True))
+        self.assertEqual((first.product_code, second.product_code), ('', 'BK-9'))
+        self.assertEqual((first.asset, first.machine_name, first.serial),
+                         (self.asset, 'Technogym Excite Run 700', 'TG-77'))
         self.assertEqual((second.asset, second.machine_name, second.serial), (None, 'Old bike', 'B-9'))
         # The ticket's text fields are written from the machines for everything that reads them.
         self.assertEqual(ticket.serial_numbers, 'TG-77' + chr(10) + 'B-9')
         self.assertIn('Technogym Excite Run 700 (TG-77): Not working', ticket.description)
-        self.assertIn('cannot be used', ticket.description)
+
+    def test_reporting_from_a_machines_page_has_it_chosen_and_sends(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        page = self.client.get(f'/customers/portal/tickets/new/?machine={self.asset.pk}')
+        self.assertEqual(page.context['form'].fields['site'].initial, self.site.pk)
+        first = page.context['machines'][0]
+        self.assertEqual((first.initial['which'], first.initial['asset']), ('list', str(self.asset.pk)))
+        # As the page posts it: that first card is an "initial" form now.
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(
+            machines=[{'which': 'list', 'asset': str(self.asset.pk), 'problem': 'not_working'}],
+            **{'machines-INITIAL_FORMS': '1'},
+        ))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(CustomerTicket.objects.get().machines.get().asset, self.asset)
+
+    def test_someone_elses_machine_is_not_chosen(self):
+        theirs = Asset.objects.create(site=self.other_site, brand=self.brand, model_name='Their bike')
+        self.client.login(username='fitnessfirst', password='pass12345')
+        page = self.client.get(f'/customers/portal/tickets/new/?machine={theirs.pk}')
+        self.assertFalse(page.context['machines'][0].initial)
+
 
     def test_a_machine_from_another_site_is_rejected(self):
         other_site = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
@@ -818,27 +1273,38 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
+    def test_a_machine_needs_its_problem_described(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'model_name': 'Treadmill', 'serial_no': 'SN-1', 'problem': 'noise', 'description': '  '},
+        ]))
+        self.assertContains(response, 'Please describe the problem')
+        self.assertFalse(CustomerTicket.objects.exists())
+
     def test_a_machine_needs_a_problem_and_an_identity(self):
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[{'description': 'Squeaks'}]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
-    def test_an_unlisted_machine_needs_its_serial_or_a_sticker_photo(self):
+    def test_an_unlisted_machine_needs_its_typed_serial_a_photo_is_extra(self):
+        # The typed number is how the machine is tracked; a sticker photo
+        # alone isn't enough, but it's kept alongside to check it.
         self.client.login(username='fitnessfirst', password='pass12345')
+        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display'},
+            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
         ]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
         sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
-            {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
+            {'model_name': 'Old bike', 'serial_no': 'OB-9', 'problem': 'display', 'serial_photo': sticker},
         ]))
         machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual(machine.serial_no, 'OB-9')
         self.assertTrue(machine.serial_photo.name.endswith('/sticker.jpg'))
-        self.assertEqual(machine.ticket.serial_numbers, 'serial number on the sticker photo')
 
     def test_a_listed_machine_needs_no_serial(self):
         self.client.login(username='fitnessfirst', password='pass12345')
@@ -866,6 +1332,72 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         ticket = CustomerTicket.objects.get()
         status_page = self.client.get(f'/tasks/tickets/status/{ticket.token}/')
         self.assertContains(status_page, 'Technogym Excite Run 700')
+
+
+class PortalMachinesTests(CustomerTestCase):
+    # "My machines": each machine at the customer's sites, its history, and
+    # reporting a problem with it.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Brand
+        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
+        self.customer.save(update_fields=['user'])
+        self.brand = Brand.objects.create(name='Technogym')
+        self.machine = Asset.objects.create(
+            site=self.site, brand=self.brand, model_name='Excite Run 700', serial_no='TG-77', code='EXC-RUN-700',
+        )
+        self.client.login(username='fitnessfirst', password='pass12345')
+
+    def test_the_list_shows_this_customers_machines_but_not_retired_ones(self):
+        Asset.objects.create(site=self.site, brand=self.brand, model_name='Old bike', status=Asset.Status.RETIRED)
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        Asset.objects.create(
+            site=Site.objects.create(customer=other, name='Far', address='x'), brand=self.brand, model_name='Their rower',
+        )
+        page = self.client.get('/customers/portal/machines/')
+        self.assertContains(page, 'Excite Run 700')
+        self.assertNotContains(page, 'Old bike')
+        self.assertNotContains(page, 'Their rower')
+        self.assertContains(page, f'/customers/portal/machines/{self.machine.pk}/')
+
+    def test_a_machine_shows_its_code_visits_and_open_requests(self):
+        from reports.models import WorkReport
+        from tasks.models import Task, TaskAsset, TicketMachine
+        visit = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.CLOSED, scheduled_for=timezone.now(),
+        )
+        TaskAsset.objects.create(task=visit, asset=self.machine, outcome=TaskAsset.Outcome.REPAIRED)
+        WorkReport.objects.create(
+            task=visit, findings='Belt worn', action_taken='Replaced belt', resolved=True, labour_hours='1.00',
+            customer_name='Ali', submitted_at=timezone.now(),
+        )
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0050', customer=self.customer, company_name='Fitness First',
+            site_description='Marina Branch', site_address='Dubai Marina', contact_name='Ali',
+            contact_phone='0501234567', description='Noise', submitted_at=timezone.now(),
+        )
+        TicketMachine.objects.create(ticket=ticket, asset=self.machine, position=0, problem='noise', description='Noise')
+        page = self.client.get(f'/customers/portal/machines/{self.machine.pk}/')
+        self.assertContains(page, 'EXC-RUN-700')
+        self.assertContains(page, 'Repaired')
+        self.assertContains(page, f'/customers/portal/visits/{visit.pk}/report.pdf')
+        self.assertContains(page, 'AE-T0050')
+        self.assertContains(page, f'/customers/portal/tickets/new/?machine={self.machine.pk}')
+        self.assertEqual(self.client.get('/customers/portal/machines/').context['sites'].__class__.__name__, 'dict_items')
+
+    def test_someone_elses_machine_is_not_found(self):
+        other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
+        theirs = Asset.objects.create(
+            site=Site.objects.create(customer=other, name='Far', address='x'), brand=self.brand, model_name='Rower',
+        )
+        self.assertEqual(self.client.get(f'/customers/portal/machines/{theirs.pk}/').status_code, 404)
+
+    def test_staff_cannot_open_the_portal_machines(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertIn(self.client.get('/customers/portal/machines/').status_code, (302, 403))
 
 
 class SiteMapLocationTests(CustomerTestCase):
@@ -1133,3 +1665,33 @@ class CustomerAccountUnlockTests(CustomerTestCase):
         self.assertNotIn('fitnessfirst', locked_usernames())
         response = self.client.post('/customers/portal/login/', {'username': 'fitnessfirst', 'password': 'pass12345'})
         self.assertEqual(response.status_code, 302)
+
+
+class PortalMachineQuestionTests(PortalTicketMachinesTests):
+    # Each machine card asks one thing first — in their list, or new — and
+    # only that answer's fields count.
+
+    def test_the_answer_decides_what_is_needed(self):
+        self.client.login(username='fitnessfirst', password='pass12345')
+        page = self.client.get('/customers/portal/tickets/new/')
+        self.assertContains(page, 'Is this machine in your list?')
+
+        # "In my list" but nothing picked: asked to pick, nothing about a serial.
+        response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'list', 'model_name': 'typed by mistake', 'problem': 'display'},
+        ]))
+        self.assertContains(response, 'Please choose the machine from your list.')
+        self.assertNotContains(response, 'Please enter the serial number')
+
+        # "New": model and serial; a machine picked earlier is dropped.
+        self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
+            {'which': 'new', 'asset': str(self.asset.pk), 'model_name': 'Old bike', 'serial_no': 'B-9', 'problem': 'display'},
+        ]))
+        machine = CustomerTicket.objects.get().machines.get()
+        self.assertEqual((machine.asset, machine.model_name, machine.serial_no), (None, 'Old bike', 'B-9'))
+
+    def test_a_customer_with_no_machines_is_not_asked(self):
+        from customers.models import Asset
+        Asset.objects.filter(site__customer=self.customer).delete()
+        self.client.login(username='fitnessfirst', password='pass12345')
+        self.assertNotContains(self.client.get('/customers/portal/tickets/new/'), 'Is this machine in your list?')

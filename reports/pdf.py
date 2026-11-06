@@ -2,15 +2,17 @@
 the technician recorded, the machines and parts, and the customer's
 sign-off. Rendered in the language asked for, right to left in Arabic.
 """
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.staticfiles import finders
+from django.db.models import Q
 from django.template.loader import render_to_string
 from django.utils import timezone, translation
 
-from tasks.models import TaskAssignment
+from .phrases import Action, Finding, Recommendation, WorkLine
 
 
 def _local_file(url):
@@ -44,32 +46,59 @@ def _url_fetcher(url, *args, **kwargs):
 
 def report_content(report):
     """What the customer sees and signs, as plain JSON-safe data: findings,
-    work done, the machines with their outcomes, the parts (no prices) and
-    who signed. Frozen into WorkReport.signed_content at signing, so a
+    work done, the time on site, the machines with their outcomes, the
+    parts (no prices) and who signed. Frozen into WorkReport.signed_content at signing, so a
     later edit can be spotted by comparing this with the frozen copy.
     """
     task = report.task
     # Sorted, not in saved order: the report form deletes and recreates
     # these rows on every save, which mustn't read as a change.
+    # A machine's finding only when there is one: reports signed before
+    # findings existed must still read as unchanged.
     machines = sorted((
         {
             'name': f"{item.asset.brand.name if item.asset.brand else ''} {item.asset.model_name}".strip(),
             'serial': item.asset.serial_no,
             'outcome': item.outcome,
+            **({'note': item.note} if item.note else {}),
+            # The standard wording and the action, likewise only when set.
+            **({'finding_code': item.finding_code} if item.finding_code else {}),
+            **({'action_code': item.action_code} if item.action_code else {}),
+            **({'action': item.action} if item.action else {}),
         }
         for item in task.task_assets.select_related('asset__brand')
-    ), key=lambda machine: (machine['name'], machine['serial'], machine['outcome']))
+    ), key=lambda machine: (machine['name'], machine['serial'], machine['outcome'], machine.get('note', '')))
     parts = sorted((
         {'code': part.part_code, 'description': part.description, 'quantity': part.quantity}
         for part in report.parts_used.all()
     ), key=lambda part: (part['code'], part['description'], part['quantity']))
+    # The standard work lines and recommendations, only when there are
+    # any — reports signed before they existed still read as unchanged.
+    # An installation's machines as checked off on site — only when there
+    # are any, so other reports signed before this still read as unchanged.
+    from tasks.views import has_checklist
+    equipment = [
+        {
+            'code': line.product_code, 'serial': line.serial_number, 'status': line.status,
+            'colors': [line.frame, line.arm, line.padding, line.trim], 'instead': line.replacement, 'note': line.note,
+        }
+        for line in task.products.order_by('pk')
+    ] if has_checklist(task) else []
+    extras = {
+        key: value for key, value in (
+            ('work_lines', list(report.work_lines)), ('recommendations', list(report.recommendations)),
+            ('recommendation', report.recommendation), ('equipment', equipment),
+        ) if value
+    }
     return {
         'findings': report.findings,
         'action_taken': report.action_taken,
         'resolved': report.resolved,
+        'hours': f'{report.labour_hours:.2f}',
         'customer_name': report.customer_name,
         'machines': machines,
         'parts': parts,
+        **extras,
     }
 
 
@@ -88,29 +117,126 @@ def changed_after_signing(report):
     if not report.signed_content:
         return False
     signed = {key: value for key, value in report.signed_content.items() if key != 'signature_url'}
-    return signed != report_content(report)
+    current = report_content(report)
+    if 'hours' not in signed:
+        current.pop('hours')  # signed before the report showed the time on site
+    return signed != current
+
+
+def _equipment_step(task):
+    from tasks.views import equipment_step
+    return equipment_step(task)
+
+
+def _done_label(task):
+    from tasks.models import STEP_DONE_LABELS
+    return STEP_DONE_LABELS.get(_equipment_step(task), STEP_DONE_LABELS['installation'])
+
+
+def _line_statuses():
+    from tasks.models import TaskProduct
+    return TaskProduct.Status.choices
+
+
+def hours_text(hours):
+    """Hours as h:mm — '1.53' -> '1:32', '2.50' -> '2:30'; '' for none or
+    zero. Two decimals of an hour are exact to the minute."""
+    if hours in (None, '') or Decimal(hours) == 0:
+        return ''
+    hours_part, minutes = divmod(round(Decimal(hours) * 60), 60)
+    return f'{hours_part}:{minutes:02d}'
+
+
+def _next_visit(task):
+    """The site's next booked task after this one, as a date — the
+    report's "Next visit". None when nothing is booked yet."""
+    from tasks.models import Task
+
+    day = timezone.localtime(task.scheduled_for).date() if task.scheduled_for else timezone.localdate()
+    upcoming = Task.objects.filter(site=task.site).exclude(pk=task.pk).exclude(
+        status__in=[Task.Status.CANCELLED, Task.Status.CLOSED],
+    ).filter(Q(scheduled_for__date__gt=day) | Q(scheduled_for__isnull=True, scheduled_date__gt=day))
+    dates = [
+        timezone.localtime(other.scheduled_for).date() if other.scheduled_for else other.scheduled_date
+        for other in upcoming.only('scheduled_for', 'scheduled_date')
+    ]
+    return min(dates) if dates else None
 
 
 def _template_context(report, content, signature_url, signed_at, changed):
     from tasks.models import TaskAsset
 
     task = report.task
-    team = TaskAssignment.objects.filter(task=task, is_active=True).select_related('technician')
     outcomes = dict(TaskAsset.Outcome.choices)
+    findings, actions = dict(Finding.choices), dict(Action.choices)
+    free_lines = [line.strip(' -•\t') for line in content['action_taken'].splitlines() if line.strip(' -•\t')]
+    standard_lines = dict(WorkLine.choices)
     return {
         'report': report,
         'task': task,
         'site': task.site,
         'customer': task.site.customer,
-        'team': [assignment.technician for assignment in sorted(team, key=lambda a: a.role != TaskAssignment.Role.LEAD)],
         'content': content,
-        'work_lines': [line.strip(' -•\t') for line in content['action_taken'].splitlines() if line.strip(' -•\t')],
-        'machines': [{**machine, 'outcome_label': outcomes.get(machine['outcome'], '')} for machine in content['machines']],
+        # The standard lines first (in the report's language), then any typed.
+        'work_lines': [standard_lines[code] for code in content.get('work_lines', []) if code in standard_lines] + free_lines,
+        'machines': [
+            {
+                **machine,
+                'outcome_label': outcomes.get(machine['outcome'], ''),
+                'finding_label': findings.get(machine.get('finding_code'), machine.get('note', '')),
+                'finding_extra': machine.get('note', '') if machine.get('finding_code') else '',
+                'action_label': actions.get(machine.get('action_code'), machine.get('action', '')),
+                'action_extra': machine.get('action', '') if machine.get('action_code') else '',
+            }
+            for machine in content['machines']
+        ],
+        'recommendations': [
+            dict(Recommendation.choices)[code] for code in content.get('recommendations', [])
+            if code in dict(Recommendation.choices)
+        ] + ([content['recommendation']] if content.get('recommendation') else []),
+        'next_visit': _next_visit(task),
+        # The time on site as "2.5", "3" — none on reports signed before it
+        # was shown, or with no taps to work it out from.
+        'hours': hours_text(content.get('hours')),
         'parts': content['parts'],
+        # An installation report: its machines, and how many weren't installed.
+        'equipment': [
+            {**line, 'status_label': _done_label(task) if line['status'] == 'done' else dict(_line_statuses()).get(line['status'], '')}
+            for line in content.get('equipment', [])
+        ],
+        'not_installed': sum(1 for line in content.get('equipment', []) if line['status'] != 'done'),
+        # receiving / loading / installation: the report's words follow the step.
+        'equipment_step': _equipment_step(task),
         'signature_url': signature_url,
         'signed_at': signed_at,
         'changed_after_signing': changed,
     }
+
+
+def report_language(customer):
+    """The language a customer's visit reports are in: always their
+    country's (Country.report_language) — Arabic in Saudi Arabia and Egypt,
+    English everywhere else, whatever the customer picked for themselves.
+    The emailed copy and its email, and every download not asking for a
+    language (?lang=), use this.
+    """
+    return customer.country.report_language or 'en'
+
+
+def render_visit_report_html(report, language=None, problems=()):
+    """The report as it would be sent, as an HTML page with a "preview"
+    banner and the things to fix (`problems`) above it — the review step
+    before sending. Same template, content and language as the PDF.
+    """
+    context = _template_context(report, report_content(report), report.signature_url, report.submitted_at, False)
+    country_zone = report.task.site.customer.country.timezone
+    with translation.override(language or translation.get_language()), timezone.override(country_zone):
+        return render_to_string('reports/visit_report_pdf.html', {
+            **context,
+            'is_rtl': translation.get_language_bidi(),
+            'preview': True,
+            'problems': [str(problem) for problem in problems],
+        })
 
 
 def render_visit_report_pdf(report, language=None, signed_version=False):

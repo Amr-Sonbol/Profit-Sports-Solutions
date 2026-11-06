@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
-import { ApiRequestError, clearToken, getToken, setToken as persistToken } from '@/api/client';
+import { ApiRequestError, clearToken, getToken, setActiveCountry, setToken as persistToken } from '@/api/client';
 import { fetchMe, login as loginRequest } from '@/api/endpoints';
 import { cacheScreenData, withOfflineCopy } from '@/offline';
 import { registerForPush, unregisterForPush } from '@/push';
@@ -13,6 +13,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   /** After a password is set: the server signed out every phone and sent this one a fresh token. */
   passwordSet: (response: { token: string } & Me) => Promise<void>;
+  /** After editing the profile: the updated details everywhere, offline too. */
+  profileSaved: (profile: Me) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -73,6 +75,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const signOut = async () => {
     await unregisterForPush();
     await clearToken();
+    await setActiveCountry(null);  // the next person starts in their own country
     setMe(null);
   };
 
@@ -86,7 +89,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     registerForPush();
   };
 
-  const value = useMemo(() => ({ me, isLoading, signIn, signOut, passwordSet }), [me, isLoading]);
+  const profileSaved = (profile: Me) => {
+    cacheScreenData('me', profile);
+    setMe(profile);
+  };
+
+  const value = useMemo(
+    () => ({ me, isLoading, signIn, signOut, passwordSet, profileSaved }), [me, isLoading],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

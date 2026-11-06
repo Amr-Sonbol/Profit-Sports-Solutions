@@ -41,7 +41,8 @@ def working_hours_between(start, end, tz, weekend_weekdays):
 
 def overdue_unscheduled_tasks(country, technician, now=None):
     """Open tasks in this country with no date yet, more than 24 working
-    hours after they were created. A supervisor sees the ones they're
+    hours after they were created — every hour counts for an emergency,
+    since the team works weekends for those. A supervisor sees the ones they're
     responsible for, plus any nobody is responsible for; the manager tier
     sees all of them. Everyone else, nothing.
     """
@@ -69,5 +70,7 @@ def overdue_unscheduled_tasks(country, technician, now=None):
     weekend = country.weekend_weekdays
     return [
         task for task in tasks
-        if working_hours_between(task.created_at, now, tz, weekend) > UNSCHEDULED_ALARM_HOURS
+        if working_hours_between(
+            task.created_at, now, tz, set() if task.priority == Task.Priority.EMERGENCY else weekend,
+        ) > UNSCHEDULED_ALARM_HOURS
     ]

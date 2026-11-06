@@ -1,12 +1,28 @@
+import re
+
 from django import forms
 from django.contrib.auth import get_user_model, password_validation
+from django.contrib.auth.forms import AuthenticationForm
 from django.utils.translation import gettext_lazy as _
 
-from reference.models import Country
+from django.core.validators import FileExtensionValidator
+
+from reference.models import Brand, Country
 from tasks.forms import new_password_fields
+from tasks.models import MAX_TICKET_ATTACHMENT_BYTES, SERIAL_PHOTO_EXTENSIONS
 from tasks.location import parse_coordinates
 
-from .models import Customer, Site
+from .models import Asset, Customer, Site
+
+
+class PortalLoginForm(AuthenticationForm):
+    """The portal's login: one plain message for a wrong email, a wrong
+    password or a staff login alike, so it never says which accounts exist."""
+
+    error_messages = {
+        **AuthenticationForm.error_messages,
+        'invalid_login': _('The email or password is incorrect. Please check them and try again.'),
+    }
 
 
 class CreateLoginForm(forms.Form):
@@ -218,6 +234,33 @@ class ChangeLoginEmailForm(forms.Form):
         return email
 
 
+class PortalEmailChangeForm(forms.Form):
+    """A customer changing their own sign-in email: the new address and
+    their current password. Nothing changes until they open the link sent
+    to the new address (accounts.send_email_change_link)."""
+
+    email = forms.EmailField(label=_('New sign-in email'))
+    password = forms.CharField(label=_('Your current password'), strip=False, widget=forms.PasswordInput)
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_email(self):
+        email = self.cleaned_data['email'].strip()
+        if email.lower() == self.user.username.lower():
+            raise forms.ValidationError(_('This is already your sign-in email.'))
+        if get_user_model().objects.filter(username__iexact=email).exclude(pk=self.user.pk).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
+
+    def clean_password(self):
+        password = self.cleaned_data['password']
+        if not self.user.check_password(password):
+            raise forms.ValidationError(_('Your password is not correct.'))
+        return password
+
+
 class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
 
@@ -252,4 +295,101 @@ class QuickInviteForm(forms.Form):
                 'A customer named %(name)s already exists in this country. Please send the invitation from '
                 'their row instead.',
             ) % {'name': name.strip()})
+        return cleaned
+
+
+class CustomerSettingsForm(forms.ModelForm):
+    """The portal's Settings: the customer's own contact details and
+    addresses, and the language the portal shows in (the header's EN/AR
+    switch sets the same field). Their login email is changed by staff
+    (Customer accounts), not here."""
+
+    class Meta:
+        model = Customer
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address', 'language']
+        labels = {
+            'contact_name': _('Contact name'), 'contact_phone': _('Contact phone number'),
+            'contact_email': _('Contact email'), 'billing_address': _('Invoice address'),
+            'shipping_address': _('Delivery address'), 'language': _('Language'),
+        }
+        help_texts = {
+            'contact_email': _('Where we send updates about your requests.'),
+            'billing_address': _('The address invoices should be issued to.'),
+            'shipping_address': _('Where spare and replacement parts should be delivered.'),
+            'language': _('The language this portal shows in.'),
+        }
+        widgets = {
+            'billing_address': forms.Textarea(attrs={'rows': 2}),
+            'shipping_address': forms.Textarea(attrs={'rows': 2}),
+        }
+
+
+class PortalColorForm(forms.ModelForm):
+    """The portal's Settings, its own section: the customer's color for
+    their portal (buttons and highlights), any color at all."""
+
+    class Meta:
+        model = Customer
+        fields = ['brand_color']
+        labels = {'brand_color': _("Or type your brand's color code")}
+        help_texts = {'brand_color': _('From your logo or brand guide, e.g. #0B1F4D.')}
+        widgets = {
+            'brand_color': forms.TextInput(attrs={
+                'maxlength': 7, 'dir': 'ltr', 'spellcheck': 'false', 'autocomplete': 'off', 'placeholder': '#RRGGBB',
+                'data-color-code': '',
+            }),
+        }
+
+    def clean_brand_color(self):
+        # "0B1F4D" or "#0B1F4D", as brand guides write it: stored as "#0b1f4d".
+        color = self.cleaned_data['brand_color'].strip().lower()
+        color = color if color.startswith('#') else f'#{color}'
+        if not re.fullmatch(r'#[0-9a-f]{6}', color):
+            raise forms.ValidationError(_('Enter a color code like #0B1F4D, or choose your color above.'))
+        return color
+
+
+class CustomerMachineForm(forms.ModelForm):
+    """A customer adding one of their own machines from the portal: where it
+    is, its brand, model, serial and code, and a photo of its sticker. It
+    joins their list waiting for confirmation (Asset.Status.PENDING) — ours
+    once a technician records it at a visit or the office confirms it."""
+
+    class Meta:
+        model = Asset
+        fields = ['site', 'brand', 'model_name', 'serial_no', 'code', 'sticker_photo']
+        labels = {
+            'model_name': _('Model'), 'serial_no': _('Serial number'), 'code': _('Product code (optional)'),
+            'sticker_photo': _('Photo of the sticker'),
+        }
+        help_texts = {
+            'model_name': _('As shown on the machine.'),
+            'serial_no': _("As shown on the machine's sticker."),
+            'code': _('The product code shown on the sticker, if available.'),
+            'sticker_photo': _('A clear photo helps our team confirm the details. Take a photo or upload one.'),
+        }
+        widgets = {'sticker_photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, customer, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['site'].queryset = customer.sites.order_by('name')
+        sites = list(self.fields['site'].queryset[:2])
+        if len(sites) == 1:
+            self.fields['site'].initial = sites[0].pk
+        self.fields['brand'].queryset = Brand.objects.filter(is_active=True).order_by('name')
+        self.fields['serial_no'].required = True
+        self.fields['sticker_photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+
+    def clean_sticker_photo(self):
+        photo = self.cleaned_data.get('sticker_photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+        return photo
+
+    def clean(self):
+        cleaned = super().clean()
+        serial, site = (cleaned.get('serial_no') or '').strip(), cleaned.get('site')
+        if serial and site and Asset.objects.filter(site=site, serial_no__iexact=serial).exists():
+            self.add_error('serial_no', _('This machine is already in your list.'))
+        cleaned['serial_no'] = serial
         return cleaned
