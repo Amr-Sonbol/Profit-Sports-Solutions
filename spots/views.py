@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import translation
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -89,3 +89,17 @@ def home(request):
     if technician.must_change_password:
         return redirect('tasks:first_login')
     return render(request, 'welcome.html', home_summary(request, technician))
+
+
+def bell(request):
+    """Just the bell (templates/_bell.html), for static/js/bell.js to refresh it
+    when someone comes back to the tab — the same reads as any page's header.
+    Nothing for anyone else."""
+    if not request.user.is_authenticated or not (
+        getattr(request.user, 'technician', None) or getattr(request.user, 'customer', None)
+    ):
+        return HttpResponse(status=204)
+    request.bell_only = True  # a page's one-time notices (spots.email_failures) wait for a real page
+    response = render(request, '_bell.html')
+    response['Cache-Control'] = 'no-store'
+    return response

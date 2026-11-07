@@ -4784,3 +4784,8 @@ details.review-more:not(.section) {
     cursor: not-allowed;
     pointer-events: auto;
 }
+
+/* The bell's holder (templates/_bell.html): no box of its own, so the header lays out its parts as before. */
+.bell-slot {
+    display: contents;
+}

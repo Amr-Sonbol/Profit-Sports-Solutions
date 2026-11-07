@@ -16,7 +16,7 @@ from django.utils.translation import gettext_lazy as _
 # rating page (both from emails, by token), switching language, signing out,
 # and the files and styles those pages use.
 PORTAL_PATHS = ('/customers/portal/', '/tasks/tickets/status/', '/reports/feedback/')
-SHARED_PATHS = ('/i18n/', '/accounts/logout/', '/static/', '/media/', '/favicon')
+SHARED_PATHS = ('/i18n/', '/accounts/logout/', '/static/', '/media/', '/favicon', '/bell/')
 
 
 def _on_portal_host(request):

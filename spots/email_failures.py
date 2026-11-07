@@ -52,6 +52,8 @@ def failed_emails(request):
     technician = getattr(user, 'technician', None) if user is not None and user.is_authenticated else None
     if technician is None or getattr(request, 'viewing_as', None) or getattr(request, 'viewing_as_user', None):
         return {}
+    if getattr(request, 'bell_only', False):
+        return {}  # shown (and marked seen) only on a real page
     unseen = FailedEmail.objects.filter(seen_at__isnull=True, triggered_by=user)
     if technician.role == Technician.Role.ADMIN:
         unseen = FailedEmail.objects.filter(seen_at__isnull=True).filter(

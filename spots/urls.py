@@ -35,6 +35,7 @@ urlpatterns = [
     ),
     path('accounts/reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     path('i18n/setlang/', views.set_language, name='set_language'),
+    path('bell/', views.bell, name='bell'),
     path('tasks/', include('tasks.urls')),
     path('reports/', include('reports.urls')),
     path('customers/', include('customers.urls')),

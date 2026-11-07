@@ -507,3 +507,40 @@ class NewRequestAlertsTests(LifecycleTestCase):
         self.assertNotIn('unscheduled_overdue', kinds)
         self.assertIn(ticket.pk, [item['ticket'].pk for item in bell['unseen_notifications'] if item.get('ticket')])
         self.assertEqual(self.staff.get('/tasks/?alarm=unscheduled').context['page_obj'].paginator.count, 15)
+
+
+class BellRefreshTests(LifecycleTestCase):
+    """/bell/: just the bell, for static/js/bell.js when someone comes back to the tab."""
+
+    def test_staff_get_their_bell_with_the_new_request(self):
+        self._staff('desk1', 'UAE Desk', Technician.Role.COUNTRY_SUPPORT)
+        desk = self.client_for('desk1')
+        desk.get('/tasks/')
+        self.send_request()
+        ticket = self.newest_request()
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as queries:
+            response = desk.get('/bell/')
+        self.assertContains(response, 'id="bell"')
+        self.assertContains(response, ticket.ticket_number)
+        self.assertNotContains(response, '<html')  # the bell alone, not a page
+        self.assertLess(len(queries), 25)
+
+    def test_the_customer_gets_their_bell_with_the_reply(self):
+        self.send_request()
+        ticket = self.newest_request()
+        self.staff.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'add_reply', 'message': 'On it.'})
+        response = self.portal.get('/bell/')
+        self.assertContains(response, 'id="bell"')
+        self.assertContains(response, 'notif-bell__badge')
+
+    def test_nobody_else_gets_anything(self):
+        self.assertEqual(self.client_class().get('/bell/').status_code, 204)
+
+    def test_it_never_uses_up_a_one_time_email_warning(self):
+        from people.models import FailedEmail
+        FailedEmail.objects.create(triggered_by=self.admin.user, recipients='x@example.com', subject='Hello',
+                                   error='down', failed_at=timezone.now())
+        self.staff.get('/bell/')
+        self.assertContains(self.staff.get('/tasks/'), 'An email could not be sent')
