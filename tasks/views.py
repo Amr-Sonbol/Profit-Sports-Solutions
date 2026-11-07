@@ -1548,6 +1548,8 @@ def task_list(request):
     pak_reference = request.GET.get('pak_reference', '').strip()
     serial_number = request.GET.get('serial_number', '').strip()
     customer_id = request.GET.get('customer', '')
+    # Typed (any part of the name), or a link's ?customer=<pk>.
+    customer_name = request.GET.get('customer_name', '').strip()
     technician_id = request.GET.get('technician', '')
     shipping_company = request.GET.get('shipping_company', '')
     scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
@@ -1589,6 +1591,10 @@ def task_list(request):
 
     if customer_id:
         tasks = tasks.filter(site__customer_id=customer_id)
+        if not customer_name:
+            customer_name = Customer.objects.filter(pk=customer_id).values_list('name', flat=True).first() or ''
+    elif customer_name:
+        tasks = tasks.filter(site__customer__name__icontains=customer_name)
 
     if technician_id:
         tasks = tasks.filter(
@@ -1612,7 +1618,8 @@ def task_list(request):
     if supervisor_id:
         tasks = tasks.filter(responsible_supervisor_id=supervisor_id)
 
-    tasks = tasks.annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'promised_at')
+    # Newest first: the latest opened task at the top.
+    tasks = tasks.order_by('-reported_at', '-pk')
 
     paginator = Paginator(tasks, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -1624,7 +1631,8 @@ def task_list(request):
     filter_params = {
         key: value for key, value in {
             'task_id': task_id, 'site': site, 'pak_reference': pak_reference,
-            'serial_number': serial_number, 'customer': customer_id, 'technician': technician_id,
+            'serial_number': serial_number, 'customer': customer_id, 'customer_name': customer_name,
+            'technician': technician_id,
             'shipping_company': shipping_company,
             'scheduled_from': request.GET.get('scheduled_from', ''),
             'scheduled_to': request.GET.get('scheduled_to', ''),
@@ -1660,7 +1668,7 @@ def task_list(request):
         'customers': customers.order_by('name'),
         'technicians': technicians.order_by('full_name'),
         'shipping_company_choices': ShippingCompany.choices,
-        'selected_customer': customer_id,
+        'selected_customer': customer_id, 'customer_name': customer_name,
         'selected_technician': technician_id,
         'selected_shipping_company': shipping_company,
         'scheduled_from': request.GET.get('scheduled_from', ''),
@@ -2162,6 +2170,10 @@ def task_detail(request, pk):
         'close_task_form': close_task_form,
         'cancel_task_form': cancel_task_form,
         'rebook_form': rebook_form,
+        # The lead's confirmation (the "accepted" tap): who and when, shown under the status.
+        'confirmed_event': task.events.filter(event_type=TaskEvent.EventType.ACCEPTED).select_related(
+            'actor__technician',
+        ).order_by('-occurred_at').first() if task.status == Task.Status.ACCEPTED else None,
         # Why it stopped, in the technician's words (shown with "Book a new visit").
         'stop_reason': task.events.filter(event_type=TaskEvent.EventType.BLOCKED).order_by('-occurred_at')
         .values_list('note', flat=True).first() if task.status == Task.Status.BLOCKED else '',
@@ -2841,7 +2853,8 @@ def ticket_status(request, token):
         raise PermissionDenied
     can_reply = _ticket_is_open(ticket)
     reply_form = TicketReplyForm()
-    notify_customer.seen(customer, ticket=ticket)
+    if not request.viewing_as:  # an admin viewing as them doesn't read their bell for them
+        notify_customer.seen(customer, ticket=ticket)
 
     if request.method == 'POST' and can_reply:
         reply_form = TicketReplyForm(request.POST, request.FILES)
@@ -2912,6 +2925,8 @@ def ticket_list(request):
     site = request.GET.get('site', '').strip()
     pak = request.GET.get('pak', '').strip()
     customer_id = request.GET.get('customer', '')
+    # Typed (any part of the name): the customer we have, or the company the request named.
+    customer_name = request.GET.get('customer_name', '').strip()
     date = parse_date(request.GET.get('date', '') or '')
     about = request.GET.get('about', '')
     need = request.GET.get('need', '')
@@ -2946,6 +2961,9 @@ def ticket_list(request):
         # task_create uses to find it.
         customer = get_object_or_404(customers, pk=customer_id)
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
+        customer_name = customer_name or customer.name
+    elif customer_name:
+        tickets = tickets.filter(Q(customer__name__icontains=customer_name) | Q(company_name__icontains=customer_name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     if about in CustomerTicket.About.values:
@@ -2957,6 +2975,7 @@ def ticket_list(request):
     filter_params = {
         key: value for key, value in {
             'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak, 'customer': customer_id,
+            'customer_name': customer_name,
             'date': request.GET.get('date', ''), 'country': 'all' if all_countries else '', 'about': about,
             'need': need,
         }.items() if value
@@ -2971,7 +2990,7 @@ def ticket_list(request):
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
         'date': request.GET.get('date', ''),
         'customers': customers.order_by('name'),
-        'selected_customer': customer_id,
+        'selected_customer': customer_id, 'customer_name': customer_name,
         'filter_qs': urlencode(filter_params),
         'can_view_all_countries': can_view_all_countries,
         'all_countries': all_countries,

@@ -52,7 +52,7 @@
             <input type="hidden" name="action" value="{{ task.next_action }}">
             <input type="hidden" name="next" value="today">
             <button type="submit" class="button">
-                {% if task.next_action == 'accept' %}{% translate "Accept task" %}
+                {% if task.next_action == 'accept' %}{% translate "Confirm task" %}
                 {% elif task.next_action == 'en_route' %}{% translate "Heading to site" %}
                 {% elif task.next_action == 'arrive' %}{% translate "I have arrived" %}
                 {% elif task.next_action == 'start' %}{% translate "Start work" %}{% endif %}

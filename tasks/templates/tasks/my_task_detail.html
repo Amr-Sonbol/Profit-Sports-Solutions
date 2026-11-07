@@ -95,7 +95,7 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ next_action }}">
             <button type="submit" class="button">
-                {% if next_action == 'accept' %}{% translate "Accept task" %}
+                {% if next_action == 'accept' %}{% translate "Confirm task" %}
                 {% elif next_action == 'en_route' %}{% translate "Heading to site" %}
                 {% elif next_action == 'arrive' %}{% translate "I have arrived" %}
                 {% elif next_action == 'start' %}{% translate "Start work" %}

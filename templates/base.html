@@ -223,6 +223,16 @@
             </nav>
         {% endif %}
     </header>
+    {% if request.viewing_as %}
+    {# An admin seeing the portal as this customer (view only); always a way back. #}
+    <div class="view-as-bar" role="status">
+        <span>{% blocktranslate with name=request.viewing_as.name %}You're viewing the portal as <strong>{{ name }}</strong> · view only, nothing is sent to them{% endblocktranslate %}</span>
+        <form method="post" action="{% url 'customers:view_as_stop' %}">
+            {% csrf_token %}
+            <button type="submit" class="view-as-bar__back">{% translate "Back to admin" %}</button>
+        </form>
+    </div>
+    {% endif %}
     <main class="page">
         {# Not where there's nowhere to go back to (spots.context_processors.page_back). #}
         {% if show_page_back %}

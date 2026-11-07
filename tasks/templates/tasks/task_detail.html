@@ -14,6 +14,10 @@
         <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
     </div>
 </div>
+{# Who confirmed the job, and when — while it's confirmed and not started yet. #}
+{% if confirmed_event %}
+<p class="muted task-confirmed">{% blocktranslate with name=confirmed_event.actor.technician.full_name|default:confirmed_event.actor.get_username when=confirmed_event.occurred_at|date:"j M, P" %}Confirmed by {{ name }} · {{ when }}{% endblocktranslate %}</p>
+{% endif %}
 {% if departed_on_task %}
 <p class="flash flash--error">
     {% translate "A member of this task team has left the company." %}

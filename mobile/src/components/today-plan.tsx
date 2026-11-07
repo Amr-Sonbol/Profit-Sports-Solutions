@@ -12,7 +12,7 @@ import type { ScheduleItem, TodayPlan } from '@/types';
 
 // The lead's next tap — the same buttons as the task screen.
 const ACTION_LABELS: Record<string, string> = {
-  accept: 'Accept task',
+  accept: 'Confirm task',
   en_route: 'Heading to site',
   arrive: 'I have arrived',
   start: 'Start work',

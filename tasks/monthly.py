@@ -172,11 +172,31 @@ def _top_customers(sets, limit=10):
 
 
 def _still_open(tasks):
-    labels = dict(Task.Status.choices)
+    """This month's tasks not finished yet, in the schedule's plain groups:
+    missed (its day passed, not started), stopped on site (blocked), in
+    progress, planned (booked, not started — or no day yet)."""
+    today = timezone.localdate()
+    counts = {'missed': 0, 'stopped': 0, 'in_progress': 0, 'planned': 0}
+    planned = {Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED}
+    for status, scheduled_for, scheduled_date in tasks.exclude(
+        status__in=DONE + (Task.Status.CANCELLED,),
+    ).values_list('status', 'scheduled_for', 'scheduled_date'):
+        day = timezone.localtime(scheduled_for).date() if scheduled_for else scheduled_date
+        if status == Task.Status.BLOCKED:
+            counts['stopped'] += 1
+        elif status == Task.Status.IN_PROGRESS:
+            counts['in_progress'] += 1
+        elif status in planned and day is not None and day < today:
+            counts['missed'] += 1
+        else:
+            counts['planned'] += 1
+    labels = [
+        ('missed', _('Missed'), True), ('stopped', _('Stopped on site'), True),
+        ('in_progress', _('In progress'), False), ('planned', _('Planned'), False),
+    ]
     return [
-        {'label': labels.get(row['status'], row['status']), 'count': row['n']}
-        for row in tasks.exclude(status__in=DONE + (Task.Status.CANCELLED,)).values('status')
-        .annotate(n=Count('pk')).order_by('-n')
+        {'label': label, 'count': counts[key], 'attention': attention}
+        for key, label, attention in labels if counts[key]
     ]
 
 

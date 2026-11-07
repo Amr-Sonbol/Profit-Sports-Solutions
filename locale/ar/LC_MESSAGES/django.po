@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 10:59+0000\n"
+"POT-Creation-Date: 2026-11-07 11:53+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -527,12 +527,6 @@ msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آ�
 msgid "About"
 msgstr "الموضوع"
 
-msgid "Accept task"
-msgstr "قبول المهمة"
-
-msgid "Accepted"
-msgstr "مقبولة"
-
 msgid "Access notes"
 msgstr "ملاحظات الدخول"
 
@@ -730,9 +724,6 @@ msgstr "تم اختبار جميع الأجهزة للتأكد من سلامة �
 msgid "All open tasks have been scheduled."
 msgstr "تمت جدولة جميع المهام المفتوحة."
 
-msgid "All shipping companies"
-msgstr "كل شركات الشحن"
-
 msgid "All staff accounts are created here. Please select the role first: technician, supervisor, manager, Country Support Manager, Technical Support Manager, Warehouse Manager, Operations Manager or administrator."
 msgstr "يتم إنشاء جميع حسابات الموظفين من هنا. يرجى اختيار الدور أولاً: فني، أو مشرف، أو مدير، أو مدير الدعم في الدولة، أو مدير الدعم الفني، أو مدير المستودع، أو مدير العمليات، أو مسؤول النظام."
 
@@ -900,6 +891,9 @@ msgstr "بانتظار قرارك"
 
 msgid "Back"
 msgstr "رجوع"
+
+msgid "Back to admin"
+msgstr "العودة إلى الإدارة"
 
 msgid "Back to all countries — schedule"
 msgstr "العودة إلى جدول كل الدول"
@@ -1141,6 +1135,9 @@ msgstr "اختر…"
 msgid "Clash: %(number)s at %(start)s"
 msgstr "تعارض: %(number)s الساعة %(start)s"
 
+msgid "Clear"
+msgstr "مسح"
+
 msgid "Clear signature"
 msgstr "مسح التوقيع"
 
@@ -1189,12 +1186,6 @@ msgstr "دليل الألوان"
 msgid "Comments (optional)"
 msgstr "تعليقات (اختياري)"
 
-msgid "Company"
-msgstr "الشركة"
-
-msgid "Company (as entered)"
-msgstr "الشركة (كما أُدخلت)"
-
 msgid "Completed"
 msgstr "مكتملة"
 
@@ -1235,6 +1226,9 @@ msgstr "تأكيد كلمة المرور الجديدة"
 msgid "Confirm reassignment"
 msgstr "تأكيد إعادة الإسناد"
 
+msgid "Confirm task"
+msgstr "تأكيد المهمة"
+
 msgid "Confirm technician skill levels"
 msgstr "اعتماد مستويات مهارات الفنيين"
 
@@ -1250,6 +1244,16 @@ msgstr "معتمد"
 #, python-format
 msgid "Confirmed by %(name)s"
 msgstr "اعتمده %(name)s"
+
+#, python-format
+msgid "Confirmed by %(name)s · %(when)s"
+msgstr "أكّدها %(name)s · %(when)s"
+
+msgid "Confirmed by technician"
+msgstr "أكّدها الفني"
+
+msgid "Confirmed the task"
+msgstr "أكّد المهمة"
 
 #, python-format
 msgid "Confirming your upcoming Profit Sports Solutions visit — %(number)s"
@@ -2237,6 +2241,9 @@ msgstr "الإبلاغ عن إهمال"
 msgid "Flooring"
 msgstr "الأرضيات"
 
+msgid "Follow-up needed"
+msgstr "تلزم متابعة"
+
 #, python-format
 msgid "Follow-up of %(number)s: the machines still to install."
 msgstr "متابعة للمهمة %(number)s: الأجهزة المتبقية للتركيب."
@@ -2794,8 +2801,8 @@ msgstr "تم تسجيل التوقف لهذا اليوم."
 msgid "Marked as unavailable."
 msgstr "تم التعيين كغير متاح."
 
-msgid "Median time to accept a task"
-msgstr "الوسيط الزمني لقبول المهمة"
+msgid "Median time to confirm a task"
+msgstr "الوسيط الزمني لتأكيد المهمة"
 
 msgid "Menu"
 msgstr "القائمة"
@@ -3146,6 +3153,9 @@ msgstr "لا توجد أجهزة في هذا المستودع."
 msgid "No machines match your search."
 msgstr "لا توجد أجهزة مطابقة لبحثك."
 
+msgid "No machines yet."
+msgstr "لا توجد أجهزة بعد."
+
 msgid "No messages."
 msgstr "لا توجد رسائل."
 
@@ -3206,6 +3216,9 @@ msgstr "لا توجد لوحة رقم تسلسلي مقروءة"
 msgid "No reports yet. A visit's report appears here once our team has finished."
 msgstr "لا توجد تقارير بعد. يظهر تقرير الزيارة هنا عندما ينتهي فريقنا."
 
+msgid "No requests yet."
+msgstr "لا توجد طلبات بعد."
+
 msgid "No serial number on record"
 msgstr "لا يوجد رقم تسلسلي مسجل"
 
@@ -3239,6 +3252,9 @@ msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
 msgid "No tasks this month."
 msgstr "لا توجد مهام هذا الشهر."
 
+msgid "No tasks yet."
+msgstr "لا توجد مهام بعد."
+
 msgid "No technician yet"
 msgstr "لا فني بعد"
 
@@ -3250,6 +3266,9 @@ msgstr "لا توجد تذاكر مطابقة لعوامل التصفية الم
 
 msgid "No visit is booked at the moment. We will let you know as soon as one is."
 msgstr "لا توجد زيارة محجوزة حاليًا. سنخبرك فور حجز زيارة."
+
+msgid "No visit reports yet."
+msgstr "لا توجد تقارير زيارات بعد."
 
 msgid "No visits are planned at the moment."
 msgstr "لا توجد زيارات مخطط لها حاليًا."
@@ -3961,6 +3980,9 @@ msgstr "قيّم هذه الزيارة"
 msgid "Rated %(rating)s/5"
 msgstr "التقييم %(rating)s/5"
 
+msgid "Rating"
+msgstr "التقييم"
+
 msgid "Reactivate"
 msgstr "إعادة التفعيل"
 
@@ -4153,6 +4175,9 @@ msgstr "الأرقام التسلسلية المُبلَّغ عنها"
 msgid "Reports"
 msgstr "التقارير"
 
+msgid "Reports & ratings"
+msgstr "التقارير والتقييمات"
+
 msgid "Reports awaiting your approval"
 msgstr "تقارير بانتظار موافقتك"
 
@@ -4307,6 +4332,9 @@ msgstr "نفس ساعات التقرير"
 msgid "Satisfaction"
 msgstr "الرضا"
 
+msgid "Satisfaction (out of 5)"
+msgstr "الرضا (من 5)"
+
 msgid "Saturday"
 msgstr "السبت"
 
@@ -4409,11 +4437,23 @@ msgstr "البحث بالاسم أو اسم الدخول أو البريد ال�
 msgid "Search by serial, model, brand, site, or customer"
 msgstr "ابحث بالرقم التسلسلي أو الطراز أو العلامة التجارية أو الموقع أو العميل"
 
+msgid "See all in Machines"
+msgstr "عرض الكل في الأجهزة"
+
+msgid "See all in Tasks"
+msgstr "عرض الكل في المهام"
+
+msgid "See all in Tickets"
+msgstr "عرض الكل في التذاكر"
+
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
 
 msgid "See the week"
 msgstr "عرض الأسبوع"
+
+msgid "See their portal exactly as they do: view only, their password untouched, nothing sent to them."
+msgstr "شاهد بوابتهم كما يرونها تمامًا: للعرض فقط، دون المساس بكلمة المرور، ودون إرسال أي شيء إليهم."
 
 msgid "Segment"
 msgstr "الفئة"
@@ -5245,6 +5285,9 @@ msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً."
 msgid "This customer can sign in as “%(username)s” to view their tickets and service history."
 msgstr "يمكن لهذا العميل تسجيل الدخول باسم «%(username)s» للاطلاع على تذاكره وسجل الخدمة."
 
+msgid "This customer has no active portal login to view."
+msgstr "لا يملك هذا العميل حسابًا نشطًا في البوابة لعرضه."
+
 msgid "This customer's report is in Arabic. Use the lists where you can; write anything you type in Arabic."
 msgstr "تقرير هذا العميل باللغة العربية. استخدم القوائم قدر الإمكان، واكتب أي نص إضافي باللغة العربية."
 
@@ -5535,6 +5578,9 @@ msgstr "الثلاثاء"
 msgid "Type"
 msgstr "النوع"
 
+msgid "Type a name"
+msgstr "اكتب اسمًا"
+
 msgid "Type of ticket"
 msgstr "نوع التذكرة"
 
@@ -5622,6 +5668,9 @@ msgstr "عرض الكل (%(count)s)"
 msgid "View and edit customers and sites"
 msgstr "عرض العملاء والفروع وتعديلهم"
 
+msgid "View as customer"
+msgstr "العرض بصفة العميل"
+
 msgid "View board"
 msgstr "عرض اللوحة"
 
@@ -5636,6 +5685,9 @@ msgstr "عرض السجل"
 
 msgid "View machines and their task/ticket history"
 msgstr "عرض الأجهزة وسجل مهامها وطلباتها"
+
+msgid "View only: nothing can be sent or changed while viewing as a customer."
+msgstr "للعرض فقط: لا يمكن إرسال أو تغيير أي شيء أثناء العرض بصفة عميل."
 
 msgid "View or edit report"
 msgstr "عرض أو تعديل التقرير"
@@ -6023,6 +6075,10 @@ msgstr "قيّمتنا بـ %(rating)s/5"
 #, python-format
 msgid "You sign in with <strong dir=\"ltr\">%(email)s</strong>. To change it, enter the new address and your password: we send a confirmation link there, and the change happens once you open it."
 msgstr "تسجّل الدخول باستخدام <strong dir=\"ltr\">%(email)s</strong>. لتغييره، أدخل العنوان الجديد وكلمة المرور: سنرسل رابط تأكيد إليه، ويتم التغيير بمجرد فتحه."
+
+#, python-format
+msgid "You're viewing the portal as <strong>%(name)s</strong> · view only, nothing is sent to them"
+msgstr "أنت تعرض البوابة بصفة <strong>%(name)s</strong> · للعرض فقط، ولا يُرسل إليهم أي شيء"
 
 msgid "Your Profit Sports Solutions password has been changed"
 msgstr "تم تغيير كلمة مرور Profit Sports Solutions الخاصة بك"
@@ -7420,8 +7476,17 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "A problem with a machine"
 #~ msgstr "مشكلة في جهاز"
 
+#~ msgid "Accept task"
+#~ msgstr "قبول المهمة"
+
+#~ msgid "Accepted"
+#~ msgstr "مقبولة"
+
 #~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 #~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
+
+#~ msgid "All shipping companies"
+#~ msgstr "كل شركات الشحن"
 
 #~ msgid "Attachment"
 #~ msgstr "مرفق"
@@ -7465,6 +7530,12 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Coming up"
 #~ msgstr "القادم"
+
+#~ msgid "Company"
+#~ msgstr "الشركة"
+
+#~ msgid "Company (as entered)"
+#~ msgstr "الشركة (كما أُدخلت)"
 
 #~ msgid "Couldn't access the site"
 #~ msgstr "تعذّر دخول الموقع"

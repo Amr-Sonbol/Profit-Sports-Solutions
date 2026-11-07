@@ -141,7 +141,7 @@
             </dd>
         </div>
         <div>
-            <dt>{% translate "Median time to accept a task" %}</dt>
+            <dt>{% translate "Median time to confirm a task" %}</dt>
             <dd>
                 {% if reliability.acceptance_latency_minutes is not None %}
                     {% blocktranslate with minutes=reliability.acceptance_latency_minutes %}{{ minutes }} minutes{% endblocktranslate %}

@@ -100,7 +100,8 @@ class Task(models.Model):
     class Status(models.TextChoices):
         NEW = 'new', _('New')
         ASSIGNED = 'assigned', _('Assigned')
-        ACCEPTED = 'accepted', _('Accepted')
+        # The lead has seen the job and confirmed it — an acknowledgment, not a choice to accept or refuse.
+        ACCEPTED = 'accepted', _('Confirmed by technician')
         IN_PROGRESS = 'in_progress', _('In progress')
         PENDING_SUPERVISOR_REVIEW = 'pending_supervisor_review', _('Pending supervisor review')
         COMPLETED = 'completed', _('Completed')
@@ -965,7 +966,7 @@ class TaskEvent(models.Model):
         SCHEDULE_CHANGE_REQUESTED = 'schedule_change_requested', _('Schedule change requested')
         SCHEDULE_CHANGE_APPROVED = 'schedule_change_approved', _('Schedule change approved')
         SCHEDULE_CHANGE_DENIED = 'schedule_change_denied', _('Schedule change denied')
-        ACCEPTED = 'accepted', _('Accepted')
+        ACCEPTED = 'accepted', _('Confirmed the task')
         EN_ROUTE = 'en_route', _('En route')
         ARRIVED = 'arrived', _('Arrived')
         BLOCKED = 'blocked', _('Blocked')

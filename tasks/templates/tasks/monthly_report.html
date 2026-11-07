@@ -131,7 +131,7 @@
             <h2>{% translate "This month's tasks still open" %}</h2>
             <table class="mreport-table">
                 <tbody>
-                    {% for row in still_open %}<tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                    {% for row in still_open %}<tr{% if row.attention %} class="mreport-row--attention"{% endif %}><td>{{ row.label }}{% if row.attention %} ⚠{% endif %}</td><td>{{ row.count }}</td></tr>
                     {% empty %}<tr><td class="empty-state">{% translate "Every task opened this month is finished." %}</td></tr>{% endfor %}
                 </tbody>
             </table>

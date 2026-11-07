@@ -92,8 +92,12 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'spots.middleware.TechnicianLocaleMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # An admin viewing the portal as a customer (customers.views.view_as_start):
+    # after messages (it uses them), before the language and timezone, so those
+    # are the customer's.
+    'spots.middleware.ViewAsCustomerMiddleware',
+    'spots.middleware.TechnicianLocaleMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Must be last — axes needs to see what every other middleware
     # already did to the request/response before it decides whether

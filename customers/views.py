@@ -9,7 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Max, Q
+from django.db.models import Avg, Count, Max, Q
 from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -148,8 +148,89 @@ def customer_detail(request, pk):
             messages.success(request, _('Site added.'))
             return redirect('customers:customer_detail', pk=customer.pk)
 
-    context = {'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin}
+    context = {
+        'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
+        **_customer_overview(request, customer),
+    }
     return render(request, 'customers/customer_detail.html', context)
+
+
+CUSTOMER_TABS = ('sites', 'requests', 'tasks', 'machines', 'reports')
+CUSTOMER_TAB_ROWS = 25
+
+
+@login_required
+def view_as_start(request, pk):
+    """Admin only: see the portal exactly as this customer does, to check a
+    complaint (spots.middleware.ViewAsCustomerMiddleware) — view only, their
+    password untouched, nothing sent to them; recorded in the Audit log."""
+    from spots.middleware import VIEW_AS_SESSION_KEY
+
+    technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    if technician.role != Technician.Role.ADMIN or request.method != 'POST':
+        raise PermissionDenied
+    customer = get_object_or_404(Customer.objects.select_related('user'), pk=pk)
+    if customer.user is None or not customer.user.is_active:
+        messages.error(request, _('This customer has no active portal login to view.'))
+        return redirect('customers:customer_detail', pk=customer.pk)
+    log_account_action(request, customer, f'Admin viewed the portal as this customer ({request.user.get_username()})')
+    request.session[VIEW_AS_SESSION_KEY] = customer.pk
+    return redirect('customers:portal_home')
+
+
+@login_required
+def view_as_stop(request):
+    """Back from viewing as a customer to the admin's own pages, on that
+    customer's page."""
+    from spots.middleware import VIEW_AS_SESSION_KEY
+
+    customer_id = request.session.pop(VIEW_AS_SESSION_KEY, None)
+    if customer_id:
+        return redirect('customers:customer_detail', pk=customer_id)
+    return redirect('home')
+
+
+def _customer_overview(request, customer):
+    """Everything about one customer for a manager or admin, on its page:
+    headline numbers, then one tab at a time (?tab=) — its sites, requests,
+    tasks, machines, or visit reports with their ratings — each the latest
+    CUSTOMER_TAB_ROWS, the full list a link away."""
+    from reports.models import CustomerFeedback, WorkReport
+
+    requests = CustomerTicket.objects.filter(customer=customer, kind=CustomerTicket.Kind.CUSTOMER)
+    tasks = Task.objects.filter(site__customer=customer)
+    machines = Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED)
+    ratings = CustomerFeedback.objects.filter(task__site__customer=customer, rating__isnull=False)
+    open_task_statuses = [
+        Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED,
+    ]
+    rating = ratings.aggregate(average=Avg('rating'), count=Count('pk'))
+    tab = request.GET.get('tab') if request.GET.get('tab') in CUSTOMER_TABS else 'sites'
+    overview = {
+        'tab': tab,
+        'open_requests': requests.filter(status=CustomerTicket.Status.NEW).count(),
+        'open_tasks': tasks.filter(status__in=open_task_statuses).count(),
+        'machine_count': machines.count(),
+        'rating_average': round(rating['average'], 1) if rating['average'] is not None else None,
+        'rating_count': rating['count'],
+        'counts': {
+            'sites': customer.sites.count(), 'requests': requests.count(), 'tasks': tasks.count(),
+            'machines': machines.count(), 'reports': WorkReport.objects.filter(task__site__customer=customer).count(),
+        },
+    }
+    if tab == 'requests':
+        overview['rows'] = requests.select_related('site', 'task').order_by('-submitted_at')[:CUSTOMER_TAB_ROWS]
+    elif tab == 'tasks':
+        overview['rows'] = tasks.select_related('site', 'task_type').order_by('-reported_at')[:CUSTOMER_TAB_ROWS]
+    elif tab == 'machines':
+        overview['rows'] = machines.select_related('site', 'brand').order_by(
+            'site__name', 'model_name',
+        )[:CUSTOMER_TAB_ROWS]
+    elif tab == 'reports':
+        overview['rows'] = WorkReport.objects.filter(task__site__customer=customer).select_related(
+            'task__site', 'task__task_type', 'task__feedback',
+        ).order_by('-submitted_at')[:CUSTOMER_TAB_ROWS]
+    return overview
 
 
 @login_required
@@ -706,7 +787,8 @@ def portal_visit(request, pk):
     if setup:
         return setup
     task = get_object_or_404(Task.objects.select_related('site', 'task_type'), pk=pk, site__customer=customer)
-    notify.seen(customer, task=task)
+    if not request.viewing_as:  # an admin viewing as them doesn't read their bell for them
+        notify.seen(customer, task=task)
     report = getattr(task, 'report', None)
     feedback = getattr(task, 'feedback', None)
     can_rate = report is not None and task.status in DONE_STATUSES and not (feedback and feedback.submitted_at)
