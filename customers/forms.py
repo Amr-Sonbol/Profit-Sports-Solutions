@@ -119,10 +119,20 @@ class SiteCreateForm(forms.ModelForm):
 
     class Meta:
         model = Site
-        fields = ['name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes']
+        fields = [
+            'name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes',
+            'warranty_start', 'warranty_until',
+        ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 2}),
             'access_notes': forms.Textarea(attrs={'rows': 2}),
+            'warranty_start': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'warranty_until': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+        }
+        help_texts = {
+            'warranty_start': _('Normally the installation or handover date. Everything at this branch is free '
+                                'while under warranty.'),
+            'warranty_until': _('Left empty, it is set to two years after the start.'),
         }
 
     def __init__(self, *args, customer=None, **kwargs):
@@ -134,6 +144,39 @@ class SiteCreateForm(forms.ModelForm):
         if self.customer and Site.objects.filter(customer=self.customer, name__iexact=name).exists():
             raise forms.ValidationError(_('This customer already has a site with this name.'))
         return name
+
+
+class CustomerTermsForm(forms.ModelForm):
+    """A customer's commercial terms (managers and admins): the discount on
+    quotations, and the agreed shipping (per shipment) and service (per
+    visit) costs, with how long they last and where they come from."""
+
+    class Meta:
+        model = Customer
+        fields = ['quotation_discount', 'shipping_cost', 'service_cost', 'terms_valid_until', 'terms_note']
+        widgets = {
+            'terms_valid_until': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'terms_note': forms.Textarea(attrs={'rows': 2}),
+        }
+        help_texts = {
+            'quotation_discount': _('Off the quotation total. Empty: no discount agreed.'),
+            'shipping_cost': _('In the customer\'s country currency. Empty: not agreed.'),
+            'service_cost': _('In the customer\'s country currency. Empty: not agreed.'),
+        }
+
+
+class SiteTermsForm(forms.ModelForm):
+    """A branch's own commercial terms, where they differ from its
+    customer's (managers and admins); each left empty uses the customer's."""
+
+    class Meta:
+        model = Site
+        fields = ['quotation_discount', 'shipping_cost', 'service_cost']
+        help_texts = {
+            'quotation_discount': _("Empty: the customer's."),
+            'shipping_cost': _("Empty: the customer's."),
+            'service_cost': _("Empty: the customer's."),
+        }
 
 
 class SiteEditForm(forms.ModelForm):
@@ -153,10 +196,20 @@ class SiteEditForm(forms.ModelForm):
 
     class Meta:
         model = Site
-        fields = ['name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes']
+        fields = [
+            'name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes',
+            'warranty_start', 'warranty_until',
+        ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 2}),
             'access_notes': forms.Textarea(attrs={'rows': 2}),
+            'warranty_start': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'warranty_until': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+        }
+        help_texts = {
+            'warranty_start': _('Normally the installation or handover date. Everything at this branch is free '
+                                'while under warranty.'),
+            'warranty_until': _('Left empty, it is set to two years after the start.'),
         }
 
     def __init__(self, *args, **kwargs):

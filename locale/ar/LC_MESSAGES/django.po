@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 11:53+0000\n"
+"POT-Creation-Date: 2026-11-07 15:15+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -998,6 +998,9 @@ msgstr "تأكيد الزيارة الجديدة"
 msgid "Booked, not started yet."
 msgstr "محجوزة ولم تبدأ بعد."
 
+msgid "Branch"
+msgstr "الفرع"
+
 msgid "Branch name or city"
 msgstr "اسم الفرع أو المدينة"
 
@@ -1185,6 +1188,12 @@ msgstr "دليل الألوان"
 
 msgid "Comments (optional)"
 msgstr "تعليقات (اختياري)"
+
+msgid "Commercial terms"
+msgstr "الشروط التجارية"
+
+msgid "Commercial terms saved."
+msgstr "تم حفظ الشروط التجارية."
 
 msgid "Completed"
 msgstr "مكتملة"
@@ -2044,6 +2053,9 @@ msgstr "طارئ"
 msgid "Employment"
 msgstr "نوع التوظيف"
 
+msgid "Empty: the customer's."
+msgstr "فارغ: شروط العميل."
+
 msgid "En route"
 msgstr "في الطريق"
 
@@ -2216,6 +2228,9 @@ msgstr "تقديم التقرير"
 msgid "Files"
 msgstr "الملفات"
 
+msgid "Fill in only what differs from the customer's terms; anything left empty uses the customer's. Under warranty, everything at this branch is free."
+msgstr "املأ فقط ما يختلف عن شروط العميل؛ وما يُترك فارغًا تُطبَّق عليه شروط العميل. أثناء الضمان، كل شيء في هذا الفرع مجاني."
+
 msgid "Filtered by:"
 msgstr "مُصفّى حسب:"
 
@@ -2293,6 +2308,10 @@ msgstr "لون الإطار"
 
 msgid "Free"
 msgstr "متاح"
+
+#, python-format
+msgid "Free · under warranty until %(date)s"
+msgstr "مجاني · ضمان حتى %(date)s"
 
 msgid "Freelance"
 msgstr "مستقل"
@@ -2463,6 +2482,9 @@ msgstr "استيراد العملاء"
 msgid "In progress"
 msgstr "قيد التنفيذ"
 
+msgid "In the customer's country currency. Empty: not agreed."
+msgstr "بعملة بلد العميل. فارغ: غير متفق عليه."
+
 msgid "In this warehouse:"
 msgstr "في هذا المستودع:"
 
@@ -2606,6 +2628,9 @@ msgstr "اتركه فارغاً لاستخدام بيانات التواصل ا�
 
 msgid "Leave the contact fields blank to use the customer's own contact details."
 msgstr "اترك حقول التواصل فارغة لاستخدام بيانات التواصل الخاصة بالعميل."
+
+msgid "Left empty, it is set to two years after the start."
+msgstr "إذا تُرك فارغًا، يُحدَّد بعد سنتين من البداية."
 
 msgid "Left the company"
 msgstr "غادر الشركة"
@@ -3144,6 +3169,9 @@ msgstr "لم يتم إنشاء حساب دخول بعد. بعد إنشائه، �
 msgid "No login yet"
 msgstr "لا يوجد حساب دخول بعد"
 
+msgid "No longer on it"
+msgstr "لم يعد عليها"
+
 msgid "No machines are recorded. Add each machine you worked on."
 msgstr "لم تُسجَّل أي أجهزة. أضف كل جهاز عملت عليه."
 
@@ -3231,6 +3259,9 @@ msgstr "لم يتم إعداد أي مهارات."
 msgid "No spare parts in stock."
 msgstr "لا توجد قطع غيار في المخزون."
 
+msgid "No special terms"
+msgstr "لا شروط خاصة"
+
 msgid "No staff match the selected filters."
 msgstr "لا يوجد موظفون يطابقون عوامل التصفية المحددة."
 
@@ -3293,6 +3324,9 @@ msgstr "لا شيء — يتطلب كل موقع جهة تواصل خاصة به
 
 msgid "Normal"
 msgstr "عادية"
+
+msgid "Normally the installation or handover date. Everything at this branch is free while under warranty."
+msgstr "عادةً تاريخ التركيب أو التسليم. كل شيء في هذا الفرع مجاني أثناء الضمان."
 
 msgid "Not at the site"
 msgstr "ليس في الموقع"
@@ -3428,6 +3462,9 @@ msgstr "الرقم"
 
 msgid "Object"
 msgstr "العنصر"
+
+msgid "Off the quotation total. Empty: no discount agreed."
+msgstr "من إجمالي عرض السعر. فارغ: لا خصم متفق عليه."
 
 msgid "On"
 msgstr "مُفعّلة"
@@ -3961,6 +3998,10 @@ msgstr "روابط سريعة"
 msgid "Quotation"
 msgstr "عرض السعر"
 
+#, python-format
+msgid "Quotation −%(value)s%%"
+msgstr "عرض السعر −%(value)s%%"
+
 msgid "Rank"
 msgstr "الترتيب"
 
@@ -4362,6 +4403,12 @@ msgstr "حفظ كلمة المرور الجديدة"
 msgid "Save report"
 msgstr "حفظ التقرير"
 
+msgid "Save terms"
+msgstr "حفظ الشروط"
+
+msgid "Save this branch's terms"
+msgstr "حفظ شروط هذا الفرع"
+
 msgid "Say what is wrong with the damaged ones, or add a photo."
 msgstr "اذكر ما المشكلة في التالف، أو أضف صورة."
 
@@ -4448,6 +4495,9 @@ msgstr "عرض الكل في التذاكر"
 
 msgid "See full progress"
 msgstr "عرض التقدم الكامل"
+
+msgid "See the website exactly as they do: view only, their password untouched, nothing sent or marked read for them."
+msgstr "شاهد الموقع كما يراه تمامًا: للعرض فقط، دون المساس بكلمة المرور، ودون إرسال أي شيء إليه أو تعليمه كمقروء."
 
 msgid "See the week"
 msgstr "عرض الأسبوع"
@@ -4576,6 +4626,10 @@ msgstr "الرقم/الأرقام التسلسلية"
 msgid "Serial plate"
 msgstr "لوحة الرقم التسلسلي"
 
+#, python-format
+msgid "Service %(value)s %(currency)s / visit"
+msgstr "الخدمة %(value)s %(currency)s / زيارة"
+
 msgid "Service history"
 msgstr "سجل الصيانة"
 
@@ -4653,6 +4707,10 @@ msgstr "شحن قطعة"
 
 msgid "Shipping"
 msgstr "الشحن"
+
+#, python-format
+msgid "Shipping %(value)s %(currency)s"
+msgstr "الشحن %(value)s %(currency)s"
 
 msgid "Shipping address"
 msgstr "عنوان الشحن"
@@ -4980,6 +5038,13 @@ msgstr "أخبرنا بما تحتاج إليه"
 msgid "Temporary password"
 msgstr "كلمة المرور المؤقتة"
 
+msgid "Terms"
+msgstr "الشروط"
+
+#, python-format
+msgid "Terms expired %(date)s"
+msgstr "انتهت الشروط في %(date)s"
+
 msgid "Thank you for contacting us. Our team is reviewing your request and will reply here."
 msgstr "شكرًا لتواصلك معنا. يقوم فريقنا بمراجعة طلبك وسيرد عليك هنا."
 
@@ -5058,6 +5123,10 @@ msgstr "تم تحديد اليوم بتاريخ %(date)s. يرجى اختيار 
 
 msgid "The decision has been returned to the support desk."
 msgstr "تمت إعادة القرار إلى مكتب الدعم."
+
+#, python-format
+msgid "The discount on quotations, and the agreed shipping cost (per shipment) and service cost (per visit), in %(currency)s. A branch can have its own; a branch under warranty gets everything free."
+msgstr "الخصم على عروض الأسعار، وتكلفة الشحن المتفق عليها (لكل شحنة) وتكلفة الخدمة (لكل زيارة)، بعملة %(currency)s. يمكن أن يكون للفرع شروطه الخاصة، والفرع تحت الضمان يحصل على كل شيء مجانًا."
 
 #, python-format
 msgid "The email address %(email)s already belongs to another account."
@@ -5263,6 +5332,12 @@ msgstr "يصبح الزميل قائد المهمة؛ والمهام التي ك
 msgid "This account can only be changed by someone at the same level or above."
 msgstr "لا يمكن تعديل هذا الحساب إلا من قِبل شخص في المستوى نفسه أو أعلى."
 
+msgid "This branch's terms"
+msgstr "شروط هذا الفرع"
+
+msgid "This branch's terms saved."
+msgstr "تم حفظ شروط هذا الفرع."
+
 msgid "This can no longer be undone. Please ask a manager to correct the time."
 msgstr "لم يعد بالإمكان التراجع عن ذلك. يرجى مطالبة المدير بتصحيح الوقت."
 
@@ -5357,6 +5432,9 @@ msgstr "رابط إعادة تعيين كلمة المرور لم يعد صال�
 
 msgid "This person has left the company, so their login is disabled. Reactivate them from their record should they return."
 msgstr "غادر هذا الشخص الشركة، لذا فإن تسجيل دخوله معطّل. أعد تفعيله من سجله إذا عاد."
+
+msgid "This person has no active login to view, or is an admin."
+msgstr "لا يملك هذا الشخص حساب دخول نشطًا لعرضه، أو أنه مسؤول."
 
 #, python-format
 msgid "This report has been changed since the customer signed it on %(date)s. Please ask the customer to sign the updated report, or refer to the signed version."
@@ -5608,6 +5686,10 @@ msgstr "قيد المراجعة"
 msgid "Under supervision"
 msgstr "تحت الإشراف"
 
+#, python-format
+msgid "Under warranty · until %(date)s"
+msgstr "تحت الضمان · حتى %(date)s"
+
 msgid "Under way"
 msgstr "قيد التنفيذ"
 
@@ -5671,6 +5753,9 @@ msgstr "عرض العملاء والفروع وتعديلهم"
 msgid "View as customer"
 msgstr "العرض بصفة العميل"
 
+msgid "View as user"
+msgstr "العرض بصفة المستخدم"
+
 msgid "View board"
 msgstr "عرض اللوحة"
 
@@ -5686,8 +5771,8 @@ msgstr "عرض السجل"
 msgid "View machines and their task/ticket history"
 msgstr "عرض الأجهزة وسجل مهامها وطلباتها"
 
-msgid "View only: nothing can be sent or changed while viewing as a customer."
-msgstr "للعرض فقط: لا يمكن إرسال أو تغيير أي شيء أثناء العرض بصفة عميل."
+msgid "View only: nothing can be sent or changed while viewing as someone else."
+msgstr "للعرض فقط: لا يمكن إرسال أو تغيير أي شيء أثناء العرض بصفة شخص آخر."
 
 msgid "View or edit report"
 msgstr "عرض أو تعديل التقرير"
@@ -5785,6 +5870,9 @@ msgstr "الزيارات القادمة"
 msgid "Visits completed"
 msgstr "الزيارات المنجزة"
 
+msgid "Visits this month"
+msgstr "الزيارات هذا الشهر"
+
 msgid "Waiting for confirmation"
 msgstr "بانتظار التأكيد"
 
@@ -5802,6 +5890,23 @@ msgstr "مستودع الكميات"
 
 msgid "Warranty"
 msgstr "ضمان"
+
+msgid "Warranty date added to existing site"
+msgstr "تمت إضافة تاريخ الضمان إلى فرع موجود"
+
+#, python-format
+msgid "Warranty ended %(date)s"
+msgstr "انتهى الضمان في %(date)s"
+
+#, python-format
+msgid "Warranty ends in %(days)s day"
+msgid_plural "Warranty ends in %(days)s days"
+msgstr[0] "ينتهي الضمان اليوم"
+msgstr[1] "ينتهي الضمان خلال يوم واحد"
+msgstr[2] "ينتهي الضمان خلال يومين"
+msgstr[3] "ينتهي الضمان خلال %(days)s أيام"
+msgstr[4] "ينتهي الضمان خلال %(days)s يومًا"
+msgstr[5] "ينتهي الضمان خلال %(days)s يوم"
 
 msgid "We are arranging a visit for this request and will contact you to agree a date."
 msgstr "نقوم بترتيب زيارة لهذا الطلب وسنتواصل معك للاتفاق على موعد."
@@ -6079,6 +6184,10 @@ msgstr "تسجّل الدخول باستخدام <strong dir=\"ltr\">%(email)s</
 #, python-format
 msgid "You're viewing the portal as <strong>%(name)s</strong> · view only, nothing is sent to them"
 msgstr "أنت تعرض البوابة بصفة <strong>%(name)s</strong> · للعرض فقط، ولا يُرسل إليهم أي شيء"
+
+#, python-format
+msgid "You're viewing the website as <strong>%(name)s</strong> · view only, nothing is sent to them"
+msgstr "أنت تعرض الموقع بصفة <strong>%(name)s</strong> · للعرض فقط، ولا يُرسل إليه أي شيء"
 
 msgid "Your Profit Sports Solutions password has been changed"
 msgstr "تم تغيير كلمة مرور Profit Sports Solutions الخاصة بك"
@@ -6495,6 +6604,9 @@ msgstr "إرسال بريد لمشرف المهمة عند شحن القطع"
 msgid "employment type"
 msgstr "نوع التوظيف"
 
+msgid "empty: no end date"
+msgstr "فارغ: بلا تاريخ انتهاء"
+
 msgid "end date"
 msgstr "تاريخ الانتهاء"
 
@@ -6549,6 +6661,9 @@ msgstr "النتائج"
 
 msgid "for"
 msgstr "لـ"
+
+msgid "for example the contract or agreement these terms come from"
+msgstr "مثل العقد أو الاتفاقية التي جاءت منها هذه الشروط"
 
 msgid "for task"
 msgstr "للمهمة"
@@ -6695,6 +6810,9 @@ msgstr "الاسم (بالعربية)"
 
 msgid "need"
 msgstr "الاحتياج"
+
+msgid "normally the installation or handover date"
+msgstr "عادةً تاريخ التركيب أو التسليم"
 
 msgid "not on the delivery note — added by whoever did the step"
 msgstr "غير مذكور في إذن التسليم — أضافه من نفّذ الخطوة"
@@ -6850,6 +6968,9 @@ msgstr "الكمية"
 msgid "quotation"
 msgstr "عرض السعر"
 
+msgid "quotation discount (%)"
+msgstr "خصم عرض السعر (%)"
+
 msgid "quotation uploaded at"
 msgstr "وقت رفع عرض السعر"
 
@@ -6997,6 +7118,9 @@ msgstr "صورة ملصق الرقم التسلسلي"
 msgid "serial number(s)"
 msgstr "الرقم/الأرقام التسلسلية"
 
+msgid "service cost per visit"
+msgstr "تكلفة الخدمة لكل زيارة"
+
 msgid "set automatically from the signed-in customer's account"
 msgstr "يُعيَّن تلقائياً من حساب العميل المسجَّل الدخول"
 
@@ -7035,6 +7159,9 @@ msgstr "عنوان الشحن"
 
 msgid "shipping company"
 msgstr "شركة الشحن"
+
+msgid "shipping cost per shipment"
+msgstr "تكلفة الشحن لكل شحنة"
 
 msgid "shipping tracking number"
 msgstr "رقم تتبع الشحن"
@@ -7225,6 +7352,12 @@ msgstr "مهارات الفني"
 msgid "technicians"
 msgstr "الفنيون"
 
+msgid "terms note"
+msgstr "ملاحظة الشروط"
+
+msgid "terms valid until"
+msgstr "الشروط سارية حتى"
+
 msgid "the company's own account — its sites are our warehouses"
 msgstr "حساب الشركة الخاص — مواقعه هي مستودعاتنا"
 
@@ -7278,6 +7411,9 @@ msgstr "المهمة التي تتولى هذا الجهاز (زيارة أو ش
 
 msgid "the technician for a self-assessment; the supervisor for a review"
 msgstr "الفني في حالة التقييم الذاتي؛ والمشرف في حالة المراجعة"
+
+msgid "this branch"
+msgstr "هذا الفرع"
 
 msgid "this company's account or reference code, if any"
 msgstr "رمز الحساب أو المرجع الخاص بهذه الشركة، إن وُجد"
@@ -7348,6 +7484,9 @@ msgstr "رحلة"
 msgid "trips"
 msgstr "رحلات"
 
+msgid "two years after the start, unless agreed otherwise"
+msgstr "بعد سنتين من البداية ما لم يُتفق على غير ذلك"
+
 msgid "type"
 msgstr "النوع"
 
@@ -7386,6 +7525,19 @@ msgstr "لغة تقرير الزيارة"
 
 msgid "warehouse"
 msgstr "المستودع"
+
+msgid "warranty start"
+msgstr "بداية الضمان"
+
+msgid "warranty until"
+msgstr "الضمان حتى"
+
+#, python-format
+msgid "warranty_start \"%(value)s\" is not a date. Please write it as 2026-03-15 or 15/03/2026."
+msgstr "قيمة warranty_start «%(value)s» ليست تاريخًا. يُرجى كتابتها بصيغة 2026-03-15 أو 15/03/2026."
+
+msgid "warranty_start (optional) is the branch's installation date, e.g. 2026-03-15 or 15/03/2026: the warranty runs two years from it, and everything at that branch is free meanwhile. Re-uploading with dates added fills them in for branches that have none yet."
+msgstr "العمود warranty_start (اختياري) هو تاريخ تركيب الفرع، مثل 2026-03-15 أو 15/03/2026: يسري الضمان سنتين منه، وكل شيء في ذلك الفرع مجاني خلال تلك المدة. وإعادة رفع الملف مع التواريخ تملؤها للفروع التي لا تاريخ لها بعد."
 
 msgid "weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"
@@ -7662,9 +7814,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Waiting for review"
 #~ msgstr "بانتظار المراجعة"
 
-#~ msgid "Warranty end"
-#~ msgstr "نهاية الضمان"
-
 #~ msgid "What's wrong?"
 #~ msgstr "ما المشكلة؟"
 
@@ -7720,6 +7869,3 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "up to %(size)d MB"
 #~ msgstr "حتى %(size)d ميجابايت"
-
-#~ msgid "warranty end"
-#~ msgstr "نهاية الضمان"

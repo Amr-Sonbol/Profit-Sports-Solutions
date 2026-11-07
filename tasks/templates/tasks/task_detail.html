@@ -33,7 +33,10 @@
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Customer / Site" %}</dt>
-            <dd>{{ task.site.customer.name }} — {{ task.site.name }}</dd>
+            <dd>{{ task.site.customer.name }} — {{ task.site.name }}
+                {# The branch's warranty for everyone; its commercial terms for managers and admins. #}
+                {% with site=task.site %}<span class="terms-row">{% include "_warranty_label.html" %}{% if user.technician.is_manager_tier %} {% include "_terms_labels.html" %}{% endif %}</span>{% endwith %}
+            </dd>
         </div>
         <div>
             <dt>{% translate "Address" %}</dt>

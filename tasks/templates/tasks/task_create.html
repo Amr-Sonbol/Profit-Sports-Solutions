@@ -203,3 +203,29 @@
     {% endif %}
 </div>
 {% endblock %}
+
+{% block scripts %}
+{{ form.warranty_site_ids|json_script:"warranty-site-ids" }}
+<script>
+// A branch under warranty: everything is free, so billing switches to
+// Warranty when it's picked (still changeable, e.g. damage not covered).
+(function () {
+    var site = document.getElementById('id_site');
+    var billing = document.getElementById('id_billing_type');
+    var isWarranty = document.getElementById('id_is_warranty');
+    var ids = JSON.parse(document.getElementById('warranty-site-ids').textContent);
+    if (!site || !billing) {
+        return;
+    }
+    site.addEventListener('change', function () {
+        if (ids.indexOf(Number(site.value)) !== -1) {
+            billing.value = 'warranty';
+            if (isWarranty) {
+                isWarranty.value = 'true';
+                if (isWarranty.type === 'checkbox') { isWarranty.checked = true; }
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

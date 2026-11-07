@@ -23,7 +23,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, connection, transaction
 from django.db.models import (
-    Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
+    Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse
@@ -1454,6 +1454,24 @@ def home_summary(request, technician):
     }
 
 
+def technician_workload(technicians, country):
+    """Each technician's work still to do, by its day in `country`: today,
+    upcoming (later, or no date yet) and overdue (its day has passed). Work
+    done and waiting for review or closing doesn't count. {technician id:
+    {'today', 'upcoming', 'overdue'}}."""
+    to_do = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
+    country_zone = ZoneInfo(country.timezone)
+    today = timezone.now().astimezone(country_zone).date()
+    workload = {technician.id: {'today': 0, 'upcoming': 0, 'overdue': 0} for technician in technicians}
+    for technician_id, scheduled_for, scheduled_date in TaskAssignment.objects.filter(
+        technician__in=technicians, is_active=True, task__status__in=to_do,
+    ).values_list('technician_id', 'task__scheduled_for', 'task__scheduled_date'):
+        day = scheduled_for.astimezone(country_zone).date() if scheduled_for else scheduled_date
+        when = 'upcoming' if day is None or day > today else 'today' if day == today else 'overdue'
+        workload[technician_id][when] += 1
+    return workload
+
+
 def dashboard_overview(active_country):
     """The dashboard's figures for a country: its technicians (with their
     work still to do: today, upcoming, overdue), every open task in "needs someone first" order
@@ -1463,19 +1481,7 @@ def dashboard_overview(active_country):
     technicians = list(Technician.objects.filter(
         is_active=True, country=active_country, role=Technician.Role.TECHNICIAN,
     ).order_by('full_name'))
-    # Each technician's work still to do, by its day in this country: today,
-    # upcoming (later, or no date yet) and overdue (its day has passed).
-    # Work done and waiting for review or closing doesn't count.
-    to_do = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
-    country_zone = ZoneInfo(active_country.timezone)
-    today = timezone.now().astimezone(country_zone).date()
-    workload = {technician.id: {'today': 0, 'upcoming': 0, 'overdue': 0} for technician in technicians}
-    for technician_id, scheduled_for, scheduled_date in TaskAssignment.objects.filter(
-        technician__in=technicians, is_active=True, task__status__in=to_do,
-    ).values_list('technician_id', 'task__scheduled_for', 'task__scheduled_date'):
-        day = scheduled_for.astimezone(country_zone).date() if scheduled_for else scheduled_date
-        when = 'upcoming' if day is None or day > today else 'today' if day == today else 'overdue'
-        workload[technician_id][when] += 1
+    workload = technician_workload(technicians, active_country)
     for technician in technicians:
         technician.workload = workload[technician.id]
 
@@ -1767,11 +1773,13 @@ def task_detail(request, pk):
         pk, requesting_technician, get_active_country(request), 'site__customer__country',
     )
 
-    if requesting_technician.is_manager_tier:
+    # An admin viewing as someone else doesn't read their notifications or messages for them.
+    if requesting_technician.is_manager_tier and not request.viewing_as_user:
         task.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
-    TaskMessageRecipient.objects.filter(
-        message__task=task, technician=requesting_technician, seen_at__isnull=True,
-    ).update(seen_at=timezone.now())
+    if not request.viewing_as_user:
+        TaskMessageRecipient.objects.filter(
+            message__task=task, technician=requesting_technician, seen_at__isnull=True,
+        ).update(seen_at=timezone.now())
 
     message_form = TaskMessageForm()
     if request.method == 'POST' and request.POST.get('action') == 'add_message':
@@ -3045,7 +3053,7 @@ def ticket_review(request, pk):
         and (pending_escalation is None or holds_pending)
     )
 
-    if can_manage:
+    if can_manage and not request.viewing_as_user:
         ticket.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
 
     dismiss_form = DismissTicketForm()
@@ -4739,6 +4747,78 @@ def technician_hours_export(request):
     return response
 
 
+TECHNICIAN_TABS = ('tasks', 'reports')
+TECHNICIAN_TAB_ROWS = 25
+
+
+@login_required
+def technician_detail(request, pk):
+    """Everything about one staff member, for whoever oversees them: their
+    work still to do (today, upcoming, overdue), visits this month and
+    satisfaction, then their tasks or the reports they filed (?tab=), the
+    latest TECHNICIAN_TAB_ROWS — with their board, progress, skills and
+    edit a click away, and "View as user" for an admin.
+    """
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TECHNICIANS)
+    technician = _scoped_or_404(
+        _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
+    )
+    led = Task.objects.filter(assignments__technician=technician, assignments__role=TaskAssignment.Role.LEAD).distinct()
+    reports = WorkReport.objects.filter(task__in=led)
+    month_start = timezone.localdate().replace(day=1)
+    rating = CustomerFeedback.objects.filter(task__in=led, rating__isnull=False).aggregate(
+        average=Avg('rating'), count=Count('pk'),
+    )
+    tab = request.GET.get('tab') if request.GET.get('tab') in TECHNICIAN_TABS else 'tasks'
+    assignments = TaskAssignment.objects.filter(technician=technician)
+    context = {
+        'technician': technician, 'tab': tab,
+        'workload': technician_workload([technician], technician.country)[technician.id],
+        'visits_this_month': reports.filter(submitted_at__date__gte=month_start).count(),
+        'rating_average': round(rating['average'], 1) if rating['average'] is not None else None,
+        'rating_count': rating['count'],
+        'counts': {'tasks': assignments.values('task').distinct().count(), 'reports': reports.count()},
+        'can_view_as': (
+            requesting_technician.role == Technician.Role.ADMIN and technician.role != Technician.Role.ADMIN
+            and technician.user_id and technician.user.is_active
+        ),
+    }
+    if tab == 'tasks':
+        context['rows'] = assignments.select_related('task__site__customer', 'task__task_type').order_by(
+            '-task__reported_at', '-pk',
+        )[:TECHNICIAN_TAB_ROWS]
+    else:
+        context['rows'] = reports.select_related('task__site__customer', 'task__feedback').order_by(
+            '-submitted_at',
+        )[:TECHNICIAN_TAB_ROWS]
+    return render(request, 'tasks/technician_detail.html', context)
+
+
+@login_required
+def view_as_user_start(request, pk):
+    """Admin only: see the website exactly as this staff member does, to
+    check a complaint (spots.middleware.ViewAsCustomerMiddleware) — view
+    only, their password untouched, nothing sent or marked read for them;
+    recorded in the Audit log. Not another admin."""
+    from django.contrib.admin.models import CHANGE, LogEntry
+
+    from spots.middleware import VIEW_AS_USER_SESSION_KEY
+
+    admin = require_admin(request)
+    if request.method != 'POST':
+        raise PermissionDenied
+    technician = get_object_or_404(Technician.objects.select_related('user'), pk=pk)
+    if technician.role == Technician.Role.ADMIN or not technician.user_id or not technician.user.is_active:
+        messages.error(request, _('This person has no active login to view, or is an admin.'))
+        return redirect('tasks:technician_detail', pk=technician.pk)
+    LogEntry.objects.log_actions(
+        user_id=request.user.pk, queryset=[technician], action_flag=CHANGE, single_object=True,
+        change_message=f'Admin viewed the website as this person ({admin.full_name})',
+    )
+    request.session[VIEW_AS_USER_SESSION_KEY] = technician.user_id
+    return redirect('home')
+
+
 @login_required
 def technician_board(request, pk):
     """A supervisor's or manager's view of one person's schedule — the
@@ -5749,9 +5829,10 @@ def my_task_detail(request, pk):
     can_resume = is_paused
     undoable = undoable_tap(task, request.user) if is_lead else None
 
-    TaskMessageRecipient.objects.filter(
-        message__task=task, technician=technician, seen_at__isnull=True,
-    ).update(seen_at=timezone.now())
+    if not request.viewing_as_user:  # an admin viewing as them doesn't read their messages for them
+        TaskMessageRecipient.objects.filter(
+            message__task=task, technician=technician, seen_at__isnull=True,
+        ).update(seen_at=timezone.now())
 
     upload_form = TaskAttachmentUploadForm()
     block_form = BlockTaskForm()

@@ -1,8 +1,9 @@
 import secrets
 
 from django.conf import settings
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from people.models import Technician
@@ -36,6 +37,27 @@ class Customer(models.Model):
         _('portal color'), max_length=7, default='#c8c8c8',
         validators=[RegexValidator(r'^#[0-9a-fA-F]{6}$', _('Choose a color.'))],
         help_text=_("the customer's own color for their portal, as #RRGGBB"),
+    )
+    # Commercial terms, managers' and admins' only: the discount on
+    # quotations, and the agreed shipping (per shipment) and service (per
+    # visit) costs, in the customer's country currency. Empty: not agreed.
+    quotation_discount = models.DecimalField(
+        _('quotation discount (%)'), max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    shipping_cost = models.DecimalField(
+        _('shipping cost per shipment'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    service_cost = models.DecimalField(
+        _('service cost per visit'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    terms_valid_until = models.DateField(
+        _('terms valid until'), null=True, blank=True, help_text=_('empty: no end date'),
+    )
+    terms_note = models.TextField(
+        _('terms note'), blank=True, help_text=_('for example the contract or agreement these terms come from'),
     )
     contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
@@ -124,6 +146,12 @@ class Customer(models.Model):
             self.user.save(update_fields=['is_active'])
 
 
+# New customers and new branches: the warranty from installation, and when
+# to start warning that it's about to end.
+WARRANTY_YEARS = 2
+WARRANTY_SOON_DAYS = 60
+
+
 class Site(models.Model):
     customer = models.ForeignKey(
         Customer, on_delete=models.PROTECT, related_name='sites',
@@ -154,6 +182,30 @@ class Site(models.Model):
     location_source = models.CharField(
         _('location source'), max_length=10, choices=LocationSource.choices, blank=True,
     )
+    # The warranty on everything at this branch: new customers and new
+    # branches get WARRANTY_YEARS from installation. The end fills itself in
+    # from the start unless agreed otherwise.
+    warranty_start = models.DateField(
+        _('warranty start'), null=True, blank=True, help_text=_('normally the installation or handover date'),
+    )
+    warranty_until = models.DateField(
+        _('warranty until'), null=True, blank=True,
+        help_text=_('two years after the start, unless agreed otherwise'),
+    )
+    # This branch's own commercial terms, where they differ from its
+    # customer's; empty: the customer's (Site.commercial_terms).
+    quotation_discount = models.DecimalField(
+        _('quotation discount (%)'), max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    shipping_cost = models.DecimalField(
+        _('shipping cost per shipment'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    service_cost = models.DecimalField(
+        _('service cost per visit'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
 
     class Meta:
         verbose_name = _('site')
@@ -166,6 +218,58 @@ class Site(models.Model):
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
+
+    def save(self, *args, **kwargs):
+        if self.warranty_start and not self.warranty_until:
+            start = self.warranty_start
+            try:
+                self.warranty_until = start.replace(year=start.year + WARRANTY_YEARS)
+            except ValueError:  # 29 February
+                self.warranty_until = start.replace(year=start.year + WARRANTY_YEARS, day=28)
+        super().save(*args, **kwargs)
+
+    def warranty_state(self, today=None):
+        """'active', 'ending' (within WARRANTY_SOON_DAYS), 'ended', or None (no warranty recorded)."""
+        if not self.warranty_until:
+            return None
+        today = today or timezone.localdate()
+        if self.warranty_until < today:
+            return 'ended'
+        if self.warranty_start and self.warranty_start > today:
+            return None
+        return 'ending' if (self.warranty_until - today).days <= WARRANTY_SOON_DAYS else 'active'
+
+    @property
+    def commercial_terms(self):
+        """This branch's terms: each its own where set, else the customer's.
+        {'quotation_discount' | 'shipping_cost' | 'service_cost': (value or
+        None, 'branch' | 'customer'), 'currency', 'valid_until', 'expired',
+        'note', 'free'}. Under warranty everything is free (`free`), whatever
+        the terms; they apply again once it ends."""
+        customer = self.customer
+        terms = {}
+        for name in ('quotation_discount', 'shipping_cost', 'service_cost'):
+            own = getattr(self, name)
+            terms[name] = (own, 'branch') if own is not None else (getattr(customer, name), 'customer')
+        terms.update(
+            currency=customer.country.currency_code, valid_until=customer.terms_valid_until,
+            expired=bool(customer.terms_valid_until and customer.terms_valid_until < timezone.localdate()),
+            note=customer.terms_note,
+        )
+        terms['any'] = any(
+            terms[name][0] is not None for name in ('quotation_discount', 'shipping_cost', 'service_cost')
+        )
+        # Under warranty, everything is free: parts, shipping and service.
+        terms['free'] = self.under_warranty
+        return terms
+
+    @property
+    def under_warranty(self):
+        return self.warranty_state() in ('active', 'ending')
+
+    @property
+    def warranty_days_left(self):
+        return (self.warranty_until - timezone.localdate()).days if self.warranty_until else None
 
     @property
     def effective_contact_name(self):

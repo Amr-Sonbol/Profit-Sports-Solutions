@@ -136,6 +136,13 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['priority'].initial = Task.Priority.NORMAL
         self.fields['source'].initial = Task.Source.PHONE
         self.fields['billing_type'].initial = Task.BillingType.CHARGEABLE
+        # The branches under warranty now: picking one switches billing to
+        # warranty on the page (task_create.html), still changeable.
+        self.warranty_site_ids = [
+            site.pk for site in Site.objects.filter(
+                customer__is_active=True, customer__country=country, warranty_until__gte=timezone.localdate(),
+            ).only('pk', 'warranty_start', 'warranty_until') if site.under_warranty
+        ]
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
 
         # Coming from a customer ticket — hint the free-text fields with
@@ -164,6 +171,10 @@ class TaskCreateForm(forms.ModelForm):
                 self.fields['site'].initial = ticket.site_id
                 if not is_admin:
                     self.fields['site'].disabled = True
+                # A branch under warranty: everything is free — billed as warranty.
+                if ticket.site and ticket.site.under_warranty:
+                    self.fields['billing_type'].initial = Task.BillingType.WARRANTY
+                    self.fields['is_warranty'].initial = True
             else:
                 # No registered site to go on (an anonymous public
                 # submission) — best-effort match by name, same

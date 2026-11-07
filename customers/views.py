@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date
+from datetime import date, datetime
 
 from axes.utils import reset as axes_reset
 from django.contrib import messages
@@ -35,6 +35,7 @@ from .accounts import (
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
+    CustomerTermsForm, SiteTermsForm,
     CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
     PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm, QuickInviteForm,
     SiteCreateForm, SiteEditForm,
@@ -52,7 +53,22 @@ CUSTOMER_IMPORT_REQUIRED_COLUMNS = ['customer_name']
 CUSTOMER_IMPORT_COLUMNS = CUSTOMER_IMPORT_REQUIRED_COLUMNS + [
     'customer_contact_email', 'segment', 'customer_contact_name', 'customer_contact_phone',
     'site_name', 'site_address', 'site_contact_name', 'site_contact_phone', 'site_contact_email', 'access_notes',
+    'warranty_start',
 ]
+
+
+def _import_date(value):
+    """A date as spreadsheets write it — 2026-03-15, 15/03/2026 or 15-03-2026;
+    None when empty; ValueError when it can't be read."""
+    value = (value or '').strip()
+    if not value:
+        return None
+    for shape in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y'):
+        try:
+            return datetime.strptime(value, shape).date()
+        except ValueError:
+            continue
+    raise ValueError(value)
 
 # Avoids characters easy to mis-type or mis-read out loud/over chat: 0/O, 1/l/I.
 TEMPORARY_PASSWORD_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -138,8 +154,18 @@ def customer_detail(request, pk):
     is_admin = requesting_technician.role == Technician.Role.ADMIN
     customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
+    # Commercial terms: managers and admins only; every change to the Audit log.
+    can_see_terms = requesting_technician.is_manager_tier
+    terms_form = CustomerTermsForm(instance=customer) if can_see_terms else None
+    if request.method == 'POST' and request.POST.get('action') == 'terms' and can_see_terms:
+        terms_form = CustomerTermsForm(request.POST, instance=customer)
+        if terms_form.is_valid():
+            _save_terms_logged(request, terms_form, customer)
+            messages.success(request, _('Commercial terms saved.'))
+            return redirect(f"{reverse('customers:customer_detail', args=[customer.pk])}?tab=sites#terms")
+
     form = SiteCreateForm(customer=customer) if is_admin else None
-    if request.method == 'POST' and is_admin:
+    if request.method == 'POST' and is_admin and request.POST.get('action') != 'terms':
         form = SiteCreateForm(request.POST, customer=customer)
         if form.is_valid():
             site = form.save(commit=False)
@@ -150,6 +176,8 @@ def customer_detail(request, pk):
 
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
+        'can_see_terms': can_see_terms, 'terms_form': terms_form,
+        'today': timezone.localdate(),
         **_customer_overview(request, customer),
     }
     return render(request, 'customers/customer_detail.html', context)
@@ -180,13 +208,17 @@ def view_as_start(request, pk):
 
 @login_required
 def view_as_stop(request):
-    """Back from viewing as a customer to the admin's own pages, on that
-    customer's page."""
-    from spots.middleware import VIEW_AS_SESSION_KEY
+    """Back from viewing as a customer (or a staff member) to the admin's own
+    pages, on that customer's (or person's) page."""
+    from spots.middleware import VIEW_AS_SESSION_KEY, VIEW_AS_USER_SESSION_KEY
 
     customer_id = request.session.pop(VIEW_AS_SESSION_KEY, None)
+    user_id = request.session.pop(VIEW_AS_USER_SESSION_KEY, None)
     if customer_id:
         return redirect('customers:customer_detail', pk=customer_id)
+    technician = Technician.objects.filter(user_id=user_id).first() if user_id else None
+    if technician is not None:
+        return redirect('tasks:technician_detail', pk=technician.pk)
     return redirect('home')
 
 
@@ -309,16 +341,36 @@ def site_edit(request, pk):
     require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
     site = get_object_or_404(Site, pk=pk, customer__country=get_active_country(request))
 
-    if request.method == 'POST':
+    technician = request.user.technician
+    terms_form = SiteTermsForm(instance=site) if technician.is_manager_tier else None
+    form = SiteEditForm(instance=site)
+    if request.method == 'POST' and request.POST.get('action') == 'terms' and terms_form is not None:
+        terms_form = SiteTermsForm(request.POST, instance=site)
+        if terms_form.is_valid():
+            _save_terms_logged(request, terms_form, site.customer, branch=site)
+            messages.success(request, _('This branch\'s terms saved.'))
+            return redirect('customers:site_edit', pk=site.pk)
+    elif request.method == 'POST':
         form = SiteEditForm(request.POST, instance=site)
         if form.is_valid():
             form.save()
             messages.success(request, _('Site updated.'))
             return redirect('customers:customer_detail', pk=site.customer_id)
-    else:
-        form = SiteEditForm(instance=site)
 
-    return render(request, 'customers/site_edit.html', {'site': site, 'form': form})
+    return render(request, 'customers/site_edit.html', {'site': site, 'form': form, 'terms_form': terms_form})
+
+
+def _save_terms_logged(request, form, customer, branch=None):
+    """Save commercial terms and record each changed one in the Audit log,
+    from → to (money is involved)."""
+    changes = [
+        f'{form.fields[name].label}: {form.initial.get(name) or "—"} → {form.cleaned_data[name] or "—"}'
+        for name in form.changed_data
+    ]
+    form.save()
+    if changes:
+        where = f' (branch {branch.name})' if branch else ''
+        log_account_action(request, customer, f'Commercial terms changed{where}: ' + '; '.join(changes))
 
 
 def _import_customers_csv(csv_file, country):
@@ -351,6 +403,17 @@ def _import_customers_csv(csv_file, country):
         if site_name and not site_address:
             results.append({
                 **result, 'outcome': 'error', 'detail': _('site_address is required when site_name is given'),
+            })
+            continue
+
+        try:
+            warranty_start = _import_date(row.get('warranty_start'))
+        except ValueError:
+            results.append({
+                **result, 'outcome': 'error',
+                'detail': _(
+                    'warranty_start "%(value)s" is not a date. Please write it as 2026-03-15 or 15/03/2026.'
+                ) % {'value': row.get('warranty_start')},
             })
             continue
 
@@ -395,11 +458,19 @@ def _import_customers_csv(csv_file, country):
                     results.append({**result, 'outcome': outcome, 'detail': detail})
                     continue
 
-                if Site.objects.filter(customer=customer, name__iexact=site_name).exists():
-                    results.append({
-                        **result, 'outcome': 'skipped',
-                        'detail': _('This customer already has a site with this name'),
-                    })
+                existing = Site.objects.filter(customer=customer, name__iexact=site_name).first()
+                if existing is not None:
+                    if warranty_start and not existing.warranty_start:
+                        existing.warranty_start, existing.warranty_until = warranty_start, None
+                        existing.save()
+                        results.append({
+                            **result, 'outcome': 'created', 'detail': _('Warranty date added to existing site'),
+                        })
+                    else:
+                        results.append({
+                            **result, 'outcome': 'skipped',
+                            'detail': _('This customer already has a site with this name'),
+                        })
                     continue
 
                 site = Site(
@@ -408,6 +479,7 @@ def _import_customers_csv(csv_file, country):
                     contact_phone=(row.get('site_contact_phone') or '').strip(),
                     contact_email=(row.get('site_contact_email') or '').strip(),
                     access_notes=(row.get('access_notes') or '').strip(),
+                    warranty_start=warranty_start,
                 )
                 site.full_clean(exclude=['customer'])
                 site.save()
@@ -458,13 +530,14 @@ def customer_import_template(request):
     writer = csv.writer(response)
     writer.writerow(CUSTOMER_IMPORT_COLUMNS)
     # Name and email only — the customer completes the rest after the welcome email.
-    writer.writerow(['Gold Gym', 'info@goldgym.example', '', '', '', '', '', '', '', '', ''])
-    # Or with sites: one row per branch, sharing the customer name.
+    writer.writerow(['Gold Gym', 'info@goldgym.example', '', '', '', '', '', '', '', '', '', ''])
+    # Or with sites: one row per branch, sharing the customer name; warranty_start (optional) is the
+    # installation date — the warranty runs two years from it.
     writer.writerow([
         'Fitness First', 'ali@example.com', 'gym', 'Ali Manager', '0501234567',
-        'Marina Branch', 'Dubai Marina, near the mall', '', '', '', 'Gate code 1234',
+        'Marina Branch', 'Dubai Marina, near the mall', '', '', '', 'Gate code 1234', '2026-03-15',
     ])
-    writer.writerow(['Fitness First', '', 'gym', '', '', 'JBR Branch', 'JBR, near the beach', '', '', '', ''])
+    writer.writerow(['Fitness First', '', 'gym', '', '', 'JBR Branch', 'JBR, near the beach', '', '', '', '', ''])
     return response
 
 

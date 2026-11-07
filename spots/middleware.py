@@ -39,28 +39,33 @@ class TechnicianLocaleMiddleware:
 
 
 VIEW_AS_SESSION_KEY = 'view_as_customer'
+VIEW_AS_USER_SESSION_KEY = 'view_as_user'
 
 
 class ViewAsCustomerMiddleware:
-    """An admin seeing the portal exactly as one customer sees it, to check
-    a complaint — without touching the customer's account: no password
-    change, no login on their account, nothing sent to them.
+    """An admin seeing the site exactly as one customer, or one staff member,
+    sees it — to check a complaint — without touching that account: no
+    password change, no login on it, nothing sent, nothing marked read.
 
-    While the session holds VIEW_AS_SESSION_KEY (customers.views
-    view_as_start), each request runs as that customer's login
-    (`request.user`), with the admin kept as `request.real_user` and the
-    customer as `request.viewing_as`. View only: anything but reading is
-    refused, except stopping. A non-admin, or a customer without a login,
-    simply ends it.
+    While the session holds VIEW_AS_SESSION_KEY (a customer:
+    customers.views.view_as_start) or VIEW_AS_USER_SESSION_KEY (a staff
+    member who isn't an admin: tasks.views.view_as_user_start), each request
+    runs as that login (`request.user`), with the admin kept as
+    `request.real_user` and the person as `request.viewing_as` (a customer)
+    or `request.viewing_as_user` (a technician). View only: anything but
+    reading is refused, except stopping. Anyone but an admin simply ends it.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        customer_id = request.session.get(VIEW_AS_SESSION_KEY) if hasattr(request, 'session') else None
         request.viewing_as = None
-        if customer_id:
+        request.viewing_as_user = None
+        session = getattr(request, 'session', None)
+        customer_id = session.get(VIEW_AS_SESSION_KEY) if session is not None else None
+        user_id = session.get(VIEW_AS_USER_SESSION_KEY) if session is not None else None
+        if customer_id or user_id:
             from django.contrib import messages
             from django.shortcuts import redirect
             from django.urls import reverse
@@ -70,17 +75,26 @@ class ViewAsCustomerMiddleware:
             from people.models import Technician
 
             technician = getattr(request.user, 'technician', None)
-            customer = Customer.objects.select_related('user', 'country').filter(
-                pk=customer_id, user__isnull=False, user__is_active=True,
-            ).first()
-            if technician is None or technician.role != Technician.Role.ADMIN or customer is None:
-                request.session.pop(VIEW_AS_SESSION_KEY, None)
+            is_admin = technician is not None and technician.role == Technician.Role.ADMIN
+            customer = person = None
+            if is_admin and customer_id:
+                customer = Customer.objects.select_related('user', 'country').filter(
+                    pk=customer_id, user__isnull=False, user__is_active=True,
+                ).first()
+            elif is_admin and user_id:
+                person = Technician.objects.select_related('user', 'country').filter(
+                    user_id=user_id, user__is_active=True,
+                ).exclude(role=Technician.Role.ADMIN).first()
+            if customer is None and person is None:
+                session.pop(VIEW_AS_SESSION_KEY, None)
+                session.pop(VIEW_AS_USER_SESSION_KEY, None)
             else:
                 stop_url = reverse('customers:view_as_stop')
                 if request.method not in ('GET', 'HEAD', 'OPTIONS') and request.path != stop_url:
-                    messages.error(request, _('View only: nothing can be sent or changed while viewing as a customer.'))
-                    return redirect(request.META.get('HTTP_REFERER') or reverse('customers:portal_home'))
+                    messages.error(request, _('View only: nothing can be sent or changed while viewing as someone else.'))
+                    return redirect(request.META.get('HTTP_REFERER') or reverse('home'))
                 request.real_user = request.user
-                request.user = customer.user
+                request.user = (customer or person).user
                 request.viewing_as = customer
+                request.viewing_as_user = person
         return self.get_response(request)

@@ -31,4 +31,27 @@
         <button type="submit" class="button">{% translate "Save changes" %}</button>
     </form>
 </div>
+{% if terms_form %}
+{# This branch's own terms, where they differ from its customer's (managers and admins). #}
+<div class="section" id="terms">
+    <h2>{% translate "This branch's terms" %}</h2>
+    <p class="field__help">{% translate "Fill in only what differs from the customer's terms; anything left empty uses the customer's. Under warranty, everything at this branch is free." %}</p>
+    <p>{% include "_warranty_label.html" %} {% include "_terms_labels.html" %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="terms">
+        {% for field in terms_form %}
+        <div class="field{% if field.errors %} field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="form-actions field--wide">
+            <button type="submit" class="button">{% translate "Save this branch's terms" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 {% endblock %}

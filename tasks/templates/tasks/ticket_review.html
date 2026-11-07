@@ -36,7 +36,9 @@
         {% endif %}
         <div>
             <dt>{% translate "Site / location" %}</dt>
-            <dd>{{ ticket.site_description }}</dd>
+            <dd>{{ ticket.site_description }}
+                {% if ticket.site %}{% with site=ticket.site %}<span class="terms-row">{% include "_warranty_label.html" %}{% if user.technician.is_manager_tier %} {% include "_terms_labels.html" %}{% endif %}</span>{% endwith %}{% endif %}
+            </dd>
         </div>
         {% if ticket.customer_code %}
         <div>

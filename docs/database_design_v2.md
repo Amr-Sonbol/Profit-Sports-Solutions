@@ -155,6 +155,11 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | shipping_address | text | optional — where replacement parts should be delivered, if different from the site itself (a warehouse or head office); the customer completes it at first sign-in |
 | language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
 | brand_color | varchar(7) | `#RRGGBB`, default `#c8c8c8` (grey) — the customer's own color for their portal's buttons and highlights, chosen in portal Settings; text on it is black or white, whichever reads better (`Customer.brand_text_color`) |
+| quotation_discount | decimal(5,2) | nullable — % off quotations; managers and admins only (like the two below); empty: none agreed |
+| shipping_cost | decimal(10,2) | nullable — the agreed cost per shipment, in the country's `currency_code` |
+| service_cost | decimal(10,2) | nullable — the agreed cost per visit, in the country's `currency_code` |
+| terms_valid_until | date | nullable — when these terms end; shown as "Terms expired" after it. Every change to the terms is recorded in the Audit log, from → to |
+| terms_note | text | blank — e.g. the contract or agreement they come from |
 | user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
 | is_active | bool | |
 | must_change_password | bool | set when the welcome email goes out (or staff set a temporary password) — cleared once the customer sets their own password and completes their details |
@@ -164,7 +169,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 
 **`user` is a real login (staff-created, never self-signup), covering every site under that customer.** Logged in, they land on their own portal — every ticket they've submitted (`customer_ticket.customer`) and a summary-only service history (date, site, task type, status — never the report detail, technician names, or parts staff see on the same task). `home` (`spots/views.py`) routes a `hasattr(user, 'customer')` login there; every other login (any technician role) lands on the dashboard, the one shared overview screen — nothing else in the app is reachable with a customer login, same fixed boundary `require_technician`/`require_customer` both enforce for their own side.
 
-**An admin can view the portal as a customer** ("View as customer" on the customer's page) to check a complaint: the session runs as that customer's login (`spots.middleware.ViewAsCustomerMiddleware`), view only — anything but reading is refused — with a red bar and "Back to admin" on every page. Their password isn't touched, no login is recorded on their account, nothing is sent to them and their bell isn't marked read; each use is recorded in the Audit log.
+**An admin can view the portal as a customer** ("View as customer" on the customer's page) to check a complaint: the session runs as that customer's login (`spots.middleware.ViewAsCustomerMiddleware`), view only — anything but reading is refused — with a red bar and "Back to admin" on every page. Their password isn't touched, no login is recorded on their account, nothing is sent to them and their bell isn't marked read; each use is recorded in the Audit log. **The same for a staff member** ("View as user" on their page, `technicians/<id>/`, not another admin): the website exactly as they see it, view only, their notifications and task messages left unread.
 
 **Customer portal accounts are created by invitation.** Creating a login only asks for an email — it becomes both `user.username` and `user.email` — and the login starts with no usable password. A **welcome email** (`customers/accounts.py` — English, plus Arabic in the same message for a customer in an Arab League country, by the country's ISO code in `ARAB_COUNTRY_CODES`) carries a secure one-time link: signed, valid for 7 days, and dead the moment the password changes (the token includes a fingerprint of the password hash), so it works exactly once. The link opens a setup page where the customer sets their password and completes `contact_name`, `contact_phone`, `contact_email`, `billing_address` and `shipping_address`, then lands signed in on their portal. Sending a new welcome email invalidates any earlier link. The same kind of link also sets a new password later: customers get it from "Forgot your password?" on the portal login (which answers the same way whatever email is typed, so it can't reveal who our customers are), and staff can send it from Customer accounts. A temporary password still exists for phone support: set from Customer accounts, shown once on screen, never emailed, and the customer must replace it at the next sign-in.
 
@@ -193,6 +198,9 @@ A hotel group is one customer with many sites.
 | access_notes | text | gate codes, best hours |
 | latitude, longitude | decimal(9,6) | nullable — where the site is on the map; technicians' taps are checked against it |
 | location_source | varchar | blank, `office` or `arrival` |
+| warranty_start | date | nullable — normally the installation or handover date; new customers and new branches get 2 years |
+| warranty_until | date | nullable — filled in as start + 2 years unless set otherwise. **Under warranty everything at the branch is free** (parts, shipping, service): its terms show as "Free", and a new task there defaults to billing = warranty |
+| quotation_discount, shipping_cost, service_cost | decimal | nullable — this branch's own terms where they differ from the customer's; empty: the customer's (`Site.commercial_terms`) |
 
 **A site's map location comes from the office or the first arrival.** A manager pastes coordinates or a full Google Maps link on the site's edit page (`location_source = office`). Where nobody has, the first technician to tap "Arrived" there sets it (`arrival`) — the edit page then says so, so someone checks it. Clearing the field clears it, and the next arrival sets it again.
 
