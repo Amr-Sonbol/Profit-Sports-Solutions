@@ -3406,7 +3406,8 @@ tbody tr:hover {
 
 /* With a bell, the language switch sits right beside it at the end of the
    header (the bell takes the push to the end), so its list opens under both. */
-.notif-dropdown ~ .lang-switch__group--header {
+/* Right next to the bell (its holder, templates/_bell.html), not pushed away from it. */
+.bell-slot ~ .lang-switch__group--header {
     margin-inline-start: 0;
 }
 

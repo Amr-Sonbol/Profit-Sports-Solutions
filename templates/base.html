@@ -28,7 +28,7 @@
         {% if active_country %}
         <span class="badge badge--muted">{{ active_country.display_name }}</span>
         {% endif %}
-        {% include "_bell.html" %}
+        {% if user.technician or user.customer %}{% include "_bell.html" %}{% endif %}
         <div class="lang-switch__group lang-switch__group--header">
             <form method="post" action="{% url 'set_language' %}">
                 {% csrf_token %}
