@@ -202,3 +202,59 @@ class UploadsAndTextTests(SecurityTestCase):
             with self.subTest(url=url):
                 self.assertNotIn(b'<script>alert', page)
                 self.assertNotIn(b'<img src=x', page)
+
+
+class UploadedFilesTests(SecurityTestCase):
+    """Files go through a check: staff see them, a customer only their own,
+    the app by a signed link, nobody else."""
+
+    def setUp(self):
+        import tempfile
+        self._media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        self._media.enable()
+        self.addCleanup(self._media.disable)
+        super().setUp()
+        from tasks.models import CustomerTicketAttachment, TicketInternalNote, TicketInternalNoteFile
+        self.a_file = CustomerTicketAttachment.objects.create(
+            ticket=self.a.ticket, file=SimpleUploadedFile('photo.jpg', b'A-photo', content_type='image/jpeg'),
+            uploaded_at=timezone.now(),
+        ).file
+        self.b_file = CustomerTicketAttachment.objects.create(
+            ticket=self.b.ticket, file=SimpleUploadedFile('photo.jpg', b'B-photo', content_type='image/jpeg'),
+            uploaded_at=timezone.now(),
+        ).file
+        note = TicketInternalNote.objects.create(ticket=self.a.ticket, author=self.admin.user, message='-',
+                                                 created_at=timezone.now())
+        self.internal_file = TicketInternalNoteFile.objects.create(
+            note=note, file=SimpleUploadedFile('memo.pdf', b'internal', content_type='application/pdf'),
+        ).file
+
+    def get(self, client, file, query=''):
+        return client.get('/media/' + file.name + query)
+
+    def test_a_stranger_gets_nothing(self):
+        for file in (self.a_file, self.b_file, self.internal_file):
+            self.assertEqual(self.get(self.client_class(), file).status_code, 404)
+
+    def test_a_customer_gets_only_their_own_request_files(self):
+        a = self.login('gyma')
+        self.assertEqual(b''.join(self.get(a, self.a_file).streaming_content), b'A-photo')
+        self.assertEqual(self.get(a, self.b_file).status_code, 404)
+        self.assertEqual(self.get(a, self.internal_file).status_code, 404)
+
+    def test_staff_get_them(self):
+        admin = self.login('admin1')
+        for file in (self.a_file, self.b_file, self.internal_file):
+            self.assertEqual(self.get(admin, file).status_code, 200)
+
+    def test_the_apps_signed_link_opens_without_signing_in_and_cannot_be_reused_for_another_file(self):
+        from django.test import RequestFactory
+        from spots.media import signed_media_url
+        link = signed_media_url(RequestFactory().get('/'), self.a_file.url)
+        query = '?' + link.split('?', 1)[1]
+        self.assertEqual(self.get(self.client_class(), self.a_file, query).status_code, 200)
+        self.assertEqual(self.get(self.client_class(), self.b_file, query).status_code, 404)
+        self.assertEqual(self.get(self.client_class(), self.a_file, '?t=forged').status_code, 404)
+
+    def test_no_way_out_of_the_files_folder(self):
+        self.assertEqual(self.login('admin1').get('/media/../spots/settings.py').status_code, 404)

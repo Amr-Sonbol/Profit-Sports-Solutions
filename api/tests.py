@@ -729,9 +729,11 @@ class PartListApiTests(ApiTestCase):
         token = self.token_for('tech1')
         response = self.client.get('/api/parts/', **self.auth(token))
         # Each with its photo, so the technician can check it's the right part.
-        self.assertEqual(response.json(), [
-            {'code': 'BELT-01', 'description': 'Treadmill belt',
-             'photo_url': 'http://testserver/media/part_photos/abc/BELT-01.png'},
+        rows = response.json()
+        # The photo by a signed link: the app loads it without the website's sign-in (spots.media).
+        self.assertTrue(rows[0].pop('photo_url').startswith('http://testserver/media/part_photos/abc/BELT-01.png?t='))
+        self.assertEqual(rows, [
+            {'code': 'BELT-01', 'description': 'Treadmill belt'},
             {'code': 'PAD-7', 'description': '', 'photo_url': ''},
         ])
 

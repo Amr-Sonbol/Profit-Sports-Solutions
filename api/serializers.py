@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from reports.models import PartUsed, WorkReport
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent
+from spots.media import signed_media_url
 
 
 class TaskListSerializer(serializers.ModelSerializer):
@@ -36,10 +37,16 @@ class TaskEventSerializer(serializers.ModelSerializer):
 class TaskAttachmentSerializer(serializers.ModelSerializer):
     media_type_display = serializers.CharField(source='get_media_type_display')
     purpose_display = serializers.CharField(source='get_purpose_display')
+    # The app loads files without the website's sign-in: a signed link (spots.media).
+    url = serializers.SerializerMethodField()
 
     class Meta:
         model = TaskAttachment
         fields = ['id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at']
+
+    def get_url(self, obj):
+        request = self.context.get('request')
+        return signed_media_url(request, obj.url) if request else obj.url
 
 
 def directions_url(site):
@@ -136,6 +143,11 @@ class PartUsedSerializer(serializers.ModelSerializer):
 
 class WorkReportSerializer(serializers.ModelSerializer):
     parts_used = PartUsedSerializer(many=True, read_only=True)
+    signature_url = serializers.SerializerMethodField()
+
+    def get_signature_url(self, obj):
+        request = self.context.get('request')
+        return signed_media_url(request, obj.signature_url) if request else obj.signature_url
 
     class Meta:
         model = WorkReport

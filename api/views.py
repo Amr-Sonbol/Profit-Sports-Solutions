@@ -62,6 +62,8 @@ from tasks.views import (
     undoable_tap, SEARCH_RESULT_LIMIT,
 )
 
+from spots.media import signed_media_url
+
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
     CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
@@ -104,7 +106,7 @@ def _me_payload(user, request=None):
         'username': user.get_username(),
         'email': user.email,
         'phone': technician.phone,
-        'photo_url': request.build_absolute_uri(technician.photo.url) if technician.photo and request else '',
+        'photo_url': signed_media_url(request, technician.photo.url) if technician.photo and request else '',
         'role': technician.role,
         'role_display': technician.get_role_display(),
         'employment_type_display': technician.get_employment_type_display(),
@@ -755,7 +757,7 @@ class MySkillsView(APIView):
         for group in ('basic', 'advanced', 'conduct'):
             for row in data[group]:
                 if row['evidence_url']:
-                    row['evidence_url'] = request.build_absolute_uri(row['evidence_url'])
+                    row['evidence_url'] = signed_media_url(request, row['evidence_url'])
         return data
 
     def get(self, request):
@@ -816,7 +818,7 @@ class PersonView(APIView):
             'id': person.pk,
             'name': person.full_name,
             'role': person.get_role_display(),
-            'photo_url': request.build_absolute_uri(person.photo.url) if person.photo else '',
+            'photo_url': signed_media_url(request, person.photo.url) if person.photo else '',
             'phone': person.phone,
             'email': person.user.email if person.user_id else '',
             'country': person.country.display_name,
@@ -1197,7 +1199,7 @@ def _report_machines(task, request):
         {
             'ticket_machine_id': row['ticket_machine'], 'brand_id': None, 'model_name': row['model_name'],
             'serial_no': row['serial_no'], 'outcome': '', 'note': '', 'no_serial': False,
-            'serial_photo_url': request.build_absolute_uri(row['serial_photo_url']) if row['serial_photo_url'] else '',
+            'serial_photo_url': signed_media_url(request, row['serial_photo_url']) if row['serial_photo_url'] else '',
             'finding_code': '', 'action_code': '', 'action': '',
         }
         for row in new
@@ -1260,7 +1262,7 @@ class TaskLinePhotoView(APIView):
             return Response({'photo': ['Add a photo.']}, status=status.HTTP_400_BAD_REQUEST)
         line.photo = photo
         line.save(update_fields=['photo'])
-        return Response({'photo_url': request.build_absolute_uri(line.photo.url)})
+        return Response({'photo_url': signed_media_url(request, line.photo.url)})
 
 
 class MyTaskReportView(APIView):
@@ -1316,7 +1318,7 @@ class MyTaskReportView(APIView):
             **_report_machines(task, request),
             # An installation's machines to check off, and what can be chosen for each.
             'checklist': [
-                {**row, 'photo_url': request.build_absolute_uri(row['photo_url']) if row['photo_url'] else ''}
+                {**row, 'photo_url': signed_media_url(request, row['photo_url']) if row['photo_url'] else ''}
                 for row in checklist_initial(task)
             ] if has_checklist(task) else None,
             'checklist_statuses': [
@@ -1539,7 +1541,7 @@ def _team_task_response(request, task):
                 'product_code': line.product_code, 'kind': line.kind, 'quantity': line.quantity,
                 'serial_number': line.serial_number, 'status': line.status, 'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
                 'replacement': line.replacement, 'note': line.note, 'added_on_site': line.added_on_site,
-                'photo_url': request.build_absolute_uri(line.photo.url) if line.photo else '',
+                'photo_url': signed_media_url(request, line.photo.url) if line.photo else '',
             }
             for line in lines
         ],
@@ -1924,7 +1926,7 @@ class PartListView(APIView):
         return Response([
             {
                 'code': part.code, 'description': part.description,
-                'photo_url': request.build_absolute_uri(part.photo.url) if part.photo else '',
+                'photo_url': signed_media_url(request, part.photo.url) if part.photo else '',
             }
             for part in Part.objects.filter(is_active=True)
         ])

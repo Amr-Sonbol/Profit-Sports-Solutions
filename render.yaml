@@ -6,8 +6,10 @@
 #      into this repo's GitHub secret RENDER_DEPLOY_HOOK_URL — that's what
 #      lets .github/workflows/tests.yml redeploy only after tests pass.
 #   3. Once there's a real domain: add it under the service's Settings >
-#      Custom Domains, add it to ALLOWED_HOSTS below, and turn on
-#      SECURE_SSL_REDIRECT / SECURE_HSTS_SECONDS in the same place.
+#      Custom Domains and to ALLOWED_HOSTS below; the customer portal's
+#      own address (e.g. portal.<domain>) goes in PORTAL_HOST too.
+#      HTTPS is enforced already (SECURE_SSL_REDIRECT / SECURE_HSTS_SECONDS
+#      below): Render always serves the site over HTTPS.
 #
 # autoDeployTrigger is off deliberately — Render's own "deploy on every
 # push" would happily deploy code the test suite hasn't even seen yet.
@@ -41,6 +43,12 @@ services:
         generateValue: true
       - key: DEBUG
         value: "False"
+      # Always the secure connection: plain-http requests move to https, and
+      # browsers remember to use https for a year (HSTS).
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: SECURE_HSTS_SECONDS
+        value: "31536000"
       - key: ALLOWED_HOSTS
         value: ""
       - key: DB_NAME
