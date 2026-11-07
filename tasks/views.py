@@ -1,6 +1,7 @@
 import bisect
 import csv
 import logging
+import re
 import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -25,6 +26,7 @@ from django.db import IntegrityError, connection, transaction
 from django.db.models import (
     Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
 )
+from django.db.models.functions import Length
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -201,10 +203,18 @@ PRIORITY_RANK = Case(
 )
 
 
+def _next_number(queryset, field, prefix):
+    """The number after the highest one in use with this prefix (not "how
+    many + 1": once one is deleted, that lands on a number still taken, and
+    every retry lands on it again)."""
+    last = queryset.filter(**{f'{field}__regex': rf'^{re.escape(prefix)}[0-9]+$'}).annotate(
+        number_length=Length(field),
+    ).order_by('-number_length', f'-{field}').values_list(field, flat=True).first()
+    return f'{prefix}{(int(last[len(prefix):]) if last else 0) + 1:04d}'
+
+
 def _next_task_number(country):
-    prefix = f'{country.task_prefix or country.iso_code}-'
-    count = Task.objects.filter(task_number__startswith=prefix).count()
-    return f'{prefix}{count + 1:04d}'
+    return _next_number(Task.objects, 'task_number', f'{country.task_prefix or country.iso_code}-')
 
 
 def _parse_datetime_local(value):
@@ -233,9 +243,7 @@ def _save_new_task(task):
 
 
 def _next_ticket_number(country):
-    prefix = f'{country.task_prefix or country.iso_code}-T'
-    count = CustomerTicket.objects.filter(ticket_number__startswith=prefix).count()
-    return f'{prefix}{count + 1:04d}'
+    return _next_number(CustomerTicket.objects, 'ticket_number', f'{country.task_prefix or country.iso_code}-T')
 
 
 def ticket_machines_text(machines):
@@ -483,7 +491,32 @@ def _conduct_areas_with_current_rating(technician):
     return areas
 
 
-def _certification_status(technician):
+def _certification_reference():
+    """The active skills (non-cardio, cardio) and conduct areas the bar counts —
+    read once for a whole roster rather than once per person."""
+    return (
+        list(Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).values_list('id', flat=True)),
+        list(Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).values_list('id', flat=True)),
+        list(ConductArea.objects.filter(is_active=True).values_list('id', flat=True)),
+    )
+
+
+def _confirmed_levels(technicians):
+    """{technician id: ({skill id: level}, {conduct area id: level})}, supervisor-confirmed only,
+    for many technicians in two queries."""
+    levels = {technician.pk: ({}, {}) for technician in technicians}
+    for technician_id, skill_id, level in TechnicianSkill.objects.filter(
+        technician__in=list(levels), source=TechnicianSkill.Source.SUPERVISOR,
+    ).values_list('technician_id', 'skill_id', 'level'):
+        levels[technician_id][0][skill_id] = level
+    for technician_id, area_id, level in TechnicianConduct.objects.filter(
+        technician__in=list(levels), source=TechnicianConduct.Source.SUPERVISOR,
+    ).values_list('technician_id', 'conduct_area_id', 'level'):
+        levels[technician_id][1][area_id] = level
+    return levels
+
+
+def _certification_status(technician, reference=None, levels=None):
     """Confirmed-only progress toward the "reliable technician" bar: level
     >= RELIABLE_LEVEL on every non-cardio skill and every conduct area,
     counting only supervisor-confirmed ratings — a self-rating never counts
@@ -491,24 +524,9 @@ def _certification_status(technician):
     skills are excluded from the bar; clearing one just marks readiness in
     that additional skill set, tracked separately as `cardio_ready`.
     """
-    confirmed_skill_levels = dict(
-        TechnicianSkill.objects.filter(
-            technician=technician, source=TechnicianSkill.Source.SUPERVISOR,
-        ).values_list('skill_id', 'level'),
-    )
-    confirmed_conduct_levels = dict(
-        TechnicianConduct.objects.filter(
-            technician=technician, source=TechnicianConduct.Source.SUPERVISOR,
-        ).values_list('conduct_area_id', 'level'),
-    )
-
-    non_cardio_ids = list(
-        Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).values_list('id', flat=True),
-    )
-    cardio_ids = list(
-        Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).values_list('id', flat=True),
-    )
-    conduct_ids = list(ConductArea.objects.filter(is_active=True).values_list('id', flat=True))
+    # A roster passes what it read once for everyone (_certification_reference, _confirmed_levels).
+    confirmed_skill_levels, confirmed_conduct_levels = levels or _confirmed_levels([technician])[technician.pk]
+    non_cardio_ids, cardio_ids, conduct_ids = reference or _certification_reference()
 
     non_cardio_certified = sum(1 for i in non_cardio_ids if confirmed_skill_levels.get(i, 0) >= RELIABLE_LEVEL)
     conduct_certified = sum(1 for i in conduct_ids if confirmed_conduct_levels.get(i, 0) >= RELIABLE_LEVEL)
@@ -4033,12 +4051,13 @@ def team_progress_rows(viewer, country, month_first):
     ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
     hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
     rows = []
+    reference = _certification_reference()
     # The field team: a manager or admin sees supervisors here too.
     for technician in _people_i_oversee(viewer).filter(
         country=country, is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
     ).select_related('user').order_by('full_name'):
         completed = _completed_in_month(technician, month_first)
-        certification = _certification_status(technician)
+        certification = _certification_status(technician, reference)
         rows.append({
             'technician': technician,
             'rank': ranks.get(technician.pk),
@@ -4431,8 +4450,10 @@ def technician_list(request):
         technicians = technicians.filter(full_name__icontains=search)
 
     rows = []
+    technicians = list(technicians)
+    reference, levels = _certification_reference(), _confirmed_levels(technicians)
     for technician in technicians:
-        certification = _certification_status(technician)
+        certification = _certification_status(technician, reference, levels[technician.pk])
         rows.append({
             'technician': technician,
             'certification': certification,
@@ -4466,8 +4487,10 @@ def all_technicians(request):
         technicians = technicians.filter(full_name__icontains=search)
 
     rows = []
+    technicians = list(technicians)
+    reference, levels = _certification_reference(), _confirmed_levels(technicians)
     for technician in technicians:
-        certification = _certification_status(technician)
+        certification = _certification_status(technician, reference, levels[technician.pk])
         rows.append({
             'technician': technician,
             'certification': certification,

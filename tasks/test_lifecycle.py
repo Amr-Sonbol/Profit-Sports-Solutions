@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from customers.models import Customer, Site
@@ -358,3 +358,76 @@ class TaskTurnsTests(LifecycleTestCase):
     def test_a_signed_out_customer_from_the_rating_email_is_asked_to_sign_in(self):
         response = self.client_class(HTTP_HOST='portal.example.test').get('/reports/feedback/some-token/')
         self.assertIn(response.status_code, (302, 404))
+
+
+class BrokenMailBackend:
+    """A mail server that is down."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def send_messages(self, messages):
+        raise ConnectionRefusedError('mail server down')
+
+    def open(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class ReliabilityTests(LifecycleTestCase):
+    def test_a_mail_server_that_is_down_never_stops_the_work(self):
+        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'):
+            response = self.send_request()
+            self.assertEqual(response.status_code, 302)
+            ticket = self.newest_request()
+            response = self.staff.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'add_reply', 'message': 'On it.'})
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(ticket.replies.filter(message='On it.').exists())
+
+    def test_numbers_carry_on_after_one_is_deleted(self):
+        for _ in range(3):
+            self.send_request(about='other', need='assistance')
+        numbers = list(CustomerTicket.objects.order_by('pk').values_list('ticket_number', flat=True))
+        CustomerTicket.objects.filter(ticket_number=numbers[1]).delete()
+        response = self.send_request(about='other', need='assistance')
+        self.assertEqual(response.status_code, 302)
+        newest = self.newest_request().ticket_number
+        self.assertNotIn(newest, numbers)
+        self.assertEqual(int(newest.rsplit('T', 1)[1]), int(numbers[-1].rsplit('T', 1)[1]) + 1)
+
+
+class SimultaneousSavesTests(TransactionTestCase):
+    """Several people sending at the same moment: each gets its own number."""
+
+    def test_requests_sent_at_once_get_distinct_numbers(self):
+        import threading
+
+        from django.db import connection
+
+        from tasks.views import save_new_ticket
+        country = Country.objects.create(name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED')
+        start, errors = threading.Barrier(5), []
+
+        def send(index):
+            try:
+                start.wait()
+                save_new_ticket(CustomerTicket(
+                    country=country, company_name=f'Gym {index}', contact_name='-', contact_phone='-',
+                    description='-', submitted_at=timezone.now(),
+                ))
+            except Exception as error:  # noqa: BLE001 — reported below
+                errors.append(error)
+            finally:
+                connection.close()
+
+        threads = [threading.Thread(target=send, args=(index,)) for index in range(5)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        numbers = list(CustomerTicket.objects.values_list('ticket_number', flat=True))
+        self.assertEqual(len(numbers), 5)
+        self.assertEqual(len(set(numbers)), 5)
