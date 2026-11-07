@@ -499,7 +499,7 @@ A single row (`pk=1`, created on first use), set by an admin on its own **Notifi
 | reply_to_customer_email | bool | default `true` — the office's reply to their ticket, by email |
 | auto_notify_on_reschedule | bool | default `true` — off, a supervisor sends it by hand instead (below) |
 | new_ticket_email | bool | default `true` |
-| new_ticket_roles | varchar[] | who gets it, in the ticket's country; default the roles that can `manage_tickets` |
+| new_ticket_roles | varchar[] | who is told of a new ticket, by email and in the bell, in the ticket's country; default `operations_manager`, `country_support` |
 | new_task_email | bool | default `true` |
 | new_task_roles | varchar[] | who gets it, in the task's country; default `manager`, `admin` |
 | reply_to_staff_email | bool | default `true` — a customer's reply, to the person the ticket is assigned to |
@@ -507,7 +507,7 @@ A single row (`pk=1`, created on first use), set by an admin on its own **Notifi
 | shipment_to_supervisor_email | bool | default `true` — a task's tracking number, to its responsible supervisor |
 | push_assigned / push_removed / push_cancelled | bool | default `true` — the technician's phone notifications |
 
-An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off. A new ticket reaches the chosen roles in the ticket's country, and the roles that handle tickets in every country (`tickets_all_countries`: admin, operations manager, technical support manager) wherever they are; their bell likewise shows every country's new tickets.
+An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off. A new ticket reaches the chosen roles in the ticket's country, and those of them that handle tickets in every country (`tickets_all_countries`, e.g. the Operations Manager) wherever they are. `new_ticket_roles` decides the bell's new-ticket entries too — the one exception to the bell being unaffected by this page; replies and escalation decisions still reach everyone who can `manage_tickets`.
 
 ### failed_email
 An email the app tried and failed to send — the mail server refused it or couldn't be reached. Emails go out in the background after the page has already confirmed the action, so without this the person who caused it would never know. Written by the one function every email goes through (`tasks.views._send_notification_email`) when a background send fails; shown once, as a red warning at the top of their next page, to the staff member whose action sent it (`spots.email_failures`). One with nobody behind it — a customer's own request confirmation, say — is shown to the admins. Customers never see these.

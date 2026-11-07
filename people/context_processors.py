@@ -35,6 +35,11 @@ def notification_bell(request):
     items = []
     if can_manage_tickets:
         unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket')
+        # A new ticket: only to the roles chosen for it on the Notifications page (the same as its email);
+        # replies and escalation decisions: to everyone who handles tickets.
+        from people.models import NotificationSettings
+        if technician.role not in NotificationSettings.load().new_ticket_roles:
+            unseen_tickets = unseen_tickets.exclude(kind=TicketNotification.Kind.NEW_TICKET)
         # The company-wide roles hear of every country's tickets, whichever country they're looking at.
         if not RolePermission.objects.filter(
             role=technician.role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,

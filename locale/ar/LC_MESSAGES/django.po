@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 22:44+0000\n"
+"POT-Creation-Date: 2026-11-07 23:02+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -171,7 +171,6 @@ msgstr[4] "%(count)s مهمة"
 msgstr[5] "%(count)s مهمة"
 
 #, python-format
-#| msgid "Not scheduled within 24 working hours"
 msgid "%(count)s task not scheduled within 24 working hours"
 msgid_plural "%(count)s tasks not scheduled within 24 working hours"
 msgstr[0] "لا توجد مهام لم تُجدول خلال 24 ساعة عمل"
@@ -5174,8 +5173,8 @@ msgstr "العنوان الذي تُصدر إليه الفواتير."
 msgid "The assignment for this task can no longer be changed because work has started. Please close it and create a new task for a handover."
 msgstr "لم يعد بالإمكان تغيير إسناد هذه المهمة لأن العمل قد بدأ. يرجى إغلاقها وإنشاء مهمة جديدة للتسليم."
 
-msgid "The bell at the top of the page shows new tickets and tasks to the office whatever is set here."
-msgstr "يعرض الجرس أعلى الصفحة البلاغات والمهام الجديدة لموظفي المكتب بغض النظر عن هذه الإعدادات."
+msgid "The bell at the top of the page shows new tasks to the office whatever is set here; new tickets only to the roles chosen for them above."
+msgstr "يعرض الجرس أعلى الصفحة المهام الجديدة للمكتب أيًّا كانت الإعدادات هنا؛ أما التذاكر الجديدة فتظهر فقط للأدوار المختارة لها أعلاه."
 
 msgid "The branch's own email, if it has one. Empty: your main contact."
 msgstr "البريد الإلكتروني الخاص بالفرع إن وُجد. فارغ: جهة التواصل الرئيسية لديك."
@@ -6152,8 +6151,8 @@ msgstr "عند إنشاء حساب العميل أو إرسال رابط كلم�
 msgid "When a customer replies to a ticket; to the person it is assigned to."
 msgstr "عند رد العميل على بلاغ؛ إلى الشخص المكلّف به."
 
-msgid "When a customer sends a ticket; to the chosen roles in that country."
-msgstr "عند إرسال العميل بلاغًا؛ إلى الأدوار المختارة في تلك الدولة."
+msgid "When a customer sends a ticket; by email and in the bell, to the chosen roles in that country (those who handle tickets in every country, wherever they are)."
+msgstr "عندما يرسل العميل تذكرة؛ بالبريد الإلكتروني وفي الجرس، إلى الأدوار المختارة في تلك الدولة (ومن يتولّون التذاكر في كل الدول، أينما كانوا)."
 
 msgid "When a password changes, or a new login is set up."
 msgstr "عند تغيير كلمة المرور، أو إعداد حساب دخول جديد."

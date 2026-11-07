@@ -457,21 +457,34 @@ class SimultaneousSavesTests(TransactionTestCase):
 class NewRequestAlertsTests(LifecycleTestCase):
     """Who hears of a new request, and that the bell always has room for it."""
 
-    def test_company_wide_roles_hear_from_every_country(self):
+    def test_the_operations_manager_and_the_countrys_support_manager_are_told(self):
         from people.models import Technician as T
         saudi = Country.objects.create(name='Saudi Arabia', iso_code='SA', timezone='Asia/Riyadh', currency_code='SAR')
-        support_manager = self._staff('support_ksa', 'Sara Support', T.Role.SUPPORT_MANAGER)
-        support_manager.country = saudi
-        support_manager.save(update_fields=['country'])
+        operations = self._staff('operations_ksa', 'Omar Operations', T.Role.OPERATIONS_MANAGER)
+        operations.country = saudi
+        operations.save(update_fields=['country'])
+        self._staff('desk_uae', 'UAE Desk', T.Role.COUNTRY_SUPPORT)
         desk_ksa = self._staff('desk_ksa', 'Saudi Desk', T.Role.COUNTRY_SUPPORT)
         desk_ksa.country = saudi
         desk_ksa.save(update_fields=['country'])
+        self._staff('support_manager', 'Sara Support', T.Role.SUPPORT_MANAGER)
         mail.outbox.clear()
         self.send_request()
+        ticket = self.newest_request()
         told = {address for message in mail.outbox for address in message.to}
-        self.assertIn('support_ksa@pss.example', told)   # company-wide: every country
-        self.assertIn('admin1@pss.example', told)
-        self.assertNotIn('desk_ksa@pss.example', told)   # a country's own desk: its own country only
+        self.assertIn('operations_ksa@pss.example', told)  # every country
+        self.assertIn('desk_uae@pss.example', told)        # the request's own country
+        self.assertNotIn('desk_ksa@pss.example', told)
+        self.assertNotIn('admin1@pss.example', told)
+        self.assertNotIn('support_manager@pss.example', told)
+
+        def in_bell(username):
+            items = self.client_for(username).get('/tasks/tickets/').context['unseen_notifications']
+            return any(item.get('ticket') == ticket for item in items)
+        self.assertTrue(in_bell('operations_ksa'))
+        self.assertTrue(in_bell('desk_uae'))
+        self.assertFalse(in_bell('admin1'))
+        self.assertFalse(in_bell('support_manager'))
 
     def test_a_busy_day_of_overdue_tasks_never_hides_a_new_request_in_the_bell(self):
         from people.context_processors import notification_bell
@@ -481,6 +494,11 @@ class NewRequestAlertsTests(LifecycleTestCase):
                 task_number=f'AE-9{index:03d}', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
                 billing_type=Task.BillingType.CHARGEABLE, reported_at=long_ago, created_by=self.admin.user,
             )
+        # Someone who gets both: admins, once chosen for new tickets on the Notifications page.
+        from people.models import NotificationSettings
+        switches = NotificationSettings.load()
+        switches.new_ticket_roles = ['operations_manager', 'country_support', 'admin']
+        switches.save(update_fields=['new_ticket_roles'])
         self.send_request()
         ticket = self.newest_request()
         bell = self.staff.get('/tasks/').context

@@ -2955,7 +2955,7 @@ class NotificationBellTests(TaskTestCase):
         self.support_user = User.objects.create_user('support1', password='pass12345')
         Technician.objects.create(
             user=self.support_user, country=self.country, full_name='Sara Support',
-            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+            language='en', role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff',
         )
         self.admin_user = User.objects.create_user('admin1', password='pass12345')
         Technician.objects.create(
@@ -2963,7 +2963,7 @@ class NotificationBellTests(TaskTestCase):
             language='en', role=Technician.Role.ADMIN, employment_type='staff',
         )
 
-    def test_support_manager_sees_the_unseen_ticket_notification(self):
+    def test_country_support_manager_sees_the_unseen_ticket_notification(self):
         self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/')
         self.assertEqual(response.context['unseen_notification_count'], 1)
@@ -2976,8 +2976,8 @@ class NotificationBellTests(TaskTestCase):
         response = self.client.get('/tasks/')
         self.assertEqual(response.context['unseen_notification_count'], 0)
 
-    def test_support_manager_does_not_see_task_notifications(self):
-        # The technical support manager isn't manager-tier, so the task
+    def test_country_support_manager_does_not_see_task_notifications(self):
+        # The country support manager isn't manager-tier, so the task
         # half of the bell stays off for them, symmetric to the above.
         task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
@@ -2992,9 +2992,9 @@ class NotificationBellTests(TaskTestCase):
         kinds = {item['kind'] for item in response.context['unseen_notifications']}
         self.assertNotIn('new_task', kinds)
 
-    def test_admin_sees_both_halves_of_the_bell(self):
-        # Admin is a superset of both — manage_tickets and is_manager_tier
-        # — so it's the one role that sees everything together.
+    def test_admin_sees_new_tasks_but_not_new_tickets(self):
+        # New tickets go only to the roles chosen for them (Operations Manager,
+        # Country Support Manager); an admin's bell keeps the task half.
         task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
@@ -3004,9 +3004,10 @@ class NotificationBellTests(TaskTestCase):
 
         self.client.login(username='admin1', password='pass12345')
         response = self.client.get('/tasks/')
-        self.assertEqual(response.context['unseen_notification_count'], 2)
+        self.assertEqual(response.context['unseen_notification_count'], 1)
         kinds = {item['kind'] for item in response.context['unseen_notifications']}
         self.assertIn('new_task', kinds)
+        self.assertNotIn('new_ticket', kinds)
 
     def test_supervisor_gets_no_bell_context_at_all(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -3031,11 +3032,13 @@ class NotificationBellTests(TaskTestCase):
             ticket=other_ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
         )
 
-        # The Technical Support Manager handles tickets in every country: both count.
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.get('/tasks/tickets/')
-        self.assertEqual(response.context['unseen_notification_count'], 2)
-        # A country's own support desk: its own country only.
+        # The Operations Manager is told of every country's new tickets: both count.
+        operations = User.objects.create_user('operations1', password='pass12345')
+        Technician.objects.create(user=operations, country=self.country, full_name='Ops', language='en',
+                                  role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff')
+        self.client.login(username='operations1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/tickets/').context['unseen_notification_count'], 2)
+        # A Country Support Manager: its own country only.
         desk = User.objects.create_user('desk1', password='pass12345')
         Technician.objects.create(user=desk, country=self.country, full_name='Desk', language='en',
                                   role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff')

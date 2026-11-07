@@ -56,7 +56,7 @@
                 <colgroup><col class="notification-table__message"><col class="notification-table__channel"><col></colgroup>
                 <thead><tr><th>{% translate "Message" %}</th><th>{% translate "How" %}</th><th>{% translate "Setting" %}</th></tr></thead>
                 <tbody>
-                    {% translate "New customer ticket" as title %}{% translate "When a customer sends a ticket; to the chosen roles in that country." as when %}
+                    {% translate "New customer ticket" as title %}{% translate "When a customer sends a ticket; by email and in the bell, to the chosen roles in that country (those who handle tickets in every country, wherever they are)." as when %}
                     {% include "tasks/_notification_row.html" with field=form.new_ticket_email roles=form.new_ticket_roles channel=email %}
                     {% translate "New task" as title %}{% translate "When a task is created; to the chosen roles in that country." as when %}
                     {% include "tasks/_notification_row.html" with field=form.new_task_email roles=form.new_task_roles channel=email %}
@@ -71,7 +71,7 @@
                 </tbody>
             </table>
         </div>
-        <p class="field__help">{% translate "The bell at the top of the page shows new tickets and tasks to the office whatever is set here." %}</p>
+        <p class="field__help">{% translate "The bell at the top of the page shows new tasks to the office whatever is set here; new tickets only to the roles chosen for them above." %}</p>
     </div>
 
     <div class="section">

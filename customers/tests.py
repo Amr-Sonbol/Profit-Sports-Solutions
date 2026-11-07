@@ -1122,13 +1122,13 @@ class PortalTicketNewTests(CustomerTestCase):
         self.assertIn('received', mail.outbox[0].subject)
         self.assertIn('ali@fitnessfirst.example', mail.outbox[0].to)
 
-    def test_submitting_notifies_the_technical_support_manager_by_email(self):
-        # manage_tickets lives on the technical support manager role now,
-        # not plain Manager — the new-ticket email follows that permission.
+    def test_submitting_notifies_the_country_support_manager_by_email(self):
+        # A new ticket goes to the Operations Manager and the country's
+        # Country Support Manager (people.NotificationSettings.new_ticket_roles).
         support_user = User.objects.create_user('support1', email='sara@example.com', password='pass12345')
         Technician.objects.create(
             user=support_user, country=self.country, full_name='Sara Support',
-            language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+            language='en', role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff',
         )
 
         self.client.login(username='fitnessfirst', password='pass12345')
