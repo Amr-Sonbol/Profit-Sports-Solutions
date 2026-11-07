@@ -96,12 +96,13 @@ MIDDLEWARE = [
     # as it always did.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    # The portal's own address shows only the portal; the staff address sends portal links there (spots.hosts).
-    'spots.hosts.PortalHostMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # The portal's own address shows only the portal; the staff address sends portal links there
+    # (spots.hosts). After sign-in handling: its "not found" page needs to know who is asking.
+    'spots.hosts.PortalHostMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     # An admin viewing the portal as a customer (customers.views.view_as_start):
     # after messages (it uses them), before the language and timezone, so those
