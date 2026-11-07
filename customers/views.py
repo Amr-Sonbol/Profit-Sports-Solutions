@@ -96,7 +96,11 @@ def all_customers(request):
     if search:
         customers = customers.filter(name__icontains=search)
 
-    return render(request, 'customers/all_customers.html', {'customers': customers, 'search': search})
+    # 50 to a page: the whole roster runs to thousands as the company grows.
+    page_obj = Paginator(customers.order_by('name'), 50).get_page(request.GET.get('page'))
+    return render(request, 'customers/all_customers.html', {
+        'customers': page_obj, 'page_obj': page_obj, 'search': search,
+    })
 
 
 @login_required

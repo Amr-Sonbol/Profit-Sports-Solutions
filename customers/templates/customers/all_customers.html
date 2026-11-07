@@ -53,6 +53,17 @@
             </tbody>
         </table>
     </div>
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        {% if page_obj.has_previous %}
+            <a href="?{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+        {% endif %}
+        <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+        {% if page_obj.has_next %}
+            <a href="?{% if search %}q={{ search|urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+        {% endif %}
+    </div>
+    {% endif %}
     {% elif search %}
     <p class="empty-state">{% translate "No customers match your search." %}</p>
     {% else %}

@@ -615,21 +615,25 @@
 </div>
 {% endif %}
 
-{% if user.technician.is_manager_tier and can_cancel %}
+{% if user.technician.is_manager_tier and task.status == 'blocked' %}
+{# Stopped on site: book the same task again — new time, back to its team; the stop stays in the history. #}
 <div class="section">
-    <h2>{% translate "Cancel task" %}</h2>
-    <p class="field__help">{% translate "Cancels the task before a report is submitted. All assigned staff will be notified, and the customer's ticket conversation will remain open." %}</p>
+    <h2>{% translate "Book a new visit" %}</h2>
+    <p class="field__help">{% translate "The work stopped on site. Give it a new day and time: the task goes back to its team, and the stop and its reason stay in the history." %}</p>
+    {% if stop_reason %}<p class="sgroup-reason">{% translate "Reason:" %} {{ stop_reason }}</p>{% endif %}
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
-        <input type="hidden" name="action" value="cancel_task">
-        <div class="field {% if cancel_task_form.note.errors %}field--error{% endif %}">
-            <label for="{{ cancel_task_form.note.id_for_label }}">{{ cancel_task_form.note.label }}</label>
-            {{ cancel_task_form.note }}
-            <p class="field__help">{{ cancel_task_form.note.help_text }}</p>
-            {% for error in cancel_task_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        <input type="hidden" name="action" value="rebook">
+        {% for field in rebook_form %}
+        <div class="field{% if field.errors %} field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
-        <div class="field field--submit">
-            <button type="submit" class="button button--danger">{% translate "Cancel task" %}</button>
+        {% endfor %}
+        <div class="form-actions field--wide">
+            <button type="submit" class="button">{% translate "Book the new visit" %}</button>
         </div>
     </form>
 </div>
@@ -637,26 +641,39 @@
 
 {% if user.technician.is_manager_tier %}
 {% if task.status != 'closed' %}
+{# Close and cancel as one decision: close by default; cancel only while the task can still be called off. Each keeps its own effect (views: close_directly, cancel_task). #}
+{% with chosen=request.POST.action %}
 <div class="section">
     <h2>{% translate "Close task" %}</h2>
-    <p class="field__help">{% translate "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process." %}</p>
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" novalidate>
         {% csrf_token %}
-        <input type="hidden" name="action" value="close_directly">
-        {% if close_task_form.non_field_errors %}
-            <p class="flash flash--error">{{ close_task_form.non_field_errors|join:" " }}</p>
-        {% endif %}
-        <div class="field {% if close_task_form.note.errors %}field--error{% endif %}">
-            <label for="{{ close_task_form.note.id_for_label }}">{{ close_task_form.note.label }}</label>
-            {{ close_task_form.note }}
-            <p class="field__help">{{ close_task_form.note.help_text }}</p>
-            {% for error in close_task_form.note.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        {% if close_task_form.non_field_errors %}<p class="flash flash--error">{{ close_task_form.non_field_errors|join:" " }}</p>{% endif %}
+        <div class="topic-choices close-choices">
+            <label class="topic-choice">
+                <input type="radio" name="action" value="close_directly"{% if chosen != 'cancel_task' %} checked{% endif %}>
+                <span><strong>{% translate "Close" %}</strong><br><span class="muted">{% translate "The matter is resolved without the usual report and approval, for example a visit that proved unnecessary. The customer's request is closed too." %}</span></span>
+            </label>
+            {% if can_cancel %}
+            <label class="topic-choice">
+                <input type="radio" name="action" value="cancel_task"{% if chosen == 'cancel_task' %} checked{% endif %}>
+                <span><strong>{% translate "Cancel" %}</strong><br><span class="muted">{% translate "The visit is called off before any report. The assigned staff are told, and the customer's request stays open for follow-up." %}</span></span>
+            </label>
+            {% endif %}
         </div>
-        <div class="field field--submit">
-            <button type="submit" class="button button--danger">{% translate "Close task" %}</button>
+        {% with errors=close_task_form.note.errors|default:cancel_task_form.note.errors %}
+        <div class="field{% if errors %} field--error{% endif %}">
+            <label for="id_note">{% translate "Reason" %}</label>
+            <textarea name="note" id="id_note" rows="2" required>{{ request.POST.note|default:"" }}</textarea>
+            <p class="field__help">{% translate "Why it's being closed or cancelled, for example the customer cancelled or the issue was solved by phone." %}</p>
+            {% for error in errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endwith %}
+        <div class="form-actions">
+            <button type="submit" class="button button--danger">{% translate "Confirm" %}</button>
         </div>
     </form>
 </div>
+{% endwith %}
 {% elif task.status == 'closed' %}
 {% if user.technician.role == 'admin' %}
 <div class="section">

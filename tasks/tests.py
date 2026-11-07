@@ -4666,23 +4666,26 @@ class DashboardTests(DashboardManagerMixin, TaskTestCase):
 
         self.assertEqual(list(response.context['technicians']), [self.technician])
 
-    def test_active_task_count_reflects_open_assignments(self):
-        task = self._make_task('AE-0001', status=Task.Status.ASSIGNED)
-        TaskAssignment.objects.create(
-            task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-            assigned_at=timezone.now(), is_active=True,
-        )
-        closed_task = self._make_task('AE-0002', status=Task.Status.CLOSED)
-        TaskAssignment.objects.create(
-            task=closed_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
-            assigned_at=timezone.now(), is_active=True,
-        )
+    def test_workload_splits_work_to_do_into_today_upcoming_and_overdue(self):
+        now = timezone.now()
+        for number, when, status in [
+            ('AE-0001', now, Task.Status.ASSIGNED),                         # today
+            ('AE-0002', now - timedelta(days=3), Task.Status.ACCEPTED),     # overdue
+            ('AE-0003', None, Task.Status.NEW),                             # no date yet: upcoming
+            ('AE-0004', now + timedelta(days=5), Task.Status.ASSIGNED),     # upcoming
+            ('AE-0005', now, Task.Status.CLOSED),                           # done: not counted
+        ]:
+            task = self._make_task(number, scheduled_for=when, status=status)
+            TaskAssignment.objects.create(
+                task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                assigned_at=now, is_active=True,
+            )
 
         self._login_manager()
         response = self.client.get('/tasks/dashboard/')
 
         technician = response.context['technicians'][0]
-        self.assertEqual(technician.active_task_count, 1)
+        self.assertEqual(technician.workload, {'today': 1, 'upcoming': 2, 'overdue': 1})
 
     def test_shows_open_tasks_with_lead_and_schedule(self):
         task = self._make_task('AE-0001', scheduled_for=dubai_time(2026, 9, 9, 9, 0), status=Task.Status.ASSIGNED)
@@ -5605,10 +5608,16 @@ class MonthlyReportTests(TaskTestCase):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(f'/tasks/reports/monthly/?month={self.this_month:%Y-%m}')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['ticket_total'], 2)
-        self.assertEqual(response.context['task_total'], 2)
-        self.assertContains(response, 'Cairo Gym')
-        self.assertNotContains(response, 'Old Ticket')
+        # The headline figures: this month's two requests and two tasks, last month's left out.
+        headlines = {card['label']: card['value'] for card in response.context['headlines']}
+        self.assertEqual(headlines['Requests received'], '2')
+        self.assertEqual(headlines['Tasks opened'], '2')
+        # Every country, side by side; one of the two tasks is closed.
+        rows = {row['country']: row for row in response.context['by_country']}
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sum(row['completion'] or 0 for row in rows.values()), 100)
+        # A management summary: no list of every request and task (that's the CSV).
+        self.assertNotContains(response, 'UAE-0001')
 
     def test_export_is_a_csv_download(self):
         self.client.login(username='manager1', password='pass12345')
@@ -7744,7 +7753,7 @@ class CancelTaskTests(TaskTestCase):
     def test_manager_cancels_with_a_reason_and_the_team_is_told(self):
         self.client.login(username='manager1', password='pass12345')
         with patch('tasks.views.push_cancelled') as push:
-            self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'Customer called it off'})
+            self.client.post(self.url, {'action': 'cancel_task', 'note': 'Customer called it off'})
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.CANCELLED)
         event = self.task.events.get(event_type=TaskEvent.EventType.CANCELLED)
@@ -7753,7 +7762,7 @@ class CancelTaskTests(TaskTestCase):
 
     def test_a_reason_is_required(self):
         self.client.login(username='manager1', password='pass12345')
-        self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': ''})
+        self.client.post(self.url, {'action': 'cancel_task', 'note': ''})
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.ASSIGNED)
 
@@ -7762,16 +7771,80 @@ class CancelTaskTests(TaskTestCase):
         self.task.save(update_fields=['status'])
         self.client.login(username='manager1', password='pass12345')
         self.assertFalse(self.client.get(self.url).context['can_cancel'])
-        self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'x'})
+        self.client.post(self.url, {'action': 'cancel_task', 'note': 'x'})
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
     def test_supervisor_cannot_cancel(self):
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'cancel_task', 'cancel-note': 'x'})
+        response = self.client.post(self.url, {'action': 'cancel_task', 'note': 'x'})
         self.assertEqual(response.status_code, 403)
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+
+class RebookStoppedTaskTests(TaskTestCase):
+    """A task stopped on site (blocked) gets a new visit: the same task, a
+    new time, back to its team, the stop kept in its history."""
+
+    def setUp(self):
+        super().setUp()
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager',
+            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.task = Task.objects.create(
+            task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.BLOCKED,
+        )
+        TaskAssignment.objects.create(
+            task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+            assigned_at=timezone.now(), is_active=True,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
+            actor=self.supervisor_user, note='Gym closed',
+        )
+        self.new_time = (timezone.localtime() + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+
+    def _rebook(self, when, note=''):
+        return self.client.post(self.url, {
+            'action': 'rebook', 'scheduled_for': when.strftime('%Y-%m-%dT%H:%M'), 'note': note,
+        })
+
+    def test_manager_books_a_new_visit_and_the_lead_is_told(self):
+        self.client.login(username='manager1', password='pass12345')
+        self.assertContains(self.client.get(self.url), 'Gym closed')
+        with patch('tasks.views.push_rebooked') as push:
+            self._rebook(self.new_time, 'Customer confirmed it reopens')
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+        self.assertEqual(self.task.scheduled_for, self.new_time)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).get().note,
+                         'Customer confirmed it reopens')
+        self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.BLOCKED).exists())
+        push.assert_called_once_with(self.technician, self.task)
+
+    def test_a_time_in_the_past_is_refused(self):
+        self.client.login(username='manager1', password='pass12345')
+        self._rebook(self.new_time - timedelta(days=10))
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.BLOCKED)
+
+    def test_only_a_stopped_task_can_be_rebooked(self):
+        self.task.status = Task.Status.ASSIGNED
+        self.task.save(update_fields=['status'])
+        self.client.login(username='manager1', password='pass12345')
+        self._rebook(self.new_time)
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.scheduled_for)
+
+    def test_supervisor_cannot_rebook(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self._rebook(self.new_time).status_code, 403)
 
 
 class TakenOffTaskTests(TaskTestCase):

@@ -35,7 +35,7 @@ from django.utils.crypto import get_random_string, salted_hmac
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
-from django.utils.translation import ngettext
+from django.utils.translation import gettext_lazy, ngettext
 from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
@@ -51,14 +51,14 @@ from people.permissions import (
     require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
-from people.push import push_assigned, push_cancelled, push_in_their_language, push_removed
+from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
     AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
-    StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, CloseTicketForm, ConductAreaCreateForm,
+    StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
@@ -1456,20 +1456,28 @@ def home_summary(request, technician):
 
 def dashboard_overview(active_country):
     """The dashboard's figures for a country: its technicians (with their
-    open-task counts), every open task in "needs someone first" order
+    work still to do: today, upcoming, overdue), every open task in "needs someone first" order
     (emergencies, then no lead, then no date) and the counts. The website's
     Dashboard and the app's (api.views.DashboardView).
     """
     technicians = list(Technician.objects.filter(
         is_active=True, country=active_country, role=Technician.Role.TECHNICIAN,
     ).order_by('full_name'))
-    active_task_counts = dict(
-        TaskAssignment.objects.filter(
-            technician__in=technicians, is_active=True, task__status__in=OPEN_STATUSES,
-        ).values('technician_id').annotate(count=Count('id')).values_list('technician_id', 'count'),
-    )
+    # Each technician's work still to do, by its day in this country: today,
+    # upcoming (later, or no date yet) and overdue (its day has passed).
+    # Work done and waiting for review or closing doesn't count.
+    to_do = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
+    country_zone = ZoneInfo(active_country.timezone)
+    today = timezone.now().astimezone(country_zone).date()
+    workload = {technician.id: {'today': 0, 'upcoming': 0, 'overdue': 0} for technician in technicians}
+    for technician_id, scheduled_for, scheduled_date in TaskAssignment.objects.filter(
+        technician__in=technicians, is_active=True, task__status__in=to_do,
+    ).values_list('technician_id', 'task__scheduled_for', 'task__scheduled_date'):
+        day = scheduled_for.astimezone(country_zone).date() if scheduled_for else scheduled_date
+        when = 'upcoming' if day is None or day > today else 'today' if day == today else 'overdue'
+        workload[technician_id][when] += 1
     for technician in technicians:
-        technician.active_task_count = active_task_counts.get(technician.id, 0)
+        technician.workload = workload[technician.id]
 
     tasks = list(_with_lead_prefetch(
         Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
@@ -1984,13 +1992,50 @@ def task_detail(request, pk):
             messages.success(request, _('Task closed.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
-    cancel_task_form = CancelTaskForm(prefix='cancel')
+    # A task stopped on site (blocked) gets a new visit: the same task, a new
+    # time, back to its team (assigned — or new, with nobody on it). The stop
+    # and its reason stay in the history; customer and lead are told, as for
+    # any booking.
+    rebook_form = RebookVisitForm()
+    if request.method == 'POST' and request.POST.get('action') == 'rebook':
+        require_manager(request)
+        if task.status != Task.Status.BLOCKED:
+            messages.error(request, _('Only a task stopped on site can be given a new visit here.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+        rebook_form = RebookVisitForm(request.POST)
+        if rebook_form.is_valid():
+            lead = task.assignments.filter(is_active=True, role=TaskAssignment.Role.LEAD).select_related(
+                'technician',
+            ).first()
+            with transaction.atomic():
+                task.scheduled_for = rebook_form.cleaned_data['scheduled_for']
+                task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+                task.status = Task.Status.ASSIGNED if lead else Task.Status.NEW
+                task.save(update_fields=['scheduled_for', 'scheduled_date', 'status'])
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(),
+                    actor=request.user,
+                    note=rebook_form.cleaned_data['note'] or _('New visit after the work stopped on site.'),
+                )
+                notify_customer.visit_booked(task)
+            if lead:
+                push_rebooked(lead.technician, task)
+            if task.site.effective_contact_email and NotificationSettings.load().auto_notify_on_reschedule:
+                _send_schedule_notification(task)
+                task.schedule_notified_at = timezone.now()
+                task.schedule_notified_by = request.user
+                task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+            messages.success(request, _('New visit booked.'))
+            return redirect('tasks:task_detail', pk=task.pk)
+
+    # Close and cancel share one form on the page (one reason box, `note`).
+    cancel_task_form = CancelTaskForm()
     if request.method == 'POST' and request.POST.get('action') == 'cancel_task':
         require_manager(request)
         if task.status not in CANCELLABLE_STATUSES:
             messages.error(request, _('This task can no longer be cancelled.'))
             return redirect('tasks:task_detail', pk=task.pk)
-        cancel_task_form = CancelTaskForm(request.POST, prefix='cancel')
+        cancel_task_form = CancelTaskForm(request.POST)
         if cancel_task_form.is_valid():
             cancel_task(task, request.user, cancel_task_form.cleaned_data['note'])
             messages.success(request, _('Task cancelled.'))
@@ -2116,6 +2161,10 @@ def task_detail(request, pk):
         'feedback': getattr(task, 'feedback', None),
         'close_task_form': close_task_form,
         'cancel_task_form': cancel_task_form,
+        'rebook_form': rebook_form,
+        # Why it stopped, in the technician's words (shown with "Book a new visit").
+        'stop_reason': task.events.filter(event_type=TaskEvent.EventType.BLOCKED).order_by('-occurred_at')
+        .values_list('note', flat=True).first() if task.status == Task.Status.BLOCKED else '',
         'can_cancel': task.status in CANCELLABLE_STATUSES,
         'negligence_form': negligence_form,
         'pending_schedule_request': pending_schedule_request,
@@ -2913,8 +2962,10 @@ def ticket_list(request):
         }.items() if value
     }
 
+    # 25 to a page, like the task list: "All" across countries runs to thousands.
+    page_obj = Paginator(tickets, 25).get_page(request.GET.get('page'))
     context = {
-        'tickets': tickets, 'status': status, 'status_choices': CustomerTicket.Status.choices,
+        'tickets': page_obj, 'page_obj': page_obj, 'status': status, 'status_choices': CustomerTicket.Status.choices,
         'about': about, 'about_choices': CustomerTicket.About.choices,
         'need': need, 'need_choices': CustomerTicket.Need.choices,
         'ticket_id': ticket_id, 'company': company, 'site': site, 'pak': pak,
@@ -3514,13 +3565,218 @@ def task_week(request):
     return render(request, 'tasks/task_week.html', _calendar_context(request, tasks, country))
 
 
+# The schedule's groups, in a manager's words and reading order: what needs
+# a new date first (missed; stopped on site — a blocked task, for whatever
+# reason the technician gave), then work under way, then done.
+SCHEDULE_GROUPS = [
+    ('missed', gettext_lazy('Missed'), gettext_lazy('Its day has passed and the work was not done.')),
+    ('stopped', gettext_lazy('Stopped on site'),
+     gettext_lazy("The technician went but couldn't do or finish the work. Their reason is shown with each task.")),
+    ('in_progress', gettext_lazy('In progress'), gettext_lazy('The technician is working on it.')),
+    ('planned', gettext_lazy('Planned'), gettext_lazy('Booked, not started yet.')),
+    ('done', gettext_lazy('Done'), gettext_lazy('The work is finished (some still waiting for review).')),
+]
+SCHEDULE_ATTENTION = ('missed', 'stopped')
+
+
+def _scheduled_tasks(start, end, today, country=None):
+    """Every task (not cancelled) whose day — in its own country — falls in
+    [start, end], as (task id, country id, day, group): its schedule group
+    (SCHEDULE_GROUPS) — "missed" when its day has passed and the work
+    hasn't started, "stopped" when it's blocked."""
+    zones = {country.pk: ZoneInfo(country.timezone) for country in Country.objects.all()}
+    tasks = Task.objects.filter(
+        Q(scheduled_for__date__range=(start - timedelta(days=1), end + timedelta(days=1)))
+        | Q(scheduled_for__isnull=True, scheduled_date__range=(start, end)),
+    ).exclude(status=Task.Status.CANCELLED)
+    if country is not None:
+        tasks = tasks.filter(site__customer__country=country)
+    planned = {Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED}
+    placed = []
+    for task_id, scheduled_for, scheduled_date, status, country_id in tasks.values_list(
+        'pk', 'scheduled_for', 'scheduled_date', 'status', 'site__customer__country_id',
+    ):
+        day = scheduled_for.astimezone(zones[country_id]).date() if scheduled_for else scheduled_date
+        if start <= day <= end:
+            if status == Task.Status.BLOCKED:
+                group = 'stopped'
+            elif status == Task.Status.IN_PROGRESS:
+                group = 'in_progress'
+            elif status in planned:
+                group = 'missed' if day < today else 'planned'
+            else:
+                group = 'done'
+            placed.append((task_id, country_id, day, group))
+    return placed
+
+
+def _all_countries_grid(request):
+    """The all-countries schedule as a summary grid: per country (and, under
+    it, per technician, plus work with no technician yet), how many tasks
+    fall in each column, and how many of those need attention (blocked, or
+    their day has passed with the work still to do). Week view: one column
+    a day; month view (?view=month&month=YYYY-MM): one column a week. Each
+    task counts on its own day in its own country.
+    """
+    today = timezone.localdate()
+    if request.GET.get('view') == 'month':
+        month = parse_date(f"{request.GET.get('month', '')}-01") or today.replace(day=1)
+        next_month = (month + timedelta(days=32)).replace(day=1)
+        start = _week_start(month)
+        end = _week_start(next_month - timedelta(days=1)) + timedelta(days=WEEK_LENGTH - 1)
+        columns = [
+            {'start': week, 'end': week + timedelta(days=WEEK_LENGTH - 1),
+             'is_today': week <= today <= week + timedelta(days=WEEK_LENGTH - 1)}
+            for week in (start + timedelta(days=offset) for offset in range(0, (end - start).days + 1, WEEK_LENGTH))
+        ]
+        nav = {
+            'view': 'month', 'month': month, 'prev_month': (month - timedelta(days=1)).replace(day=1),
+            'next_month': next_month, 'this_month': today.replace(day=1),
+        }
+    else:
+        start = _week_start(parse_date(request.GET.get('start', '') or '') or today)
+        end = start + timedelta(days=WEEK_LENGTH - 1)
+        columns = [
+            {'start': day, 'end': day, 'is_today': day == today}
+            for day in (start + timedelta(days=offset) for offset in range(WEEK_LENGTH))
+        ]
+        nav = {
+            'view': 'week', 'start': start, 'end': end, 'prev_start': start - timedelta(days=WEEK_LENGTH),
+            'next_start': start + timedelta(days=WEEK_LENGTH), 'this_start': _week_start(today),
+        }
+
+    def column_of(day):
+        if not start <= day <= end:
+            return None
+        return (day - start).days // (WEEK_LENGTH if nav['view'] == 'month' else 1)
+
+    countries = {country.pk: country for country in Country.objects.all()}
+    placed = {  # task id -> (country id, column, its group)
+        task_id: (country_id, column_of(day), group)
+        for task_id, country_id, day, group in _scheduled_tasks(start, end, today)
+    }
+
+    def empty_row(**fields):
+        # Each cell knows its column's first day (where its link opens) and whether it holds today.
+        cells = [{'count': 0, 'attention': 0, 'groups': {}, 'start': column['start'], 'end': column['end'],
+                  'is_today': column['is_today']} for column in columns]
+        return {**fields, 'cells': cells, 'total': 0}
+
+    def add(row, column, group):
+        cell = row['cells'][column]
+        cell['count'] += 1
+        cell['attention'] += group in SCHEDULE_ATTENTION
+        cell['groups'][group] = cell['groups'].get(group, 0) + 1
+        row['total'] += 1
+
+    rows, technicians, assigned = {}, {}, set()
+    for task_id, technician_id, name in TaskAssignment.objects.filter(
+        task_id__in=placed, is_active=True,
+    ).values_list('task_id', 'technician_id', 'technician__full_name'):
+        country_id, column, group = placed[task_id]
+        key = (country_id, technician_id)
+        if key not in technicians:
+            technicians[key] = empty_row(name=name, pk=technician_id)
+        add(technicians[key], column, group)
+        assigned.add(task_id)
+    totals = empty_row()
+    for task_id, (country_id, column, group) in placed.items():
+        if country_id not in rows:
+            rows[country_id] = empty_row(country=countries[country_id], unassigned=empty_row())
+        add(rows[country_id], column, group)
+        add(totals, column, group)
+        if task_id not in assigned:
+            add(rows[country_id]['unassigned'], column, group)
+    for (country_id, _technician_id), row in technicians.items():
+        rows[country_id].setdefault('technicians', []).append(row)
+    # Hovering a number shows what's in it: "2 blocked · 15 overdue · 3 completed".
+    labels = {key: label for key, label, _meaning in SCHEDULE_GROUPS}
+    every_row = [totals, *rows.values(), *(row['unassigned'] for row in rows.values()), *technicians.values()]
+    for row in every_row:
+        for cell in row['cells']:
+            cell['summary'] = ' · '.join(
+                f"{cell['groups'][key]} {str(labels[key]).lower()}" for key, _label, _meaning in SCHEDULE_GROUPS
+                if cell['groups'].get(key)
+            )
+    grid = sorted(rows.values(), key=lambda row: row['country'].display_name)
+    for row in grid:
+        row['technicians'] = sorted(row.get('technicians', []), key=lambda technician: technician['name'])
+    # Each number opens its tasks (all_week_tasks): the country's, a technician's, or the unassigned.
+    base = reverse('tasks:all_week_tasks')
+
+    def link(row, **extra):
+        for cell in row['cells']:
+            query = urlencode({'country': country_id, **extra, 'start': cell['start'], 'end': cell['end']})
+            cell['url'] = f'{base}?{query}'
+
+    for row in grid:
+        country_id = row['country'].pk
+        link(row)
+        link(row['unassigned'], technician='none')
+        for technician in row['technicians']:
+            link(technician, technician=technician['pk'])
+    return {'grid_columns': columns, 'grid': grid, 'grid_totals': totals, 'nav': nav, 'today': today}
+
+
 @login_required
-def all_week(request):
-    """The same calendar for every country at once, each card naming its
-    country. Manager-only, same fixed floor as the other "all ..." boards.
+def all_week_tasks(request):
+    """The tasks behind one number on the all-countries schedule: a
+    country's (or one of its technician's, or its unassigned) tasks over a
+    day or week, grouped as the schedule counts them — overdue and blocked
+    first — each linking to its task. Manager-only, like the grid.
     """
     require_manager(request)
-    return render(request, 'tasks/all_week.html', {**_calendar_context(request, Task.objects.all()), 'show_country': True})
+    country = get_object_or_404(Country, pk=request.GET.get('country'))
+    start = parse_date(request.GET.get('start', '') or '')
+    end = parse_date(request.GET.get('end', '') or '') or start
+    if start is None or end < start or (end - start).days > 31:
+        raise Http404
+    today = timezone.localdate()
+    placed = {task_id: (day, group) for task_id, _country, day, group in _scheduled_tasks(start, end, today, country)}
+    tasks = Task.objects.filter(pk__in=placed).select_related('site__customer', 'task_type')
+    technician = None
+    if request.GET.get('technician') == 'none':
+        tasks = tasks.exclude(assignments__is_active=True)
+    elif request.GET.get('technician'):
+        technician = get_object_or_404(Technician, pk=request.GET.get('technician'))
+        tasks = tasks.filter(assignments__technician=technician, assignments__is_active=True).distinct()
+    tasks = list(_with_lead_prefetch(tasks))
+    _attach_lead_technician(tasks)
+    # A stopped task's reason: the technician's note when they marked it blocked.
+    reasons = {}
+    for task_id, note in TaskEvent.objects.filter(
+        task__in=[task for task in tasks if task.status == Task.Status.BLOCKED],
+        event_type=TaskEvent.EventType.BLOCKED,
+    ).order_by('occurred_at').values_list('task_id', 'note'):
+        reasons[task_id] = note
+    by_group = {}
+    for task in sorted(tasks, key=lambda task: (placed[task.pk][0], task.task_number)):
+        task.stop_reason = reasons.get(task.pk, '')
+        task.day = placed[task.pk][0]
+        by_group.setdefault(placed[task.pk][1], []).append(task)
+    return render(request, 'tasks/all_week_tasks.html', {
+        'country': country, 'technician': technician, 'unassigned': request.GET.get('technician') == 'none',
+        'start': start, 'end': end, 'week_start': _week_start(start), 'total': len(tasks),
+        'groups': [
+            {
+                'key': key, 'label': label, 'meaning': meaning, 'tasks': by_group[key],
+                'attention': key in SCHEDULE_ATTENTION,
+            }
+            for key, label, meaning in SCHEDULE_GROUPS if by_group.get(key)
+        ],
+    })
+
+
+@login_required
+def all_week(request):
+    """The schedule for every country at once, as a summary grid
+    (_all_countries_grid): countries, and under each its technicians, by day
+    or by week. A country's cell opens its own calendar there; a
+    technician's opens their board. Manager-only, same fixed floor as the
+    other "all ..." boards.
+    """
+    require_manager(request)
+    return render(request, 'tasks/all_week.html', _all_countries_grid(request))
 
 
 # Still to be done: what makes a past-dated task overdue (a task whose
@@ -5028,37 +5284,26 @@ def _month_report_querysets(period_start_date):
 
 @login_required
 def monthly_report(request):
-    """Every ticket and task received in a given month, company-wide,
-    with status — the report a manager pulls together each month for
-    leadership. Manager-tier, not gated by view_tasks/manage_tickets:
-    it's a cross-country summary, same fixed-floor reasoning as the
-    all_* boards.
+    """The monthly operations report for management (tasks.monthly): the
+    month's headline figures against the month before, then by country,
+    request type, type of work, satisfaction and customer — laid out to
+    print or save as PDF. Company-wide; the full list of every request and
+    task is the CSV export. Manager-tier, same fixed floor as the all_*
+    boards.
     """
-    require_manager(request)
+    from .monthly import month_report
 
+    technician = require_manager(request)
     period_start_date = _resolve_report_month(request)
-    tickets, tasks = _month_report_querysets(period_start_date)
-
-    ticket_status_labels = dict(CustomerTicket.Status.choices)
-    task_status_labels = dict(Task.Status.choices)
-
+    previous_month = _shift_month(period_start_date, -1)
     context = {
         'period_start': period_start_date,
-        'prev_month': _shift_month(period_start_date, -1),
+        'prev_month': previous_month,
         'next_month': _shift_month(period_start_date, 1),
         'this_month': timezone.localtime().date().replace(day=1),
-        'tickets': tickets,
-        'tasks': tasks,
-        'ticket_status_counts': [
-            {'label': ticket_status_labels.get(row['status'], row['status']), 'count': row['count']}
-            for row in tickets.values('status').annotate(count=Count('id')).order_by('status')
-        ],
-        'task_status_counts': [
-            {'label': task_status_labels.get(row['status'], row['status']), 'count': row['count']}
-            for row in tasks.values('status').annotate(count=Count('id')).order_by('status')
-        ],
-        'ticket_total': tickets.count(),
-        'task_total': tasks.count(),
+        'prepared_by': getattr(technician, 'full_name', '') or request.user.get_full_name() or request.user.username,
+        'prepared_at': timezone.now(),
+        **month_report(period_start_date, previous_month),
     }
     return render(request, 'tasks/monthly_report.html', context)
 

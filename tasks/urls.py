@@ -9,6 +9,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('week/', views.task_week, name='task_week'),
     path('week/all/', views.all_week, name='all_week'),
+    path('week/all/tasks/', views.all_week_tasks, name='all_week_tasks'),
     path('my-week/', views.my_week, name='my_week'),
     path('my-progress/', views.my_progress, name='my_progress'),
     path('my-skills/', views.my_skills, name='my_skills'),

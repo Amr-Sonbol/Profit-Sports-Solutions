@@ -4,13 +4,117 @@
 {% block title %}{% translate "All countries — schedule" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
+{# A summary grid: countries (and, opened, their technicians) by day or by week; each cell leads to the full calendar there. #}
 <div class="page__header">
     <div>
         <a href="{% url 'tasks:task_list' %}?country=all" class="back-link">{% translate "Back to all tasks" %}</a>
         <h1>{% translate "All countries — schedule" %}</h1>
+        <p class="muted">{% translate "How many tasks each country and technician has, day by day. Open a country to see its technicians; point at a number to see what's in it, or select it to see those tasks." %}</p>
     </div>
 </div>
-<p class="field__help">{% translate "The schedule for all countries. This view is not affected by the country selector above." %}</p>
 
-{% include "tasks/_calendar.html" %}
+<div class="sgrid-toolbar">
+    <nav class="tabs" aria-label="{% translate 'View' %}">
+        <a href="?view=week" {% if nav.view == 'week' %}class="is-active" aria-current="page"{% endif %}>{% translate "Week" %}</a>
+        <a href="?view=month" {% if nav.view == 'month' %}class="is-active" aria-current="page"{% endif %}>{% translate "Month" %}</a>
+    </nav>
+    <strong class="sgrid-toolbar__period">
+        {% if nav.view == 'month' %}{{ nav.month|date:"F Y" }}{% else %}{{ nav.start|date:"j M" }} – {{ nav.end|date:"j M Y" }}{% endif %}
+    </strong>
+    <nav class="mreport-months" aria-label="{% translate 'Period' %}">
+        {% if nav.view == 'month' %}
+        <a href="?view=month&month={{ nav.prev_month|date:'Y-m' }}" class="button button--secondary"><span class="mreport-months__arrow" aria-hidden="true">‹</span> {% translate "Previous month" %}</a>
+        <a href="?view=month&month={{ nav.this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
+        <a href="?view=month&month={{ nav.next_month|date:'Y-m' }}" class="button button--secondary">{% translate "Next month" %} <span class="mreport-months__arrow" aria-hidden="true">›</span></a>
+        {% else %}
+        <a href="?start={{ nav.prev_start|date:'Y-m-d' }}" class="button button--secondary"><span class="mreport-months__arrow" aria-hidden="true">‹</span> {% translate "Previous week" %}</a>
+        <a href="?start={{ nav.this_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "This week" %}</a>
+        <a href="?start={{ nav.next_start|date:'Y-m-d' }}" class="button button--secondary">{% translate "Next week" %} <span class="mreport-months__arrow" aria-hidden="true">›</span></a>
+        {% endif %}
+    </nav>
+</div>
+
+{# What a cell means, in symbols only — no example numbers that could pass for real ones. #}
+<p class="sgrid-legend muted"><span class="sgrid-count sgrid-count--key" aria-hidden="true"></span> = {% if nav.view == 'month' %}{% translate "tasks that week" %}{% else %}{% translate "tasks that day" %}{% endif %} · <span class="sgrid-busy">▶</span> = {% translate "of them, in progress now" %} · <span class="sgrid-alert">⚠</span> = {% translate "of them, need a new date (missed, or stopped on site)" %}</p>
+
+{% if grid %}
+<div class="table-wrap">
+    <table class="sgrid">
+        <thead>
+            <tr>
+                <th scope="col">{% translate "Country / technician" %}</th>
+                {% for column in grid_columns %}
+                <th scope="col"{% if column.is_today %} class="is-today"{% endif %}>
+                    {% if nav.view == 'month' %}{{ column.start|date:"j M" }} – {{ column.end|date:"j M" }}{% else %}{{ column.start|date:"D" }}<br>{{ column.start|date:"j M" }}{% endif %}
+                </th>
+                {% endfor %}
+                <th scope="col">{% translate "Total" %}</th>
+            </tr>
+        </thead>
+        {% for row in grid %}
+        <tbody class="sgrid-country" data-country-group>
+            <tr class="sgrid-country__row">
+                <th scope="row">
+                    <span class="sgrid-country__name">{{ row.country.display_name }}</span>
+                    {% if row.technicians or row.unassigned.total %}
+                    <button type="button" class="sgrid-toggle" aria-expanded="false" data-country-toggle>
+                        <span aria-hidden="true">▸</span>
+                        {% blocktranslate count counter=row.technicians|length %}{{ counter }} technician{% plural %}{{ counter }} technicians{% endblocktranslate %}
+                    </button>
+                    {% endif %}
+                </th>
+                {% for cell in row.cells %}
+                {% include "tasks/_sgrid_cell.html" with url=cell.url %}
+                {% endfor %}
+                <td><strong>{{ row.total }}</strong></td>
+            </tr>
+            {% for technician in row.technicians %}
+            <tr class="sgrid-person" hidden data-country-detail>
+                <th scope="row">{{ technician.name }}</th>
+                {% for cell in technician.cells %}
+                {% include "tasks/_sgrid_cell.html" with url=cell.url %}
+                {% endfor %}
+                <td>{{ technician.total }}</td>
+            </tr>
+            {% endfor %}
+            {% if row.unassigned.total %}
+            <tr class="sgrid-person sgrid-person--none" hidden data-country-detail>
+                <th scope="row">{% translate "No technician yet" %}</th>
+                {% for cell in row.unassigned.cells %}
+                {% include "tasks/_sgrid_cell.html" with url=cell.url %}
+                {% endfor %}
+                <td>{{ row.unassigned.total }}</td>
+            </tr>
+            {% endif %}
+        </tbody>
+        {% endfor %}
+        <tfoot>
+            <tr>
+                <th scope="row">{% translate "All countries" %}</th>
+                {% for cell in grid_totals.cells %}
+                {% include "tasks/_sgrid_cell.html" with url='' %}
+                {% endfor %}
+                <td>{{ grid_totals.total }}</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">{% translate "No tasks are scheduled in this period." %}</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// "▸ N technicians": show or hide that country's technician rows.
+document.querySelectorAll('[data-country-toggle]').forEach(function (button) {
+    button.addEventListener('click', function () {
+        var open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        button.closest('[data-country-group]').querySelectorAll('[data-country-detail]').forEach(function (row) {
+            row.hidden = !open;
+        });
+    });
+});
+</script>
 {% endblock %}

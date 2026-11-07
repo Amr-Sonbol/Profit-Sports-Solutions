@@ -960,6 +960,25 @@ class CloseTaskForm(forms.Form):
     )
 
 
+class RebookVisitForm(forms.Form):
+    """Manager-only — a task stopped on site (blocked) gets a new visit:
+    the same task, a new day and time, back to its team."""
+    scheduled_for = forms.DateTimeField(
+        label=_('New visit'), input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+    )
+    note = forms.CharField(
+        label=_('Note (optional)'), required=False, widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('For the team, for example: the part has arrived, or the customer confirmed the gym will be open.'),
+    )
+
+    def clean_scheduled_for(self):
+        value = self.cleaned_data['scheduled_for']
+        if value < timezone.now():
+            raise forms.ValidationError(_('Choose a time from now on.'))
+        return value
+
+
 class CancelTaskForm(forms.Form):
     """Manager-only — calls a task off before any report is filed. Unlike
     closing, the customer's ticket conversation stays open."""

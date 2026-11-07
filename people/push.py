@@ -7,7 +7,8 @@ import logging
 from urllib.request import Request, urlopen
 
 from django.conf import settings
-from django.utils import translation
+from django.utils import timezone, translation
+from django.utils.formats import date_format
 from django.utils.translation import gettext as _
 
 from .models import NotificationSettings, PushDevice
@@ -67,6 +68,21 @@ def push_assigned(technician, task, is_lead):
         technician,
         lambda: _('New task assigned') if is_lead else _('Added as helper'),
         lambda: _('%(number)s — %(site)s') % {'number': task.task_number, 'site': task.site.name},
+        {'type': 'my_task', 'task_id': task.pk},
+    )
+
+
+def push_rebooked(technician, task):
+    """Tells the lead that a task stopped on site has a new visit."""
+    if not NotificationSettings.load().push_assigned:  # the admin's Notifications page
+        return
+    push_in_their_language(
+        technician,
+        lambda: _('New visit booked'),
+        lambda: _('%(number)s — %(site)s, %(when)s') % {
+            'number': task.task_number, 'site': task.site.name,
+            'when': date_format(timezone.localtime(task.scheduled_for), 'j F, P'),
+        },
         {'type': 'my_task', 'task_id': task.pk},
     )
 

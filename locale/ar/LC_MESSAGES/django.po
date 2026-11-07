@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-06 23:36+0000\n"
+"POT-Creation-Date: 2026-11-07 10:59+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -195,6 +195,26 @@ msgid "%(count)s this month"
 msgstr "%(count)s هذا الشهر"
 
 #, python-format
+msgid "%(counter)s task"
+msgid_plural "%(counter)s tasks"
+msgstr[0] "لا مهام"
+msgstr[1] "مهمة واحدة"
+msgstr[2] "مهمتان"
+msgstr[3] "%(counter)s مهام"
+msgstr[4] "%(counter)s مهمة"
+msgstr[5] "%(counter)s مهمة"
+
+#, python-format
+msgid "%(counter)s technician"
+msgid_plural "%(counter)s technicians"
+msgstr[0] "لا فنيين"
+msgstr[1] "فني واحد"
+msgstr[2] "فنيان"
+msgstr[3] "%(counter)s فنيين"
+msgstr[4] "%(counter)s فنيًا"
+msgstr[5] "%(counter)s فني"
+
+#, python-format
 msgid "%(day)s is a day off in %(country)s; weekend work is normally for emergencies only."
 msgstr "%(day)s يوم عطلة في %(country)s؛ ويقتصر العمل في العطلة عادةً على الحالات الطارئة."
 
@@ -299,6 +319,10 @@ msgstr "%(number)s — %(company)s"
 #, python-format
 msgid "%(number)s — %(site)s"
 msgstr "%(number)s — %(site)s"
+
+#, python-format
+msgid "%(number)s — %(site)s, %(when)s"
+msgstr "%(number)s — %(site)s، %(when)s"
 
 #, python-format
 msgid "%(number)s — %(site)s. Your attendance is no longer required."
@@ -688,9 +712,6 @@ msgstr "تم فحص جميع الكابلات والتأكد من سلامتها
 msgid "All countries"
 msgstr "كل الدول"
 
-msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
-msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
-
 msgid "All countries — schedule"
 msgstr "كل الدول — الجدول الزمني"
 
@@ -850,6 +871,12 @@ msgstr "متاح"
 msgid "Available technicians"
 msgstr "الفنيون المتاحون"
 
+msgid "Average days from request to visit"
+msgstr "متوسط الأيام من الطلب حتى الزيارة"
+
+msgid "Average days to completion"
+msgstr "متوسط الأيام حتى الإنجاز"
+
 msgid "Awaiting action"
 msgstr "بانتظار إجراء"
 
@@ -873,6 +900,9 @@ msgstr "بانتظار قرارك"
 
 msgid "Back"
 msgstr "رجوع"
+
+msgid "Back to all countries — schedule"
+msgstr "العودة إلى جدول كل الدول"
 
 msgid "Back to all tasks"
 msgstr "العودة إلى كل المهام"
@@ -965,6 +995,15 @@ msgstr "اللوحة"
 msgid "Bolts tightened"
 msgstr "تم إحكام شدّ البراغي"
 
+msgid "Book a new visit"
+msgstr "حجز زيارة جديدة"
+
+msgid "Book the new visit"
+msgstr "تأكيد الزيارة الجديدة"
+
+msgid "Booked, not started yet."
+msgstr "محجوزة ولم تبدأ بعد."
+
 msgid "Branch name or city"
 msgstr "اسم الفرع أو المدينة"
 
@@ -979,6 +1018,9 @@ msgstr "اسم العلامة التجارية"
 
 msgid "Brands"
 msgstr "العلامات التجارية"
+
+msgid "By country"
+msgstr "حسب الدولة"
 
 msgid "CSV file"
 msgstr "ملف CSV"
@@ -998,17 +1040,14 @@ msgstr "عرض التقويم"
 msgid "Can train others"
 msgstr "قادر على تدريب الآخرين"
 
-msgid "Cancel task"
-msgstr "إلغاء المهمة"
+msgid "Cancel"
+msgstr "إلغاء"
 
 msgid "Cancel trip"
 msgstr "إلغاء الرحلة"
 
 msgid "Cancelled"
 msgstr "ملغاة"
-
-msgid "Cancels the task before a report is submitted. All assigned staff will be notified, and the customer's ticket conversation will remain open."
-msgstr "يُلغي المهمة قبل تقديم أي تقرير. سيتم إشعار جميع الموظفين المكلَّفين بها، وستظل محادثة تذكرة العميل مفتوحة."
 
 #, python-format
 msgid "Carrier: %(company)s"
@@ -1082,6 +1121,9 @@ msgstr "اختر كلمة مرور جديدة"
 
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
+
+msgid "Choose a time from now on."
+msgstr "اختر وقتًا من الآن فصاعدًا."
 
 msgid "Choose at least one machine to carry to the next step."
 msgstr "اختر جهازًا واحدًا على الأقل لنقله إلى الخطوة التالية."
@@ -1158,6 +1200,12 @@ msgstr "مكتملة"
 
 msgid "Completed — return to the technician"
 msgstr "مكتمل — إعادة إلى الفني"
+
+msgid "Completion rate"
+msgstr "نسبة الإنجاز"
+
+msgid "Completion rate of the month's tasks"
+msgstr "نسبة إنجاز مهام الشهر"
 
 msgid "Condition"
 msgstr "الحالة"
@@ -1255,9 +1303,6 @@ msgstr "تصحيح التقرير"
 msgid "Correct time"
 msgstr "تصحيح الوقت"
 
-msgid "Count"
-msgstr "العدد"
-
 #, python-format
 msgid "Count recorded: %(code)s %(difference)+d."
 msgstr "سُجّل الجرد: %(code)s %(difference)+d."
@@ -1273,6 +1318,9 @@ msgstr "الدول"
 
 msgid "Country"
 msgstr "الدولة"
+
+msgid "Country / technician"
+msgstr "الدولة / الفني"
 
 msgid "Country Support Manager"
 msgstr "مدير الدعم في الدولة"
@@ -1324,9 +1372,6 @@ msgstr "كلمة المرور الحالية"
 
 msgid "Current photo"
 msgstr "الصورة الحالية"
-
-msgid "Current tasks"
-msgstr "المهام الحالية"
 
 msgid "Customer"
 msgstr "العميل"
@@ -1389,6 +1434,19 @@ msgstr "رد العميل"
 msgid "Customer request"
 msgstr "طلب العميل"
 
+#, python-format
+msgid "Customer satisfaction (%(counter)s rating)"
+msgid_plural "Customer satisfaction (%(counter)s ratings)"
+msgstr[0] "رضا العملاء (%(counter)s تقييم)"
+msgstr[1] "رضا العملاء (%(counter)s تقييم)"
+msgstr[2] "رضا العملاء (%(counter)s تقييم)"
+msgstr[3] "رضا العملاء (%(counter)s تقييم)"
+msgstr[4] "رضا العملاء (%(counter)s تقييم)"
+msgstr[5] "رضا العملاء (%(counter)s تقييم)"
+
+msgid "Customer satisfaction (out of 5)"
+msgstr "رضا العملاء (من 5)"
+
 msgid "Customer sign-off"
 msgstr "توقيع العميل"
 
@@ -1450,6 +1508,9 @@ msgstr "تاريخ الإرسال"
 
 msgid "Date to be set"
 msgstr "سيُحدَّد الموعد"
+
+msgid "Day"
+msgstr "اليوم"
 
 msgid "Day and exact time"
 msgstr "اليوم والوقت المحدد"
@@ -1917,11 +1978,18 @@ msgstr "تنزيل CSV"
 msgid "Download a template CSV"
 msgstr "تنزيل نموذج CSV"
 
+msgid "Download full list (CSV)"
+msgstr "تنزيل القائمة الكاملة (CSV)"
+
 msgid "Download report (PDF)"
 msgstr "تنزيل التقرير (PDF)"
 
 msgid "Download the report (PDF)"
 msgstr "تنزيل التقرير (PDF)"
+
+#, python-format
+msgid "Each change is against %(month)s."
+msgstr "كل تغيير مقارنةً بشهر %(month)s."
 
 #, python-format
 msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
@@ -2083,6 +2151,9 @@ msgstr "جميع الرسائل التي يرسلها النظام، ومتى، 
 msgid "Every request you have sent us, and how far each has got."
 msgstr "كل طلب أرسلته إلينا، وإلى أين وصل."
 
+msgid "Every task opened this month is finished."
+msgstr "أُنجزت جميع المهام التي فُتحت هذا الشهر."
+
 msgid "Every technician in the country, by rank. Completed means the work report was submitted; the line is their last year, month by month."
 msgstr "جميع الفنيين في الدولة حسب الترتيب. المنجزة تعني أنه تم تقديم تقرير العمل؛ والخط يمثّل سنتهم الماضية شهرًا بشهر."
 
@@ -2195,11 +2266,11 @@ msgstr "مثال: منطقة الأوزان الحرة، بجوار الحوام
 msgid "For example: lockers 12 and 14, men's changing room."
 msgstr "مثال: الخزانتان 12 و14، غرفة تبديل الملابس للرجال."
 
-msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
-msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
-
 msgid "For task"
 msgstr "للمهمة"
+
+msgid "For the team, for example: the part has arrived, or the customer confirmed the gym will be open."
+msgstr "للفريق، مثال: وصلت القطعة، أو أكّد العميل أن النادي سيكون مفتوحًا."
 
 msgid "Forgot your password?"
 msgstr "هل نسيت كلمة المرور؟"
@@ -2270,6 +2341,9 @@ msgstr "لم ينفّذ هذا الإصلاح بمفرده من قبل، أو ل
 msgid "Heading to site"
 msgstr "في الطريق إلى الموقع"
 
+msgid "Headline figures"
+msgstr "المؤشرات الرئيسية"
+
 msgid "Held for"
 msgstr "محجوزة لـ"
 
@@ -2327,6 +2401,9 @@ msgstr "الوسيلة"
 
 msgid "How many arrived"
 msgstr "كم وصل"
+
+msgid "How many tasks each country and technician has, day by day. Open a country to see its technicians; point at a number to see what's in it, or select it to see those tasks."
+msgstr "عدد مهام كل دولة وكل فني يومًا بيوم. افتح الدولة لترى فنييها، ومرّر المؤشر على رقم لترى تفاصيله، أو اختره لترى تلك المهام."
 
 msgid "How the customer reached us"
 msgstr "كيف تواصل معنا العميل"
@@ -2471,6 +2548,9 @@ msgstr "عنوان الفاتورة"
 msgid "It joins your list at once, waiting for our team to confirm it — at the next visit, or from the photo of its sticker."
 msgstr "يُضاف إلى قائمتك فورًا، بانتظار تأكيد فريقنا — في الزيارة القادمة، أو من صورة الملصق."
 
+msgid "Its day has passed and the work was not done."
+msgstr "مضى يومها ولم يُنجز العمل."
+
 msgid "Job"
 msgstr "المهمة"
 
@@ -2503,6 +2583,9 @@ msgid "Later today"
 msgstr "لاحقًا اليوم"
 
 msgid "Lead"
+msgstr "الفني الرئيسي"
+
+msgid "Lead technician"
 msgstr "الفني الرئيسي"
 
 msgid "Lead technician set."
@@ -2732,6 +2815,9 @@ msgstr "رسالة إلى العميل (اختياري)"
 msgid "Messages"
 msgstr "الرسائل"
 
+msgid "Missed"
+msgstr "فائتة"
+
 msgid "Missing"
 msgstr "مفقود"
 
@@ -2754,12 +2840,18 @@ msgstr "شهر"
 msgid "Monthly"
 msgstr "شهري"
 
+msgid "Monthly operations report"
+msgstr "التقرير التشغيلي الشهري"
+
 msgid "Monthly report"
 msgstr "التقرير الشهري"
 
 #, python-format
 msgid "More planned than %(warehouse)s holds: %(codes)s. Check the warehouse, or record a count on the Stock screen."
 msgstr "المخطَّط أكثر مما في %(warehouse)s: %(codes)s. تحقّق من المستودع، أو سجّل جردًا في شاشة المخزون."
+
+msgid "Most active customers"
+msgstr "العملاء الأكثر نشاطًا"
 
 msgid "Move all their open tasks to"
 msgstr "نقل جميع مهامه المفتوحة إلى"
@@ -2895,6 +2987,18 @@ msgstr "طلب جديد"
 msgid "New ticket %(number)s — %(company)s"
 msgstr "طلب جديد %(number)s — %(company)s"
 
+msgid "New visit"
+msgstr "الزيارة الجديدة"
+
+msgid "New visit after the work stopped on site."
+msgstr "زيارة جديدة بعد توقف العمل في الموقع."
+
+msgid "New visit booked"
+msgstr "تم حجز زيارة جديدة"
+
+msgid "New visit booked."
+msgstr "تم حجز زيارة جديدة."
+
 msgid "Next"
 msgstr "التالي"
 
@@ -2955,11 +3059,17 @@ msgstr "لا يوجد فنيون نشطون في دولتك."
 msgid "No active technicians."
 msgstr "لا يوجد فنيون نشطون."
 
+msgid "No activity this month."
+msgstr "لا يوجد نشاط هذا الشهر."
+
 msgid "No attachments."
 msgstr "لا توجد مرفقات."
 
 msgid "No brand"
 msgstr "بدون علامة تجارية"
+
+msgid "No change"
+msgstr "دون تغيير"
 
 msgid "No check-ins today"
 msgstr "لا توجد تسجيلات اليوم"
@@ -3093,9 +3203,6 @@ msgstr "لا توجد منتجات."
 msgid "No readable serial plate"
 msgstr "لا توجد لوحة رقم تسلسلي مقروءة"
 
-msgid "No records to display."
-msgstr "لا توجد سجلات لعرضها."
-
 msgid "No reports yet. A visit's report appears here once our team has finished."
 msgstr "لا توجد تقارير بعد. يظهر تقرير الزيارة هنا عندما ينتهي فريقنا."
 
@@ -3120,20 +3227,26 @@ msgstr "لا مهام"
 msgid "No tasks are scheduled for today."
 msgstr "لا توجد مهام مجدولة لليوم."
 
+msgid "No tasks are scheduled in this period."
+msgstr "لا توجد مهام مجدولة في هذه الفترة."
+
+msgid "No tasks here."
+msgstr "لا توجد مهام هنا."
+
 msgid "No tasks match these filters."
 msgstr "لا توجد مهام مطابقة لهذه الفلاتر."
 
 msgid "No tasks this month."
 msgstr "لا توجد مهام هذا الشهر."
 
+msgid "No technician yet"
+msgstr "لا فني بعد"
+
 msgid "No technicians match your search."
 msgstr "لا يوجد فنيون مطابقون لبحثك."
 
 msgid "No tickets match the selected filters."
 msgstr "لا توجد تذاكر مطابقة لعوامل التصفية المحددة."
-
-msgid "No tickets this month."
-msgstr "لا توجد طلبات هذا الشهر."
 
 msgid "No visit is booked at the moment. We will let you know as soon as one is."
 msgstr "لا توجد زيارة محجوزة حاليًا. سنخبرك فور حجز زيارة."
@@ -3202,6 +3315,9 @@ msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
 msgid "Not sent"
 msgstr "لم تُرسل"
 
+msgid "Not set"
+msgstr "غير محدد"
+
 msgid "Not signed"
 msgstr "غير موقَّع"
 
@@ -3258,6 +3374,9 @@ msgstr "لا يوجد ما تبقّى لإنجازه اليوم."
 
 msgid "Nothing missing was found."
 msgstr "لم يُعثر على أي نقص."
+
+msgid "Nothing recorded this month."
+msgstr "لم يُسجل شيء هذا الشهر."
 
 #, python-format
 msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
@@ -3324,6 +3443,9 @@ msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من ق�
 msgid "Only a manager plans the machines on a loading."
 msgstr "المدير فقط يخطّط أجهزة التحميل."
 
+msgid "Only a task stopped on site can be given a new visit here."
+msgstr "لا يمكن حجز زيارة جديدة هنا إلا لمهمة توقف العمل فيها في الموقع."
+
 msgid "Only closed tasks can be flagged."
 msgstr "لا يمكن الإبلاغ إلا عن المهام المغلقة."
 
@@ -3350,6 +3472,12 @@ msgstr "المهام المفتوحة"
 
 msgid "Open tasks to reassign"
 msgstr "مهام مفتوحة لإعادة الإسناد"
+
+msgid "Open the country's calendar"
+msgstr "فتح تقويم الدولة"
+
+msgid "Open the technician's board"
+msgstr "فتح لوحة الفني"
 
 msgid "Open their record"
 msgstr "فتح سجله"
@@ -3544,6 +3672,9 @@ msgstr "نظرة عامة على الأداء"
 msgid "Performed by"
 msgstr "نُفّذت بواسطة"
 
+msgid "Period"
+msgstr "الفترة"
+
 msgid "Permission"
 msgstr "الصلاحية"
 
@@ -3591,6 +3722,9 @@ msgstr "صور أو فيديو أو PDF"
 
 msgid "Pick the work performed."
 msgstr "اختر الأعمال المنفّذة."
+
+msgid "Planned"
+msgstr "مخططة"
 
 msgid "Planned for an earlier day and not done yet."
 msgstr "كانت مخططة ليوم سابق ولم تُنجز بعد."
@@ -3723,6 +3857,12 @@ msgstr "حساب البوابة"
 msgid "Portal welcome and password link"
 msgstr "الترحيب في البوابة ورابط كلمة المرور"
 
+msgid "Prepared by"
+msgstr "أعده"
+
+msgid "Prepared on"
+msgstr "تاريخ الإعداد"
+
 msgid "Preview report"
 msgstr "معاينة التقرير"
 
@@ -3743,6 +3883,9 @@ msgstr "الأسبوع الماضي"
 
 msgid "Previous year"
 msgstr "السنة السابقة"
+
+msgid "Print or save as PDF"
+msgstr "طباعة أو حفظ كملف PDF"
 
 msgid "Priority"
 msgstr "الأولوية"
@@ -4056,6 +4199,16 @@ msgstr "طلب في %(time)s"
 msgid "Requests"
 msgstr "الطلبات"
 
+msgid "Requests are counted by the day they were sent, tasks by the day they were opened, visits by the day their report was filed, and ratings by the day they were given."
+msgstr "تُحتسب الطلبات بيوم إرسالها، والمهام بيوم فتحها، والزيارات بيوم تقديم تقريرها، والتقييمات بيوم إعطائها."
+
+#, python-format
+msgid "Requests by type (%(total)s)"
+msgstr "الطلبات حسب النوع (%(total)s)"
+
+msgid "Requests received"
+msgstr "الطلبات الواردة"
+
 msgid "Required for this type of task."
 msgstr "مطلوب لهذا النوع من المهام."
 
@@ -4083,6 +4236,9 @@ msgstr "تفاصيل الحل، مثل طلب المخزون أو رد المو�
 
 msgid "Resolved"
 msgstr "تم الحل"
+
+msgid "Resolved on the first visit"
+msgstr "حُلّت من الزيارة الأولى"
 
 #, python-format
 msgid "Resolved: %(answer)s"
@@ -4147,6 +4303,9 @@ msgstr "التأخر عن الموعد"
 
 msgid "Same as the report"
 msgstr "نفس ساعات التقرير"
+
+msgid "Satisfaction"
+msgstr "الرضا"
 
 msgid "Saturday"
 msgstr "السبت"
@@ -4219,6 +4378,9 @@ msgstr "مجدولة في"
 
 msgid "Scheduled from"
 msgstr "مجدولة من"
+
+msgid "Scheduled tasks"
+msgstr "المهام المجدولة"
 
 msgid "Scheduled to"
 msgstr "مجدولة إلى"
@@ -4612,6 +4774,9 @@ msgstr "طلب مخزون"
 msgid "Stopped for today"
 msgstr "تم الإيقاف لليوم"
 
+msgid "Stopped on site"
+msgstr "توقف في الموقع"
+
 msgid "Subject"
 msgstr "الموضوع"
 
@@ -4712,15 +4877,14 @@ msgstr "المهام المنجزة شهريًا"
 msgid "Tasks not scheduled"
 msgstr "مهام غير مجدولة"
 
+msgid "Tasks opened"
+msgstr "المهام المفتوحة"
+
 msgid "Tasks opened and completed per month"
 msgstr "المهام المفتوحة والمكتملة شهريًا"
 
 msgid "Tasks opened and completed per week"
 msgstr "المهام المفتوحة والمكتملة أسبوعيًا"
-
-#, python-format
-msgid "Tasks received (%(total)s)"
-msgstr "المهام الواردة (%(total)s)"
 
 msgid "Tasks without a lead technician"
 msgstr "مهام بدون فني رئيسي"
@@ -4936,6 +5100,9 @@ msgstr "الأجهزة الواردة في إذن التسليم. الكمية 4
 msgid "The machines to carry, with their serial numbers and colors:"
 msgstr "الأجهزة المنقولة، بأرقامها التسلسلية وألوانها:"
 
+msgid "The matter is resolved without the usual report and approval, for example a visit that proved unnecessary. The customer's request is closed too."
+msgstr "تمت معالجة الأمر دون التقرير والاعتماد المعتادين، كزيارة تبيّن أنها غير ضرورية. ويُغلق طلب العميل أيضًا."
+
 msgid "The part names or numbers if you know them, and how many of each."
 msgstr "أسماء القطع أو أرقامها إن كنت تعرفها، والكمية المطلوبة من كل منها."
 
@@ -4967,14 +5134,17 @@ msgstr "لم يتم حل المشكلة المُبلّغ عنها بالكامل
 msgid "The rest"
 msgstr "الباقي"
 
-msgid "The schedule for all countries. This view is not affected by the country selector above."
-msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
-
 msgid "The signature could not be read. Please sign again."
 msgstr "تعذّرت قراءة التوقيع. يرجى التوقيع مجدداً."
 
 msgid "The supervisor has been notified of the shipment."
 msgstr "تم إشعار المشرف بالشحنة."
+
+msgid "The technician is working on it."
+msgstr "الفني يعمل عليها."
+
+msgid "The technician went but couldn't do or finish the work. Their reason is shown with each task."
+msgstr "ذهب الفني لكنه لم يتمكن من تنفيذ العمل أو إكماله. يظهر سببه مع كل مهمة."
 
 msgid "The trip cannot end before it starts."
 msgstr "لا يمكن أن تنتهي الرحلة قبل بدايتها."
@@ -4985,12 +5155,21 @@ msgstr "حقلا كلمة المرور غير متطابقين."
 msgid "The version you signed"
 msgstr "النسخة التي وقّعتها"
 
+msgid "The visit is called off before any report. The assigned staff are told, and the customer's request stays open for follow-up."
+msgstr "تُلغى الزيارة قبل أي تقرير. يُبلَّغ الفريق المكلَّف، ويبقى طلب العميل مفتوحًا للمتابعة."
+
 msgid "The visit report appears here once our team has finished, and you can download it."
 msgstr "يظهر تقرير الزيارة هنا عندما ينتهي فريقنا، ويمكنك تنزيله."
 
 #, python-format
 msgid "The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for %(days)s days."
 msgstr "تُرسل رسالة الترحيب باللغة الإنجليزية، وباللغة العربية أيضاً للعملاء في الدول العربية، ورابط التفعيل الآمن فيها صالح لمدة %(days)s أيام."
+
+msgid "The work is finished (some still waiting for review)."
+msgstr "أُنجز العمل (وبعضه بانتظار المراجعة)."
+
+msgid "The work stopped on site. Give it a new day and time: the task goes back to its team, and the stop and its reason stay in the history."
+msgstr "توقف العمل في الموقع. حدّد يومًا ووقتًا جديدين: تعود المهمة إلى فريقها، ويبقى التوقف وسببه في السجل."
 
 msgid "The year"
 msgstr "السنة"
@@ -5028,6 +5207,9 @@ msgstr "يمكن تحديد هذه البيانات من شاشة تعديل ا�
 
 msgid "These can be uploaded from the task's Edit screen."
 msgstr "يمكن رفع هذه الملفات من شاشة تعديل المهمة."
+
+msgid "These need a new date."
+msgstr "تحتاج هذه إلى موعد جديد."
 
 msgid "These staff members have been deactivated but remain assigned to the following tasks. Please open each task and select a replacement; for a lead, choose the reason “Left the company”."
 msgstr "تم إلغاء تفعيل هؤلاء الموظفين، لكنهم لا يزالون مسندين إلى المهام التالية. يرجى فتح كل مهمة واختيار بديل؛ وبالنسبة لقائد المهمة، اختر السبب «غادر الشركة»."
@@ -5114,6 +5296,9 @@ msgstr "هذا الجهاز يحتاج إلى رقمه التسلسلي — اك
 
 msgid "This month"
 msgstr "هذا الشهر"
+
+msgid "This month's tasks still open"
+msgstr "مهام هذا الشهر التي لا تزال مفتوحة"
 
 msgid "This page does not exist, or you do not have permission to access it. Please verify the link or return to the previous page."
 msgstr "هذه الصفحة غير موجودة، أو ليست لديك صلاحية الوصول إليها. يرجى التحقق من الرابط أو العودة إلى الصفحة السابقة."
@@ -5266,10 +5451,6 @@ msgstr "أُعيد فتح الطلب."
 msgid "Tickets"
 msgstr "التذاكر"
 
-#, python-format
-msgid "Tickets received (%(total)s)"
-msgstr "الطلبات الواردة (%(total)s)"
-
 msgid "Tickets received and resolved per month"
 msgstr "التذاكر المستلمة والمحلولة شهريًا"
 
@@ -5321,6 +5502,9 @@ msgstr "محاولات تسجيل دخول فاشلة كثيرة جداً من �
 
 msgid "Too many sign-in attempts"
 msgstr "محاولات تسجيل دخول كثيرة جداً"
+
+msgid "Total"
+msgstr "الإجمالي"
 
 #, python-format
 msgid "Track your shipment here: %(url)s"
@@ -5427,6 +5611,9 @@ msgstr "متابعة مع مورّد"
 
 msgid "Video"
 msgstr "فيديو"
+
+msgid "View"
+msgstr "عرض"
 
 #, python-format
 msgid "View all %(count)s"
@@ -5543,6 +5730,9 @@ msgstr "الزيارات"
 msgid "Visits coming up"
 msgstr "الزيارات القادمة"
 
+msgid "Visits completed"
+msgstr "الزيارات المنجزة"
+
 msgid "Waiting for confirmation"
 msgstr "بانتظار التأكيد"
 
@@ -5637,6 +5827,9 @@ msgstr "مرحباً بك. يرجى تعيين كلمة المرور."
 
 msgid "What do you need?"
 msgstr "ما الذي تحتاج إليه؟"
+
+msgid "What each request was about, against what the customer needed."
+msgstr "موضوع كل طلب مقابل ما احتاجه العميل."
 
 msgid "What happened"
 msgstr "ماذا حدث"
@@ -5737,11 +5930,17 @@ msgstr "من يستلمها"
 msgid "Why"
 msgstr "السبب"
 
+msgid "Why it's being closed or cancelled, for example the customer cancelled or the issue was solved by phone."
+msgstr "سبب الإغلاق أو الإلغاء، كأن يكون العميل قد ألغى أو حُلّت المشكلة عبر الهاتف."
+
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
 
 msgid "Work Performed"
 msgstr "الأعمال المنفّذة"
+
+msgid "Work by type"
+msgstr "العمل حسب النوع"
 
 msgid "Work done"
 msgstr "العمل المنجز"
@@ -6465,6 +6664,12 @@ msgstr "إعدادات الإشعارات"
 msgid "occurred at"
 msgstr "حدث في"
 
+msgid "of them, in progress now"
+msgstr "منها قيد التنفيذ الآن"
+
+msgid "of them, need a new date (missed, or stopped on site)"
+msgstr "منها تحتاج إلى موعد جديد (فائتة، أو توقف العمل في الموقع)"
+
 msgid "one account covers every site under this customer; created by staff only, no self-registration"
 msgstr "حساب واحد يشمل جميع مواقع هذا العميل؛ يُنشئه الموظفون فقط، ولا يتاح التسجيل الذاتي"
 
@@ -6928,6 +7133,12 @@ msgstr "أنواع المهام"
 msgid "tasks"
 msgstr "المهام"
 
+msgid "tasks that day"
+msgstr "مهام في ذلك اليوم"
+
+msgid "tasks that week"
+msgstr "مهام في ذلك الأسبوع"
+
 msgid "technician"
 msgstr "الفني"
 
@@ -7209,6 +7420,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "A problem with a machine"
 #~ msgstr "مشكلة في جهاز"
 
+#~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
+#~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
+
 #~ msgid "Attachment"
 #~ msgstr "مرفق"
 
@@ -7228,8 +7442,17 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Black"
 #~ msgstr "أسود"
 
+#~ msgid "Blocked or overdue"
+#~ msgstr "متوقفة أو متأخرة"
+
 #~ msgid "Blue"
 #~ msgstr "أزرق"
+
+#~ msgid "Cancel task"
+#~ msgstr "إلغاء المهمة"
+
+#~ msgid "Cancels the task before a report is submitted. All assigned staff will be notified, and the customer's ticket conversation will remain open."
+#~ msgstr "يُلغي المهمة قبل تقديم أي تقرير. سيتم إشعار جميع الموظفين المكلَّفين بها، وستظل محادثة تذكرة العميل مفتوحة."
 
 #~ msgid "Cannot be used"
 #~ msgstr "لا يمكن استخدامه"
@@ -7243,6 +7466,15 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Coming up"
 #~ msgstr "القادم"
 
+#~ msgid "Couldn't access the site"
+#~ msgstr "تعذّر دخول الموقع"
+
+#~ msgid "Count"
+#~ msgstr "العدد"
+
+#~ msgid "Current tasks"
+#~ msgstr "المهام الحالية"
+
 #~ msgid "Download (PDF)"
 #~ msgstr "تنزيل (PDF)"
 
@@ -7252,6 +7484,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "File %(number)s"
 #~ msgstr "ملف %(number)s"
+
+#~ msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
+#~ msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
 
 #~ msgid "Green"
 #~ msgstr "أخضر"
@@ -7273,6 +7508,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Navy"
 #~ msgstr "كحلي"
+
+#~ msgid "No records to display."
+#~ msgstr "لا توجد سجلات لعرضها."
 
 #~ msgid "No, it's not in my list yet"
 #~ msgstr "لا، ليس في قائمتي بعد"
@@ -7316,11 +7554,21 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Submit"
 #~ msgstr "إرسال"
 
+#, python-format
+#~ msgid "Tasks received (%(total)s)"
+#~ msgstr "المهام الواردة (%(total)s)"
+
 #~ msgid "Teal"
 #~ msgstr "أزرق مخضر"
 
 #~ msgid "The machine cannot be used"
 #~ msgstr "لا يمكن استخدام الجهاز"
+
+#~ msgid "The schedule for all countries. This view is not affected by the country selector above."
+#~ msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
+#~ msgid "The team went, but the gym was closed, there was no key or the customer was absent."
+#~ msgstr "ذهب الفريق، لكن النادي كان مغلقًا أو لم يتوفر مفتاح أو كان العميل غائبًا."
 
 #~ msgid "This is not a customer account."
 #~ msgstr "هذا ليس حساب عميل."
@@ -7340,8 +7588,8 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Two columns: code and description. A header row is permitted."
 #~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
 
-#~ msgid "View"
-#~ msgstr "عرض"
+#~ msgid "Waiting for review"
+#~ msgstr "بانتظار المراجعة"
 
 #~ msgid "Warranty end"
 #~ msgstr "نهاية الضمان"
@@ -7388,6 +7636,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "internal tickets only"
 #~ msgstr "للتذاكر الداخلية فقط"
+
+#~ msgid "of them blocked, or overdue (their day has passed with the work still to do)"
+#~ msgstr "منها متوقفة أو متأخرة (مضى يومها والعمل لم يُنجز بعد)"
 
 #~ msgid "request type"
 #~ msgstr "نوع الطلب"
