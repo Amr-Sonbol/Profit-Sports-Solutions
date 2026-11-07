@@ -67,7 +67,10 @@ def ticket_progress(ticket):
     if ticket.status == CustomerTicket.Status.NEW:
         return RECEIVED
     if ticket.status == CustomerTicket.Status.CONVERTED:
-        return visit_progress(ticket.task) if ticket.task_id else BEING_ARRANGED
+        # Its visit cancelled: the request isn't settled, the team arranges it again.
+        if not ticket.task_id or ticket.task.status == Task.Status.CANCELLED:
+            return BEING_ARRANGED
+        return visit_progress(ticket.task)
     if ticket.status == CustomerTicket.Status.CLOSED:
         return RESOLVED
     return CLOSED

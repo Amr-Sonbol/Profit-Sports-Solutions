@@ -654,8 +654,10 @@ def _portal_requests(customer):
         ticket.report_visit = ticket.task if ticket.task_id and getattr(ticket.task, 'report', None) else None
         ticket.progress = ticket_progress(ticket)
         ticket.steps = progress_steps(ticket.progress) if ticket.heads_for_a_visit else None
+        # A cancelled visit doesn't settle the request: it stays open, as it does for the team.
         ticket.is_open = ticket.status == CustomerTicket.Status.NEW or (
-            ticket.status == CustomerTicket.Status.CONVERTED and ticket.task_id and is_upcoming(ticket.task)
+            ticket.status == CustomerTicket.Status.CONVERTED and ticket.task_id
+            and (is_upcoming(ticket.task) or ticket.task.status == Task.Status.CANCELLED)
         )
     return tickets
 
