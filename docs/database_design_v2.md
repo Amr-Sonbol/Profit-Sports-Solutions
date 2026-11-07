@@ -532,7 +532,7 @@ A complaint or request from a customer — or an internal matter staff need to f
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | kind | varchar | `customer` (default), `stock` (stock request), `vendor` (vendor follow-up), `other` (other internal) |
-| about | varchar | what a customer's request is about, the first of two questions on the portal: `machines` (default), `flooring`, `accessories`, `lockers`, `other` (something else) |
+| about | varchar | what a customer's request is about, the first of two questions on the portal: `machines` (default), `flooring`, `accessories`, `lockers`, `other` (something else) — or `new_branch`, a customer asking us to add a branch they've opened (portal "Request a new branch"; never offered on the request form): nothing is created from it, an admin adds the branch from the request ("Add this branch" fills the site form in) with its warranty start |
 | need | varchar | what they need, the second question: `repair` (fix a problem, default), `parts` (spare parts or a quotation), `visit` (a maintenance visit), `assistance` (advice or assistance). `machines` with `repair` or `parts` is told through machine cards (`ticket_machine`); every other pair is a message, saved as `description`, with files on the ticket itself. Replaced a single `topic` (migrations 0070–0072 converted it) |
 | source | varchar | customer tickets: `portal` (default), `phone`, `whatsapp`, `email` — the same values as `task.source`, so a task made from it keeps the channel |
 | opened_by_id | FK → user | nullable — the staff member who opened it; empty when the customer did |

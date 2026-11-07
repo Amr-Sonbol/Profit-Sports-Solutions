@@ -51,6 +51,7 @@ from people.permissions import (
     require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
+from spots.hosts import portal_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
@@ -1229,7 +1230,7 @@ def _send_feedback_email(request, feedback):
     """
     task = feedback.task
     country_tz = ZoneInfo(task.site.customer.country.timezone)
-    link = request.build_absolute_uri(reverse('reports:feedback_form', args=[feedback.token]))
+    link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token]))
     contact = task.site.effective_contact_name or task.site.customer.name
     site = task.site.name
     with translation.override('en'):
@@ -2514,7 +2515,7 @@ def send_ticket_confirmation_to_customer(request, ticket):
         return
     if not ticket.contact_email:
         return
-    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
     with translation.override('en'):
         subject = _('Ticket %(number)s received — Profit Sports Solutions') % {'number': ticket.ticket_number}
         message = _(
@@ -2607,7 +2608,7 @@ def _send_reply_to_customer(request, reply):
     ticket = reply.ticket
     if not ticket.contact_email:
         return
-    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
     with translation.override('en'):
         subject = _('New reply on your ticket %(number)s — %(site)s') % {
             'number': ticket.ticket_number, 'site': ticket.site_description,
@@ -2642,7 +2643,7 @@ def _send_request_closed(request, ticket):
         return
     if not ticket.contact_email:
         return
-    link = request.build_absolute_uri(reverse('tasks:ticket_status', args=[ticket.token]))
+    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
     with translation.override('en'):
         subject = _('Your request %(number)s has been resolved — %(site)s') % {
             'number': ticket.ticket_number, 'site': ticket.site_description,

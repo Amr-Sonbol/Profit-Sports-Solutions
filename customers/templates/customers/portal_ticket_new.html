@@ -31,6 +31,7 @@
             <label for="{{ form.site.id_for_label }}">{{ form.site.label }}</label>
             {{ form.site }}
             {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            <p class="field__help"><a href="{% url 'customers:portal_branch_request' %}">{% translate "Your branch isn't listed? Request a new branch" %}</a></p>
         </div>
         <div class="report-steps__nav" hidden data-steps-nav>
             <button type="button" class="button" data-step-next>{% translate "Next" %}</button>

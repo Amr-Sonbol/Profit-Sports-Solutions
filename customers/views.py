@@ -35,7 +35,7 @@ from .accounts import (
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
-    CustomerTermsForm, SiteTermsForm,
+    CustomerTermsForm, PortalBranchRequestForm, SiteTermsForm,
     CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
     PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm, QuickInviteForm,
     SiteCreateForm, SiteEditForm,
@@ -164,7 +164,14 @@ def customer_detail(request, pk):
             messages.success(request, _('Commercial terms saved.'))
             return redirect(f"{reverse('customers:customer_detail', args=[customer.pk])}?tab=sites#terms")
 
-    form = SiteCreateForm(customer=customer) if is_admin else None
+    # From a customer's new-branch request (ticket_review's "Add this branch"): the form filled in.
+    branch_initial = {
+        field: request.GET[param] for param, field in (
+            ('branch_name', 'name'), ('branch_address', 'address'),
+            ('branch_contact', 'contact_name'), ('branch_phone', 'contact_phone'),
+        ) if request.GET.get(param)
+    }
+    form = SiteCreateForm(customer=customer, initial=branch_initial) if is_admin else None
     if request.method == 'POST' and is_admin and request.POST.get('action') != 'terms':
         form = SiteCreateForm(request.POST, customer=customer)
         if form.is_valid():
@@ -832,6 +839,11 @@ def portal_settings(request):
     return render(request, 'customers/portal_settings.html', {
         'customer': customer, 'details_form': details_form, 'color_form': color_form,
         'email_form': email_form, 'password_form': password_form,
+        # Their branches, and new ones they've asked us to add that we haven't yet.
+        'branches': customer.sites.order_by('name'),
+        'branch_requests': customer.tickets.filter(
+            about=CustomerTicket.About.NEW_BRANCH, status=CustomerTicket.Status.NEW,
+        ).order_by('-submitted_at'),
         # "Your details" in three groups, each under its own title.
         'details_groups': [
             (_('Contact'), ('contact_name', 'contact_phone', 'contact_email')),
@@ -977,6 +989,51 @@ def portal_machine(request, pk):
     return render(request, 'customers/portal_machine.html', {
         'machine': machine, 'visits': visits, 'open_requests': open_requests,
     })
+
+
+@login_required(login_url='customers:portal_login')
+def portal_branch_request(request):
+    """A customer asking us to add a branch they've opened: it arrives as a
+    request ("A new branch") for the team, like any other — nothing is
+    created from it. An admin adds the branch from that request
+    (tasks.views.ticket_review's "Add this branch")."""
+    customer = require_customer(request)
+    if customer.must_change_password:
+        return redirect('customers:portal_first_login')
+    form = PortalBranchRequestForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        data = form.cleaned_data
+        lines = [
+            _('Branch name: %(name)s') % {'name': data['name']},
+            _('Address: %(address)s') % {'address': data['address']},
+        ]
+        if data['contact_name'] or data['contact_phone'] or data['contact_email']:
+            lines.append(_('Contact: %(name)s %(phone)s %(email)s') % {
+                'name': data['contact_name'], 'phone': data['contact_phone'], 'email': data['contact_email'],
+            })
+        if data['opening_date']:
+            lines.append(_('Opening date: %(date)s') % {'date': data['opening_date'].isoformat()})
+        if data['message']:
+            lines.append(data['message'])
+        with transaction.atomic():
+            ticket = CustomerTicket(
+                customer=customer, country=customer.country, company_name=customer.name,
+                customer_code=customer.code, site_description=data['name'], site_address=data['address'],
+                contact_name=data['contact_name'] or customer.contact_name or customer.name,
+                contact_phone=data['contact_phone'] or customer.contact_phone,
+                contact_email=customer.contact_email,
+                about=CustomerTicket.About.NEW_BRANCH, need=CustomerTicket.Need.ASSISTANCE,
+                subject=data['name'], description='\n'.join(lines), submitted_at=timezone.now(),
+            )
+            save_new_ticket(ticket)
+            TicketNotification.objects.create(
+                ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
+            )
+        send_ticket_confirmation_to_customer(request, ticket)
+        send_new_ticket_email_to_staff(request, ticket)
+        messages.success(request, _('Thank you. We have received your new branch and will add it to your account.'))
+        return redirect('customers:portal_requests')
+    return render(request, 'customers/portal_branch_request.html', {'form': form})
 
 
 @login_required(login_url='customers:portal_login')

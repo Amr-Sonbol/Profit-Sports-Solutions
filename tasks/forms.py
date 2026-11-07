@@ -1397,7 +1397,8 @@ class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
         self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
         self.fields['attachments'] = message_files_field(_('Files'))
         # Chosen by the customer every time: nothing is assumed.
-        for name, choices in (('about', CustomerTicket.About.choices), ('need', CustomerTicket.Need.choices)):
+        about_choices = [c for c in CustomerTicket.About.choices if c[0] != CustomerTicket.About.NEW_BRANCH]
+        for name, choices in (('about', about_choices), ('need', CustomerTicket.Need.choices)):
             self.fields[name].choices = choices
             self.fields[name].initial = None
         sites = list(customer.sites.all()[:2])
@@ -1768,6 +1769,12 @@ class TicketEditForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'rows': 5}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only machines have serial numbers: flooring, lockers, accessories
+        # and the rest have none, and correcting their details must still save.
+        self.fields['serial_numbers'].required = False
 
 
 class AssignTicketForm(forms.Form):

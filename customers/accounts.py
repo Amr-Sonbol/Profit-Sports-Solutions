@@ -14,6 +14,8 @@ from django.utils import timezone, translation
 from django.utils.crypto import salted_hmac
 from django.utils.translation import gettext_lazy
 
+from spots.hosts import portal_url
+
 LINK_VALID_DAYS = 7
 LINK_SALT = 'customers.portal-link'
 # A customer changing their own sign-in email confirms the new address
@@ -109,7 +111,7 @@ def _in_languages(languages, build):
 
 def _send_link_email(request, customer, subject_msgid, body_msgid, button_msgid):
     user = customer.user
-    link = request.build_absolute_uri(reverse('customers:portal_account_link', args=[make_link_token(user)]))
+    link = portal_url(request, reverse('customers:portal_account_link', args=[make_link_token(user)]))
     _send_account_email(
         customer, user.email, subject_msgid, body_msgid, button_msgid,
         {'link': link, 'username': user.username, 'days': LINK_VALID_DAYS}, link,
@@ -246,7 +248,7 @@ def email_change_for_token(token):
 def send_email_change_link(request, customer, new_email):
     """Email the confirmation link to the new address; nothing changes until
     it's opened."""
-    link = request.build_absolute_uri(
+    link = portal_url(request, 
         reverse('customers:portal_email_confirm', args=[make_email_change_token(customer.user, new_email)]),
     )
     _send_account_email(

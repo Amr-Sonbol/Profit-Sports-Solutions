@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Request a new branch" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+{# A customer telling us about a branch they've opened: it arrives as a request; our team adds the branch. #}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <a href="{% url 'customers:portal_requests' %}" class="back-link">{% translate "Back to requests" %}</a>
+            <h1>{% translate "Request a new branch" %}</h1>
+            <p class="muted">{% translate "Opened a new branch? Tell us about it and our team will add it to your account, so you can send requests and register machines there." %}</p>
+        </div>
+    </div>
+
+    <section class="section">
+        <form method="post" class="form-grid" novalidate>
+            {% csrf_token %}
+            {% for field in form %}
+            <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'address' or field.name == 'message' %} field--wide{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="form-actions field--wide">
+                <button type="submit" class="button">{% translate "Submit request" %}</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

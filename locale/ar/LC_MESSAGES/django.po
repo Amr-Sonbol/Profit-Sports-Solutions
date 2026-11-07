@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 15:15+0000\n"
+"POT-Creation-Date: 2026-11-07 16:03+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -415,6 +415,9 @@ msgstr "يمكن إرفاق %(count)d ملفات كحد أقصى."
 msgid "A member of this task team has left the company."
 msgstr "غادر أحد أعضاء فريق هذه المهمة الشركة."
 
+msgid "A new branch"
+msgstr "فرع جديد"
+
 #, python-format
 msgid ""
 "A new task has been created.\n"
@@ -570,6 +573,12 @@ msgstr "الوقت الفعلي للحدوث"
 msgid "Add a contact email"
 msgstr "إضافة بريد إلكتروني للتواصل"
 
+msgid "Add a contact email address first (Edit details)."
+msgstr "أضف بريدًا إلكترونيًا للتواصل أولًا (تعديل التفاصيل)."
+
+msgid "Add a contact email address for this site first."
+msgstr "أضف بريدًا إلكترونيًا للتواصل لهذا الموقع أولًا."
+
 msgid "Add a machine"
 msgstr "إضافة جهاز"
 
@@ -584,6 +593,9 @@ msgstr "إضافة صورة"
 
 msgid "Add a site"
 msgstr "إضافة فرع"
+
+msgid "Add a tracking number (Edit) first; then you can send it to the customer."
+msgstr "أضف رقم تتبع أولًا (تعديل)، ثم يمكنك إرساله إلى العميل."
 
 msgid "Add another machine"
 msgstr "إضافة جهاز آخر"
@@ -609,6 +621,9 @@ msgstr "أضف كل جهاز على حدة مع صوره الخاصة، ليتم
 msgid "Add helper"
 msgstr "إضافة مساعد"
 
+msgid "Add internal note"
+msgstr "إضافة ملاحظة داخلية"
+
 msgid "Add note"
 msgstr "إضافة ملاحظة"
 
@@ -623,6 +638,9 @@ msgstr "إضافة مهارة"
 
 msgid "Add the machine"
 msgstr "إضافة الجهاز"
+
+msgid "Add this branch"
+msgstr "إضافة هذا الفرع"
 
 msgid "Add trip"
 msgstr "إضافة رحلة"
@@ -656,6 +674,10 @@ msgstr "معلومات إضافية"
 
 msgid "Address"
 msgstr "العنوان"
+
+#, python-format
+msgid "Address: %(address)s"
+msgstr "العنوان: %(address)s"
 
 msgid "Addresses"
 msgstr "العناوين"
@@ -962,6 +984,9 @@ msgstr "المهارات الأساسية المعتمدة بالمستوى %(re
 msgid "Before"
 msgstr "قبل"
 
+msgid "Being added"
+msgstr "قيد الإضافة"
+
 msgid "Being arranged"
 msgstr "قيد الترتيب"
 
@@ -1001,8 +1026,15 @@ msgstr "محجوزة ولم تبدأ بعد."
 msgid "Branch"
 msgstr "الفرع"
 
+msgid "Branch name"
+msgstr "اسم الفرع"
+
 msgid "Branch name or city"
 msgstr "اسم الفرع أو المدينة"
+
+#, python-format
+msgid "Branch name: %(name)s"
+msgstr "اسم الفرع: %(name)s"
 
 msgid "Brand"
 msgstr "العلامة التجارية"
@@ -1153,20 +1185,17 @@ msgstr "إغلاق"
 msgid "Close internal task"
 msgstr "إغلاق المهمة الداخلية"
 
+msgid "Close request"
+msgstr "إغلاق الطلب"
+
 msgid "Close task"
 msgstr "إغلاق المهمة"
-
-msgid "Close ticket"
-msgstr "إغلاق الطلب"
 
 msgid "Close with resolution"
 msgstr "إغلاق مع بيان الحل"
 
 msgid "Closed"
 msgstr "مغلقة"
-
-msgid "Closes the ticket regardless of its current status, including converted or dismissed tickets."
-msgstr "يُغلق التذكرة بصرف النظر عن حالتها الحالية، بما في ذلك التذاكر المحوَّلة أو المرفوضة."
 
 msgid "Club"
 msgstr "نادٍ"
@@ -1274,6 +1303,9 @@ msgstr "تم استبدال لوحة التحكم"
 msgid "Contact"
 msgstr "جهة الاتصال"
 
+msgid "Contact at the branch"
+msgstr "جهة التواصل في الفرع"
+
 msgid "Contact email"
 msgstr "البريد الإلكتروني لجهة الاتصال"
 
@@ -1289,6 +1321,10 @@ msgstr "هاتف جهة الاتصال"
 msgid "Contact phone number"
 msgstr "رقم هاتف التواصل"
 
+#, python-format
+msgid "Contact: %(name)s %(phone)s %(email)s"
+msgstr "جهة التواصل: %(name)s %(phone)s %(email)s"
+
 msgid "Continue"
 msgstr "متابعة"
 
@@ -1300,9 +1336,6 @@ msgstr "المحادثة"
 
 msgid "Convert to a field task"
 msgstr "التحويل إلى مهمة ميدانية"
-
-msgid "Convert to task"
-msgstr "تحويل إلى مهمة"
 
 msgid "Converted to task"
 msgstr "تم تحويلها إلى مهمة"
@@ -1352,6 +1385,9 @@ msgstr "إنشاء مهمة متابعة لها"
 
 msgid "Create a part shipment task"
 msgstr "إنشاء مهمة شحن قطعة"
+
+msgid "Create a task from this request"
+msgstr "إنشاء مهمة من هذا الطلب"
 
 msgid "Create a visit task"
 msgstr "إنشاء مهمة زيارة"
@@ -1952,6 +1988,9 @@ msgstr "معطَّل"
 msgid "Dismiss"
 msgstr "رفض"
 
+msgid "Dismiss this request"
+msgstr "رفض هذا الطلب"
+
 msgid "Dismissed"
 msgstr "مرفوضة"
 
@@ -2028,6 +2067,9 @@ msgstr "تعديل التفاصيل"
 
 msgid "Edit photo"
 msgstr "تعديل الصورة"
+
+msgid "Edit shipping"
+msgstr "تعديل الشحن"
 
 msgid "Edit site"
 msgstr "تعديل الموقع"
@@ -2342,9 +2384,6 @@ msgstr "مجاملة"
 
 msgid "Gym"
 msgstr "صالة رياضية"
-
-msgid "Gym address"
-msgstr "عنوان النادي الرياضي"
 
 msgid "Hand the device to the customer to review the work and the time on site, and sign."
 msgstr "سلّم الجهاز للعميل لمراجعة العمل ومدة العمل في الموقع، ثم التوقيع."
@@ -3454,8 +3493,8 @@ msgstr "إشعار مرة أخرى"
 msgid "Notify customer of scheduled visit"
 msgstr "إشعار العميل بالزيارة المجدولة"
 
-msgid "Notify customer of tracking number"
-msgstr "إشعار العميل برقم التتبع"
+msgid "Notify the customer"
+msgstr "إشعار العميل"
 
 msgid "Number"
 msgstr "الرقم"
@@ -3508,6 +3547,12 @@ msgstr "لا يمكن الإبلاغ إلا عن المهام المغلقة."
 msgid "Only customer_name is required. A file with just customer_name and customer_contact_email is enough: each customer then completes their details after receiving the welcome email from Customer accounts. Save the file from Excel as “CSV UTF-8” so Arabic names are kept."
 msgstr "الحقل customer_name هو الوحيد المطلوب. يكفي ملف يتضمن customer_name وcustomer_contact_email فقط: إذ يستكمل كل عميل بياناته بعد استلام رسالة الترحيب من شاشة حسابات العملاء. يرجى حفظ الملف من Excel بصيغة «CSV UTF-8» للحفاظ على الأسماء العربية."
 
+msgid "Only managers and admins see this. Never shown to the customer."
+msgstr "يراها المديرون والمسؤولون فقط. لا تظهر للعميل أبدًا."
+
+msgid "Only the team on this task sees this. Never shown to the customer."
+msgstr "يراها فريق هذه المهمة فقط. لا تظهر للعميل أبدًا."
+
 msgid "Open"
 msgstr "مفتوحة"
 
@@ -3547,12 +3592,25 @@ msgstr "فتح تذاكر نيابةً عن العميل (هاتف، واتسا�
 msgid "Opened"
 msgstr "تاريخ الفتح"
 
+msgid "Opened a new branch? Tell us about it and our team will add it to your account, so you can send requests and register machines there."
+msgstr "افتتحت فرعًا جديدًا؟ أخبرنا عنه وسيضيفه فريقنا إلى حسابك، لتتمكن من إرسال الطلبات وتسجيل الأجهزة فيه."
+
 msgid "Opened by"
 msgstr "فتحها"
+
+msgid "Opening date (optional)"
+msgstr "تاريخ الافتتاح (اختياري)"
+
+#, python-format
+msgid "Opening date: %(date)s"
+msgstr "تاريخ الافتتاح: %(date)s"
 
 #, python-format
 msgid "Opening stock — %(file)s"
 msgstr "المخزون الافتتاحي — %(file)s"
+
+msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there, then close this request."
+msgstr "يفتح صفحة العميل مع نموذج الفرع معبّأً من هذا الطلب. حدّد هناك بداية الضمان، ثم أغلق هذا الطلب."
 
 msgid "Operations Manager"
 msgstr "مدير العمليات"
@@ -4231,6 +4289,9 @@ msgstr "التقارير المقدمة"
 msgid "Request"
 msgstr "الطلب"
 
+msgid "Request a new branch"
+msgstr "طلب إضافة فرع جديد"
+
 msgid "Request a new link"
 msgstr "طلب رابط جديد"
 
@@ -4381,6 +4442,12 @@ msgstr "السبت"
 
 msgid "Save"
 msgstr "حفظ"
+
+msgid "Save a tracking number first."
+msgstr "احفظ رقم التتبع أولًا."
+
+msgid "Save a tracking number first; then you can send it to the customer."
+msgstr "احفظ رقم التتبع أولًا، ثم يمكنك إرساله إلى العميل."
 
 msgid "Save and sign in"
 msgstr "حفظ وتسجيل الدخول"
@@ -4577,9 +4644,6 @@ msgstr "إرسال للمراجعة"
 msgid "Send link"
 msgstr "إرسال الرابط"
 
-msgid "Send message"
-msgstr "إرسال الرسالة"
-
 msgid "Send my rating"
 msgstr "إرسال تقييمي"
 
@@ -4597,6 +4661,9 @@ msgstr "إرسال رابط الإعداد"
 
 msgid "Send to installation"
 msgstr "إرسال إلى التركيب"
+
+msgid "Send to the team"
+msgstr "إرسال إلى الفريق"
 
 msgid "Send us a request, follow your requests and visits, and download your reports."
 msgstr "أرسل إلينا طلبًا، وتابع طلباتك وزياراتك، وحمّل تقاريرك."
@@ -4996,6 +5063,9 @@ msgstr "الفريق"
 msgid "Team map"
 msgstr "خريطة الفريق"
 
+msgid "Team messages"
+msgstr "رسائل الفريق"
+
 msgid "Team progress"
 msgstr "تقدّم الفريق"
 
@@ -5054,6 +5124,9 @@ msgstr "شكرًا لتقييمك هذه الزيارة."
 msgid "Thank you."
 msgstr "شكراً لكم."
 
+msgid "Thank you. We have received your new branch and will add it to your account."
+msgstr "شكرًا لك. استلمنا بيانات فرعك الجديد وسنضيفه إلى حسابك."
+
 msgid "That day"
 msgstr "ذلك اليوم"
 
@@ -5069,6 +5142,12 @@ msgstr "لم يعد بالإمكان تغيير إسناد هذه المهمة �
 
 msgid "The bell at the top of the page shows new tickets and tasks to the office whatever is set here."
 msgstr "يعرض الجرس أعلى الصفحة البلاغات والمهام الجديدة لموظفي المكتب بغض النظر عن هذه الإعدادات."
+
+msgid "The branch's own email, if it has one. Empty: your main contact."
+msgstr "البريد الإلكتروني الخاص بالفرع إن وُجد. فارغ: جهة التواصل الرئيسية لديك."
+
+msgid "The branches on your account. Opened a new one? Ask us to add it."
+msgstr "الفروع المسجّلة في حسابك. افتتحت فرعًا جديدًا؟ اطلب منا إضافته."
 
 msgid "The carrier and tracking number, from the task or the ticket."
 msgstr "شركة الشحن ورقم التتبع، من المهمة أو البلاغ."
@@ -5112,6 +5191,9 @@ msgstr ""
 
 msgid "The customer receives this report as a PDF by email. Leave blank to send nothing."
 msgstr "يتلقى العميل هذا التقرير بصيغة PDF عبر البريد الإلكتروني. اتركه فارغًا لعدم الإرسال."
+
+msgid "The customer sees these messages."
+msgstr "يرى العميل هذه الرسائل."
 
 #, python-format
 msgid "The customer signed this report on %(date)s. If you change it, please ask the customer to sign again; otherwise it will be marked as changed after signing."
@@ -5240,6 +5322,9 @@ msgstr "تم حل المشكلة المُبلّغ عنها والمعدات تع
 msgid "The reported issue has not yet been fully resolved. A follow-up visit will be arranged."
 msgstr "لم يتم حل المشكلة المُبلّغ عنها بالكامل بعد. سيتم ترتيب زيارة متابعة."
 
+msgid "The request"
+msgstr "الطلب"
+
 msgid "The rest"
 msgstr "الباقي"
 
@@ -5310,9 +5395,6 @@ msgstr "لا يوجد ما ينتظر إجراءً منك."
 
 msgid "There is nothing requiring follow-up today."
 msgstr "لا يوجد ما يتطلب متابعة اليوم."
-
-msgid "These can be set from the task's Edit screen."
-msgstr "يمكن تحديد هذه البيانات من شاشة تعديل المهمة."
 
 msgid "These can be uploaded from the task's Edit screen."
 msgstr "يمكن رفع هذه الملفات من شاشة تعديل المهمة."
@@ -5653,6 +5735,9 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
+msgid "Turn this request into a task to plan the work, or reply below if it can be handled without a visit."
+msgstr "حوّل هذا الطلب إلى مهمة لتخطيط العمل، أو ردّ أدناه إن أمكن معالجته دون زيارة."
+
 msgid "Type"
 msgstr "النوع"
 
@@ -5794,9 +5879,6 @@ msgstr "عرض مخزون المستودعات"
 
 msgid "Viewing"
 msgstr "تعرض بيانات"
-
-msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
-msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
 
 msgid "Visit"
 msgstr "زيارة"
@@ -6197,6 +6279,12 @@ msgstr "تم تغيير بريد تسجيل الدخول لبوابة Profit Spo
 
 msgid "Your account is ready. Welcome."
 msgstr "حسابك جاهز. مرحباً بك."
+
+msgid "Your branch isn't listed? Request a new branch"
+msgstr "فرعك غير موجود؟ اطلب إضافة فرع جديد"
+
+msgid "Your branches"
+msgstr "فروعك"
 
 msgid "Your color has been saved."
 msgstr "تم حفظ لونك."
@@ -7680,6 +7768,12 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
 #~ msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
 
+#~ msgid "Close ticket"
+#~ msgstr "إغلاق الطلب"
+
+#~ msgid "Closes the ticket regardless of its current status, including converted or dismissed tickets."
+#~ msgstr "يُغلق التذكرة بصرف النظر عن حالتها الحالية، بما في ذلك التذاكر المحوَّلة أو المرفوضة."
+
 #~ msgid "Coming up"
 #~ msgstr "القادم"
 
@@ -7688,6 +7782,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Company (as entered)"
 #~ msgstr "الشركة (كما أُدخلت)"
+
+#~ msgid "Convert to task"
+#~ msgstr "تحويل إلى مهمة"
 
 #~ msgid "Couldn't access the site"
 #~ msgstr "تعذّر دخول الموقع"
@@ -7717,6 +7814,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Grey"
 #~ msgstr "رمادي"
 
+#~ msgid "Gym address"
+#~ msgstr "عنوان النادي الرياضي"
+
 #~ msgid "How the matter was resolved without a task, for example advice given or resolved by phone."
 #~ msgstr "كيفية حل الطلب دون إنشاء مهمة، مثل تقديم المشورة أو الحل عبر الهاتف."
 
@@ -7737,6 +7837,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "No, it's not in my list yet"
 #~ msgstr "لا، ليس في قائمتي بعد"
+
+#~ msgid "Notify customer of tracking number"
+#~ msgstr "إشعار العميل برقم التتبع"
 
 #~ msgid "Orange"
 #~ msgstr "برتقالي"
@@ -7765,11 +7868,11 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Report a problem"
 #~ msgstr "الإبلاغ عن مشكلة"
 
+#~ msgid "Send message"
+#~ msgstr "إرسال الرسالة"
+
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"
-
-#~ msgid "Send to our team"
-#~ msgstr "أرسل إلى فريقنا"
 
 #~ msgid "Signed version"
 #~ msgstr "النسخة الموقّعة"
@@ -7793,6 +7896,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "The team went, but the gym was closed, there was no key or the customer was absent."
 #~ msgstr "ذهب الفريق، لكن النادي كان مغلقًا أو لم يتوفر مفتاح أو كان العميل غائبًا."
 
+#~ msgid "These can be set from the task's Edit screen."
+#~ msgstr "يمكن تحديد هذه البيانات من شاشة تعديل المهمة."
+
 #~ msgid "This is not a customer account."
 #~ msgstr "هذا ليس حساب عميل."
 
@@ -7810,6 +7916,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Two columns: code and description. A header row is permitted."
 #~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
+
+#~ msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
+#~ msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
 
 #~ msgid "Waiting for review"
 #~ msgstr "بانتظار المراجعة"
@@ -7835,9 +7944,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Your color"
 #~ msgstr "لونك"
-
-#~ msgid "Your machine"
-#~ msgstr "جهازك"
 
 #~ msgid "Your requests, visits and reports in one place."
 #~ msgstr "طلباتك وزياراتك وتقاريرك في مكان واحد."

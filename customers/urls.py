@@ -29,6 +29,7 @@ urlpatterns = [
     path('portal/history/', RedirectView.as_view(pattern_name='customers:portal_reports')),
     path('portal/reports/', views.portal_reports, name='portal_reports'),
     path('portal/tickets/new/', views.portal_ticket_new, name='portal_ticket_new'),
+    path('portal/branches/new/', views.portal_branch_request, name='portal_branch_request'),
     path('portal/machines/', views.portal_machines, name='portal_machines'),
     path('portal/settings/', views.portal_settings, name='portal_settings'),
     path('portal/machines/add/', views.portal_machine_add, name='portal_machine_add'),

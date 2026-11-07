@@ -324,6 +324,9 @@ class CustomerTicket(models.Model):
         ACCESSORIES = 'accessories', _('Accessories')
         LOCKERS = 'lockers', _('Lockers')
         OTHER = 'other', _('Something else')
+        # A customer asking us to add a branch they've opened (customers.views
+        # portal_branch_request) — never offered on the normal request form.
+        NEW_BRANCH = 'new_branch', _('A new branch')
 
     class Need(models.TextChoices):
         REPAIR = 'repair', _('Fix a problem')
@@ -470,6 +473,8 @@ class CustomerTicket(models.Model):
     @property
     def request_type(self):
         """What it's about and what they need, as one line: "Machines · Spare parts or a quotation"."""
+        if self.about == self.About.NEW_BRANCH:  # what's needed is the branch itself
+            return str(self.get_about_display())
         return f'{self.get_about_display()} · {self.get_need_display()}'
 
     @property

@@ -314,6 +314,28 @@ class PortalEmailChangeForm(forms.Form):
         return password
 
 
+class PortalBranchRequestForm(forms.Form):
+    """A customer asking us to add a branch they've opened. Nothing is
+    created from it: it arrives as a request, and an admin adds the branch
+    (with its warranty start) from it."""
+
+    name = forms.CharField(label=_('Branch name'), max_length=150)
+    address = forms.CharField(label=_('Address'), widget=forms.Textarea(attrs={'rows': 2}))
+    contact_name = forms.CharField(label=_('Contact at the branch'), max_length=150, required=False)
+    contact_phone = forms.CharField(label=_('Contact phone'), max_length=30, required=False)
+    contact_email = forms.EmailField(
+        label=_('Contact email'), required=False,
+        help_text=_("The branch's own email, if it has one. Empty: your main contact."),
+    )
+    opening_date = forms.DateField(
+        label=_('Opening date (optional)'), required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+    )
+    message = forms.CharField(
+        label=_('Anything else we should know'), required=False, widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+
 class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
 

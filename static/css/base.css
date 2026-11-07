@@ -4549,3 +4549,238 @@ td .field__help {
 .terms-row {
     margin-block-start: 0.25rem;
 }
+
+/* ===== A request's page (tasks/ticket_review.html): the work on the left,
+   the context on the right; one column on a phone. ===== */
+.review {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 1rem;
+    align-items: start;
+}
+
+@media (min-width: 1000px) {
+    .review {
+        grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+    }
+
+    .review__side {
+        position: sticky;
+        top: calc(var(--header-height, 3.5rem) + 0.5rem);
+    }
+}
+
+.review-card {
+    margin-block-end: 0.75rem;
+}
+
+.review-card h2 {
+    margin-block-end: 0.5rem;
+}
+
+.review-card h3 {
+    margin-block: 0.9rem 0.3rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.review-request__type {
+    margin-block: 0 0.25rem;
+}
+
+.review-message {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    border-radius: 4px;
+    background: var(--color-bg);
+}
+
+.review-callout {
+    margin-block: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    border-inline-start: 4px solid var(--color-text);
+    background: var(--color-bg);
+}
+
+.review-card--decision {
+    border-inline-start: 4px solid var(--color-text);
+}
+
+.review-decision__other {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.75rem;
+    margin-block-start: 0.75rem;
+    padding-block-start: 0.75rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.review-decision__other .field {
+    flex: 1 1 14rem;
+    margin: 0;
+}
+
+/* Label above, value under: the side column's facts. */
+.review-facts {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0 0 0.6rem;
+}
+
+.review-facts dt {
+    color: var(--color-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.review-facts dd {
+    margin: 0.1rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+/* Reassign in one line: the choice and its button. */
+.review-inline {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-block-end: 0.5rem;
+}
+
+.review-inline select {
+    flex: 1 1 10rem;
+    min-inline-size: 0;
+}
+
+/* A fold-out for what's rarely needed. */
+.review-more > summary {
+    cursor: pointer;
+    font-weight: 700;
+    padding-block: 0.35rem;
+}
+
+.review-more[open] > summary {
+    margin-block-end: 0.5rem;
+}
+
+details.review-more:not(.section) {
+    margin-block-start: 0.6rem;
+    padding-block-start: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.review-more__body {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.review-notes li + li {
+    margin-block-start: 0.6rem;
+    padding-block-start: 0.6rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+/* ===== Anything internal (request notes, a task's team messages): amber,
+   locked, and saying who sees it — never mistaken for what the customer
+   sees. ===== */
+.internal-box {
+    border: 1px solid #e8c37a;
+    border-inline-start: 5px solid var(--color-warning);
+    background: #fffaf0;
+}
+
+.internal-box__head {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.internal-box__head h2 {
+    margin: 0;
+}
+
+.internal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding-block: 0.15rem;
+    padding-inline: 0.5rem;
+    border-radius: 2px;
+    background: var(--color-warning);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.internal-badge .icon {
+    inline-size: 0.85rem;
+    block-size: 0.85rem;
+}
+
+.internal-box__who {
+    margin-block: 0.35rem 0.75rem;
+    color: #8a5a00;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Each note: a sticky note with who wrote it, their role and when. */
+.internal-notes {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+}
+
+.internal-note {
+    padding-block: 0.5rem;
+    padding-inline: 0.75rem;
+    border: 1px solid #f0d9a8;
+    border-radius: 2px;
+    background: #fff3d6;
+}
+
+.internal-note__meta {
+    margin: 0 0 0.25rem;
+    color: #8a5a00;
+    font-size: 0.75rem;
+}
+
+.internal-note p:last-child {
+    margin-block-end: 0;
+}
+
+/* Team messages: the chat bubbles in the same amber. */
+.internal-box .chat-bubble {
+    border-color: #f0d9a8;
+    background: #fff3d6;
+}
+
+.internal-box .chat-message--mine .chat-bubble {
+    background: #ffe9b8;
+}
+
+/* Shipping's two buttons on one row; Notify greyed out until it can be used. */
+.review-shipping__actions {
+    flex-wrap: wrap;
+}
+
+.button[disabled],
+.button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: auto;
+}

@@ -216,14 +216,19 @@
 </div>
 {% endif %}
 
-<div class="section">
-    <h2>{% translate "Messages" %}</h2>
+{# Internal: the team on this task only — its own look (amber, locked), never mistaken for anything the customer sees. #}
+<div class="section internal-box">
+    <div class="internal-box__head">
+        <h2>{% translate "Team messages" %}</h2>
+        <span class="internal-badge">{% include "_icon.html" with name="lock" %}{% translate "Internal" %}</span>
+    </div>
+    <p class="internal-box__who">{% translate "Only the team on this task sees this. Never shown to the customer." %}</p>
     {% if task_messages %}
     <div class="chat-thread">
         {% for task_message in task_messages %}
         <div class="chat-message {% if task_message.sent_by == user %}chat-message--mine{% endif %}">
             <div class="chat-meta">
-                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}</span>
+                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}{% if task_message.sent_by.technician %} <span class="muted">· {{ task_message.sent_by.technician.get_role_display }}</span>{% endif %}</span>
                 <span class="muted">{{ task_message.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             </div>
             <div class="chat-bubble">
@@ -247,7 +252,7 @@
             {% for error in message_form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field field--submit">
-            <button type="submit" class="button button--secondary">{% translate "Send message" %}</button>
+            <button type="submit" class="button button--secondary">{% translate "Send to the team" %}</button>
         </div>
     </form>
 </div>

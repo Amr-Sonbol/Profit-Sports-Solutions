@@ -36,6 +36,14 @@ RENDER_EXTERNAL_HOSTNAME = config('RENDER_EXTERNAL_HOSTNAME', default='')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
+# The customer portal's own address (e.g. portal.example.com, or
+# portal.localhost:8000 locally), apart from the staff site: there only the
+# portal's pages open, and every link emailed to a customer points there
+# (spots.hosts). Empty: one address for both, as before.
+PORTAL_HOST = config('PORTAL_HOST', default='')
+if PORTAL_HOST and PORTAL_HOST.split(':')[0] not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(PORTAL_HOST.split(':')[0])
+
 # Error monitoring — off unless SENTRY_DSN is set in .env, so local dev
 # and CI (which never set it) are completely unaffected. This is what
 # actually surfaces the errors behind the friendly 404/403/500 pages;
@@ -88,6 +96,8 @@ MIDDLEWARE = [
     # as it always did.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # The portal's own address shows only the portal; the staff address sends portal links there (spots.hosts).
+    'spots.hosts.PortalHostMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

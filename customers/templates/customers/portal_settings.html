@@ -41,6 +41,28 @@
         </form>
     </section>
 
+    {# Their branches, those we've still to add, and the way to ask for a new one. #}
+    <section class="section" id="branches">
+        <h2>{% translate "Your branches" %}</h2>
+        <p class="settings__intro">{% translate "The branches on your account. Opened a new one? Ask us to add it." %}</p>
+        <ul class="action-list">
+            {% for site in branches %}
+            <li class="action-row portal-row">
+                <span class="portal-row__main"><strong>{{ site.name }}</strong><span class="muted">{{ site.address }}</span></span>
+            </li>
+            {% endfor %}
+            {% for request in branch_requests %}
+            <li class="action-row portal-row">
+                <span class="portal-row__main"><strong>{{ request.site_description }}</strong><span class="muted">{{ request.site_address }}</span></span>
+                <span class="badge badge--neutral">{% translate "Being added" %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="form-actions">
+            <a href="{% url 'customers:portal_branch_request' %}" class="button">{% translate "Request a new branch" %}</a>
+        </div>
+    </section>
+
     {# Their portal color: any from the picker, or their brand's exact code (brand-color.js keeps the two in step). #}
     <section class="section">
         <h2>{% translate "Your portal color" %}</h2>
