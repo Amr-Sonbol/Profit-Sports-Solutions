@@ -19,7 +19,10 @@ class SeedRolePermissionsTests(TestCase):
         # view_technicians and decide_escalated_tickets are the permissions
         # that have since moved away from this default — each checked
         # separately below.
-        expected_allowed_roles = {'supervisor', 'manager', 'admin'}
+        # Since people 0057 the Operations Manager and the Technical Support
+        # Manager hold every permission an admin does; a Country Support
+        # Manager also manage_customers.
+        expected_allowed_roles = {'supervisor', 'manager', 'admin', 'operations_manager', 'support_manager'}
         other_permissions = set(RolePermission.Permission) - {
             RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
@@ -32,7 +35,10 @@ class SeedRolePermissionsTests(TestCase):
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
             )
-            self.assertEqual(allowed_roles, expected_allowed_roles, permission)
+            expected = expected_allowed_roles | (
+                {'country_support'} if permission == RolePermission.Permission.MANAGE_CUSTOMERS else set()
+            )
+            self.assertEqual(allowed_roles, expected, permission)
 
     def test_view_stock_is_whoever_runs_or_plans_the_stock(self):
         allowed_roles = set(
@@ -40,7 +46,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_STOCK, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin'})
 
     def test_view_tasks_also_includes_the_warehouse_manager(self):
         # The warehouse manager needs to search tasks by PAK reference and
@@ -50,7 +56,9 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'admin'})
+        # And (0057) the Technical Support Manager, and a Country Support Manager following its requests on.
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager',
+                                         'support_manager', 'country_support', 'admin'})
 
     def test_open_tickets_is_support_and_operations_managers_and_admin(self):
         allowed_roles = set(
@@ -113,7 +121,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TECHNICIANS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'support_manager', 'admin'})
 
     def test_decide_escalated_tickets_is_the_upper_chain_and_admin(self):
         allowed_roles = set(
@@ -131,7 +139,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.MANAGE_PARTS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin'})
 
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(
@@ -154,7 +162,7 @@ class ActiveCountryContextTests(TestCase):
         )
         for username, role in [
             ('tech1', Technician.Role.TECHNICIAN), ('supervisor1', Technician.Role.SUPERVISOR),
-            ('manager1', Technician.Role.MANAGER), ('support1', Technician.Role.SUPPORT_MANAGER),
+            ('manager1', Technician.Role.MANAGER), ('support1', Technician.Role.COUNTRY_SUPPORT),
             ('admin1', Technician.Role.ADMIN),
         ]:
             user = User.objects.create_user(username, password='pass12345')

@@ -148,13 +148,16 @@ class Technician(models.Model):
 
     @property
     def is_manager_tier(self):
-        """Manager and admin share every manager-only screen and action —
-        cross-country reach, approvals, the fixed-floor reference-data
-        screens (skills, brands, countries, ...). Admin is the one thing
+        """Manager, the Operations Manager, the Technical Support Manager and
+        admin share every manager-only screen and action — cross-country
+        reach, approvals, the fixed-floor reference-data screens (skills,
+        brands, countries, ...), the monthly report. Admin is the one thing
         on top: only admin can reach Roles & permissions itself (see
         require_admin) — checked separately with role == Role.ADMIN.
         """
-        return self.role in (self.Role.MANAGER, self.Role.ADMIN)
+        return self.role in (
+            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.ADMIN,
+        )
 
     @property
     def is_any_manager(self):
