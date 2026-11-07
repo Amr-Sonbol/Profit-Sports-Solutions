@@ -81,7 +81,7 @@
 <div class="section">
     <div class="customer-tab__head">
         <h2>{% translate "Requests" %}</h2>
-        <a href="{% url 'tasks:ticket_list' %}?customer={{ customer.pk }}&status=all&country=all">{% translate "See all in Tickets" %}</a>
+        {% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_list' %}?customer={{ customer.pk }}&status=all&country=all">{% translate "See all in Tickets" %}</a>{% endif %}
     </div>
     <div class="table-wrap"><table class="compact-table">
         <thead><tr><th>{% translate "Ticket" %}</th><th>{% translate "Site" %}</th><th>{% translate "Request" %}</th><th>{% translate "Status" %}</th></tr></thead>

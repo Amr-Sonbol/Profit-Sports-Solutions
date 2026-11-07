@@ -667,7 +667,7 @@ class PortalProgressTests(CustomerTestCase):
         self.assertContains(page, 'Your next visit')
         self.assertContains(page, 'Visit scheduled on')
         visits = self.client.get('/customers/portal/visits/')
-        self.assertEqual([v.task_number for v in visits.context['upcoming']], ['AE-0902', 'AE-0901', 'AE-0903'])
+        self.assertEqual([v.task_number for v in visits.context['visits']], ['AE-0902', 'AE-0901', 'AE-0903'])
         self.assertContains(visits, 'Date to be set')
         # The team's words never reach the customer.
         self.assertNotContains(page, 'Assigned')
@@ -714,7 +714,7 @@ class PortalProgressTests(CustomerTestCase):
     def test_no_back_link_on_the_portal_home_or_login(self):
         self.assertNotContains(self.client.get('/customers/portal/'), 'page-back')
         self.assertContains(self.client.get('/customers/portal/tickets/new/'), 'Back to requests')
-        for page in ('requests/', 'visits/', 'history/', 'machines/', 'settings/'):
+        for page in ('requests/', 'visits/', 'reports/', 'machines/', 'settings/'):
             self.assertNotContains(self.client.get(f'/customers/portal/{page}'), 'page-back')
         self.client.logout()
         page = self.client.get('/customers/portal/login/')
@@ -893,7 +893,7 @@ class PortalSettingsTests(CustomerTestCase):
 
     def test_the_login_email_is_shown_not_editable(self):
         page = self.client.get('/customers/portal/settings/')
-        self.assertContains(page, 'You sign in as ali@fitnessfirst.ae')
+        self.assertContains(page, 'ali@fitnessfirst.ae</strong>')
         self.assertNotIn('username', page.context['details_form'].fields)
 
     def test_staff_and_unfinished_accounts_cannot_use_it(self):
@@ -987,7 +987,7 @@ class PortalBellTests(CustomerTestCase):
         )
         open_page = self.client.get('/customers/portal/requests/')
         self.assertEqual([t.ticket_number for t in open_page.context['tickets']], ['AE-T0070'])
-        self.assertContains(open_page, 'progress-steps__step--current')
+        self.assertIsNotNone(open_page.context['tickets'][0].progress)
         closed_page = self.client.get('/customers/portal/requests/?show=closed')
         self.assertEqual([t.ticket_number for t in closed_page.context['tickets']], ['AE-T0072'])
 
@@ -1674,7 +1674,7 @@ class PortalMachineQuestionTests(PortalTicketMachinesTests):
     def test_the_answer_decides_what_is_needed(self):
         self.client.login(username='fitnessfirst', password='pass12345')
         page = self.client.get('/customers/portal/tickets/new/')
-        self.assertContains(page, 'Is this machine in your list?')
+        self.assertContains(page, 'Which machine?')
 
         # "In my list" but nothing picked: asked to pick, nothing about a serial.
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[

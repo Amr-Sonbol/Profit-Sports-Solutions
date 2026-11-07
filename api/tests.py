@@ -705,7 +705,7 @@ class MyTaskUndoApiTests(ApiTestCase):
             content_type='application/json', **self.auth(token),
         )
         detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(token)).json()
-        self.assertEqual(detail['undoable_step'], 'Accepted')
+        self.assertEqual(detail['undoable_step'], 'Confirmed the task')
 
         response = self.client.post(
             f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': 'undo'}),

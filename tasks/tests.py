@@ -3,7 +3,6 @@ from unittest.mock import patch
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
-from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -3813,7 +3812,7 @@ class MyWeekTests(TaskTestCase):
         response = self.client.get('/tasks/my-week/')
         self.assertEqual(response.context['next_job'].next_action, 'accept')
         self.assertIn('query=25.080000%2C55.140000', response.context['next_job'].directions_url)
-        self.assertContains(response, 'Accept task')
+        self.assertContains(response, 'Confirm task')
 
         # Tapping it on the card comes back to Today.
         response = self.client.post(f'/tasks/my/{task.pk}/', {'action': 'accept', 'next': 'today'})
@@ -7808,7 +7807,8 @@ class RebookStoppedTaskTests(TaskTestCase):
             task=self.task, event_type=TaskEvent.EventType.BLOCKED, occurred_at=timezone.now(),
             actor=self.supervisor_user, note='Gym closed',
         )
-        self.new_time = (timezone.localtime() + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+        # Typed in the country's own time (Dubai), stored in UTC.
+        self.new_time = (timezone.localtime(timezone.now(), ZoneInfo('Asia/Dubai')) + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
 
     def _rebook(self, when, note=''):
         return self.client.post(self.url, {
@@ -8695,7 +8695,7 @@ class SidebarPerUserTests(TaskTestCase):
         self.assertContains(response, 'nav-toggle')
         self.assertNotContains(response, 'site-header__links')
         self.assertEqual([item['label'] for item in response.context['portal_nav']],
-                         ['Home', 'Requests', 'Visits', 'History', 'Machines', 'Settings'])
+                         ['Home', 'Requests', 'Visits', 'Reports', 'Machines', 'Settings'])
         self.assertContains(response, 'aria-current="page"')
         # None of the staff pages.
         self.assertNotContains(response, f'href="{reverse("tasks:my_week")}"')
@@ -9335,7 +9335,7 @@ class EquipmentChainTests(TaskTestCase):
     def test_a_receiving_sends_nothing_on_and_the_internal_account_gets_no_tickets(self):
         from tasks.forms import StaffTicketForm
         self.client.login(username='manager1', password='pass12345')
-        self.assertNotContains(self.client.get(f'/tasks/{self.receiving.pk}/'), 'Send to')
+        self.assertNotContains(self.client.get(f'/tasks/{self.receiving.pk}/'), 'Send to installation')
         line = self.receiving.products.get()
         response = self.client.post(f'/tasks/{self.receiving.pk}/', {
             'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [line.pk],

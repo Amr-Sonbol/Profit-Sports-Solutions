@@ -94,8 +94,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
         return [
             {
                 'name': machine.machine_name, 'serial': machine.serial,
-                'problem': machine.get_problem_display(), 'out_of_service': machine.out_of_service,
-                'description': machine.description,
+                'problem': machine.get_problem_display(), 'description': machine.description,
             }
             for machine in obj.ticket_machines.all()
         ]

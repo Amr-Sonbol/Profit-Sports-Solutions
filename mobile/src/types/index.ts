@@ -89,7 +89,7 @@ export interface TaskDetail {
   site_contact_phone?: string;
   directions_url?: string;
   // The machines the customer reported for this task (portal ticket).
-  machines?: { name: string; serial: string; problem: string; out_of_service: boolean; description: string }[];
+  machines?: { name: string; serial: string; problem: string; description: string }[];
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null

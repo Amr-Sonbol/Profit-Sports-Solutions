@@ -173,7 +173,7 @@ export default function TaskDetailScreen() {
                 <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
                   <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
                   <ThemedText type="small">
-                    {machine.problem}{machine.out_of_service ? ' · cannot be used' : ''}
+                    {machine.problem}
                   </ThemedText>
                   {machine.description ? <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText> : null}
                 </ThemedView>

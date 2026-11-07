@@ -21,8 +21,9 @@
         {% endif %}
         <a href="{% url 'tasks:technician_board' technician.pk %}" class="button button--secondary">{% translate "Schedule" %}</a>
         <a href="{% url 'tasks:technician_progress' technician.pk %}" class="button button--secondary">{% translate "Progress" %}</a>
-        <a href="{% url 'tasks:technician_skills' technician.pk %}" class="button button--secondary">{% translate "Skills" %}</a>
-        <a href="{% url 'tasks:technician_edit' technician.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+        {# Only the pages this viewer may open. #}
+        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' technician.pk %}" class="button button--secondary">{% translate "Skills" %}</a>{% endif %}
+        {% if 'manage_technicians' in role_permissions %}<a href="{% url 'tasks:technician_edit' technician.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
     </div>
 </div>
 
