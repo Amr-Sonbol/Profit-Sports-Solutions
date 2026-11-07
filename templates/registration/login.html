@@ -9,7 +9,9 @@
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.errors %}
-            <p class="flash flash--error">{% translate "Incorrect username or password." %}</p>
+            {# A customer's account: pointed to the portal (spots.hosts); otherwise the one message. #}
+            {% if form.customer_account %}<p class="flash flash--error">{{ form.non_field_errors.0 }}</p>
+            {% else %}<p class="flash flash--error">{% translate "Incorrect username or password." %}</p>{% endif %}
         {% endif %}
         <div class="field">
             <label for="{{ form.username.id_for_label }}">{% translate "Username" %}</label>

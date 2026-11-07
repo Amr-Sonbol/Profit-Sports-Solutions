@@ -6,7 +6,11 @@ any portal link there, so old links keep working. Empty PORTAL_HOST: one
 address for both, as before — nothing here does anything.
 """
 from django.conf import settings
+from django.contrib.auth import logout
+from django.contrib.auth.forms import AuthenticationForm
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponseRedirect
+from django.utils.translation import gettext_lazy as _
 
 # What a customer reaches: the portal, a request's status page and the
 # rating page (both from emails, by token), switching language, signing out,
@@ -27,6 +31,22 @@ def portal_url(request, path):
         scheme = request.scheme if request is not None else 'https'
         return f'{scheme}://{settings.PORTAL_HOST}{path}'
     return request.build_absolute_uri(path)
+
+
+class StaffAuthenticationForm(AuthenticationForm):
+    """The staff sign-in. With the portal on its own address, a customer's
+    account is pointed there instead of signed in here."""
+
+    customer_account = False  # the page shows this message instead of "Incorrect username or password"
+
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        if settings.PORTAL_HOST and getattr(user, 'customer', None) is not None:
+            self.customer_account = True
+            raise ValidationError(
+                _('This is the staff sign-in. Customers sign in at %(address)s') % {'address': settings.PORTAL_HOST},
+                code='customer_account',
+            )
 
 
 class PortalHostMiddleware:
@@ -53,4 +73,9 @@ class PortalHostMiddleware:
 
             if not request.session.get(VIEW_AS_SESSION_KEY):
                 return HttpResponseRedirect(portal_url(request, request.get_full_path()))
+        elif getattr(request.user, 'customer', None) is not None:
+            # A customer's sign-in has no place on the staff address (one left from before
+            # the portal moved): end it, and this address shows its own sign-in.
+            logout(request)
+            return HttpResponseRedirect(request.get_full_path())
         return self.get_response(request)

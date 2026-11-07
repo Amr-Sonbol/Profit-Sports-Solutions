@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 16:03+0000\n"
+"POT-Creation-Date: 2026-11-07 22:11+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -5477,6 +5477,10 @@ msgstr "هذا هو مسؤول النظام الوحيد القادر على ت�
 
 msgid "This is the report exactly as the customer will receive it."
 msgstr "هذا هو التقرير تمامًا كما سيستلمه العميل."
+
+#, python-format
+msgid "This is the staff sign-in. Customers sign in at %(address)s"
+msgstr "هذه صفحة دخول الموظفين. يسجّل العملاء دخولهم على %(address)s"
 
 #, python-format
 msgid "This link has expired or has already been used. Each link can be used once and is valid for %(days)s days."

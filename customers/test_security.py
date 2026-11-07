@@ -147,6 +147,22 @@ class PortalAddressTests(SecurityTestCase):
             with self.subTest(url=url):
                 self.assertEqual(admin.get(url).status_code, 404)
 
+    def test_a_customer_sign_in_left_on_the_staff_address_is_ended(self):
+        customer = self.login('gyma')
+        response = customer.get('/')
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('_auth_user_id', customer.session)
+        self.assertIn('/accounts/login/', customer.get('/').url)
+
+    def test_a_customer_on_the_staff_sign_in_is_pointed_to_the_portal(self):
+        page = self.client_class().post('/accounts/login/', {'username': 'gyma', 'password': PASSWORD})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'Customers sign in at portal.example.test')
+
+    def test_staff_still_sign_in_on_the_staff_address(self):
+        response = self.client_class().post('/accounts/login/', {'username': 'admin1', 'password': PASSWORD})
+        self.assertEqual(response.status_code, 302)
+
     def test_portal_links_on_the_staff_address_move_to_the_portal(self):
         response = self.client_class().get('/customers/portal/login/')
         self.assertEqual(response['Location'], 'http://portal.example.test/customers/portal/login/')
