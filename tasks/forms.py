@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import lazy
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
@@ -1294,14 +1295,22 @@ class MultipleFileField(forms.FileField):
         return not self.disabled and bool(data)
 
 
+def _filled_in_later(message, values):
+    """A lazily translated text with its %(...)s values, filled in when shown (in the
+    reader's language) — `_('...') % {...}` in a field definition runs once, at startup,
+    and freezes it in English."""
+    return lazy(lambda: str(message) % values, str)()
+
+
+FILES_LIMIT = {'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)}
+
+
 def message_files_field(label):
     """The files sent with a message — any number up to the limit, each a
     photo, video or PDF of at most 25 MB."""
     return MultipleFileField(
         required=False, label=label,
-        help_text=_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each') % {
-            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
-        },
+        help_text=_filled_in_later(_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each'), FILES_LIMIT),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
@@ -1328,9 +1337,9 @@ class TicketAttachmentsForm(forms.Form):
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number; up to %(count)d files, %(size)d MB each') % {
-            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
-        },
+        help_text=_filled_in_later(
+            _('showing the issue and the serial number; up to %(count)d files, %(size)d MB each'), FILES_LIMIT,
+        ),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
