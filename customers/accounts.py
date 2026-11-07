@@ -174,6 +174,23 @@ def send_welcome(request, customer, email=None):
     Sending again invalidates any earlier link. Returns False, sending
     nothing, if that email already belongs to a different login.
     """
+    if not _prepare_welcome(customer, email):
+        return False
+    _send_link_email(request, customer, WELCOME_SUBJECT, WELCOME_BODY, WELCOME_BUTTON)
+    return True
+
+
+def welcome_link(request, customer):
+    """The same welcome link the email carries, for staff to send another way
+    (WhatsApp, say) — when the email doesn't arrive. Prepared as for the email,
+    so any earlier link stops working. None if that email already belongs to a
+    different login."""
+    if not _prepare_welcome(customer):
+        return None
+    return portal_url(request, reverse('customers:portal_account_link', args=[make_link_token(customer.user)]))
+
+
+def _prepare_welcome(customer, email=None):
     User = get_user_model()
     if customer.user_id is None:
         email = (email or customer.contact_email).strip()
@@ -189,7 +206,6 @@ def send_welcome(request, customer, email=None):
     customer.must_change_password = True
     customer.invited_at = timezone.now()
     customer.save(update_fields=['user', 'must_change_password', 'invited_at'])
-    _send_link_email(request, customer, WELCOME_SUBJECT, WELCOME_BODY, WELCOME_BUTTON)
     return True
 
 

@@ -67,6 +67,12 @@
     <div class="account-panel__actions">
         {% if row.status in inviteable %}
         {% include "customers/_account_action.html" with action="invite" label=_("Send welcome email") %}
+        {# When the email doesn't arrive: the same link, to send by WhatsApp or text. #}
+        {% include "customers/_account_action.html" with action="copy_welcome_link" label=_("Copy welcome link") %}
+        {% endif %}
+        {% if not account and row.status in inviteable %}
+        {# No login yet (and an email to make it with): one click creates it with a password to read out over the phone. #}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
         {% endif %}
         {% if row.status == 'active' or row.status == 'locked' %}
         {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}

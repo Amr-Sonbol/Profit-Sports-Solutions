@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 22:11+0000\n"
+"POT-Creation-Date: 2026-11-07 22:44+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -169,6 +169,17 @@ msgstr[2] "مهمتان"
 msgstr[3] "%(count)s مهام"
 msgstr[4] "%(count)s مهمة"
 msgstr[5] "%(count)s مهمة"
+
+#, python-format
+#| msgid "Not scheduled within 24 working hours"
+msgid "%(count)s task not scheduled within 24 working hours"
+msgid_plural "%(count)s tasks not scheduled within 24 working hours"
+msgstr[0] "لا توجد مهام لم تُجدول خلال 24 ساعة عمل"
+msgstr[1] "مهمة واحدة لم تُجدول خلال 24 ساعة عمل"
+msgstr[2] "مهمتان لم تُجدولا خلال 24 ساعة عمل"
+msgstr[3] "%(count)s مهام لم تُجدول خلال 24 ساعة عمل"
+msgstr[4] "%(count)s مهمة لم تُجدول خلال 24 ساعة عمل"
+msgstr[5] "%(count)s مهمة لم تُجدول خلال 24 ساعة عمل"
 
 #, python-format
 msgid "%(count)s task significantly over estimate"
@@ -770,6 +781,10 @@ msgstr "تُرسل دائمًا، لحماية الحساب"
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
 
+#, python-format
+msgid "An email could not be sent: “%(subject)s” to %(recipients)s."
+msgstr "تعذّر إرسال بريد إلكتروني: «%(subject)s» إلى %(recipients)s."
+
 msgid "Answer to the customer"
 msgstr "الرد على العميل"
 
@@ -1342,6 +1357,18 @@ msgstr "تم تحويلها إلى مهمة"
 
 msgid "Coordinates could not be found in the input. Please enter them as “latitude, longitude”, or paste the full Google Maps link (not a shortened maps.app.goo.gl link)."
 msgstr "تعذّر العثور على إحداثيات في المدخلات. يرجى إدخالها بالصيغة «خط العرض، خط الطول»، أو لصق رابط خرائط Google الكامل (وليس رابطاً مختصراً من maps.app.goo.gl)."
+
+msgid "Copied"
+msgstr "تم النسخ"
+
+msgid "Copy link"
+msgstr "نسخ الرابط"
+
+msgid "Copy message"
+msgstr "نسخ الرسالة"
+
+msgid "Copy welcome link"
+msgstr "نسخ رابط الترحيب"
 
 msgid "Correct report"
 msgstr "تصحيح التقرير"
@@ -2411,6 +2438,10 @@ msgstr "المؤشرات الرئيسية"
 
 msgid "Held for"
 msgstr "محجوزة لـ"
+
+#, python-format
+msgid "Hello %(name)s, welcome to the Profit Sports Solutions customer portal. Open this link to set your password and complete your details (valid for %(days)s days, once):"
+msgstr "مرحبًا %(name)s، أهلًا بك في بوابة عملاء Profit Sports Solutions. افتح هذا الرابط لتعيين كلمة المرور وإكمال بياناتك (صالح لمدة %(days)s أيام، ولمرة واحدة):"
 
 msgid "Helper"
 msgstr "مساعد"
@@ -3617,6 +3648,9 @@ msgstr "مدير العمليات"
 
 msgid "Optional: any notes required before work resumes."
 msgstr "اختياري: أي ملاحظات لازمة قبل استئناف العمل."
+
+msgid "Or a ready message"
+msgstr "أو رسالة جاهزة"
 
 msgid "Or type your brand's color code"
 msgstr "أو اكتب رمز لون علامتك التجارية"
@@ -5221,6 +5255,9 @@ msgstr "تم تغيير البريد الإلكتروني إلى %(email)s."
 msgid "The email or password is incorrect. Please check them and try again."
 msgstr "البريد الإلكتروني أو كلمة المرور غير صحيحة. يُرجى التحقق منهما والمحاولة مرة أخرى."
 
+msgid "The email server refused it or could not be reached. Check the email settings, then send it again."
+msgstr "رفضه خادم البريد أو تعذّر الوصول إليه. تحقّق من إعدادات البريد ثم أرسله مرة أخرى."
+
 msgid "The feedback request has been sent."
 msgstr "تم إرسال طلب التقييم."
 
@@ -5281,6 +5318,9 @@ msgstr[5] "آخر %(weeks)s أسبوع. تعني \"مكتملة\" أنه تم ر
 
 msgid "The lead has left the company. As work has already started, only the lead can be replaced; the new lead will continue from the current stage of the task."
 msgstr "غادر قائد المهمة الشركة. وبما أن العمل قد بدأ، فلا يمكن إلا استبدال القائد؛ وسيتابع القائد الجديد من المرحلة الحالية للمهمة."
+
+msgid "The link"
+msgstr "الرابط"
 
 msgid "The list from which technicians select parts when recording a work report. Deactivate a part rather than deleting it, so that past reports retain their codes."
 msgstr "القائمة التي يختار منها الفنيون القطع عند تسجيل تقرير العمل. يرجى إيقاف القطعة بدلاً من حذفها، لتحتفظ التقارير السابقة برموزها."
@@ -5358,6 +5398,10 @@ msgstr "يظهر تقرير الزيارة هنا عندما ينتهي فريق
 #, python-format
 msgid "The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for %(days)s days."
 msgstr "تُرسل رسالة الترحيب باللغة الإنجليزية، وباللغة العربية أيضاً للعملاء في الدول العربية، ورابط التفعيل الآمن فيها صالح لمدة %(days)s أيام."
+
+#, python-format
+msgid "The welcome link for %(name)s (username: %(username)s). Send it by WhatsApp or text message: it opens the same page as the welcome email."
+msgstr "رابط الترحيب الخاص بـ %(name)s (اسم المستخدم: %(username)s). أرسله عبر واتساب أو رسالة نصية: يفتح الصفحة نفسها التي يفتحها بريد الترحيب."
 
 msgid "The work is finished (some still waiting for review)."
 msgstr "أُنجز العمل (وبعضه بانتظار المراجعة)."
@@ -5817,6 +5861,10 @@ msgstr "اسم المستخدم"
 msgid "Users"
 msgstr "المستخدمون"
 
+#, python-format
+msgid "Valid for %(days)s days and works once. It replaces any welcome link sent before. Send it only to the customer: whoever opens it can set the account's password."
+msgstr "صالح لمدة %(days)s أيام ويعمل مرة واحدة، ويحلّ محل أي رابط ترحيب أُرسل من قبل. أرسله إلى العميل فقط: من يفتحه يستطيع تعيين كلمة مرور الحساب."
+
 msgid "Vehicle"
 msgstr "مركبة"
 
@@ -6050,6 +6098,9 @@ msgstr "تم إرسال رسالة الترحيب إلى %(email)s."
 #, python-format
 msgid "Welcome emails sent: %(sent)s. Skipped: %(skipped)s."
 msgstr "رسائل الترحيب المرسلة: %(sent)s. المتجاوزة: %(skipped)s."
+
+msgid "Welcome link"
+msgstr "رابط الترحيب"
 
 msgid "Welcome to the Profit Sports Solutions customer portal"
 msgstr "مرحباً بكم في بوابة عملاء Profit Sports Solutions"
@@ -6372,6 +6423,10 @@ msgstr "يُحسب وقتك في الموقع تلقائيًا من خطواتك
 
 msgid "Your username, for your reference:"
 msgstr "اسم المستخدم الخاص بك، للرجوع إليه:"
+
+#, python-format
+msgid "Your username: %(username)s. After that, sign in at %(address)s"
+msgstr "اسم المستخدم: %(username)s. بعد ذلك، سجّل الدخول على %(address)s"
 
 msgid "Your visit"
 msgstr "زيارتك"
@@ -6708,6 +6763,9 @@ msgstr "سبب الإنهاء"
 msgid "ended at"
 msgstr "انتهى في"
 
+msgid "error"
+msgstr "خطأ"
+
 msgid "escalated at"
 msgstr "تاريخ التصعيد"
 
@@ -6738,6 +6796,15 @@ msgstr "عرض المصنع"
 
 msgid "factory offer uploaded at"
 msgstr "وقت رفع عرض المصنع"
+
+msgid "failed at"
+msgstr "تاريخ الفشل"
+
+msgid "failed email"
+msgstr "بريد تعذّر إرساله"
+
+msgid "failed emails"
+msgstr "رسائل تعذّر إرسالها"
 
 msgid "fields displayed on the report form for this task type"
 msgstr "الحقول المعروضة في نموذج التقرير لهذا النوع من المهام"
@@ -7080,6 +7147,9 @@ msgstr "سبب إلغاء التفعيل، مثل الاستقالة أو إنه
 
 msgid "recipient of feedback requests after a report is approved"
 msgstr "الجهة التي تُرسل إليها طلبات التقييم بعد اعتماد التقرير"
+
+msgid "recipients"
+msgstr "المستلمون"
 
 msgid "recommendations"
 msgstr "التوصيات"
@@ -7567,6 +7637,9 @@ msgstr "المنطقة الزمنية"
 msgid "token"
 msgstr "الرمز"
 
+msgid "triggered by"
+msgstr "بسبب إجراء من"
+
 msgid "trim color"
 msgstr "لون الحواف"
 
@@ -7871,9 +7944,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Report a problem"
 #~ msgstr "الإبلاغ عن مشكلة"
-
-#~ msgid "Send message"
-#~ msgstr "إرسال الرسالة"
 
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"

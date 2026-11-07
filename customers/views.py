@@ -32,6 +32,7 @@ from tasks.views import (
 from .accounts import (
     LINK_VALID_DAYS, AccountStatus, account_status, email_change_for_token, locked_usernames, log_account_action,
     send_email_change_link, send_email_changed_notice, send_password_link, send_welcome, user_for_link_token,
+    welcome_link,
 )
 from .forms import (
     ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
@@ -1205,6 +1206,20 @@ def customer_accounts(request):
                 messages.error(request, _('The email address %(email)s already belongs to another account.') % {
                     'email': customer.contact_email,
                 })
+        elif action == 'copy_welcome_link' and status in INVITEABLE:
+            # The welcome email's own link, shown to copy and send another way.
+            link = welcome_link(request, customer)
+            if link is None:
+                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                    'email': customer.contact_email,
+                })
+                return _account_redirect(request)
+            log_account_action(request, customer, 'Portal welcome link copied')
+            return render(request, 'customers/customer_account_link.html', {
+                'customer': customer, 'link': link, 'days': LINK_VALID_DAYS,
+                'portal_address': settings.PORTAL_HOST or request.get_host(),
+                'return_query': request.POST.get('return_query', ''),
+            })
         elif action == 'password_link' and status in (AccountStatus.ACTIVE, AccountStatus.LOCKED):
             send_password_link(request, customer)
             log_account_action(request, customer, 'Portal password link sent')
@@ -1230,9 +1245,17 @@ def customer_accounts(request):
                 messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
             else:
                 messages.error(request, form.errors['email'][0])
-        elif action == 'temporary_password' and user is not None and user.is_active:
+        elif action == 'temporary_password' and (user.is_active if user else status in INVITEABLE):
             # Shown once, right here, for reading out over the phone — never
-            # emailed, never stored anywhere readable.
+            # emailed, never stored anywhere readable. A customer with no login
+            # yet gets one on the spot (as the welcome email would create it).
+            if user is None:
+                if welcome_link(request, customer) is None:
+                    messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                        'email': customer.contact_email,
+                    })
+                    return _account_redirect(request)
+                user = customer.user
             password = _generate_temporary_password()
             user.set_password(password)
             user.save(update_fields=['password'])

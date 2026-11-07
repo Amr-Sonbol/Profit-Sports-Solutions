@@ -53,6 +53,7 @@ from people.permissions import (
     require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404,
 )
+from spots.email_failures import current_user_id, record_failed_email
 from spots.hosts import portal_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
@@ -1015,11 +1016,17 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
                 email.attach(file.name.rsplit('/', 1)[-1], file.read())
             finally:
                 file.close()
+    # Who caused it, read now: the background thread doesn't carry the request with it.
+    triggered_by_id = current_user_id()
+
     def deliver():
         try:
             email.send()
-        except Exception:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
+        except Exception as error:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
             logger.exception('Notification email failed: %s', subject)
+            if background:
+                # Nobody is waiting for this one: told on their next page instead (spots.email_failures).
+                record_failed_email(triggered_by_id, recipient_list, subject, error)
             return False
         return True
 
@@ -1585,6 +1592,8 @@ def task_list(request):
         priority = ''
     unassigned = request.GET.get('lead') == 'none'
     unscheduled = request.GET.get('scheduled') == 'none'
+    # The bell's "waiting to be scheduled" entry links here (tasks.alarms).
+    overdue_scheduling = request.GET.get('alarm') == 'unscheduled'
     supervisor_id = request.GET.get('supervisor', '')
     if not supervisor_id.isdigit():
         supervisor_id = ''
@@ -1602,6 +1611,9 @@ def task_list(request):
     elif status != 'all':
         tasks = tasks.filter(status=status)
 
+    if overdue_scheduling:
+        from tasks.alarms import overdue_unscheduled_tasks
+        tasks = tasks.filter(pk__in=[task.pk for task in overdue_unscheduled_tasks(active_country, technician)])
     if task_id:
         tasks = tasks.filter(task_number__icontains=task_id)
     if site:
@@ -2784,15 +2796,21 @@ def _send_escalation_decided_email(request, escalation):
     )
 
 
-def _staff_notification_recipients(country, roles):
+def _staff_notification_recipients(country, roles, everywhere=None):
     """Logins in this country, among these roles, with an email on file —
     who gets alerted about a new ticket or a new task. The bell only
     reaches someone already in the app; this reaches them either way.
+    `everywhere`: a permission whose roles hear from every country, not
+    only their own (a new ticket: tickets_all_countries).
     """
+    in_reach = Q(country=country)
+    if everywhere:
+        in_reach |= Q(role__in=RolePermission.objects.filter(
+            permission=everywhere, allowed=True,
+        ).values('role'))
     return list(
-        Technician.objects.filter(
-            is_active=True, country=country, role__in=roles, user__isnull=False,
-        ).exclude(user__email='').values_list('user__email', flat=True)
+        Technician.objects.filter(in_reach, is_active=True, role__in=roles, user__isnull=False)
+        .exclude(user__email='').values_list('user__email', flat=True).distinct()
     )
 
 
@@ -2806,7 +2824,10 @@ def send_new_ticket_email_to_staff(request, ticket):
     switches = NotificationSettings.load()
     if not switches.new_ticket_email:
         return
-    recipients = _staff_notification_recipients(ticket.country, switches.new_ticket_roles)
+    # The company-wide roles (admin, operations, technical support manager) hear from every country.
+    recipients = _staff_notification_recipients(
+        ticket.country, switches.new_ticket_roles, everywhere=RolePermission.Permission.TICKETS_ALL_COUNTRIES,
+    )
     if not recipients:
         return
     link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))

@@ -274,3 +274,53 @@ class UploadedFilesTests(SecurityTestCase):
 
     def test_no_way_out_of_the_files_folder(self):
         self.assertEqual(self.login('admin1').get('/media/../spots/settings.py').status_code, 404)
+
+
+class CopyWelcomeLinkTests(SecurityTestCase):
+    """The welcome email's link, shown to staff to send another way."""
+
+    def setUp(self):
+        super().setUp()
+        self.new = Customer.objects.create(country=self.country, name='New Gym', segment='gym',
+                                           contact_email='owner@newgym.example')
+        Site.objects.create(customer=self.new, name='New Gym Main', address='Dubai')
+
+    def copy(self, client):
+        return client.post('/customers/accounts/', {'action': 'copy_welcome_link', 'customer': self.new.pk})
+
+    def test_an_admin_gets_the_link_and_it_opens_the_account_set_up(self):
+        page = self.copy(self.login('admin1'))
+        self.assertEqual(page.status_code, 200)
+        link = page.context['link']
+        self.assertIn('/customers/portal/account/', link)
+        self.assertContains(page, link)
+        self.new.refresh_from_db()
+        self.assertEqual(self.new.user.username, 'owner@newgym.example')
+        self.assertTrue(self.new.must_change_password)
+        # It opens the account set-up page, exactly as the email's link does.
+        self.assertTemplateUsed(self.client_class().get(link.split('testserver', 1)[1]), 'customers/portal_account_link.html')
+
+    def test_a_new_link_replaces_the_one_before(self):
+        admin = self.login('admin1')
+        first = self.copy(admin).context['link']
+        self.copy(admin)
+        self.assertTemplateUsed(self.client_class().get(first.split('testserver', 1)[1]), 'customers/portal_link_invalid.html')
+
+    def test_customers_cannot_get_it(self):
+        self.assertNotEqual(self.copy(self.login('gyma')).status_code, 200)
+        self.assertIsNone(Customer.objects.get(pk=self.new.pk).user)
+
+    def test_a_temporary_password_in_one_click_for_a_customer_with_no_login_yet(self):
+        page = self.login('admin1').post('/customers/accounts/', {'action': 'temporary_password', 'customer': self.new.pk})
+        self.assertEqual(page.status_code, 200)
+        password = page.context['password']
+        self.new.refresh_from_db()
+        self.assertTrue(self.new.must_change_password)
+        self.assertTrue(self.client_class().login(username='owner@newgym.example', password=password))
+
+    def test_no_login_is_made_for_a_customer_without_an_email(self):
+        self.new.contact_email = ''
+        self.new.save(update_fields=['contact_email'])
+        self.login('admin1').post('/customers/accounts/', {'action': 'temporary_password', 'customer': self.new.pk})
+        self.new.refresh_from_db()
+        self.assertIsNone(self.new.user)

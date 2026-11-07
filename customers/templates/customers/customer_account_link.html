@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "Welcome link" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+{# The welcome email's own link, to send another way (WhatsApp, text) when the email doesn't arrive. #}
+<div class="page__header">
+    <div>
+        <a href="{% url 'customers:customer_accounts' %}{% if return_query %}?{{ return_query }}{% endif %}" class="back-link">{% translate "Customer accounts" %}</a>
+        <h1>{% translate "Welcome link" %}</h1>
+    </div>
+</div>
+
+<div class="section">
+    <p>{% blocktranslate with name=customer.name username=customer.user.username %}The welcome link for {{ name }} (username: {{ username }}). Send it by WhatsApp or text message: it opens the same page as the welcome email.{% endblocktranslate %}</p>
+
+    <div class="field">
+        <label for="welcome-link">{% translate "The link" %}</label>
+        <input type="text" id="welcome-link" value="{{ link }}" readonly dir="ltr">
+    </div>
+    <div class="form-actions">
+        <button type="button" class="button" data-copy="welcome-link" data-copied="{% translate 'Copied' %}">{% translate "Copy link" %}</button>
+    </div>
+
+    <div class="field">
+        <label for="welcome-message">{% translate "Or a ready message" %}</label>
+        <textarea id="welcome-message" rows="6" readonly>{% blocktranslate with name=customer.contact_name|default:customer.name days=days %}Hello {{ name }}, welcome to the Profit Sports Solutions customer portal. Open this link to set your password and complete your details (valid for {{ days }} days, once):{% endblocktranslate %}
+{{ link }}
+{% blocktranslate with username=customer.user.username address=portal_address %}Your username: {{ username }}. After that, sign in at {{ address }}{% endblocktranslate %}</textarea>
+    </div>
+    <div class="form-actions">
+        <button type="button" class="button button--secondary" data-copy="welcome-message" data-copied="{% translate 'Copied' %}">{% translate "Copy message" %}</button>
+    </div>
+
+    <p class="field__help">{% blocktranslate with days=days %}Valid for {{ days }} days and works once. It replaces any welcome link sent before. Send it only to the customer: whoever opens it can set the account's password.{% endblocktranslate %}</p>
+</div>
+<script src="{% static 'js/copy-text.js' %}" defer></script>
+{% endblock %}

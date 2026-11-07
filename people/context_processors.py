@@ -34,9 +34,12 @@ def notification_bell(request):
     country = get_active_country(request)
     items = []
     if can_manage_tickets:
-        unseen_tickets = TicketNotification.objects.filter(
-            seen_at__isnull=True, ticket__country=country,
-        ).select_related('ticket')
+        unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket')
+        # The company-wide roles hear of every country's tickets, whichever country they're looking at.
+        if not RolePermission.objects.filter(
+            role=technician.role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
+        ).exists():
+            unseen_tickets = unseen_tickets.filter(ticket__country=country)
         items += [
             {'kind': notification.kind, 'created_at': notification.created_at, 'ticket': notification.ticket}
             for notification in unseen_tickets
@@ -57,10 +60,12 @@ def notification_bell(request):
         ).select_related('ticket')
     ]
     from tasks.alarms import overdue_unscheduled_tasks
-    items += [
-        {'kind': 'unscheduled_overdue', 'created_at': task.created_at, 'task': task}
-        for task in overdue_unscheduled_tasks(country, technician)
-    ]
+    # One entry for them all, so a busy day of them never pushes newer news (a new ticket) out of the ten shown.
+    overdue = overdue_unscheduled_tasks(country, technician)
+    if len(overdue) == 1:
+        items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0]})
+    elif overdue:
+        items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue)})
     # Internal tickets (stock, vendor, other) waiting on this person — live,
     # so they stay until closed, like the overdue alarms above.
     from tasks.models import CustomerTicket
@@ -115,9 +120,9 @@ def notification_bell(request):
     if not items and not (can_manage_tickets or technician.is_manager_tier):
         return {}
     items.sort(key=lambda item: item['created_at'], reverse=True)
-    # Overdue-scheduling alarms are the oldest items by nature — kept on
-    # top so they're never pushed out of the ten shown by newer ones.
-    items.sort(key=lambda item: item['kind'] != 'unscheduled_overdue')
+    # The overdue-scheduling alarm is the oldest item by nature — kept on
+    # top so it's never pushed out of the ten shown by newer ones.
+    items.sort(key=lambda item: not item['kind'].startswith('unscheduled_overdue'))
     return {
         'unseen_notifications': items[:10],
         'unseen_notification_count': len(items),

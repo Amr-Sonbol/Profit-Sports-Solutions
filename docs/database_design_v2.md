@@ -507,7 +507,20 @@ A single row (`pk=1`, created on first use), set by an admin on its own **Notifi
 | shipment_to_supervisor_email | bool | default `true` — a task's tracking number, to its responsible supervisor |
 | push_assigned / push_removed / push_cancelled | bool | default `true` — the technician's phone notifications |
 
-An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off.
+An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off. A new ticket reaches the chosen roles in the ticket's country, and the roles that handle tickets in every country (`tickets_all_countries`: admin, operations manager, technical support manager) wherever they are; their bell likewise shows every country's new tickets.
+
+### failed_email
+An email the app tried and failed to send — the mail server refused it or couldn't be reached. Emails go out in the background after the page has already confirmed the action, so without this the person who caused it would never know. Written by the one function every email goes through (`tasks.views._send_notification_email`) when a background send fails; shown once, as a red warning at the top of their next page, to the staff member whose action sent it (`spots.email_failures`). One with nobody behind it — a customer's own request confirmation, say — is shown to the admins. Customers never see these.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| triggered_by_id | FK → user, nullable | whose action sent it; null when nobody signed in on the staff side caused it (`SET NULL` if that login is deleted) |
+| recipients | text | comma-separated |
+| subject | varchar(255) | |
+| error | text | the mail server's own message, shortened |
+| failed_at | timestamptz | |
+| seen_at | timestamptz, nullable | set when the warning is shown |
 
 ### customer_ticket
 A complaint or request from a customer — or an internal matter staff need to follow up (see `kind`). A customer ticket is submitted either by a signed-in customer picking one of their own registered sites, or by staff on the customer's behalf when they phoned, messaged or emailed (`open_tickets`, "New ticket"). There's no anonymous path: a brand-new customer reaches the company outside the app and staff registers them — `/tasks/tickets/new/`, the old public no-login form, now just redirects to the portal login. `customer_id`/`site_id` are still nullable columns rather than required ones, so any ticket already in the database from before this changed stays valid as-is; every ticket submitted from now on always has both set.

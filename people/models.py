@@ -524,3 +524,29 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f'{self.technician} — {self.token[:24]}'
+
+
+class FailedEmail(models.Model):
+    """An email the app tried and failed to send (the mail server refused or
+    couldn't be reached) — emails go out in the background, so the person
+    who caused it would otherwise never know. Shown once, on their next
+    page, to the staff member whose action sent it; with nobody behind it (a
+    customer's own request, say), to the admins (spots.email_failures)."""
+
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='failed_emails', verbose_name=_('triggered by'),
+    )
+    recipients = models.TextField(_('recipients'))
+    subject = models.CharField(_('subject'), max_length=255)
+    error = models.TextField(_('error'))
+    failed_at = models.DateTimeField(_('failed at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('failed email')
+        verbose_name_plural = _('failed emails')
+        ordering = ['-failed_at']
+
+    def __str__(self):
+        return f'{self.subject} → {self.recipients}'

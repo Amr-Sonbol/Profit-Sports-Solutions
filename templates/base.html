@@ -58,6 +58,10 @@
                             — {{ notification.task.site.name }}
                             <span class="muted">({{ notification.task.task_number }})</span>
                         </a>
+                        {% elif notification.kind == 'unscheduled_overdue_many' %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}
+                        </a>
                         {% elif notification.kind == 'escalation_pending' %}
                         <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
                             {% translate "Escalated to you — decision required" %}
@@ -243,6 +247,12 @@
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
         <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
         {% endif %}
+        {# An email that couldn't be sent, once, to whoever sent it (spots.email_failures). #}
+        {% for failure in failed_emails %}
+            <p class="flash flash--error">{% blocktranslate with subject=failure.subject recipients=failure.recipients %}An email could not be sent: “{{ subject }}” to {{ recipients }}.{% endblocktranslate %}
+            {% translate "The email server refused it or could not be reached. Check the email settings, then send it again." %}
+            <span class="muted" dir="ltr">({{ failure.error|truncatechars:140 }})</span></p>
+        {% endfor %}
         {% for message in messages %}
             <p class="flash flash--{{ message.tags }}">{{ message }}</p>
         {% endfor %}

@@ -3018,7 +3018,7 @@ class NotificationBellTests(TaskTestCase):
         response = self.client.get('/tasks/my-week/')
         self.assertNotIn('unseen_notification_count', response.context)
 
-    def test_a_different_countrys_notification_does_not_count(self):
+    def test_another_countrys_ticket_counts_only_for_the_company_wide_roles(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
@@ -3031,9 +3031,16 @@ class NotificationBellTests(TaskTestCase):
             ticket=other_ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
         )
 
+        # The Technical Support Manager handles tickets in every country: both count.
         self.client.login(username='support1', password='pass12345')
         response = self.client.get('/tasks/tickets/')
-        self.assertEqual(response.context['unseen_notification_count'], 1)
+        self.assertEqual(response.context['unseen_notification_count'], 2)
+        # A country's own support desk: its own country only.
+        desk = User.objects.create_user('desk1', password='pass12345')
+        Technician.objects.create(user=desk, country=self.country, full_name='Desk', language='en',
+                                  role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff')
+        self.client.login(username='desk1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/tickets/').context['unseen_notification_count'], 1)
 
     def test_manager_opening_the_task_marks_its_notification_seen(self):
         task = Task.objects.create(

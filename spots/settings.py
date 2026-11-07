@@ -103,6 +103,8 @@ MIDDLEWARE = [
     # The portal's own address shows only the portal; the staff address sends portal links there
     # (spots.hosts). After sign-in handling: its "not found" page needs to know who is asking.
     'spots.hosts.PortalHostMiddleware',
+    # Who is making the request, so an email that fails later can be shown to them (spots.email_failures).
+    'spots.email_failures.CurrentUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     # An admin viewing the portal as a customer (customers.views.view_as_start):
     # after messages (it uses them), before the language and timezone, so those
@@ -172,6 +174,7 @@ TEMPLATES = [
                 'spots.context_processors.static_version',
                 'spots.context_processors.page_back',
                 'spots.context_processors.portal_nav',
+                'spots.email_failures.failed_emails',
             ],
         },
     },

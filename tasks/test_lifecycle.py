@@ -386,6 +386,27 @@ class ReliabilityTests(LifecycleTestCase):
             self.assertEqual(response.status_code, 302)
             self.assertTrue(ticket.replies.filter(message='On it.').exists())
 
+    def test_an_email_that_fails_later_is_shown_once_to_whoever_sent_it(self):
+        from unittest.mock import patch
+
+        from people.models import FailedEmail
+        self.send_request()
+        ticket = self.newest_request()
+        # As on the live server: sent after the page answered (here at once, so the test can see it).
+        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'),                 patch('tasks.views._in_background', lambda work: work()):
+            self.staff.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'add_reply', 'message': 'On it.'})
+            self.send_request(about='other', need='assistance')  # the customer's own: for the admins
+        failure = FailedEmail.objects.get(triggered_by=self.admin.user)
+        self.assertIn('ali@fitnessfirst.example', failure.recipients)
+        self.assertIn('mail server down', failure.error)
+        self.assertTrue(FailedEmail.objects.filter(triggered_by__isnull=True).exists())
+        page = self.staff.get('/tasks/')
+        self.assertContains(page, 'An email could not be sent')
+        self.assertContains(page, 'ali@fitnessfirst.example')
+        self.assertNotContains(self.staff.get('/tasks/'), 'An email could not be sent')  # once
+        self.assertNotContains(self.portal.get('/customers/portal/'), 'An email could not be sent')
+        self.assertNotContains(self.client_for('supervisor1').get('/tasks/'), 'An email could not be sent')
+
     def test_numbers_carry_on_after_one_is_deleted(self):
         for _ in range(3):
             self.send_request(about='other', need='assistance')
@@ -431,3 +452,40 @@ class SimultaneousSavesTests(TransactionTestCase):
         numbers = list(CustomerTicket.objects.values_list('ticket_number', flat=True))
         self.assertEqual(len(numbers), 5)
         self.assertEqual(len(set(numbers)), 5)
+
+
+class NewRequestAlertsTests(LifecycleTestCase):
+    """Who hears of a new request, and that the bell always has room for it."""
+
+    def test_company_wide_roles_hear_from_every_country(self):
+        from people.models import Technician as T
+        saudi = Country.objects.create(name='Saudi Arabia', iso_code='SA', timezone='Asia/Riyadh', currency_code='SAR')
+        support_manager = self._staff('support_ksa', 'Sara Support', T.Role.SUPPORT_MANAGER)
+        support_manager.country = saudi
+        support_manager.save(update_fields=['country'])
+        desk_ksa = self._staff('desk_ksa', 'Saudi Desk', T.Role.COUNTRY_SUPPORT)
+        desk_ksa.country = saudi
+        desk_ksa.save(update_fields=['country'])
+        mail.outbox.clear()
+        self.send_request()
+        told = {address for message in mail.outbox for address in message.to}
+        self.assertIn('support_ksa@pss.example', told)   # company-wide: every country
+        self.assertIn('admin1@pss.example', told)
+        self.assertNotIn('desk_ksa@pss.example', told)   # a country's own desk: its own country only
+
+    def test_a_busy_day_of_overdue_tasks_never_hides_a_new_request_in_the_bell(self):
+        from people.context_processors import notification_bell
+        long_ago = timezone.now() - timedelta(days=10)
+        for index in range(15):
+            Task.objects.create(
+                task_number=f'AE-9{index:03d}', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=long_ago, created_by=self.admin.user,
+            )
+        self.send_request()
+        ticket = self.newest_request()
+        bell = self.staff.get('/tasks/').context
+        kinds = [item['kind'] for item in bell['unseen_notifications']]
+        self.assertEqual(kinds.count('unscheduled_overdue_many'), 1)
+        self.assertNotIn('unscheduled_overdue', kinds)
+        self.assertIn(ticket.pk, [item['ticket'].pk for item in bell['unseen_notifications'] if item.get('ticket')])
+        self.assertEqual(self.staff.get('/tasks/?alarm=unscheduled').context['page_obj'].paginator.count, 15)
