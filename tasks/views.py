@@ -5897,13 +5897,14 @@ def country_create(request):
     return render(request, 'tasks/country_create.html', {'form': form})
 
 
-def request_for_task(task):
+def request_for_task(task, with_conversation=True):
     """Everything from the customer's request a task came from, for whoever
     does the work (tasks/_from_request.html, and the app): who to contact,
     their message as they wrote it, every photo and file they attached (a
     request split across tasks: this task's machines', and any not tied to
-    a machine), and the conversation with support, with its files. Never
-    internal notes. None when the task didn't come from a customer's request."""
+    a machine), and — for the office, not the technician (with_conversation)
+    — the conversation with support, with its files. Never internal notes.
+    None when the task didn't come from a customer's request."""
     ticket = getattr(task, 'ticket', None) or next(
         (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
     )
@@ -5915,7 +5916,8 @@ def request_for_task(task):
     files = [attachment.file for attachment in attachments]
     files += [machine.serial_photo for machine in task.ticket_machines.all() if machine.serial_photo]
     replies = []
-    for reply in ticket.replies.select_related('sent_by').prefetch_related('files').order_by('sent_at'):
+    for reply in (ticket.replies.select_related('sent_by').prefetch_related('files').order_by('sent_at')
+                  if with_conversation else []):
         reply_files = [item.file for item in reply.files.all()]
         if reply.attachment:
             reply_files.insert(0, reply.attachment)
@@ -5925,7 +5927,7 @@ def request_for_task(task):
 
 def request_for_app(request, task):
     """request_for_task as the app shows it: plain values, and signed links to the files (spots.media)."""
-    found = request_for_task(task)
+    found = request_for_task(task, with_conversation=False)  # the technician: the job, not the talk
     if found is None:
         return None
     ticket = found['ticket']
@@ -6165,7 +6167,8 @@ def my_task_detail(request, pk):
     context = {
         'task': task,
         'shipment': _shipment_context(task, technician),
-        'from_request': request_for_task(task),
+        # The technician: who to contact, the problem and its photos — not the conversation with support.
+        'from_request': request_for_task(task, with_conversation=False),
         'is_lead': is_lead,
         'next_action': next_action,
         'can_block': can_block,

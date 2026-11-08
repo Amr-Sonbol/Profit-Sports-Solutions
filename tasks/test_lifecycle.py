@@ -797,18 +797,21 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             task = ticket.task
             self.staff.post(f'/tasks/{task.pk}/assign/', {'action': 'set_lead', 'technician': self.tech.pk})
 
-            for page in (self.staff.get(f'/tasks/{task.pk}/'), self.client_for('tech1').get(f'/tasks/my/{task.pk}/')):
+            office, technician = self.staff.get(f'/tasks/{task.pk}/'), self.client_for('tech1').get(f'/tasks/my/{task.pk}/')
+            for page in (office, technician):
                 self.assertContains(page, "From the customer's request")
-                for text in ('Ali Hassan', '0501112222', 'Stops after 5 minutes', 'Can you send the serial plate?',
-                             'Here it is, TG-1.'):
+                for text in ('Ali Hassan', '0501112222', 'Stops after 5 minutes', 'belt.jpg'):
                     self.assertContains(page, text)
                 self.assertNotContains(page, 'SECRET internal remark')
+            # The conversation with support: the office's, not the technician's.
+            self.assertContains(office, 'Here it is, TG-1.')
+            self.assertNotContains(technician, 'Here it is, TG-1.')
 
             token = self.client_class().post('/api/login/', json.dumps({'username': 'tech1', 'password': PASSWORD}),
                                              content_type='application/json').json()['token']
             detail = self.client_class().get(f'/api/my-tasks/{task.pk}/', HTTP_AUTHORIZATION=f'Token {token}').json()
             got = detail['from_request']
             self.assertEqual((got['ticket_number'], got['contact_phone']), (ticket.ticket_number, '0501112222'))
-            self.assertEqual([entry['message'] for entry in got['conversation']],
-                             ['Can you send the serial plate?', 'Here it is, TG-1.'])
+            self.assertEqual(got['conversation'], [])
+            self.assertEqual([file['name'] for file in got['files']], ['belt.jpg'])
             self.assertNotIn('SECRET', json.dumps(got))
