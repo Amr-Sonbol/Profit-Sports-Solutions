@@ -4891,3 +4891,35 @@ details.review-more:not(.section) {
 .shipment-send-to p {
     margin: 0 0 0.25rem;
 }
+
+/* A new request's "What happens next?" (tasks/_next_step.html): three choices side by side, stacked on a phone. */
+.next-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+    margin-block-start: 1rem;
+}
+
+.next-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.next-choice h3 {
+    margin: 0;
+}
+
+.next-choice .form-actions {
+    margin-block-start: auto;
+}
+
+.review-next__more {
+    margin-block: 0.75rem 0;
+    font-size: 0.9rem;
+}

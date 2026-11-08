@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 01:05+0000\n"
+"POT-Creation-Date: 2026-11-08 12:14+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -707,6 +707,9 @@ msgstr "المهارات المتقدمة المعتمدة"
 msgid "Advice given"
 msgstr "تم تقديم المشورة"
 
+msgid "Advice given (solved by phone or instructions)"
+msgstr "تم تقديم النصيحة (حُلّت بالهاتف أو بالتعليمات)"
+
 msgid "Advice or assistance"
 msgstr "نصيحة أو مساعدة"
 
@@ -768,6 +771,9 @@ msgstr "كل الفنيين"
 msgid "All the machines listed were checked and are in order."
 msgstr "تمت مراجعة جميع الأجهزة المذكورة وهي سليمة."
 
+msgid "All waiting machines are ticked: they go together. Untick any to handle them separately afterwards."
+msgstr "كل الأجهزة المنتظرة محدّدة: تُعالَج معًا. ألغِ تحديد أي جهاز لمعالجته بشكل منفصل لاحقًا."
+
 msgid "Alone, no callbacks"
 msgstr "بمفرده، دون إعادة زيارات"
 
@@ -786,6 +792,12 @@ msgstr "تعذّر إرسال بريد إلكتروني: «%(subject)s» إلى 
 
 msgid "Answer to the customer"
 msgstr "الرد على العميل"
+
+msgid "Answer without a visit"
+msgstr "الرد بدون زيارة"
+
+msgid "Answered and closed. The customer has been told."
+msgstr "تم الرد والإغلاق. تم إبلاغ العميل."
 
 msgid "Any time that day"
 msgstr "في أي وقت من ذلك اليوم"
@@ -918,9 +930,6 @@ msgstr "بانتظار مراجعة المشرف المسؤول قبل مواف�
 
 msgid "Awaiting your action"
 msgstr "بانتظار إجراء منك"
-
-msgid "Awaiting your decision"
-msgstr "بانتظار قرارك"
 
 msgid "Back"
 msgstr "رجوع"
@@ -1192,6 +1201,9 @@ msgstr "اختر جهازًا واحدًا على الأقل لنقله إلى �
 msgid "Choose at least one role, or turn this email off."
 msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
 
+msgid "Choose later"
+msgstr "الاختيار لاحقًا"
+
 msgid "Choose your color"
 msgstr "اختر لونك"
 
@@ -1430,12 +1442,6 @@ msgstr "تم تحديث الدولة."
 msgid "Create a follow-up task for them"
 msgstr "إنشاء مهمة متابعة لها"
 
-msgid "Create a task"
-msgstr "إنشاء مهمة"
-
-msgid "Create a task from this request"
-msgstr "إنشاء مهمة من هذا الطلب"
-
 msgid "Create account and send login details"
 msgstr "إنشاء الحساب وإرسال بيانات الدخول"
 
@@ -1454,6 +1460,9 @@ msgstr "إنشاء مهمة"
 #, python-format
 msgid "Create the branch “%(name)s”"
 msgstr "إنشاء الفرع «%(name)s»"
+
+msgid "Create the visit"
+msgstr "إنشاء الزيارة"
 
 msgid "Created"
 msgstr "أُنشئت"
@@ -1611,6 +1620,9 @@ msgstr "اليوم"
 
 msgid "Day and exact time"
 msgstr "اليوم والوقت المحدد"
+
+msgid "Day and time"
+msgstr "اليوم والوقت"
 
 msgid "Day only — the supervisor will set the exact time"
 msgstr "اليوم فقط — سيحدد المشرف الوقت بدقة"
@@ -2033,12 +2045,6 @@ msgstr "تعطيل الوصول إلى البوابة"
 msgid "Disabled"
 msgstr "معطَّل"
 
-msgid "Dismiss"
-msgstr "رفض"
-
-msgid "Dismiss this request"
-msgstr "رفض هذا الطلب"
-
 msgid "Dismissed"
 msgstr "مرفوضة"
 
@@ -2086,6 +2092,9 @@ msgstr "تنزيل التقرير (PDF)"
 
 msgid "Download the report (PDF)"
 msgstr "تنزيل التقرير (PDF)"
+
+msgid "Duplicate or not needed"
+msgstr "مكرّر أو غير مطلوب"
 
 #, python-format
 msgid "Each change is against %(month)s."
@@ -2371,9 +2380,6 @@ msgstr "تم إنشاء مهمة المتابعة %(number)s للأجهزة ال
 msgid "For"
 msgstr "إلى"
 
-msgid "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered."
-msgstr "لـ«تم تقديم النصيحة» أو «غير مشمول»: يراه العميل بجانب الجهاز في طلبه، مثل طريقة إعادة تشغيله أو سبب عدم شموله."
-
 msgid "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal."
 msgstr "لعميل تواصل معنا هاتفياً أو عبر رسالة أو بريد إلكتروني. تصبح هذه تذكرة اعتيادية: يتلقى العميل التأكيد المعتاد، ويمكنه متابعتها والرد عليها عبر بوابته."
 
@@ -2451,6 +2457,9 @@ msgstr "من طلبك"
 msgid "Given by the customer in their portal, without being asked."
 msgstr "قدّمه العميل من بوابته دون طلب."
 
+msgid "Goes to the warehouse manager to prepare, then a technician hands it to the courier. No visit."
+msgstr "يذهب إلى مدير المستودع لتجهيزه، ثم يسلّمه فني لشركة الشحن. بدون زيارة."
+
 msgid "Goodwill"
 msgstr "مجاملة"
 
@@ -2514,6 +2523,9 @@ msgstr "مرتفعة"
 
 msgid "High priority"
 msgstr "أولوية عالية"
+
+msgid "High priority (a machine isn't working)"
+msgstr "أولوية عالية (جهاز لا يعمل)"
 
 msgid "History"
 msgstr "السجل الزمني"
@@ -2700,6 +2712,10 @@ msgstr "مضى يومها ولم يُنجز العمل."
 
 msgid "Job"
 msgstr "المهمة"
+
+#, python-format
+msgid "Kept on task %(number)s: change them there."
+msgstr "محفوظة في المهمة %(number)s: عدّلها هناك."
 
 msgid "Kind"
 msgstr "النوع"
@@ -2998,6 +3014,9 @@ msgstr "التقرير التشغيلي الشهري"
 
 msgid "Monthly report"
 msgstr "التقرير الشهري"
+
+msgid "More options: the full task form"
+msgstr "خيارات أكثر: نموذج المهمة الكامل"
 
 #, python-format
 msgid "More planned than %(warehouse)s holds: %(codes)s. Check the warehouse, or record a count on the Stock screen."
@@ -3697,14 +3716,14 @@ msgstr "مدير العمليات"
 msgid "Optional: any notes required before work resumes."
 msgstr "اختياري: أي ملاحظات لازمة قبل استئناف العمل."
 
+msgid "Optional: the customer is told once it's set."
+msgstr "اختياري: يُبلَّغ العميل عند تحديده."
+
 msgid "Or a ready message"
 msgstr "أو رسالة جاهزة"
 
 msgid "Or check and change its details first"
 msgstr "أو راجع بياناته وعدّلها أولًا"
-
-msgid "Or settle it without a task"
-msgstr "أو أنهِه بدون مهمة"
 
 msgid "Or type your brand's color code"
 msgstr "أو اكتب رمز لون علامتك التجارية"
@@ -4062,6 +4081,9 @@ msgstr "يرجى رفع ملف بصيغة CSV."
 
 msgid "Please visit the following page to choose a new password:"
 msgstr "يرجى زيارة الصفحة التالية لاختيار كلمة مرور جديدة:"
+
+msgid "Please write your answer to the customer."
+msgstr "يرجى كتابة ردك على العميل."
 
 msgid "Poor"
 msgstr "ضعيف"
@@ -4725,9 +4747,6 @@ msgstr "يرجى اختيار نوع مهمة موجود أو إضافة نوع 
 msgid "Select the machine and an outcome, or leave this row blank."
 msgstr "يرجى اختيار الجهاز والنتيجة، أو ترك هذا الصف فارغاً."
 
-msgid "Select the machines, then choose what happens to them. Machines can go to different tasks: create one task, then select the next machines."
-msgstr "اختر الأجهزة ثم حدّد الإجراء المناسب لها. يمكن توزيع الأجهزة على مهام مختلفة: أنشئ مهمة، ثم اختر الأجهزة التالية."
-
 msgid "Select…"
 msgstr "اختر…"
 
@@ -4751,6 +4770,9 @@ msgstr "أرسل اعتذاراً موجزاً يوضح سبب التأخير ا
 
 msgid "Send a copy to"
 msgstr "إرسال نسخة إلى"
+
+msgid "Send a technician"
+msgstr "إرسال فني"
 
 msgid "Send confirmation link"
 msgstr "إرسال رابط التأكيد"
@@ -4781,6 +4803,9 @@ msgstr "إرسال رابط إعادة التعيين"
 
 msgid "Send setup link"
 msgstr "إرسال رابط الإعداد"
+
+msgid "Send the answer and close"
+msgstr "إرسال الرد والإغلاق"
 
 msgid "Send to"
 msgstr "يُرسل إلى"
@@ -4904,6 +4929,9 @@ msgstr "أُرسل رابط الإعداد"
 msgid "Share their login page: "
 msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
 
+msgid "Ship a part"
+msgstr "شحن قطعة"
+
 msgid "Ship part"
 msgstr "شحن قطعة"
 
@@ -4922,6 +4950,9 @@ msgstr "الشحن %(value)s %(currency)s"
 
 msgid "Shipping address"
 msgstr "عنوان الشحن"
+
+msgid "Shipping and PAK"
+msgstr "الشحن ورقم PAK"
 
 msgid "Shipping company"
 msgstr "شركة الشحن"
@@ -5705,6 +5736,9 @@ msgstr "تم تعديل هذا التقرير بعد أن وقّعه العمي�
 msgid "This request has been reviewed and closed. Please contact us if you require further assistance."
 msgstr "تمت مراجعة هذا الطلب وإغلاقه. يُرجى التواصل معنا إذا احتجت إلى مزيد من المساعدة."
 
+msgid "This request has no branch yet: use More options to choose one."
+msgstr "هذا الطلب ليس له فرع بعد: استخدم «خيارات أكثر» لاختياره."
+
 msgid "This schedule is locked. Please request a change, and a manager will review it."
 msgstr "هذا الموعد مقفل. يرجى طلب التغيير، وسيقوم المدير بمراجعته."
 
@@ -5861,9 +5895,6 @@ msgstr "للحفاظ على فعالية التشحيم، نوصي بتوجيه 
 msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
 msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
 
-msgid "To send a spare part instead of a visit, choose the type Spare Part Shipment on the next page."
-msgstr "لإرسال قطعة غيار بدلًا من زيارة، اختر النوع «شحن قطع غيار» في الصفحة التالية."
-
 msgid "To staff"
 msgstr "إلى الموظفين"
 
@@ -5914,9 +5945,6 @@ msgstr "الرحلات"
 msgid "Tuesday"
 msgstr "الثلاثاء"
 
-msgid "Turn this request into a task to plan the work, or reply below if it can be handled without a visit."
-msgstr "حوّل هذا الطلب إلى مهمة لتخطيط العمل، أو ردّ أدناه إن أمكن معالجته دون زيارة."
-
 msgid "Type"
 msgstr "النوع"
 
@@ -5953,6 +5981,9 @@ msgstr "تحت الإشراف"
 #, python-format
 msgid "Under warranty · until %(date)s"
 msgstr "تحت الضمان · حتى %(date)s"
+
+msgid "Under warranty: free"
+msgstr "تحت الضمان: مجاني"
 
 msgid "Under way"
 msgstr "قيد التنفيذ"
@@ -6138,6 +6169,9 @@ msgstr "الزيارات المنجزة"
 msgid "Visits this month"
 msgstr "الزيارات هذا الشهر"
 
+msgid "Waiting"
+msgstr "بانتظار القرار"
+
 msgid "Waiting for confirmation"
 msgstr "بانتظار التأكيد"
 
@@ -6259,6 +6293,9 @@ msgstr "موضوع كل طلب مقابل ما احتاجه العميل."
 msgid "What happened"
 msgstr "ماذا حدث"
 
+msgid "What happens next?"
+msgstr "ما الخطوة التالية؟"
+
 msgid "What is it about?"
 msgstr "ما موضوع الطلب؟"
 
@@ -6270,9 +6307,6 @@ msgstr "ما أبلغ به العميل"
 
 msgid "What the levels mean"
 msgstr "ماذا تعني المستويات"
-
-msgid "What to tell the customer (optional)"
-msgstr "ما تريد إبلاغه للعميل (اختياري)"
 
 msgid "WhatsApp"
 msgstr "واتساب"
@@ -6468,6 +6502,9 @@ msgstr "تم تغيير بريد تسجيل الدخول لبوابة Profit Spo
 
 msgid "Your account is ready. Welcome."
 msgstr "حسابك جاهز. مرحباً بك."
+
+msgid "Your answer to the customer"
+msgstr "ردك على العميل"
 
 msgid "Your branch isn't listed? Request a new branch"
 msgstr "فرعك غير موجود؟ اطلب إضافة فرع جديد"
@@ -7958,6 +7995,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Attachments from the customer's ticket"
 #~ msgstr "مرفقات من طلب العميل"
 
+#~ msgid "Awaiting your decision"
+#~ msgstr "بانتظار قرارك"
+
 #~ msgid "Back to history"
 #~ msgstr "العودة إلى السجل"
 
@@ -8018,11 +8058,23 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Create a part shipment task"
 #~ msgstr "إنشاء مهمة شحن قطعة"
 
+#~ msgid "Create a task"
+#~ msgstr "إنشاء مهمة"
+
+#~ msgid "Create a task from this request"
+#~ msgstr "إنشاء مهمة من هذا الطلب"
+
 #~ msgid "Create a visit task"
 #~ msgstr "إنشاء مهمة زيارة"
 
 #~ msgid "Current tasks"
 #~ msgstr "المهام الحالية"
+
+#~ msgid "Dismiss"
+#~ msgstr "رفض"
+
+#~ msgid "Dismiss this request"
+#~ msgstr "رفض هذا الطلب"
 
 #~ msgid "Download (PDF)"
 #~ msgstr "تنزيل (PDF)"
@@ -8033,6 +8085,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "File %(number)s"
 #~ msgstr "ملف %(number)s"
+
+#~ msgid "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered."
+#~ msgstr "لـ«تم تقديم النصيحة» أو «غير مشمول»: يراه العميل بجانب الجهاز في طلبه، مثل طريقة إعادة تشغيله أو سبب عدم شموله."
 
 #~ msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
 #~ msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
@@ -8073,6 +8128,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there; saving brings you back here, to create its task or close the request."
 #~ msgstr "يفتح صفحة العميل ونموذج الفرع معبّأ من هذا الطلب. حدّد بداية الضمان هناك؛ الحفظ يعيدك إلى هنا لإنشاء مهمته أو إغلاق الطلب."
 
+#~ msgid "Or settle it without a task"
+#~ msgstr "أو أنهِه بدون مهمة"
+
 #~ msgid "Orange"
 #~ msgstr "برتقالي"
 
@@ -8099,6 +8157,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Report a problem"
 #~ msgstr "الإبلاغ عن مشكلة"
+
+#~ msgid "Select the machines, then choose what happens to them. Machines can go to different tasks: create one task, then select the next machines."
+#~ msgstr "اختر الأجهزة ثم حدّد الإجراء المناسب لها. يمكن توزيع الأجهزة على مهام مختلفة: أنشئ مهمة، ثم اختر الأجهزة التالية."
 
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"
@@ -8140,8 +8201,14 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Ticket status"
 #~ msgstr "حالة الطلب"
 
+#~ msgid "To send a spare part instead of a visit, choose the type Spare Part Shipment on the next page."
+#~ msgstr "لإرسال قطعة غيار بدلًا من زيارة، اختر النوع «شحن قطع غيار» في الصفحة التالية."
+
 #~ msgid "Track your reports and service history."
 #~ msgstr "تابع تقاريرك وسجل الصيانة الخاص بك."
+
+#~ msgid "Turn this request into a task to plan the work, or reply below if it can be handled without a visit."
+#~ msgstr "حوّل هذا الطلب إلى مهمة لتخطيط العمل، أو ردّ أدناه إن أمكن معالجته دون زيارة."
 
 #~ msgid "Two columns: code and description. A header row is permitted."
 #~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
@@ -8151,6 +8218,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Waiting for review"
 #~ msgstr "بانتظار المراجعة"
+
+#~ msgid "What to tell the customer (optional)"
+#~ msgstr "ما تريد إبلاغه للعميل (اختياري)"
 
 #~ msgid "What's wrong?"
 #~ msgstr "ما المشكلة؟"

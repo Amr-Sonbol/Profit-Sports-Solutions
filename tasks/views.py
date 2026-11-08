@@ -2340,6 +2340,109 @@ def task_edit(request, pk):
     return render(request, 'tasks/task_edit.html', context)
 
 
+# A request's "What happens next?" (ticket_review): its task made in one step,
+# everything the request already says filled in; the full New task form only
+# for "More options".
+REQUEST_NEED_TASK_TYPES = {
+    CustomerTicket.Need.REPAIR: 'breakdown_repair',
+    CustomerTicket.Need.VISIT: 'preventive_maintenance',
+    CustomerTicket.Need.ASSISTANCE: 'site_consultation_assessment',
+    CustomerTicket.Need.PARTS: 'spare_parts_replacement',
+}
+
+
+def _task_form_for(requesting_technician, ticket, data=None):
+    """The New task form for this request: as it opens (its branch, the
+    customer's words, source, warranty billing), or bound to `data`."""
+    return TaskCreateForm(
+        data, country=ticket.country, ticket=ticket, is_admin=requesting_technician.role == Technician.Role.ADMIN,
+        can_assign=_has_permission(requesting_technician, RolePermission.Permission.ASSIGN_TASKS),
+    )
+
+
+def request_plan(ticket, machines, ship=False):
+    """What a task from this request will be: its type (from what they
+    need, or a part shipment), and high priority when a machine isn't
+    working at all."""
+    if ship:
+        task_type = part_shipment_type()
+    elif ticket.about == CustomerTicket.About.NEW_BRANCH:
+        task_type = TaskType.objects.filter(code='new_installation').first()
+    else:
+        task_type = TaskType.objects.filter(code=REQUEST_NEED_TASK_TYPES.get(ticket.need, '')).first()
+    urgent = any(machine.problem == TicketMachine.Problem.NOT_WORKING for machine in machines)
+    return {'task_type': task_type, 'priority': Task.Priority.HIGH if urgent else Task.Priority.NORMAL}
+
+
+def _form_values(form):
+    """What the form would post as it opens."""
+    data = {}
+    for field in form:
+        value = field.value()
+        if value is None or value is False:
+            continue
+        if value is True:
+            value = 'on'
+        elif isinstance(value, datetime):
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
+            value = value.strftime('%Y-%m-%dT%H:%M')
+        elif isinstance(value, date):
+            value = value.isoformat()
+        data[field.html_name] = value
+    return data
+
+
+def task_from_request(request, requesting_technician, ticket, machines, ship=False, lead=None, when=''):
+    """The request's task in one step, through the same path as the New
+    task form (create_task: the bell, the staff email, the request linked,
+    its machines decided). Returns (task, None), or (None, the form's
+    errors) when it needs the full form."""
+    plan = request_plan(ticket, machines, ship=ship)
+    data = _form_values(_task_form_for(requesting_technician, ticket))
+    data.update({'site': ticket.site_id, 'priority': plan['priority']})
+    if plan['task_type']:
+        data['task_type'] = plan['task_type'].pk
+    if machines:
+        data['description'] = ticket_machines_text(machines)[1]
+    if lead is not None and not ship:
+        data['lead'] = lead.pk
+    if when and not ship:
+        data['scheduled_for'] = when
+    form = _task_form_for(requesting_technician, ticket, data)
+    if not form.is_valid():
+        return None, form.errors
+    decision = TicketMachine.Decision.SHIP_PART if ship else TicketMachine.Decision.VISIT
+    task = create_task(request, form, requesting_technician, ticket, machines, decision)
+    if task.scheduled_for:
+        notify_customer.visit_booked(task)
+    return task, None
+
+
+def _next_step_context(technician, ticket, can_manage):
+    if not (can_manage and ticket.status == CustomerTicket.Status.NEW):
+        return {}
+    form = _task_form_for(technician, ticket)
+    machines = list(ticket.machines.filter(decision=''))
+    return {
+        'next_technicians': form.fields['lead'].queryset if 'lead' in form.fields else None,
+        'next_plan': request_plan(ticket, machines),
+        'next_warranty': bool(ticket.site and ticket.site.under_warranty),
+    }
+
+
+def close_request_with_answer(request, ticket, answer):
+    """Closed with our answer: on their request page, in their bell and by email."""
+    ticket.status = CustomerTicket.Status.CLOSED
+    ticket.close_reason = answer
+    ticket.reviewed_by = request.user
+    ticket.reviewed_at = timezone.now()
+    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+    if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+        notify_customer.request_closed(ticket)
+        _send_request_closed(request, ticket)
+
+
 def create_task(request, form, creator, ticket=None, selected_machines=(), machine_decision=''):
     """Creates the task from a valid TaskCreateForm — with any new site,
     brand or task type it adds, the "created" event, the bell, the ticket
@@ -3145,6 +3248,59 @@ def ticket_review(request, pk):
             return redirect('tasks:ticket_review', pk=ticket.pk)
 
     if (
+        request.method == 'POST' and can_manage and request.POST.get('action') == 'next'
+        and ticket.status == CustomerTicket.Status.NEW
+    ):
+        # "What happens next?": send a technician, ship a part, or answer without a visit.
+        choice = request.POST.get('choice')
+        undecided = ticket.machines.filter(decision='')
+        selected = list(undecided.filter(pk__in=[v for v in request.POST.getlist('machines') if v.isdigit()]))
+        if undecided.exists() and not selected:
+            messages.error(request, _('Please select at least one machine that has not been decided yet.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+        if choice in ('visit', 'ship'):
+            if not ticket.site_id:
+                messages.error(request, _('This request has no branch yet: use More options to choose one.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+            lead = None
+            lead_id = request.POST.get('technician', '')
+            lead_field = _task_form_for(technician, ticket).fields.get('lead')  # only with assign_tasks
+            if lead_id.isdigit() and lead_field is not None:
+                lead = lead_field.queryset.filter(pk=lead_id).first()
+            task, errors = task_from_request(
+                request, technician, ticket, selected, ship=choice == 'ship', lead=lead,
+                when=request.POST.get('scheduled_for', '').strip(),
+            )
+            if task is None:
+                messages.error(request, ' '.join(str(error) for field in errors.values() for error in field))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+            messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
+            return redirect('tasks:task_detail', pk=task.pk)
+        if choice == 'answer':
+            reason = request.POST.get('reason')
+            answer = request.POST.get('answer', '').strip()
+            if not answer:
+                messages.error(request, _('Please write your answer to the customer.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+            if reason == 'duplicate':
+                # Nothing to decide per machine: the whole request is answered and closed.
+                close_request_with_answer(request, ticket, answer)
+                messages.success(request, _('Answered and closed. The customer has been told.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
+            decision = (TicketMachine.Decision.NOT_COVERED if reason == 'not_covered'
+                        else TicketMachine.Decision.ADVICE)
+            TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
+                decision=decision, decision_note=answer[:255], decided_by=request.user, decided_at=timezone.now(),
+            )
+            if ticket.machines.filter(decision='').exists():
+                messages.success(request, _('Decision saved.'))  # other machines still waiting
+            else:
+                close_request_with_answer(request, ticket, answer)
+                messages.success(request, _('Answered and closed. The customer has been told.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+        return redirect('tasks:ticket_review', pk=ticket.pk)
+
+    if (
         request.method == 'POST' and can_manage and request.POST.get('action') == 'machines'
         and ticket.status == CustomerTicket.Status.NEW
     ):
@@ -3300,15 +3456,8 @@ def ticket_review(request, pk):
             # still new; a closed one goes through 'reopen' instead.
             close_form = CloseTicketForm(request.POST)
             if close_form.is_valid():
-                ticket.status = CustomerTicket.Status.CLOSED
-                ticket.close_reason = close_form.cleaned_data['close_reason']
-                ticket.reviewed_by = request.user
-                ticket.reviewed_at = timezone.now()
-                ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
-                if ticket.kind == CustomerTicket.Kind.CUSTOMER:
-                    # The reason is our answer: on their request page, in their bell and by email.
-                    notify_customer.request_closed(ticket)
-                    _send_request_closed(request, ticket)
+                # The reason is our answer: on their request page, in their bell and by email.
+                close_request_with_answer(request, ticket, close_form.cleaned_data['close_reason'])
                 messages.success(request, _('Ticket closed.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
@@ -3345,6 +3494,8 @@ def ticket_review(request, pk):
         ),
         'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
+        # "What happens next?": who can be sent, and what the task will be (task_from_request).
+        **_next_step_context(technician, ticket, can_manage),
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
         'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         'escalations': escalations, 'pending_escalation': pending_escalation,

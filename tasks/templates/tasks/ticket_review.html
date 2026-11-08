@@ -189,77 +189,7 @@
     {% endif %}
     {# ===== The decision, last: once the request, conversation and notes are read, while it's new ===== #}
     {% if can_manage and ticket.status == 'new' %}
-    <section class="section review-card review-card--decision">
-        <h2>{% translate "Decision" %}</h2>
-        {% with machines=ticket.machines.all %}
-        {% if machines %}
-        {# One decision per machine: select some, then a task for them or a decision without one. #}
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <input type="hidden" name="action" value="machines">
-            <div class="table-wrap">
-                <table class="compact-table">
-                    <thead><tr><th></th><th>{% translate "Machine" %}</th><th>{% translate "Problem" %}</th><th>{% translate "Decision" %}</th></tr></thead>
-                    <tbody>
-                        {% for machine in machines %}
-                        <tr>
-                            <td>{% if not machine.decision %}<input type="checkbox" name="machines" value="{{ machine.pk }}" aria-label="{{ machine.machine_name }}">{% endif %}</td>
-                            <td>{{ machine.machine_name }}<span class="compact-table__sub" dir="ltr">{{ machine.serial|default:"—" }}</span></td>
-                            <td>{{ machine.get_problem_display }}</td>
-                            <td>
-                                {% if machine.decision %}
-                                {{ machine.get_decision_display }}{% if machine.task %} · <a class="task-number" href="{% url 'tasks:task_detail' machine.task.pk %}">{{ machine.task.task_number }}</a>{% endif %}
-                                {% if machine.decision_note %}<span class="compact-table__sub">{{ machine.decision_note }}</span>{% endif %}
-                                {% else %}<span class="muted">{% translate "Awaiting your decision" %}</span>{% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <p class="field__help">{% translate "Select the machines, then choose what happens to them. Machines can go to different tasks: create one task, then select the next machines." %}</p>
-            {# One button: the task's type says what it is — a visit, or a Spare Part Shipment (tasks.shipments). #}
-            <div class="button-row">
-                <button type="submit" name="do" value="visit" class="button">{% translate "Create a task" %}</button>
-            </div>
-            <p class="field__help">{% translate "To send a spare part instead of a visit, choose the type Spare Part Shipment on the next page." %}</p>
-            {# Settled without a task: the note is what the customer reads next to the machine on their request. #}
-            <div class="review-decision__other">
-                <h3>{% translate "Or settle it without a task" %}</h3>
-                <div class="field">
-                    <label for="decision-note">{% translate "What to tell the customer (optional)" %}</label>
-                    <input type="text" id="decision-note" name="decision_note" maxlength="255">
-                    <p class="field__help">{% translate "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered." %}</p>
-                </div>
-                <div class="button-row">
-                    <button type="submit" name="do" value="advice" class="button button--secondary">{% translate "Advice given" %}</button>
-                    <button type="submit" name="do" value="not_covered" class="button button--secondary">{% translate "Not covered" %}</button>
-                </div>
-            </div>
-        </form>
-        {% elif ticket.about == 'new_branch' and not ticket.site %}
-        {# A branch that doesn't exist yet: nowhere to send a task until it's added (and linked) above. #}
-        <p class="field__help">{% translate "Add the branch first (button above); then you can create its task here." %}</p>
-        {% else %}
-        <p class="field__help">{% translate "Turn this request into a task to plan the work, or reply below if it can be handled without a visit." %}</p>
-        <p><a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Create a task from this request" %}</a></p>
-        {% endif %}
-        {% endwith %}
-        <details class="review-more"{% if dismiss_form.errors %} open{% endif %}>
-            <summary>{% translate "Dismiss this request" %}</summary>
-            <form method="post" class="review-more__body" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="dismiss">
-                <div class="field {% if dismiss_form.dismissal_reason.errors %}field--error{% endif %}">
-                    <label for="{{ dismiss_form.dismissal_reason.id_for_label }}">{{ dismiss_form.dismissal_reason.label }}</label>
-                    {{ dismiss_form.dismissal_reason }}
-                    <p class="field__help">{{ dismiss_form.dismissal_reason.help_text }}</p>
-                    {% for error in dismiss_form.dismissal_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                </div>
-                <div class="form-actions"><button type="submit" class="button button--danger">{% translate "Dismiss" %}</button></div>
-            </form>
-        </details>
-    </section>
+    {% include "tasks/_next_step.html" %}
     {% endif %}
 </div>
 
@@ -349,6 +279,17 @@
 
     {% if can_manage %}
     {# ===== Rarely needed: shipping, and correcting the details ===== #}
+    {% if ticket.task %}
+    {# Once there's a task, shipping and the PAK number live there: one place to update. #}
+    <section class="section review-card">
+        <h2>{% translate "Shipping and PAK" %}</h2>
+        <dl class="review-facts">
+            <div><dt>{% translate "Shipping" %}</dt><dd>{{ ticket.task.get_shipping_company_display|default:"—" }}{% if ticket.task.shipping_tracking_number %} · <span dir="ltr">{{ ticket.task.shipping_tracking_number }}</span>{% endif %}</dd></div>
+            <div><dt>{% translate "PAK reference number" %}</dt><dd dir="ltr">{{ ticket.task.pak_reference_number|default:"—" }}</dd></div>
+        </dl>
+        <p class="field__help">{% blocktranslate with number=ticket.task.task_number %}Kept on task {{ number }}: change them there.{% endblocktranslate %} <a href="{% url 'tasks:task_detail' ticket.task.pk %}" class="task-number" dir="ltr">{{ ticket.task.task_number }}</a></p>
+    </section>
+    {% else %}
     {# Shipping: company and tracking number; "Notify the customer" beside Save, always there, usable once a tracking number is saved (and there's an email to send it to). #}
     <details class="section review-card review-more"{% if logistics_form.errors %} open{% endif %}>
         <summary>{% translate "Shipping" %}{% if ticket.shipping_company %} · {{ ticket.get_shipping_company_display }}{% endif %}{% if ticket.shipping_tracking_number %} · <span dir="ltr">{{ ticket.shipping_tracking_number }}</span>{% endif %}</summary>
@@ -400,6 +341,7 @@
             <div class="form-actions"><button type="submit" class="button button--secondary">{% translate "Save" %}</button></div>
         </form>
     </details>
+    {% endif %}
 
     <details class="section review-card review-more"{% if edit_form.errors %} open{% endif %}>
         <summary>{% translate "Edit details" %}</summary>

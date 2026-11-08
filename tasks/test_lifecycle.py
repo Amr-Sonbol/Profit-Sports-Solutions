@@ -820,3 +820,89 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             self.assertEqual(got['conversation'], [])
             self.assertEqual([file['name'] for file in got['files']], ['belt.jpg'])
             self.assertNotIn('SECRET', json.dumps(got))
+
+
+class WhatHappensNextTests(LifecycleTestCase):
+    """A new request's three choices: a visit in one step, a part, or an answer."""
+
+    def setUp(self):
+        super().setUp()
+        self.send_request(machines=[
+            {'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
+             'description': 'Dead, no power.'},
+            {'which': 'new', 'model_name': 'Bike', 'serial_no': 'BK-2', 'problem': 'noise', 'description': 'Squeaks.'},
+        ])
+        self.ticket = self.newest_request()
+        self.url = f'/tasks/tickets/{self.ticket.pk}/'
+        self.machines = [str(machine.pk) for machine in self.ticket.machines.all()]
+
+    def next(self, **data):
+        return self.staff.post(self.url, {'action': 'next', 'machines': self.machines, **data})
+
+    def test_the_page_offers_three_choices_with_machines_ticked(self):
+        page = self.staff.get(self.url)
+        self.assertContains(page, 'What happens next?')
+        self.assertContains(page, 'Create the visit')
+        self.assertContains(page, 'Ship a part')
+        self.assertContains(page, 'Send the answer and close')
+        self.assertContains(page, 'checked aria-label="Excite Run 700"')
+
+    def test_a_visit_in_one_step(self):
+        from customers.models import CustomerNotification
+        when = (timezone.localtime() + timedelta(days=1)).strftime('%Y-%m-%dT10:00')
+        response = self.next(choice='visit', technician=self.tech.pk, scheduled_for=when)
+        self.ticket.refresh_from_db()
+        task = self.ticket.task
+        self.assertRedirects(response, f'/tasks/{task.pk}/', fetch_redirect_response=False)
+        self.assertEqual(task.site, self.site)
+        self.assertEqual(task.task_type.code, 'breakdown_repair')          # "Fix a problem"
+        self.assertEqual(task.priority, Task.Priority.HIGH)                 # a machine isn't working
+        self.assertEqual(task.status, Task.Status.ASSIGNED)
+        self.assertEqual(task.assignments.get(is_active=True).technician, self.tech)
+        self.assertIsNotNone(task.scheduled_for)
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CONVERTED)
+        self.assertEqual(set(self.ticket.machines.values_list('decision', flat=True)), {'visit'})
+        self.assertTrue(CustomerNotification.objects.filter(customer=self.customer, kind='visit_booked').exists())
+
+    def test_a_visit_with_no_one_chosen_yet(self):
+        self.next(choice='visit')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.task.status, Task.Status.NEW)
+        self.assertFalse(self.ticket.task.assignments.exists())
+
+    def test_a_part(self):
+        from tasks.shipments import is_part_shipment
+        self.next(choice='ship')
+        self.ticket.refresh_from_db()
+        self.assertTrue(is_part_shipment(self.ticket.task))
+        self.assertEqual(set(self.ticket.machines.values_list('decision', flat=True)), {'ship_part'})
+
+    def test_split_one_machine_now_the_other_later(self):
+        self.machines = self.machines[:1]
+        self.next(choice='visit')
+        self.ticket.refresh_from_db()
+        self.assertEqual(sorted(self.ticket.machines.values_list('decision', flat=True)), ['', 'visit'])
+        self.assertContains(self.staff.get(self.url), 'What happens next?')  # still the other one to decide
+
+    def test_an_answer_closes_it_and_reaches_the_customer(self):
+        mail.outbox.clear()
+        self.assertEqual(self.next(choice='answer', reason='advice', answer='').status_code, 302)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)  # no answer: nothing happens
+        self.next(choice='answer', reason='advice', answer='Hold the reset button for 10 seconds.')
+        self.ticket.refresh_from_db()
+        self.assertEqual((self.ticket.status, self.ticket.close_reason),
+                         (CustomerTicket.Status.CLOSED, 'Hold the reset button for 10 seconds.'))
+        self.assertTrue(any('Hold the reset button' in m.body for m in mail.outbox))
+
+    def test_a_duplicate_is_answered_too(self):
+        self.next(choice='answer', reason='duplicate', answer='Already handled in your other request.')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_once_there_is_a_task_shipping_lives_on_it(self):
+        self.next(choice='ship')
+        self.ticket.refresh_from_db()
+        page = self.staff.get(self.url)
+        self.assertContains(page, 'Shipping and PAK')
+        self.assertNotContains(page, 'value="update_logistics"')
