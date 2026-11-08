@@ -2917,15 +2917,17 @@ class TicketStatusAccessTests(TaskTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('/customers/portal/login/', response.url)
 
-    def test_a_different_customers_login_gets_403(self):
+    def test_a_different_customer_is_told_the_link_is_for_another_account(self):
         other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
         other_user = User.objects.create_user('other_portal', password='pass12345')
         other_customer.user = other_user
         other_customer.save(update_fields=['user'])
 
         self.client.login(username='other_portal', password='pass12345')
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 403)
+        response = self.client.get(self.url, follow=True)
+        self.assertEqual(response.redirect_chain[-1][0], '/customers/portal/requests/')
+        self.assertContains(response, 'That link is for a request on a different customer account.')
+        self.assertNotContains(response, self.ticket.ticket_number)  # never whose, or which
 
     def test_staff_login_gets_403_too(self):
         # ticket_review is the staff-facing equivalent — a technician

@@ -20,16 +20,21 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
         {request.machines.length} machine(s) · {request.photo_count} photo(s)
         {request.video_count ? ` · ${request.video_count} video(s)` : ''}
       </ThemedText>
-      {request.site_address ? (
-        <TouchableOpacity onPress={() => directionsUrl && Linking.openURL(directionsUrl)}>
-          <ThemedText themeColor="primary">{request.site_name} — {request.site_address}</ThemedText>
-        </TouchableOpacity>
-      ) : null}
-      {request.contact_name ? <ThemedText>{request.contact_name}</ThemedText> : null}
-      {request.contact_phone ? (
-        <TouchableOpacity onPress={() => Linking.openURL(`tel:${request.contact_phone}`)}>
-          <ThemedText themeColor="primary">{request.contact_phone}</ThemedText>
-        </TouchableOpacity>
+      {/* Where and who: its own card, apart from the machines. */}
+      {request.site_address || request.contact_name || request.contact_phone ? (
+        <ThemedView style={[styles.card, { borderColor: theme.backgroundSelected }]}>
+          {request.site_address ? (
+            <TouchableOpacity onPress={() => directionsUrl && Linking.openURL(directionsUrl)}>
+              <ThemedText themeColor="primary">{request.site_name} — {request.site_address}</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+          {request.contact_name ? <ThemedText>{request.contact_name}</ThemedText> : null}
+          {request.contact_phone ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${request.contact_phone}`)}>
+              <ThemedText themeColor="primary">{request.contact_phone}</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+        </ThemedView>
       ) : null}
       {request.machines.length === 0 ? (
         <>
@@ -38,7 +43,7 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
         </>
       ) : null}
       {request.machines.map((machine, index) => (
-        <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+        <ThemedView key={index} style={[styles.card, { borderColor: theme.backgroundSelected }]}>
           <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
           <ThemedText type="small" themeColor={machine.urgent ? 'danger' : undefined}>{machine.problem}</ThemedText>
           {machine.description ? <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText> : null}
@@ -87,8 +92,9 @@ function MediaStrip({ items }: { items: RequestFile[] }) {
 }
 
 const styles = StyleSheet.create({
-  section: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
-  machine: { borderBottomWidth: 1, paddingBottom: Spacing.two, gap: 2, backgroundColor: 'transparent' },
+  section: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.two },
+  // One card each: the contact, and every machine with its own photos.
+  card: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: 2, backgroundColor: 'transparent' },
   subTitle: { marginTop: Spacing.two },
   mediaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one, backgroundColor: 'transparent' },
   mediaTile: { width: 96, gap: 2 },

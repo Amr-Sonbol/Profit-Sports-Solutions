@@ -314,17 +314,6 @@ export default function TaskDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {task.can_file_report ? (
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary }]}
-              onPress={() => router.push(`/report/${task.id}`)}
-            >
-              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
-                {task.status === 'in_progress' ? 'Submit work report' : 'Edit work report'}
-              </ThemedText>
-            </TouchableOpacity>
-          ) : null}
-
           <ThemedView style={styles.section}>
             <ThemedText type="smallBold">Add a photo</ThemedText>
             <ThemedView style={styles.photoRow}>
@@ -348,9 +337,22 @@ export default function TaskDetailScreen() {
               {task.attachments.map((attachment) => (
                 <ThemedText key={attachment.id} themeColor="textSecondary" type="small">
                   {attachment.purpose_display} — {attachment.media_type_display}
+                  {attachment.asset_name ? ` · ${attachment.asset_name}` : ''}
                 </ThemedText>
               ))}
             </ThemedView>
+          ) : null}
+
+          {/* The report: last, just before the history. */}
+          {task.can_file_report ? (
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => router.push(`/report/${task.id}`)}
+            >
+              <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>
+                {task.status === 'in_progress' ? 'Submit work report' : 'Work report'}
+              </ThemedText>
+            </TouchableOpacity>
           ) : null}
 
           {task.events.length > 0 ? (

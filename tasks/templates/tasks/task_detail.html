@@ -378,6 +378,7 @@
         {% for attachment in attachments %}
         <li>
             <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
+            {% if attachment.asset %}<strong>{{ attachment.asset.brand.name }} {{ attachment.asset.model_name }}{% if attachment.asset.serial_no %} · <span dir="ltr">{{ attachment.asset.serial_no }}</span>{% endif %}</strong>{% endif %}
             {% include "_attachment.html" with file=attachment.url %}
             <span class="muted">{% blocktranslate with source=attachment.get_source_display time=attachment.uploaded_at|date:"SHORT_DATETIME_FORMAT" %}{{ source }} — {{ time }}{% endblocktranslate %}</span>
         </li>

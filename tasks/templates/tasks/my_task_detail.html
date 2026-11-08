@@ -169,6 +169,7 @@
         {% for attachment in attachments %}
         <li>
             <span class="badge badge--muted">{{ attachment.get_purpose_display }}</span>
+            {% if attachment.asset %}<strong>{{ attachment.asset.brand.name }} {{ attachment.asset.model_name }}{% if attachment.asset.serial_no %} · <span dir="ltr">{{ attachment.asset.serial_no }}</span>{% endif %}</strong>{% endif %}
             {% if attachment.media_type == 'photo' %}
                 <a href="{{ attachment.url }}" target="_blank" rel="noopener">
                     <img src="{{ attachment.url }}" alt="{{ attachment.get_purpose_display }}" class="attachment-thumb">

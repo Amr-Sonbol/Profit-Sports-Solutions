@@ -1024,3 +1024,28 @@ class ReportMachinesTests(LifecycleTestCase):
     def test_the_copy_goes_to_whoever_made_the_request_by_default(self):
         from tasks.views import report_copy_default
         self.assertEqual(report_copy_default(self.task), self.site.effective_contact_email or '')
+
+    def test_a_photo_from_a_machines_card_belongs_to_that_machine(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from rest_framework.test import APIClient
+        from customers.models import Asset
+        from tasks.models import TaskAssignment, TaskAttachment
+        TaskAssignment.objects.create(task=self.task, technician=self.tech, role=TaskAssignment.Role.LEAD, assigned_at=timezone.now())
+        other_site = Site.objects.create(customer=self.customer, name='Elsewhere')
+        elsewhere = Asset.objects.create(site=other_site, brand=self.brand, model_name='Bike', serial_no='X-1')
+        api = APIClient()
+        api.force_authenticate(self.tech.user)
+        jpeg = lambda: SimpleUploadedFile('fault.jpg', b'\xff\xd8\xff\xe0' + b'0' * 64, content_type='image/jpeg')
+        url = f'/api/my-tasks/{self.task.pk}/attachments/'
+        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': self.asset.pk}, format='multipart')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()['asset'], self.asset.pk)
+        self.assertEqual(TaskAttachment.objects.get().asset, self.asset)
+        # Only a machine at this task's branch.
+        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': elsewhere.pk}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        # The report shows it under its machine's card.
+        from tasks.views import save_task_machines
+        save_task_machines(self.task, [{'asset': self.asset, 'outcome': 'repaired', 'note': ''}], [])
+        report = api.get(f'/api/my-tasks/{self.task.pk}/report/').json()
+        self.assertEqual([p['purpose'] for p in report['machines'][0]['photos']], ['fault'])

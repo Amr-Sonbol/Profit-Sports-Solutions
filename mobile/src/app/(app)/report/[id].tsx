@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity,
@@ -10,7 +11,9 @@ import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-c
 import { WebView } from 'react-native-webview';
 
 import { API_BASE_URL, ApiRequestError } from '@/api/client';
-import { fetchMyReport, fetchMyTaskDetail, fetchParts, previewMyReport, submitMyReport } from '@/api/endpoints';
+import {
+  fetchMyReport, fetchMyTaskDetail, fetchParts, previewMyReport, submitMyReport, uploadTaskAttachment,
+} from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -23,6 +26,14 @@ import {
 import type {
   Brand, CataloguePart, ChecklistRow, Choice, ReportHelper, ReportMachine, SiteMachine, TaskDetail, WorkReport,
 } from '@/types';
+
+// The photos a machine's card takes, each saved as that machine's.
+const MACHINE_PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; label: string }[] = [
+  { purpose: 'fault', label: 'Fault' },
+  { purpose: 'serial_plate', label: 'Serial plate' },
+  { purpose: 'before', label: 'Before' },
+  { purpose: 'after', label: 'After' },
+];
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -57,7 +68,7 @@ function machineRow(machine: ReportMachine, brands: Brand[], addedHere = false):
 
 /** What the server is sent for a card, without the screen's own fields. */
 // The brand as typed goes too: a known one counts even if not picked from the suggestions.
-function machineInput({ key, name, addedHere, ...machine }: MachineRow): ReportMachine {
+function machineInput({ key, name, addedHere, photos: _photos, ...machine }: MachineRow): ReportMachine {
   return machine;
 }
 
@@ -300,6 +311,39 @@ export default function ReportScreen() {
 
   const updateMachine = (key: string, changes: Partial<MachineRow>) => {
     setMachines((rows) => rows.map((row) => (row.key === key ? { ...row, ...changes } : row)));
+  };
+
+  // A photo taken from a machine's card belongs to that machine, so it's clear what it shows.
+  const [photoUploading, setPhotoUploading] = useState('');
+  const addMachinePhoto = async (row: MachineRow, purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
+    if (!row.asset_id) {
+      return;
+    }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Access to the photo library is required to attach a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+    const file = result.assets[0];
+    setPhotoUploading(row.key);
+    try {
+      const saved = await uploadTaskAttachment(
+        Number(id), file.uri, file.fileName ?? 'upload.jpg', file.mimeType ?? 'image/jpeg', purpose, row.asset_id,
+      );
+      if (saved) {
+        setMachines((rows) => rows.map((other) => (
+          other.key === row.key ? { ...other, photos: [...(other.photos ?? []), saved] } : other
+        )));
+      }
+    } catch (err) {
+      Alert.alert('Upload failed', err instanceof ApiRequestError ? err.message : `Please try again. (${String(err)})`);
+    } finally {
+      setPhotoUploading('');
+    }
   };
 
   // Up to five brands matching what's typed, hidden once one is picked.
@@ -728,8 +772,43 @@ export default function ReportScreen() {
                     placeholderTextColor={theme.textSecondary} maxLength={255}
                     onChangeText={(value) => updateMachine(row.key, { action: value })}
                   />
-                  <ThemedText type="smallBold">Status</ThemedText>
                   {/* A machine that came with the task stays: one not worked on is marked "Not worked on", with why. */}
+                  <ThemedText type="smallBold">Photos of this machine</ThemedText>
+                  {row.asset_id ? (
+                    <>
+                      {row.photos?.length ? (
+                        <ThemedView style={styles.photoRow}>
+                          {row.photos.map((photo) => (
+                            <TouchableOpacity key={photo.id} onPress={() => Linking.openURL(photo.url)} style={styles.photoItem}>
+                              <Image
+                                source={{ uri: photo.url, cacheKey: `task-photo-${photo.id}` }} cachePolicy="disk"
+                                style={styles.photoThumb} contentFit="cover"
+                              />
+                              <ThemedText type="small" themeColor="textSecondary">{photo.purpose_display}</ThemedText>
+                            </TouchableOpacity>
+                          ))}
+                        </ThemedView>
+                      ) : null}
+                      {photoUploading === row.key ? <ActivityIndicator /> : (
+                        <ThemedView style={styles.chipRow}>
+                          {MACHINE_PHOTO_KINDS.map(({ purpose, label }) => (
+                            <TouchableOpacity
+                              key={purpose}
+                              style={[styles.suggestion, { borderColor: theme.primary }]}
+                              onPress={() => addMachinePhoto(row, purpose)}
+                              disabled={Boolean(photoUploading)}
+                            >
+                              <ThemedText themeColor="primary" type="small">+ {label}</ThemedText>
+                            </TouchableOpacity>
+                          ))}
+                        </ThemedView>
+                      )}
+                    </>
+                  ) : (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      A new machine gets its photos once the report is sent and it&apos;s registered: open the report again to add them.
+                    </ThemedText>
+                  )}
                 </ThemedView>
               ))}
               {errors.machines ? <ThemedText themeColor="danger" type="small">{errors.machines}</ThemedText> : null}
@@ -741,7 +820,10 @@ export default function ReportScreen() {
                       style={[styles.suggestion, { borderColor: theme.backgroundSelected }]}
                       onPress={() => {
                         setMachines((rows) => [...rows, machineRow(
-                          { asset_id: machine.id, name: machine.name, serial_no: machine.serial_no, outcome: '', note: '' },
+                          {
+                            asset_id: machine.id, name: machine.name, serial_no: machine.serial_no, outcome: '', note: '',
+                            photos: machine.photos ?? [],
+                          },
                           brands, true,
                         )]);
                         setPickingMachine(false);
@@ -1072,6 +1154,9 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 const styles = StyleSheet.create({
+  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
+  photoItem: { alignItems: 'center', gap: 2 },
+  photoThumb: { width: 72, height: 72, borderRadius: Spacing.one },
   removeX: {
     position: 'absolute', top: Spacing.two, end: Spacing.two, zIndex: 1,
     borderWidth: 1, borderRadius: Spacing.one, padding: 2,

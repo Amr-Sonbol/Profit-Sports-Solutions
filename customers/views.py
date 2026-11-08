@@ -598,6 +598,10 @@ def portal_login(request):
         user = form.get_user()
         if hasattr(user, 'customer'):
             login(request, user)
+            # "Keep me signed in" (ticked by default): the usual two weeks; unticked — a shared
+            # computer — the sign-in ends when the browser closes.
+            if not request.POST.get('remember'):
+                request.session.set_expiry(0)
             if user.customer.must_change_password:
                 return redirect('customers:portal_first_login')
             if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
@@ -605,7 +609,10 @@ def portal_login(request):
             return redirect('customers:portal_home')
         form.add_error(None, form.error_messages['invalid_login'])
 
-    return render(request, 'customers/portal_login.html', {'form': form, 'next': next_url})
+    return render(request, 'customers/portal_login.html', {
+        'form': form, 'next': next_url,
+        'remember': request.method != 'POST' or bool(request.POST.get('remember')),
+    })
 
 
 SETUP_FIELDS = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address']

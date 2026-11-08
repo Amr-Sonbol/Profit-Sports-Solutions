@@ -862,6 +862,7 @@ Photos, videos and links. The supervisor attaches the customer's evidence at cre
 | source | varchar | customer, supervisor, technician |
 | uploaded_by_id | FK → user | |
 | uploaded_at | timestamptz | |
+| asset_id | FK → asset, nullable | the machine it shows — taken from that machine's card on the visit report (app), only a machine at the task's site; null: the visit as a whole. `SET_NULL`. Shown with the machine's name wherever the task's photos are listed |
 
 Compress photos on upload and never autoplay video. Technicians are on mobile data.
 

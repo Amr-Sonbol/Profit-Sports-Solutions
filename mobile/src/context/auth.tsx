@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 
 import { ApiRequestError, clearToken, getToken, setActiveCountry, setToken as persistToken } from '@/api/client';
 import { fetchMe, login as loginRequest } from '@/api/endpoints';
-import { cacheScreenData, withOfflineCopy } from '@/offline';
+import { cacheScreenData, clearOfflineData, withOfflineCopy } from '@/offline';
 import { registerForPush, unregisterForPush } from '@/push';
 import type { Me } from '@/types';
 
@@ -76,6 +76,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await unregisterForPush();
     await clearToken();
     await setActiveCountry(null);  // the next person starts in their own country
+    clearOfflineData();  // and sees nothing of this person's
     setMe(null);
   };
 

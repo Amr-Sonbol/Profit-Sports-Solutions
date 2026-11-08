@@ -935,13 +935,13 @@ def _attachment_media_type(uploaded_file):
     return TaskAttachment.MediaType.DOCUMENT
 
 
-def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachment.Source.TECHNICIAN):
+def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachment.Source.TECHNICIAN, asset=None):
     path = default_storage.save(f'attachments/{task.pk}/{uploaded_file.name}', uploaded_file)
-    TaskAttachment.objects.create(
+    return TaskAttachment.objects.create(
         task=task, storage_kind=TaskAttachment.StorageKind.FILE,
         url=request.build_absolute_uri(default_storage.url(path)),
         media_type=_attachment_media_type(uploaded_file), purpose=purpose,
-        source=source, uploaded_by=request.user, uploaded_at=timezone.now(),
+        source=source, uploaded_by=request.user, uploaded_at=timezone.now(), asset=asset,
     )
 
 
@@ -2187,7 +2187,7 @@ def task_detail(request, pk):
         'departed_on_task': task.status in NEEDS_REASSIGNING_STATUSES and task.assignments.filter(
             is_active=True, technician__is_active=False,
         ).exists(),
-        'attachments': task.attachments.select_related('uploaded_by'),
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
         # The customer's request, all of it (request_for_task).
         'from_request': request_for_task(task),
         'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
@@ -3033,7 +3033,15 @@ def ticket_status(request, token):
     """
     ticket = get_object_or_404(CustomerTicket, token=token)
     customer = getattr(request.user, 'customer', None)
-    if customer is None or ticket.customer_id != customer.id:
+    if customer is not None and ticket.customer_id != customer.id:
+        # A link from an email for another account (two accounts, one inbox): say so plainly —
+        # never whose it is — and show this account's own requests.
+        messages.error(request, _(
+            'That link is for a request on a different customer account. '
+            'To see it, sign out and sign in with the account it was sent to.'
+        ))
+        return redirect('customers:portal_requests')
+    if customer is None:
         raise PermissionDenied
     can_reply = _ticket_is_open(ticket)
     reply_form = TicketReplyForm()
@@ -6384,7 +6392,7 @@ def my_task_detail(request, pk):
         'undoable_tap': undoable,
         'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
         'report': getattr(task, 'report', None),
-        'attachments': task.attachments.select_related('uploaded_by'),
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
         # Negligence flags are a manager-only reliability signal — never
         # shown to the technician being flagged.
         'events': task.events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE).order_by('occurred_at'),

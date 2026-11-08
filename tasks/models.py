@@ -1142,6 +1142,11 @@ class TaskAttachment(models.Model):
         verbose_name=_('uploaded by'),
     )
     uploaded_at = models.DateTimeField(_('uploaded at'))
+    # The machine it shows, taken from that machine's card on the report; blank: the visit as a whole.
+    asset = models.ForeignKey(
+        'customers.Asset', on_delete=models.SET_NULL, null=True, blank=True, related_name='task_photos',
+        verbose_name=_('machine'),
+    )
 
     class Meta:
         verbose_name = _('task attachment')

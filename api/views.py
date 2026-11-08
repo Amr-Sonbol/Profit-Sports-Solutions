@@ -40,7 +40,7 @@ from tasks.forms import (
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, ShippingCompany, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
+from tasks.models import CustomerTicket, ShippingCompany, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
     report_copy_default,
@@ -69,7 +69,7 @@ from spots.media import signed_media_url
 
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
-    CustomerTicketSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
+    CustomerTicketSerializer, TaskAttachmentSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
     directions_url,
 )
 
@@ -1188,8 +1188,16 @@ class MyTaskAttachmentView(APIView):
         form = TaskAttachmentUploadForm(request.data, request.FILES)
         if not form.is_valid():
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-        _save_attachment(request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'])
-        return Response(status=status.HTTP_201_CREATED)
+        # `asset`: the machine it shows (its card on the report) — only one at this task's branch.
+        asset = None
+        if request.data.get('asset'):
+            asset = Asset.objects.filter(pk=request.data['asset'], site=assignment.task.site).first()
+            if asset is None:
+                return Response({'asset': ['That machine is not at this branch.']}, status=status.HTTP_400_BAD_REQUEST)
+        attachment = _save_attachment(
+            request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'], asset=asset,
+        )
+        return Response(TaskAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
 def _machine_label(asset):
@@ -1204,10 +1212,16 @@ def _report_machines(task, request):
     """
     existing, new = report_machine_initial(task)
     site_assets = {asset.pk: asset for asset in Asset.objects.filter(site=task.site).select_related('brand')}
+    # Each machine's own photos, under its card.
+    photos = {}
+    for attachment in TaskAttachment.objects.filter(task=task, asset__isnull=False):
+        photos.setdefault(attachment.asset_id, []).append(
+            TaskAttachmentSerializer(attachment, context={'request': request}).data,
+        )
     rows = [
         {
             'asset_id': row['asset'], 'name': _machine_label(site_assets[row['asset']]),
-            'serial_no': site_assets[row['asset']].serial_no,
+            'serial_no': site_assets[row['asset']].serial_no, 'photos': photos.get(row['asset'], []),
             'outcome': row.get('outcome', ''), 'note': row.get('note', ''),
             'finding_code': row.get('finding_code', ''), 'action_code': row.get('action_code', ''), 'action': row.get('action', ''),
         }
@@ -1224,7 +1238,7 @@ def _report_machines(task, request):
     return {
         'machines': rows,
         'site_machines': [
-            {'id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no}
+            {'id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no, 'photos': photos.get(asset.pk, [])}
             for asset in site_assets.values()
         ],
         'brands': [{'id': brand.pk, 'name': brand.name} for brand in Brand.objects.filter(is_active=True)],

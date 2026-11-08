@@ -1,4 +1,4 @@
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 
 import { ApiRequestError } from '@/api/client';
 import { submitMyReport } from '@/api/endpoints';
@@ -52,6 +52,23 @@ export function isNetworkError(err: unknown): boolean {
 }
 
 // ---- last-loaded copies of screen data ----
+
+/**
+ * Signing out: nothing of this person's stays on the phone — their screens'
+ * copies and any report not sent yet — so the next one to sign in here
+ * (a shared phone) never sees it, even with no signal.
+ */
+export function clearOfflineData() {
+  try {
+    for (const entry of new Directory(Paths.document).list()) {
+      if (entry instanceof File && (entry.name.startsWith('cache-') || entry.name === PENDING_FILE)) {
+        entry.delete();
+      }
+    }
+  } catch {
+    // Nothing stored, or storage unavailable: nothing to clear.
+  }
+}
 
 export function cacheScreenData(key: string, value: unknown) {
   writeJson(`cache-${key}.json`, value);

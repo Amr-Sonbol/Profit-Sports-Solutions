@@ -72,8 +72,11 @@ class CustomersStayInTheirOwnDataTests(SecurityTestCase):
             f'/customers/portal/machines/{b.asset.pk}/',
         ):
             with self.subTest(url=url):
-                response = a.get(url)
-                self.assertIn(response.status_code, (403, 404), url)
+                # Refused, or (a request's emailed link) sent to this account's own requests.
+                response = a.get(url, follow=True)
+                self.assertIn(response.status_code, (200, 403, 404), url)
+                if response.status_code == 200:
+                    self.assertEqual(response.redirect_chain[-1][0], '/customers/portal/requests/')
                 self.assertNotIn(b'Private', response.content)
 
     def test_the_rating_link_from_an_email_shows_nothing_private(self):
@@ -143,9 +146,16 @@ class StaffPagesAreClosedToOthersTests(SecurityTestCase):
 class PortalAddressTests(SecurityTestCase):
     def test_no_staff_page_exists_on_the_portal_address(self):
         admin = self.login('admin1', host='portal.example.test')
-        for url in StaffPagesAreClosedToOthersTests.STAFF_PAGES + ('/accounts/login/', '/api/my-tasks/'):
+        for url in StaffPagesAreClosedToOthersTests.STAFF_PAGES + ('/api/my-tasks/',):
             with self.subTest(url=url):
                 self.assertEqual(admin.get(url).status_code, 404)
+
+    def test_signing_out_on_the_portal_lands_on_the_portal_sign_in(self):
+        customer = self.login('gyma', host='portal.example.test')
+        response = customer.post('/accounts/logout/', follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[-1][0], '/customers/portal/login/')
+        self.assertNotIn('_auth_user_id', customer.session)
 
     def test_a_customer_sign_in_left_on_the_staff_address_is_ended(self):
         customer = self.login('gyma')
@@ -324,3 +334,16 @@ class CopyWelcomeLinkTests(SecurityTestCase):
         self.login('admin1').post('/customers/accounts/', {'action': 'temporary_password', 'customer': self.new.pk})
         self.new.refresh_from_db()
         self.assertIsNone(self.new.user)
+
+
+class KeepMeSignedInTests(SecurityTestCase):
+    def test_ticked_keeps_the_sign_in_and_unticked_ends_it_with_the_browser(self):
+        for remember, ends_with_browser in (('1', False), ('', True)):
+            with self.subTest(remember=remember):
+                client = self.client_class()
+                client.post('/customers/portal/login/', {'username': 'gyma', 'password': PASSWORD, 'remember': remember})
+                self.assertIn('_auth_user_id', client.session)
+                self.assertEqual(client.session.get_expire_at_browser_close(), ends_with_browser)
+
+    def test_the_box_is_ticked_to_begin_with(self):
+        self.assertContains(self.client_class().get('/customers/portal/login/'), 'name="remember" value="1" checked')

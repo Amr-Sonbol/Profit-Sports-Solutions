@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 18:19+0000\n"
+"POT-Creation-Date: 2026-11-08 22:23+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2807,6 +2807,9 @@ msgstr "مضى يومها ولم يُنجز العمل."
 msgid "Job"
 msgstr "المهمة"
 
+msgid "Keep me signed in on this device"
+msgstr "إبقائي مسجّلاً على هذا الجهاز"
+
 #, python-format
 msgid "Kept on task %(number)s: change them there."
 msgstr "محفوظة في المهمة %(number)s: عدّلها هناك."
@@ -5474,6 +5477,9 @@ msgstr "ذلك اليوم"
 #, python-format
 msgid "That day (%(day)s)"
 msgstr "ذلك اليوم (%(day)s)"
+
+msgid "That link is for a request on a different customer account. To see it, sign out and sign in with the account it was sent to."
+msgstr "هذا الرابط لطلب على حساب عميل آخر. لعرضه، سجّل الخروج ثم سجّل الدخول بالحساب الذي أُرسل إليه."
 
 msgid "The address invoices should be issued to."
 msgstr "العنوان الذي تُصدر إليه الفواتير."
@@ -8396,6 +8402,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Two columns: code and description. A header row is permitted."
 #~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
+
+#~ msgid "Untick on a shared computer: you're signed out when the browser closes."
+#~ msgstr "ألغِ التحديد على جهاز مشترك: يتم تسجيل خروجك عند إغلاق المتصفح."
 
 #~ msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
 #~ msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."

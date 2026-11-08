@@ -39,14 +39,22 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
     purpose_display = serializers.CharField(source='get_purpose_display')
     # The app loads files without the website's sign-in: a signed link (spots.media).
     url = serializers.SerializerMethodField()
+    # The machine it shows, if taken from a machine's card ('' for the visit as a whole).
+    asset_name = serializers.SerializerMethodField()
 
     class Meta:
         model = TaskAttachment
-        fields = ['id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at']
+        fields = ['id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at', 'asset', 'asset_name']
 
     def get_url(self, obj):
         request = self.context.get('request')
         return signed_media_url(request, obj.url) if request else obj.url
+
+    def get_asset_name(self, obj):
+        if not obj.asset_id:
+            return ''
+        asset = obj.asset
+        return f"{asset.brand.name if asset.brand_id else ''} {asset.model_name}".strip() + (f' · {asset.serial_no}' if asset.serial_no else '')
 
 
 def directions_url(site):

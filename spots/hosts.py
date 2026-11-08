@@ -10,6 +10,7 @@ from django.contrib.auth import logout
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponseRedirect
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 # What a customer reaches: the portal, a request's status page and the
@@ -66,6 +67,9 @@ class PortalHostMiddleware:
         if _on_portal_host(request):
             if path == '/':
                 return HttpResponseRedirect('/customers/portal/')
+            # Signing out lands on the sign-in (LOGOUT_REDIRECT_URL): here, the portal's own.
+            if path == reverse('login'):
+                return HttpResponseRedirect(reverse('customers:portal_login'))
             if not path.startswith(PORTAL_PATHS + SHARED_PATHS):
                 raise Http404
         elif path.startswith(PORTAL_PATHS):

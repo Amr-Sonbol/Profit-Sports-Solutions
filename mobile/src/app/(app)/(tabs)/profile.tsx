@@ -8,8 +8,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { confirmAction } from '@/confirm';
 import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
+import { pendingReports } from '@/offline';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -24,6 +26,21 @@ function initials(name: string) {
  */
 export default function ProfileScreen() {
   const { me, signOut } = useSession();
+
+  // Asked first; a report saved offline and not sent yet would be lost, so that's said plainly.
+  const confirmSignOut = async () => {
+    const unsent = pendingReports().length;
+    const ok = await confirmAction(
+      'Sign out?',
+      unsent
+        ? `${unsent} report(s) on this phone haven't been sent yet (no connection). Signing out deletes them. Connect and send them first.`
+        : 'Your saved copies are removed from this phone, so the next person to sign in here sees nothing of yours.',
+      'Sign out',
+    );
+    if (ok) {
+      await signOut();
+    }
+  };
   const theme = useTheme();
   const router = useRouter();
 
@@ -88,7 +105,7 @@ export default function ProfileScreen() {
             <ThemedText>Change password</ThemedText>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.button, { borderColor: theme.danger }]} onPress={signOut}>
+          <TouchableOpacity style={[styles.button, { borderColor: theme.danger }]} onPress={confirmSignOut}>
             <Ionicons name="log-out-outline" size={18} color={theme.danger} />
             <ThemedText themeColor="danger">Sign out</ThemedText>
           </TouchableOpacity>

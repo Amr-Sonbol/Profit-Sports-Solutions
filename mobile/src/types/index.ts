@@ -62,6 +62,9 @@ export interface TaskAttachment {
   purpose: string;
   purpose_display: string;
   uploaded_at: string;
+  /** The machine it shows (taken from its card on the report); blank: the visit as a whole. */
+  asset?: number | null;
+  asset_name?: string;
 }
 
 export interface TaskDetail {
@@ -142,6 +145,8 @@ export interface WorkReport {
 export interface ReportMachine {
   asset_id?: number;
   name?: string;
+  /** This machine's own photos on the task (shown under its card; never sent back). */
+  photos?: TaskAttachment[];
   ticket_machine_id?: number | null;
   brand_id?: number | null;
   /** The brand as typed: a known one counts even when not picked from the suggestions. */
@@ -167,6 +172,7 @@ export interface SiteMachine {
   id: number;
   name: string;
   serial_no: string;
+  photos?: TaskAttachment[];
 }
 
 export interface Brand {

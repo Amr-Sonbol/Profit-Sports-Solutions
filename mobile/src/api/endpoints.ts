@@ -4,6 +4,7 @@ import { currentLocation } from '@/location';
 import { API_BASE_URL, ApiRequestError, apiRequest, getActiveCountry, getToken } from './client';
 import type {
   PlannedLine,
+  TaskAttachment,
   ChecklistRow,
   StaffAccount,
   Dashboard,
@@ -73,7 +74,10 @@ export function markShipped(id: number, shippingCompany: string, trackingNumber:
   });
 }
 
-export async function uploadTaskAttachment(id: number, fileUri: string, fileName: string, mimeType: string, purpose: string) {
+/** `assetId`: the machine the photo shows (its card on the report). Returns the saved photo. */
+export async function uploadTaskAttachment(
+  id: number, fileUri: string, fileName: string, mimeType: string, purpose: string, assetId?: number,
+): Promise<TaskAttachment | null> {
   // Sent by the file system's own multipart upload (expo-file-system): this
   // SDK's fetch won't send a photo picked from the gallery as form data
   // ("Unsupported FormDataPart implementation"). Same sign-in headers as apiRequest.
@@ -84,7 +88,7 @@ export async function uploadTaskAttachment(id: number, fileUri: string, fileName
     uploadType: UploadType.MULTIPART,
     fieldName: 'file',
     mimeType,
-    parameters: { purpose },
+    parameters: { purpose, ...(assetId ? { asset: String(assetId) } : {}) },
     headers: {
       ...(token ? { Authorization: `Token ${token}` } : {}),
       ...(country ? { 'X-Active-Country': country } : {}),
@@ -98,6 +102,11 @@ export async function uploadTaskAttachment(id: number, fileUri: string, fileName
       body = null;
     }
     throw new ApiRequestError(result.status, body);
+  }
+  try {
+    return JSON.parse(result.body) as TaskAttachment;
+  } catch {
+    return null;
   }
 }
 
