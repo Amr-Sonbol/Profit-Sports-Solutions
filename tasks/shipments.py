@@ -44,6 +44,24 @@ def stage(task):
     return PREPARING if task.status == Task.Status.NEW else READY
 
 
+def send_to(task):
+    """Where the parcel goes and who takes it: the branch, its address and
+    directions, and the contact — the customer's request's when it came
+    from one (who asked for the part), else the branch's own."""
+    from api.serializers import directions_url
+    from .views import request_for_task
+
+    site = task.site
+    found = request_for_task(task, with_conversation=False)
+    ticket = found['ticket'] if found else None
+    return {
+        'customer': site.customer.name, 'branch': site.name, 'address': site.address,
+        'directions_url': directions_url(site),
+        'contact_name': (ticket.contact_name if ticket else '') or site.effective_contact_name,
+        'contact_phone': (ticket.contact_phone if ticket else '') or site.effective_contact_phone,
+    }
+
+
 def can_prepare(technician, task):
     """The country's warehouse manager, or the manager tier."""
     return technician.is_manager_tier or (

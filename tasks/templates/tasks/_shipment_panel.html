@@ -10,6 +10,16 @@
         <li class="{% if shipment.stage == 'shipped' %}is-current{% endif %}">{% translate "Shipped" %}</li>
     </ol>
 
+    {# Where it goes and who takes it (tasks.shipments.send_to). #}
+    {% with to=shipment.send_to %}
+    <div class="shipment-send-to">
+        <h3>{% translate "Send to" %}</h3>
+        <p><strong>{{ to.customer }}</strong> — {{ to.branch }}</p>
+        {% if to.address %}<p><a href="{{ to.directions_url }}" target="_blank" rel="noopener" dir="auto">{{ to.address }}</a></p>{% endif %}
+        <p>{{ to.contact_name|default:"—" }}{% if to.contact_phone %} · <a href="tel:{{ to.contact_phone }}" dir="ltr">{{ to.contact_phone }}</a>{% endif %}</p>
+    </div>
+    {% endwith %}
+
     <dl class="detail-grid">
         <div>
             <dt>{% translate "Parts" %}</dt>

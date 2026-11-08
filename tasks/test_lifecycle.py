@@ -597,6 +597,11 @@ class PartShipmentTests(LifecycleTestCase):
         tech = self.client_for('tech1')
         page = tech.get(f'/tasks/my/{self.task.pk}/')
         self.assertContains(page, 'Hand it to the courier')
+        # Where it goes and who takes it: the branch and its address, the contact's name and number.
+        send_to = page.context['shipment']['send_to']
+        self.assertEqual((send_to['branch'], send_to['address'], send_to['contact_name'], send_to['contact_phone']),
+                         ('Marina Branch', 'Dubai Marina', 'Ali', '0501234567'))
+        self.assertContains(page, '0501234567')
         self.assertIsNone(page.context['next_action'])
         mail.outbox.clear()
         tech.post(f'/tasks/my/{self.task.pk}/', {'action': 'shipment_shipped', 'shipping_company': 'local_courier',

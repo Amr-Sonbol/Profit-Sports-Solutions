@@ -249,6 +249,20 @@ export default function TaskDetailScreen() {
             // A part shipment: the parcel, and handing it to the courier (tasks.shipments).
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Part shipment · {task.shipment.label}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">Send to</ThemedText>
+              <ThemedText>{task.shipment.send_to.customer} — {task.shipment.send_to.branch}</ThemedText>
+              {task.shipment.send_to.address ? (
+                <TouchableOpacity onPress={() => Linking.openURL(task.shipment!.send_to.directions_url)}>
+                  <ThemedText themeColor="primary">{task.shipment.send_to.address}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              {task.shipment.send_to.contact_name ? <ThemedText>{task.shipment.send_to.contact_name}</ThemedText> : null}
+              {task.shipment.send_to.contact_phone ? (
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${task.shipment!.send_to.contact_phone}`)}>
+                  <ThemedText themeColor="primary">{task.shipment.send_to.contact_phone}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+
               {task.shipment.parts.map((part, index) => (
                 <ThemedText key={index} type="small">{part.code} × {part.quantity}</ThemedText>
               ))}

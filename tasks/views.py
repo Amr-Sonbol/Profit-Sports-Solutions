@@ -5982,6 +5982,7 @@ def shipment_for_app(task, technician):
         'shipping_tracking_number': task.shipping_tracking_number,
         'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
         'companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
+        'send_to': shipments.send_to(task),
     }
 
 
@@ -5999,6 +6000,7 @@ def _shipment_context(task, technician):
         'can_prepare': can_prepare and stage in (shipments.PREPARING, shipments.READY),
         'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
         'can_book_fitting': can_prepare and stage == shipments.SHIPPED,
+        'send_to': shipments.send_to(task),
         'technicians': shipments.technicians_for(task) if can_prepare else (),
         'companies': ShippingCompany.choices, 'blank_rows': range(3),
         'fitting_visits': task.next_tasks.order_by('pk'),

@@ -4878,3 +4878,16 @@ details.review-more:not(.section) {
     padding-block: 0.5rem;
     border-block-end: 1px solid var(--color-border);
 }
+
+/* Where a part shipment goes (tasks/_shipment_panel.html). */
+.shipment-send-to {
+    margin-block: 0.75rem 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+}
+
+.shipment-send-to h3,
+.shipment-send-to p {
+    margin: 0 0 0.25rem;
+}

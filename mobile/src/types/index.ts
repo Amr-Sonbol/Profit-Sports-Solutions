@@ -622,6 +622,11 @@ export interface Shipment {
   shipping_tracking_number: string;
   can_ship: boolean;
   companies: { value: string; label: string }[];
+  // Where it goes and who takes it.
+  send_to: {
+    customer: string; branch: string; address: string; directions_url: string;
+    contact_name: string; contact_phone: string;
+  };
 }
 
 export interface RequestFile {
