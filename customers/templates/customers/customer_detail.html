@@ -219,6 +219,9 @@
     <h2>{% translate "Add a site" %}</h2>
     <form method="post" novalidate>
         {% csrf_token %}
+        {# Added from a customer's new-branch request: saving links the branch to it (customers.views.customer_detail). #}
+        {% if from_request %}<input type="hidden" name="from_request" value="{{ from_request.pk }}">
+        <p class="field__help">{% blocktranslate with number=from_request.ticket_number %}From request {{ number }}: saving links the new branch to it.{% endblocktranslate %}</p>{% endif %}
         {% if form.non_field_errors %}
             <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}

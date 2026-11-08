@@ -78,6 +78,11 @@ def portal_bell(customer):
                 'text': _('New reply from our team'), 'about': note.ticket.ticket_number,
                 'url': reverse('tasks:ticket_status', args=[note.ticket.token]),
             })
+        elif note.kind == CustomerNotification.Kind.PART_SHIPPED and note.ticket_id:
+            items.append({
+                'text': _('Your part is on its way'), 'about': note.ticket.ticket_number,
+                'url': reverse('tasks:ticket_status', args=[note.ticket.token]),
+            })
         elif note.kind == CustomerNotification.Kind.REQUEST_CLOSED and note.ticket_id:
             items.append({
                 'text': _('Your request has been resolved'), 'about': note.ticket.ticket_number,

@@ -62,6 +62,16 @@ export async function sendTaskAction(id: number, action: string, note?: string) 
   });
 }
 
+// A part shipment handed to the courier: the courier, and its tracking
+// number when it has one (local couriers often don't). The server emails
+// the customer and settles their request.
+export function markShipped(id: number, shippingCompany: string, trackingNumber: string) {
+  return apiRequest<{ status: string }>(`/api/my-tasks/${id}/action/`, {
+    method: 'POST',
+    body: { action: 'shipped', shipping_company: shippingCompany, shipping_tracking_number: trackingNumber },
+  });
+}
+
 export function uploadTaskAttachment(id: number, fileUri: string, fileName: string, mimeType: string, purpose: string) {
   const form = new FormData();
   // React Native's FormData accepts this {uri, name, type} shape in place

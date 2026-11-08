@@ -141,6 +141,8 @@ class TaskType(models.Model):
         # The equipment chain's steps before an installation.
         RECEIVING = 'receiving', _('Receiving from the factory')
         LOADING = 'loading', _('Loading')
+        # A spare part sent to the customer, no visit (tasks.shipments).
+        PART_SHIPMENT = 'part_shipment', _('Spare part shipment')
 
     code = models.CharField(
         _('code'), max_length=50, unique=True,

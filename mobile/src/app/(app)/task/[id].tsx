@@ -3,12 +3,12 @@ import { useCallback, useState, type ComponentProps } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TouchableOpacity,
+  ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TextInput, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
-import { fetchMyTaskDetail, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
+import { fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -43,6 +43,8 @@ export default function TaskDetailScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
   const [isOffline, setIsOffline] = useState(false);
+  const [courier, setCourier] = useState('');
+  const [tracking, setTracking] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +70,23 @@ export default function TaskDetailScreen() {
       await load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'The action could not be completed. Please try again.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleShipped = async () => {
+    if (!courier) {
+      setError('Please choose the shipping company.');
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    try {
+      await markShipped(Number(id), courier, tracking.trim());
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not mark it shipped. Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -183,6 +202,97 @@ export default function TaskDetailScreen() {
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
+            </ThemedView>
+          ) : null}
+
+          {task.from_request ? (
+            // Everything from the customer's request: contact, their message, their photos, the conversation.
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">From the customer's request · {task.from_request.ticket_number}</ThemedText>
+              {task.from_request.contact_name ? <Row label="Contact" value={task.from_request.contact_name} /> : null}
+              {task.from_request.contact_phone ? (
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${task.from_request!.contact_phone}`)}>
+                  <ThemedText themeColor="primary">{task.from_request.contact_phone}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+              {task.from_request.contact_email ? <ThemedText type="small">{task.from_request.contact_email}</ThemedText> : null}
+              {task.from_request.subject ? <ThemedText type="smallBold">{task.from_request.subject}</ThemedText> : null}
+              <ThemedText>{task.from_request.message}</ThemedText>
+              {task.from_request.files.map((file) => (
+                <TouchableOpacity key={file.url} onPress={() => Linking.openURL(file.url)}>
+                  <ThemedText themeColor="primary" type="small">📎 {file.name}</ThemedText>
+                </TouchableOpacity>
+              ))}
+              {task.from_request.conversation.length > 0 ? (
+                <ThemedText type="smallBold" style={styles.conversationTitle}>Conversation with the customer</ThemedText>
+              ) : null}
+              {task.from_request.conversation.map((entry, index) => (
+                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
+                  <ThemedText type="small" themeColor="textSecondary">{entry.sender} · {new Date(entry.sent_at).toLocaleString()}</ThemedText>
+                  <ThemedText type="small">{entry.message}</ThemedText>
+                  {entry.files.map((file) => (
+                    <TouchableOpacity key={file.url} onPress={() => Linking.openURL(file.url)}>
+                      <ThemedText themeColor="primary" type="small">📎 {file.name}</ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </ThemedView>
+              ))}
+            </ThemedView>
+          ) : null}
+
+          {task.shipment ? (
+            // A part shipment: the parcel, and handing it to the courier (tasks.shipments).
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Part shipment · {task.shipment.label}</ThemedText>
+              {task.shipment.parts.map((part, index) => (
+                <ThemedText key={index} type="small">{part.code} × {part.quantity}</ThemedText>
+              ))}
+              {task.shipment.pak_reference_number ? <Row label="PAK" value={task.shipment.pak_reference_number} /> : null}
+              {task.shipment.stage === 'shipped' ? (
+                <>
+                  <Row label="Courier" value={task.shipment.shipping_company || '—'} />
+                  <Row label="Tracking" value={task.shipment.shipping_tracking_number || '—'} />
+                </>
+              ) : null}
+              {task.shipment.can_ship ? (
+                <ThemedView style={styles.shipForm}>
+                  <ThemedText type="small" themeColor="textSecondary">Shipping company</ThemedText>
+                  <ThemedView style={styles.courierRow}>
+                    {task.shipment.companies.map((company) => (
+                      <TouchableOpacity
+                        key={company.value}
+                        style={[
+                          styles.courierChip, { borderColor: theme.backgroundSelected },
+                          courier === company.value && { backgroundColor: theme.primary, borderColor: theme.primary },
+                        ]}
+                        onPress={() => setCourier(company.value)}
+                      >
+                        <ThemedText type="small" style={courier === company.value ? { color: theme.onPrimary } : undefined}>
+                          {company.label}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </ThemedView>
+                  <ThemedText type="small" themeColor="textSecondary">Tracking number (leave empty if the courier has none)</ThemedText>
+                  <TextInput
+                    style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                    value={tracking}
+                    onChangeText={setTracking}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
+                    onPress={handleShipped}
+                    disabled={isBusy}
+                  >
+                    {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
+                      <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>Shipped</ThemedText>
+                    )}
+                  </TouchableOpacity>
+                  <ThemedText type="small" themeColor="textSecondary">The customer is emailed that it is on its way.</ThemedText>
+                </ThemedView>
+              ) : null}
             </ThemedView>
           ) : null}
 
@@ -310,4 +420,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.two,
   },
   machine: { borderBottomWidth: 1, paddingBottom: Spacing.two, gap: 2, backgroundColor: 'transparent' },
+  shipForm: { gap: Spacing.two, marginTop: Spacing.two, backgroundColor: 'transparent' },
+  conversationTitle: { marginTop: Spacing.two },
+  courierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
+  courierChip: { borderWidth: 1, borderRadius: Spacing.four, paddingVertical: Spacing.one, paddingHorizontal: Spacing.three },
+  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, fontSize: 16 },
 });

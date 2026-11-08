@@ -242,9 +242,10 @@ class RolePermission(models.Model):
 
 
 def _default_new_ticket_roles():
-    # Told of each new ticket, by email and in the bell: the Operations Manager (every
-    # country) and each country's Country Support Manager (their own).
-    return ['operations_manager', 'country_support']
+    # Told of each new ticket, by email and in the bell: the Technical Support Manager
+    # (every country) and each country's Country Support Manager (their own). Nobody of
+    # these for a country: the admins instead (tasks.views.new_ticket_recipients).
+    return ['support_manager', 'country_support']
 
 
 def _default_new_task_roles():

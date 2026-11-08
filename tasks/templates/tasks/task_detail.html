@@ -25,6 +25,8 @@
 </p>
 {% endif %}
 
+{% if shipment %}{% include "tasks/_shipment_panel.html" %}{% endif %}
+
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Details" %}</h2>
@@ -298,7 +300,8 @@
     {% endif %}
     {% endif %}
 
-    {# Shipping: company and tracking number; "Notify the customer" always there, usable once a tracking number is set (and the branch has an email). #}
+    {# Shipping: company and tracking number; "Notify the customer" always there, usable once a tracking number is set (and the branch has an email). A part shipment has its own panel for these. #}
+    {% if not shipment %}
     {# The PAK reference number on its own, apart from shipping. #}
     <h3>{% translate "PAK reference number" %}</h3>
     <p dir="ltr">{{ task.pak_reference_number|default:"—" }}</p>
@@ -330,6 +333,7 @@
     </div>
     {% if not task.shipping_tracking_number %}<p class="field__help">{% translate "Add a tracking number (Edit) first; then you can send it to the customer." %}</p>
     {% elif not task.site.contact_email %}<p class="field__help">{% translate "Add a contact email address for this site first." %}</p>{% endif %}
+    {% endif %}
 </div>
 
 {% if task.status == 'closed' %}
@@ -406,19 +410,7 @@
     {% endif %}
 </div>
 
-{% if ticket_attachments %}
-<div class="section">
-    <h2>{% translate "Attachments from the customer's ticket" %}</h2>
-    <ul class="plain-list">
-        {% for ticket_attachment in ticket_attachments %}
-        <li>
-            {% include "_attachment.html" with file=ticket_attachment.file %}
-            <span class="muted">{{ ticket_attachment.uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-{% endif %}
+{% if from_request %}{% include "tasks/_from_request.html" %}{% endif %}
 
 {% if task_assets %}
 <div class="section">

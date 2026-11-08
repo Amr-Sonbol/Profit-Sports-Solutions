@@ -173,18 +173,31 @@ def customer_detail(request, pk):
         ) if request.GET.get(param)
     }
     form = SiteCreateForm(customer=customer, initial=branch_initial) if is_admin else None
+    # The new-branch request it comes from, if any: still waiting for its branch.
+    request_id = request.POST.get('from_request') or request.GET.get('from_request') or ''
+    from_request = CustomerTicket.objects.filter(
+        pk=request_id, customer=customer, about=CustomerTicket.About.NEW_BRANCH, site__isnull=True,
+    ).first() if request_id.isdigit() else None
     if request.method == 'POST' and is_admin and request.POST.get('action') != 'terms':
         form = SiteCreateForm(request.POST, customer=customer)
         if form.is_valid():
             site = form.save(commit=False)
             site.customer = customer
             site.save()
+            if from_request is not None:
+                # The request now has its branch: a task made from it (its installation, say) starts there.
+                from_request.site = site
+                from_request.save(update_fields=['site'])
+                messages.success(request, _('Branch added and linked to request %(number)s.') % {
+                    'number': from_request.ticket_number,
+                })
+                return redirect('tasks:ticket_review', pk=from_request.pk)
             messages.success(request, _('Site added.'))
             return redirect('customers:customer_detail', pk=customer.pk)
 
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
-        'can_see_terms': can_see_terms, 'terms_form': terms_form,
+        'can_see_terms': can_see_terms, 'terms_form': terms_form, 'from_request': from_request,
         'today': timezone.localdate(),
         **_customer_overview(request, customer),
     }

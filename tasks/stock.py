@@ -2,7 +2,7 @@
 the tasks themselves, never stored, so it can't drift from them:
 
     machines, per warehouse:  received − loaded + counts
-    spare parts, per country: received − used on reports + counts
+    spare parts, per country: received − used on reports − shipped + counts
 
 plus hand counts (StockAdjustment). Codes are compared ignoring case and
 spaces. Colours aren't separate stock, and there are no shelves.
@@ -62,6 +62,11 @@ def part_stock(country):
     _add(totals, PartUsed.objects.filter(
         report__task__site__customer__country=country,
     ).values_list('part_code', 'quantity'), sign=-1)
+    # Sent to customers (tasks.shipments): out once picked and ready to ship.
+    _add(totals, TaskProduct.objects.filter(
+        kind=TaskProduct.Kind.PART, status=TaskProduct.Status.DONE,
+        task__task_type__category=TaskType.Category.PART_SHIPMENT, task__site__customer__country=country,
+    ).exclude(task__status=Task.Status.CANCELLED).values_list('product_code', 'quantity'), sign=-1)
     _add(totals, StockAdjustment.objects.filter(
         site__customer__country=country, kind=TaskProduct.Kind.PART,
     ).values_list('product_code', 'quantity'))

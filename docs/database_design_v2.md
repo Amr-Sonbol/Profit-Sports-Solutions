@@ -128,7 +128,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | code | varchar | stable key, never changes |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`) |
+| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`). Also `part_shipment` — a spare part sent to the customer instead of a visit (*Part shipments*, under `task_product`); seeded type *Spare Part Shipment* (reference 0032) |
 | requires_photos | bool | |
 | requires_signature | bool | |
 | checklist_template | jsonb | the fields the report form shows for this type |
@@ -499,7 +499,7 @@ A single row (`pk=1`, created on first use), set by an admin on its own **Notifi
 | reply_to_customer_email | bool | default `true` — the office's reply to their ticket, by email |
 | auto_notify_on_reschedule | bool | default `true` — off, a supervisor sends it by hand instead (below) |
 | new_ticket_email | bool | default `true` |
-| new_ticket_roles | varchar[] | who is told of a new ticket, by email and in the bell, in the ticket's country; default `operations_manager`, `country_support` |
+| new_ticket_roles | varchar[] | who is told of a new ticket, by email and in the bell, in the ticket's country; default `support_manager` (the Technical Support Manager, every country), `country_support` (people 0058). With nobody of these active for a country, the admins are told instead (`tasks.alarms.new_ticket_people`) |
 | new_task_email | bool | default `true` |
 | new_task_roles | varchar[] | who gets it, in the task's country; default `manager`, `admin` |
 | reply_to_staff_email | bool | default `true` — a customer's reply, to the person the ticket is assigned to |
@@ -507,7 +507,7 @@ A single row (`pk=1`, created on first use), set by an admin on its own **Notifi
 | shipment_to_supervisor_email | bool | default `true` — a task's tracking number, to its responsible supervisor |
 | push_assigned / push_removed / push_cancelled | bool | default `true` — the technician's phone notifications |
 
-An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off. A new ticket reaches the chosen roles in the ticket's country, and those of them that handle tickets in every country (`tickets_all_countries`, e.g. the Operations Manager) wherever they are. `new_ticket_roles` decides the bell's new-ticket entries too — the one exception to the bell being unaffected by this page; replies and escalation decisions still reach everyone who can `manage_tickets`.
+An email that's on needs at least one role to receive it. Every switch is checked in the function that sends that message, so each one is the single place it can be turned off. A new ticket reaches the chosen roles in the ticket's country, and those of them that handle tickets in every country (`tickets_all_countries`, e.g. the Technical Support Manager) wherever they are — or, with nobody of them for that country, the admins, so no ticket goes unseen. `new_ticket_roles` decides the bell's new-ticket entries too — the one exception to the bell being unaffected by this page; replies and escalation decisions still reach everyone who can `manage_tickets`.
 
 ### failed_email
 An email the app tried and failed to send — the mail server refused it or couldn't be reached. Emails go out in the background after the page has already confirmed the action, so without this the person who caused it would never know. Written by the one function every email goes through (`tasks.views._send_notification_email`) when a background send fails; shown once, as a red warning at the top of their next page, to the staff member whose action sent it (`spots.email_failures`). One with nobody behind it — a customer's own request confirmation, say — is shown to the admins. Customers never see these.
@@ -545,7 +545,7 @@ A complaint or request from a customer — or an internal matter staff need to f
 | notes | text | blank — anything else the customer wants to add |
 | submitted_at | timestamptz | |
 | kind | varchar | `customer` (default), `stock` (stock request), `vendor` (vendor follow-up), `other` (other internal) |
-| about | varchar | what a customer's request is about, the first of two questions on the portal: `machines` (default), `flooring`, `accessories`, `lockers`, `other` (something else) — or `new_branch`, a customer asking us to add a branch they've opened (portal "Request a new branch"; never offered on the request form): nothing is created from it, an admin adds the branch from the request ("Add this branch" fills the site form in) with its warranty start |
+| about | varchar | what a customer's request is about, the first of two questions on the portal: `machines` (default), `flooring`, `accessories`, `lockers`, `other` (something else) — or `new_branch`, a customer asking us to add a branch they've opened (portal "Request a new branch"; never offered on the request form): whoever handles the request creates the branch from it in one click ("Create the branch": name, address and contact as the customer typed them; the email is the one in their message), or an admin checks it first on the customer's site form, filled in; either way the branch is linked as the request's `site_id`, so a task made from the request (its installation) starts there. No task can be made from it until then. The warranty start is set afterwards on the branch |
 | need | varchar | what they need, the second question: `repair` (fix a problem, default), `parts` (spare parts or a quotation), `visit` (a maintenance visit), `assistance` (advice or assistance). `machines` with `repair` or `parts` is told through machine cards (`ticket_machine`); every other pair is a message, saved as `description`, with files on the ticket itself. Replaced a single `topic` (migrations 0070–0072 converted it) |
 | source | varchar | customer tickets: `portal` (default), `phone`, `whatsapp`, `email` — the same values as `task.source`, so a task made from it keeps the channel |
 | opened_by_id | FK → user | nullable — the staff member who opened it; empty when the customer did |
@@ -635,7 +635,7 @@ One item in a customer's portal bell, written where each thing happens (`custome
 |---|---|---|
 | id | PK | |
 | customer_id | FK → customer | |
-| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`) |
+| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`), `part_shipped` (a part shipment for one of their requests was handed to the courier; on the request, so opening it clears it) |
 | task_id | FK → task | nullable — the visit it's about |
 | ticket_id | FK → customer_ticket | nullable — the request it's about |
 | created_at | timestamptz | |
@@ -789,9 +789,19 @@ Per warehouse and code only — colours aren't separate stock, and there are no 
 
 **Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
 
-> received (`done` part lines on receiving tasks at the country's warehouse) − used (`part_used` on that country's reports) + counts
+> received (`done` part lines on receiving tasks at the country's warehouse) − used (`part_used` on that country's reports) − shipped (`done` part lines on that country's part shipments that aren't cancelled) + counts
 
 **Parts ordered for one repair are held for it.** A part line received for a particular task (`for_task`, the repair with the PAK number) counts in the warehouse but shows as **held for that task**, not free, until that task's report uses it; whatever the task leaves unused once it's closed or cancelled becomes free stock.
+
+**Part shipments.** A machine's "Ship part" decision on a request makes a task of type `part_shipment` (whatever type was picked, and with no lead yet); one can also be made by hand. It has its own three steps, none of a visit's (on the way, arrived, report, signature, review — `tasks.shipments`, the panel on the task page and the technician's own):
+
+| Step | `task.status` | Who | What |
+|---|---|---|---|
+| Preparing | `new` | the country's warehouse manager, or the manager tier | picks the parts (`task_product` `part` lines, `done`: they leave the country's stock now, back if the task is cancelled), the PAK number, and the technician who ships it (the lead; told by push). Repeatable until shipped, to correct |
+| Ready to ship | `assigned` | that technician (or whoever can prepare) | the courier (`shipping_company`) and its tracking number, **optional** — local couriers often have none |
+| Shipped | `closed` | — | the customer is emailed that it's on its way (carrier, and the tracking number when there is one); the request is settled, its machine reads "Part shipped" |
+
+Events `parts_ready` and `shipped` record the two steps. There's no "delivered" step: many couriers can't confirm one. A part that needs fitting gets **Book a fitting visit** after shipping: a normal visit task (type *Spare Parts Replacement*), same site, linked as the next step (`previous_task`).
 
 The **Stock** screen lists each warehouse's machines and parts by code and quantity — parts with their photo, and how many of each are held and for which task — in the active country (a manager switches country from the header, as on every screen), gated on `view_stock` (manager, warehouse_manager, operations_manager and admin by default). Machines are listed per warehouse; spare parts per country, since each country has one parts warehouse.
 

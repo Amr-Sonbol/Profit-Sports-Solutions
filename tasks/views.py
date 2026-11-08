@@ -54,7 +54,9 @@ from people.permissions import (
     require_technician, scoped_or_404 as _scoped_or_404,
 )
 from spots.email_failures import current_user_id, record_failed_email
+from tasks.shipments import is_part_shipment, part_shipment_type
 from spots.hosts import portal_url
+from spots.media import signed_media_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
@@ -786,6 +788,8 @@ def _week_nav_context(today, start, country=None):
 
 def _next_technician_action(task):
     """Which button the lead should see next, or None if nothing is theirs to tap right now."""
+    if is_part_shipment(task):
+        return None  # its own steps, none of a visit's (tasks.shipments)
     if task.status == Task.Status.ASSIGNED:
         return 'accept'
     if task.status == Task.Status.ACCEPTED:
@@ -1165,13 +1169,13 @@ def _send_shipping_notice(contact_name, entity_name, reference, company, trackin
     """
     carrier_label = ShippingCompany(company).label if company else ''
     tracking_url = None
-    if company:
+    if company and tracking_number:  # a local courier often has none
         url_template = CARRIER_TRACKING_URLS.get(company)
         if url_template:
             tracking_url = url_template.format(tracking=quote(tracking_number))
     with translation.override('en'):
         subject = _('Your shipment is on its way — %(reference)s') % {'reference': reference}
-        lines = [_('Tracking number: %(tracking)s') % {'tracking': tracking_number}]
+        lines = [_('Tracking number: %(tracking)s') % {'tracking': tracking_number}] if tracking_number else []
         if company:
             lines.insert(0, _('Carrier: %(company)s') % {'company': carrier_label})
             if tracking_url:
@@ -1804,6 +1808,10 @@ def task_detail(request, pk):
         pk, requesting_technician, get_active_country(request), 'site__customer__country',
     )
 
+    shipped = _shipment_post(request, task, requesting_technician, request.path)
+    if shipped is not None:
+        return shipped
+
     # An admin viewing as someone else doesn't read their notifications or messages for them.
     if requesting_technician.is_manager_tier and not request.viewing_as_user:
         task.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
@@ -2163,17 +2171,13 @@ def task_detail(request, pk):
         # viewing the same task.
         events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
 
-    # The ticket's main task links back directly; another task split from
-    # the same ticket finds it through its machines.
-    source_ticket = getattr(task, 'ticket', None) or next(
-        (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
-    )
     pending_schedule_request = task.schedule_change_requests.filter(
         status=ScheduleChangeRequest.Status.PENDING,
     ).select_related('requested_by').first()
 
     context = {
         'task': task,
+        'shipment': _shipment_context(task, requesting_technician),
         'active_lead': active_lead,
         'active_helpers': active_helpers,
         'events': events,
@@ -2182,13 +2186,8 @@ def task_detail(request, pk):
             is_active=True, technician__is_active=False,
         ).exists(),
         'attachments': task.attachments.select_related('uploaded_by'),
-        # A split ticket's task shows its own machines' photos (and any not
-        # tied to a machine), not those of machines handled elsewhere.
-        'ticket_attachments': (
-            source_ticket.attachments.filter(Q(machine__task=task) | Q(machine__isnull=True))
-            if source_ticket and task.ticket_machines.exists()
-            else source_ticket.attachments.all() if source_ticket else []
-        ),
+        # The customer's request, all of it (request_for_task).
+        'from_request': request_for_task(task),
         'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
         'products': task.products.all(),
         # An installation's machines not installed yet, and the chain around it.
@@ -2377,6 +2376,12 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
         task = form.save(commit=False)
         task.site = site
         task.brand = brand
+        # "Ship part": a part shipment, whatever type was picked (tasks.shipments) —
+        # and picking that type records the machines' decision as "Ship part".
+        if machine_decision == TicketMachine.Decision.SHIP_PART and part_shipment_type():
+            task_type = part_shipment_type()
+        if task_type is not None and task_type.category == TaskType.Category.PART_SHIPMENT and selected_machines:
+            machine_decision = TicketMachine.Decision.SHIP_PART
         task.task_type = task_type
         task.created_by = request.user
         task.status = Task.Status.NEW
@@ -2416,7 +2421,8 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
             ticket.reviewed_by = request.user
             ticket.reviewed_at = timezone.now()
             ticket.save(update_fields=['task', 'customer', 'status', 'reviewed_by', 'reviewed_at'])
-    if cleaned.get('lead'):
+    # A part shipment's technician is chosen when the parts are ready (tasks.shipments).
+    if cleaned.get('lead') and not is_part_shipment(task):
         # Chosen on the form: assigned as from the assign screen (event, push, status).
         _set_lead(task, None, cleaned['lead'], '', request.user)
     _send_new_task_email_to_staff(request, task)
@@ -2451,6 +2457,10 @@ def task_create(request):
         if not requesting_technician.is_any_manager:
             internal = internal.none()
         ticket = get_object_or_404(customer_tickets | internal, pk=ticket_id)
+        if ticket.about == CustomerTicket.About.NEW_BRANCH and not ticket.site_id:
+            # A branch that doesn't exist yet: added (and linked) from the request first.
+            messages.error(request, _('Add the branch first (button above); then you can create its task here.'))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
         # Sites, brands and technicians all come from the ticket's own
         # country, so whoever handles every country's tickets can convert
         # one without switching to it first.
@@ -2473,8 +2483,19 @@ def task_create(request):
             machine_decision = TicketMachine.Decision.VISIT
 
     can_assign = _has_permission(requesting_technician, RolePermission.Permission.ASSIGN_TASKS)
+    # "Ship part": the type is a part shipment, shown and fixed (tasks.shipments).
+    shipment_type = part_shipment_type() if machine_decision == TicketMachine.Decision.SHIP_PART else None
+
+    def lock_type(form):
+        if shipment_type:
+            form.fields['task_type'].initial = shipment_type.pk
+            form.fields['task_type'].disabled = True
+        return form
+
     if request.method == 'POST':
-        form = TaskCreateForm(request.POST, country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign)
+        form = lock_type(TaskCreateForm(
+            request.POST, country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign,
+        ))
         if form.is_valid():
             task = create_task(request, form, requesting_technician, ticket, selected_machines, machine_decision)
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
@@ -2487,7 +2508,7 @@ def task_create(request):
                 messages.warning(request, clash)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign)
+        form = lock_type(TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign))
         if selected_machines:
             form.fields['description'].initial = ticket_machines_text(selected_machines)[1]
 
@@ -2824,9 +2845,11 @@ def send_new_ticket_email_to_staff(request, ticket):
     switches = NotificationSettings.load()
     if not switches.new_ticket_email:
         return
-    # The company-wide roles (admin, operations, technical support manager) hear from every country.
-    recipients = _staff_notification_recipients(
-        ticket.country, switches.new_ticket_roles, everywhere=RolePermission.Permission.TICKETS_ALL_COUNTRIES,
+    # The chosen roles (by default the Technical Support Manager and the country's
+    # Country Support Manager); nobody of those: the admins (tasks.alarms).
+    from tasks.alarms import new_ticket_people
+    recipients = list(
+        new_ticket_people(ticket.country).exclude(user__email='').values_list('user__email', flat=True).distinct()
     )
     if not recipients:
         return
@@ -3146,6 +3169,25 @@ def ticket_review(request, pk):
 
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
+
+        if (action == 'create_branch' and ticket.about == CustomerTicket.About.NEW_BRANCH
+                and ticket.customer_id and not ticket.site_id):
+            # A customer's new branch, in one click from what they typed: name, address, contact
+            # (the email is the one in their message, if any). Linked, so its task starts there.
+            email = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', ticket.description or '')
+            site = ticket.customer.sites.filter(name__iexact=ticket.site_description.strip()).first()
+            if site is None:
+                site = Site.objects.create(
+                    customer=ticket.customer, name=ticket.site_description.strip()[:150],
+                    address=ticket.site_address, contact_name=ticket.contact_name, contact_phone=ticket.contact_phone,
+                    contact_email=email.group(0) if email else '',
+                )
+            ticket.site = site
+            ticket.save(update_fields=['site'])
+            messages.success(request, _('Branch %(name)s created for %(customer)s.') % {
+                'name': site.name, 'customer': ticket.customer.name,
+            })
+            return redirect('tasks:ticket_review', pk=ticket.pk)
 
         if action == 'escalate' and can_escalate:
             escalate_form = EscalateTicketForm(request.POST, country=ticket.country, escalated_by=technician)
@@ -5855,6 +5897,166 @@ def country_create(request):
     return render(request, 'tasks/country_create.html', {'form': form})
 
 
+def request_for_task(task):
+    """Everything from the customer's request a task came from, for whoever
+    does the work (tasks/_from_request.html, and the app): who to contact,
+    their message as they wrote it, every photo and file they attached (a
+    request split across tasks: this task's machines', and any not tied to
+    a machine), and the conversation with support, with its files. Never
+    internal notes. None when the task didn't come from a customer's request."""
+    ticket = getattr(task, 'ticket', None) or next(
+        (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
+    )
+    if ticket is None or ticket.kind != CustomerTicket.Kind.CUSTOMER:
+        return None
+    attachments = ticket.attachments.order_by('uploaded_at')
+    if task.ticket_machines.exists():
+        attachments = attachments.filter(Q(machine__task=task) | Q(machine__isnull=True))
+    files = [attachment.file for attachment in attachments]
+    files += [machine.serial_photo for machine in task.ticket_machines.all() if machine.serial_photo]
+    replies = []
+    for reply in ticket.replies.select_related('sent_by').prefetch_related('files').order_by('sent_at'):
+        reply_files = [item.file for item in reply.files.all()]
+        if reply.attachment:
+            reply_files.insert(0, reply.attachment)
+        replies.append({'reply': reply, 'files': reply_files})
+    return {'ticket': ticket, 'files': files, 'replies': replies}
+
+
+def request_for_app(request, task):
+    """request_for_task as the app shows it: plain values, and signed links to the files (spots.media)."""
+    found = request_for_task(task)
+    if found is None:
+        return None
+    ticket = found['ticket']
+
+    def links(files):
+        return [{'name': file.name.rsplit('/', 1)[-1], 'url': signed_media_url(request, file.url)} for file in files]
+    return {
+        'ticket_number': ticket.ticket_number, 'contact_name': ticket.contact_name,
+        'contact_phone': ticket.contact_phone, 'contact_email': ticket.contact_email,
+        'subject': ticket.subject, 'message': ticket.description, 'submitted_at': ticket.submitted_at,
+        'files': links(found['files']),
+        'conversation': [{
+            'from_customer': item['reply'].sender == TicketReply.Sender.CUSTOMER,
+            'sender': (str(_('Customer')) if item['reply'].sender == TicketReply.Sender.CUSTOMER else
+                       getattr(getattr(item['reply'].sent_by, 'technician', None), 'full_name', '')),
+            'message': item['reply'].message, 'sent_at': item['reply'].sent_at, 'files': links(item['files']),
+        } for item in found['replies']],
+    }
+
+
+def ship_and_tell_customer(task, user, company, tracking):
+    """A part shipment handed to the courier, and the customer emailed —
+    the website's task pages and the app (api.views.MyTaskActionView)."""
+    from tasks import shipments
+
+    tracking = tracking.strip()[:100]
+    shipments.mark_shipped(task, user, company, tracking)
+    # In the customer's bell too, on each request it ships for.
+    for ticket in CustomerTicket.objects.filter(Q(task=task) | Q(machines__task=task)).distinct():
+        notify_customer.part_shipped(ticket)
+    if task.site.effective_contact_email:
+        _send_shipping_notice(
+            task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
+            company, tracking, task.site.effective_contact_email,
+        )
+
+
+def shipment_for_app(task, technician):
+    """A part shipment as the app shows it (api.views.MyTaskDetailView); None for any other task."""
+    from tasks import shipments
+
+    if not is_part_shipment(task):
+        return None
+    stage = shipments.stage(task)
+    return {
+        'stage': stage, 'label': str(shipments.STAGE_LABELS[stage]),
+        'parts': [{'code': line.product_code, 'quantity': line.quantity}
+                  for line in task.products.filter(kind=TaskProduct.Kind.PART).order_by('pk')],
+        'pak_reference_number': task.pak_reference_number,
+        'shipping_company': task.get_shipping_company_display() if task.shipping_company else '',
+        'shipping_tracking_number': task.shipping_tracking_number,
+        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
+        'companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
+    }
+
+
+def _shipment_context(task, technician):
+    """What a part shipment's panel shows this person (tasks/_shipment_panel.html); None for any other task."""
+    from tasks import shipments
+
+    if not is_part_shipment(task):
+        return None
+    stage = shipments.stage(task)
+    can_prepare = shipments.can_prepare(technician, task)
+    return {
+        'stage': stage, 'label': shipments.STAGE_LABELS[stage], 'shipper': shipments.shipper(task),
+        'parts': task.products.filter(kind=TaskProduct.Kind.PART).order_by('pk'),
+        'can_prepare': can_prepare and stage in (shipments.PREPARING, shipments.READY),
+        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
+        'can_book_fitting': can_prepare and stage == shipments.SHIPPED,
+        'technicians': shipments.technicians_for(task) if can_prepare else (),
+        'companies': ShippingCompany.choices, 'blank_rows': range(3),
+        'fitting_visits': task.next_tasks.order_by('pk'),
+    }
+
+
+def _shipment_post(request, task, technician, back):
+    """A part shipment's two steps and its fitting visit (tasks.shipments),
+    from the office's task page or the technician's own. None when the
+    request isn't one of them."""
+    from tasks import shipments
+
+    action = request.POST.get('action')
+    if request.method != 'POST' or not is_part_shipment(task) or action not in (
+        'shipment_ready', 'shipment_shipped', 'book_fitting',
+    ):
+        return None
+    stage = shipments.stage(task)
+    if action == 'shipment_ready':
+        if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
+            raise PermissionDenied
+        parts, problems = [], []
+        for code, quantity in zip(request.POST.getlist('part_code'), request.POST.getlist('part_quantity')):
+            code = code.strip()
+            if not code:
+                continue
+            if not quantity.strip().isdigit() or int(quantity) < 1:
+                problems.append(_('Please enter a quantity of at least 1 for %(code)s.') % {'code': code})
+            else:
+                parts.append((code, int(quantity)))
+        shipper_id = request.POST.get('technician', '')
+        chosen = shipments.technicians_for(task).filter(pk=shipper_id).first() if shipper_id.isdigit() else None
+        if not parts:
+            problems.append(_('Please add at least one part.'))
+        if chosen is None:
+            problems.append(_('Please choose the technician who will ship it.'))
+        if problems:
+            messages.error(request, ' '.join(str(problem) for problem in problems))
+            return redirect(back)
+        shipments.mark_ready(task, request.user, parts, request.POST.get('pak_reference_number', '').strip()[:100], chosen)
+        messages.success(request, _('Ready to ship. %(name)s has been told.') % {'name': chosen.full_name})
+        return redirect(back)
+    if action == 'shipment_shipped':
+        if not shipments.can_ship(technician, task) or stage != shipments.READY:
+            raise PermissionDenied
+        company = request.POST.get('shipping_company', '')
+        if company not in ShippingCompany.values:
+            messages.error(request, _('Please choose the shipping company.'))
+            return redirect(back)
+        ship_and_tell_customer(task, request.user, company, request.POST.get('shipping_tracking_number', ''))
+        messages.success(request, _('Shipped. The customer has been told.'))
+        return redirect(back)
+    if not shipments.can_prepare(technician, task) or stage != shipments.SHIPPED:
+        raise PermissionDenied
+    visit = shipments.book_fitting_visit(task, request.user)
+    messages.success(request, _('Fitting visit %(number)s created: choose its technician and day.') % {
+        'number': visit.task_number,
+    })
+    return redirect('tasks:task_detail', pk=visit.pk)
+
+
 @login_required
 def my_task_detail(request, pk):
     technician = require_technician(request)
@@ -5873,6 +6075,12 @@ def my_task_detail(request, pk):
     can_pause = is_lead and task.status == Task.Status.IN_PROGRESS and not is_paused
     can_resume = is_paused
     undoable = undoable_tap(task, request.user) if is_lead else None
+    if is_part_shipment(task):
+        # Its own two steps (tasks.shipments), none of a visit's.
+        next_action, can_block, can_pause, can_resume, undoable = None, False, False, False, None
+        shipped = _shipment_post(request, task, technician, request.path)
+        if shipped is not None:
+            return shipped
 
     if not request.viewing_as_user:  # an admin viewing as them doesn't read their messages for them
         TaskMessageRecipient.objects.filter(
@@ -5956,6 +6164,8 @@ def my_task_detail(request, pk):
 
     context = {
         'task': task,
+        'shipment': _shipment_context(task, technician),
+        'from_request': request_for_task(task),
         'is_lead': is_lead,
         'next_action': next_action,
         'can_block': can_block,

@@ -987,6 +987,9 @@ class TaskEvent(models.Model):
         REOPENED = 'reopened', _('Reopened')
         CANCELLED = 'cancelled', _('Cancelled')
         NEGLIGENCE = 'negligence', _('Negligence reported')
+        # A part shipment's two steps (tasks.shipments).
+        PARTS_READY = 'parts_ready', _('Parts ready to ship')
+        SHIPPED = 'shipped', _('Shipped')
 
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='events',

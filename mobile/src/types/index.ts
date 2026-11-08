@@ -97,6 +97,11 @@ export interface TaskDetail {
   // server is the only thing that decides what's next, this is never
   // computed here.
   next_action: string | null;
+  // A part shipment's own steps (tasks.shipments), or null for any other
+  // task: the parcel, and whether this person hands it to the courier now.
+  shipment?: Shipment | null;
+  // Everything from the customer's request the task came from, or null.
+  from_request?: FromRequest | null;
   is_lead: boolean;
   can_file_report: boolean;
   // The task type's own setting — the API refuses a report without one.
@@ -606,4 +611,32 @@ export interface PlannedLine {
   arm: string;
   padding: string;
   trim: string;
+}
+
+export interface Shipment {
+  stage: 'preparing' | 'ready' | 'shipped' | 'cancelled';
+  label: string;
+  parts: { code: string; quantity: number }[];
+  pak_reference_number: string;
+  shipping_company: string;
+  shipping_tracking_number: string;
+  can_ship: boolean;
+  companies: { value: string; label: string }[];
+}
+
+export interface RequestFile {
+  name: string;
+  url: string;
+}
+
+export interface FromRequest {
+  ticket_number: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  subject: string;
+  message: string;
+  submitted_at: string;
+  files: RequestFile[];
+  conversation: { from_customer: boolean; sender: string; message: string; sent_at: string; files: RequestFile[] }[];
 }

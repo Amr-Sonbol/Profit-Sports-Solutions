@@ -43,8 +43,13 @@
         <div class="creatable-field__row">
             <div class="field {% if form.site.errors %}field--error{% endif %}">
                 <label for="{{ form.site.id_for_label }}">{{ form.site.label }} *</label>
+                {% if form.site.field.disabled and ticket.site %}
+                {# Chosen by the customer and locked: shown plainly, not as a greyed-out list that reads as empty. #}
+                <p class="locked-value">{% include "_icon.html" with name='lock' %} <strong>{{ ticket.site.name }}</strong> <span class="muted">({% translate "chosen by the customer" %})</span></p>
+                {% else %}
                 {{ form.site }}
                 <p class="field__help">{{ form.site.help_text }}</p>
+                {% endif %}
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
             {% if user.technician.role == 'admin' %}
@@ -92,8 +97,10 @@
             <div class="field {% if form.task_type.errors %}field--error{% endif %}">
                 <label for="{{ form.task_type.id_for_label }}">{{ form.task_type.label }}</label>
                 {{ form.task_type }}
+                {% if form.task_type.field.disabled %}<p class="field__help">{% translate "Set by the request's decision: the parts are prepared and shipped, no visit." %}</p>{% endif %}
                 {% for error in form.task_type.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+            {% if not form.task_type.field.disabled %}
             <input type="checkbox" id="toggle-new-task-type" class="toggle-checkbox" hidden>
             <label for="toggle-new-task-type" class="add-new-toggle">{% translate "+ Add new task type" %}</label>
             <fieldset class="new-item-fieldset">
@@ -121,6 +128,7 @@
                     </div>
                 </div>
             </fieldset>
+            {% endif %}
         </div>
 
         <div class="creatable-field__row">

@@ -34,17 +34,25 @@ def notification_bell(request):
     country = get_active_country(request)
     items = []
     if can_manage_tickets:
-        unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket')
-        # A new ticket: only to the roles chosen for it on the Notifications page (the same as its email);
-        # replies and escalation decisions: to everyone who handles tickets.
-        from people.models import NotificationSettings
-        if technician.role not in NotificationSettings.load().new_ticket_roles:
-            unseen_tickets = unseen_tickets.exclude(kind=TicketNotification.Kind.NEW_TICKET)
+        unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket__country')
         # The company-wide roles hear of every country's tickets, whichever country they're looking at.
         if not RolePermission.objects.filter(
             role=technician.role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
         ).exists():
             unseen_tickets = unseen_tickets.filter(ticket__country=country)
+        # A new ticket: only to whoever is told of it, as by its email (tasks.alarms.new_ticket_people —
+        # the chosen roles, or the admins when nobody of those reaches its country);
+        # replies and escalation decisions: to everyone who handles tickets.
+        from tasks.alarms import new_ticket_people
+        told_in = {}
+        for notification in unseen_tickets:
+            ticket_country = notification.ticket.country
+            if notification.kind == TicketNotification.Kind.NEW_TICKET and ticket_country.pk not in told_in:
+                told_in[ticket_country.pk] = new_ticket_people(ticket_country).filter(pk=technician.pk).exists()
+        unseen_tickets = [
+            notification for notification in unseen_tickets
+            if notification.kind != TicketNotification.Kind.NEW_TICKET or told_in[notification.ticket.country_id]
+        ]
         items += [
             {'kind': notification.kind, 'created_at': notification.created_at, 'ticket': notification.ticket}
             for notification in unseen_tickets

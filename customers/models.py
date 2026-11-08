@@ -355,6 +355,7 @@ class CustomerNotification(models.Model):
         REPLY = 'reply', _('Reply to a request')
         VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
         REQUEST_CLOSED = 'request_closed', _('Request resolved')
+        PART_SHIPPED = 'part_shipped', _('Part shipped')
 
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name='notifications', verbose_name=_('customer'),

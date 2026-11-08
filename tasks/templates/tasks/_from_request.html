@@ -1,0 +1,51 @@
+{% load i18n %}{% comment %}Everything from the customer's request a task came from (tasks.views.request_for_task): who to contact, their message as written, every photo and file, and the conversation with support. Never internal notes. On the office task page and the technician's own.{% endcomment %}
+{% with ticket=from_request.ticket %}
+<div class="section from-request">
+    <div class="from-request__head">
+        <h2>{% translate "From the customer's request" %}</h2>
+        {% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_review' ticket.pk %}" class="task-number" dir="ltr">{{ ticket.ticket_number }}</a>{% else %}<span class="task-number" dir="ltr">{{ ticket.ticket_number }}</span>{% endif %}
+    </div>
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Contact" %}</dt>
+            <dd>{{ ticket.contact_name|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Phone" %}</dt>
+            <dd>{% if ticket.contact_phone %}<a href="tel:{{ ticket.contact_phone }}" dir="ltr">{{ ticket.contact_phone }}</a>{% else %}—{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Email" %}</dt>
+            <dd>{% if ticket.contact_email %}<a href="mailto:{{ ticket.contact_email }}" dir="ltr">{{ ticket.contact_email }}</a>{% else %}—{% endif %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Sent" %}</dt>
+            <dd>{{ ticket.submitted_at|date:"j M Y, P" }}</dd>
+        </div>
+    </dl>
+
+    <h3>{% translate "Their message" %}</h3>
+    <div class="review-message" dir="auto">{% if ticket.subject %}<strong>{{ ticket.subject }}</strong><br>{% endif %}{{ ticket.description|linebreaksbr }}</div>
+    {% if ticket.notes %}<p class="muted" dir="auto">{{ ticket.notes|linebreaksbr }}</p>{% endif %}
+
+    {% if from_request.files %}
+    <h3>{% translate "Their photos and files" %}</h3>
+    <ul class="plain-list">
+        {% for file in from_request.files %}<li>{% include "_attachment.html" with file=file %}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if from_request.replies %}
+    <h3>{% translate "Conversation with the customer" %}</h3>
+    <ul class="plain-list from-request__conversation">
+        {% for item in from_request.replies %}{% with reply=item.reply %}
+        <li>
+            <span class="muted">{% if reply.sender == 'customer' %}{% translate "Customer" %}{% else %}{{ reply.sent_by.technician.full_name|default:reply.sent_by.get_username }}{% endif %} · {{ reply.sent_at|date:"j M, P" }}</span>
+            <div dir="auto">{{ reply.message|linebreaksbr }}</div>
+            {% for file in item.files %}{% include "_attachment.html" with file=file %}{% endfor %}
+        </li>
+        {% endwith %}{% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% endwith %}

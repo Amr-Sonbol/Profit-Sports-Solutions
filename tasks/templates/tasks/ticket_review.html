@@ -27,11 +27,24 @@
     <section class="section review-card">
         <h2>{% translate "The request" %}</h2>
         <p class="review-request__type"><span class="badge">{{ ticket.request_type }}</span>{% if ticket.subject %} <strong>{{ ticket.subject }}</strong>{% endif %}</p>
-        {% if ticket.about == 'new_branch' and ticket.customer and user.technician.role == 'admin' %}
-        {# Nothing was created from the request: the admin adds the branch, with its warranty start, then closes the request. #}
+        {% if ticket.about == 'new_branch' and ticket.site %}
+        {# Added: the branch is linked, so a task made from the request (its installation) starts there. #}
         <div class="review-callout">
-            <a class="button" href="{% url 'customers:customer_detail' ticket.customer.pk %}?tab=sites&amp;branch_name={{ ticket.site_description|urlencode }}&amp;branch_address={{ ticket.site_address|urlencode }}&amp;branch_contact={{ ticket.contact_name|urlencode }}&amp;branch_phone={{ ticket.contact_phone|urlencode }}#add-site">{% translate "Add this branch" %}</a>
-            <p class="field__help">{% translate "Opens the customer's page with the branch form filled in from this request. Set its warranty start there, then close this request." %}</p>
+            <p>{% blocktranslate with name=ticket.site.name %}Branch added: <strong>{{ name }}</strong>. A task created from this request starts there.{% endblocktranslate %}</p>
+            {% if 'manage_customers' in role_permissions %}<p><a href="{% url 'customers:site_edit' ticket.site.pk %}">{% translate "Set its warranty start and other details" %}</a></p>{% endif %}
+        </div>
+        {% elif ticket.about == 'new_branch' and ticket.customer and can_manage %}
+        {# One click: the branch made from what the customer typed, and linked to this request. #}
+        <div class="review-callout">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_branch">
+                <button type="submit" class="button">{% blocktranslate with name=ticket.site_description %}Create the branch “{{ name }}”{% endblocktranslate %}</button>
+            </form>
+            <p class="field__help">{% translate "From the customer's details in this request: name, address and contact. You can set its warranty start afterwards." %}</p>
+            {% if user.technician.role == 'admin' %}
+            <a href="{% url 'customers:customer_detail' ticket.customer.pk %}?tab=sites&amp;from_request={{ ticket.pk }}&amp;branch_name={{ ticket.site_description|urlencode }}&amp;branch_address={{ ticket.site_address|urlencode }}&amp;branch_contact={{ ticket.contact_name|urlencode }}&amp;branch_phone={{ ticket.contact_phone|urlencode }}#add-site">{% translate "Or check and change its details first" %}</a>
+            {% endif %}
         </div>
         {% endif %}
         {% with machines=ticket.machines.all %}
@@ -205,14 +218,18 @@
                 </table>
             </div>
             <p class="field__help">{% translate "Select the machines, then choose what happens to them. Machines can go to different tasks: create one task, then select the next machines." %}</p>
+            {# One button: the task's type says what it is — a visit, or a Spare Part Shipment (tasks.shipments). #}
             <div class="button-row">
-                <button type="submit" name="do" value="visit" class="button">{% translate "Create a visit task" %}</button>
-                <button type="submit" name="do" value="ship_part" class="button button--secondary">{% translate "Create a part shipment task" %}</button>
+                <button type="submit" name="do" value="visit" class="button">{% translate "Create a task" %}</button>
             </div>
+            <p class="field__help">{% translate "To send a spare part instead of a visit, choose the type Spare Part Shipment on the next page." %}</p>
+            {# Settled without a task: the note is what the customer reads next to the machine on their request. #}
             <div class="review-decision__other">
+                <h3>{% translate "Or settle it without a task" %}</h3>
                 <div class="field">
-                    <label for="decision-note">{% translate "Note to the customer (optional)" %}</label>
+                    <label for="decision-note">{% translate "What to tell the customer (optional)" %}</label>
                     <input type="text" id="decision-note" name="decision_note" maxlength="255">
+                    <p class="field__help">{% translate "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered." %}</p>
                 </div>
                 <div class="button-row">
                     <button type="submit" name="do" value="advice" class="button button--secondary">{% translate "Advice given" %}</button>
@@ -220,6 +237,9 @@
                 </div>
             </div>
         </form>
+        {% elif ticket.about == 'new_branch' and not ticket.site %}
+        {# A branch that doesn't exist yet: nowhere to send a task until it's added (and linked) above. #}
+        <p class="field__help">{% translate "Add the branch first (button above); then you can create its task here." %}</p>
         {% else %}
         <p class="field__help">{% translate "Turn this request into a task to plan the work, or reply below if it can be handled without a visit." %}</p>
         <p><a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}" class="button">{% translate "Create a task from this request" %}</a></p>

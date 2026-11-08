@@ -3032,11 +3032,11 @@ class NotificationBellTests(TaskTestCase):
             ticket=other_ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now(),
         )
 
-        # The Operations Manager is told of every country's new tickets: both count.
-        operations = User.objects.create_user('operations1', password='pass12345')
-        Technician.objects.create(user=operations, country=self.country, full_name='Ops', language='en',
-                                  role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff')
-        self.client.login(username='operations1', password='pass12345')
+        # The Technical Support Manager is told of every country's new tickets: both count.
+        technical = User.objects.create_user('technical1', password='pass12345')
+        Technician.objects.create(user=technical, country=self.country, full_name='Tech Support', language='en',
+                                  role=Technician.Role.SUPPORT_MANAGER, employment_type='staff')
+        self.client.login(username='technical1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/tickets/').context['unseen_notification_count'], 2)
         # A Country Support Manager: its own country only.
         desk = User.objects.create_user('desk1', password='pass12345')

@@ -1,11 +1,11 @@
 {% extends "tasks/email/base.html" %}
 {% block content %}
 <p style="margin:0 0 16px;">Dear {{ contact }},</p>
-<p style="margin:0 0 16px;">We are pleased to inform you that your shipment for <strong>{{ entity }}</strong> has been dispatched. You may track it using the details below.</p>
+<p style="margin:0 0 16px;">We are pleased to inform you that your shipment for <strong>{{ entity }}</strong> has been dispatched.{% if tracking_number %} You may track it using the details below.{% endif %}</p>
 {% if carrier_label %}
 {% include "tasks/email/_carrier_chip.html" %}
 {% endif %}
-<p style="margin:0 0 4px;">Tracking number: <strong>{{ tracking_number }}</strong></p>
+{% if tracking_number %}<p style="margin:0 0 4px;">Tracking number: <strong>{{ tracking_number }}</strong></p>{% endif %}
 {% if tracking_url %}
 {% include "tasks/email/_button.html" with url=tracking_url label="Track your shipment" %}
 {% endif %}

@@ -68,6 +68,8 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     events = TaskEventSerializer(many=True, read_only=True)
     attachments = TaskAttachmentSerializer(many=True, read_only=True)
     next_action = serializers.SerializerMethodField()
+    shipment = serializers.SerializerMethodField()
+    from_request = serializers.SerializerMethodField()
     is_lead = serializers.SerializerMethodField()
     can_file_report = serializers.SerializerMethodField()
     requires_signature = serializers.SerializerMethodField()
@@ -87,12 +89,20 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'priority', 'priority_display',
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
-            'events', 'attachments', 'next_action', 'is_lead', 'can_file_report',
+            'events', 'attachments', 'next_action', 'shipment', 'from_request', 'is_lead', 'can_file_report',
             'requires_signature', 'undoable_step',
         ]
 
     def get_next_action(self, obj):
         return self.context.get('next_action')
+
+    def get_from_request(self, obj):
+        # Everything from the customer's request (tasks.views.request_for_app); None for any other task.
+        return self.context.get('from_request')
+
+    def get_shipment(self, obj):
+        # A part shipment's own steps (tasks.views.shipment_for_app); None for any other task.
+        return self.context.get('shipment')
 
     def get_directions_url(self, obj):
         return directions_url(obj.site)

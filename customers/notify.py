@@ -35,6 +35,11 @@ def staff_replied(ticket):
     _notify(ticket.customer, CustomerNotification.Kind.REPLY, ticket=ticket)
 
 
+def part_shipped(ticket):
+    """A spare part for one of their requests is on its way (tasks.shipments)."""
+    _notify(ticket.customer, CustomerNotification.Kind.PART_SHIPPED, ticket=ticket)
+
+
 def request_closed(ticket):
     """We resolved one of their requests, visit or not: our answer is on it."""
     _notify(ticket.customer, CustomerNotification.Kind.REQUEST_CLOSED, ticket=ticket)

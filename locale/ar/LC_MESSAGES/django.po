@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-07 23:02+0000\n"
+"POT-Creation-Date: 2026-11-08 00:47+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -646,11 +646,11 @@ msgstr "إضافة الفرع"
 msgid "Add skill"
 msgstr "إضافة مهارة"
 
+msgid "Add the branch first (button above); then you can create its task here."
+msgstr "أضف الفرع أولًا (الزر أعلاه)؛ بعدها يمكنك إنشاء مهمته من هنا."
+
 msgid "Add the machine"
 msgstr "إضافة الجهاز"
-
-msgid "Add this branch"
-msgstr "إضافة هذا الفرع"
 
 msgid "Add trip"
 msgstr "إضافة رحلة"
@@ -1028,6 +1028,9 @@ msgstr "اللوحة"
 msgid "Bolts tightened"
 msgstr "تم إحكام شدّ البراغي"
 
+msgid "Book a fitting visit"
+msgstr "حجز زيارة تركيب"
+
 msgid "Book a new visit"
 msgstr "حجز زيارة جديدة"
 
@@ -1039,6 +1042,18 @@ msgstr "محجوزة ولم تبدأ بعد."
 
 msgid "Branch"
 msgstr "الفرع"
+
+#, python-format
+msgid "Branch %(name)s created for %(customer)s."
+msgstr "تم إنشاء الفرع %(name)s للعميل %(customer)s."
+
+#, python-format
+msgid "Branch added and linked to request %(number)s."
+msgstr "تمت إضافة الفرع وربطه بالطلب %(number)s."
+
+#, python-format
+msgid "Branch added: <strong>%(name)s</strong>. A task created from this request starts there."
+msgstr "تمت إضافة الفرع: <strong>%(name)s</strong>. المهمة التي تُنشأ من هذا الطلب تكون فيه."
 
 msgid "Branch name"
 msgstr "اسم الفرع"
@@ -1134,6 +1149,9 @@ msgstr "طُلب التغيير إلى %(time)s — بانتظار مراجعة 
 
 msgid "Change requested. A manager will review it."
 msgstr "تم طلب التغيير. سيقوم المدير بمراجعته."
+
+msgid "Change the parcel"
+msgstr "تعديل الطرد"
 
 msgid "Change your password"
 msgstr "تغيير كلمة المرور"
@@ -1409,14 +1427,11 @@ msgstr "تم تحديث الدولة."
 msgid "Create a follow-up task for them"
 msgstr "إنشاء مهمة متابعة لها"
 
-msgid "Create a part shipment task"
-msgstr "إنشاء مهمة شحن قطعة"
+msgid "Create a task"
+msgstr "إنشاء مهمة"
 
 msgid "Create a task from this request"
 msgstr "إنشاء مهمة من هذا الطلب"
-
-msgid "Create a visit task"
-msgstr "إنشاء مهمة زيارة"
 
 msgid "Create account and send login details"
 msgstr "إنشاء الحساب وإرسال بيانات الدخول"
@@ -1432,6 +1447,10 @@ msgstr "إنشاء مهام جديدة"
 
 msgid "Create task"
 msgstr "إنشاء مهمة"
+
+#, python-format
+msgid "Create the branch “%(name)s”"
+msgstr "إنشاء الفرع «%(name)s»"
 
 msgid "Created"
 msgstr "أُنشئت"
@@ -2315,6 +2334,17 @@ msgstr "النتائج والإجراءات"
 msgid "Findings: %(text)s"
 msgstr "الملاحظات: %(text)s"
 
+#, python-format
+msgid "Fit the parts shipped in %(number)s."
+msgstr "تركيب القطع المشحونة في %(number)s."
+
+msgid "Fitting visit"
+msgstr "زيارة التركيب"
+
+#, python-format
+msgid "Fitting visit %(number)s created: choose its technician and day."
+msgstr "تم إنشاء زيارة التركيب %(number)s: اختر الفني واليوم."
+
 msgid "Fix a problem"
 msgstr "إصلاح مشكلة"
 
@@ -2337,6 +2367,9 @@ msgstr "تم إنشاء مهمة المتابعة %(number)s للأجهزة ال
 
 msgid "For"
 msgstr "إلى"
+
+msgid "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered."
+msgstr "لـ«تم تقديم النصيحة» أو «غير مشمول»: يراه العميل بجانب الجهاز في طلبه، مثل طريقة إعادة تشغيله أو سبب عدم شموله."
 
 msgid "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal."
 msgstr "لعميل تواصل معنا هاتفياً أو عبر رسالة أو بريد إلكتروني. تصبح هذه تذكرة اعتيادية: يتلقى العميل التأكيد المعتاد، ويمكنه متابعتها والرد عليها عبر بوابته."
@@ -2390,6 +2423,13 @@ msgstr "الجمعة"
 msgid "From customer"
 msgstr "من العميل"
 
+#, python-format
+msgid "From request %(number)s: saving links the new branch to it."
+msgstr "من الطلب %(number)s: الحفظ يربط الفرع الجديد به."
+
+msgid "From the customer's details in this request: name, address and contact. You can set its warranty start afterwards."
+msgstr "من بيانات العميل في هذا الطلب: الاسم والعنوان وجهة الاتصال. يمكنك تحديد بداية الضمان بعد ذلك."
+
 msgid "From when you tapped Start until now, without pauses. It stops when you send the report; waiting for review doesn't count."
 msgstr "من ضغطك على «بدء العمل» حتى الآن، دون فترات التوقف. يتوقف العدّ عند إرسال التقرير، ولا يُحتسب وقت انتظار المراجعة."
 
@@ -2410,6 +2450,9 @@ msgstr "مجاملة"
 
 msgid "Gym"
 msgstr "صالة رياضية"
+
+msgid "Hand it to the courier"
+msgstr "تسليمه لشركة الشحن"
 
 msgid "Hand the device to the customer to review the work and the time on site, and sign."
 msgstr "سلّم الجهاز للعميل لمراجعة العمل ومدة العمل في الموقع، ثم التوقيع."
@@ -2694,6 +2737,9 @@ msgstr "إجازة"
 
 msgid "Leave blank to use the site's own contact details."
 msgstr "اتركه فارغاً لاستخدام بيانات التواصل الخاصة بالموقع."
+
+msgid "Leave empty when the courier has none (local couriers often don't)."
+msgstr "اتركه فارغًا إذا لم يكن لدى شركة الشحن رقم تتبع (كثيرًا ما لا يوجد لدى شركات الشحن المحلية)."
 
 msgid "Leave the contact fields blank to use the customer's own contact details."
 msgstr "اترك حقول التواصل فارغة لاستخدام بيانات التواصل الخاصة بالعميل."
@@ -3416,6 +3462,9 @@ msgstr "غير موجود في قائمة الأجهزة"
 msgid "Not invited"
 msgstr "غير مدعو"
 
+msgid "Not picked yet"
+msgstr "لم تُختر بعد"
+
 msgid "Not rated"
 msgstr "غير مقيّم"
 
@@ -3478,9 +3527,6 @@ msgstr "تمت إضافة الملاحظة."
 
 msgid "Note for the support desk (internal)"
 msgstr "ملاحظة لفريق الدعم (داخلية)"
-
-msgid "Note to the customer (optional)"
-msgstr "ملاحظة للعميل (اختياري)"
 
 msgid "Notes"
 msgstr "الملاحظات"
@@ -3639,9 +3685,6 @@ msgstr "تاريخ الافتتاح: %(date)s"
 msgid "Opening stock — %(file)s"
 msgstr "المخزون الافتتاحي — %(file)s"
 
-msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there, then close this request."
-msgstr "يفتح صفحة العميل مع نموذج الفرع معبّأً من هذا الطلب. حدّد هناك بداية الضمان، ثم أغلق هذا الطلب."
-
 msgid "Operations Manager"
 msgstr "مدير العمليات"
 
@@ -3650,6 +3693,12 @@ msgstr "اختياري: أي ملاحظات لازمة قبل استئناف ا�
 
 msgid "Or a ready message"
 msgstr "أو رسالة جاهزة"
+
+msgid "Or check and change its details first"
+msgstr "أو راجع بياناته وعدّلها أولًا"
+
+msgid "Or settle it without a task"
+msgstr "أو أنهِه بدون مهمة"
 
 msgid "Or type your brand's color code"
 msgstr "أو اكتب رمز لون علامتك التجارية"
@@ -3755,6 +3804,12 @@ msgstr "تم فحص الجزء وضبطه"
 msgid "Part ordered, to be fitted on a follow-up visit"
 msgstr "تم طلب القطعة، وستُركَّب في زيارة لاحقة"
 
+msgid "Part shipment"
+msgstr "شحن قطعة"
+
+msgid "Part shipped"
+msgstr "تم شحن القطعة"
+
 msgid "Part updated."
 msgstr "تم تحديث القطعة."
 
@@ -3766,6 +3821,9 @@ msgstr "القطع المستخدمة"
 
 msgid "Parts on the way"
 msgstr "القطع في الطريق"
+
+msgid "Parts ready to ship"
+msgstr "القطع جاهزة للشحن"
 
 msgid "Parts shipped"
 msgstr "شحن القطع"
@@ -3894,6 +3952,9 @@ msgstr "يرجى إضافة رقم تتبع الشحنة قبل إشعار ال�
 msgid "Please add at least one machine."
 msgstr "يُرجى إضافة جهاز واحد على الأقل."
 
+msgid "Please add at least one part."
+msgstr "يرجى إضافة قطعة واحدة على الأقل."
+
 msgid "Please answer both questions."
 msgstr "يُرجى الإجابة عن السؤالين."
 
@@ -3910,6 +3971,12 @@ msgstr "يرجى مراجعة بريدك الإلكتروني"
 msgid "Please choose the machine from your list."
 msgstr "يرجى اختيار الجهاز من قائمتك."
 
+msgid "Please choose the shipping company."
+msgstr "يرجى اختيار شركة الشحن."
+
+msgid "Please choose the technician who will ship it."
+msgstr "يرجى اختيار الفني الذي سيشحنه."
+
 msgid "Please close the task (submit its report) before requesting feedback."
 msgstr "يرجى إغلاق المهمة (تقديم تقريرها) قبل طلب التقييم."
 
@@ -3921,6 +3988,10 @@ msgstr "يرجى إكمال رمز القطعة والكمية، أو ترك ه�
 
 msgid "Please describe the problem: what happens, since when, any error code, and how often."
 msgstr "يرجى وصف المشكلة: ما الذي يحدث، ومنذ متى، وأي رمز خطأ، وكم مرة تتكرر."
+
+#, python-format
+msgid "Please enter a quantity of at least 1 for %(code)s."
+msgstr "يرجى إدخال كمية لا تقل عن 1 للقطعة %(code)s."
 
 msgid "Please enter the model of the machine."
 msgstr "يرجى إدخال طراز الجهاز."
@@ -4004,11 +4075,17 @@ msgstr "حساب البوابة"
 msgid "Portal welcome and password link"
 msgstr "الترحيب في البوابة ورابط كلمة المرور"
 
+msgid "Prepare the parcel"
+msgstr "تجهيز الطرد"
+
 msgid "Prepared by"
 msgstr "أعده"
 
 msgid "Prepared on"
 msgstr "تاريخ الإعداد"
+
+msgid "Preparing"
+msgstr "قيد التجهيز"
 
 msgid "Preview report"
 msgstr "معاينة التقرير"
@@ -4123,6 +4200,13 @@ msgstr "إعادة تفعيل العميل"
 
 msgid "Ready for advanced level"
 msgstr "جاهز للمستوى المتقدم"
+
+msgid "Ready to ship"
+msgstr "جاهز للشحن"
+
+#, python-format
+msgid "Ready to ship. %(name)s has been told."
+msgstr "جاهز للشحن. تم إبلاغ %(name)s."
 
 msgid "Reason"
 msgstr "السبب"
@@ -4760,6 +4844,12 @@ msgstr "حُدد عند أول وصول"
 msgid "Set by the first technician to arrive. Please verify it and correct it if inaccurate."
 msgstr "حدده أول فني وصل إلى الموقع. يرجى التحقق منه وتصحيحه إذا كان غير دقيق."
 
+msgid "Set by the request's decision: the parts are prepared and shipped, no visit."
+msgstr "محدّد من قرار الطلب: تُجهَّز القطع وتُشحن، بدون زيارة."
+
+msgid "Set its warranty start and other details"
+msgstr "تحديد بداية الضمان وباقي البيانات"
+
 msgid "Set level"
 msgstr "تحديد المستوى"
 
@@ -4805,6 +4895,12 @@ msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
 msgid "Ship part"
 msgstr "شحن قطعة"
 
+msgid "Shipped"
+msgstr "تم الشحن"
+
+msgid "Shipped. The customer has been told."
+msgstr "تم الشحن. تم إبلاغ العميل."
+
 msgid "Shipping"
 msgstr "الشحن"
 
@@ -4820,6 +4916,9 @@ msgstr "شركة الشحن"
 
 msgid "Shipping tracking number"
 msgstr "رقم تتبع الشحن"
+
+msgid "Ships it"
+msgstr "يشحنه"
 
 msgid "Should you have any questions about the work carried out, please do not hesitate to contact us."
 msgstr "إذا كانت لديكم أي استفسارات بشأن الأعمال المنجزة، فلا تترددوا في التواصل معنا."
@@ -4935,6 +5034,9 @@ msgstr "المصدر"
 
 msgid "Spare part"
 msgstr "قطعة غيار"
+
+msgid "Spare part shipment"
+msgstr "شحن قطع غيار"
 
 msgid "Spare parts"
 msgstr "قطع الغيار"
@@ -5222,6 +5324,9 @@ msgstr ""
 "العرض والرد:\n"
 "%(link)s\n"
 
+msgid "The customer is emailed that it's on its way, and the request is settled."
+msgstr "يُرسل للعميل بريد بأن الشحنة في الطريق، ويُغلق الطلب."
+
 msgid "The customer receives this report as a PDF by email. Leave blank to send nothing."
 msgstr "يتلقى العميل هذا التقرير بصيغة PDF عبر البريد الإلكتروني. اتركه فارغًا لعدم الإرسال."
 
@@ -5336,6 +5441,9 @@ msgstr "تمت معالجة الأمر دون التقرير والاعتماد 
 msgid "The part names or numbers if you know them, and how many of each."
 msgstr "أسماء القطع أو أرقامها إن كنت تعرفها، والكمية المطلوبة من كل منها."
 
+msgid "The parts you pick here leave the warehouse stock."
+msgstr "القطع التي تختارها هنا تُخصم من مخزون المستودع."
+
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
@@ -5378,6 +5486,9 @@ msgstr "الفني يعمل عليها."
 
 msgid "The technician went but couldn't do or finish the work. Their reason is shown with each task."
 msgstr "ذهب الفني لكنه لم يتمكن من تنفيذ العمل أو إكماله. يظهر سببه مع كل مهمة."
+
+msgid "The technician who will ship it"
+msgstr "الفني الذي سيشحنه"
 
 msgid "The trip cannot end before it starts."
 msgstr "لا يمكن أن تنتهي الرحلة قبل بدايتها."
@@ -5731,6 +5842,9 @@ msgstr "للحفاظ على فعالية التشحيم، نوصي بتوجيه 
 #, python-format
 msgid "To mark a staff member as unavailable, use <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">Technician availability</a>. This applies across all tasks, not only this one."
 msgstr "لتعيين موظف كغير متاح، استخدم <a href=\"%(availability_url)s\" target=\"_blank\" rel=\"noopener\">توفر الفنيين</a>. ينطبق ذلك على جميع المهام، وليس على هذه المهمة فقط."
+
+msgid "To send a spare part instead of a visit, choose the type Spare Part Shipment on the next page."
+msgstr "لإرسال قطعة غيار بدلًا من زيارة، اختر النوع «شحن قطع غيار» في الصفحة التالية."
 
 msgid "To staff"
 msgstr "إلى الموظفين"
@@ -6139,6 +6253,9 @@ msgstr "ما أبلغ به العميل"
 msgid "What the levels mean"
 msgstr "ماذا تعني المستويات"
 
+msgid "What to tell the customer (optional)"
+msgstr "ما تريد إبلاغه للعميل (اختياري)"
+
 msgid "WhatsApp"
 msgstr "واتساب"
 
@@ -6373,6 +6490,9 @@ msgstr "رسالتك"
 msgid "Your next visit"
 msgstr "زيارتك القادمة"
 
+msgid "Your part is on its way"
+msgstr "القطعة في الطريق إليك"
+
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحبًا بك."
 
@@ -6553,6 +6673,9 @@ msgstr "الفئة"
 
 msgid "checklist template"
 msgstr "قالب قائمة التحقق"
+
+msgid "chosen by the customer"
+msgstr "اختاره العميل"
 
 msgid "close reason"
 msgstr "سبب الإغلاق"
@@ -7798,6 +7921,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Accepted"
 #~ msgstr "مقبولة"
 
+#~ msgid "Add this branch"
+#~ msgstr "إضافة هذا الفرع"
+
 #~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 #~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
 
@@ -7868,6 +7994,12 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Count"
 #~ msgstr "العدد"
 
+#~ msgid "Create a part shipment task"
+#~ msgstr "إنشاء مهمة شحن قطعة"
+
+#~ msgid "Create a visit task"
+#~ msgstr "إنشاء مهمة زيارة"
+
 #~ msgid "Current tasks"
 #~ msgstr "المهام الحالية"
 
@@ -7916,6 +8048,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Notify customer of tracking number"
 #~ msgstr "إشعار العميل برقم التتبع"
+
+#~ msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there; saving brings you back here, to create its task or close the request."
+#~ msgstr "يفتح صفحة العميل ونموذج الفرع معبّأ من هذا الطلب. حدّد بداية الضمان هناك؛ الحفظ يعيدك إلى هنا لإنشاء مهمته أو إغلاق الطلب."
 
 #~ msgid "Orange"
 #~ msgstr "برتقالي"

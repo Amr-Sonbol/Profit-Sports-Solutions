@@ -147,7 +147,7 @@ class EveryKindOfRequestTests(LifecycleTestCase):
         self.assertEqual(response.status_code, 302, self.form_errors(response))
         ticket = self.newest_request()
         self.assertEqual(ticket.about, CustomerTicket.About.NEW_BRANCH)
-        self.assertContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Add this branch')
+        self.assertContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
 
     def test_a_machine_request_without_a_serial_is_refused(self):
         response = self.send_request(machines=[{'which': 'new', 'model_name': 'Excite Run 700', 'problem': 'not_working',
@@ -457,34 +457,42 @@ class SimultaneousSavesTests(TransactionTestCase):
 class NewRequestAlertsTests(LifecycleTestCase):
     """Who hears of a new request, and that the bell always has room for it."""
 
-    def test_the_operations_manager_and_the_countrys_support_manager_are_told(self):
+    def test_the_technical_support_manager_and_the_countrys_support_manager_are_told(self):
         from people.models import Technician as T
         saudi = Country.objects.create(name='Saudi Arabia', iso_code='SA', timezone='Asia/Riyadh', currency_code='SAR')
-        operations = self._staff('operations_ksa', 'Omar Operations', T.Role.OPERATIONS_MANAGER)
-        operations.country = saudi
-        operations.save(update_fields=['country'])
+        technical = self._staff('technical_ksa', 'Tarek Technical', T.Role.SUPPORT_MANAGER)
+        technical.country = saudi
+        technical.save(update_fields=['country'])
         self._staff('desk_uae', 'UAE Desk', T.Role.COUNTRY_SUPPORT)
         desk_ksa = self._staff('desk_ksa', 'Saudi Desk', T.Role.COUNTRY_SUPPORT)
         desk_ksa.country = saudi
         desk_ksa.save(update_fields=['country'])
-        self._staff('support_manager', 'Sara Support', T.Role.SUPPORT_MANAGER)
+        self._staff('operations', 'Omar Operations', T.Role.OPERATIONS_MANAGER)
         mail.outbox.clear()
         self.send_request()
         ticket = self.newest_request()
         told = {address for message in mail.outbox for address in message.to}
-        self.assertIn('operations_ksa@pss.example', told)  # every country
-        self.assertIn('desk_uae@pss.example', told)        # the request's own country
+        self.assertIn('technical_ksa@pss.example', told)  # every country
+        self.assertIn('desk_uae@pss.example', told)       # the request's own country
         self.assertNotIn('desk_ksa@pss.example', told)
         self.assertNotIn('admin1@pss.example', told)
-        self.assertNotIn('support_manager@pss.example', told)
+        self.assertNotIn('operations@pss.example', told)   # opens them when he wants, isn't alerted
 
         def in_bell(username):
             items = self.client_for(username).get('/tasks/tickets/').context['unseen_notifications']
             return any(item.get('ticket') == ticket for item in items)
-        self.assertTrue(in_bell('operations_ksa'))
+        self.assertTrue(in_bell('technical_ksa'))
         self.assertTrue(in_bell('desk_uae'))
         self.assertFalse(in_bell('admin1'))
-        self.assertFalse(in_bell('support_manager'))
+        self.assertFalse(in_bell('operations'))
+
+    def test_with_nobody_of_those_the_admins_are_told(self):
+        mail.outbox.clear()
+        self.send_request()
+        ticket = self.newest_request()
+        self.assertIn('admin1@pss.example', {address for message in mail.outbox for address in message.to})
+        self.assertTrue(any(item.get('ticket') == ticket
+                            for item in self.staff.get('/tasks/tickets/').context['unseen_notifications']))
 
     def test_a_busy_day_of_overdue_tasks_never_hides_a_new_request_in_the_bell(self):
         from people.context_processors import notification_bell
@@ -497,7 +505,7 @@ class NewRequestAlertsTests(LifecycleTestCase):
         # Someone who gets both: admins, once chosen for new tickets on the Notifications page.
         from people.models import NotificationSettings
         switches = NotificationSettings.load()
-        switches.new_ticket_roles = ['operations_manager', 'country_support', 'admin']
+        switches.new_ticket_roles = ['support_manager', 'country_support', 'admin']
         switches.save(update_fields=['new_ticket_roles'])
         self.send_request()
         ticket = self.newest_request()
@@ -544,3 +552,263 @@ class BellRefreshTests(LifecycleTestCase):
                                    error='down', failed_at=timezone.now())
         self.staff.get('/bell/')
         self.assertContains(self.staff.get('/tasks/'), 'An email could not be sent')
+
+
+class PartShipmentTests(LifecycleTestCase):
+    """A machine's "Ship part": preparing (warehouse manager), ready to ship
+    (the technician given it), shipped — no visit steps; stock goes down."""
+
+    def setUp(self):
+        super().setUp()
+        self.warehouse = self._staff('warehouse1', 'Ali Warehouse', Technician.Role.WAREHOUSE_MANAGER)
+        self._staff('tech2', 'Other Tech', Technician.Role.TECHNICIAN)
+        self.send_request(need='parts', machines=[{'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1',
+                                                   'parts': 'Running belt', 'description': 'Belt is worn.'}])
+        self.ticket = self.newest_request()
+        machine = self.ticket.machines.get()
+        url = f'/tasks/new/?ticket={self.ticket.pk}&machines={machine.pk}&decision=ship_part'
+        page = self.staff.get(url)
+        self.staff.post(url, form_data(page.context['form'], site=self.site.pk, lead=self.tech.pk))
+        self.ticket.refresh_from_db()
+        self.task = Task.objects.get(pk=self.ticket.task.pk)
+        self.url = f'/tasks/{self.task.pk}/'
+
+    def ready(self, client, **extra):
+        return client.post(self.url, {'action': 'shipment_ready', 'part_code': ['BELT-01', ''], 'part_quantity': ['2', '1'],
+                                      'pak_reference_number': 'PAK-5', 'technician': self.tech.pk, **extra})
+
+    def test_from_the_decision_to_shipped(self):
+        from tasks.stock import part_stock
+        from tasks.shipments import is_part_shipment, stage
+        self.assertTrue(is_part_shipment(self.task))
+        self.assertEqual((stage(self.task), self.task.assignments.count()), ('preparing', 0))  # no lead yet
+        self.assertContains(self.staff.get(self.url), 'Prepare the parcel')
+
+        # The warehouse manager prepares it.
+        warehouse = self.client_for('warehouse1')
+        self.ready(warehouse)
+        self.task.refresh_from_db()
+        self.assertEqual(stage(self.task), 'ready')
+        self.assertEqual(self.task.pak_reference_number, 'PAK-5')
+        self.assertEqual(part_stock(self.country).get('BELT-01'), -2)  # out of stock: 2 picked
+
+        # Only the technician it was given to ships it, from their own page; no visit steps there.
+        self.assertEqual(self.client_for('tech2').get(f'/tasks/my/{self.task.pk}/').status_code, 404)
+        tech = self.client_for('tech1')
+        page = tech.get(f'/tasks/my/{self.task.pk}/')
+        self.assertContains(page, 'Hand it to the courier')
+        self.assertIsNone(page.context['next_action'])
+        mail.outbox.clear()
+        tech.post(f'/tasks/my/{self.task.pk}/', {'action': 'shipment_shipped', 'shipping_company': 'local_courier',
+                                                 'shipping_tracking_number': ''})
+        self.task.refresh_from_db()
+        self.assertEqual((self.task.status, stage(self.task)), (Task.Status.CLOSED, 'shipped'))
+        notice = next(m for m in mail.outbox if 'ali@fitnessfirst.example' in m.to)
+        self.assertIn('Local courier', notice.alternatives[0][0])
+        self.assertNotIn('Tracking number', notice.alternatives[0][0])
+        # The customer: settled, "Part shipped".
+        closed = self.portal.get('/customers/portal/requests/?show=closed').context['tickets']
+        self.assertIn(self.ticket.pk, [t.pk for t in closed])
+        self.assertContains(self.portal.get(f'/tasks/tickets/status/{self.ticket.token}/'), 'Part shipped')
+
+        # A part that needs fitting: a visit, linked.
+        response = warehouse.post(self.url, {'action': 'book_fitting'})
+        visit = Task.objects.get(previous_task=self.task)
+        self.assertRedirects(response, f'/tasks/{visit.pk}/', fetch_redirect_response=False)
+        self.assertFalse(is_part_shipment(visit))
+
+    def test_a_technician_cannot_prepare_and_a_cancelled_one_gives_its_parts_back(self):
+        from tasks.stock import part_stock
+        self.assertEqual(self.ready(self.client_for('tech1')).status_code, 403)
+        self.ready(self.client_for('warehouse1'))
+        self.assertEqual(part_stock(self.country).get('BELT-01'), -2)
+        Task.objects.filter(pk=self.task.pk).update(status=Task.Status.CANCELLED)
+        self.assertIsNone(part_stock(self.country).get('BELT-01'))
+
+    def test_nothing_ships_without_a_courier_or_before_it_is_ready(self):
+        tech = self.client_for('tech1')
+        self.assertEqual(self.staff.post(self.url, {'action': 'shipment_shipped', 'shipping_company': 'dhl'}).status_code, 403)
+        self.ready(self.client_for('warehouse1'))
+        tech.post(f'/tasks/my/{self.task.pk}/', {'action': 'shipment_shipped', 'shipping_company': ''})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+
+class PartShipmentFormTests(LifecycleTestCase):
+    def test_the_type_is_set_and_fixed_from_the_decision(self):
+        from tasks.shipments import part_shipment_type
+        self.send_request()
+        ticket = self.newest_request()
+        url = f'/tasks/new/?ticket={ticket.pk}&machines={ticket.machines.get().pk}&decision=ship_part'
+        field = self.staff.get(url).context['form'].fields['task_type']
+        self.assertTrue(field.disabled)
+        self.assertEqual(field.initial, part_shipment_type().pk)
+        # A visit keeps the choice open.
+        visit_url = url.replace('ship_part', 'visit')
+        self.assertFalse(self.staff.get(visit_url).context['form'].fields['task_type'].disabled)
+
+    def test_one_button_and_the_type_says_it_is_a_part_shipment(self):
+        from tasks.shipments import is_part_shipment, part_shipment_type
+        self.send_request()
+        ticket = self.newest_request()
+        machine = ticket.machines.get()
+        self.assertNotContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Create a part shipment task')
+        url = f'/tasks/new/?ticket={ticket.pk}&machines={machine.pk}&decision=visit'
+        page = self.staff.get(url)
+        self.staff.post(url, form_data(page.context['form'], site=self.site.pk, task_type=part_shipment_type().pk))
+        machine.refresh_from_db()
+        self.assertEqual(machine.decision, 'ship_part')
+        self.assertTrue(is_part_shipment(machine.task))
+
+
+class PartShipmentAppTests(PartShipmentTests):
+    """The same parcel, shipped from the mobile app (api.views)."""
+
+    def test_shipped_from_the_app(self):
+        import json
+        self.ready(self.client_for('warehouse1'))
+        token = self.client_class().post('/api/login/', json.dumps({'username': 'tech1', 'password': PASSWORD}),
+                                         content_type='application/json').json()['token']
+        auth = {'HTTP_AUTHORIZATION': f'Token {token}'}
+        detail = self.client_class().get(f'/api/my-tasks/{self.task.pk}/', **auth).json()
+        self.assertIsNone(detail['next_action'])
+        self.assertEqual(detail['shipment']['stage'], 'ready')
+        self.assertTrue(detail['shipment']['can_ship'])
+        self.assertEqual(detail['shipment']['parts'], [{'code': 'BELT-01', 'quantity': 2}])
+        # No courier: refused. A visit's step: refused.
+        app = self.client_class()
+        self.assertEqual(app.post(f'/api/my-tasks/{self.task.pk}/action/', {'action': 'shipped'}, **auth).status_code, 400)
+        app.post(f'/api/my-tasks/{self.task.pk}/action/', {'action': 'accept'}, **auth)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+        mail.outbox.clear()
+        response = app.post(f'/api/my-tasks/{self.task.pk}/action/',
+                            {'action': 'shipped', 'shipping_company': 'aramex', 'shipping_tracking_number': 'AX-77'}, **auth)
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual((self.task.status, self.task.shipping_tracking_number), (Task.Status.CLOSED, 'AX-77'))
+        self.assertTrue(any('AX-77' in m.body for m in mail.outbox))
+
+
+class PartShippedBellTests(PartShipmentTests):
+    def test_the_customer_bell_says_the_part_is_on_its_way(self):
+        self.ready(self.client_for('warehouse1'))
+        self.client_for('tech1').post(f'/tasks/my/{self.task.pk}/', {'action': 'shipment_shipped',
+                                                                    'shipping_company': 'dhl', 'shipping_tracking_number': ''})
+        bell = self.portal.get('/customers/portal/').context['portal_bell']
+        self.assertTrue(any(item['text'] == 'Your part is on its way' and item['new'] for item in bell))
+        self.portal.get(f'/tasks/tickets/status/{self.ticket.token}/')  # opened: no longer new
+        bell = self.portal.get('/customers/portal/').context['portal_bell']
+        self.assertFalse(any(item['text'] == 'Your part is on its way' and item['new'] for item in bell))
+
+
+class NewBranchRequestTests(LifecycleTestCase):
+    def test_one_click_creates_the_branch_from_the_request(self):
+        self._staff('desk1', 'UAE Desk', Technician.Role.COUNTRY_SUPPORT)
+        self.portal.post('/customers/portal/branches/new/', {
+            'name': 'JBR Branch', 'address': 'JBR Walk', 'contact_name': 'Omar', 'contact_phone': '0509999999',
+            'contact_email': 'omar@fitnessfirst.example', 'opening_date': '2026-12-01', 'message': 'Opens soon.',
+        })
+        ticket = self.newest_request()
+        desk = self.client_for('desk1')
+        self.assertContains(desk.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
+        desk.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'})
+        ticket.refresh_from_db()
+        site = ticket.site
+        self.assertEqual((site.customer, site.name, site.address, site.contact_name, site.contact_phone, site.contact_email),
+                         (self.customer, 'JBR Branch', 'JBR Walk', 'Omar', '0509999999', 'omar@fitnessfirst.example'))
+        # Clicked twice: still one branch.
+        desk.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'})
+        self.assertEqual(self.customer.sites.filter(name='JBR Branch').count(), 1)
+        # The task starts there; the customer has it in their list.
+        self.assertEqual(desk.get(f'/tasks/new/?ticket={ticket.pk}').context['form'].fields['site'].initial, site.pk)
+        self.assertContains(self.portal.get('/customers/portal/settings/'), 'JBR Branch')
+
+    def test_the_added_branch_is_linked_and_the_task_starts_there(self):
+        self.portal.post('/customers/portal/branches/new/', {
+            'name': 'JBR Branch', 'address': 'JBR Walk', 'contact_name': 'Omar', 'contact_phone': '0509999999',
+            'contact_email': '', 'opening_date': '', 'message': 'Opens next month.',
+        })
+        ticket = self.newest_request()
+        review = self.staff.get(f'/tasks/tickets/{ticket.pk}/')
+        self.assertContains(review, f'from_request={ticket.pk}')
+        page = self.staff.get(f'/customers/{self.customer.pk}/?tab=sites&from_request={ticket.pk}&branch_name=JBR+Branch')
+        self.assertContains(page, 'name="from_request"')
+        response = self.staff.post(f'/customers/{self.customer.pk}/', {
+            'from_request': ticket.pk, 'name': 'JBR Branch', 'address': 'JBR Walk',
+        })
+        self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.site.name, 'JBR Branch')
+        self.assertContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Branch added')
+        form = self.staff.get(f'/tasks/new/?ticket={ticket.pk}').context['form']
+        self.assertEqual(form.fields['site'].initial, ticket.site_id)
+
+
+class LockedBranchTests(LifecycleTestCase):
+    def test_the_customers_branch_shows_plainly_when_locked(self):
+        self._staff('desk1', 'UAE Desk', Technician.Role.COUNTRY_SUPPORT)
+        self.send_request(about='other', need='assistance')
+        ticket = self.newest_request()
+        page = self.client_for('desk1').get(f'/tasks/new/?ticket={ticket.pk}')
+        self.assertContains(page, 'class="locked-value"')
+        self.assertContains(page, 'Marina Branch')
+        self.assertNotContains(page, 'name="site"')
+        # An admin may still change it: the list stays.
+        self.assertContains(self.staff.get(f'/tasks/new/?ticket={ticket.pk}'), 'name="site"')
+
+
+class NewBranchNotYetAddedTests(LifecycleTestCase):
+    def test_no_task_until_the_branch_is_added(self):
+        self.portal.post('/customers/portal/branches/new/', {
+            'name': 'JBR Branch', 'address': 'JBR Walk', 'contact_name': '', 'contact_phone': '',
+            'contact_email': '', 'opening_date': '', 'message': '',
+        })
+        ticket = self.newest_request()
+        review = self.staff.get(f'/tasks/tickets/{ticket.pk}/')
+        self.assertNotContains(review, f'/tasks/new/?ticket={ticket.pk}"')
+        self.assertContains(review, 'Add the branch first')
+        self.assertRedirects(self.staff.get(f'/tasks/new/?ticket={ticket.pk}'), f'/tasks/tickets/{ticket.pk}/',
+                             fetch_redirect_response=False)
+
+
+class EverythingFromTheRequestTests(LifecycleTestCase):
+    """A task made from a request carries all of it: contact, message, files, conversation — no internal notes."""
+
+    def test_on_the_office_page_the_technicians_page_and_the_app(self):
+        import json
+        import tempfile
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
+            self.send_request(contact_name='Ali Hassan', contact_phone='0501112222', **{
+                'machines-0-files': [SimpleUploadedFile('belt.jpg', b'jpg', content_type='image/jpeg')],
+            })
+            ticket = self.newest_request()
+            url = f'/tasks/tickets/{ticket.pk}/'
+            self.staff.post(url, {'action': 'add_reply', 'message': 'Can you send the serial plate?'})
+            self.portal.post(f'/tasks/tickets/status/{ticket.token}/', {'message': 'Here it is, TG-1.'})
+            self.staff.post(url, {'action': 'add_internal_note', 'message': 'SECRET internal remark'})
+            machine = ticket.machines.get()
+            create_url = f'/tasks/new/?ticket={ticket.pk}&machines={machine.pk}&decision=visit'
+            page = self.staff.get(create_url)
+            self.staff.post(create_url, form_data(page.context['form'], site=self.site.pk))
+            ticket.refresh_from_db()
+            task = ticket.task
+            self.staff.post(f'/tasks/{task.pk}/assign/', {'action': 'set_lead', 'technician': self.tech.pk})
+
+            for page in (self.staff.get(f'/tasks/{task.pk}/'), self.client_for('tech1').get(f'/tasks/my/{task.pk}/')):
+                self.assertContains(page, "From the customer's request")
+                for text in ('Ali Hassan', '0501112222', 'Stops after 5 minutes', 'Can you send the serial plate?',
+                             'Here it is, TG-1.'):
+                    self.assertContains(page, text)
+                self.assertNotContains(page, 'SECRET internal remark')
+
+            token = self.client_class().post('/api/login/', json.dumps({'username': 'tech1', 'password': PASSWORD}),
+                                             content_type='application/json').json()['token']
+            detail = self.client_class().get(f'/api/my-tasks/{task.pk}/', HTTP_AUTHORIZATION=f'Token {token}').json()
+            got = detail['from_request']
+            self.assertEqual((got['ticket_number'], got['contact_phone']), (ticket.ticket_number, '0501112222'))
+            self.assertEqual([entry['message'] for entry in got['conversation']],
+                             ['Can you send the serial plate?', 'Here it is, TG-1.'])
+            self.assertNotIn('SECRET', json.dumps(got))

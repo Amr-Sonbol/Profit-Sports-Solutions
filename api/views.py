@@ -40,8 +40,10 @@ from tasks.forms import (
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
+from tasks.models import CustomerTicket, ShippingCompany, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
+from tasks.shipments import is_part_shipment
 from tasks.views import (
+    request_for_app, ship_and_tell_customer, shipment_for_app,
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
@@ -1096,6 +1098,8 @@ class MyTaskDetailView(APIView):
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
             'requires_signature': _requires_signature(task),
             'undoable_tap': undoable_tap(task, request.user) if is_lead else None,
+            'shipment': shipment_for_app(task, request.user.technician),
+            'from_request': request_for_app(request, task),
         }
         return Response(TaskDetailSerializer(task, context=context).data)
 
@@ -1118,6 +1122,18 @@ class MyTaskActionView(APIView):
 
         action = request.data.get('action')
         next_action = _next_technician_action(task)
+
+        if action == 'shipped':
+            # A part shipment handed to the courier (tasks.shipments): the courier, the tracking number if any.
+            from tasks import shipments
+            if not is_part_shipment(task) or shipments.stage(task) != shipments.READY:
+                return Response({'detail': 'This is not a parcel waiting to ship.'}, status=status.HTTP_400_BAD_REQUEST)
+            company = request.data.get('shipping_company', '')
+            if company not in ShippingCompany.values:
+                return Response({'shipping_company': [str(_('Please choose the shipping company.'))]},
+                                status=status.HTTP_400_BAD_REQUEST)
+            ship_and_tell_customer(task, request.user, company, str(request.data.get('shipping_tracking_number') or ''))
+            return Response({'status': task.status})
 
         if action == 'undo':
             if not undo_last_tap(task, request.user):
