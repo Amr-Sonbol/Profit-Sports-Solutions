@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 00:47+0000\n"
+"POT-Creation-Date: 2026-11-08 01:01+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -883,9 +883,6 @@ msgstr "إرفاق ملفات"
 msgid "Attachments"
 msgstr "المرفقات"
 
-msgid "Attachments from the customer's ticket"
-msgstr "مرفقات من طلب العميل"
-
 msgid "Audit log"
 msgstr "سجل التدقيق"
 
@@ -1054,6 +1051,9 @@ msgstr "تمت إضافة الفرع وربطه بالطلب %(number)s."
 #, python-format
 msgid "Branch added: <strong>%(name)s</strong>. A task created from this request starts there."
 msgstr "تمت إضافة الفرع: <strong>%(name)s</strong>. المهمة التي تُنشأ من هذا الطلب تكون فيه."
+
+msgid "Branch address"
+msgstr "عنوان الفرع"
 
 msgid "Branch name"
 msgstr "اسم الفرع"
@@ -1365,6 +1365,9 @@ msgstr "عقد"
 
 msgid "Conversation"
 msgstr "المحادثة"
+
+msgid "Conversation with the customer"
+msgstr "المحادثة مع العميل"
 
 msgid "Convert to a field task"
 msgstr "التحويل إلى مهمة ميدانية"
@@ -2429,6 +2432,9 @@ msgstr "من الطلب %(number)s: الحفظ يربط الفرع الجديد 
 
 msgid "From the customer's details in this request: name, address and contact. You can set its warranty start afterwards."
 msgstr "من بيانات العميل في هذا الطلب: الاسم والعنوان وجهة الاتصال. يمكنك تحديد بداية الضمان بعد ذلك."
+
+msgid "From the customer's request"
+msgstr "من طلب العميل"
 
 msgid "From when you tapped Start until now, without pauses. It stops when you send the report; waiting for review doesn't count."
 msgstr "من ضغطك على «بدء العمل» حتى الآن، دون فترات التوقف. يتوقف العدّ عند إرسال التقرير، ولا يُحتسب وقت انتظار المراجعة."
@@ -4791,6 +4797,9 @@ msgstr "إرسال رسالة الترحيب"
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
 
+msgid "Sent"
+msgstr "أُرسل"
+
 msgid "Sent by hand, with a button"
 msgstr "تُرسل يدويًا بزر"
 
@@ -5524,6 +5533,12 @@ msgstr "السنة"
 
 msgid "Their login: they get a link to choose their own password. Leave empty only if they have none yet."
 msgstr "حساب دخوله: سيصله رابط لاختيار كلمة مروره. اتركه فارغًا فقط إن لم يكن لديه بريد بعد."
+
+msgid "Their message"
+msgstr "رسالتهم"
+
+msgid "Their photos and files"
+msgstr "صورهم وملفاتهم"
 
 msgid "There are no active supervisors or technicians in this country."
 msgstr "لا يوجد مشرفون أو فنيون نشطون في هذه الدولة."
@@ -7936,6 +7951,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "Attachment %(number)s"
 #~ msgstr "مرفق %(number)s"
+
+#~ msgid "Attachments from the customer's ticket"
+#~ msgstr "مرفقات من طلب العميل"
 
 #~ msgid "Back to history"
 #~ msgstr "العودة إلى السجل"

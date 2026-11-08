@@ -5936,6 +5936,7 @@ def request_for_app(request, task):
         return [{'name': file.name.rsplit('/', 1)[-1], 'url': signed_media_url(request, file.url)} for file in files]
     return {
         'ticket_number': ticket.ticket_number, 'contact_name': ticket.contact_name,
+        'site_name': task.site.name, 'site_address': task.site.address or ticket.site_address,
         'contact_phone': ticket.contact_phone, 'contact_email': ticket.contact_email,
         'subject': ticket.subject, 'message': ticket.description, 'submitted_at': ticket.submitted_at,
         'files': links(found['files']),

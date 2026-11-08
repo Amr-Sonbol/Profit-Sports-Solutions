@@ -7,6 +7,10 @@
     </div>
     <dl class="detail-grid">
         <div>
+            <dt>{% translate "Branch address" %}</dt>
+            <dd>{% with address=task.site.address|default:ticket.site_address %}{% if address %}<a href="https://www.google.com/maps/search/?api=1&amp;query={% if task.site.latitude %}{{ task.site.latitude }},{{ task.site.longitude }}{% else %}{{ task.site.name|urlencode }}%2C%20{{ address|urlencode }}{% endif %}" target="_blank" rel="noopener" dir="auto">{{ task.site.name }} — {{ address }}</a>{% else %}{{ task.site.name|default:"—" }}{% endif %}{% endwith %}</dd>
+        </div>
+        <div>
             <dt>{% translate "Contact" %}</dt>
             <dd>{{ ticket.contact_name|default:"—" }}</dd>
         </div>

@@ -800,7 +800,7 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             office, technician = self.staff.get(f'/tasks/{task.pk}/'), self.client_for('tech1').get(f'/tasks/my/{task.pk}/')
             for page in (office, technician):
                 self.assertContains(page, "From the customer's request")
-                for text in ('Ali Hassan', '0501112222', 'Stops after 5 minutes', 'belt.jpg'):
+                for text in ('Ali Hassan', '0501112222', 'Stops after 5 minutes', 'belt.jpg', 'Dubai Marina'):
                     self.assertContains(page, text)
                 self.assertNotContains(page, 'SECRET internal remark')
             # The conversation with support: the office's, not the technician's.

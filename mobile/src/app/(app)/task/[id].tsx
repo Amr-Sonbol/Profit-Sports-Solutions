@@ -209,6 +209,11 @@ export default function TaskDetailScreen() {
             // Everything from the customer's request: contact, their message, their photos, the conversation.
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">From the customer's request · {task.from_request.ticket_number}</ThemedText>
+              {task.from_request.site_address ? (
+                <TouchableOpacity onPress={() => task.directions_url && Linking.openURL(task.directions_url)}>
+                  <ThemedText themeColor="primary">{task.from_request.site_name} — {task.from_request.site_address}</ThemedText>
+                </TouchableOpacity>
+              ) : null}
               {task.from_request.contact_name ? <Row label="Contact" value={task.from_request.contact_name} /> : null}
               {task.from_request.contact_phone ? (
                 <TouchableOpacity onPress={() => Linking.openURL(`tel:${task.from_request!.contact_phone}`)}>

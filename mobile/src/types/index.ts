@@ -631,6 +631,8 @@ export interface RequestFile {
 
 export interface FromRequest {
   ticket_number: string;
+  site_name: string;
+  site_address: string;
   contact_name: string;
   contact_phone: string;
   contact_email: string;
