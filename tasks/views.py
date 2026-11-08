@@ -57,6 +57,7 @@ from people.permissions import (
 from spots.email_failures import current_user_id, record_failed_email
 from tasks.shipments import is_part_shipment, part_shipment_type
 from spots.hosts import portal_url, staff_url
+from tasks import answers
 from spots.media import signed_media_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
@@ -2436,6 +2437,7 @@ def _next_step_context(technician, ticket, can_manage):
     machines = list(ticket.machines.filter(decision=''))
     return {
         'next_technicians': form.fields['lead'].queryset if 'lead' in form.fields else None,
+        'next_reasons': answers.form_groups(ticket.customer.language if ticket.customer_id else 'en'),
         'next_plan': request_plan(ticket, machines),
         'next_warranty': bool(ticket.site and ticket.site.under_warranty),
     }
@@ -3249,7 +3251,6 @@ def ticket_review(request, pk):
         ticket.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
 
     dismiss_form = DismissTicketForm()
-    close_form = CloseTicketForm()
     assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
     logistics_form = TicketLogisticsForm(instance=ticket)
     edit_form = TicketEditForm(instance=ticket)
@@ -3303,20 +3304,19 @@ def ticket_review(request, pk):
             messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
             return redirect('tasks:task_detail', pk=task.pk)
         if choice == 'answer':
-            reason = request.POST.get('reason')
+            reason = answers.reason_from(request.POST.get('reason'))
             answer = request.POST.get('answer', '').strip()
+            if reason is None:
+                messages.error(request, _('Please choose why.'))
+                return redirect('tasks:ticket_review', pk=ticket.pk)
             if not answer:
                 messages.error(request, _('Please write your answer to the customer.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
-            if reason == 'duplicate':
-                # Nothing to decide per machine: the whole request is answered and closed.
-                close_request_with_answer(request, ticket, answer)
-                messages.success(request, _('Answered and closed. The customer has been told.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-            decision = (TicketMachine.Decision.NOT_COVERED if reason == 'not_covered'
-                        else TicketMachine.Decision.ADVICE)
+            # Each selected machine gets the reason's decision and the reason itself; once none is
+            # waiting, the request closes with the answer (customer told: page, bell, email).
             TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
-                decision=decision, decision_note=answer[:255], decided_by=request.user, decided_at=timezone.now(),
+                decision=answers.decision_for(reason), decision_reason=reason, decision_note=answer[:255],
+                decided_by=request.user, decided_at=timezone.now(),
             )
             if ticket.machines.filter(decision='').exists():
                 messages.success(request, _('Decision saved.'))  # other machines still waiting
@@ -3491,17 +3491,6 @@ def ticket_review(request, pk):
                 messages.success(request, _('Ticket dismissed.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
-        elif action == 'close' and ticket.status != CustomerTicket.Status.CLOSED:
-            # Any status but already-closed — support_manager/admin can
-            # close a ticket at any point in its life, not just while it's
-            # still new; a closed one goes through 'reopen' instead.
-            close_form = CloseTicketForm(request.POST)
-            if close_form.is_valid():
-                # The reason is our answer: on their request page, in their bell and by email.
-                close_request_with_answer(request, ticket, close_form.cleaned_data['close_reason'])
-                messages.success(request, _('Ticket closed.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
         elif action == 'reopen' and technician.role == Technician.Role.ADMIN:
             # Admin-only — support_manager can close, but reopening a
             # decision someone already signed off on is one step further,
@@ -3535,7 +3524,7 @@ def ticket_review(request, pk):
             Task.objects.filter(ticket_machines__ticket=ticket).distinct().order_by('pk')
             or ([ticket.task] if ticket.task_id else [])
         ),
-        'ticket': ticket, 'dismiss_form': dismiss_form, 'close_form': close_form, 'assign_form': assign_form,
+        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
         'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
         # "What happens next?": who can be sent, and what the task will be (task_from_request).
         **_next_step_context(technician, ticket, can_manage),

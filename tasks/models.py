@@ -797,11 +797,28 @@ class TicketMachine(models.Model):
         # Both of these are handled through a task (task below).
         VISIT = 'visit', _('Visit')
         SHIP_PART = 'ship_part', _('Ship part')
-        # These two resolve the machine without a task.
+        # These resolve the machine without a task ("Answer without a visit", its reason below).
         ADVICE = 'advice', _('Advice given')
         NOT_COVERED = 'not_covered', _('Not covered')
+        NO_ACTION = 'no_action', _('No action needed')
 
     TASK_DECISIONS = (Decision.VISIT, Decision.SHIP_PART)
+
+    class Reason(models.TextChoices):
+        """Why a machine was answered without a visit — each leads to one decision (REASON_DECISIONS)."""
+        # Resolved remotely
+        REMOTE_FIX = 'remote_fix', _('Fixed remotely (phone or video call)')
+        INSTRUCTIONS = 'instructions', _('Usage or maintenance instructions provided')
+        CUSTOMER_FIX = 'customer_fix', _('Resolved by the customer on site (power, cable, settings)')
+        # Not covered
+        OUT_OF_COVERAGE = 'out_of_coverage', _('Outside warranty or service contract')
+        MISUSE = 'misuse', _('Damage from misuse or external causes')
+        NOT_OUR_EQUIPMENT = 'not_our_equipment', _('Equipment not supplied or serviced by us')
+        NO_PARTS = 'no_parts', _('Parts no longer available (end of life)')
+        # No action needed
+        DUPLICATE = 'duplicate', _('Duplicate of another request')
+        ALREADY_RESOLVED = 'already_resolved', _('Already resolved before our review')
+        WITHDRAWN = 'withdrawn', _('Withdrawn by the customer')
 
     ticket = models.ForeignKey(
         CustomerTicket, on_delete=models.CASCADE, related_name='machines', verbose_name=_('ticket'),
@@ -840,6 +857,8 @@ class TicketMachine(models.Model):
         verbose_name=_('decided by'),
     )
     decided_at = models.DateTimeField(_('decided at'), null=True, blank=True)
+    # Why, when answered without a visit (blank for a visit or a part, and for earlier answers).
+    decision_reason = models.CharField(_('reason'), max_length=30, choices=Reason.choices, blank=True)
 
     class Meta:
         verbose_name = _('ticket machine')

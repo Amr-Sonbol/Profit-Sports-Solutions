@@ -4894,29 +4894,106 @@ details.review-more:not(.section) {
 
 /* A new request's "What happens next?" (tasks/_next_step.html): three choices side by side, stacked on a phone. */
 .next-choices {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: 1rem;
     margin-block-start: 1rem;
 }
 
-.next-choice {
+/* The three ways forward as one segmented choice; only the chosen one's form
+   shows below, full width — no lopsided cards, no empty space beside them. */
+.next-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+@media (min-width: 640px) {
+    .next-tabs {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.next-tab {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-    padding: 1rem;
+    gap: 0.15rem;
+    padding: 0.75rem 0.9rem;
     border: 1px solid var(--color-border);
-    border-radius: 6px;
+    border-radius: 8px;
+    background: var(--color-surface);
+    cursor: pointer;
+}
+
+.next-tab input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.next-tab__title {
+    font-weight: 700;
+}
+
+.next-tab__hint {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.next-tab:hover {
+    background: var(--color-hover);
+}
+
+.next-tab:has(input:checked) {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
     background: var(--color-surface);
 }
 
-.next-choice h3 {
+.next-tab:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.next-choice {
+    display: none;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    margin-block-start: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+}
+
+.next-choices:has(input[value="visit"]:checked) .next-choice--visit,
+.next-choices:has(input[value="ship"]:checked) .next-choice--ship,
+.next-choices:has(input[value="answer"]:checked) .next-choice--answer {
+    display: flex;
+}
+
+.next-choice > .field__help {
     margin: 0;
 }
 
+/* Side by side when there's room: technician and time; reason and answer. */
+.next-choice__fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+    .next-choice__fields {
+        grid-template-columns: 1fr 1fr;
+        align-items: start;
+    }
+}
+
 .next-choice .form-actions {
-    margin-block-start: auto;
+    justify-content: flex-end;
 }
 
 .review-next__more {

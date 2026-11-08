@@ -2372,52 +2372,14 @@ class TicketReviewTests(TaskTestCase):
         self.assertEqual(self.ticket.dismissal_reason, 'Duplicate report.')
         self.assertEqual(self.ticket.reviewed_by, self.support_user)
 
-    def test_close_works_from_new(self):
+    def test_a_request_is_closed_only_by_answering_it(self):
+        # One way to close a request without a visit: "Answer without a visit" (its reason and
+        # each machine's decision recorded). The old "Close request" is gone, and posting it does nothing.
         self.client.login(username='support1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Advice given by phone.'})
-        self.assertEqual(response.status_code, 302)
-
+        self.assertNotContains(self.client.get(self.url), 'name="action" value="close"')
+        self.client.post(self.url, {'action': 'close', 'close_reason': 'Advice given by phone.'})
         self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
-        self.assertEqual(self.ticket.close_reason, 'Advice given by phone.')
-        self.assertEqual(self.ticket.reviewed_by, self.support_user)
-
-    def test_close_works_from_dismissed_too(self):
-        # Close reaches a ticket from any status but already-closed — a
-        # dismissed one can still be closed instead, no reopen needed first.
-        self.ticket.status = CustomerTicket.Status.DISMISSED
-        self.ticket.dismissal_reason = 'Wrong call.'
-        self.ticket.save(update_fields=['status', 'dismissal_reason'])
-
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Actually handled by phone.'})
-        self.assertEqual(response.status_code, 302)
-
-        self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
-
-    def test_close_works_from_converted_too(self):
-        self.ticket.status = CustomerTicket.Status.CONVERTED
-        self.ticket.save(update_fields=['status'])
-
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Closing it out too.'})
-        self.assertEqual(response.status_code, 302)
-
-        self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
-
-    def test_cannot_close_an_already_closed_ticket(self):
-        self.ticket.status = CustomerTicket.Status.CLOSED
-        self.ticket.close_reason = 'Already handled.'
-        self.ticket.save(update_fields=['status', 'close_reason'])
-
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'close', 'close_reason': 'Trying again.'})
-        self.assertEqual(response.status_code, 200)
-
-        self.ticket.refresh_from_db()
-        self.assertEqual(self.ticket.close_reason, 'Already handled.')
+        self.assertNotEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
 
     def test_admin_can_reopen_a_closed_ticket(self):
         admin_user = User.objects.create_user('admin1', password='pass12345')

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 22:35+0000\n"
+"POT-Creation-Date: 2026-11-08 23:03+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -576,6 +576,9 @@ msgstr ""
 "عرض المهمة:\n"
 "%(link)s\n"
 
+msgid "A visit, created in one step"
+msgstr "زيارة تُنشأ بخطوة واحدة"
+
 #, python-format
 msgid "A welcome email with a secure activation link has been sent to %(email)s."
 msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آمناً إلى %(email)s."
@@ -759,9 +762,6 @@ msgstr "المهارات المتقدمة المعتمدة"
 msgid "Advice given"
 msgstr "تم تقديم المشورة"
 
-msgid "Advice given (solved by phone or instructions)"
-msgstr "تم تقديم النصيحة (حُلّت بالهاتف أو بالتعليمات)"
-
 msgid "Advice or assistance"
 msgstr "نصيحة أو مساعدة"
 
@@ -828,6 +828,9 @@ msgstr "كل الأجهزة المنتظرة محدّدة: تُعالَج معً
 
 msgid "Alone, no callbacks"
 msgstr "بمفرده، دون إعادة زيارات"
+
+msgid "Already resolved before our review"
+msgstr "حُلّت قبل مراجعتنا"
 
 msgid "Alternatively, upload a photo of a signed paper copy:"
 msgstr "أو ارفع صورة لنسخة ورقية موقَّعة:"
@@ -916,6 +919,9 @@ msgstr "كما هو موضح على الجهاز."
 
 msgid "As soon as they send a ticket from the portal."
 msgstr "فور إرسال العميل بلاغًا من البوابة."
+
+msgid "As you asked, we have closed this request. If you need us again, please send a new request at any time."
+msgstr "بناءً على طلبك، أغلقنا هذا الطلب. إذا احتجت إلينا مجدداً، يمكنك إرسال طلب جديد في أي وقت."
 
 msgid "Ask for this schedule change? A manager decides."
 msgstr "طلب هذا التغيير في الموعد؟ يقرّر المدير."
@@ -1262,6 +1268,9 @@ msgstr "اختر لونًا."
 msgid "Choose a new password"
 msgstr "اختر كلمة مرور جديدة"
 
+msgid "Choose a reason"
+msgstr "اختر السبب"
+
 msgid "Choose a reason for replacing the current lead."
 msgstr "اختر سببًا لاستبدال الفني الرئيسي الحالي."
 
@@ -1282,6 +1291,9 @@ msgstr "اختر لونك"
 
 msgid "Choose…"
 msgstr "اختر…"
+
+msgid "Choosing one fills in a suggested answer: edit it as needed."
+msgstr "يؤدي اختيار السبب إلى كتابة رد مقترح: عدّله حسب الحاجة."
 
 #, python-format
 msgid "Clash: %(number)s at %(start)s"
@@ -1304,9 +1316,6 @@ msgstr "إغلاق المهمة الداخلية"
 
 msgid "Close or cancel this task, as chosen? Everyone on it is told."
 msgstr "إغلاق المهمة أو إلغاؤها حسب اختيارك؟ يُبلَّغ كل من عليها."
-
-msgid "Close request"
-msgstr "إغلاق الطلب"
 
 msgid "Close task"
 msgstr "إغلاق المهمة"
@@ -1687,6 +1696,9 @@ msgstr "يسجّل العملاء الدخول من بوابة العملاء."
 
 msgid "DHL"
 msgstr "DHL"
+
+msgid "Damage from misuse or external causes"
+msgstr "ضرر ناتج عن سوء الاستخدام أو أسباب خارجية"
 
 msgid "Damaged"
 msgstr "تالف"
@@ -2190,8 +2202,8 @@ msgstr "تنزيل التقرير (PDF)"
 msgid "Download your reports"
 msgstr "حمّل تقاريرك"
 
-msgid "Duplicate or not needed"
-msgstr "مكرّر أو غير مطلوب"
+msgid "Duplicate of another request"
+msgstr "مكرر لطلب آخر"
 
 #, python-format
 msgid "Each change is against %(month)s."
@@ -2302,6 +2314,9 @@ msgstr "أدخله المكتب"
 
 msgid "Equipment"
 msgstr "المعدات"
+
+msgid "Equipment not supplied or serviced by us"
+msgstr "معدات لم نوردها ولا نقدم لها الصيانة"
 
 msgid "Equipment skills confirmed"
 msgstr "مهارات المعدات المعتمدة"
@@ -2462,6 +2477,9 @@ msgstr "تم إنشاء زيارة التركيب %(number)s: اختر الفن�
 
 msgid "Fix a problem"
 msgstr "إصلاح مشكلة"
+
+msgid "Fixed remotely (phone or video call)"
+msgstr "تم الإصلاح عن بُعد (مكالمة هاتفية أو فيديو)"
 
 msgid "Flag negligence"
 msgstr "الإبلاغ عن إهمال"
@@ -3897,6 +3915,9 @@ msgstr "أعمال أخرى، كل منها في سطر"
 msgid "Others call on them when they are stuck. Can train others."
 msgstr "يلجأ إليه الآخرون عندما تواجههم صعوبة. قادر على تدريب الآخرين."
 
+msgid "Our answer closes it"
+msgstr "ردّنا يغلق الطلب"
+
 #, python-format
 msgid "Our management team reviewed your request on %(when)s. We will follow up with you here."
 msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(when)s، وسنتابع معكم من هنا."
@@ -3909,6 +3930,9 @@ msgstr "مستودعاتنا"
 
 msgid "Outcome"
 msgstr "النتيجة"
+
+msgid "Outside warranty or service contract"
+msgstr "خارج الضمان أو عقد الصيانة"
 
 msgid "Overall Condition"
 msgstr "الحالة العامة"
@@ -3979,6 +4003,9 @@ msgstr "قطع الغيار"
 
 msgid "Parts Used"
 msgstr "القطع المستخدمة"
+
+msgid "Parts no longer available (end of life)"
+msgstr "قطع الغيار لم تعد متوفرة (انتهاء عمر الطراز)"
 
 msgid "Parts on the way"
 msgstr "القطع في الطريق"
@@ -4140,6 +4167,9 @@ msgstr "يرجى اختيار شركة الشحن."
 
 msgid "Please choose the technician who will ship it."
 msgstr "يرجى اختيار الفني الذي سيشحنه."
+
+msgid "Please choose why."
+msgstr "يرجى اختيار السبب."
 
 msgid "Please close the task (submit its report) before requesting feedback."
 msgstr "يرجى إغلاق المهمة (تقديم تقريرها) قبل طلب التقييم."
@@ -4663,8 +4693,14 @@ msgstr "تفاصيل الحل، مثل طلب المخزون أو رد المو�
 msgid "Resolved"
 msgstr "تم الحل"
 
+msgid "Resolved by the customer on site (power, cable, settings)"
+msgstr "حلّها العميل في الموقع (الكهرباء، الكابل، الإعدادات)"
+
 msgid "Resolved on the first visit"
 msgstr "حُلّت من الزيارة الأولى"
+
+msgid "Resolved remotely"
+msgstr "حُلّت عن بُعد"
 
 #, python-format
 msgid "Resolved: %(answer)s"
@@ -4999,6 +5035,9 @@ msgstr "إرسال رسالة الترحيب إلى المحددين"
 
 msgid "Sent"
 msgstr "أُرسل"
+
+msgid "Sent by courier, no visit"
+msgstr "تُرسل عبر شركة الشحن، دون زيارة"
 
 msgid "Sent by hand, with a button"
 msgstr "تُرسل يدويًا بزر"
@@ -5486,8 +5525,36 @@ msgstr "الشروط"
 msgid "Terms expired %(date)s"
 msgstr "انتهت الشروط في %(date)s"
 
+msgid "Thank you for contacting us. As discussed with your team, the issue was resolved remotely and the machine is working normally again. If the problem returns, please send us a new request."
+msgstr "شكراً لتواصلكم معنا. كما تم الاتفاق مع فريقكم، حُلّت المشكلة عن بُعد ويعمل الجهاز الآن بشكل طبيعي. إذا تكررت المشكلة، يرجى إرسال طلب جديد."
+
 msgid "Thank you for contacting us. Our team is reviewing your request and will reply here."
 msgstr "شكرًا لتواصلك معنا. يقوم فريقنا بمراجعة طلبك وسيرد عليك هنا."
+
+msgid "Thank you for contacting us. The damage reported comes from use or causes outside normal operation, which the warranty does not cover. We would be glad to send you a quotation for the repair."
+msgstr "شكراً لتواصلكم معنا. الضرر المُبلَّغ عنه ناتج عن استخدام أو أسباب خارج التشغيل الطبيعي، ولا يشمله الضمان. يسعدنا إرسال عرض سعر لإصلاحه."
+
+msgid "Thank you for contacting us. The issue was resolved on site by your team (for example the power supply, a cable or a setting), so no visit is needed. If it happens again, please send us a new request."
+msgstr "شكراً لتواصلكم معنا. حلّ فريقكم المشكلة في الموقع (مثل مصدر الكهرباء أو أحد الكابلات أو أحد الإعدادات)، لذا لا حاجة إلى زيارة. إذا تكررت، يرجى إرسال طلب جديد."
+
+#, python-format
+msgid "Thank you for contacting us. This equipment was not supplied or serviced by %(company)s, so we are unable to take on this repair. We recommend contacting its supplier."
+msgstr "شكراً لتواصلكم معنا. هذه المعدات لم تورّدها %(company)s ولا تقدم لها الصيانة، لذا لا يمكننا القيام بهذا الإصلاح. ننصح بالتواصل مع المورّد."
+
+msgid "Thank you for contacting us. This machine is outside its warranty or service contract, so this repair is not covered. We would be glad to send you a quotation for the work."
+msgstr "شكراً لتواصلكم معنا. هذا الجهاز خارج الضمان أو عقد الصيانة، لذا لا يشمل ذلك هذا الإصلاح. يسعدنا إرسال عرض سعر للعمل."
+
+msgid "Thank you for contacting us. This request duplicates one we are already handling, so we have closed it to keep everything in one place. You can follow the progress on the original request."
+msgstr "شكراً لتواصلكم معنا. هذا الطلب مكرر لطلب نعمل عليه بالفعل، لذا أغلقناه ليبقى كل شيء في مكان واحد. يمكنكم متابعة التقدم في الطلب الأصلي."
+
+msgid "Thank you for contacting us. Unfortunately the parts for this model are no longer manufactured, so a repair is not possible. Our team would be happy to advise you on a replacement."
+msgstr "شكراً لتواصلكم معنا. للأسف لم تعد قطع غيار هذا الطراز تُصنَّع، لذا لا يمكن إصلاحه. يسعد فريقنا تقديم المشورة بشأن بديل مناسب."
+
+msgid "Thank you for contacting us. We have shared the usage and maintenance instructions for this machine with your team. Following them should prevent the issue; if it continues, please send us a new request."
+msgstr "شكراً لتواصلكم معنا. شاركنا تعليمات الاستخدام والصيانة لهذا الجهاز مع فريقكم. اتباعها يمنع تكرار المشكلة؛ وإذا استمرت، يرجى إرسال طلب جديد."
+
+msgid "Thank you for contacting us. We understand the issue has already been resolved, so we have closed this request. If you need anything further, please send us a new request."
+msgstr "شكراً لتواصلكم معنا. علمنا أن المشكلة قد حُلّت بالفعل، لذا أغلقنا هذا الطلب. إذا احتجتم إلى أي شيء آخر، يرجى إرسال طلب جديد."
 
 msgid "Thank you for rating this visit."
 msgstr "شكرًا لتقييمك هذه الزيارة."
@@ -6216,6 +6283,9 @@ msgstr "رفع"
 msgid "Upload a list"
 msgstr "رفع قائمة"
 
+msgid "Usage or maintenance instructions provided"
+msgstr "تم تقديم تعليمات الاستخدام أو الصيانة"
+
 msgid "Use only if the customer subsequently complained about this specific visit and the fault lies with the technician; not every complaint constitutes negligence. This is recorded in their reliability record and is not visible to the technician."
 msgstr "يُستخدم فقط إذا تقدّم العميل لاحقاً بشكوى بخصوص هذه الزيارة تحديداً وكان الخطأ من جانب الفني؛ فليست كل شكوى إهمالاً. يُسجَّل ذلك في سجل موثوقيته ولا يظهر للفني."
 
@@ -6605,6 +6675,9 @@ msgstr "سبب الإغلاق أو الإلغاء، كأن يكون العميل
 
 msgid "Why the customer could not sign"
 msgstr "سبب عدم توقيع العميل"
+
+msgid "Withdrawn by the customer"
+msgstr "سحبه العميل"
 
 msgid "Work Performed"
 msgstr "الأعمال المنفّذة"
@@ -8208,6 +8281,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Add this branch"
 #~ msgstr "إضافة هذا الفرع"
 
+#~ msgid "Advice given (solved by phone or instructions)"
+#~ msgstr "تم تقديم النصيحة (حُلّت بالهاتف أو بالتعليمات)"
+
 #~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 #~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
 
@@ -8259,6 +8335,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
 #~ msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
+
+#~ msgid "Close request"
+#~ msgstr "إغلاق الطلب"
 
 #~ msgid "Close ticket"
 #~ msgstr "إغلاق الطلب"
@@ -8365,9 +8444,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Pink"
 #~ msgstr "وردي"
-
-#~ msgid "Please choose one."
-#~ msgstr "يُرجى اختيار أحدها."
 
 #~ msgid "Preview"
 #~ msgstr "معاينة"

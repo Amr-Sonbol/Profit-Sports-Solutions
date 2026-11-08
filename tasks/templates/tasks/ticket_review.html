@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{{ ticket.ticket_number }} — {{ ticket.company_name }}{% endblock %}
 
@@ -234,22 +234,7 @@
             <button type="submit" class="button button--secondary">{% translate "Assign" %}</button>
             {% for error in assign_form.assigned_to.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
         </form>
-        {% if ticket.status != 'closed' %}
-        <details class="review-more"{% if close_form.errors %} open{% endif %}>
-            <summary>{% translate "Close request" %}</summary>
-            <form method="post" class="review-more__body" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="close">
-                <div class="field {% if close_form.close_reason.errors %}field--error{% endif %}">
-                    <label for="{{ close_form.close_reason.id_for_label }}">{{ close_form.close_reason.label }}</label>
-                    {{ close_form.close_reason }}
-                    <p class="field__help">{{ close_form.close_reason.help_text }}</p>
-                    {% for error in close_form.close_reason.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                </div>
-                <div class="form-actions"><button type="submit" class="button">{% translate "Close request" %}</button></div>
-            </form>
-        </details>
-        {% elif is_admin %}
+        {% if ticket.status == 'closed' and is_admin %}
         <form method="post" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="reopen">
@@ -376,3 +361,5 @@
 </aside>
 </div>
 {% endblock %}
+
+{% block scripts %}<script src="{% static 'js/answer-suggest.js' %}?v={{ css_version }}" defer></script>{% endblock %}

@@ -23,6 +23,7 @@
                         <td>
                             {% if machine.decision %}
                             {{ machine.get_decision_display }}{% if machine.task %} · <a class="task-number" href="{% url 'tasks:task_detail' machine.task.pk %}">{{ machine.task.task_number }}</a>{% endif %}
+                            {% if machine.decision_reason %}<span class="compact-table__sub">{{ machine.get_decision_reason_display }}</span>{% endif %}
                             {% if machine.decision_note %}<span class="compact-table__sub">{{ machine.decision_note }}</span>{% endif %}
                             {% else %}<span class="muted">{% translate "Waiting" %}</span>{% endif %}
                         </td>
@@ -34,25 +35,46 @@
         <p class="field__help">{% translate "All waiting machines are ticked: they go together. Untick any to handle them separately afterwards." %}</p>
         {% endif %}
 
+        {# Choose one of three; only its form shows, full width (CSS: .next-choices:has(...)). #}
         <div class="next-choices">
+            <fieldset class="next-tabs">
+                <legend class="visually-hidden">{% translate "What happens next?" %}</legend>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="visit" checked>
+                    <span class="next-tab__title">{% translate "Send a technician" %}</span>
+                    <span class="next-tab__hint">{% translate "A visit, created in one step" %}</span>
+                </label>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="ship">
+                    <span class="next-tab__title">{% translate "Ship a part" %}</span>
+                    <span class="next-tab__hint">{% translate "Sent by courier, no visit" %}</span>
+                </label>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="answer">
+                    <span class="next-tab__title">{% translate "Answer without a visit" %}</span>
+                    <span class="next-tab__hint">{% translate "Our answer closes it" %}</span>
+                </label>
+            </fieldset>
+
             {# 1. A technician: who and when; everything else from the request. #}
-            <div class="next-choice">
-                <h3>{% translate "Send a technician" %}</h3>
+            <div class="next-choice next-choice--visit">
                 <p class="field__help">{% if next_plan.task_type %}{{ next_plan.task_type.display_name|default:next_plan.task_type.name }}{% endif %}{% if next_plan.priority == 'high' %} · {% translate "High priority (a machine isn't working)" %}{% endif %}{% if next_warranty %} · {% translate "Under warranty: free" %}{% endif %}</p>
                 {% if ticket.site %}
-                {% if next_technicians is not None %}
-                <div class="field">
-                    <label for="next-technician">{% translate "Technician" %}</label>
-                    <select id="next-technician" name="technician">
-                        <option value="">{% translate "Choose later" %}</option>
-                        {% for person in next_technicians %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-                <div class="field">
-                    <label for="next-when">{% translate "Day and time" %}</label>
-                    <input type="datetime-local" id="next-when" name="scheduled_for">
-                    <p class="field__help">{% translate "Optional: the customer is told once it's set." %}</p>
+                <div class="next-choice__fields">
+                    {% if next_technicians is not None %}
+                    <div class="field">
+                        <label for="next-technician">{% translate "Technician" %}</label>
+                        <select id="next-technician" name="technician">
+                            <option value="">{% translate "Choose later" %}</option>
+                            {% for person in next_technicians %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="field">
+                        <label for="next-when">{% translate "Day and time" %}</label>
+                        <input type="datetime-local" id="next-when" name="scheduled_for">
+                        <p class="field__help">{% translate "Optional: the customer is told once it's set." %}</p>
+                    </div>
                 </div>
                 <div class="form-actions">
                     <button type="submit" name="choice" value="visit" class="button">{% translate "Create the visit" %}</button>
@@ -63,33 +85,39 @@
             </div>
 
             {# 2. A part: to the warehouse manager to prepare (tasks.shipments). #}
-            <div class="next-choice">
-                <h3>{% translate "Ship a part" %}</h3>
+            <div class="next-choice next-choice--ship">
                 <p class="field__help">{% translate "Goes to the warehouse manager to prepare, then a technician hands it to the courier. No visit." %}</p>
                 {% if ticket.site %}
                 <div class="form-actions">
-                    <button type="submit" name="choice" value="ship" class="button button--secondary">{% translate "Ship a part" %}</button>
+                    <button type="submit" name="choice" value="ship" class="button">{% translate "Ship a part" %}</button>
                 </div>
+                {% else %}
+                <p class="muted">{% translate "This request has no branch yet: use More options to choose one." %}</p>
                 {% endif %}
             </div>
 
-            {# 3. No visit: our answer closes it (for the customer, on their request and by email). #}
-            <div class="next-choice">
-                <h3>{% translate "Answer without a visit" %}</h3>
-                <div class="field">
-                    <label for="next-reason">{% translate "Why" %}</label>
-                    <select id="next-reason" name="reason">
-                        <option value="advice">{% translate "Advice given (solved by phone or instructions)" %}</option>
-                        <option value="not_covered">{% translate "Not covered" %}</option>
-                        <option value="duplicate">{% translate "Duplicate or not needed" %}</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="next-answer">{% translate "Your answer to the customer" %}</label>
-                    <textarea id="next-answer" name="answer" rows="3"></textarea>
+            {# 3. No visit: the reason (recorded on each machine) and our answer, which closes it. #}
+            <div class="next-choice next-choice--answer">
+                <div class="next-choice__fields">
+                    <div class="field">
+                        <label for="next-reason">{% translate "Reason" %}</label>
+                        <select id="next-reason" name="reason" data-answer-reason>
+                            <option value="">{% translate "Choose a reason" %}</option>
+                            {% for group, reasons in next_reasons %}
+                            <optgroup label="{{ group }}">
+                                {% for value, label, suggestion in reasons %}<option value="{{ value }}" data-suggestion="{{ suggestion }}">{{ label }}</option>{% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                        <p class="field__help">{% translate "Choosing one fills in a suggested answer: edit it as needed." %}</p>
+                    </div>
+                    <div class="field">
+                        <label for="next-answer">{% translate "Your answer to the customer" %}</label>
+                        <textarea id="next-answer" name="answer" rows="4" data-answer-text></textarea>
+                    </div>
                 </div>
                 <div class="form-actions">
-                    <button type="submit" name="choice" value="answer" class="button button--secondary">{% translate "Send the answer and close" %}</button>
+                    <button type="submit" name="choice" value="answer" class="button">{% translate "Send the answer and close" %}</button>
                 </div>
             </div>
         </div>

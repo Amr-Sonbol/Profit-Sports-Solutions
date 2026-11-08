@@ -286,9 +286,13 @@ class OtherEndingsTests(LifecycleTestCase):
 
     def test_closed_with_an_answer_reaches_the_customer_and_an_admin_reopens(self):
         mail.outbox.clear()
-        self.staff.post(self.url, {'action': 'close', 'close_reason': 'Answered by phone.'})
+        # "Answer without a visit": every waiting machine gets the reason's decision, and the request closes.
+        waiting = [str(pk) for pk in self.ticket.machines.filter(decision='').values_list('pk', flat=True)]
+        self.staff.post(self.url, {'action': 'next', 'choice': 'answer', 'reason': 'remote_fix',
+                                   'answer': 'Answered by phone.', 'machines': waiting})
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+        self.assertFalse(self.ticket.machines.exclude(decision='advice', decision_reason='remote_fix').exists())
         self.assertTrue(any('ali@fitnessfirst.example' in m.to for m in mail.outbox))
         self.staff.post(self.url, {'action': 'reopen'})
         self.ticket.refresh_from_db()
@@ -901,6 +905,22 @@ class WhatHappensNextTests(LifecycleTestCase):
         self.next(choice='answer', reason='duplicate', answer='Already handled in your other request.')
         self.ticket.refresh_from_db()
         self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_the_reason_is_kept_on_each_machine_with_its_decision(self):
+        self.assertEqual(self.next(choice='answer', reason='', answer='Hello').status_code, 302)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.NEW)  # no reason: nothing happens
+        self.next(choice='answer', reason='misuse', answer='Not covered: damage from misuse.')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+        self.assertEqual(set(self.ticket.machines.values_list('decision', 'decision_reason')), {('not_covered', 'misuse')})
+
+    def test_the_reasons_come_grouped_each_with_a_suggested_answer(self):
+        page = self.staff.get(self.url)
+        for text in ('Resolved remotely', 'Not covered', 'No action needed', 'Withdrawn by the customer',
+                     'data-suggestion="Thank you for contacting us.'):
+            self.assertContains(page, text)
+        self.assertContains(page, 'not supplied or serviced by Profit Sports Solutions')  # the company, by name
 
     def test_once_there_is_a_task_shipping_lives_on_it(self):
         self.next(choice='ship')
