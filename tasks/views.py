@@ -56,7 +56,7 @@ from people.permissions import (
 )
 from spots.email_failures import current_user_id, record_failed_email
 from tasks.shipments import is_part_shipment, part_shipment_type
-from spots.hosts import portal_url
+from spots.hosts import portal_url, staff_url
 from spots.media import signed_media_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
@@ -1215,7 +1215,7 @@ def _send_shipment_notice_to_supervisor(request, task):
     supervisor = task.responsible_supervisor
     if not supervisor or not supervisor.user_id or not supervisor.user.email:
         return
-    link = request.build_absolute_uri(reverse('tasks:task_detail', args=[task.pk]))
+    link = staff_url(request, reverse('tasks:task_detail', args=[task.pk]))
     carrier_label = task.get_shipping_company_display() if task.shipping_company else ''
     tracking_url = None
     if task.shipping_company:
@@ -2739,7 +2739,7 @@ def send_staff_setup_link(request, technician):
     user = technician.user
     if not user.email:
         return False
-    link = request.build_absolute_uri(reverse('tasks:staff_setup', args=[make_staff_link_token(user)]))
+    link = staff_url(request, reverse('tasks:staff_setup', args=[make_staff_link_token(user)]))
     context = {'contact': technician.full_name, 'username': user.get_username(), 'link': link,
                'days': STAFF_LINK_VALID_DAYS}
     with translation.override('en'):
@@ -2845,7 +2845,7 @@ def _send_reply_to_staff(request, reply):
     assignee = ticket.assigned_to
     if not assignee or not assignee.user_id or not assignee.user.email:
         return
-    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
     with translation.override('en'):
         subject = _('New customer reply — ticket %(number)s') % {'number': ticket.ticket_number}
         message = _(
@@ -2875,7 +2875,7 @@ def _send_escalation_email(request, escalation):
     if not recipient.user_id or not recipient.user.email:
         return
     ticket = escalation.ticket
-    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
     with translation.override('en'):
         subject = _('Ticket escalated to you — %(number)s') % {'number': ticket.ticket_number}
         message = _(
@@ -2907,7 +2907,7 @@ def _send_escalation_decided_email(request, escalation):
     if not recipient.user_id or not recipient.user.email:
         return
     ticket = escalation.ticket
-    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
     with translation.override('en'):
         subject = _('Escalation decided — %(number)s') % {'number': ticket.ticket_number}
         decision = escalation.get_decision_display()
@@ -2966,7 +2966,7 @@ def send_new_ticket_email_to_staff(request, ticket):
     )
     if not recipients:
         return
-    link = request.build_absolute_uri(reverse('tasks:ticket_review', args=[ticket.pk]))
+    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
     with translation.override('en'):
         subject = _('New ticket %(number)s — %(company)s') % {
             'number': ticket.ticket_number, 'company': ticket.company_name,
@@ -3004,7 +3004,7 @@ def _send_new_task_email_to_staff(request, task):
     recipients = _staff_notification_recipients(task.site.customer.country, switches.new_task_roles)
     if not recipients:
         return
-    link = request.build_absolute_uri(reverse('tasks:task_detail', args=[task.pk]))
+    link = staff_url(request, reverse('tasks:task_detail', args=[task.pk]))
     with translation.override('en'):
         subject = _('New task %(number)s — %(site)s') % {'number': task.task_number, 'site': task.site.name}
         message = _(

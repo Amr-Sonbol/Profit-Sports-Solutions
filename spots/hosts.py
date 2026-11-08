@@ -34,6 +34,14 @@ def portal_url(request, path):
     return request.build_absolute_uri(path)
 
 
+def staff_url(request, path):
+    """A link for staff: on the staff site's address, even when a customer's
+    action on the portal is what sends it (settings.STAFF_HOST)."""
+    if settings.STAFF_HOST and _on_portal_host(request):
+        return f'{request.scheme}://{settings.STAFF_HOST}{path}'
+    return request.build_absolute_uri(path)
+
+
 class StaffAuthenticationForm(AuthenticationForm):
     """The staff sign-in. With the portal on its own address, a customer's
     account is pointed there instead of signed in here."""

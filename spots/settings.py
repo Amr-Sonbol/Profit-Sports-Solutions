@@ -41,6 +41,11 @@ if RENDER_EXTERNAL_HOSTNAME:
 # portal's pages open, and every link emailed to a customer points there
 # (spots.hosts). Empty: one address for both, as before.
 PORTAL_HOST = config('PORTAL_HOST', default='')
+# The staff site's own address (e.g. app.example.com, or localhost:8000
+# locally): links in staff emails a customer's action sends (a new request,
+# their reply) point here, not to the portal they were on (spots.hosts.staff_url).
+# Empty: the address the request came in on, as before.
+STAFF_HOST = config('STAFF_HOST', default='')
 if PORTAL_HOST and PORTAL_HOST.split(':')[0] not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(PORTAL_HOST.split(':')[0])
 

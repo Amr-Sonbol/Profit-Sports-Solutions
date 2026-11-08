@@ -173,6 +173,15 @@ class PortalAddressTests(SecurityTestCase):
         response = self.client_class().post('/accounts/login/', {'username': 'admin1', 'password': PASSWORD})
         self.assertEqual(response.status_code, 302)
 
+    @override_settings(STAFF_HOST='staff.example.test')
+    def test_a_staff_link_sent_from_the_portal_points_to_the_staff_site(self):
+        from django.test import RequestFactory
+        from spots.hosts import staff_url
+        on_portal = RequestFactory(HTTP_HOST='portal.example.test').get('/')
+        on_staff = RequestFactory().get('/')
+        self.assertEqual(staff_url(on_portal, '/tasks/tickets/7/'), 'http://staff.example.test/tasks/tickets/7/')
+        self.assertEqual(staff_url(on_staff, '/tasks/tickets/7/'), 'http://testserver/tasks/tickets/7/')
+
     def test_portal_links_on_the_staff_address_move_to_the_portal(self):
         response = self.client_class().get('/customers/portal/login/')
         self.assertEqual(response['Location'], 'http://portal.example.test/customers/portal/login/')
