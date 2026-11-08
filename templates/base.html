@@ -158,6 +158,10 @@
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
 {% if user.technician or user.customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>
 <script src="{% static 'js/bell.js' %}?v={{ css_version }}" defer></script>{% endif %}
+{# Photos made smaller on the phone before they upload; too-big files refused before a long upload. #}
+<script src="{% static 'js/photo-shrink.js' %}?v={{ css_version }}" defer></script>
+{# "Are you sure?" before any form with a data-confirm message (a task's steps, mostly). #}
+<script src="{% static 'js/confirm-actions.js' %}?v={{ css_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

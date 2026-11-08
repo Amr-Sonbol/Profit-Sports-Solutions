@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Linking, StyleSheet, TouchableOpacity } from 
 
 import { ApiRequestError } from '@/api/client';
 import { sendTaskAction } from '@/api/endpoints';
+import { confirmStep } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -44,7 +45,7 @@ export function TodayPlanView({ plan, onChanged }: { plan: TodayPlan; onChanged:
   const job = plan.next_job;
 
   const tap = async (action: string) => {
-    if (!job) {
+    if (!job || !(await confirmStep(action))) {
       return;
     }
     setIsBusy(true);

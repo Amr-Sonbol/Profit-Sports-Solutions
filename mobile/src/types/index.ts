@@ -144,6 +144,8 @@ export interface ReportMachine {
   name?: string;
   ticket_machine_id?: number | null;
   brand_id?: number | null;
+  /** The brand as typed: a known one counts even when not picked from the suggestions. */
+  brand_name?: string;
   model_name?: string;
   serial_no: string;
   /** The product code (e.g. BENCH-01), beside the serial — optional. */
@@ -600,6 +602,8 @@ export interface ChecklistRow {
 
 /** A planned machine line (api/views.py TaskLinesView). */
 export interface PlannedLine {
+  /** The machine already on the task (kept, corrected in place — never removed); none on a new row. */
+  line_id?: number;
   /** 'machine', or 'part' (a spare part — receiving only: no serial, no colours). */
   kind: string;
   product_code: string;
@@ -629,9 +633,24 @@ export interface Shipment {
   };
 }
 
+// One photo, video or file the customer sent (tasks.customer_report). `key`
+// stays the same while `url` (a signed link) changes: the photo is cached once.
 export interface RequestFile {
-  name: string;
+  kind: 'image' | 'video' | 'file';
   url: string;
+  key: string;
+  name: string;
+  serial_plate: boolean;
+  added_by_staff: boolean;
+}
+
+export interface ReportedMachine {
+  name: string;
+  serial: string;
+  problem: string;
+  urgent: boolean;
+  description: string;
+  items: RequestFile[];
 }
 
 export interface FromRequest {
@@ -644,6 +663,9 @@ export interface FromRequest {
   subject: string;
   message: string;
   submitted_at: string;
-  files: RequestFile[];
-  conversation: { from_customer: boolean; sender: string; message: string; sent_at: string; files: RequestFile[] }[];
+  machines: ReportedMachine[];
+  other_files: RequestFile[];
+  sent_later: RequestFile[];
+  photo_count: number;
+  video_count: number;
 }

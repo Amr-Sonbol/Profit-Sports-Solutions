@@ -43,6 +43,7 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ShippingCompany, Task, TaskAsset, TaskAssignment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
+    report_copy_default,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
@@ -1246,8 +1247,12 @@ def _machine_form(task, row):
             'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
             'action': row.get('action', ''),
         }, site=task.site)
+    # A brand typed but not picked from the suggestions still counts when it's a known one.
+    brand = row.get('brand_id') or ''
+    if not brand and str(row.get('brand_name') or '').strip():
+        brand = Brand.objects.filter(name__iexact=str(row['brand_name']).strip()).values_list('pk', flat=True).first() or ''
     return NewAssetForm({
-        'brand': row.get('brand_id') or '', 'model_name': row.get('model_name', ''),
+        'brand': brand, 'model_name': row.get('model_name', ''),
         'serial_no': row.get('serial_no', ''), 'code': row.get('code', ''), 'outcome': row.get('outcome', ''),
         'note': row.get('note', ''),
         'finding_code': row.get('finding_code') or '', 'action_code': row.get('action_code') or '',
@@ -1320,8 +1325,8 @@ class MyTaskReportView(APIView):
         report = getattr(task, 'report', None)
         return Response({
             'report': WorkReportSerializer(report).data if report else None,
-            # "Send a copy to" starts as wherever the last copy went, else the site's contact.
-            'send_copy_to': (report.copy_sent_to if report else '') or task.site.effective_contact_email or '',
+            # "Send a copy to" starts as wherever the last copy went, else report_copy_default.
+            'send_copy_to': (report.copy_sent_to if report else '') or report_copy_default(task),
             # The visit's hours, from the taps — shown, never typed (Task.time_on_site);
             # final once the report has been sent.
             'time_on_site': hours_text(task.time_on_site()) or None,  # "1:32"
@@ -1447,6 +1452,7 @@ class MyTaskReportView(APIView):
                     [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
                 ),
                 None if checklist_forms is None else [form.cleaned_data for form in checklist_forms],
+                drawn_signature='' if request.data.get('signature_waived_reason') else request.data.get('signature') or '',
             )
             return Response({'html': html, 'problems': [str(problem) for problem in problems]})
 
@@ -1544,6 +1550,8 @@ def _team_task_response(request, task):
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
         ),
         'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
+        # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
+        'from_request': request_for_app(request, task),
     }
     data = TeamTaskDetailSerializer(task, context=context).data
     # What a manager can do here, as on the website's task page (TaskManageView).
@@ -1640,7 +1648,7 @@ class TaskLinesView(APIView):
             'warning': warning,
             'lines': [
                 {
-                    'kind': line.kind, 'product_code': line.product_code,
+                    'line_id': line.pk, 'kind': line.kind, 'product_code': line.product_code,
                     'for_task': line.for_task.task_number if line.for_task_id else '',
                     'serial_number': line.serial_number, 'quantity': line.quantity,
                     'frame': line.frame, 'arm': line.arm, 'padding': line.padding, 'trim': line.trim,
@@ -1655,7 +1663,8 @@ class TaskLinesView(APIView):
             return Response({'detail': locked}, status=status.HTTP_400_BAD_REQUEST)
         forms_ = [
             TaskProductForm({key: row.get(key, '') for key in (
-                'kind', 'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim', 'for_task',
+                'line_id', 'kind', 'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim',
+                'for_task',
             )})
             for row in request.data.get('lines') or [] if isinstance(row, dict)
         ]

@@ -28,16 +28,14 @@
         </div>
     </dl>
 
+    {# Machines: each with its own words, photos and videos (the block below). Otherwise: their message. #}
+    {% if not from_request.report.machines %}
     <h3>{% translate "Their message" %}</h3>
     <div class="review-message" dir="auto">{% if ticket.subject %}<strong>{{ ticket.subject }}</strong><br>{% endif %}{{ ticket.description|linebreaksbr }}</div>
+    {% endif %}
     {% if ticket.notes %}<p class="muted" dir="auto">{{ ticket.notes|linebreaksbr }}</p>{% endif %}
 
-    {% if from_request.files %}
-    <h3>{% translate "Their photos and files" %}</h3>
-    <ul class="plain-list">
-        {% for file in from_request.files %}<li>{% include "_attachment.html" with file=file %}</li>{% endfor %}
-    </ul>
-    {% endif %}
+    {% include "tasks/_customer_report.html" with report=from_request.report %}
 
     {% if from_request.replies %}
     <h3>{% translate "Conversation with the customer" %}</h3>

@@ -712,6 +712,9 @@ A customer's own phone photo or short video of the fault, uploaded with the tick
 | machine_id | FK → ticket_machine | null — which machine on the ticket the photo shows; portal tickets always set it |
 | file | file | image or short video, 25 MB limit |
 | uploaded_at | timestamptz | |
+| added_by_id | FK → user, nullable | staff who added it for the customer — a photo they sent on WhatsApp or by email, added on the request page ("Add photos the customer sent another way") under one of its machines or none (tasks 0076). Empty: the customer's own upload |
+
+**What the customer reported, wherever the work is planned or done.** `tasks.customer_report` gathers a request's machines, each with its name, serial and serial-plate photo, problem, the customer's own words, and its photos and videos (these rows, in upload order); files not tied to a machine; and the files the customer sent later in the conversation (their replies only, never support's). One template shows it (`tasks/_customer_report.html`): on the request page, the office's task page and the technician's (a task split from a request: only its own machines), and the app gets the same as JSON with signed links (`api` `from_request`; each file has a fixed key, so the phone caches photos for offline). Photos are shown as images (a click opens them full size), videos play in the browser's own player. Photos are made smaller on the uploader's phone before they upload (`static/js/photo-shrink.js`: about 2000 px, JPEG; anything it can't read goes as it is), and a file over the limit is refused there, before a long upload. The request list shows how many photos and videos each request came with.
 
 **Still shown once the ticket becomes a task.** Converting a ticket doesn't copy these rows into `task_attachment` — the file stays owned by the ticket, exactly where it was uploaded — but the task's own detail page reads them straight off `task.ticket.attachments` (the OneToOne back to `customer_ticket`) and shows them in their own "Attachments from the customer's ticket" section, so a supervisor sees the original evidence without anyone re-uploading it.
 
@@ -752,13 +755,15 @@ Which machines the task covers. Populated by the technician during the work, not
 | id | PK | |
 | task_id | FK → task | |
 | asset_id | FK → asset | |
-| outcome | varchar | repaired, replaced, not_repairable, inspected_ok |
+| outcome | varchar | repaired, replaced, not_repairable, inspected_ok, not_worked_on — the last with its reason in `note` (required): on the task but not worked on (not on site, the customer declined, no time); never counted as fixed |
 | finding_code | varchar | blank — a standard finding (`reports.phrases.Finding`), printed in the report's language |
 | note | varchar(255) | blank — any other finding, typed in the report's language |
 | action_code | varchar | blank — a standard action (`reports.phrases.Action`) |
 | action | varchar(255) | blank — any other action, typed in the report's language |
 
 **A task made from a portal ticket starts its report from that ticket's machines** (`ticket_machine.task`): the listed ones are already picked, waiting for an outcome; an unlisted one is a new-machine row with its model and serial filled in, and registering it there sets `ticket_machine.asset`. The customer's ticket page then shows each machine's outcome and note. The frozen signed copy includes a machine's `note` only when it has one, so reports signed before notes existed don't read as changed.
+
+**A machine on the report is never removed.** Once recorded, a row left out of a later save (website or any app version) is put back as it was; one that wasn't worked on is marked `not_worked_on` with why. The app's ✕ only takes back a machine added in that same report before it's sent.
 
 Many-to-many because a customer reporting three broken treadmills is one visit, and an installation is one visit covering twenty machines. A single `asset_id` on the task would force you to split those artificially.
 
@@ -783,11 +788,13 @@ So each serial is typed once, wherever the machine is first handled one by one.
 
 **Straight from the factory to a customer** there's no receiving or loading: the installation is created at the customer's site and planned from the container's list (code × quantity), and the installer checks what arrived and types every serial. It never touches a warehouse's stock.
 
+**A machine on a task is never removed.** Once a line is on a task, no one deletes it — not on the Edit screen (no Delete column), not from the app's planning (Remove only on a row not saved yet), not by leaving its row out: a row for an existing line (its `line_id`, or from an app that doesn't send ids, the same code and serial) corrects that line in place — code, serial, colours, and on a receiving its count — keeping what was recorded on it on site (status, photo); new rows add lines (`tasks.views.save_planned_lines`). The one exception is a line a technician added on site themselves, which the on-site checklist can take back.
+
 **Warehouse stock — counted, not stored.** How many of a code a warehouse holds is worked out from the tasks themselves, so it can never drift from them:
 
 > received (`done` receiving lines at that warehouse) − loaded (lines of loading tasks there that aren't cancelled) + counts (`stock_adjustment`, below)
 
-Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it, or removing a line, puts them back. Planning a load shows each code's stock next to it and **warns** when it would go below zero, but doesn't block: the warehouse floor is the truth, and a count corrects the figure.
+Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it puts them back (its lines are never removed: see above). Planning a load shows each code's stock next to it and **warns** when it would go below zero, but doesn't block: the warehouse floor is the truth, and a count corrects the figure.
 
 **Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
 

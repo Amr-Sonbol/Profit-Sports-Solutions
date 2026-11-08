@@ -168,7 +168,8 @@ export default function PlanLinesScreen() {
                     ))}
                   </ThemedView>
                 ) : null}
-                {!locked ? (
+                {/* Only a row not saved yet: a machine on the task is never removed. */}
+                {!locked && !line.line_id ? (
                   <TouchableOpacity onPress={() => setLines((current) => (current ?? []).filter((_, i) => i !== index))}>
                     <ThemedText type="small" themeColor="danger">Remove</ThemedText>
                   </TouchableOpacity>

@@ -1,6 +1,7 @@
+import { File, UploadType } from 'expo-file-system';
 import { currentLocation } from '@/location';
 
-import { apiRequest } from './client';
+import { API_BASE_URL, ApiRequestError, apiRequest, getActiveCountry, getToken } from './client';
 import type {
   PlannedLine,
   ChecklistRow,
@@ -72,17 +73,32 @@ export function markShipped(id: number, shippingCompany: string, trackingNumber:
   });
 }
 
-export function uploadTaskAttachment(id: number, fileUri: string, fileName: string, mimeType: string, purpose: string) {
-  const form = new FormData();
-  // React Native's FormData accepts this {uri, name, type} shape in place
-  // of a real File/Blob — fetch on this platform knows how to read it.
-  form.append('file', { uri: fileUri, name: fileName, type: mimeType } as unknown as Blob);
-  form.append('purpose', purpose);
-  return apiRequest<void>(`/api/my-tasks/${id}/attachments/`, {
-    method: 'POST',
-    body: form,
-    isFormData: true,
+export async function uploadTaskAttachment(id: number, fileUri: string, fileName: string, mimeType: string, purpose: string) {
+  // Sent by the file system's own multipart upload (expo-file-system): this
+  // SDK's fetch won't send a photo picked from the gallery as form data
+  // ("Unsupported FormDataPart implementation"). Same sign-in headers as apiRequest.
+  const token = await getToken();
+  const country = await getActiveCountry();
+  const result = await new File(fileUri).upload(`${API_BASE_URL}/api/my-tasks/${id}/attachments/`, {
+    httpMethod: 'POST',
+    uploadType: UploadType.MULTIPART,
+    fieldName: 'file',
+    mimeType,
+    parameters: { purpose },
+    headers: {
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+      ...(country ? { 'X-Active-Country': country } : {}),
+    },
   });
+  if (result.status < 200 || result.status >= 300) {
+    let body: unknown = null;
+    try {
+      body = JSON.parse(result.body);
+    } catch {
+      body = null;
+    }
+    throw new ApiRequestError(result.status, body);
+  }
 }
 
 export function fetchMyReport(id: number) {
@@ -187,7 +203,8 @@ export function fetchMySchedule(params: { view: string; start?: string; month?: 
 export function previewMyReport(id: number, report: WorkReportInput) {
   return apiRequest<{ html: string; problems: string[] }>(`/api/my-tasks/${id}/report/?preview=1`, {
     method: 'POST',
-    body: { ...report, signature: null },
+    // The signature goes too: the review shows it (the server never stores it for a review).
+    body: report,
   });
 }
 

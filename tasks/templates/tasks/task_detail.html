@@ -111,7 +111,7 @@
 <div class="section">
     <h2>{% translate "Scheduling" %}</h2>
     <p class="field__help">{% blocktranslate with date=task.scheduled_date|date:"SHORT_DATE_FORMAT" %}The day is set for {{ date }}. Please select the exact time.{% endblocktranslate %}</p>
-    <form method="post" novalidate class="form-grid">
+    <form method="post" novalidate class="form-grid" data-confirm="{% translate "Change the visit time? The change is recorded in the task's history." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="set_schedule_time">
         <div class="field">
@@ -130,7 +130,7 @@
     <p class="muted">{% blocktranslate with time=pending_schedule_request.requested_scheduled_for|date:"SHORT_DATETIME_FORMAT" %}Change requested to {{ time }} — pending manager review.{% endblocktranslate %}</p>
     {% else %}
     <p class="field__help">{% translate "This schedule is locked. Please request a change, and a manager will review it." %}</p>
-    <form method="post" novalidate class="form-grid">
+    <form method="post" novalidate class="form-grid" data-confirm="{% translate "Ask for this schedule change? A manager decides." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="request_schedule_change">
         <div class="field">
@@ -167,13 +167,13 @@
         {% endif %}
     </dl>
     <div class="button-row">
-        <form method="post" novalidate>
+        <form method="post" novalidate data-confirm="{% translate "Approve this schedule change?" %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="approve_schedule_change">
             <input type="hidden" name="request_id" value="{{ pending_schedule_request.pk }}">
             <button type="submit" class="button">{% translate "Approve" %}</button>
         </form>
-        <form method="post" novalidate class="form-grid">
+        <form method="post" novalidate class="form-grid" data-confirm="{% translate "Turn down this schedule change?" %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="deny_schedule_change">
             <input type="hidden" name="request_id" value="{{ pending_schedule_request.pk }}">
@@ -226,7 +226,7 @@
     <p class="empty-state">{% translate "Not yet notified." %}</p>
     {% endif %}
     {% if task.scheduled_for and task.site.contact_email %}
-    <form method="post" novalidate>
+    <form method="post" novalidate data-confirm="{% translate "Email the customer the visit time?" %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="notify_schedule">
         <button type="submit" class="button button--secondary">
@@ -236,7 +236,7 @@
 
     <h3>{% translate "Expecting a delay?" %}</h3>
     <p class="muted">{% translate "Send a brief apology explaining the reason for the expected delay, such as traffic or an extended previous job." %}</p>
-    <form method="post" novalidate>
+    <form method="post" novalidate data-confirm="{% translate "Tell the customer the visit is delayed?" %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="notify_delay">
         <div class="field">
@@ -319,7 +319,7 @@
     </dl>
     <div class="form-actions review-shipping__actions">
         {% if task.shipping_tracking_number and task.site.contact_email %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-confirm="{% translate "Email the customer the tracking number?" %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="notify_shipping">
             <button type="submit" class="button button--secondary">{% translate "Notify the customer" %}</button>
@@ -357,7 +357,7 @@
     {% endif %}
     {% if user.technician.is_manager_tier and not feedback.submitted_at %}
     {% if task.site.contact_email %}
-    <form method="post" novalidate>
+    <form method="post" novalidate data-confirm="{% translate "Send the rating request? The customer is emailed." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="send_feedback_request">
         <button type="submit" class="button button--secondary">
@@ -466,7 +466,7 @@
     {% endif %}
     {% if lines_to_carry and can_send_on %}
     {# Loading: carry the loaded machines to an installation — any country. #}
-    <form method="post" class="next-step">
+    <form method="post" class="next-step" data-confirm="{% translate "Send the machines on to the next step? A new task is made." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_next_step">
         <h3>{% translate "Send to installation" %}</h3>
@@ -499,7 +499,7 @@
     <div class="flash flash--warning">
         {% blocktranslate count count=still_to_install|length %}{{ count }} machine is still to install.{% plural %}{{ count }} machines are still to install.{% endblocktranslate %}
         {% if can_create_follow_up %}
-        <form method="post" class="inline-form">
+        <form method="post" class="inline-form" data-confirm="{% translate "Create a follow-up task for the machines still to install?" %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="create_follow_up">
             <button type="submit" class="button">{% translate "Create a follow-up task for them" %}</button>
@@ -526,7 +526,7 @@
     {% if task.status == 'pending_supervisor_review' %}
     <p class="flash flash--info">{% translate "Awaiting review by the responsible supervisor before manager approval." %}</p>
         {% if can_approve_as_supervisor %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-confirm="{% translate "Approve the report? It goes to a manager for the final approval." %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="approve_report_supervisor">
             <button type="submit" class="button">{% translate "Approve for manager review" %}</button>
@@ -535,7 +535,7 @@
     {% elif task.status == 'completed' %}
     <p class="flash flash--info">{% translate "Awaiting manager approval before this task can be closed." %}</p>
         {% if user.technician.is_manager_tier %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-confirm="{% translate "Approve and close? The task closes." %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="approve_report">
             <button type="submit" class="button">{% translate "Approve and close" %}</button>
@@ -625,7 +625,7 @@
     <h2>{% translate "Book a new visit" %}</h2>
     <p class="field__help">{% translate "The work stopped on site. Give it a new day and time: the task goes back to its team, and the stop and its reason stay in the history." %}</p>
     {% if stop_reason %}<p class="sgroup-reason">{% translate "Reason:" %} {{ stop_reason }}</p>{% endif %}
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-confirm="{% translate "Book a new visit? The technician is told the new time." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="rebook">
         {% for field in rebook_form %}
@@ -649,7 +649,7 @@
 {% with chosen=request.POST.action %}
 <div class="section">
     <h2>{% translate "Close task" %}</h2>
-    <form method="post" novalidate>
+    <form method="post" novalidate data-confirm="{% translate "Close or cancel this task, as chosen? Everyone on it is told." %}">
         {% csrf_token %}
         {% if close_task_form.non_field_errors %}<p class="flash flash--error">{{ close_task_form.non_field_errors|join:" " }}</p>{% endif %}
         <div class="topic-choices close-choices">
@@ -683,7 +683,7 @@
 <div class="section">
     <h2>{% translate "Reopen" %}</h2>
     <p class="field__help">{% translate "Reverses the closure decision and returns the task to awaiting manager approval. The submitted report is not affected." %}</p>
-    <form method="post" novalidate>
+    <form method="post" novalidate data-confirm="{% translate "Reopen this task? It goes back to awaiting manager approval." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="reopen">
         <button type="submit" class="button button--secondary">{% translate "Reopen task" %}</button>
@@ -693,7 +693,7 @@
 <div class="section">
     <h2>{% translate "Flag negligence" %}</h2>
     <p class="field__help">{% translate "Use only if the customer subsequently complained about this specific visit and the fault lies with the technician; not every complaint constitutes negligence. This is recorded in their reliability record and is not visible to the technician." %}</p>
-    <form method="post" class="form-grid" novalidate>
+    <form method="post" class="form-grid" novalidate data-confirm="{% translate "Report negligence? It is recorded against the technician." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="flag_negligence">
         {% if negligence_form.non_field_errors %}
@@ -776,7 +776,7 @@
             {% if user.technician.is_manager_tier and event.event_type in correctable_event_types %}
             <details>
                 <summary>{% translate "Correct time" %}</summary>
-                <form method="post" class="form-grid" novalidate>
+                <form method="post" class="form-grid" novalidate data-confirm="{% translate "Correct this time? The change is recorded in the task's history." %}">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="correct_event">
                     <input type="hidden" name="event_id" value="{{ event.pk }}">

@@ -4923,3 +4923,75 @@ details.review-more:not(.section) {
     margin-block: 0.75rem 0;
     font-size: 0.9rem;
 }
+
+/* What the customer reported, machine by machine (tasks/_customer_report.html). */
+.customer-report {
+    display: grid;
+    gap: 1rem;
+}
+
+.customer-report__summary {
+    margin: 0;
+    color: var(--color-muted);
+}
+
+.machine-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.machine-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.machine-card__head h3 {
+    margin: 0;
+}
+
+.machine-card__serial {
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+    font-family: ui-monospace, monospace;
+}
+
+.machine-card__words,
+.machine-card__history {
+    margin: 0;
+}
+
+.media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.5rem;
+}
+
+.media-item {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    min-width: 0;
+}
+
+.media-item img,
+.media-item video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+}
+
+.media-item figcaption,
+.media-item__open {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}

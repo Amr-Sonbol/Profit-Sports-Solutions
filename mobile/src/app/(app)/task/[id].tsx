@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
+import { CustomerRequest } from '@/components/customer-request';
+import { confirmAction, confirmStep } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -63,6 +65,9 @@ export default function TaskDetailScreen() {
   );
 
   const handleAction = async (action: string) => {
+    if (!(await confirmStep(action))) {
+      return;
+    }
     setIsBusy(true);
     setError('');
     try {
@@ -78,6 +83,9 @@ export default function TaskDetailScreen() {
   const handleShipped = async () => {
     if (!courier) {
       setError('Please choose the shipping company.');
+      return;
+    }
+    if (!(await confirmAction('Mark as shipped?', 'The customer will be emailed that the part is on its way.'))) {
       return;
     }
     setIsBusy(true);
@@ -114,7 +122,9 @@ export default function TaskDetailScreen() {
       );
       await load();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Upload failed. Please try again.');
+      // The phone's own reason too (no connection, a file it couldn't read…), so it can be fixed.
+      console.warn('Photo upload failed (file-system upload)', err);
+      setError(err instanceof ApiRequestError ? err.message : `Upload failed. Please try again. (${String(err)})`);
     } finally {
       setIsBusy(false);
     }
@@ -185,15 +195,15 @@ export default function TaskDetailScreen() {
             {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
           </ThemedView>
 
-          {task.machines && task.machines.length > 0 ? (
+          {task.from_request ? (
+            <CustomerRequest request={task.from_request} directionsUrl={task.directions_url} />
+          ) : task.machines && task.machines.length > 0 ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Machines the customer reported</ThemedText>
               {task.machines.map((machine, index) => (
                 <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
                   <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
-                  <ThemedText type="small">
-                    {machine.problem}
-                  </ThemedText>
+                  <ThemedText type="small">{machine.problem}</ThemedText>
                   {machine.description ? <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText> : null}
                 </ThemedView>
               ))}
@@ -202,46 +212,6 @@ export default function TaskDetailScreen() {
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
-            </ThemedView>
-          ) : null}
-
-          {task.from_request ? (
-            // Everything from the customer's request: contact, their message, their photos, the conversation.
-            <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">From the customer's request · {task.from_request.ticket_number}</ThemedText>
-              {task.from_request.site_address ? (
-                <TouchableOpacity onPress={() => task.directions_url && Linking.openURL(task.directions_url)}>
-                  <ThemedText themeColor="primary">{task.from_request.site_name} — {task.from_request.site_address}</ThemedText>
-                </TouchableOpacity>
-              ) : null}
-              {task.from_request.contact_name ? <Row label="Contact" value={task.from_request.contact_name} /> : null}
-              {task.from_request.contact_phone ? (
-                <TouchableOpacity onPress={() => Linking.openURL(`tel:${task.from_request!.contact_phone}`)}>
-                  <ThemedText themeColor="primary">{task.from_request.contact_phone}</ThemedText>
-                </TouchableOpacity>
-              ) : null}
-              {task.from_request.contact_email ? <ThemedText type="small">{task.from_request.contact_email}</ThemedText> : null}
-              {task.from_request.subject ? <ThemedText type="smallBold">{task.from_request.subject}</ThemedText> : null}
-              <ThemedText>{task.from_request.message}</ThemedText>
-              {task.from_request.files.map((file) => (
-                <TouchableOpacity key={file.url} onPress={() => Linking.openURL(file.url)}>
-                  <ThemedText themeColor="primary" type="small">📎 {file.name}</ThemedText>
-                </TouchableOpacity>
-              ))}
-              {task.from_request.conversation.length > 0 ? (
-                <ThemedText type="smallBold" style={styles.conversationTitle}>Conversation with the customer</ThemedText>
-              ) : null}
-              {task.from_request.conversation.map((entry, index) => (
-                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
-                  <ThemedText type="small" themeColor="textSecondary">{entry.sender} · {new Date(entry.sent_at).toLocaleString()}</ThemedText>
-                  <ThemedText type="small">{entry.message}</ThemedText>
-                  {entry.files.map((file) => (
-                    <TouchableOpacity key={file.url} onPress={() => Linking.openURL(file.url)}>
-                      <ThemedText themeColor="primary" type="small">📎 {file.name}</ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ThemedView>
-              ))}
             </ThemedView>
           ) : null}
 

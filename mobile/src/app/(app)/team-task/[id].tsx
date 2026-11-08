@@ -9,6 +9,8 @@ import { ApiRequestError } from '@/api/client';
 import {
   approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
 } from '@/api/endpoints';
+import { CustomerRequest } from '@/components/customer-request';
+import { confirmAction } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -66,6 +68,9 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   const create = async () => {
     if (!site) {
       setError('Choose where the next step is.');
+      return;
+    }
+    if (!(await confirmAction('Send these machines on?', `A new task is made for the next step, with ${chosen.length} machines.`))) {
       return;
     }
     setIsBusy(true);
@@ -156,7 +161,11 @@ export default function TeamTaskScreen() {
     }, [load]),
   );
 
-  const run = async (action: () => Promise<TeamTaskDetail>, success: string) => {
+  // Every change asks first (a mistaken tap is easy on a phone): `question` is [title, what it does].
+  const run = async (action: () => Promise<TeamTaskDetail>, success: string, question: [string, string]) => {
+    if (!(await confirmAction(question[0], question[1]))) {
+      return;
+    }
     setIsBusy(true);
     setError('');
     try {
@@ -191,7 +200,9 @@ export default function TeamTaskScreen() {
     const body: Record<string, string | number> = managing.action === 'correct_time'
       ? { action: 'correct_time', event_id: managing.eventId ?? 0, corrected_at: manageTime ? local(manageTime) : '', reason: manageNote }
       : { action: managing.action, note: manageNote };
-    run(() => manageTask(task.id, body), MANAGE_DONE[managing.action]).then(() => setManaging(null));
+    run(() => manageTask(task.id, body), MANAGE_DONE[managing.action], [
+      'Are you sure?', 'This changes the task and is recorded in its history.',
+    ]).then(() => setManaging(null));
   };
 
   const startPicking = async (kind: 'lead' | 'helper') => {
@@ -226,7 +237,9 @@ export default function TeamTaskScreen() {
     }
   };
 
-  const send = (body: AssignAction, message: string) => run(() => assignTask(Number(id), body), message);
+  const send = (body: AssignAction, message: string) => run(() => assignTask(Number(id), body), message, [
+    'Change who is on this task?', 'The people added or removed are notified.',
+  ]);
 
   if (!task) {
     return (
@@ -308,14 +321,17 @@ export default function TeamTaskScreen() {
             {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
 
-          {task.description ? (
+          {task.from_request ? (
+            // What the customer reported, machine by machine, with their photos.
+            <CustomerRequest request={task.from_request} directionsUrl={task.directions_url} />
+          ) : task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
               <ThemedText>{task.description}</ThemedText>
             </ThemedView>
           ) : null}
 
-          {task.machines && task.machines.length > 0 ? (
+          {!task.from_request && task.machines && task.machines.length > 0 ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Machines the customer reported</ThemedText>
               {task.machines.map((machine, index) => (
@@ -472,6 +488,9 @@ export default function TeamTaskScreen() {
               onPress={() => run(
                 () => approveTaskReport(Number(id)),
                 task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Awaiting manager approval.',
+                task.can_manager_approve
+                  ? ['Approve and close?', 'The task closes, and the customer can then be asked to rate the visit.']
+                  : ['Approve the report?', 'It goes to a manager for the final approval.'],
               )}
               disabled={isBusy}
             >
@@ -528,6 +547,9 @@ export default function TeamTaskScreen() {
                     <SecondaryButton
                       label="Create a follow-up task for them" disabled={isBusy}
                       onPress={async () => {
+                        if (!(await confirmAction('Create a follow-up task?', 'A new task is made for the machines still to install.'))) {
+                          return;
+                        }
                         setIsBusy(true);
                         try {
                           const created = await createFollowUp(task.id);

@@ -1012,6 +1012,14 @@ class NegligenceFlagForm(forms.Form):
     )
 
 
+def require_reason_when_not_worked_on(form, cleaned):
+    """A machine on the task not worked on says why (its note): not on site,
+    the customer declined, no time for it."""
+    from tasks.models import TaskAsset
+    if cleaned.get('outcome') == TaskAsset.Outcome.NOT_WORKED_ON and not (cleaned.get('note') or '').strip():
+        form.add_error('note', _("Please say why it wasn't worked on (not on site, the customer declined, no time…)."))
+
+
 class ExistingAssetOutcomeForm(forms.Form):
     """A machine already at this site that this visit actually covered.
 
@@ -1049,6 +1057,7 @@ class ExistingAssetOutcomeForm(forms.Form):
             raise forms.ValidationError(
                 _('Select the machine and an outcome, or leave this row blank.'),
             )
+        require_reason_when_not_worked_on(self, cleaned)
         return cleaned
 
 
@@ -1087,15 +1096,21 @@ class NewAssetForm(forms.Form):
         cleaned = super().clean()
         if not any(cleaned.get(f) for f in ('brand', 'model_name', 'serial_no', 'outcome')):
             return cleaned
-        if not cleaned.get('brand') or not cleaned.get('model_name') or not cleaned.get('outcome'):
-            raise forms.ValidationError(
-                _('Enter at least a brand, model, and outcome for each new machine, or leave the row blank.'),
-            )
+        # Says which machine, and what's missing on it — "the brand" is easy to type without picking it.
+        missing = [label for field, label in (
+            ('brand', _('choose its brand from the list')), ('model_name', _('enter its model')),
+            ('outcome', _('choose an outcome')),
+        ) if not cleaned.get(field)]
+        if missing:
+            serial = (cleaned.get('serial_no') or '').strip()
+            machine = cleaned.get('model_name') or _('A new machine')
+            raise forms.ValidationError('%s%s: %s.' % (machine, f' ({serial})' if serial else '', ', '.join(str(m) for m in missing)))
         cleaned['serial_no'] = (cleaned.get('serial_no') or '').strip()
         if not cleaned['serial_no'] and not cleaned.get('no_serial'):
             self.add_error('serial_no', _(
                 'Type the serial number from the machine\'s plate, or tick “No readable serial plate”.',
             ))
+        require_reason_when_not_worked_on(self, cleaned)
         return cleaned
 
 
@@ -1229,6 +1244,8 @@ class TaskProductForm(forms.Form):
     trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
     # A spare part ordered for one repair: that task's number, so the part is held for it.
     for_task = forms.CharField(required=False, max_length=30, label=_('For task'))
+    # The line this row is (tasks.views.save_planned_lines): updated in place, never deleted. Empty: a new line.
+    line_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     def clean(self):
         cleaned = super().clean()
@@ -1489,7 +1506,9 @@ class TicketMachineForm(forms.Form):
     )
     files = MultipleFileField(
         required=False, label=_('Photos or a short video'),
-        help_text=_('showing the issue and the serial number'),
+        # What helps the team most, so they arrive knowing the job (tasks.customer_report).
+        help_text=_('What helps us most: a photo of the problem, a photo of the serial plate, and if it makes a '
+                    'noise, a short video (up to 30 seconds). Up to 25 MB each.'),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
@@ -1997,4 +2016,27 @@ class NotificationSettingsForm(forms.ModelForm):
         for switch, roles in (('new_ticket_email', 'new_ticket_roles'), ('new_task_email', 'new_task_roles')):
             if cleaned.get(switch) and not cleaned.get(roles):
                 self.add_error(roles, _('Choose at least one role, or turn this email off.'))
+        return cleaned
+
+
+class CustomerPhotosForm(MessageFilesMixin, forms.Form):
+    """Photos or videos the customer sent another way (WhatsApp, email),
+    added by staff to their request — to one machine, or not tied to one —
+    so they reach the task like the ones uploaded on the portal."""
+
+    machine = forms.ChoiceField(label=_('For which machine'), required=False)
+    attachments = message_files_field(_('Photos, videos or PDFs'))
+
+    def __init__(self, *args, ticket, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ticket = ticket
+        self.fields['machine'].choices = [('', _('Not one machine in particular'))] + [
+            (str(machine.pk), f'{machine.machine_name} ({machine.serial})' if machine.serial else machine.machine_name)
+            for machine in ticket.machines.order_by('position', 'pk')
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get('attachments'):
+            self.add_error('attachments', _('Please choose at least one file.'))
         return cleaned

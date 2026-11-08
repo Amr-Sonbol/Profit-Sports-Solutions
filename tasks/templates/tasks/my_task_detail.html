@@ -95,7 +95,7 @@
     <h2>{% translate "Status" %}</h2>
     <div class="button-row">
         {% if next_action %}
-        <form method="post" novalidate data-locate>
+        <form method="post" novalidate data-locate data-confirm="{% if next_action == 'accept' %}{% translate 'Confirm this task? You confirm you will do this visit; the office sees it straight away.' %}{% elif next_action == 'en_route' %}{% translate 'On your way? This records that you are heading to the site, with the time.' %}{% elif next_action == 'arrive' %}{% translate 'Arrived at the site? This records your arrival time and where you are.' %}{% else %}{% translate 'Start work? This records the time you start working.' %}{% endif %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ next_action }}">
             <button type="submit" class="button">
@@ -108,14 +108,14 @@
         </form>
         {% endif %}
         {% if can_resume %}
-        <form method="post" novalidate data-locate>
+        <form method="post" novalidate data-locate data-confirm="{% translate 'Resume work? This records the time you start again.' %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="resume">
             <button type="submit" class="button">{% translate "Work resumed" %}</button>
         </form>
         {% endif %}
         {% if undoable_tap %}
-        <form method="post" novalidate>
+        <form method="post" novalidate data-confirm="{% translate 'Undo the last step? It is removed as if it never happened.' %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="undo">
             <button type="submit" class="button button--secondary">
@@ -129,7 +129,7 @@
     {% endif %}
 
     {% if can_pause %}
-    <form method="post" class="form-grid" novalidate data-locate>
+    <form method="post" class="form-grid" novalidate data-locate data-confirm="{% translate 'Stopped for today? This records the time and your reason.' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="pause">
         <div class="field {% if pause_form.note.errors %}field--error{% endif %}">
@@ -145,7 +145,7 @@
     {% endif %}
 
     {% if can_block %}
-    <form method="post" class="form-grid" novalidate data-locate>
+    <form method="post" class="form-grid" novalidate data-locate data-confirm="{% translate 'Stop the work on site? The office is told it could not go ahead, with your reason.' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="block">
         <div class="field {% if block_form.note.errors %}field--error{% endif %}">

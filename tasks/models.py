@@ -893,6 +893,11 @@ class CustomerTicketAttachment(models.Model):
         _('file'), upload_to=_ticket_attachment_path,
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
+    # A photo staff added for the customer (sent on WhatsApp or by email); empty: the customer's own upload.
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name=_('added by'),
+    )
     uploaded_at = models.DateTimeField(_('uploaded at'))
 
     class Meta:
@@ -1155,6 +1160,9 @@ class TaskAsset(models.Model):
         REPLACED = 'replaced', _('Replaced')
         NOT_REPAIRABLE = 'not_repairable', _('Not repairable')
         INSPECTED_OK = 'inspected_ok', _('Inspected OK')
+        # On the task, but not worked on (not on site, the customer declined, no time): recorded with
+        # its reason (the note, required), never removed — and never counted as fixed.
+        NOT_WORKED_ON = 'not_worked_on', _('Not worked on')
 
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='task_assets',

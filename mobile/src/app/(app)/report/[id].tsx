@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -36,23 +37,27 @@ interface PartRow {
 interface MachineRow extends ReportMachine {
   key: string;
   brand_name: string;
+  /** Added here, just now: the only kind that can be taken back (its ✕) — the task's own never are. */
+  addedHere: boolean;
 }
 
 type FieldErrors = Record<string, string>;
 
 let nextMachineKey = 0;
 
-function machineRow(machine: ReportMachine, brands: Brand[]): MachineRow {
+function machineRow(machine: ReportMachine, brands: Brand[], addedHere = false): MachineRow {
   nextMachineKey += 1;
   return {
     ...machine,
     key: String(nextMachineKey),
     brand_name: brands.find((brand) => brand.id === machine.brand_id)?.name ?? '',
+    addedHere,
   };
 }
 
 /** What the server is sent for a card, without the screen's own fields. */
-function machineInput({ key, brand_name, name, ...machine }: MachineRow): ReportMachine {
+// The brand as typed goes too: a known one counts even if not picked from the suggestions.
+function machineInput({ key, name, addedHere, ...machine }: MachineRow): ReportMachine {
   return machine;
 }
 
@@ -115,7 +120,8 @@ export default function ReportScreen() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [findings, setFindings] = useState('');
   const [actionTaken, setActionTaken] = useState('');
-  const [resolved, setResolved] = useState(true);
+  // Not chosen until the technician chooses (a saved report opens with its answer): never "Yes" by default.
+  const [resolved, setResolved] = useState<boolean | null>(null);
   // The visit's time as "1:32", worked out by the server from the taps — shown, not typed.
   const [labourHours, setLabourHours] = useState('');
   const [timeIsFinal, setTimeIsFinal] = useState(false);
@@ -211,7 +217,8 @@ export default function ReportScreen() {
         setSignatureOnFile(Boolean(report?.signature_url));
         setNotSigned(Boolean(input.signature_waived_reason));
         setWaivedReason(input.signature_waived_reason ?? '');
-        if (input.send_copy_to !== undefined) {
+        // Left blank on the phone, the customer's address (from the server) stays.
+        if (input.send_copy_to) {
           setSendCopyTo(input.send_copy_to);
         }
         if (input.helper_hours) {
@@ -316,7 +323,7 @@ export default function ReportScreen() {
       work_lines: workLines,
       recommendations,
       recommendation,
-      resolved,
+      resolved: resolved ?? false,
       customer_name: customerName,
       // Fully blank rows are just unused space, same as the web form.
       parts: parts
@@ -334,7 +341,19 @@ export default function ReportScreen() {
 
   // "Review report": the report exactly as the customer will get it, and
   // what to fix — nothing is sent until Submit on the review.
+  // Whether the problem is solved is always a choice someone made.
+  const resolvedChosen = () => {
+    if (resolved === null) {
+      setErrors({ resolved: 'Please choose Yes or No.' });
+      return false;
+    }
+    return true;
+  };
+
   const openReview = async () => {
+    if (!resolvedChosen()) {
+      return;
+    }
     setIsBusy(true);
     setErrors({});
     try {
@@ -354,6 +373,9 @@ export default function ReportScreen() {
   };
 
   const submit = async () => {
+    if (!resolvedChosen()) {
+      return;
+    }
     setIsBusy(true);
     setErrors({});
     const location = await currentLocation();
@@ -469,6 +491,12 @@ export default function ReportScreen() {
                   onOK={(signature) => {
                     setNewSignature(signature);
                     setSigning(false);
+                    // Signed from the review: show the review again, now with the signature on it.
+                    if (review && !review.offline) {
+                      previewMyReport(Number(id), { ...reportInput(), signature, signature_waived_reason: '' })
+                        .then(setReview)
+                        .catch(() => undefined);  // the old page stays; Submit still sends the signature
+                    }
                   }}
                   onEmpty={() => setSignError('Please sign in the box above.')}
                 />
@@ -595,6 +623,17 @@ export default function ReportScreen() {
             <ThemedView style={styles.section}>
               {machines.map((row) => (
                 <ThemedView key={row.key} style={[styles.partCard, { borderColor: theme.backgroundSelected }]}>
+                  {/* Added by mistake, just now: take it back. The task's own machines have no ✕. */}
+                  {row.addedHere ? (
+                    <TouchableOpacity
+                      style={[styles.removeX, { borderColor: theme.danger }]}
+                      onPress={() => setMachines((rows) => rows.filter((other) => other.key !== row.key))}
+                      accessibilityRole="button" accessibilityLabel="Remove this machine (added by mistake)"
+                      hitSlop={8}
+                    >
+                      <Ionicons name="close" size={18} color={theme.danger} />
+                    </TouchableOpacity>
+                  ) : null}
                   {row.asset_id ? (
                     <ThemedText type="smallBold">
                       {row.name}{row.serial_no ? ` · ${row.serial_no}` : ''}
@@ -690,9 +729,7 @@ export default function ReportScreen() {
                     onChangeText={(value) => updateMachine(row.key, { action: value })}
                   />
                   <ThemedText type="smallBold">Status</ThemedText>
-                  <TouchableOpacity onPress={() => setMachines((rows) => rows.filter((other) => other.key !== row.key))}>
-                    <ThemedText themeColor="danger" type="small">Remove machine</ThemedText>
-                  </TouchableOpacity>
+                  {/* A machine that came with the task stays: one not worked on is marked "Not worked on", with why. */}
                 </ThemedView>
               ))}
               {errors.machines ? <ThemedText themeColor="danger" type="small">{errors.machines}</ThemedText> : null}
@@ -705,7 +742,7 @@ export default function ReportScreen() {
                       onPress={() => {
                         setMachines((rows) => [...rows, machineRow(
                           { asset_id: machine.id, name: machine.name, serial_no: machine.serial_no, outcome: '', note: '' },
-                          brands,
+                          brands, true,
                         )]);
                         setPickingMachine(false);
                       }}
@@ -732,7 +769,7 @@ export default function ReportScreen() {
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
                 onPress={() => setMachines((rows) => [...rows, machineRow(
-                  { brand_id: null, model_name: '', serial_no: '', outcome: '', note: '' }, brands,
+                  { brand_id: null, model_name: '', serial_no: '', outcome: '', note: '' }, brands, true,
                 )])}
               >
                 <ThemedText themeColor="primary">+ Add a machine not in the list</ThemedText>
@@ -1035,6 +1072,10 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 const styles = StyleSheet.create({
+  removeX: {
+    position: 'absolute', top: Spacing.two, end: Spacing.two, zIndex: 1,
+    borderWidth: 1, borderRadius: Spacing.one, padding: 2,
+  },
   serialRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
   serialLabel: { flex: 1 },
   container: { flex: 1 },

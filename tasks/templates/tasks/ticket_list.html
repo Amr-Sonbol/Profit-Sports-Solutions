@@ -92,7 +92,9 @@
             <tr>
                 <td><a href="{% url 'tasks:ticket_review' ticket.pk %}" dir="ltr">{{ ticket.ticket_number }}</a><span class="compact-table__sub">{{ ticket.submitted_at|date:"j M, P" }}</span></td>
                 <td><strong>{{ ticket.company_name }}</strong><span class="compact-table__sub">{{ ticket.site_description }}{% if all_countries %} · {{ ticket.country.display_name }}{% endif %}</span></td>
-                <td>{{ ticket.request_type }}{% if ticket.subject %}<span class="compact-table__sub">{{ ticket.subject }}</span>{% endif %}</td>
+                <td>{{ ticket.request_type }}{% if ticket.subject %}<span class="compact-table__sub">{{ ticket.subject }}</span>{% endif %}
+                    {# Photos and videos it came with: none yet, ask early. #}
+                    <span class="compact-table__sub{% if not ticket.media_count %} muted{% endif %}">{% if ticket.media_count %}{% blocktranslate count count=ticket.media_count %}{{ count }} photo or video{% plural %}{{ count }} photos or videos{% endblocktranslate %}{% else %}{% translate "No photos yet" %}{% endif %}</span></td>
                 <td>{{ ticket.contact_name }}<span class="compact-table__sub" dir="ltr">{{ ticket.contact_phone }}</span></td>
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>

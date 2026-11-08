@@ -24,9 +24,10 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, connection, transaction
 from django.db.models import (
-    Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Sum, Value, When,
+    Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum, Value,
+    When,
 )
-from django.db.models.functions import Length
+from django.db.models.functions import Coalesce, Length
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -63,6 +64,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
+    CustomerPhotosForm,
     AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
@@ -2259,10 +2261,11 @@ def task_edit(request, pk):
     loading_locked = is_loading and not is_manager
     products_locked = products_locked or loading_locked
 
-    TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS, can_delete=True)
+    # No Delete: once a task has its machines, none is removed (save_planned_lines).
+    TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS)
     product_initial = [
         {
-            'kind': p.kind, 'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
+            'line_id': p.pk, 'kind': p.kind, 'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
             'frame': p.frame, 'arm': p.arm, 'padding': p.padding, 'trim': p.trim,
             'for_task': p.for_task.task_number if p.for_task_id else '',
         }
@@ -2417,6 +2420,13 @@ def task_from_request(request, requesting_technician, ticket, machines, ship=Fal
     if task.scheduled_for:
         notify_customer.visit_booked(task)
     return task, None
+
+
+def _report_without_later(ticket):
+    from tasks.customer_report import customer_report
+    report = customer_report(ticket)
+    report['later'] = []
+    return report
 
 
 def _next_step_context(technician, ticket, can_manage):
@@ -3112,6 +3122,14 @@ def ticket_list(request):
         is_escalated=Exists(
             TicketEscalation.objects.filter(ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING),
         ),
+        # How many photos and videos came with it (and serial-plate photos): none yet means ask early.
+        media_count=Coalesce(Subquery(
+            CustomerTicketAttachment.objects.filter(ticket=OuterRef('pk')).order_by().values('ticket')
+            .annotate(n=Count('pk')).values('n'),
+        ), 0) + Coalesce(Subquery(
+            TicketMachine.objects.filter(ticket=OuterRef('pk')).exclude(serial_photo='').order_by().values('ticket')
+            .annotate(n=Count('pk')).values('n'),
+        ), 0),
     )
     customers = Customer.objects.filter(is_active=True)
     if not all_countries:
@@ -3326,6 +3344,21 @@ def ticket_review(request, pk):
     if request.method == 'POST' and can_manage:
         action = request.POST.get('action')
 
+        if action == 'add_customer_photos':
+            # Sent another way (WhatsApp, email): onto the request, under its machine, so they reach the task.
+            photos_form = CustomerPhotosForm(request.POST, request.FILES, ticket=ticket)
+            if photos_form.is_valid():
+                machine_id = photos_form.cleaned_data['machine']
+                machine = ticket.machines.filter(pk=machine_id).first() if machine_id else None
+                for upload in photos_form.cleaned_data['attachments']:
+                    CustomerTicketAttachment.objects.create(
+                        ticket=ticket, machine=machine, file=upload, uploaded_at=timezone.now(), added_by=request.user,
+                    )
+                messages.success(request, _("The customer's photos have been added."))
+            else:
+                messages.error(request, ' '.join(str(e) for errors in photos_form.errors.values() for e in errors))
+            return redirect('tasks:ticket_review', pk=ticket.pk)
+
         if (action == 'create_branch' and ticket.about == CustomerTicket.About.NEW_BRANCH
                 and ticket.customer_id and not ticket.site_id):
             # A customer's new branch, in one click from what they typed: name, address, contact
@@ -3485,7 +3518,9 @@ def ticket_review(request, pk):
     context = {
         # Photos not tied to one of the ticket's machines (staff-opened and
         # older tickets); a machine's own show in the machines table.
-        'ticket_general_attachments': ticket.attachments.filter(machine__isnull=True),
+        # What the customer reported, machine by machine; what they sent later is in the conversation here.
+        'ticket_report': _report_without_later(ticket),
+        'photos_form': CustomerPhotosForm(ticket=ticket) if can_manage else None,
         # Every task made from it: the one for a single conversion, or each
         # group of machines on a split ticket.
         'ticket_tasks': (
@@ -6073,7 +6108,8 @@ def request_for_task(task, with_conversation=True):
         if reply.attachment:
             reply_files.insert(0, reply.attachment)
         replies.append({'reply': reply, 'files': reply_files})
-    return {'ticket': ticket, 'files': files, 'replies': replies}
+    from tasks.customer_report import customer_report
+    return {'ticket': ticket, 'files': files, 'replies': replies, 'report': customer_report(ticket, task)}
 
 
 def request_for_app(request, task):
@@ -6083,20 +6119,33 @@ def request_for_app(request, task):
         return None
     ticket = found['ticket']
 
-    def links(files):
-        return [{'name': file.name.rsplit('/', 1)[-1], 'url': signed_media_url(request, file.url)} for file in files]
+    def items(entries):
+        # `key` stays the same while the signed link changes: the phone caches each photo once, for offline.
+        return [{
+            'kind': entry['kind'], 'url': signed_media_url(request, entry['file'].url), 'key': entry['file'].name,
+            'name': entry['file'].name.rsplit('/', 1)[-1], 'serial_plate': entry['label'] == 'serial',
+            'added_by_staff': entry['added_by'] is not None,
+        } for entry in entries]
+    report = found['report']
+    items_by_machine = [items(card['items']) for card in report['machines']]
     return {
+        'machines': [{
+            'name': card['machine'].machine_name, 'serial': card['machine'].serial,
+            'problem': card['machine'].get_problem_display(), 'urgent': card['machine'].problem == TicketMachine.Problem.NOT_WORKING,
+            'description': card['machine'].description, 'items': items(card['items']),
+        } for card in report['machines']],
+        'other_files': items(report['other']), 'sent_later': items(report['later']),
+        'photo_count': report['photos'], 'video_count': report['videos'],
         'ticket_number': ticket.ticket_number, 'contact_name': ticket.contact_name,
         'site_name': task.site.name, 'site_address': task.site.address or ticket.site_address,
         'contact_phone': ticket.contact_phone, 'contact_email': ticket.contact_email,
         'subject': ticket.subject, 'message': ticket.description, 'submitted_at': ticket.submitted_at,
-        'files': links(found['files']),
-        'conversation': [{
-            'from_customer': item['reply'].sender == TicketReply.Sender.CUSTOMER,
-            'sender': (str(_('Customer')) if item['reply'].sender == TicketReply.Sender.CUSTOMER else
-                       getattr(getattr(item['reply'].sent_by, 'technician', None), 'full_name', '')),
-            'message': item['reply'].message, 'sent_at': item['reply'].sent_at, 'files': links(item['files']),
-        } for item in found['replies']],
+        # For app versions already on phones (before the per-machine report): the flat list they read,
+        # and an empty conversation. Keep until every phone runs the new app.
+        'files': [{'name': entry['name'], 'url': entry['url']} for entry in (
+            [item for machine in items_by_machine for item in machine] + items(report['other']) + items(report['later'])
+        )],
+        'conversation': [],
     }
 
 
@@ -6452,16 +6501,43 @@ def save_work_report(request, task, technician, report_form, part_rows):
 
 
 def save_planned_lines(task, rows):
-    """The machine lines as planned on the Edit screen (TaskProductForm
-    rows), replacing the previous plan. On a loading or an installation,
+    """The machine lines as planned on the Edit screen and in the app
+    (TaskProductForm rows). A machine on the task is never removed: a row
+    for an existing line (its line_id — or, from an app that doesn't send
+    ids, the same code and serial) updates that line in place, keeping
+    what was recorded on it on site (status, photo); a line with no row is
+    simply kept; only new rows add lines. On a loading or an installation,
     "BENCH-01 × 4" becomes four lines — one per machine, each with its own
     serial and status to check off on site. Receiving keeps code ×
     quantity (counted against the container's list), and only there can a
     line be a spare part."""
-    task.products.all().delete()
     step = equipment_step(task)
+    unused = {line.pk: line for line in task.products.all()}
+
+    def existing_for(cleaned):
+        if cleaned.get('line_id') in unused:
+            return unused.pop(cleaned['line_id'])
+        for pk, line in unused.items():
+            if (line.product_code, line.serial_number) == (cleaned.get('product_code'), cleaned.get('serial_number', '')):
+                return unused.pop(pk)
+        return None
+
     for cleaned in rows:
-        if not cleaned.get('product_code') or cleaned.get('DELETE'):
+        line = existing_for(cleaned) if cleaned.get('product_code') or cleaned.get('line_id') else None
+        if line is not None:
+            # Corrected in place: its code, serial, colours — and on a receiving, its count.
+            if cleaned.get('product_code'):
+                line.product_code = cleaned['product_code']
+                line.serial_number = '' if step == TaskType.Category.RECEIVING else cleaned.get('serial_number', '')
+                for color in TaskProductForm.COLORS:
+                    setattr(line, color, cleaned[color])
+                if step == TaskType.Category.RECEIVING:
+                    line.quantity = cleaned['quantity']
+                    line.kind = cleaned.get('kind') or line.kind
+                    line.for_task = cleaned.get('for_task')
+                line.save()
+            continue
+        if not cleaned.get('product_code'):
             continue
         fields = {
             'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
@@ -6781,11 +6857,21 @@ def report_problems(report, language):
     return problems
 
 
-def report_preview(request, task, technician, report_form, part_rows, machine_rows=None, checklist_rows=None):
+def report_copy_default(task):
+    """Where the customer's copy of the report goes unless changed: whoever
+    made the request, else the branch's (or the customer's) contact."""
+    ticket = CustomerTicket.objects.filter(task=task).only('contact_email').first()
+    return (ticket.contact_email if ticket else '') or task.site.effective_contact_email or ''
+
+
+def report_preview(request, task, technician, report_form, part_rows, machine_rows=None, checklist_rows=None,
+                   drawn_signature=''):
     """(html, problems): the report exactly as it would be sent, saved
     for a moment and rolled back — nothing is kept, sent or notified. For
     the "Review report" step on the website and in the app.
     `machine_rows` is (existing rows, new rows), or None to leave them.
+    `drawn_signature`: a signature already drawn (a data: image), shown as
+    it is — never stored for a review.
     """
     from reports.pdf import render_visit_report_html, report_language
 
@@ -6794,6 +6880,8 @@ def report_preview(request, task, technician, report_form, part_rows, machine_ro
         if checklist_rows is not None:
             save_checklist(task, [{**row, 'photo': None} for row in checklist_rows])
         saved = save_work_report(request, task, technician, report_form, part_rows)
+        if str(drawn_signature).startswith('data:image/'):
+            saved.signature_url = drawn_signature  # this moment only: rolled back below
         if machine_rows is not None:
             save_task_machines(task, *machine_rows)
         problems = report_problems(saved, language)
@@ -6899,8 +6987,10 @@ def save_task_machines(task, existing_rows, new_rows):
     (ExistingAssetOutcomeForm / NewAssetForm). A new machine is registered
     at the site; when it was a customer's unlisted ticket machine, that
     ticket machine now points at it, so their ticket shows its result.
-    Blank rows are skipped.
+    Blank rows are skipped. A machine already recorded on the report is
+    never dropped: left out (or blanked), it's kept as it was.
     """
+    recorded = {line.asset_id: line for line in TaskAsset.objects.filter(task=task)}
     TaskAsset.objects.filter(task=task).delete()
 
     def wording(cleaned):
@@ -6930,6 +7020,12 @@ def save_task_machines(task, existing_rows, new_rows):
             TaskAsset.objects.create(task=task, asset=new_asset, outcome=cleaned['outcome'], **wording(cleaned))
             if cleaned.get('ticket_machine'):
                 task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=new_asset)
+    # Not removable once recorded: anything left out goes back as it was.
+    kept = set(TaskAsset.objects.filter(task=task).values_list('asset_id', flat=True))
+    for asset_id, line in recorded.items():
+        if asset_id not in kept:
+            line.pk = None
+            line.save()
 
 
 def _report_form(request, task, technician, back_url):
@@ -6986,6 +7082,7 @@ def _report_form(request, task, technician, back_url):
                 html, _problems = report_preview(
                     request, task, technician, report_form, part_formset.cleaned_data,
                     (existing_formset.cleaned_data, new_formset.cleaned_data), checklist_rows,
+                    drawn_signature='' if request.POST.get('signature_waived') else request.POST.get('signature_drawn', ''),
                 )
                 return HttpResponse(html)
             with transaction.atomic():
@@ -7000,7 +7097,7 @@ def _report_form(request, task, technician, back_url):
     else:
         report_form = WorkReportForm(
             instance=report, require_signature=_requires_signature(task), helpers=helpers,
-            copy_to_default=task.site.effective_contact_email or '', time_on_site=time_on_site,
+            copy_to_default=report_copy_default(task), time_on_site=time_on_site,
         )
         existing_formset = ExistingAssetFormSet(
             initial=existing_initial, prefix='existing', form_kwargs={'site': task.site},

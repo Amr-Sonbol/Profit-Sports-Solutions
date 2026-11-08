@@ -360,7 +360,7 @@
     <div class="section button-row" data-staff-only>
         {# Opens the report as the customer will get it, in a new tab — nothing is saved. #}
         <button type="submit" name="preview" value="1" formtarget="_blank" class="button">{% translate "Preview report" %}</button>
-        <button type="submit" class="button button--secondary">{% translate "Save report" %}</button>
+        <button type="submit" class="button button--secondary" data-confirm="{% translate 'Save the report? It goes to your supervisor for review.' %}">{% translate "Save report" %}</button>
     </div>
 </form>
 {% endblock %}

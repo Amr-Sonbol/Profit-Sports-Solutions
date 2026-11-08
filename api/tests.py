@@ -1681,9 +1681,25 @@ class PlanLinesApiTests(InstallationChecklistApiTests):
         ]}), content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 200, response.content)
         lines = response.json()['lines']
+        # The machine already on the task stays; the three planned are added.
         self.assertEqual([(line['product_code'], line['quantity'], line['arm'], line['frame']) for line in lines],
-                         [('BENCH-01', 1, 'Red', 'Black')] * 3)
+                         [('EXCITE-RUN', 1, 'Black', 'Black')] + [('BENCH-01', 1, 'Red', 'Black')] * 3)
         self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/lines/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+    def test_the_app_never_removes_or_duplicates_a_machine_on_the_task(self):
+        token = self.token_for('supervisor1')
+        url = f'/api/tasks/{self.task.pk}/lines/'
+        before = list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number'))
+        lines = self.client.get(url, **self.auth(token)).json()['lines']
+        self.assertTrue(all('line_id' in line for line in lines))
+        # Everything left out (the old app's Remove): all still there.
+        self.client.post(url, json.dumps({'lines': []}), content_type='application/json', **self.auth(token))
+        self.assertEqual(list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number')), before)
+        # The same list sent back without ids (an app from before line ids): no duplicates.
+        for line in lines:
+            line.pop('line_id')
+        self.client.post(url, json.dumps({'lines': lines}), content_type='application/json', **self.auth(token))
+        self.assertEqual(list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number')), before)
 
 
 class AppUsersTests(ManagerChoosesTheCountryTests):

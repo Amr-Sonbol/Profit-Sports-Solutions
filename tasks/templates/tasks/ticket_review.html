@@ -47,11 +47,8 @@
             {% endif %}
         </div>
         {% endif %}
-        {% with machines=ticket.machines.all %}
-        {% if machines %}
-        <h3>{% translate "Machines to service" %}</h3>
-        {% include "tasks/_ticket_machines.html" %}
-        {% else %}
+        {# Machines: each with its own words, photos and videos (tasks.customer_report); otherwise their message. #}
+        {% if not ticket_report.machines %}
         {% if ticket.serial_numbers %}
         <h3>{% translate "Serial number(s)" %}</h3>
         <p class="pre-line" dir="ltr">{{ ticket.serial_numbers }}</p>
@@ -59,16 +56,32 @@
         <h3>{% translate "Message" %}</h3>
         <p class="pre-line review-message">{{ ticket.description }}</p>
         {% endif %}
-        {% endwith %}
         {% if ticket.notes %}
         <h3>{% translate "Additional information" %}</h3>
         <p class="pre-line">{{ ticket.notes }}</p>
         {% endif %}
-        {% if ticket_general_attachments %}
-        <h3>{% translate "Photos and/or short video" %}</h3>
-        <ul class="plain-list">
-            {% for attachment in ticket_general_attachments %}<li>{% include "_attachment.html" with file=attachment.file %}</li>{% endfor %}
-        </ul>
+        {% include "tasks/_customer_report.html" with report=ticket_report %}
+        {% if photos_form %}
+        {# Sent another way (WhatsApp, email): added here, under their machine, so they reach the task. #}
+        <details class="review-more">
+            <summary>{% translate "Add photos the customer sent another way (WhatsApp, email)" %}</summary>
+            <form method="post" enctype="multipart/form-data" class="review-more__body" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_customer_photos">
+                {% if photos_form.machine.field.choices|length > 1 %}
+                <div class="field">
+                    <label for="{{ photos_form.machine.id_for_label }}">{{ photos_form.machine.label }}</label>
+                    {{ photos_form.machine }}
+                </div>
+                {% endif %}
+                <div class="field">
+                    <label for="{{ photos_form.attachments.id_for_label }}">{{ photos_form.attachments.label }}</label>
+                    {{ photos_form.attachments }}
+                    <p class="field__help">{{ photos_form.attachments.help_text }}</p>
+                </div>
+                <div class="form-actions"><button type="submit" class="button button--secondary">{% translate "Add the photos" %}</button></div>
+            </form>
+        </details>
         {% endif %}
     </section>
 

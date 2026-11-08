@@ -82,14 +82,13 @@
                         <th>{% translate "Padding color" %}</th>
                         <th>{% translate "Trim color" %}</th>
                         {% if is_receiving %}<th>{% translate "For task" %}</th>{% endif %}
-                        <th>{% translate "Delete" %}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for product_form in product_formset %}
                     <tr>
                         {% if is_receiving %}<td>{{ product_form.kind }}</td>{% endif %}
-                        <td>{{ product_form.product_code }}</td>
+                        <td>{{ product_form.line_id }}{{ product_form.product_code }}</td>
                         {% if not is_receiving %}<td>{{ product_form.serial_number }}</td>{% endif %}
                         <td>{{ product_form.quantity }}</td>
                         <td>{{ product_form.frame }}</td>
@@ -97,7 +96,6 @@
                         <td>{{ product_form.padding }}</td>
                         <td>{{ product_form.trim }}</td>
                         {% if is_receiving %}<td>{{ product_form.for_task }}</td>{% endif %}
-                        <td>{{ product_form.DELETE }}</td>
                     </tr>
                     {% if product_form.errors %}
                     <tr><td colspan="9">

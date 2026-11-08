@@ -709,27 +709,28 @@ class TaskEditTests(TaskTestCase):
         product = self.task.products.get()
         self.assertEqual(product.quantity, 1)
 
-    def test_resubmitting_products_replaces_the_previous_set(self):
+    def test_a_machine_on_the_task_is_corrected_in_place_and_new_rows_add(self):
         self.client.login(username='supervisor1', password='pass12345')
         self.client.post(self.url, self._payload(**{
             **self._management_form('products', 1),
             'products-0-product_code': 'PNL-OLD', 'products-0-serial_number': '', 'products-0-quantity': '1',
         }))
-        self.assertEqual(self.task.products.count(), 1)
+        line = self.task.products.get()
 
         self.client.post(self.url, self._payload(**{
-            **self._management_form('products', 1),
-            'products-0-product_code': 'PNL-NEW', 'products-0-serial_number': '', 'products-0-quantity': '3',
+            **self._management_form('products', 2),
+            'products-0-line_id': str(line.pk), 'products-0-product_code': 'PNL-FIXED', 'products-0-quantity': '1',
+            'products-1-product_code': 'PNL-EXTRA', 'products-1-quantity': '1',
         }))
 
-        products = list(self.task.products.all())
-        self.assertEqual(len(products), 1)
-        self.assertEqual(products[0].product_code, 'PNL-NEW')
-        self.assertEqual(products[0].quantity, 3)
+        self.assertEqual(list(self.task.products.order_by('pk').values_list('pk', 'product_code')),
+                         [(line.pk, 'PNL-FIXED'), (self.task.products.get(product_code='PNL-EXTRA').pk, 'PNL-EXTRA')])
 
     def _replace_products_with(self, code):
+        line = self.task.products.first()
         return self.client.post(self.url, self._payload(**{
             **self._management_form('products', 1),
+            'products-0-line_id': str(line.pk) if line else '',
             'products-0-product_code': code, 'products-0-serial_number': '', 'products-0-quantity': '1',
         }))
 
@@ -784,25 +785,29 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual([(line.product_code, line.quantity, line.status) for line in lines],
                          [('BENCH-01', 1, TaskProduct.Status.PENDING)] * 3)
 
-    def test_deleting_a_product_row_via_checkbox(self):
+    def test_no_one_removes_a_machine_once_it_is_on_the_task(self):
         self.client.login(username='supervisor1', password='pass12345')
         self.client.post(self.url, self._payload(**{
             **self._management_form('products', 1),
             'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
             'products-0-quantity': '1', 'products-0-frame': 'Matte black',
         }))
-        self.assertEqual(self.task.products.count(), 1)
+        line = self.task.products.get()
+        line.status = TaskProduct.Status.DONE  # checked off on site
+        line.save(update_fields=['status'])
+        self.assertNotContains(self.client.get(self.url), 'DELETE')  # no Delete on the page
 
-        # Ticking Delete removes the row outright — no need to also blank
-        # out product_code or any of its other fields by hand.
-        response = self.client.post(self.url, self._payload(**{
-            **self._management_form('products', 1, initial=1),
-            'products-0-product_code': 'BENCH-01', 'products-0-serial_number': 'SN-1',
-            'products-0-quantity': '1', 'products-0-frame': 'Matte black',
-            'products-0-DELETE': 'on',
-        }))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.task.products.count(), 0)
+        # A forged Delete, a blanked row, or the row left out entirely: the machine stays, with its status.
+        for rows in (
+            {'products-0-line_id': str(line.pk), 'products-0-product_code': 'BENCH-01', 'products-0-quantity': '1',
+             'products-0-DELETE': 'on'},
+            {'products-0-line_id': str(line.pk), 'products-0-product_code': '', 'products-0-quantity': ''},
+            {},
+        ):
+            with self.subTest(rows=rows):
+                response = self.client.post(self.url, self._payload(**{**self._management_form('products', 1), **rows}))
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(list(self.task.products.values_list('pk', 'status')), [(line.pk, TaskProduct.Status.DONE)])
 
     def test_searching_tasks_by_product_serial_number(self):
         self.client.login(username='supervisor1', password='pass12345')

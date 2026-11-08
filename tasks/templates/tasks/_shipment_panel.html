@@ -47,7 +47,7 @@
 
     {% if shipment.can_prepare %}
     {# The warehouse manager: the parts picked (they leave stock), the PAK number, who ships it. Again while not shipped, to correct. #}
-    <form method="post" class="shipment-form" novalidate>
+    <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Ready to ship? The parts leave the stock and the technician is told.' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="shipment_ready">
         <h3>{% if shipment.stage == 'preparing' %}{% translate "Prepare the parcel" %}{% else %}{% translate "Change the parcel" %}{% endif %}</h3>
@@ -85,7 +85,7 @@
 
     {% if shipment.can_ship %}
     {# Whoever hands it to the courier: the courier, and its tracking number when it has one. #}
-    <form method="post" class="shipment-form" novalidate>
+    <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Mark as shipped? The customer is emailed that the part is on its way.' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="shipment_shipped">
         <h3>{% translate "Hand it to the courier" %}</h3>
@@ -111,7 +111,7 @@
     <p>{% translate "Fitting visit" %}: <a href="{% url 'tasks:task_detail' visit.pk %}" class="task-number" dir="ltr">{{ visit.task_number }}</a> · {{ visit.get_status_display }}</p>
     {% endfor %}
     {% if shipment.can_book_fitting %}
-    <form method="post" class="form-actions">
+    <form method="post" class="form-actions" data-confirm="{% translate 'Create a fitting visit? A new visit task is made for this branch.' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="book_fitting">
         <button type="submit" class="button button--secondary">{% translate "Book a fitting visit" %}</button>

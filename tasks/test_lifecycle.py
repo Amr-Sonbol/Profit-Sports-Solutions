@@ -817,8 +817,10 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             detail = self.client_class().get(f'/api/my-tasks/{task.pk}/', HTTP_AUTHORIZATION=f'Token {token}').json()
             got = detail['from_request']
             self.assertEqual((got['ticket_number'], got['contact_phone']), (ticket.ticket_number, '0501112222'))
-            self.assertEqual(got['conversation'], [])
-            self.assertEqual([file['name'] for file in got['files']], ['belt.jpg'])
+            self.assertEqual(got['conversation'], [])  # kept for older apps, always empty: never support's messages
+            self.assertEqual(got['machines'][0]['serial'], 'TG-1')
+            self.assertEqual([(item['kind'], item['name']) for item in got['machines'][0]['items']], [('image', 'belt.jpg')])
+            self.assertTrue(got['machines'][0]['items'][0]['url'].endswith(tuple('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_:')))
             self.assertNotIn('SECRET', json.dumps(got))
 
 
@@ -906,3 +908,119 @@ class WhatHappensNextTests(LifecycleTestCase):
         page = self.staff.get(self.url)
         self.assertContains(page, 'Shipping and PAK')
         self.assertNotContains(page, 'value="update_logistics"')
+
+
+class CustomerReportTests(LifecycleTestCase):
+    """Every photo and video the customer sent, under its machine, wherever the work is planned or done."""
+
+    def setUp(self):
+        import tempfile
+        self._media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        self._media.enable()
+        self.addCleanup(self._media.disable)
+        super().setUp()
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.send_request(machines=[
+            {'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
+             'description': 'Dead.', 'files': [SimpleUploadedFile('dead.jpg', b'jpg', content_type='image/jpeg'),
+                                                SimpleUploadedFile('noise.mp4', b'mp4', content_type='video/mp4')]},
+            {'which': 'new', 'model_name': 'Bike', 'serial_no': 'BK-2', 'problem': 'noise', 'description': 'Squeaks.'},
+        ])
+        self.ticket = self.newest_request()
+        self.url = f'/tasks/tickets/{self.ticket.pk}/'
+
+    def test_on_the_request_page_photos_show_under_their_machine(self):
+        page = self.staff.get(self.url).content.decode()
+        self.assertIn('2 machines', page)
+        self.assertIn('<video src=', page)
+        excite, bike = page.index('Excite Run 700'), page.index('No photos sent for this machine.')
+        self.assertLess(excite, page.index('dead.jpg'))
+        self.assertLess(page.index('dead.jpg'), bike)  # the photo under the first machine, the second has none
+
+    def test_staff_add_whatsapp_photos_under_a_machine_and_the_technician_sees_them(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bike = self.ticket.machines.get(serial_no='BK-2')
+        self.staff.post(self.url, {'action': 'add_customer_photos', 'machine': bike.pk,
+                                   'attachments': [SimpleUploadedFile('whatsapp.jpg', b'jpg', content_type='image/jpeg')]})
+        attachment = bike.attachments.get()
+        self.assertEqual(attachment.added_by, self.admin.user)
+        # Photos sent later in the conversation reach the technician too (never support's messages).
+        self.portal.post(f'/tasks/tickets/status/{self.ticket.token}/', {
+            'message': 'Here is the plate.', 'attachments': [SimpleUploadedFile('plate.jpg', b'jpg', content_type='image/jpeg')],
+        })
+        self.staff.post(self.url, {'action': 'next', 'machines': [str(m.pk) for m in self.ticket.machines.all()],
+                                   'choice': 'visit', 'technician': self.tech.pk})
+        self.ticket.refresh_from_db()
+        technician_page = self.client_for('tech1').get(f'/tasks/my/{self.ticket.task.pk}/')
+        for text in ('whatsapp.jpg', 'Added by our team', 'Sent later by the customer', 'plate.jpg', 'dead.jpg'):
+            self.assertContains(technician_page, text)
+        self.assertNotContains(technician_page, 'Here is the plate.')
+
+    def test_the_request_list_counts_photos(self):
+        page = self.staff.get('/tasks/tickets/')
+        self.assertContains(page, '2 photos or videos')
+
+
+class ReportMachinesTests(LifecycleTestCase):
+    """A machine on the report is never removed; one not worked on says why."""
+
+    def setUp(self):
+        super().setUp()
+        from customers.models import Asset
+        from reference.models import Brand
+        self.brand = Brand.objects.create(name='Technogym')
+        self.asset = Asset.objects.create(site=self.site, brand=self.brand, model_name='Excite Run 700', serial_no='TG-1')
+        self.task = Task.objects.create(
+            task_number='AE-0900', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.admin.user,
+        )
+
+    def test_a_recorded_machine_left_out_comes_back_as_it_was(self):
+        from tasks.models import TaskAsset
+        from tasks.views import save_task_machines
+        save_task_machines(self.task, [{'asset': self.asset, 'outcome': 'repaired', 'note': 'Belt replaced'}], [])
+        save_task_machines(self.task, [], [])  # everything left out
+        line = TaskAsset.objects.get(task=self.task)
+        self.assertEqual((line.asset, line.outcome, line.note), (self.asset, 'repaired', 'Belt replaced'))
+
+    def test_not_worked_on_needs_a_reason(self):
+        from tasks.forms import ExistingAssetOutcomeForm
+        from tasks.models import TaskAsset
+        self.assertIn(('not_worked_on', 'Not worked on'), [(v, str(l)) for v, l in TaskAsset.Outcome.choices])
+        form = ExistingAssetOutcomeForm({'asset': self.asset.pk, 'outcome': 'not_worked_on', 'note': ''}, site=self.site)
+        self.assertFalse(form.is_valid())
+        self.assertIn('note', form.errors)
+        form = ExistingAssetOutcomeForm({'asset': self.asset.pk, 'outcome': 'not_worked_on', 'note': 'Not on site'}, site=self.site)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_a_typed_brand_counts_and_a_missing_one_names_the_machine(self):
+        from api.views import _machine_form
+        row = {'model_name': 'Bike 500', 'serial_no': 'BK-2290', 'outcome': 'repaired'}
+        form = _machine_form(self.task, {**row, 'brand_name': ' technogym '})
+        self.assertTrue(form.is_valid(), form.errors)
+        form = _machine_form(self.task, row)
+        self.assertFalse(form.is_valid())
+        self.assertIn('Bike 500 (BK-2290): choose its brand from the list.', form.non_field_errors())
+
+    def test_the_review_shows_a_signature_already_drawn(self):
+        import base64
+        from django.test import RequestFactory
+        from tasks.views import report_preview
+        from reports.forms import WorkReportForm
+        from tasks.models import Technician
+        png = 'data:image/png;base64,' + base64.b64encode(
+            bytes.fromhex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a1300000000049454e44ae426082'),
+        ).decode()
+        tech = self.tech
+        form = WorkReportForm({'action_taken': 'Checked', 'resolved': 'True', 'customer_name': 'Sara'})
+        self.assertTrue(form.is_valid(), form.errors)
+        request = RequestFactory().post('/')
+        request.user = tech.user
+        html, problems = report_preview(request, self.task, tech, form, [], drawn_signature=png)
+        self.assertIn(png, html)
+        from reports.models import WorkReport
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())  # nothing kept
+
+    def test_the_copy_goes_to_whoever_made_the_request_by_default(self):
+        from tasks.views import report_copy_default
+        self.assertEqual(report_copy_default(self.task), self.site.effective_contact_email or '')
