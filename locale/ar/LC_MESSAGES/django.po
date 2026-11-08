@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 22:23+0000\n"
+"POT-Creation-Date: 2026-11-08 22:35+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1628,6 +1628,9 @@ msgstr "رد العميل"
 msgid "Customer request"
 msgstr "طلب العميل"
 
+msgid "Customer requests"
+msgstr "طلبات العملاء"
+
 #, python-format
 msgid "Customer satisfaction (%(counter)s rating)"
 msgid_plural "Customer satisfaction (%(counter)s ratings)"
@@ -1678,6 +1681,9 @@ msgstr "صورة العميل للوحة الرقم التسلسلي"
 
 msgid "Customers"
 msgstr "العملاء"
+
+msgid "Customers sign in on the customer portal."
+msgstr "يسجّل العملاء الدخول من بوابة العملاء."
 
 msgid "DHL"
 msgstr "DHL"
@@ -2181,6 +2187,9 @@ msgstr "تنزيل التقرير (PDF)"
 msgid "Download the report (PDF)"
 msgstr "تنزيل التقرير (PDF)"
 
+msgid "Download your reports"
+msgstr "حمّل تقاريرك"
+
 msgid "Duplicate or not needed"
 msgstr "مكرّر أو غير مطلوب"
 
@@ -2409,6 +2418,9 @@ msgstr "FedEx"
 msgid "Feedback request"
 msgstr "طلب التقييم"
 
+msgid "Field service"
+msgstr "الخدمة الميدانية"
+
 msgid "File"
 msgstr "ملف"
 
@@ -2456,6 +2468,9 @@ msgstr "الإبلاغ عن إهمال"
 
 msgid "Flooring"
 msgstr "الأرضيات"
+
+msgid "Follow every visit"
+msgstr "تابع كل زيارة"
 
 msgid "Follow-up needed"
 msgstr "تلزم متابعة"
@@ -4558,6 +4573,9 @@ msgstr "التقارير"
 msgid "Reports & ratings"
 msgstr "التقارير والتقييمات"
 
+msgid "Reports and approvals"
+msgstr "التقارير والموافقات"
+
 msgid "Reports awaiting your approval"
 msgstr "تقارير بانتظار موافقتك"
 
@@ -4915,6 +4933,9 @@ msgstr "أرسل اعتذاراً موجزاً يوضح سبب التأخير ا
 
 msgid "Send a copy to"
 msgstr "إرسال نسخة إلى"
+
+msgid "Send a request"
+msgstr "أرسل طلباً"
 
 msgid "Send a technician"
 msgstr "إرسال فني"
@@ -5371,6 +5392,9 @@ msgstr "تم تحديث المهمة."
 msgid "Tasks"
 msgstr "المهام"
 
+msgid "Tasks and visits"
+msgstr "المهام والزيارات"
+
 msgid "Tasks assisted on"
 msgstr "المهام التي شارك فيها كمساعد"
 
@@ -5412,6 +5436,9 @@ msgstr "تقدّم الفريق"
 
 msgid "Team schedule"
 msgstr "جدول الفريق"
+
+msgid "Team sign-in"
+msgstr "دخول الفريق"
 
 msgid "Technical Support Manager"
 msgstr "مدير الدعم الفني"
@@ -6192,6 +6219,9 @@ msgstr "رفع قائمة"
 msgid "Use only if the customer subsequently complained about this specific visit and the fault lies with the technician; not every complaint constitutes negligence. This is recorded in their reliability record and is not visible to the technician."
 msgstr "يُستخدم فقط إذا تقدّم العميل لاحقاً بشكوى بخصوص هذه الزيارة تحديداً وكان الخطأ من جانب الفني؛ فليست كل شكوى إهمالاً. يُسجَّل ذلك في سجل موثوقيته ولا يظهر للفني."
 
+msgid "Use the email and password of your account."
+msgstr "استخدم البريد الإلكتروني وكلمة المرور الخاصين بحسابك."
+
 msgid "Username"
 msgstr "اسم المستخدم"
 
@@ -6708,6 +6738,9 @@ msgstr "تم حفظ بياناتك."
 msgid "Your feedback has already been recorded. Thank you for your time."
 msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
+msgid "Your gym equipment, looked after. Everything about your requests and visits in one place."
+msgstr "معدات ناديك في أيدٍ أمينة. كل ما يخص طلباتك وزياراتك في مكان واحد."
+
 msgid "Your gym's color. The portal's buttons and highlights use it."
 msgstr "لون ناديك. تستخدمه أزرار البوابة والعناصر المميزة فيها."
 
@@ -6846,6 +6879,9 @@ msgstr "لا يجوز تخزين أي مبلغ دون عملته"
 
 msgid "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) or the items (Accessories)"
 msgstr "موضوع التذكرة الداخلية؛ وفي طلب العميل: موضوعه («أخرى») أو المنطقة («الأرضيات») أو القطع («الإكسسوارات»)"
+
+msgid "any time, as PDF."
+msgstr "في أي وقت، بصيغة PDF."
 
 msgid "approximate duration of the job; shown as an estimated finish time"
 msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتهاء متوقع"
@@ -7202,6 +7238,9 @@ msgstr "لون الإطار"
 
 msgid "free text as shown on the plate"
 msgstr "نص حر كما يظهر على اللوحة"
+
+msgid "from booking to the signed report."
+msgstr "من الحجز حتى التقرير الموقّع."
 
 msgid "full contact name"
 msgstr "الاسم الكامل لجهة الاتصال"
@@ -8112,6 +8151,9 @@ msgstr "من وقّع"
 
 msgid "why there is no signature"
 msgstr "سبب عدم وجود توقيع"
+
+msgid "with photos of the problem, machine by machine."
+msgstr "مع صور المشكلة، جهازاً بجهاز."
 
 msgid "work performed"
 msgstr "الأعمال المنفّذة"

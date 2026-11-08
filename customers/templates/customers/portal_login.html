@@ -1,30 +1,55 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% translate "Customer portal" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="auth-card">
-    <h1>{% translate "Customer portal" %}</h1>
-    <p class="muted">{% translate "Send us a request, follow your requests and visits, and download your reports." %}</p>
+{# Two halves: who we are and what the portal does, then the sign-in. Stacked on a phone. #}
+<div class="signin">
+    <section class="signin__brand">
+        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="signin__logo">
+        <h1 class="signin__brand-title">{% translate "Customer portal" %}</h1>
+        <p class="signin__tagline">{% translate "Your gym equipment, looked after. Everything about your requests and visits in one place." %}</p>
+        <ul class="signin__features">
+            <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v13H4z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span><strong>{% translate "Send a request" %}</strong> {% translate "with photos of the problem, machine by machine." %}</span>
+            </li>
+            <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                <span><strong>{% translate "Follow every visit" %}</strong> {% translate "from booking to the signed report." %}</span>
+            </li>
+            <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 14h6M10 17h6"/></svg>
+                <span><strong>{% translate "Download your reports" %}</strong> {% translate "any time, as PDF." %}</span>
+            </li>
+        </ul>
+    </section>
 
-    <form method="post" novalidate>
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
-        {% endif %}
-        <div class="field">
-            <label for="{{ form.username.id_for_label }}">{% translate "Email" %}</label>
-            {{ form.username }}
-        </div>
-        <div class="field">
-            <label for="{{ form.password.id_for_label }}">{% translate "Password" %}</label>
-            {{ form.password }}
-        </div>
-        <label class="checkbox-label"><input type="checkbox" name="remember" value="1"{% if remember %} checked{% endif %}> {% translate "Keep me signed in on this device" %}</label>
-        <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit" class="button">{% translate "Log in" %}</button>
-    </form>
-    <p><a href="{% url 'customers:portal_password_help' %}">{% translate "Forgot your password?" %}</a></p>
+    <section class="signin__panel">
+        <h2 class="signin__title">{% translate "Sign in" %}</h2>
+        <p class="muted">{% translate "Use the email and password of your account." %}</p>
+
+        <form method="post" class="signin__form" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
+            {% endif %}
+            <div class="field">
+                <label for="{{ form.username.id_for_label }}">{% translate "Email" %}</label>
+                {{ form.username }}
+            </div>
+            <div class="field">
+                <label for="{{ form.password.id_for_label }}">{% translate "Password" %}</label>
+                {{ form.password }}
+            </div>
+            <div class="signin__row">
+                <label class="checkbox-label"><input type="checkbox" name="remember" value="1"{% if remember %} checked{% endif %}> {% translate "Keep me signed in on this device" %}</label>
+                <a href="{% url 'customers:portal_password_help' %}">{% translate "Forgot your password?" %}</a>
+            </div>
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit" class="button signin__submit">{% translate "Log in" %}</button>
+        </form>
+    </section>
 </div>
 {% endblock %}
