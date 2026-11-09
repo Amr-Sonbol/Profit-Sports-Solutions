@@ -110,6 +110,53 @@ export async function uploadTaskAttachment(
   }
 }
 
+/** Sends one file (multipart) with text fields, signed in as for apiRequest. Returns the parsed reply. */
+export async function uploadFileTo<T>(path: string, fileUri: string, mimeType: string, fieldName: string, parameters: Record<string, string>): Promise<T> {
+  const token = await getToken();
+  const country = await getActiveCountry();
+  const result = await new File(fileUri).upload(`${API_BASE_URL}${path}`, {
+    httpMethod: 'POST',
+    uploadType: UploadType.MULTIPART,
+    fieldName,
+    mimeType,
+    parameters,
+    headers: {
+      ...(token ? { Authorization: `Token ${token}` } : {}),
+      ...(country ? { 'X-Active-Country': country } : {}),
+    },
+  });
+  let body: unknown = null;
+  try {
+    body = JSON.parse(result.body);
+  } catch {
+    body = null;
+  }
+  if (result.status < 200 || result.status >= 300) {
+    throw new ApiRequestError(result.status, body);
+  }
+  return body as T;
+}
+
+/** One field of the website's Edit task form, as the app draws it (api.views._describe_form). */
+export interface EditField {
+  name: string;
+  label: string;
+  kind: 'text' | 'textarea' | 'number' | 'choice' | 'bool' | 'datetime' | 'date' | 'file';
+  required: boolean;
+  value: string | boolean;
+  choices: { value: string; label: string }[];
+  help: string;
+}
+
+export function fetchTaskEditForm(id: number) {
+  return apiRequest<{ fields: EditField[] }>(`/api/tasks/${id}/edit/`);
+}
+
+/** Saves the given fields (the rest stay as they are). */
+export function saveTaskEdit(id: number, values: Record<string, string | boolean>) {
+  return apiRequest<TeamTaskDetail & { message: string; warnings: string[] }>(`/api/tasks/${id}/edit/`, { method: 'POST', body: values });
+}
+
 export function fetchMyReport(id: number) {
   return apiRequest<{
     report: WorkReport | null;
@@ -165,10 +212,37 @@ export function fetchAssignmentCandidates(id: number) {
 export type AssignAction =
   | { action: 'set_lead'; technician: number; end_reason?: string }
   | { action: 'add_helper'; technician: number }
-  | { action: 'remove_helper'; assignment_id: number; end_reason: string };
+  | { action: 'remove_helper'; assignment_id: number; end_reason: string }
+  /** The visit's day and time, local (YYYY-MM-DDTHH:MM), before anyone has set off. */
+  | { action: 'schedule'; scheduled_for: string };
 
 export function assignTask(id: number, body: AssignAction) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/assign/`, { method: 'POST', body });
+}
+
+/** One message on a task's team thread. */
+export interface TaskMessage {
+  id: number;
+  message: string;
+  sent_at: string;
+  sent_by: string;
+  role: string;
+  mine: boolean;
+}
+
+/** The task's team messages (reading them marks them seen). */
+export function fetchTaskMessages(id: number) {
+  return apiRequest<TaskMessage[]>(`/api/tasks/${id}/messages/`);
+}
+
+/** Adds a message; everyone on the task is told. Returns the thread. */
+export function postTaskMessage(id: number, message: string) {
+  return apiRequest<TaskMessage[]>(`/api/tasks/${id}/messages/`, { method: 'POST', body: { message } });
+}
+
+/** One of the website task page's actions (api.views.TaskActionView). Returns the task again. */
+export function taskAction(id: number, body: Record<string, unknown>) {
+  return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/action/`, { method: 'POST', body });
 }
 
 export function approveTaskReport(id: number) {
@@ -365,6 +439,9 @@ type TaskLines = {
   /** After saving a loading: more planned than the warehouse holds (not a block). */
   warning: string;
   lines: PlannedLine[];
+  /** Each line's brand to pick from, and the task's own (the default). Older servers: absent. */
+  brands?: { id: number; name: string }[];
+  task_brand_id?: number | null;
 };
 
 export function fetchTaskLines(id: number) {

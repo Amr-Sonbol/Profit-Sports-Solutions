@@ -10,10 +10,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiRequestError } from '@/api/client';
 import { fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
+import { TaskMessages } from '@/components/task-messages';
 import { confirmAction, confirmStep } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { TaskDetail } from '@/types';
@@ -40,6 +42,8 @@ const PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; lab
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { me } = useSession();
+  const canPlan = me?.permissions?.includes('view_tasks') ?? false;
   const theme = useTheme();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -153,6 +157,16 @@ export default function TaskDetailScreen() {
             {task.customer_name}
           </ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          {/* A supervisor (or above) plans from the task's full screen: time, team, edit, actions. */}
+          {canPlan ? (
+            <TouchableOpacity
+              style={[styles.planButton, { borderColor: theme.primary }]}
+              onPress={() => router.push(`/team-task/${task.id}`)}
+            >
+              <Ionicons name="options-outline" size={16} color={theme.primary} />
+              <ThemedText type="small" themeColor="primary">Plan this task: time, team, edit, actions</ThemedText>
+            </TouchableOpacity>
+          ) : null}
           <ThemedView style={styles.whenRow}>
             <Ionicons name="time-outline" size={18} color={theme.text} />
             <ThemedText type="smallBold">{when(task)}</ThemedText>
@@ -343,6 +357,8 @@ export default function TaskDetailScreen() {
             </ThemedView>
           ) : null}
 
+          <TaskMessages taskId={task.id} />
+
           {/* The report: last, just before the history. */}
           {task.can_file_report ? (
             <TouchableOpacity
@@ -383,6 +399,10 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  planButton: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.two, alignSelf: 'flex-start',
+    borderWidth: 1, borderRadius: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three,
+  },
   container: { flex: 1 },
   safeArea: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },

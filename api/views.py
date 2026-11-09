@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 
+from django import forms
 from django.contrib.auth import SESSION_KEY, authenticate, login
 from django.contrib.auth.models import update_last_login
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -7,7 +8,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect
 from django.utils import translation
 from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -18,6 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from customers import notify as notify_customer
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
 from customers.accounts import locked_usernames, log_account_action
@@ -27,23 +29,26 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_manager,
     scoped_or_404,
 )
-from people.push import push_assigned, push_removed
+from people.push import push_assigned, push_rebooked, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    AddHelperForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
     CancelTaskForm, CloseTaskForm, DeactivateTechnicianForm, TechnicianCreateForm,
-    CorrectEventTimeForm, NegligenceFlagForm,
+    CorrectEventTimeForm, NegligenceFlagForm, RebookVisitForm, TaskMessageForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
-from tasks.models import CustomerTicket, ShippingCompany, Task, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
+from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
     report_copy_default,
+    approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
+    rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
+    apply_task_edit, _form_values, customer_has_current_time,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
@@ -229,7 +234,51 @@ class MyTodayView(APIView):
             } if next_job else None,
             'later_today': [_schedule_item(task) for task in plan['later_today']],
             'done_today': [_schedule_item(task) for task in plan['done_today']],
+            'to_plan': _to_plan(request),
         })
+
+
+# Not started yet: still the supervisor's to plan (a day, a lead).
+PLANNING_STATUSES = (Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED)
+
+
+def can_set_visit_time(request, task):
+    """The website's rule (TaskEditForm): before anyone has set off, the
+    task's supervisor sets the time — unless a manager has fixed it (locked,
+    or a day pinned with no time yet): then he asks to move it
+    (request_schedule_change) or sets that day's time. A manager always can."""
+    if task.status not in PLANNING_STATUSES or not _owns_task(request, task):
+        return False
+    if not has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS):
+        return False
+    if request.user.technician.is_manager_tier:
+        return True
+    day_only_pending = bool(task.scheduled_date and not task.scheduled_for)
+    return not task.schedule_time_locked and not day_only_pending
+
+
+def _to_plan(request):
+    """A supervisor's tasks still waiting for his decision — his as the
+    responsible supervisor, or his own visit as lead — with no day or no
+    lead yet; newest first, each with what's missing. Empty for anyone who
+    doesn't assign tasks."""
+    if not has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS):
+        return []
+    me = request.user.technician
+    tasks = Task.objects.filter(status__in=PLANNING_STATUSES).filter(
+        Q(responsible_supervisor=me)
+        | Q(assignments__technician=me, assignments__is_active=True, assignments__role=TaskAssignment.Role.LEAD),
+    ).distinct().select_related('site__customer').prefetch_related('assignments__technician').order_by('-pk')
+    items = []
+    for task in tasks:
+        lead = next((a for a in task.assignments.all() if a.is_active and a.role == TaskAssignment.Role.LEAD), None)
+        missing = [name for name, gap in (('date', task.scheduled_for is None), ('lead', lead is None)) if gap]
+        if missing:
+            items.append({
+                **_schedule_item(task), 'missing': missing, 'received_at': task.reported_at,
+                'lead_name': lead.technician.full_name if lead else '',
+            })
+    return items
 
 
 class MyScheduleView(APIView):
@@ -1044,8 +1093,8 @@ class MyTaskListView(APIView):
         assignments = TaskAssignment.objects.filter(
             technician=technician, is_active=True, task__status__in=OPEN_STATUSES,
         ).select_related('task__site__customer')
-        tasks = [a.task for a in assignments]
-        tasks.sort(key=lambda t: (t.scheduled_for is None, t.scheduled_for))
+        # Newest received first (when it was given to them): Today shows the day in time order.
+        tasks = [a.task for a in sorted(assignments, key=lambda a: a.assigned_at, reverse=True)]
         return Response(TaskListSerializer(tasks, many=True).data)
 
 
@@ -1528,6 +1577,54 @@ class MyTaskReportView(APIView):
         })
 
 
+def _task_for_anyone_on_it(request, pk):
+    """A task its own people open (assigned to it now), or anyone the team
+    view lets see it (view_tasks, same scope as the website)."""
+    assignment = TaskAssignment.objects.filter(
+        task__pk=pk, technician=request.user.technician, is_active=True,
+    ).select_related('task__site__customer__country').first()
+    if assignment:
+        return assignment.task
+    if not has_role_permission(request, RolePermission.Permission.VIEW_TASKS):
+        raise PermissionDenied
+    return _get_team_task(request, pk)
+
+
+class TaskMessagesView(APIView):
+    """The task's team messages, as on the website's task pages: GET the
+    thread (oldest first; reading it marks them seen), POST {"message"} to
+    add one — everyone on the task is told (tasks.views._post_task_message)."""
+
+    permission_classes = [IsTechnician]
+
+    def _thread(self, request, task):
+        return [
+            {
+                'id': message.pk, 'message': message.message, 'sent_at': message.sent_at,
+                'sent_by': getattr(getattr(message.sent_by, 'technician', None), 'full_name', '')
+                or message.sent_by.get_username(),
+                'role': getattr(getattr(message.sent_by, 'technician', None), 'get_role_display', lambda: '')(),
+                'mine': message.sent_by_id == request.user.pk,
+            }
+            for message in task.messages.select_related('sent_by__technician').order_by('sent_at')
+        ]
+
+    def get(self, request, pk):
+        task = _task_for_anyone_on_it(request, pk)
+        TaskMessageRecipient.objects.filter(
+            message__task=task, technician=request.user.technician, seen_at__isnull=True,
+        ).update(seen_at=timezone.now())
+        return Response(self._thread(request, task))
+
+    def post(self, request, pk):
+        task = _task_for_anyone_on_it(request, pk)
+        form = TaskMessageForm({'message': request.data.get('message', '')})
+        if not form.is_valid():
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+        _post_task_message(request, task, form.cleaned_data['message'])
+        return Response(self._thread(request, task), status=status.HTTP_201_CREATED)
+
+
 def _get_team_task(request, pk):
     """Same scope as the web task detail: the active country, or any
     country for the manager tier.
@@ -1566,6 +1663,8 @@ def _team_task_response(request, task):
         'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
         # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
         'from_request': request_for_app(request, task),
+        # A part shipment's steps, as the office's panel offers them to this person.
+        'shipment': shipment_for_app(task, technician),
     }
     data = TeamTaskDetailSerializer(task, context=context).data
     # What a manager can do here, as on the website's task page (TaskManageView).
@@ -1577,6 +1676,7 @@ def _team_task_response(request, task):
         'lines': [
             {
                 'product_code': line.product_code, 'kind': line.kind, 'quantity': line.quantity,
+                'brand': str(line.brand or task.brand or ''),
                 'serial_number': line.serial_number, 'status': line.status, 'status_label': str(line.status_label), 'colors': f'{line.frame} / {line.arm} / {line.padding} / {line.trim}',
                 'replacement': line.replacement, 'note': line.note, 'added_on_site': line.added_on_site,
                 'photo_url': signed_media_url(request, line.photo.url) if line.photo else '',
@@ -1609,6 +1709,7 @@ def _team_task_response(request, task):
             'title': str(_('Send to installation')),
         } if lines_to_carry(task) and technician.is_manager_tier else None,
     } if lines or task.previous_task_id else None
+    data['actions'] = _task_actions(request, task, owns)
     data['manage'] = {
         'can_cancel': is_manager and task.status in CANCELLABLE_STATUSES,
         'can_close': is_manager and task.status != Task.Status.CLOSED,
@@ -1663,12 +1764,17 @@ class TaskLinesView(APIView):
             'lines': [
                 {
                     'line_id': line.pk, 'kind': line.kind, 'product_code': line.product_code,
+                    # Its own brand, else the task's.
+                    'brand_id': line.brand_id or task.brand_id, 'brand_name': (line.brand or task.brand or '') and str(line.brand or task.brand),
                     'for_task': line.for_task.task_number if line.for_task_id else '',
                     'serial_number': line.serial_number, 'quantity': line.quantity,
                     'frame': line.frame, 'arm': line.arm, 'padding': line.padding, 'trim': line.trim,
                 }
-                for line in task.products.select_related('for_task').order_by('pk')
+                for line in task.products.select_related('for_task', 'brand').order_by('pk')
             ],
+            # To pick a line's brand from; the task's own comes first as the default.
+            'brands': [{'id': brand.pk, 'name': brand.name} for brand in Brand.objects.filter(is_active=True).order_by('name')],
+            'task_brand_id': task.brand_id,
         })
 
     def post(self, request, pk):
@@ -1677,7 +1783,7 @@ class TaskLinesView(APIView):
             return Response({'detail': locked}, status=status.HTTP_400_BAD_REQUEST)
         forms_ = [
             TaskProductForm({key: row.get(key, '') for key in (
-                'line_id', 'kind', 'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim',
+                'line_id', 'kind', 'product_code', 'serial_number', 'quantity', 'frame', 'arm', 'padding', 'trim', 'brand',
                 'for_task',
             )})
             for row in request.data.get('lines') or [] if isinstance(row, dict)
@@ -1782,6 +1888,254 @@ class TaskManageView(APIView):
         return _team_task_response(request, task)
 
 
+def _task_actions(request, task, owns):
+    """What this person can do on the task now, as the website's task page
+    offers it (TaskActionView runs them): each a yes/no, with what it needs."""
+    technician = request.user.technician
+    plans = owns and has_role_permission(request, RolePermission.Permission.CREATE_TASKS)
+    is_manager = technician.is_manager_tier
+    pending = task.schedule_change_requests.filter(
+        status=ScheduleChangeRequest.Status.PENDING,
+    ).select_related('requested_by').first()
+    feedback = getattr(task, 'feedback', None)
+    return {
+        # The visit's day and time (TeamTaskAssignView "schedule"), when the website would allow it.
+        'schedule': can_set_visit_time(request, task),
+        'has_contact_email': bool(task.site.effective_contact_email),
+        # Only when the customer doesn't have this time yet — and never while a change awaits a manager.
+        'notify_schedule': plans and bool(task.scheduled_for) and pending is None and not customer_has_current_time(task),
+        'schedule_notified_at': task.schedule_notified_at,
+        'notify_delay': plans and bool(task.scheduled_for),
+        'notify_shipping': plans and bool(task.shipping_tracking_number),
+        'set_schedule_time': plans and bool(task.scheduled_date) and not task.scheduled_for,
+        'scheduled_date': task.scheduled_date,
+        'request_schedule_change': plans and task.schedule_time_locked and pending is None,
+        'pending_change': {
+            'id': pending.pk, 'requested_for': pending.requested_scheduled_for, 'reason': pending.reason,
+            'requested_by': pending.requested_by.full_name, 'can_review': is_manager,
+        } if pending else None,
+        'rebook': is_manager and task.status == Task.Status.BLOCKED,
+        'send_feedback_request': is_manager and task.status == Task.Status.CLOSED,
+        'feedback_requested_at': feedback.requested_at if feedback else None,
+        'reopen': technician.role == Technician.Role.ADMIN and task.status == Task.Status.CLOSED,
+    }
+
+
+def _field_kind(field):
+    widget = field.field.widget
+    name = type(widget).__name__
+    if isinstance(widget, forms.CheckboxInput):
+        return 'bool'
+    if isinstance(widget, forms.ClearableFileInput) or isinstance(widget, forms.FileInput):
+        return 'file'
+    if isinstance(widget, forms.Select):
+        return 'choice'
+    if isinstance(widget, forms.Textarea):
+        return 'textarea'
+    if getattr(widget, 'input_type', '') == 'datetime-local' or name == 'DateTimeInput':
+        return 'datetime'
+    if getattr(widget, 'input_type', '') == 'date' or name == 'DateInput':
+        return 'date'
+    if getattr(widget, 'input_type', '') == 'number' or name == 'NumberInput':
+        return 'number'
+    return 'text'
+
+
+def _edit_values(form):
+    """What the form holds now, as it would post it — a yes/no/unknown answer
+    (NullBooleanField) as "true"/"false"/"unknown", never lost on saving."""
+    values = _form_values(form)
+    for field in form:
+        if isinstance(field.field, forms.NullBooleanField):
+            current = field.value()
+            values[field.html_name] = 'true' if current is True else 'false' if current is False else 'unknown'
+    return values
+
+
+def _describe_form(request, form):
+    """A form as the app draws it: each field's name, label, kind, choices,
+    current value and help — so the app's edit screen is always the
+    website's form, whatever fields it has."""
+    values = _edit_values(form)
+    fields = []
+    for field in form:
+        kind = _field_kind(field)
+        value = values.get(field.html_name, '')
+        if kind == 'bool':
+            value = bool(value)
+        elif kind == 'file':
+            current = field.value()
+            value = signed_media_url(request, current.url) if current and getattr(current, 'url', '') else ''
+        fields.append({
+            'name': field.html_name, 'label': str(field.label), 'kind': kind, 'required': field.field.required,
+            'value': value if kind != 'choice' else str(value or ''),
+            'choices': [
+                {'value': str(v), 'label': str(l)}
+                for v, l in (getattr(field.field, 'choices', None) or getattr(field.field.widget, 'choices', []))
+            ] if kind == 'choice' else [],
+            'help': str(field.help_text or ''),
+        })
+    return fields
+
+
+class TaskDocumentView(APIView):
+    """A document added to a task from the app, as on the website's task page
+    (StaffAttachmentUploadForm): multipart `file` and `purpose` (delivery_note,
+    written_report, other) — staff, never a technician. Returns the task again."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        if request.user.technician.role == Technician.Role.TECHNICIAN:
+            raise PermissionDenied
+        form = StaffAttachmentUploadForm(request.data, request.FILES)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        _save_attachment(
+            request, task, form.cleaned_data['file'], form.cleaned_data['purpose'], source=TaskAttachment.Source.SUPERVISOR,
+        )
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
+class TaskEditView(APIView):
+    """The website's Edit task (tasks.views.task_edit) from the app — the same
+    form, rules and save (apply_task_edit); its machines are planned on their
+    own screen. GET: the form's fields. POST: any of them (JSON, or multipart
+    for one document file); the rest stay as they are. Returns the task
+    again, with "message" and "warnings"."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.CREATE_TASKS)]
+
+    def _form(self, request, task, data=None, files=None):
+        technician = request.user.technician
+        return TaskEditForm(
+            data, files, instance=task, country=task.site.customer.country, is_manager=technician.is_manager_tier,
+        )
+
+    def get(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        return Response({'fields': _describe_form(request, self._form(request, task))})
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        data = _edit_values(self._form(request, task))
+        for name, value in request.data.items():
+            if name in request.FILES:
+                continue
+            if value is True or value == 'true':
+                data[name] = 'on'
+            elif value is False or value == 'false':
+                data.pop(name, None)
+            else:
+                data[name] = '' if value is None else str(value)
+        previous_scheduled_for, previous_scheduled_date = task.scheduled_for, task.scheduled_date
+        form = self._form(request, task, data, request.FILES)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
+        done, warnings = apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date)
+        response = _team_task_response(request, _get_team_task(request, pk))
+        response.data['message'] = done
+        response.data['warnings'] = warnings
+        return response
+
+
+class TaskActionView(APIView):
+    """The website task page's actions, from the app — the same names, the
+    same rules (tasks.views' shared functions) and the same permissions:
+    notify_schedule, notify_delay {reason}, notify_shipping, set_schedule_time
+    {time HH:MM}, request_schedule_change {requested_for YYYY-MM-DDTHH:MM,
+    reason} — the task's supervisor; approve_schedule_change / deny_schedule_change
+    {request_id, note}, rebook {scheduled_for, note}, send_feedback_request —
+    a manager; reopen — an admin. Returns the task again, or {"detail"}.
+    """
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        technician = request.user.technician
+        action = request.data.get('action')
+        data = request.data
+        error = None
+        if action in ('notify_schedule', 'notify_delay', 'notify_shipping', 'set_schedule_time',
+                      'request_schedule_change'):
+            require_role_permission_or_403(request, RolePermission.Permission.CREATE_TASKS)
+            _require_task_owner(request, task)
+            if action == 'notify_schedule':
+                error = notify_schedule(task, request.user)
+            elif action == 'notify_delay':
+                error = notify_delay(task, request.user, data.get('reason', ''))
+            elif action == 'notify_shipping':
+                error = notify_shipping(task)
+            elif action == 'set_schedule_time':
+                error = set_schedule_time(task, technician, request.user, data.get('time', ''))
+            else:
+                error = request_schedule_change(
+                    task, technician, request.user, data.get('requested_for', ''), data.get('reason', ''),
+                )
+        elif action in ('approve_schedule_change', 'deny_schedule_change'):
+            require_manager(request)
+            change_request = get_object_or_404(
+                ScheduleChangeRequest, pk=data.get('request_id'), task=task,
+                status=ScheduleChangeRequest.Status.PENDING,
+            )
+            if action == 'approve_schedule_change':
+                approve_schedule_change(task, change_request, request.user)
+            else:
+                deny_schedule_change(task, change_request, request.user, data.get('note', ''))
+        elif action == 'rebook':
+            require_manager(request)
+            if task.status != Task.Status.BLOCKED:
+                error = _('Only a task stopped on site can be given a new visit here.')
+            else:
+                form = RebookVisitForm({'scheduled_for': data.get('scheduled_for', ''), 'note': data.get('note', '')})
+                if not form.is_valid():
+                    return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+                rebook_visit(task, request.user, form.cleaned_data['scheduled_for'], form.cleaned_data['note'])
+        elif action == 'send_feedback_request':
+            require_manager(request)
+            error = send_feedback_request(request, task)
+        elif action == 'reopen':
+            if technician.role != Technician.Role.ADMIN:
+                raise PermissionDenied
+            error = reopen_task(task, request.user)
+        elif action in ('shipment_ready', 'shipment_shipped', 'book_fitting'):
+            # A part shipment's steps, as on the office's panel (tasks.shipments).
+            from tasks import shipments
+            if not is_part_shipment(task):
+                raise Http404
+            stage = shipments.stage(task)
+            if action == 'shipment_ready':
+                if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
+                    raise PermissionDenied
+                _shipper, problems = shipment_ready(
+                    task, request.user, [(row.get('code'), row.get('quantity')) for row in data.get('parts') or []
+                                         if isinstance(row, dict)],
+                    data.get('pak_reference_number', ''), data.get('technician', ''),
+                )
+                error = ' '.join(str(problem) for problem in problems)
+            elif action == 'shipment_shipped':
+                if not shipments.can_ship(technician, task) or stage != shipments.READY:
+                    raise PermissionDenied
+                if data.get('shipping_company', '') not in ShippingCompany.values:
+                    error = _('Please choose the shipping company.')
+                else:
+                    ship_and_tell_customer(task, request.user, data['shipping_company'], data.get('shipping_tracking_number', ''))
+            else:
+                if not shipments.can_prepare(technician, task) or stage != shipments.SHIPPED:
+                    raise PermissionDenied
+                visit = shipments.book_fitting_visit(task, request.user)
+                return Response({'fitting_task_id': visit.pk, 'fitting_task_number': visit.task_number})
+        else:
+            return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        return _team_task_response(request, _get_team_task(request, pk))
+
+
 class TeamTaskDetailView(APIView):
     """Any task in the requester's scope, with its lead/helpers, report,
     and which of assign/approve the requester can do — the mobile side of
@@ -1881,6 +2235,28 @@ class TeamTaskAssignView(APIView):
                 assigned_at=timezone.now(), is_active=True,
             )
             push_assigned(form.cleaned_data['technician'], task, is_lead=False)
+        elif action == 'schedule':
+            # The visit's day and time (local, YYYY-MM-DDTHH:MM), before anyone has set off — the
+            # website's rules: in the future, recorded, the customer told, the lead notified.
+            if task.status not in PLANNING_STATUSES:
+                return Response({'detail': str(_('The visit has started: its time can no longer be changed here.'))},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not can_set_visit_time(request, task):
+                return Response({'detail': str(_('A manager fixed this time: ask to move the visit instead.'))},
+                                status=status.HTTP_400_BAD_REQUEST)
+            form = RebookVisitForm({'scheduled_for': request.data.get('scheduled_for', ''), 'note': ''})
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            with transaction.atomic():
+                task.scheduled_for = form.cleaned_data['scheduled_for']
+                task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+                task.save(update_fields=['scheduled_for', 'scheduled_date'])
+                TaskEvent.objects.create(
+                    task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(), actor=request.user,
+                )
+                notify_customer.visit_booked(task)
+            if active_lead:
+                push_rebooked(active_lead.technician, task)
         elif action == 'remove_helper':
             helper = get_object_or_404(
                 TaskAssignment, pk=request.data.get('assignment_id'), task=task,

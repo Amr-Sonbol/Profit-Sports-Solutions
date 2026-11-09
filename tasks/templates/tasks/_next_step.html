@@ -61,11 +61,21 @@
                 <p class="field__help">{% if next_plan.task_type %}{{ next_plan.task_type.display_name|default:next_plan.task_type.name }}{% endif %}{% if next_plan.priority == 'high' %} · {% translate "High priority (a machine isn't working)" %}{% endif %}{% if next_warranty %} · {% translate "Under warranty: free" %}{% endif %}</p>
                 {% if ticket.site %}
                 <div class="next-choice__fields">
+                    {% if next_supervisors is not None %}
+                    <div class="field">
+                        <label for="next-supervisor">{% translate "Supervisor" %}</label>
+                        <select id="next-supervisor" name="supervisor">
+                            <option value="">{% translate "None" %}</option>
+                            {% for person in next_supervisors %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
+                        </select>
+                        <p class="field__help">{% translate "Receives it to plan: the day and the technician." %}</p>
+                    </div>
+                    {% endif %}
                     {% if next_technicians is not None %}
                     <div class="field">
                         <label for="next-technician">{% translate "Technician" %}</label>
                         <select id="next-technician" name="technician">
-                            <option value="">{% translate "Choose later" %}</option>
+                            <option value="">{% translate "The supervisor decides" %}</option>
                             {% for person in next_technicians %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
                         </select>
                     </div>

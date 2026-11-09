@@ -1265,6 +1265,10 @@ class TaskProduct(models.Model):
     )
     kind = models.CharField(_('kind'), max_length=10, choices=Kind.choices, default=Kind.MACHINE)
     product_code = models.CharField(_('product code'), max_length=100)
+    # Its own brand (a delivery can mix brands); blank: the task's (Task.brand).
+    brand = models.ForeignKey(
+        'reference.Brand', on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name=_('brand'),
+    )
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
     frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)

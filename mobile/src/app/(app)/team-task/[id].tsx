@@ -1,5 +1,6 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
@@ -7,9 +8,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction,
+  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction, uploadFileTo,
 } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
+import { ShipmentSteps } from '@/components/shipment-steps';
+import { TaskActionsPanel } from '@/components/task-actions';
+import { TaskMessages } from '@/components/task-messages';
 import { confirmAction } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -136,6 +140,21 @@ function fileName(url: string): string {
   }
 }
 
+// Not started yet: the day can still be set (api.views.PLANNING_STATUSES).
+const PLANNING_STATUSES = ['new', 'assigned', 'accepted'];
+
+function localTime(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// What a document added from here is (tasks.forms.StaffAttachmentUploadForm).
+const DOCUMENT_KINDS = [
+  { value: 'delivery_note', label: 'Delivery note' },
+  { value: 'written_report', label: 'Written report' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function TeamTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -191,12 +210,32 @@ export default function TeamTaskScreen() {
     setManageTime(at ? new Date(at) : null);
   };
 
+  // Planning the visit: its day and time (the same picker as a corrected tap).
+  const [settingVisit, setSettingVisit] = useState(false);
+  const startSettingVisit = () => {
+    setManaging(null);
+    // The time it has, else tomorrow at 9:00 to start from (the picker needs one).
+    const start = new Date();
+    start.setDate(start.getDate() + 1);
+    start.setHours(9, 0, 0, 0);
+    setManageTime(task?.scheduled_for ? new Date(task.scheduled_for) : start);
+    setSettingVisit(true);
+    setPickingTime(Platform.OS === 'ios' ? 'datetime' : 'date');
+  };
+  const saveVisit = () => {
+    if (!manageTime) {
+      return;
+    }
+    send({ action: 'schedule', scheduled_for: localTime(manageTime) }, 'Visit time set. The customer and the lead are told.', [
+      'Set the visit time?', 'The customer and the lead are told.',
+    ]).then(() => setSettingVisit(false));
+  };
+
   const saveManaging = () => {
     if (!managing || !task) {
       return;
     }
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const local = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const local = localTime;
     const body: Record<string, string | number> = managing.action === 'correct_time'
       ? { action: 'correct_time', event_id: managing.eventId ?? 0, corrected_at: manageTime ? local(manageTime) : '', reason: manageNote }
       : { action: managing.action, note: manageNote };
@@ -237,9 +276,34 @@ export default function TeamTaskScreen() {
     }
   };
 
-  const send = (body: AssignAction, message: string) => run(() => assignTask(Number(id), body), message, [
+  // Staff add documents (never a technician), as on the website's task page.
+  const canAddDocuments = me?.role !== undefined && me?.role !== 'technician';
+  const addDocument = async (purpose: string, label: string) => {
+    const picked = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true });
+    if (picked.canceled || !picked.assets[0]) {
+      return;
+    }
+    const file = picked.assets[0];
+    if (!(await confirmAction(`Add this ${label.toLowerCase()}?`, file.name))) {
+      return;
+    }
+    setIsBusy(true);
+    setError('');
+    try {
+      setTask(await uploadFileTo<TeamTaskDetail>(
+        `/api/tasks/${id}/documents/`, file.uri, file.mimeType ?? 'application/pdf', 'file', { purpose },
+      ));
+      Alert.alert('Done', 'Document added.');
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'The document could not be added. Please try again.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const send = (body: AssignAction, message: string, question: [string, string] = [
     'Change who is on this task?', 'The people added or removed are notified.',
-  ]);
+  ]) => run(() => assignTask(Number(id), body), message, question);
 
   if (!task) {
     return (
@@ -296,8 +360,15 @@ export default function TeamTaskScreen() {
                 <ThemedText type="small" themeColor="primary">Plan the machines</ThemedText>
               </TouchableOpacity>
             ) : null}
-            {/* Everything else on the website's task page: edit, schedule and delay
-                notices to the customer, messages, documents, feedback request... */}
+            {/* The website's Edit task, drawn from its own form (task-edit/[id]). */}
+            <TouchableOpacity
+              style={[styles.quickButton, { borderColor: theme.primary }]}
+              onPress={() => router.push(`/task-edit/${task.id}`)}
+            >
+              <Ionicons name="create-outline" size={16} color={theme.primary} />
+              <ThemedText type="small" themeColor="primary">Edit task</ThemedText>
+            </TouchableOpacity>
+            {/* The website's page itself, for anything else. */}
             <TouchableOpacity
               style={[styles.quickButton, { borderColor: theme.primary }]}
               onPress={() => router.push({
@@ -348,7 +419,7 @@ export default function TeamTaskScreen() {
             </ThemedView>
           ) : null}
 
-          {task.attachments.length > 0 ? (
+          {task.attachments.length > 0 || canAddDocuments ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
               {task.attachments.map((attachment) => (
@@ -362,6 +433,14 @@ export default function TeamTaskScreen() {
                   <ThemedText type="small" themeColor="textSecondary">{attachment.purpose_display}</ThemedText>
                 </TouchableOpacity>
               ))}
+              {/* A document, as on the website's task page: what it is, then the file (PDF or photo). */}
+              {canAddDocuments ? (
+                <ThemedView style={styles.buttonRow}>
+                  {DOCUMENT_KINDS.map((kind) => (
+                    <SecondaryButton key={kind.value} label={`+ ${kind.label}`} onPress={() => addDocument(kind.value, kind.label)} disabled={isBusy} />
+                  ))}
+                </ThemedView>
+              ) : null}
             </ThemedView>
           ) : null}
 
@@ -369,6 +448,11 @@ export default function TeamTaskScreen() {
 
           <ThemedView style={styles.section}>
             <ThemedText type="smallBold">Team</ThemedText>
+            <ThemedText>
+              Visit: {task.scheduled_for
+                ? new Date(task.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                : 'no day set yet'}
+            </ThemedText>
             <ThemedText>Lead: {task.lead ? task.lead.technician_name : 'not assigned yet'}</ThemedText>
             {task.helpers.map((helper) => (
               <ThemedView key={helper.id} style={styles.helperRow}>
@@ -380,15 +464,43 @@ export default function TeamTaskScreen() {
                 ) : null}
               </ThemedView>
             ))}
-            {task.can_assign ? (
+            {task.can_assign || task.actions?.schedule ? (
               <ThemedView style={styles.buttonRow}>
-                <SecondaryButton
-                  label={task.lead ? 'Change lead' : 'Assign lead'} onPress={() => startPicking('lead')}
-                  disabled={isBusy}
-                />
-                {task.lead ? (
+                {task.can_assign ? (
+                  <SecondaryButton
+                    label={task.lead ? 'Change lead' : 'Assign lead'} onPress={() => startPicking('lead')}
+                    disabled={isBusy}
+                  />
+                ) : null}
+                {task.can_assign && task.lead ? (
                   <SecondaryButton label="Add helper" onPress={() => startPicking('helper')} disabled={isBusy} />
                 ) : null}
+                {/* The website's rule: when a manager fixed the time, Actions offers "Ask to move the visit". */}
+                {(task.actions ? task.actions.schedule : task.can_assign && PLANNING_STATUSES.includes(task.status)) ? (
+                  <SecondaryButton
+                    label={task.scheduled_for ? 'Change the visit time' : 'Set the visit time'}
+                    onPress={startSettingVisit} disabled={isBusy}
+                  />
+                ) : null}
+              </ThemedView>
+            ) : null}
+            {settingVisit ? (
+              <ThemedView style={[styles.section, styles.manageBox, { borderColor: theme.primary }]}>
+                <ThemedText type="smallBold">Visit day and time</ThemedText>
+                <TouchableOpacity
+                  style={[styles.quickButton, { borderColor: theme.primary }]}
+                  onPress={() => setPickingTime(Platform.OS === 'ios' ? 'datetime' : 'date')}
+                >
+                  <ThemedText type="small" themeColor="primary">
+                    {manageTime
+                      ? manageTime.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : 'Pick the day and time'}
+                  </ThemedText>
+                </TouchableOpacity>
+                <ThemedView style={styles.quickRow}>
+                  <SecondaryButton label="Save" onPress={saveVisit} disabled={isBusy || !manageTime} />
+                  <SecondaryButton label="Back" onPress={() => setSettingVisit(false)} />
+                </ThemedView>
               </ThemedView>
             ) : null}
           </ThemedView>
@@ -518,7 +630,7 @@ export default function TeamTaskScreen() {
               {task.equipment.lines.map((line, index) => (
                 <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
                   <ThemedText type="smallBold">
-                    {line.product_code}{line.serial_number ? ` · ${line.serial_number}` : ''}{line.added_on_site ? ' · added on site' : ''}
+                    {line.brand ? `${line.brand} ` : ''}{line.product_code}{line.serial_number ? ` · ${line.serial_number}` : ''}{line.added_on_site ? ' · added on site' : ''}
                   </ThemedText>
                   <ThemedText type="small" themeColor={line.status === 'done' ? 'text' : line.status === 'pending' ? 'textSecondary' : 'danger'}>
                     {line.status_label} · {line.colors}
@@ -631,6 +743,12 @@ export default function TeamTaskScreen() {
             />
           ) : null}
 
+          <ShipmentSteps task={task} onChanged={setTask} />
+
+          <TaskActionsPanel task={task} onChanged={setTask} />
+
+          <TaskMessages taskId={task.id} />
+
           {task.events.length > 0 ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">History</ThemedText>
@@ -715,7 +833,8 @@ const styles = StyleSheet.create({
   picker: { borderWidth: 1, gap: Spacing.two },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
   helperRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
-  buttonRow: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two, backgroundColor: 'transparent' },
+  // Wraps: three buttons (lead, helper, visit time) don't fit side by side on a phone.
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two, backgroundColor: 'transparent' },
   candidate: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   unavailable: { opacity: 0.5 },
   reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },

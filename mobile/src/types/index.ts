@@ -255,7 +255,28 @@ export interface Assignment {
 
 // A supervisor's/manager's view of any task in scope (api/views.py
 // TeamTaskDetailView). The can_* flags are decided by the server.
+/** What this person can do on the task now, as the website's task page offers it. */
+export interface TaskActions {
+  /** The visit's day and time can be set here (else, when a manager fixed it: request_schedule_change). */
+  schedule?: boolean;
+  has_contact_email: boolean;
+  notify_schedule: boolean;
+  schedule_notified_at: string | null;
+  notify_delay: boolean;
+  notify_shipping: boolean;
+  set_schedule_time: boolean;
+  scheduled_date: string | null;
+  request_schedule_change: boolean;
+  pending_change: { id: number; requested_for: string; reason: string; requested_by: string; can_review: boolean } | null;
+  rebook: boolean;
+  send_feedback_request: boolean;
+  feedback_requested_at: string | null;
+  reopen: boolean;
+}
+
 export interface TeamTaskDetail extends TaskDetail {
+  /** Older servers: absent. */
+  actions?: TaskActions;
   lead: Assignment | null;
   helpers: Assignment[];
   report: WorkReport | null;
@@ -267,6 +288,8 @@ export interface TeamTaskDetail extends TaskDetail {
   equipment?: {
     lines: {
       product_code: string; kind: string; quantity: number; serial_number: string; status: string; status_label: string;
+      /** Its brand (else the task's); older servers: absent. */
+      brand?: string;
       colors: string;
       replacement: string; note: string; added_on_site: boolean; photo_url: string;
     }[];
@@ -319,6 +342,14 @@ export interface TodayPlan {
   next_job: (ScheduleItem & { next_action: string | null; directions_url: string }) | null;
   later_today: ScheduleItem[];
   done_today: ScheduleItem[];
+  /** A supervisor's tasks still to plan: no day or no lead yet (older servers: absent). */
+  to_plan?: PlanItem[];
+}
+
+export interface PlanItem extends ScheduleItem {
+  missing: ('date' | 'lead')[];
+  received_at: string;
+  lead_name: string;
 }
 
 /** My progress (/api/my-progress/): the year's line and a month's figures. */
@@ -613,6 +644,10 @@ export interface PlannedLine {
   /** 'machine', or 'part' (a spare part — receiving only: no serial, no colours). */
   kind: string;
   product_code: string;
+  /** Its brand (the task's when none of its own); sent back as `brand`. Older servers: absent. */
+  brand_id?: number | null;
+  brand_name?: string;
+  brand?: number | string | null;
   /** A spare part ordered for one repair: that task's number — held for it in stock. */
   for_task?: string;
   serial_number: string;
@@ -637,6 +672,11 @@ export interface Shipment {
     customer: string; branch: string; address: string; directions_url: string;
     contact_name: string; contact_phone: string;
   };
+  /** The office's steps (older servers: absent): the warehouse manager prepares it, then the fitting visit. */
+  can_prepare?: boolean;
+  shippers?: { id: number; name: string }[];
+  shipper?: string;
+  can_book_fitting?: boolean;
 }
 
 // One photo, video or file the customer sent (tasks.customer_report). `key`

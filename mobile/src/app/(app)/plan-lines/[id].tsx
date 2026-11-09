@@ -7,18 +7,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchTaskLines, saveTaskLines } from '@/api/endpoints';
+import { ChoicePicker } from '@/components/choice-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { PlannedLine } from '@/types';
+import type { Choice, PlannedLine } from '@/types';
 
 const COLORS = [['frame', 'Frame'], ['arm', 'Arm'], ['padding', 'Padding'], ['trim', 'Trim']] as const;
 
-function emptyLine(): PlannedLine {
+function emptyLine(brandId: number | null = null): PlannedLine {
   return {
     kind: 'machine', product_code: '', serial_number: '', quantity: '1', frame: 'Black', arm: 'Black', padding: 'Black',
-    trim: 'Black',
+    trim: 'Black', brand_id: brandId,
   };
 }
 
@@ -45,10 +46,17 @@ export default function PlanLinesScreen() {
   const [receiving, setReceiving] = useState(false);
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  // Each line's brand: the task's by default (a delivery can mix brands).
+  const [brands, setBrands] = useState<Choice[]>([]);
+  const [taskBrandId, setTaskBrandId] = useState<number | null>(null);
 
   useFocusEffect(useCallback(() => {
     fetchTaskLines(Number(id)).then((data) => {
-      setLines(data.lines.length ? data.lines.map((line) => ({ ...line, quantity: String(line.quantity) })) : [emptyLine()]);
+      setBrands((data.brands ?? []).map((brand) => ({ value: String(brand.id), label: brand.name })));
+      setTaskBrandId(data.task_brand_id ?? null);
+      setLines(data.lines.length
+        ? data.lines.map((line) => ({ ...line, quantity: String(line.quantity) }))
+        : [emptyLine(data.task_brand_id ?? null)]);
       setLocked(data.locked);
       setLockedReason(data.locked_reason);
       setStock(data.stock);
@@ -66,7 +74,7 @@ export default function PlanLinesScreen() {
     setIsBusy(true);
     setError('');
     try {
-      const filled = (lines ?? []).filter((line) => line.product_code.trim());
+      const filled = (lines ?? []).filter((line) => line.product_code.trim()).map((line) => ({ ...line, brand: line.brand_id ?? '' }));
       const saved = await saveTaskLines(Number(id), filled);
       if (saved.warning) {
         // A loading planned beyond the warehouse's stock: saved, but say so.
@@ -126,6 +134,12 @@ export default function PlanLinesScreen() {
                     })}
                   </ThemedView>
                 ) : null}
+                {brands.length && line.kind !== 'part' ? (
+                  <ChoicePicker
+                    label="Brand" choices={brands} value={line.brand_id ? String(line.brand_id) : ''} optional
+                    onChange={(value) => update(index, { brand_id: value ? Number(value) : null })}
+                  />
+                ) : null}
                 <ThemedView style={styles.row}>
                   <TextInput
                     style={[inputStyle, styles.flex]} value={line.product_code} editable={!locked}
@@ -180,7 +194,7 @@ export default function PlanLinesScreen() {
               <>
                 <TouchableOpacity
                   style={[styles.addButton, { borderColor: theme.primary }]}
-                  onPress={() => setLines((current) => [...(current ?? []), emptyLine()])}
+                  onPress={() => setLines((current) => [...(current ?? []), emptyLine(taskBrandId)])}
                 >
                   <ThemedText themeColor="primary">{receiving ? '+ Another code' : '+ Another machine'}</ThemedText>
                 </TouchableOpacity>

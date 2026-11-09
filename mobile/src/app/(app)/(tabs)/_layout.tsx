@@ -41,15 +41,23 @@ export default function AppTabsLayout() {
   // A manager's home screen; they have no My progress (field staff's), as on the website.
   const showDashboard = can('view_dashboard');
   const isManagerTier = me?.role === 'manager' || me?.role === 'admin';
+  // Who plans others' work (a supervisor) opens on Tasks, where "To plan" is.
+  const plansWork = can('assign_tasks');
   const router = useRouter();
-  const openedDashboard = useRef(false);
+  const opened = useRef(false);
   useEffect(() => {
-    // Open on the Dashboard once, for whoever has one; Schedule stays a tab.
-    if (showDashboard && !openedDashboard.current) {
-      openedDashboard.current = true;
-      router.navigate('/dashboard');
+    // The first screen, once: a manager's Dashboard; a supervisor's Tasks; a technician's
+    // Schedule (the next job and its Directions) — the tabs stay as they are.
+    if (opened.current || !me) {
+      return;
     }
-  }, [showDashboard, router]);
+    opened.current = true;
+    if (showDashboard) {
+      router.navigate('/dashboard');
+    } else if (plansWork) {
+      router.navigate('/tasks');
+    }
+  }, [me, showDashboard, plansWork, router]);
 
   return (
     <Tabs
@@ -66,6 +74,7 @@ export default function AppTabsLayout() {
         name="dashboard"
         options={{ title: 'Dashboard', tabBarIcon: tabIcon('speedometer'), href: showDashboard ? undefined : null }}
       />
+      <Tabs.Screen name="tasks" options={{ title: 'Tasks', tabBarIcon: tabIcon('list') }} />
       <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
       <Tabs.Screen
         name="progress"
@@ -78,10 +87,11 @@ export default function AppTabsLayout() {
         name="tickets"
         options={{ title: 'Tickets', tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
       />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
       <Tabs.Screen
         name="more" options={{ title: 'More', tabBarIcon: tabIcon('grid'), href: showMore ? undefined : null }}
       />
+      {/* Always the last tab (far right; far left in Arabic). */}
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
     </Tabs>
   );
 }

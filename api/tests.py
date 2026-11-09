@@ -637,6 +637,45 @@ class TeamTaskApiTests(ApiTestCase):
         self.assertEqual(response.json()['lead']['technician_name'], 'Omar Other')
         self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.REASSIGNED).exists())
 
+    def test_the_supervisor_sets_the_visit_time_and_it_leaves_to_plan(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = None
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        token = self.token_for('supervisor1')
+        today = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual([(i['id'], i['missing']) for i in today['to_plan']], [(self.task.pk, ['date'])])
+
+        in_the_past = timezone.localtime(timezone.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': in_the_past}).status_code, 400)
+        tomorrow = timezone.localtime(timezone.now() + timedelta(days=1)).replace(hour=9, minute=0)
+        response = self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': tomorrow.strftime('%Y-%m-%dT%H:%M')})
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        # Read as the country's local time (the app sends what the supervisor picked there).
+        from zoneinfo import ZoneInfo
+        self.assertEqual(timezone.localtime(self.task.scheduled_for, ZoneInfo(self.country.timezone)).hour, 9)
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED).exists())
+        self.assertEqual(self.client.get('/api/my-today/', **self.auth(token)).json()['to_plan'], [])
+
+    def test_to_plan_includes_his_own_visit_with_no_day_and_never_a_technicians(self):
+        own = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        TaskAssignment.objects.create(task=own, technician=self.supervisor, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now())
+        to_plan = self.client.get('/api/my-today/', **self.auth(self.token_for('supervisor1'))).json()['to_plan']
+        self.assertIn((own.pk, ['date']), [(i['id'], i['missing']) for i in to_plan])
+        self.assertEqual(self.client.get('/api/my-today/', **self.auth(self.token_for('tech1'))).json()['to_plan'], [])
+
+    def test_the_time_is_fixed_once_the_visit_has_started(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        tomorrow = timezone.localtime(timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        response = self._post(self.token_for('supervisor1'), 'assign', {'action': 'schedule', 'scheduled_for': tomorrow})
+        self.assertEqual(response.status_code, 400)
+
     def test_team_is_locked_once_work_starts(self):
         self.task.status = Task.Status.IN_PROGRESS
         self.task.save(update_fields=['status'])
@@ -1738,3 +1777,167 @@ class AppUsersTests(ManagerChoosesTheCountryTests):
         }), content_type='application/json', **self.auth(token))
         self.assertEqual(response.json(), {'moved': 1, 'still_to_reassign': 0})
         self.assertEqual(self.task.assignments.get(is_active=True).technician, colleague)
+
+
+class MyTasksNewestFirstTests(ApiTestCase):
+    def test_the_task_received_last_comes_first(self):
+        later = Task.objects.create(
+            task_number='AE-0778', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=timezone.now() + timedelta(days=30),
+        )
+        TaskAssignment.objects.create(task=later, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now() + timedelta(minutes=5))
+        ids = [t['id'] for t in self.client.get('/api/my-tasks/', **self.auth(self.token_for('tech1'))).json()]
+        self.assertEqual(ids[:2], [later.pk, self.task.pk])
+
+
+class TaskMessagesApiTests(ApiTestCase):
+    """The task's team messages in the app, for its technician and for the team view."""
+
+    def test_the_lead_and_the_supervisor_talk_on_the_task(self):
+        tech, supervisor = self.token_for('tech1'), self.token_for('supervisor1')
+        url = f'/api/tasks/{self.task.pk}/messages/'
+        response = self.client.post(url, json.dumps({'message': 'The part arrived.'}),
+                                    content_type='application/json', **self.auth(supervisor))
+        self.assertEqual(response.status_code, 201)
+        thread = self.client.get(url, **self.auth(tech)).json()
+        self.assertEqual([(m['message'], m['mine']) for m in thread], [('The part arrived.', False)])
+        self.assertEqual(self.client.post(url, json.dumps({'message': ''}), content_type='application/json',
+                                          **self.auth(tech)).status_code, 400)
+
+    def test_someone_not_on_the_task_without_the_team_view_cannot_read_it(self):
+        outsider = User.objects.create_user('outsider', password='pass12345')
+        Technician.objects.create(user=outsider, country=self.country, full_name='Out Sider', language='en',
+                                  role=Technician.Role.TECHNICIAN, employment_type='staff')
+        response = self.client.get(f'/api/tasks/{self.task.pk}/messages/', **self.auth(self.token_for('outsider')))
+        self.assertEqual(response.status_code, 403)
+
+
+class TaskActionApiTests(TeamTaskApiTests):
+    """The website task page's actions from the app: same rules, same permissions."""
+
+    def act(self, token, **body):
+        return self._post(token, 'action', body)
+
+    def test_the_supervisor_tells_the_customer_the_visit_time_and_a_delay(self):
+        from django.core import mail
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        self.site.contact_email = 'gym@example.test'
+        self.site.save(update_fields=['contact_email'])
+        token = self.token_for('supervisor1')
+        actions = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']
+        self.assertTrue(actions['notify_schedule'] and actions['notify_delay'])
+        mail.outbox.clear()
+        self.assertEqual(self.act(token, action='notify_schedule').status_code, 200)
+        self.assertTrue(any('gym@example.test' in m.to for m in mail.outbox))
+        self.assertEqual(self.act(token, action='notify_delay', reason='').status_code, 400)  # needs a reason
+        self.assertEqual(self.act(token, action='notify_delay', reason='Traffic on the highway').status_code, 200)
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
+
+    def test_manager_and_admin_actions_stay_theirs(self):
+        supervisor = self.token_for('supervisor1')
+        self.assertEqual(self.act(supervisor, action='send_feedback_request').status_code, 403)
+        self.assertEqual(self.act(supervisor, action='reopen').status_code, 403)
+        self.assertEqual(self.act(self.token_for('manager1'), action='reopen').status_code, 403)  # admins only
+
+    def test_a_manager_books_a_new_visit_for_a_task_stopped_on_site(self):
+        manager = self.token_for('manager1')
+        when = timezone.localtime(timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self.act(manager, action='rebook', scheduled_for=when).status_code, 400)  # not stopped
+        self.task.status = Task.Status.BLOCKED
+        self.task.save(update_fields=['status'])
+        self.assertTrue(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(manager)).json()['actions']['rebook'])
+        self.assertEqual(self.act(manager, action='rebook', scheduled_for=when, note='Part arrived').status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+
+class TaskEditApiTests(TeamTaskApiTests):
+    """The website's Edit task and documents, from the app."""
+
+    def test_saving_one_field_keeps_every_other_as_it_was(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.description = 'Treadmill stops'
+        self.task.save(update_fields=['responsible_supervisor', 'description'])
+        token = self.token_for('supervisor1')
+        fields = {f['name']: f for f in self.client.get(f'/api/tasks/{self.task.pk}/edit/', **self.auth(token)).json()['fields']}
+        self.assertEqual(fields['description']['value'], 'Treadmill stops')
+        before = {name: getattr(self.task, name) for name in ('priority', 'billing_type', 'is_warranty', 'task_type_id')}
+        response = self.client.post(f'/api/tasks/{self.task.pk}/edit/', json.dumps({'description': 'Belt slips'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.description, 'Belt slips')
+        self.assertEqual({name: getattr(self.task, name) for name in before}, before)
+
+    def test_a_technician_adds_no_office_documents(self):
+        upload = SimpleUploadedFile('note.pdf', b'%PDF-1.4 test', content_type='application/pdf')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/documents/', {'file': upload, 'purpose': 'other'},
+                                    **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 403)
+
+
+class VisitTimeRuleTests(TeamTaskApiTests):
+    """The website's rule in the app: a time a manager fixed is moved by asking, not by the supervisor."""
+
+    def test_a_fixed_time_is_asked_for_not_changed(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.schedule_time_locked = True
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'schedule_time_locked', 'scheduled_for'])
+        token = self.token_for('supervisor1')
+        actions = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']
+        self.assertFalse(actions['schedule'])
+        self.assertTrue(actions['request_schedule_change'])
+        when = timezone.localtime(timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': when}).status_code, 400)
+        self.assertTrue(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(self.token_for('manager1'))).json()['actions']['schedule'])
+
+
+class LineBrandTests(TeamTaskApiTests):
+    """Each machine line has its own brand; none given: the task's."""
+
+    def test_a_line_takes_the_task_brand_unless_given_its_own(self):
+        from reference.models import Brand
+        from tasks.views import save_planned_lines
+        from tasks.forms import TaskProductForm
+        panatta, technogym = Brand.objects.create(name='Panatta'), Brand.objects.create(name='Technogym')
+        self.task.brand = panatta
+        self.task.save(update_fields=['brand'])
+        rows = []
+        for data in ({'product_code': 'BENCH-01', 'quantity': 1}, {'product_code': 'RUN-700', 'quantity': 1, 'brand': technogym.pk}):
+            form = TaskProductForm(data)
+            self.assertTrue(form.is_valid(), form.errors)
+            rows.append(form.cleaned_data)
+        save_planned_lines(self.task, rows)
+        self.assertEqual(dict(self.task.products.values_list('product_code', 'brand__name')),
+                         {'BENCH-01': 'Panatta', 'RUN-700': 'Technogym'})
+
+
+class TellTheCustomerTheTimeTests(TeamTaskApiTests):
+    """The customer is told a time once, again only after it moves — never while a change awaits a manager."""
+
+    def test_offered_only_when_needed(self):
+        from tasks.models import ScheduleChangeRequest
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        self.site.contact_email = 'gym@example.test'
+        self.site.save(update_fields=['contact_email'])
+        token = self.token_for('supervisor1')
+        offered = lambda: self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']['notify_schedule']
+        self.assertTrue(offered())
+        self.assertEqual(self._post(token, 'action', {'action': 'notify_schedule'}).status_code, 200)
+        self.assertFalse(offered())  # the customer has this time
+        TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(),
+                                 actor=self.supervisor_user)
+        self.assertTrue(offered())  # the time moved
+        ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self.supervisor, requested_scheduled_for=timezone.now() + timedelta(days=3),
+            created_at=timezone.now(),
+        )
+        self.assertFalse(offered())
+        self.assertEqual(self._post(token, 'action', {'action': 'notify_schedule'}).status_code, 400)

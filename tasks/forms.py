@@ -1236,6 +1236,10 @@ class TaskProductForm(forms.Form):
         choices=TaskProduct.Kind.choices, required=False, initial=TaskProduct.Kind.MACHINE, label=_('Kind'),
     )
     product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
+    # Blank: the task's brand (save_planned_lines).
+    brand = forms.ModelChoiceField(
+        queryset=Brand.objects.filter(is_active=True), required=False, label=_('Brand'),
+    )
     serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
     frame = forms.CharField(required=False, max_length=100, label=_('Frame color'), initial=DEFAULT_COLOR)

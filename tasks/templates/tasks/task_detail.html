@@ -226,13 +226,18 @@
     <p class="empty-state">{% translate "Not yet notified." %}</p>
     {% endif %}
     {% if task.scheduled_for and task.site.contact_email %}
+    {# Only when the customer doesn't have this time yet, and never while a change awaits a manager. #}
+    {% if pending_schedule_request %}
+    <p class="muted">{% translate "A change of time is waiting for a manager: the customer is told once it is decided." %}</p>
+    {% elif not customer_has_current_time %}
     <form method="post" novalidate data-confirm="{% translate "Email the customer the visit time?" %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="notify_schedule">
         <button type="submit" class="button button--secondary">
-            {% if task.schedule_notified_at %}{% translate "Notify again" %}{% else %}{% translate "Notify customer of scheduled visit" %}{% endif %}
+            {% if task.schedule_notified_at %}{% translate "Tell the customer the new time" %}{% else %}{% translate "Notify customer of scheduled visit" %}{% endif %}
         </button>
     </form>
+    {% endif %}
 
     <h3>{% translate "Expecting a delay?" %}</h3>
     <p class="muted">{% translate "Send a brief apology explaining the reason for the expected delay, such as traffic or an extended previous job." %}</p>
@@ -439,6 +444,7 @@
         <table>
             <thead>
                 <tr>
+                    <th>{% translate "Brand" %}</th>
                     <th>{% translate "Product code" %}</th>
                     <th>{% translate "Serial number" %}</th>
                     <th>{% translate "Status" %}</th>
@@ -451,6 +457,7 @@
             <tbody>
                 {% for product in products %}
                 <tr>
+                    <td>{{ product.brand.name|default:task.brand.name|default:"—" }}</td>
                     <td>{{ product.product_code }}{% if product.quantity > 1 %} × {{ product.quantity }}{% endif %}{% if product.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% if product.for_task %} {% translate "for" %} <a href="{% url 'tasks:task_detail' product.for_task.pk %}" dir="ltr">{{ product.for_task.task_number }}</a>{% endif %}{% endif %}{% if product.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}</td>
                     <td>{{ product.serial_number|default:"—" }}</td>
                     <td>{{ product.status_label }}</td>

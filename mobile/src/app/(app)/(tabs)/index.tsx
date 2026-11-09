@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
+import { fetchMyToday } from '@/api/endpoints';
 import { TodayPlanView } from '@/components/today-plan';
 import { type ScheduleMode, ScheduleView } from '@/components/schedule-view';
 import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
@@ -11,12 +11,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskListItem, TodayPlan } from '@/types';
+import type { TodayPlan } from '@/types';
 
-export default function MyTasksScreen() {
+// The schedule only: today (the next job, its tap and Directions) or the
+// calendar. Every open task, and a supervisor's "To plan", are on Tasks.
+export default function MyScheduleScreen() {
   const router = useRouter();
   const theme = useTheme();
-  const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [today, setToday] = useState<TodayPlan | null>(null);
   // Today (the next job first) or the calendar: week, month, year.
   const [mode, setMode] = useState<'today' | ScheduleMode>('today');
@@ -30,13 +31,9 @@ export default function MyTasksScreen() {
   const load = useCallback(async () => {
     setPending(await sendPendingReports());
     try {
-      const [list, plan] = await Promise.all([
-        withOfflineCopy('my-tasks', fetchMyTasks),
-        withOfflineCopy('my-today', fetchMyToday),
-      ]);
-      setTasks(list.data);
+      const plan = await withOfflineCopy('my-today', fetchMyToday);
       setToday(plan.data);
-      setIsOffline(list.offline || plan.offline);
+      setIsOffline(plan.offline);
       setError('');
     } catch {
       setError('Could not load your tasks.');
@@ -92,55 +89,28 @@ export default function MyTasksScreen() {
             taskRoute={(id) => `/task/${id}`}
           />
         ) : (
-        <FlatList
-          data={tasks ?? []}
-          keyExtractor={(item) => String(item.id)}
+        <ScrollView
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
-          // Today first (the next job, its tap and Directions), then every open task.
-          ListHeaderComponent={today ? (
-            <>
-              <ThemedView style={styles.tabs}>
-                {(['today', 'week', 'month', 'year'] as const).map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.tab, { borderColor: theme.backgroundSelected },
-                      mode === option && { backgroundColor: theme.primary, borderColor: theme.primary },
-                    ]}
-                    onPress={() => setMode(option)}
-                  >
-                    <ThemedText type="small" style={mode === option ? { color: theme.onPrimary } : undefined}>
-                      {option[0]!.toUpperCase() + option.slice(1)}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </ThemedView>
-              <TodayPlanView plan={today} onChanged={load} />
-              <ThemedText type="smallBold">All my open tasks</ThemedText>
-            </>
-          ) : undefined}
-          ListEmptyComponent={
-            tasks !== null ? <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText> : undefined
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-              onPress={() => router.push(`/task/${item.id}`)}
-            >
-              <ThemedText type="smallBold">{item.task_number}</ThemedText>
-              <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
-              <ThemedView style={styles.row}>
-                <ThemedText themeColor="primary" type="small">
-                  {item.status_display}
+        >
+          <ThemedView style={styles.tabs}>
+            {(['today', 'week', 'month', 'year'] as const).map((option) => (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.tab, { borderColor: theme.backgroundSelected },
+                  mode === option && { backgroundColor: theme.primary, borderColor: theme.primary },
+                ]}
+                onPress={() => setMode(option)}
+              >
+                <ThemedText type="small" style={mode === option ? { color: theme.onPrimary } : undefined}>
+                  {option[0]!.toUpperCase() + option.slice(1)}
                 </ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {item.priority_display}
-                </ThemedText>
-              </ThemedView>
-            </TouchableOpacity>
-          )}
-        />
+              </TouchableOpacity>
+            ))}
+          </ThemedView>
+          {today ? <TodayPlanView plan={today} onChanged={load} /> : null}
+        </ScrollView>
         )}
       </SafeAreaView>
     </ThemedView>
@@ -157,8 +127,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
-  card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
-  row: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'transparent' },
   tabs: { flexDirection: 'row', gap: Spacing.two, paddingBottom: Spacing.three, backgroundColor: 'transparent' },
   tab: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
 });

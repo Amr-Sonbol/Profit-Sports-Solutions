@@ -43,6 +43,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th>{% translate "Brand" %}</th>
                         <th>{% translate "Product code" %}</th>
                         <th>{% translate "Serial number" %}</th>
                         <th>{% translate "Quantity" %}</th>
@@ -52,6 +53,7 @@
                 <tbody>
                     {% for product in task.products.all %}
                     <tr>
+                        <td>{{ product.brand.name|default:task.brand.name|default:"—" }}</td>
                         <td dir="ltr">{{ product.product_code }}{% if product.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}</td>
                         <td>{{ product.serial_number|default:"—" }}</td>
                         <td>{{ product.quantity }}</td>
@@ -74,6 +76,7 @@
                 <thead>
                     <tr>
                         {% if is_receiving %}<th>{% translate "Kind" %}</th>{% endif %}
+                        <th>{% translate "Brand" %}</th>
                         <th>{% translate "Product code" %}</th>
                         {% if not is_receiving %}<th>{% translate "Serial number" %}</th>{% endif %}
                         <th>{% translate "Quantity" %}</th>
@@ -88,6 +91,7 @@
                     {% for product_form in product_formset %}
                     <tr>
                         {% if is_receiving %}<td>{{ product_form.kind }}</td>{% endif %}
+                        <td>{{ product_form.brand }}</td>
                         <td>{{ product_form.line_id }}{{ product_form.product_code }}</td>
                         {% if not is_receiving %}<td>{{ product_form.serial_number }}</td>{% endif %}
                         <td>{{ product_form.quantity }}</td>

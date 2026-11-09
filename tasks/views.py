@@ -1799,6 +1799,179 @@ def task_report_pdf(request, pk):
     return response
 
 
+# The task page's actions, shared by the website (task_detail) and the app
+# (api.views.TaskActionView): each does the whole thing and returns None, or
+# the message saying why it couldn't. Permissions are checked by the caller.
+
+def schedule_change_pending(task):
+    return task.schedule_change_requests.filter(status=ScheduleChangeRequest.Status.PENDING).exists()
+
+
+def customer_has_current_time(task):
+    """Told this visit's time, and it hasn't moved since."""
+    if not task.schedule_notified_at:
+        return False
+    return not task.events.filter(
+        event_type=TaskEvent.EventType.RESCHEDULED, occurred_at__gt=task.schedule_notified_at,
+    ).exists()
+
+
+def notify_schedule(task, user):
+    if not task.scheduled_for:
+        return _('Please set a scheduled time before notifying the customer.')
+    if schedule_change_pending(task):
+        # A time that may still move: the customer hears once the manager decides.
+        return _('A change of time is waiting for a manager: the customer is told once it is decided.')
+    if not task.site.effective_contact_email:
+        return _('Please add a contact email address for this site before notifying the customer.')
+    _send_schedule_notification(task)
+    task.schedule_notified_at = timezone.now()
+    task.schedule_notified_by = user
+    task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+    return None
+
+
+def set_schedule_time(task, technician, user, time_text):
+    """The time for a day-only booking."""
+    if not task.scheduled_date or task.scheduled_for:
+        return _('There is no day-only schedule awaiting a time.')
+    time_value = parse_time(time_text or '')
+    if not time_value:
+        return _('Enter a time.')
+    task.scheduled_for = timezone.make_aware(datetime.combine(task.scheduled_date, time_value))
+    # A supervisor completing a manager's day-only date is the normal path and
+    # stays open; a manager doing it themselves locks it, same rule as everywhere else.
+    task.schedule_time_locked = technician.is_manager_tier
+    task.save(update_fields=['scheduled_for', 'schedule_time_locked'])
+    TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(), actor=user)
+    notify_customer.visit_booked(task)
+    return None
+
+
+def request_schedule_change(task, technician, user, requested_text, reason):
+    """A supervisor asking a manager to move a time the manager fixed."""
+    if not task.schedule_time_locked:
+        return _('This schedule is not locked. Please edit it directly.')
+    if task.schedule_change_requests.filter(status=ScheduleChangeRequest.Status.PENDING).exists():
+        return _('There is already a pending request for this task.')
+    requested_for = _parse_datetime_local(requested_text or '')
+    if not requested_for:
+        return _('Enter the date and time you are requesting.')
+    change_request = ScheduleChangeRequest.objects.create(
+        task=task, requested_by=technician, requested_scheduled_for=timezone.make_aware(requested_for),
+        reason=(reason or '').strip(), created_at=timezone.now(),
+    )
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_REQUESTED,
+        occurred_at=timezone.now(), actor=user, note=change_request.reason,
+    )
+    return None
+
+
+def approve_schedule_change(task, change_request, user):
+    task.scheduled_for = change_request.requested_scheduled_for
+    task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+    task.schedule_time_locked = True
+    task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
+    change_request.status = ScheduleChangeRequest.Status.APPROVED
+    change_request.reviewed_by = user
+    change_request.reviewed_at = timezone.now()
+    change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(), actor=user)
+    notify_customer.visit_booked(task)
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_APPROVED, occurred_at=timezone.now(), actor=user,
+    )
+
+
+def deny_schedule_change(task, change_request, user, note):
+    change_request.status = ScheduleChangeRequest.Status.DENIED
+    change_request.reviewed_by = user
+    change_request.reviewed_at = timezone.now()
+    change_request.review_note = (note or '').strip()
+    change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_note'])
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_DENIED,
+        occurred_at=timezone.now(), actor=user, note=change_request.review_note,
+    )
+
+
+def notify_delay(task, user, reason):
+    reason = (reason or '').strip()
+    if not task.scheduled_for:
+        return _('Please set a scheduled time before notifying the customer.')
+    if not task.site.effective_contact_email:
+        return _('Please add a contact email address for this site before notifying the customer.')
+    if not reason:
+        return _('Please state the reason for the delay before notifying the customer.')
+    _send_delay_notice(task, reason)
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.DELAY_NOTICE, occurred_at=timezone.now(), actor=user, note=reason,
+    )
+    return None
+
+
+def notify_shipping(task):
+    if not task.shipping_tracking_number:
+        return _('Please add a shipping tracking number before notifying the customer.')
+    if not task.site.effective_contact_email:
+        return _('Please add a contact email address for this site before notifying the customer.')
+    _send_shipping_notice(
+        task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
+        task.shipping_company, task.shipping_tracking_number, task.site.effective_contact_email,
+    )
+    return None
+
+
+def reopen_task(task, user):
+    """Admin-only (checked by the caller): a closed task back to awaiting the manager."""
+    if task.status != Task.Status.CLOSED:
+        return _('This task is not closed.')
+    task.status = Task.Status.COMPLETED
+    task.save(update_fields=['status'])
+    TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.REOPENED, occurred_at=timezone.now(), actor=user)
+    return None
+
+
+def rebook_visit(task, user, scheduled_for, note):
+    """A task stopped on site (blocked) gets a new visit: the same task, a new time, back to its
+    team (assigned — or new, with nobody on it). Customer and lead are told, as for any booking."""
+    lead = task.assignments.filter(is_active=True, role=TaskAssignment.Role.LEAD).select_related('technician').first()
+    with transaction.atomic():
+        task.scheduled_for = scheduled_for
+        task.scheduled_date = timezone.localtime(task.scheduled_for).date()
+        task.status = Task.Status.ASSIGNED if lead else Task.Status.NEW
+        task.save(update_fields=['scheduled_for', 'scheduled_date', 'status'])
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(), actor=user,
+            note=note or _('New visit after the work stopped on site.'),
+        )
+        notify_customer.visit_booked(task)
+    if lead:
+        push_rebooked(lead.technician, task)
+    if task.site.effective_contact_email and NotificationSettings.load().auto_notify_on_reschedule:
+        _send_schedule_notification(task)
+        task.schedule_notified_at = timezone.now()
+        task.schedule_notified_by = user
+        task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+
+
+def send_feedback_request(request, task):
+    if task.status != Task.Status.CLOSED:
+        return _('Please close the task (submit its report) before requesting feedback.')
+    if not task.site.effective_contact_email:
+        return _('Please add a contact email address for this site before requesting feedback.')
+    feedback = getattr(task, 'feedback', None)
+    if feedback is None:
+        feedback = CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), requested_by=request.user)
+    else:
+        feedback.requested_at = timezone.now()
+        feedback.requested_by = request.user
+        feedback.save(update_fields=['requested_at', 'requested_by'])
+    _send_feedback_email(request, feedback)
+    return None
+
+
 @login_required
 def task_detail(request, pk):
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
@@ -1834,65 +2007,34 @@ def task_detail(request, pk):
     if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
-        if not task.scheduled_for:
-            messages.error(request, _('Please set a scheduled time before notifying the customer.'))
-        elif not task.site.effective_contact_email:
-            messages.error(request, _('Please add a contact email address for this site before notifying the '
-                                      'customer.'))
+        error = notify_schedule(task, request.user)
+        if error:
+            messages.error(request, error)
         else:
-            _send_schedule_notification(task)
-            task.schedule_notified_at = timezone.now()
-            task.schedule_notified_by = request.user
-            task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
             messages.success(request, _('The customer has been notified of the scheduled visit.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'set_schedule_time':
         set_time_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
-        if not task.scheduled_date or task.scheduled_for:
-            messages.error(request, _('There is no day-only schedule awaiting a time.'))
+        error = set_schedule_time(task, set_time_technician, request.user, request.POST.get('scheduled_time', ''))
+        if error:
+            messages.error(request, error)
         else:
-            time_value = parse_time(request.POST.get('scheduled_time', ''))
-            if not time_value:
-                messages.error(request, _('Enter a time.'))
-            else:
-                task.scheduled_for = timezone.make_aware(datetime.combine(task.scheduled_date, time_value))
-                # A supervisor completing a manager's day-only date is the
-                # normal path and stays open; a manager doing it themselves
-                # locks it, same rule as everywhere else.
-                task.schedule_time_locked = set_time_technician.is_manager_tier
-                task.save(update_fields=['scheduled_for', 'schedule_time_locked'])
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.RESCHEDULED,
-                    occurred_at=timezone.now(), actor=request.user,
-                )
-                notify_customer.visit_booked(task)
-                messages.success(request, _('Time set.'))
+            messages.success(request, _('Time set.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'request_schedule_change':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
-        if not task.schedule_time_locked:
-            messages.error(request, _('This schedule is not locked. Please edit it directly.'))
-        elif task.schedule_change_requests.filter(status=ScheduleChangeRequest.Status.PENDING).exists():
-            messages.error(request, _('There is already a pending request for this task.'))
+        error = request_schedule_change(
+            task, requesting_technician, request.user,
+            request.POST.get('requested_scheduled_for', ''), request.POST.get('reason', ''),
+        )
+        if error:
+            messages.error(request, error)
         else:
-            requested_for = _parse_datetime_local(request.POST.get('requested_scheduled_for', ''))
-            if not requested_for:
-                messages.error(request, _('Enter the date and time you are requesting.'))
-            else:
-                change_request = ScheduleChangeRequest.objects.create(
-                    task=task, requested_by=requesting_technician,
-                    requested_scheduled_for=timezone.make_aware(requested_for),
-                    reason=request.POST.get('reason', '').strip(), created_at=timezone.now(),
-                )
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_REQUESTED,
-                    occurred_at=timezone.now(), actor=request.user, note=change_request.reason,
-                )
-                messages.success(request, _('Change requested. A manager will review it.'))
+            messages.success(request, _('Change requested. A manager will review it.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_schedule_change':
@@ -1901,23 +2043,7 @@ def task_detail(request, pk):
             ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
             status=ScheduleChangeRequest.Status.PENDING,
         )
-        task.scheduled_for = change_request.requested_scheduled_for
-        task.scheduled_date = timezone.localtime(task.scheduled_for).date()
-        task.schedule_time_locked = True
-        task.save(update_fields=['scheduled_for', 'scheduled_date', 'schedule_time_locked'])
-        change_request.status = ScheduleChangeRequest.Status.APPROVED
-        change_request.reviewed_by = request.user
-        change_request.reviewed_at = timezone.now()
-        change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
-        TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.RESCHEDULED,
-            occurred_at=timezone.now(), actor=request.user,
-        )
-        notify_customer.visit_booked(task)
-        TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_APPROVED,
-            occurred_at=timezone.now(), actor=request.user,
-        )
+        approve_schedule_change(task, change_request, request.user)
         messages.success(request, _('Schedule change approved.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
@@ -1927,52 +2053,27 @@ def task_detail(request, pk):
             ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
             status=ScheduleChangeRequest.Status.PENDING,
         )
-        change_request.status = ScheduleChangeRequest.Status.DENIED
-        change_request.reviewed_by = request.user
-        change_request.reviewed_at = timezone.now()
-        change_request.review_note = request.POST.get('review_note', '').strip()
-        change_request.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_note'])
-        TaskEvent.objects.create(
-            task=task, event_type=TaskEvent.EventType.SCHEDULE_CHANGE_DENIED,
-            occurred_at=timezone.now(), actor=request.user, note=change_request.review_note,
-        )
+        deny_schedule_change(task, change_request, request.user, request.POST.get('review_note', ''))
         messages.success(request, _('Schedule change denied.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_delay':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
-        reason = request.POST.get('delay_reason', '').strip()
-        if not task.scheduled_for:
-            messages.error(request, _('Please set a scheduled time before notifying the customer.'))
-        elif not task.site.effective_contact_email:
-            messages.error(request, _('Please add a contact email address for this site before notifying the '
-                                      'customer.'))
-        elif not reason:
-            messages.error(request, _('Please state the reason for the delay before notifying the customer.'))
+        error = notify_delay(task, request.user, request.POST.get('delay_reason', ''))
+        if error:
+            messages.error(request, error)
         else:
-            _send_delay_notice(task, reason)
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.DELAY_NOTICE,
-                occurred_at=timezone.now(), actor=request.user, note=reason,
-            )
             messages.success(request, _('The customer has been notified of the delay.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'notify_shipping':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         _require_task_owner(request, task)
-        if not task.shipping_tracking_number:
-            messages.error(request, _('Please add a shipping tracking number before notifying the customer.'))
-        elif not task.site.effective_contact_email:
-            messages.error(request, _('Please add a contact email address for this site before notifying the '
-                                      'customer.'))
+        error = notify_shipping(task)
+        if error:
+            messages.error(request, error)
         else:
-            _send_shipping_notice(
-                task.site.effective_contact_name or task.site.customer.name, task.site.name,
-                task.task_number, task.shipping_company,
-                task.shipping_tracking_number, task.site.effective_contact_email,
-            )
             messages.success(request, _('The customer has been notified of the tracking number.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
@@ -2026,15 +2127,10 @@ def task_detail(request, pk):
         # closed or not, see task_report_correct).
         if requesting_technician.role != Technician.Role.ADMIN:
             raise PermissionDenied
-        if task.status != Task.Status.CLOSED:
-            messages.error(request, _('This task is not closed.'))
+        error = reopen_task(task, request.user)
+        if error:
+            messages.error(request, error)
         else:
-            task.status = Task.Status.COMPLETED
-            task.save(update_fields=['status'])
-            TaskEvent.objects.create(
-                task=task, event_type=TaskEvent.EventType.REOPENED,
-                occurred_at=timezone.now(), actor=request.user,
-            )
             messages.success(request, _('Task reopened.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
@@ -2062,27 +2158,7 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
         rebook_form = RebookVisitForm(request.POST)
         if rebook_form.is_valid():
-            lead = task.assignments.filter(is_active=True, role=TaskAssignment.Role.LEAD).select_related(
-                'technician',
-            ).first()
-            with transaction.atomic():
-                task.scheduled_for = rebook_form.cleaned_data['scheduled_for']
-                task.scheduled_date = timezone.localtime(task.scheduled_for).date()
-                task.status = Task.Status.ASSIGNED if lead else Task.Status.NEW
-                task.save(update_fields=['scheduled_for', 'scheduled_date', 'status'])
-                TaskEvent.objects.create(
-                    task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(),
-                    actor=request.user,
-                    note=rebook_form.cleaned_data['note'] or _('New visit after the work stopped on site.'),
-                )
-                notify_customer.visit_booked(task)
-            if lead:
-                push_rebooked(lead.technician, task)
-            if task.site.effective_contact_email and NotificationSettings.load().auto_notify_on_reschedule:
-                _send_schedule_notification(task)
-                task.schedule_notified_at = timezone.now()
-                task.schedule_notified_by = request.user
-                task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+            rebook_visit(task, request.user, rebook_form.cleaned_data['scheduled_for'], rebook_form.cleaned_data['note'])
             messages.success(request, _('New visit booked.'))
             return redirect('tasks:task_detail', pk=task.pk)
 
@@ -2142,22 +2218,10 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
         require_manager(request)
-        feedback = getattr(task, 'feedback', None)
-        if task.status != Task.Status.CLOSED:
-            messages.error(request, _('Please close the task (submit its report) before requesting feedback.'))
-        elif not task.site.effective_contact_email:
-            messages.error(request, _('Please add a contact email address for this site before requesting '
-                                      'feedback.'))
+        error = send_feedback_request(request, task)
+        if error:
+            messages.error(request, error)
         else:
-            if feedback is None:
-                feedback = CustomerFeedback.objects.create(
-                    task=task, requested_at=timezone.now(), requested_by=request.user,
-                )
-            else:
-                feedback.requested_at = timezone.now()
-                feedback.requested_by = request.user
-                feedback.save(update_fields=['requested_at', 'requested_by'])
-            _send_feedback_email(request, feedback)
             messages.success(request, _('The feedback request has been sent.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
@@ -2192,7 +2256,7 @@ def task_detail(request, pk):
         # The customer's request, all of it (request_for_task).
         'from_request': request_for_task(task),
         'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
-        'products': task.products.all(),
+        'products': task.products.select_related('brand', 'for_task'),
         # An installation's machines not installed yet, and the chain around it.
         'still_to_install': still_to_install(task),
         'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
@@ -2221,6 +2285,7 @@ def task_detail(request, pk):
         'can_cancel': task.status in CANCELLABLE_STATUSES,
         'negligence_form': negligence_form,
         'pending_schedule_request': pending_schedule_request,
+        'customer_has_current_time': customer_has_current_time(task),
         'can_upload_staff_document': can_upload_staff_document,
         'staff_upload_form': staff_upload_form,
         'can_approve_as_supervisor': (
@@ -2231,6 +2296,61 @@ def task_detail(request, pk):
         'message_form': message_form,
     }
     return render(request, 'tasks/task_detail.html', context)
+
+
+def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date, product_rows=None, is_loading=False):
+    """Saves a valid TaskEditForm with everything that goes with it, on the
+    website (task_edit) and from the app (api.views.TaskEditView): a moved
+    time recorded and the customer told; the machines (`product_rows`, or
+    None to leave them); the automatic notices. Returns (the message saying
+    it's done, warnings to show)."""
+    with transaction.atomic():
+        updated_task = form.save()
+        # The time moved — or, booked by day only, the day did. Saving
+        # fills scheduled_date in from an unchanged time (a visit made
+        # from a request has none yet): that's no reschedule.
+        rescheduled = (
+            updated_task.scheduled_for != previous_scheduled_for
+            or (updated_task.scheduled_for is None and updated_task.scheduled_date != previous_scheduled_date)
+        )
+        if rescheduled:
+            TaskEvent.objects.create(
+                task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
+                occurred_at=timezone.now(), actor=request.user,
+            )
+            notify_customer.visit_booked(updated_task)
+        if product_rows is not None:
+            save_planned_lines(updated_task, product_rows)
+    warnings = []
+    short = loading_shortfall(updated_task) if is_loading and product_rows is not None else ''
+    if short:
+        warnings.append(short)
+    notices = []
+    if (
+        rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
+        and NotificationSettings.load().auto_notify_on_reschedule
+    ):
+        _send_schedule_notification(updated_task)
+        updated_task.schedule_notified_at = timezone.now()
+        updated_task.schedule_notified_by = request.user
+        updated_task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
+        notices.append(_('The customer has been notified automatically.'))
+    if (
+        'shipping_tracking_number' in form.changed_data and updated_task.shipping_tracking_number
+        and updated_task.responsible_supervisor_id
+        and NotificationSettings.load().shipment_to_supervisor_email
+    ):
+        _send_shipment_notice_to_supervisor(request, updated_task)
+        notices.append(_('The supervisor has been notified of the shipment.'))
+    weekend_warning = _weekend_warning(updated_task)
+    if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
+        warnings.append(weekend_warning)
+    if {'scheduled_for', 'scheduled_date', 'estimated_hours'} & set(form.changed_data):
+        for assignment in updated_task.assignments.filter(is_active=True).select_related('technician'):
+            clash = _clash_warning(assignment.technician, updated_task)
+            if clash:
+                warnings.append(clash)
+    return ' '.join(str(part) for part in [_('Task updated.')] + notices), [str(w) for w in warnings]
 
 
 @login_required
@@ -2267,6 +2387,7 @@ def task_edit(request, pk):
     product_initial = [
         {
             'line_id': p.pk, 'kind': p.kind, 'product_code': p.product_code, 'serial_number': p.serial_number, 'quantity': p.quantity,
+            'brand': p.brand_id or task.brand_id,
             'frame': p.frame, 'arm': p.arm, 'padding': p.padding, 'trim': p.trim,
             'for_task': p.for_task.task_number if p.for_task_id else '',
         }
@@ -2279,52 +2400,13 @@ def task_edit(request, pk):
         )
         product_formset = None if products_locked else TaskProductFormSet(request.POST, prefix='products')
         if form.is_valid() and (products_locked or product_formset.is_valid()):
-            with transaction.atomic():
-                updated_task = form.save()
-                # The time moved — or, booked by day only, the day did. Saving
-                # fills scheduled_date in from an unchanged time (a visit made
-                # from a request has none yet): that's no reschedule.
-                rescheduled = (
-                    updated_task.scheduled_for != previous_scheduled_for
-                    or (updated_task.scheduled_for is None and updated_task.scheduled_date != previous_scheduled_date)
-                )
-                if rescheduled:
-                    TaskEvent.objects.create(
-                        task=updated_task, event_type=TaskEvent.EventType.RESCHEDULED,
-                        occurred_at=timezone.now(), actor=request.user,
-                    )
-                    notify_customer.visit_booked(updated_task)
-                if not products_locked:
-                    save_planned_lines(updated_task, product_formset.cleaned_data)
-            short = loading_shortfall(updated_task) if is_loading and not products_locked else ''
-            if short:
-                messages.warning(request, short)
-            notices = []
-            if (
-                rescheduled and updated_task.scheduled_for and updated_task.site.effective_contact_email
-                and NotificationSettings.load().auto_notify_on_reschedule
-            ):
-                _send_schedule_notification(updated_task)
-                updated_task.schedule_notified_at = timezone.now()
-                updated_task.schedule_notified_by = request.user
-                updated_task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
-                notices.append(_('The customer has been notified automatically.'))
-            if (
-                'shipping_tracking_number' in form.changed_data and updated_task.shipping_tracking_number
-                and updated_task.responsible_supervisor_id
-                and NotificationSettings.load().shipment_to_supervisor_email
-            ):
-                _send_shipment_notice_to_supervisor(request, updated_task)
-                notices.append(_('The supervisor has been notified of the shipment.'))
-            messages.success(request, ' '.join([_('Task updated.')] + notices))
-            weekend_warning = _weekend_warning(updated_task)
-            if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
-                messages.warning(request, weekend_warning)
-            if {'scheduled_for', 'scheduled_date', 'estimated_hours'} & set(form.changed_data):
-                for assignment in updated_task.assignments.filter(is_active=True).select_related('technician'):
-                    clash = _clash_warning(assignment.technician, updated_task)
-                    if clash:
-                        messages.warning(request, clash)
+            done, warnings = apply_task_edit(
+                request, form, previous_scheduled_for, previous_scheduled_date,
+                None if products_locked else product_formset.cleaned_data, is_loading,
+            )
+            messages.success(request, done)
+            for warning in warnings:
+                messages.warning(request, warning)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
@@ -2397,7 +2479,8 @@ def _form_values(form):
     return data
 
 
-def task_from_request(request, requesting_technician, ticket, machines, ship=False, lead=None, when=''):
+def task_from_request(request, requesting_technician, ticket, machines, ship=False, lead=None, when='',
+                      supervisor=None):
     """The request's task in one step, through the same path as the New
     task form (create_task: the bell, the staff email, the request linked,
     its machines decided). Returns (task, None), or (None, the form's
@@ -2413,6 +2496,8 @@ def task_from_request(request, requesting_technician, ticket, machines, ship=Fal
         data['lead'] = lead.pk
     if when and not ship:
         data['scheduled_for'] = when
+    if supervisor is not None:
+        data['responsible_supervisor'] = supervisor.pk
     form = _task_form_for(requesting_technician, ticket, data)
     if not form.is_valid():
         return None, form.errors
@@ -2437,6 +2522,9 @@ def _next_step_context(technician, ticket, can_manage):
     machines = list(ticket.machines.filter(decision=''))
     return {
         'next_technicians': form.fields['lead'].queryset if 'lead' in form.fields else None,
+        'next_supervisors': (
+            form.fields['responsible_supervisor'].queryset if 'responsible_supervisor' in form.fields else None
+        ),
         'next_reasons': answers.form_groups(ticket.customer.language if ticket.customer_id else 'en'),
         'next_plan': request_plan(ticket, machines),
         'next_warranty': bool(ticket.site and ticket.site.under_warranty),
@@ -3289,14 +3377,18 @@ def ticket_review(request, pk):
             if not ticket.site_id:
                 messages.error(request, _('This request has no branch yet: use More options to choose one.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
-            lead = None
+            lead = supervisor = None
+            fields = _task_form_for(technician, ticket).fields
             lead_id = request.POST.get('technician', '')
-            lead_field = _task_form_for(technician, ticket).fields.get('lead')  # only with assign_tasks
-            if lead_id.isdigit() and lead_field is not None:
-                lead = lead_field.queryset.filter(pk=lead_id).first()
+            if lead_id.isdigit() and 'lead' in fields:  # only with assign_tasks
+                lead = fields['lead'].queryset.filter(pk=lead_id).first()
+            # The supervisor it goes to: he plans it (the day, the technician) unless that's done here.
+            supervisor_id = request.POST.get('supervisor', '')
+            if supervisor_id.isdigit() and 'responsible_supervisor' in fields:
+                supervisor = fields['responsible_supervisor'].queryset.filter(pk=supervisor_id).first()
             task, errors = task_from_request(
                 request, technician, ticket, selected, ship=choice == 'ship', lead=lead,
-                when=request.POST.get('scheduled_for', '').strip(),
+                when=request.POST.get('scheduled_for', '').strip(), supervisor=supervisor,
             )
             if task is None:
                 messages.error(request, ' '.join(str(error) for field in errors.values() for error in field))
@@ -6180,6 +6272,12 @@ def shipment_for_app(task, technician):
         'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
         'companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
         'send_to': shipments.send_to(task),
+        # The warehouse manager's step, and the fitting visit after it (the office's panel).
+        'can_prepare': shipments.can_prepare(technician, task) and stage in (shipments.PREPARING, shipments.READY),
+        'shippers': [{'id': person.pk, 'name': person.full_name} for person in shipments.technicians_for(task)]
+        if shipments.can_prepare(technician, task) else [],
+        'shipper': getattr(shipments.shipper(task), 'full_name', '') or '',
+        'can_book_fitting': shipments.can_prepare(technician, task) and stage == shipments.SHIPPED,
     }
 
 
@@ -6204,6 +6302,33 @@ def _shipment_context(task, technician):
     }
 
 
+def shipment_ready(task, user, rows, pak, shipper_id):
+    """The warehouse manager's step (website and app): the parts as (code,
+    quantity) text pairs, the PAK number and who ships it. Returns (the
+    shipper, []) once done, or (None, the problems)."""
+    from tasks import shipments
+
+    parts, problems = [], []
+    for code, quantity in rows:
+        code, quantity = str(code or '').strip(), str(quantity or '').strip()
+        if not code:
+            continue
+        if not quantity.isdigit() or int(quantity) < 1:
+            problems.append(_('Please enter a quantity of at least 1 for %(code)s.') % {'code': code})
+        else:
+            parts.append((code, int(quantity)))
+    shipper_id = str(shipper_id or '')
+    chosen = shipments.technicians_for(task).filter(pk=shipper_id).first() if shipper_id.isdigit() else None
+    if not parts:
+        problems.append(_('Please add at least one part.'))
+    if chosen is None:
+        problems.append(_('Please choose the technician who will ship it.'))
+    if problems:
+        return None, problems
+    shipments.mark_ready(task, user, parts, str(pak or '').strip()[:100], chosen)
+    return chosen, []
+
+
 def _shipment_post(request, task, technician, back):
     """A part shipment's two steps and its fitting visit (tasks.shipments),
     from the office's task page or the technician's own. None when the
@@ -6219,25 +6344,13 @@ def _shipment_post(request, task, technician, back):
     if action == 'shipment_ready':
         if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
             raise PermissionDenied
-        parts, problems = [], []
-        for code, quantity in zip(request.POST.getlist('part_code'), request.POST.getlist('part_quantity')):
-            code = code.strip()
-            if not code:
-                continue
-            if not quantity.strip().isdigit() or int(quantity) < 1:
-                problems.append(_('Please enter a quantity of at least 1 for %(code)s.') % {'code': code})
-            else:
-                parts.append((code, int(quantity)))
-        shipper_id = request.POST.get('technician', '')
-        chosen = shipments.technicians_for(task).filter(pk=shipper_id).first() if shipper_id.isdigit() else None
-        if not parts:
-            problems.append(_('Please add at least one part.'))
-        if chosen is None:
-            problems.append(_('Please choose the technician who will ship it.'))
+        chosen, problems = shipment_ready(
+            task, request.user, zip(request.POST.getlist('part_code'), request.POST.getlist('part_quantity')),
+            request.POST.get('pak_reference_number', ''), request.POST.get('technician', ''),
+        )
         if problems:
             messages.error(request, ' '.join(str(problem) for problem in problems))
             return redirect(back)
-        shipments.mark_ready(task, request.user, parts, request.POST.get('pak_reference_number', '').strip()[:100], chosen)
         messages.success(request, _('Ready to ship. %(name)s has been told.') % {'name': chosen.full_name})
         return redirect(back)
     if action == 'shipment_shipped':
@@ -6528,6 +6641,7 @@ def save_planned_lines(task, rows):
                 line.serial_number = '' if step == TaskType.Category.RECEIVING else cleaned.get('serial_number', '')
                 for color in TaskProductForm.COLORS:
                     setattr(line, color, cleaned[color])
+                line.brand = cleaned.get('brand') or line.brand or task.brand
                 if step == TaskType.Category.RECEIVING:
                     line.quantity = cleaned['quantity']
                     line.kind = cleaned.get('kind') or line.kind
@@ -6539,6 +6653,7 @@ def save_planned_lines(task, rows):
         fields = {
             'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
             **{color: cleaned[color] for color in TaskProductForm.COLORS},
+            'brand': cleaned.get('brand') or task.brand,
         }
         if step == TaskType.Category.RECEIVING:
             TaskProduct.objects.create(
@@ -6628,7 +6743,7 @@ def create_next_step(request, task, task_type, site, lines):
             for _unit in range(line.quantity):
                 TaskProduct.objects.create(
                     task=next_task, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
-                    frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
+                    frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line, brand=line.brand,
                 )
         TaskEvent.objects.create(task=next_task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=request.user)
         TaskNotification.objects.create(task=next_task, created_at=timezone.now())
@@ -6663,7 +6778,7 @@ def create_follow_up(task, user):
         for line in lines:
             TaskProduct.objects.create(
                 task=follow_up, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
-                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line,
+                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line, brand=line.brand,
             )
         TaskEvent.objects.create(task=follow_up, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=user)
         TaskNotification.objects.create(task=follow_up, created_at=timezone.now())
@@ -6727,7 +6842,7 @@ def save_checklist(task, rows):
         if line is None:
             line = TaskProduct(
                 task=task, added_on_site=True, quantity=cleaned.get('quantity') or 1,
-                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE,
+                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE, brand=task.brand,
             )
         line.product_code = cleaned['product_code']
         line.status = cleaned['status']
@@ -6742,7 +6857,7 @@ def save_checklist(task, rows):
         received = cleaned.get('received')
         if received is not None and received < line.quantity:
             rest = TaskProduct(
-                task=task, kind=line.kind, for_task_id=line.for_task_id, product_code=line.product_code,
+                task=task, kind=line.kind, for_task_id=line.for_task_id, product_code=line.product_code, brand=line.brand,
                 quantity=line.quantity - received,
                 status=cleaned.get('rest_status') or TaskProduct.Status.MISSING, note=line.note,
                 **{color: getattr(line, color) for color in TaskProductCheckForm.COLORS},

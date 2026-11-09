@@ -845,6 +845,14 @@ class WhatHappensNextTests(LifecycleTestCase):
     def next(self, **data):
         return self.staff.post(self.url, {'action': 'next', 'machines': self.machines, **data})
 
+    def test_a_visit_goes_to_the_chosen_supervisor_to_plan(self):
+        self.assertContains(self.staff.get(self.url), 'name="supervisor"')
+        self.next(choice='visit', supervisor=self.supervisor.pk)
+        self.ticket.refresh_from_db()
+        task = self.ticket.task
+        self.assertEqual(task.responsible_supervisor, self.supervisor)
+        self.assertFalse(task.assignments.filter(is_active=True).exists())  # the supervisor decides who
+
     def test_the_page_offers_three_choices_with_machines_ticked(self):
         page = self.staff.get(self.url)
         self.assertContains(page, 'What happens next?')

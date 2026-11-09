@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-08 23:03+0000\n"
+"POT-Creation-Date: 2026-11-09 00:23+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -428,6 +428,9 @@ msgstr "ملف CSV بعمودين: الكود والوصف؛ أو ملف Excel �
 msgid "A brand with this name already exists. Please select it from the list."
 msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. يرجى اختيارها من القائمة."
 
+msgid "A change of time is waiting for a manager: the customer is told once it is decided."
+msgstr "طلب تغيير الموعد بانتظار المدير: يُبلَّغ العميل بعد اتخاذ القرار."
+
 msgid "A clear photo helps our team confirm the details. Take a photo or upload one."
 msgstr "تساعد الصورة الواضحة فريقنا على التحقق من البيانات. التقط صورة أو ارفع صورة."
 
@@ -453,6 +456,9 @@ msgstr "جهاز غير مذكور في إذن التسليم (اختياري)"
 
 msgid "A maintenance visit"
 msgstr "زيارة صيانة"
+
+msgid "A manager fixed this time: ask to move the visit instead."
+msgstr "حدّد المدير هذا الموعد: اطلب نقل الزيارة بدلاً من ذلك."
 
 #, python-format
 msgid "A manager has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
@@ -1282,9 +1288,6 @@ msgstr "اختر جهازًا واحدًا على الأقل لنقله إلى �
 
 msgid "Choose at least one role, or turn this email off."
 msgstr "يُرجى اختيار دور واحد على الأقل، أو إيقاف هذه الرسالة."
-
-msgid "Choose later"
-msgstr "الاختيار لاحقًا"
 
 msgid "Choose your color"
 msgstr "اختر لونك"
@@ -3595,6 +3598,9 @@ msgstr "صوت أو اهتزاز"
 msgid "Noise under heavy weights"
 msgstr "صوت عند استخدام أوزان ثقيلة"
 
+msgid "None"
+msgstr "لا أحد"
+
 msgid "None submitted"
 msgstr "لم يتم إرسال أي شيء"
 
@@ -3732,9 +3738,6 @@ msgstr "الإشعارات"
 #, python-format
 msgid "Notified on %(time)s"
 msgstr "تم الإشعار في %(time)s"
-
-msgid "Notify again"
-msgstr "إشعار مرة أخرى"
 
 msgid "Notify customer of scheduled visit"
 msgstr "إشعار العميل بالزيارة المجدولة"
@@ -4456,6 +4459,9 @@ msgstr "تم الاستلام"
 
 msgid "Received Equipment"
 msgstr "المعدات المُستلَمة"
+
+msgid "Receives it to plan: the day and the technician."
+msgstr "يستلمها ليخطط لها: اليوم والفني."
 
 msgid "Receiving Report"
 msgstr "تقرير الاستلام"
@@ -5509,6 +5515,9 @@ msgstr "الفنيون"
 msgid "Technicians available"
 msgstr "الفنيون المتاحون"
 
+msgid "Tell the customer the new time"
+msgstr "أبلغ العميل بالموعد الجديد"
+
 msgid "Tell the customer the visit is delayed?"
 msgstr "إبلاغ العميل بتأخر الزيارة؟"
 
@@ -5787,6 +5796,9 @@ msgstr "الباقي"
 msgid "The signature could not be read. Please sign again."
 msgstr "تعذّرت قراءة التوقيع. يرجى التوقيع مجدداً."
 
+msgid "The supervisor decides"
+msgstr "يقرّر المشرف"
+
 msgid "The supervisor has been notified of the shipment."
 msgstr "تم إشعار المشرف بالشحنة."
 
@@ -5807,6 +5819,9 @@ msgstr "حقلا كلمة المرور غير متطابقين."
 
 msgid "The version you signed"
 msgstr "النسخة التي وقّعتها"
+
+msgid "The visit has started: its time can no longer be changed here."
+msgstr "بدأت الزيارة: لم يعد بالإمكان تغيير موعدها هنا."
 
 msgid "The visit is called off before any report. The assigned staff are told, and the customer's request stays open for follow-up."
 msgstr "تُلغى الزيارة قبل أي تقرير. يُبلَّغ الفريق المكلَّف، ويبقى طلب العميل مفتوحًا للمتابعة."
@@ -8336,6 +8351,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Check each machine that arrived from the factory against the delivery note: received, missing or damaged, and scan or type its serial number — once, here; it travels with the machine to the site."
 #~ msgstr "راجع كل جهاز وصل من المصنع مقابل إذن التسليم: مُستلَم أو مفقود أو تالف، وامسح رقمه التسلسلي أو اكتبه — مرة واحدة هنا، وسيرافق الجهاز حتى الموقع."
 
+#~ msgid "Choose later"
+#~ msgstr "الاختيار لاحقًا"
+
 #~ msgid "Close request"
 #~ msgstr "إغلاق الطلب"
 
@@ -8432,6 +8450,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "No, it's not in my list yet"
 #~ msgstr "لا، ليس في قائمتي بعد"
+
+#~ msgid "Notify again"
+#~ msgstr "إشعار مرة أخرى"
 
 #~ msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there; saving brings you back here, to create its task or close the request."
 #~ msgstr "يفتح صفحة العميل ونموذج الفرع معبّأ من هذا الطلب. حدّد بداية الضمان هناك؛ الحفظ يعيدك إلى هنا لإنشاء مهمته أو إغلاق الطلب."

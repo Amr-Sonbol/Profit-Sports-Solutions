@@ -820,6 +820,7 @@ The **Stock** screen lists each warehouse's machines and parts by code and quant
 | id | PK | |
 | task_id | FK → task | |
 | product_code | varchar | required |
+| brand_id | FK → brand, nullable | its own brand (one delivery can mix brands); blank: the task's (`task.brand`) — a new line takes the task's, and a line carried to a next step, a follow-up or the rest of a receiving keeps its own. Picked per line on Edit task and in the app's Plan the machines |
 | serial_number | varchar | blank on receiving; optional on loading; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
 | quantity | int | default 1; the count of that code on a receiving line, 1 per machine on a loading or an installation |
 | frame | varchar | default `Black` |
