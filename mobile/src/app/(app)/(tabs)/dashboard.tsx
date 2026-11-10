@@ -8,6 +8,8 @@ import { ApiRequestError } from '@/api/client';
 import { fetchDashboard } from '@/api/endpoints';
 import { CountryChooser } from '@/components/country-chooser';
 import { WaitingForMe } from '@/components/waiting-for-me';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -32,11 +34,15 @@ export default function DashboardScreen() {
   const theme = useTheme();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setData(await fetchDashboard());
+      const copy = await withCountryCopy('dashboard', fetchDashboard);
+      setData(copy.data);
+      setOffline(copy.offline);
       setError('');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not load the dashboard.');
@@ -86,6 +92,7 @@ export default function DashboardScreen() {
         >
           <ThemedText type="title">Dashboard</ThemedText>
           <CountryChooser onChange={load} inset={false} />
+          <OfflineNotice offline={offline} />
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
           {!data ? <ActivityIndicator /> : (
             <>

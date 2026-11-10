@@ -15,6 +15,8 @@ import { ShipmentSteps } from '@/components/shipment-steps';
 import { TaskActionsPanel } from '@/components/task-actions';
 import { TaskMessages } from '@/components/task-messages';
 import { confirmAction } from '@/confirm';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -165,10 +167,14 @@ export default function TeamTaskScreen() {
   const [picking, setPicking] = useState<Picking | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setTask(await fetchTeamTaskDetail(Number(id)));
+      const copy = await withCountryCopy(`team-task-${id}`, () => fetchTeamTaskDetail(Number(id)));
+      setTask(copy.data);
+      setOffline(copy.offline);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not load this task.');
     }
@@ -323,6 +329,7 @@ export default function TeamTaskScreen() {
         </TouchableOpacity>
 
         <ScrollView contentContainerStyle={styles.content}>
+          <OfflineNotice offline={offline} />
           <ThemedText type="title" style={styles.taskNumber}>{task.task_number}</ThemedText>
           <ThemedText type="subtitle" style={styles.customer}>{task.customer_name}</ThemedText>
           <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>

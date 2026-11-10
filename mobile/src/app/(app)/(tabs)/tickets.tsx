@@ -8,6 +8,8 @@ import { fetchTicketsPage } from '@/api/endpoints';
 import { BellButton } from '@/components/bell-button';
 import { CountryChooser } from '@/components/country-chooser';
 import { SearchBox } from '@/components/search-box';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -38,6 +40,8 @@ export default function TicketsScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const query = useDebouncedValue(search.trim());
@@ -47,7 +51,10 @@ export default function TicketsScreen() {
   const load = useCallback(async () => {
     const mine = ++asked.current;
     try {
-      const result = await fetchTicketsPage(tab, query, 1);
+      const copy = query ? { data: await fetchTicketsPage(tab, query, 1), offline: false }
+        : await withCountryCopy(`tickets-${tab}`, () => fetchTicketsPage(tab, '', 1));
+      const result = copy.data;
+      setOffline(copy.offline);
       if (mine !== asked.current) {
         return;
       }
@@ -116,6 +123,7 @@ export default function TicketsScreen() {
           })}
         </ScrollView>
         <SearchBox value={search} onChangeText={setSearch} placeholder="Search by request, gym, contact, phone or PAK" />
+        <OfflineNotice offline={offline} />
         {error ? <ThemedText themeColor="danger" style={styles.message}>{error}</ThemedText> : null}
         <FlatList
           data={rows ?? []}

@@ -19,6 +19,14 @@ export function confirmAction(title: string, message: string, confirmLabel = 'Co
   });
 }
 
+/** The button for each of a technician's steps (tasks.views.TECHNICIAN_ACTIONS) — each asks first (STEP_QUESTIONS). */
+export const STEP_LABELS: Record<string, string> = {
+  accept: 'Confirm task',
+  en_route: 'Heading to site',
+  arrive: 'I have arrived',
+  start: 'Start work',
+};
+
 /** The question for each of a task's steps (tasks.views.TECHNICIAN_ACTIONS, and undo). */
 export const STEP_QUESTIONS: Record<string, [string, string]> = {
   accept: ['Confirm this task?', 'You confirm you will do this visit. The office sees it straight away.'],

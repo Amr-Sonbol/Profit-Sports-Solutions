@@ -919,6 +919,30 @@ class PartListApiTests(ApiTestCase):
         ])
 
 
+class AppErrorTests(ApiTestCase):
+    """The phone app's errors reach the office: kept, with who and where, and in the admins' bell."""
+
+    def test_an_error_is_kept_with_who_and_where_then_shown_to_the_admins(self):
+        from people.models import AppError
+        body = {'message': 'Cannot read property x', 'stack': 'at Report', 'screen': 'screen',
+                'app_version': '1.0.0', 'platform': 'ios 18'}
+        response = self.client.post('/api/app-errors/', json.dumps(body), content_type='application/json',
+                                    **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 204)
+        error = AppError.objects.get()
+        self.assertEqual((error.technician, error.screen, error.app_version), (self.technician, 'screen', '1.0.0'))
+        # Before sign-in too, without a token.
+        self.client.post('/api/app-errors/', json.dumps({'message': 'At sign-in'}), content_type='application/json')
+        self.assertEqual(AppError.objects.count(), 2)
+        admin = User.objects.create_user('admin9', password='pass12345', is_staff=True, is_superuser=True)
+        Technician.objects.create(user=admin, country=self.country, full_name='Ada Admin', language='en',
+                                  role=Technician.Role.ADMIN, employment_type='staff')
+        self.client.login(username='admin9', password='pass12345')
+        self.assertContains(self.client.get('/tasks/'), '2 new errors in the phone app')
+        self.client.get('/admin/people/apperror/')  # opening the list marks them seen
+        self.assertNotContains(self.client.get('/tasks/'), 'new errors in the phone app')
+
+
 class PushDeviceTests(ApiTestCase):
     """Registering phones, and pushes going out (Expo's service mocked)."""
 

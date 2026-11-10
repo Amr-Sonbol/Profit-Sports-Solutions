@@ -11,7 +11,7 @@ import { ApiRequestError } from '@/api/client';
 import { fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
 import { TaskMessages } from '@/components/task-messages';
-import { confirmAction, confirmStep } from '@/confirm';
+import { confirmAction, confirmStep, STEP_LABELS } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -21,12 +21,6 @@ import { withOfflineCopy } from '@/offline';
 import type { TaskDetail } from '@/types';
 import { when } from '@/task-time';
 
-const ACTION_LABELS: Record<string, string> = {
-  accept: 'Confirm task',
-  en_route: 'Heading to site',
-  arrive: 'I have arrived',
-  start: 'Start work',
-};
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -305,14 +299,14 @@ export default function TaskDetailScreen() {
             </ThemedText>
           ) : null}
 
-          {task.is_lead && task.next_action && ACTION_LABELS[task.next_action] ? (
+          {task.is_lead && task.next_action && STEP_LABELS[task.next_action] ? (
             <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
               onPress={() => handleAction(task.next_action!)}
               disabled={isBusy}
             >
               {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
-                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>{ACTION_LABELS[task.next_action]}</ThemedText>
+                <ThemedText style={[styles.buttonText, { color: theme.onPrimary }]}>{STEP_LABELS[task.next_action]}</ThemedText>
               )}
             </TouchableOpacity>
           ) : null}

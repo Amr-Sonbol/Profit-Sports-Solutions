@@ -57,6 +57,7 @@ urlpatterns = [
     path('parts/', views.PartListView.as_view(), name='part_list'),
     path('push-device/', views.PushDeviceView.as_view(), name='push_device'),
     path('push-device/test/', views.TestPushView.as_view(), name='push_test'),
+    path('app-errors/', views.AppErrorView.as_view(), name='app_errors'),
     path('tickets/', views.TicketListView.as_view(), name='ticket_list'),
     path('tickets/<int:pk>/', views.TicketDetailView.as_view(), name='ticket_detail'),
     path('tickets/<int:pk>/reply/', views.TicketReplyView.as_view(), name='ticket_reply'),

@@ -1,6 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
-import { ApiRequestError } from '@/api/client';
+import { ApiRequestError, getActiveCountry } from '@/api/client';
 import { submitMyReport } from '@/api/endpoints';
 import type { WorkReportInput } from '@/types';
 
@@ -95,6 +95,14 @@ export async function withOfflineCopy<T>(key: string, load: () => Promise<T>): P
     }
     return { data: cached, offline: true };
   }
+}
+
+/**
+ * withOfflineCopy for the office's screens, one copy per country chosen — a
+ * manager who switched country never sees the other one's last copy.
+ */
+export async function withCountryCopy<T>(key: string, load: () => Promise<T>): Promise<{ data: T; offline: boolean }> {
+  return withOfflineCopy(`${key}-${(await getActiveCountry()) ?? 'home'}`, load);
 }
 
 // ---- reports waiting to be sent ----

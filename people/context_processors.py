@@ -121,6 +121,13 @@ def notification_bell(request):
                     login__in=list(locked), is_active=True,
                 )
             ]
+    # The phone app's errors not looked at yet — the admins'; gone once the list is opened.
+    if technician.role == Technician.Role.ADMIN:
+        from people.models import AppError
+        new_errors = AppError.objects.filter(seen_at__isnull=True)
+        latest = new_errors.order_by('-occurred_at').values_list('occurred_at', flat=True).first()
+        if latest:
+            items.append({'kind': 'app_errors', 'created_at': latest, 'count': new_errors.count()})
     # Staff logins locked out right now, for the manager tier to unlock
     # from Staff accounts — live, like the customer lockouts above.
     if technician.is_manager_tier:

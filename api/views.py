@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django import forms
@@ -2208,6 +2209,11 @@ class BellView(APIView):
             elif kind == 'customer_locked':
                 text, alarm, about = _('Customer account locked'), True, item['customer'].name
                 opens = {'screen': 'website', 'path': reverse('customers:customer_accounts') + '?status=locked'}
+            elif kind == 'app_errors':
+                text = ngettext(
+                    '%(count)s new error in the phone app', '%(count)s new errors in the phone app', item['count'],
+                ) % {'count': item['count']}
+                alarm, opens = True, {'screen': 'website', 'path': reverse('admin:people_apperror_changelist')}
             elif kind == 'staff_locked':
                 text, alarm, about = _('Staff login locked'), True, item['person'].full_name
                 opens = {'screen': 'app', 'path': '/staff-accounts'}
@@ -2516,6 +2522,31 @@ class PushDeviceView(APIView):
         PushDevice.objects.filter(
             token=str(request.data.get('token', '')), technician=request.user.technician,
         ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AppErrorView(APIView):
+    """The phone app reporting an error it hit (src/error-reporting.ts): kept
+    for the office (people.AppError) — also before sign-in, so no token is
+    needed; who it was is recorded when there is one. Never more than 100 an
+    hour, so a phone stuck in a loop can't fill the database."""
+
+    permission_classes = []
+
+    def post(self, request):
+        from people.models import AppError
+
+        if AppError.objects.filter(occurred_at__gte=timezone.now() - timedelta(hours=1)).count() >= 100:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        data = request.data
+        user = request.user if request.user and request.user.is_authenticated else None
+        AppError.objects.create(
+            technician=getattr(user, 'technician', None) if user else None,
+            message=str(data.get('message', ''))[:2000] or '(no message)',
+            stack=str(data.get('stack', ''))[:8000], screen=str(data.get('screen', ''))[:200],
+            app_version=str(data.get('app_version', ''))[:40], platform=str(data.get('platform', ''))[:40],
+            occurred_at=timezone.now(),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

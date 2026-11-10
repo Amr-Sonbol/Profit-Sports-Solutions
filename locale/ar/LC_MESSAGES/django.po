@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 15:00+0000\n"
+"POT-Creation-Date: 2026-11-10 16:17+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -135,6 +135,16 @@ msgstr[5] "%(count)s جهاز في قائمة المراجعة لم يُراجع
 #, python-format
 msgid "%(count)s more than last month"
 msgstr "أكثر بـ %(count)s من الشهر الماضي"
+
+#, python-format
+msgid "%(count)s new error in the phone app"
+msgid_plural "%(count)s new errors in the phone app"
+msgstr[0] "لا توجد أخطاء جديدة في تطبيق الهاتف"
+msgstr[1] "خطأ جديد واحد في تطبيق الهاتف"
+msgstr[2] "خطآن جديدان في تطبيق الهاتف"
+msgstr[3] "%(count)s أخطاء جديدة في تطبيق الهاتف"
+msgstr[4] "%(count)s خطأً جديدًا في تطبيق الهاتف"
+msgstr[5] "%(count)s خطأ جديد في تطبيق الهاتف"
 
 #, python-format
 msgid "%(count)s open task is still assigned to them:"
@@ -7052,6 +7062,15 @@ msgstr "موضوع التذكرة الداخلية؛ وفي طلب العميل:
 msgid "any time, as PDF."
 msgstr "في أي وقت، بصيغة PDF."
 
+msgid "app error"
+msgstr "خطأ في التطبيق"
+
+msgid "app errors"
+msgstr "أخطاء التطبيق"
+
+msgid "app version"
+msgstr "إصدار التطبيق"
+
 msgid "approximate duration of the job; shown as an estimated finish time"
 msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتهاء متوقع"
 
@@ -7661,6 +7680,9 @@ msgstr "صورة أو فيديو للفني أثناء تنفيذ هذا الإ�
 msgid "photos, videos or PDFs — up to %(count)d files, %(size)d MB each"
 msgstr "صور أو فيديو أو PDF — حتى %(count)d ملفات، %(size)d ميغابايت لكل ملف"
 
+msgid "platform"
+msgstr "النظام"
+
 msgid "please describe the issue for each machine separately, including its serial number"
 msgstr "يرجى وصف المشكلة لكل جهاز على حدة، مع ذكر رقمه التسلسلي"
 
@@ -7835,6 +7857,9 @@ msgstr "تاريخ الجدولة"
 msgid "scheduled for"
 msgstr "مجدولة لتاريخ"
 
+msgid "screen"
+msgstr "الشاشة"
+
 msgid "seen at"
 msgstr "وقت المشاهدة"
 
@@ -7956,6 +7981,9 @@ msgstr "المصدر"
 
 msgid "stable key; never changes"
 msgstr "مفتاح ثابت؛ لا يتغير أبداً"
+
+msgid "stack"
+msgstr "مسار الخطأ"
 
 msgid "standard action"
 msgstr "الإجراء المعتاد"
@@ -8514,9 +8542,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "For exceptional cases only, such as a customer cancellation or a visit that proved unnecessary. This bypasses the standard report and approval process."
 #~ msgstr "للحالات الاستثنائية فقط، كإلغاء العميل للطلب أو عدم الحاجة إلى الزيارة. يتجاوز هذا الإجراء عملية التقرير والاعتماد المعتادة."
-
-#~ msgid "Green"
-#~ msgstr "أخضر"
 
 #~ msgid "Grey"
 #~ msgstr "رمادي"

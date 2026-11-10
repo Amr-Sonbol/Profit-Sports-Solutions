@@ -68,6 +68,10 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                             {% translate "Customer account locked" %}
                             — {{ notification.customer.name }}
                         </a>
+                        {% elif notification.kind == 'app_errors' %}
+                        <a href="{% url 'admin:people_apperror_changelist' %}" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} new error in the phone app{% plural %}{{ count }} new errors in the phone app{% endblocktranslate %}
+                        </a>
                         {% elif notification.kind == 'staff_locked' %}
                         <a href="{% url 'tasks:staff_accounts' %}?status=locked" class="notif-alarm">
                             {% translate "Staff login locked" %}

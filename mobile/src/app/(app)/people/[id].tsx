@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { deactivatePerson, fetchPerson, reviewPersonSkill, setPersonAvailability } from '@/api/endpoints';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -30,6 +32,8 @@ export default function PersonScreen() {
   const theme = useTheme();
   const [person, setPerson] = useState<Person | null>(null);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState('');
   const [choosingReason, setChoosingReason] = useState(false);
@@ -41,7 +45,9 @@ export default function PersonScreen() {
 
   const load = useCallback(async () => {
     try {
-      setPerson(await fetchPerson(Number(id)));
+      const copy = await withCountryCopy(`person-${id}`, () => fetchPerson(Number(id)));
+      setPerson(copy.data);
+      setOffline(copy.offline);
       setError('');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not load this person.');
@@ -106,6 +112,7 @@ export default function PersonScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <ThemedText themeColor="primary">← Back</ThemedText>
           </TouchableOpacity>
+          <OfflineNotice offline={offline} />
 
           <ThemedView style={styles.header}>
             {person.photo_url ? (

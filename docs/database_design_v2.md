@@ -489,6 +489,21 @@ A phone that can receive push notifications for a technician (any role) — regi
 
 Sent through Expo's push service (`people/push.py`), best-effort and fail-silent like email — a failed push never blocks the action behind it; a token Expo reports as no longer registered is deleted. **Sent when:** a technician is made lead or helper on a task; a technician's report is waiting on the task's responsible supervisor; a ticket is escalated to someone; a task message names someone. Never for their own actions. Off entirely unless `EXPO_PUSH_ENABLED` is on (it is by default; tests and local runs without phones simply have no devices registered).
 
+### app_error
+Something that went wrong in the phone app — a screen that crashed, an error nobody caught — sent by the app itself (`mobile/src/error-reporting.ts` → `POST /api/app-errors/`), so a failure on a technician's phone in the field reaches the office. Accepted before sign-in too (no token needed); never more than 100 an hour in all. The admins' bell shows how many are new; the list is in the Django admin, and opening it marks them seen.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| technician_id | FK → technician, nullable | who was signed in; null before sign-in (`SET NULL` if deleted) |
+| message | text | the error's message |
+| stack | text | where in the app it happened (blank if unknown) |
+| screen | varchar(200) | `screen` (a crashed screen), `uncaught`, `fatal` |
+| app_version | varchar(40) | the app's version (`app.json`) |
+| platform | varchar(40) | e.g. `ios 18.1` |
+| occurred_at | timestamptz | |
+| seen_at | timestamptz, nullable | set when an admin opens the list |
+
 ### notification_settings
 A single row (`pk=1`, created on first use), set by an admin on its own **Notifications** page (`/tasks/notifications/`, admin-only like Roles) — not per-country, one set of switches for the whole app. The page lists every message the system sends, when and how; the automatic ones have a switch here. Messages someone sends with a button (visit confirmed, running late, parts shipped, feedback request, the visit report copy) and the security emails (password changed, staff set-up link, customer welcome/password link) are listed with no switch — they're always available or always sent. The 🔔 bell is not affected by any of this.
 

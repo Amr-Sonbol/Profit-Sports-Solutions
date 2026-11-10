@@ -4,7 +4,7 @@ import { ActivityIndicator, Alert, Linking, StyleSheet, TouchableOpacity } from 
 
 import { ApiRequestError } from '@/api/client';
 import { sendTaskAction } from '@/api/endpoints';
-import { confirmStep } from '@/confirm';
+import { confirmStep, STEP_LABELS } from '@/confirm';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -12,12 +12,6 @@ import { useTheme } from '@/hooks/use-theme';
 import type { ScheduleItem, TodayPlan } from '@/types';
 
 // The lead's next tap — the same buttons as the task screen.
-const ACTION_LABELS: Record<string, string> = {
-  accept: 'Confirm task',
-  en_route: 'Heading to site',
-  arrive: 'I have arrived',
-  start: 'Start work',
-};
 
 const ROLE_LABELS: Record<string, string> = { lead: 'Lead', helper: 'Helper', responsible: 'Responsible' };
 
@@ -103,14 +97,14 @@ export function TodayPlanView({ plan, onChanged }: { plan: TodayPlan; onChanged:
             {job.task_number} · {ROLE_LABELS[job.my_role] ?? ''} · {job.priority_display} · {job.status_display}
           </ThemedText>
           <ThemedView style={styles.buttons}>
-            {job.next_action && ACTION_LABELS[job.next_action] ? (
+            {job.next_action && STEP_LABELS[job.next_action] ? (
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: theme.primary }]}
                 onPress={() => tap(job.next_action!)}
                 disabled={isBusy}
               >
                 {isBusy ? <ActivityIndicator color={theme.onPrimary} /> : (
-                  <ThemedText style={{ color: theme.onPrimary }}>{ACTION_LABELS[job.next_action]}</ThemedText>
+                  <ThemedText style={{ color: theme.onPrimary }}>{STEP_LABELS[job.next_action]}</ThemedText>
                 )}
               </TouchableOpacity>
             ) : null}

@@ -1,13 +1,15 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
+import { DarkTheme, DefaultTheme, type ErrorBoundaryProps, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useRef } from 'react';
-import { useColorScheme } from 'react-native';
+import { Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { AuthProvider, useSession } from '@/context/auth';
+import { installErrorReporting, reportError } from '@/error-reporting';
 import { routeForNotification } from '@/push';
 
 SplashScreen.preventAutoHideAsync();
+installErrorReporting();
 
 function RootNavigator() {
   const { me, isLoading } = useSession();
@@ -57,6 +59,38 @@ function RootNavigator() {
     </Stack>
   );
 }
+
+/**
+ * A screen that crashed: told to the office (error-reporting), and a plain
+ * way back instead of a blank or red screen. Plain components only — the
+ * app's own may be what failed.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!reported.current) {
+      reported.current = true;
+      reportError(error, 'screen');
+    }
+  }, [error]);
+  return (
+    <View style={errorStyles.page}>
+      <Text style={errorStyles.title}>Something went wrong on this screen</Text>
+      <Text style={errorStyles.text}>The office has been told. Try again; if it keeps happening, call your supervisor.</Text>
+      <Pressable style={errorStyles.button} onPress={retry}>
+        <Text style={errorStyles.buttonText}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  page: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12, backgroundColor: '#FFFFFF' },
+  title: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center' },
+  text: { fontSize: 15, color: '#4B5563', textAlign: 'center' },
+  button: { backgroundColor: '#111827', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 12 },
+  buttonText: { color: '#FFFFFF', fontWeight: '600' },
+});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

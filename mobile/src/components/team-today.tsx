@@ -6,6 +6,8 @@ import { FlatList, Linking, RefreshControl, StyleSheet, TouchableOpacity } from 
 import { ApiRequestError } from '@/api/client';
 import { Avatar } from '@/components/avatar';
 import { fetchTeamToday } from '@/api/endpoints';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -39,12 +41,16 @@ export function TeamTodayList() {
   const router = useRouter();
   const [rows, setRows] = useState<TeamTodayRow[] | null>(null);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [focused, setFocused] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setRows(await fetchTeamToday());
+      const copy = await withCountryCopy('team-today', fetchTeamToday);
+      setRows(copy.data);
+      setOffline(copy.offline);
       setError('');
     } catch (err) {
       setError(err instanceof ApiRequestError && err.status === 403
@@ -78,11 +84,14 @@ export function TeamTodayList() {
         setIsRefreshing(false);
       }} />}
       ListHeaderComponent={rows ? (
+        <>
+        <OfflineNotice offline={offline} />
         <ThemedText type="small" themeColor="textSecondary">
           {(['working', 'on_site', 'on_the_way', 'blocked', 'free', 'abroad', 'off'] as const)
             .filter((state) => counts[state]).map((state) => `${counts[state]} ${STATES[state][0].toLowerCase()}`).join(' · ')
             || 'No one in your team here.'}
         </ThemedText>
+        </>
       ) : undefined}
       ListEmptyComponent={error ? <ThemedText themeColor="danger">{error}</ThemedText> : undefined}
       renderItem={({ item }) => {

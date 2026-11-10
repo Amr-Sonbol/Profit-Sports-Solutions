@@ -6,6 +6,8 @@ import { ApiRequestError } from '@/api/client';
 import { Avatar } from '@/components/avatar';
 import { fetchTeamProgress } from '@/api/endpoints';
 import { monthLabel, Sparkline } from '@/components/line-chart';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -25,11 +27,15 @@ export function TeamProgressList() {
   const [rows, setRows] = useState<TeamProgressRow[] | null>(null);
   const [month, setMonth] = useState('');
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchTeamProgress();
+      const copy = await withCountryCopy('team-progress', fetchTeamProgress);
+      const data = copy.data;
+      setOffline(copy.offline);
       setRows(data.rows);
       setMonth(data.month);
       setError('');
@@ -65,9 +71,12 @@ export function TeamProgressList() {
       contentContainerStyle={styles.list}
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
       ListHeaderComponent={month ? (
+        <>
+        <OfflineNotice offline={offline} />
         <ThemedText type="small" themeColor="textSecondary">
           {monthLabel(month, true)} · completed means the work report was submitted
         </ThemedText>
+        </>
       ) : undefined}
       ListEmptyComponent={rows !== null ? (
         <ThemedText themeColor="textSecondary">No one on your team yet.</ThemedText>

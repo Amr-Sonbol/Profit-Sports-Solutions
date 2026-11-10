@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { type BellItem, fetchBell } from '@/api/endpoints';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -24,11 +26,15 @@ export default function BellScreen() {
   const [items, setItems] = useState<BellItem[] | null>(null);
   const [count, setCount] = useState(0);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const bell = await fetchBell();
+      const copy = await withCountryCopy('bell', fetchBell);
+      const bell = copy.data;
+      setOffline(copy.offline);
       setItems(bell.items);
       setCount(bell.count);
       setError('');
@@ -66,6 +72,7 @@ export default function BellScreen() {
             The newest {items?.length} of {count}.
           </ThemedText>
         ) : null}
+        <OfflineNotice offline={offline} />
         {error ? <ThemedText themeColor="danger" style={styles.note}>{error}</ThemedText> : null}
         {items === null && !error ? <ActivityIndicator /> : null}
         <FlatList

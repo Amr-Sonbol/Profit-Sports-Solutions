@@ -10,6 +10,8 @@ import { ApiRequestError } from '@/api/client';
 import { decideTicket, fetchTicket, sendTicketMessage } from '@/api/endpoints';
 import { ChoicePicker } from '@/components/choice-picker';
 import { MediaStrip } from '@/components/customer-request';
+import { OfflineNotice } from '@/components/offline-notice';
+import { withCountryCopy } from '@/offline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { confirmAction } from '@/confirm';
@@ -42,6 +44,8 @@ export default function TicketScreen() {
   const router = useRouter();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState('');
+  // Showing the last copy kept on the phone (no connection).
+  const [offline, setOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -59,7 +63,9 @@ export default function TicketScreen() {
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchTicket(Number(id));
+      const copy = await withCountryCopy(`ticket-${id}`, () => fetchTicket(Number(id)));
+      const data = copy.data;
+      setOffline(copy.offline);
       setTicket(data);
       // Every machine still waiting is chosen to start with, as on the website.
       setSelected(data.machines.filter((machine) => !machine.decision).map((machine) => machine.id));
@@ -184,6 +190,7 @@ export default function TicketScreen() {
         <ThemedText type="small" themeColor="textSecondary">
           {[ticket.about, ticket.need].filter(Boolean).join(' · ')} · received {ago(ticket.submitted_at)}
         </ThemedText>
+        <OfflineNotice offline={offline} />
         {notice ? <ThemedText themeColor="primary">{notice}</ThemedText> : null}
 
         <ThemedView style={[styles.card, { borderColor: theme.backgroundSelected }]}>

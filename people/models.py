@@ -551,6 +551,34 @@ class PushDevice(models.Model):
         return f'{self.technician} — {self.token[:24]}'
 
 
+class AppError(models.Model):
+    """Something that went wrong in the phone app — a screen that crashed, an
+    error nobody caught — sent by the app itself, so a failure on a
+    technician's phone in the field reaches the office instead of being lost.
+    The admins see how many are new in their bell; the list is in the Django
+    admin (opening it marks them seen)."""
+
+    technician = models.ForeignKey(
+        'Technician', on_delete=models.SET_NULL, null=True, blank=True, related_name='app_errors',
+        verbose_name=_('technician'),
+    )
+    message = models.TextField(_('message'))
+    stack = models.TextField(_('stack'), blank=True)
+    screen = models.CharField(_('screen'), max_length=200, blank=True)
+    app_version = models.CharField(_('app version'), max_length=40, blank=True)
+    platform = models.CharField(_('platform'), max_length=40, blank=True)
+    occurred_at = models.DateTimeField(_('occurred at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('app error')
+        verbose_name_plural = _('app errors')
+        ordering = ['-occurred_at']
+
+    def __str__(self):
+        return f'{self.occurred_at:%Y-%m-%d %H:%M} — {self.message[:80]}'
+
+
 class FailedEmail(models.Model):
     """An email the app tried and failed to send (the mail server refused or
     couldn't be reached) — emails go out in the background, so the person
