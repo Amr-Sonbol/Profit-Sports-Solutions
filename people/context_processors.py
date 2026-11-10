@@ -65,6 +65,16 @@ def notification_bell(request):
             {'kind': 'new_task', 'created_at': notification.created_at, 'task': notification.task}
             for notification in unseen_tasks
         ]
+    if technician.is_manager_tier:
+        # A visit's time a supervisor asks to move — live, for whoever can approve it (the manager
+        # tier, in that country), until it's approved or refused.
+        from tasks.models import ScheduleChangeRequest
+        items += [
+            {'kind': 'schedule_change_pending', 'created_at': change.created_at, 'task': change.task}
+            for change in ScheduleChangeRequest.objects.filter(
+                status=ScheduleChangeRequest.Status.PENDING, task__site__customer__country=country,
+            ).select_related('task__site')
+        ]
     from tasks.models import TicketEscalation
     items += [
         {'kind': 'escalation_pending', 'created_at': escalation.escalated_at, 'ticket': escalation.ticket}

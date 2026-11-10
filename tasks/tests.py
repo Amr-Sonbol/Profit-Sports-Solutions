@@ -9578,3 +9578,43 @@ class DeactivateAndHandOverTests(TaskTestCase):
         lead = task.assignments.get(is_active=True)
         self.assertEqual((lead.technician, lead.role), (colleague, TaskAssignment.Role.LEAD))
         self.assertEqual(task.assignments.get(technician=self.technician).end_reason, 'left_company')
+
+
+class ScheduleChangeBellTests(TaskTestCase):
+    """A time a supervisor asks to move waits on the approvers' bell until it's decided."""
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+
+    def test_the_technical_support_manager_sees_it_until_decided(self):
+        from tasks.models import ScheduleChangeRequest
+        tsm_user = User.objects.create_user('tsm1', password='pass12345')
+        Technician.objects.create(
+            user=tsm_user, country=self.country, full_name='Tamer Support', language='en',
+            role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        change = ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self.supervisor_user.technician, requested_scheduled_for=timezone.now() + timedelta(days=2),
+            reason='Customer asked for Thursday', created_at=timezone.now(),
+        )
+        self.client.login(username='tsm1', password='pass12345')
+        response = self.client.get('/tasks/')
+        self.assertContains(response, 'Change of visit time requested')
+        self.assertIn('schedule_change_pending', [item['kind'] for item in response.context['unseen_notifications']])
+        change.status = ScheduleChangeRequest.Status.APPROVED
+        change.save(update_fields=['status'])
+        response = self.client.get('/tasks/')
+        self.assertNotIn('schedule_change_pending', [item['kind'] for item in response.context['unseen_notifications']])
+
+    def test_a_supervisor_is_not_asked_to_approve(self):
+        from tasks.models import ScheduleChangeRequest
+        ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self.supervisor_user.technician, requested_scheduled_for=timezone.now() + timedelta(days=2),
+            created_at=timezone.now(),
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertNotContains(self.client.get('/tasks/'), 'Change of visit time requested')

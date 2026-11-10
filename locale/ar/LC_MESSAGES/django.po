@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-09 00:23+0000\n"
+"POT-Creation-Date: 2026-11-10 00:26+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1230,6 +1230,9 @@ msgstr "تغيير البريد الإلكتروني"
 
 msgid "Change my rating"
 msgstr "تغيير تقييمي"
+
+msgid "Change of visit time requested — approval required"
+msgstr "طُلب تغيير موعد الزيارة — بانتظار الموافقة"
 
 msgid "Change password"
 msgstr "تغيير كلمة المرور"
