@@ -1092,7 +1092,7 @@ class MyTaskListView(APIView):
         technician = request.user.technician
         assignments = TaskAssignment.objects.filter(
             technician=technician, is_active=True, task__status__in=OPEN_STATUSES,
-        ).select_related('task__site__customer')
+        ).select_related('task__site__customer').prefetch_related('task__assignments__technician')
         # Newest received first (when it was given to them): Today shows the day in time order.
         tasks = [a.task for a in sorted(assignments, key=lambda a: a.assigned_at, reverse=True)]
         return Response(TaskListSerializer(tasks, many=True).data)

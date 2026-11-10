@@ -34,6 +34,8 @@ export interface TaskListItem {
   task_number: string;
   site_name: string;
   customer_name: string;
+  /** Who it's assigned to (the lead) — or, once done, who did it. Older servers: absent. */
+  lead_name?: string;
   status: string;
   status_display: string;
   priority: string;

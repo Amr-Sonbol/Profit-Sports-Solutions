@@ -132,6 +132,11 @@ export default function TeamTasksScreen() {
               >
                 <ThemedText type="smallBold">{item.task_number}</ThemedText>
                 <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
+                {item.lead_name !== undefined ? (
+                  item.lead_name
+                    ? <ThemedText type="small">{['pending_supervisor_review', 'completed', 'closed'].includes(item.status) ? 'Done by' : 'Lead'}: {item.lead_name}</ThemedText>
+                    : <ThemedText type="small" themeColor="danger">No technician yet</ThemedText>
+                ) : null}
                 <ThemedView style={styles.row}>
                   <ThemedText themeColor="primary" type="small">{item.status_display}</ThemedText>
                   <ThemedText themeColor="textSecondary" type="small">{item.priority_display}</ThemedText>

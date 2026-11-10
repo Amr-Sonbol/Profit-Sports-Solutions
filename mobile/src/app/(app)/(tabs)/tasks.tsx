@@ -21,6 +21,9 @@ import type { PlanItem, TaskListItem } from '@/types';
  * country's tasks (a supervisor: he's responsible for them) can switch to All —
  * every open task in the country, with search; a task opens its full screen.
  */
+// Done: the lead is who did it.
+const DONE = ['pending_supervisor_review', 'completed', 'closed'];
+
 export default function TasksScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -144,6 +147,13 @@ export default function TasksScreen() {
                 <StatusBadge status={item.status} label={item.status_display} />
               </ThemedView>
               <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
+              {item.lead_name !== undefined ? (
+                item.lead_name ? (
+                  <ThemedText type="small">
+                    {DONE.includes(item.status) ? 'Done by' : 'Lead'}: {item.lead_name}
+                  </ThemedText>
+                ) : <ThemedText type="small" themeColor="danger">No technician yet</ThemedText>
+              ) : null}
               <ThemedView style={styles.row}>
                 <ThemedText themeColor="textSecondary" type="small">
                   {item.scheduled_for

@@ -12,13 +12,21 @@ class TaskListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='site.customer.name')
     status_display = serializers.CharField(source='get_status_display')
     priority_display = serializers.CharField(source='get_priority_display')
+    # Who it's assigned to — or, once done, who did it: the lead.
+    lead_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             'id', 'task_number', 'site_name', 'customer_name', 'status', 'status_display',
-            'priority', 'priority_display', 'scheduled_for', 'promised_at', 'reported_at',
+            'priority', 'priority_display', 'scheduled_for', 'promised_at', 'reported_at', 'lead_name',
         ]
+
+    def get_lead_name(self, obj):
+        leads = getattr(obj, 'lead_assignments', None)  # prefetched for the team list (_with_lead_prefetch)
+        if leads is None:
+            leads = [a for a in obj.assignments.all() if a.is_active and a.role == TaskAssignment.Role.LEAD]
+        return leads[0].technician.full_name if leads else ''
 
 
 class TaskEventSerializer(serializers.ModelSerializer):
