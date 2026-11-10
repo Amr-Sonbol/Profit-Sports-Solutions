@@ -131,9 +131,13 @@ def notification_bell(request):
             ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
-    ).select_related('message__task')
+    ).select_related('message__task', 'message__sent_by__technician')
     items += [
-        {'kind': 'task_message', 'created_at': recipient.message.sent_at, 'task': recipient.message.task}
+        {
+            'kind': 'task_message', 'created_at': recipient.message.sent_at, 'task': recipient.message.task,
+            'sender': getattr(getattr(recipient.message.sent_by, 'technician', None), 'full_name', '')
+            or recipient.message.sent_by.get_username(),
+        }
         for recipient in unseen_messages
     ]
     # Whoever holds the shared inbox (tickets or tasks) always gets a

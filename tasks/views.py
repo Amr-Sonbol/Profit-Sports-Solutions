@@ -917,10 +917,12 @@ def _post_task_message(request, task, text):
     TaskMessageRecipient.objects.bulk_create([
         TaskMessageRecipient(message=message, technician=recipient) for recipient in recipients
     ])
+    # Who wrote it, so they know at a glance (a manager, the customer's contact person never).
+    sender = getattr(sender_technician, 'full_name', '') or request.user.get_username()
     for recipient in recipients:
         push_in_their_language(
             recipient,
-            lambda: _('New message — %(number)s') % {'number': task.task_number},
+            lambda: _('%(name)s — %(number)s') % {'name': sender, 'number': task.task_number},
             lambda: text[:150],
             {'type': 'task_message', 'task_id': task.pk},
         )

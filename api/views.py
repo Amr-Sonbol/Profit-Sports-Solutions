@@ -2103,7 +2103,7 @@ class BellView(APIView):
                 text, alarm, about = _('Staff login locked'), True, item['person'].full_name
                 opens = {'screen': 'website', 'path': reverse('tasks:staff_accounts') + '?status=locked'}
             elif kind == 'task_message':
-                text = _('New message')
+                text = _('New message from %(name)s') % {'name': item['sender']} if item.get('sender') else _('New message')
             elif kind == 'new_ticket':
                 text = _('New ticket')
             elif kind == 'escalation_decided':

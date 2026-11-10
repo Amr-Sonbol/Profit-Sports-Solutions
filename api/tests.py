@@ -1966,4 +1966,6 @@ class BellApiTests(TaskMessagesApiTests):
         bell = self.client.get('/api/bell/', **self.auth(self.token_for('tech1'))).json()
         self.assertEqual(bell['count'], 1)
         item = bell['items'][0]
-        self.assertEqual((item['kind'], item['text'], item['opens']), ('task_message', 'New message', {'screen': 'task', 'id': self.task.pk}))
+        self.assertEqual((item['kind'], item['opens']), ('task_message', {'screen': 'task', 'id': self.task.pk}))
+        sender = self.supervisor_user.technician.full_name
+        self.assertEqual(item['text'], f'New message from {sender}')  # who wrote it
