@@ -5,12 +5,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ago } from '@/task-time';
 import type { TaskListItem } from '@/types';
 
 // Done: the lead is who did it.
 const DONE = ['pending_supervisor_review', 'completed', 'closed'];
 
-/** One task in a list: number and status, customer and branch, new messages, the lead, the day, the priority. */
+/** One task in a list: number and status, customer and branch, new messages, the lead, the visit, when it came in, the priority. */
 export function TaskCard({ item, onPress }: { item: TaskListItem; onPress: () => void }) {
   const theme = useTheme();
   return (
@@ -35,13 +36,14 @@ export function TaskCard({ item, onPress }: { item: TaskListItem; onPress: () =>
       <ThemedView style={styles.row}>
         <ThemedText themeColor="textSecondary" type="small">
           {item.scheduled_for
-            ? new Date(item.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+            ? `Visit: ${new Date(item.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
             : 'No date yet'}
         </ThemedText>
         <ThemedText themeColor={item.priority === 'high' ? 'danger' : 'textSecondary'} type="small">
           {item.priority_display}
         </ThemedText>
       </ThemedView>
+      {item.reported_at ? <ThemedText themeColor="textSecondary" type="small">Received {ago(item.reported_at)}</ThemedText> : null}
     </TouchableOpacity>
   );
 }

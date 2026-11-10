@@ -1,7 +1,7 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AuthProvider, useSession } from '@/context/auth';
@@ -13,19 +13,22 @@ function RootNavigator() {
   const { me, isLoading } = useSession();
   const router = useRouter();
 
-  // Tapping a push notification opens the task it's about.
+  // Tapping a notification opens what it's about — with the app open, in the
+  // background, or closed (the tap that starts it is kept until signed in).
+  const tapped = Notifications.useLastNotificationResponse();
+  const handled = useRef<string | null>(null);
   useEffect(() => {
-    if (!me) {
+    if (!me || !tapped || tapped.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) {
       return;
     }
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const route = routeForNotification(response.notification.request.content.data ?? {}, me.role);
-      if (route) {
-        router.push(route as never);
-      }
-    });
-    return () => subscription.remove();
-  }, [me, router]);
+    const id = tapped.notification.request.identifier;
+    if (handled.current === id) {
+      return;
+    }
+    handled.current = id;
+    router.push(routeForNotification(tapped.notification.request.content.data ?? {}, me.role) as never);
+    Notifications.clearLastNotificationResponseAsync();
+  }, [tapped, me, router]);
 
   useEffect(() => {
     if (!isLoading) {

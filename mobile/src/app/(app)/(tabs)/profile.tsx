@@ -1,10 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { API_BASE_URL } from '@/api/client';
+import { NotificationCheck } from '@/components/notification-check';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -89,13 +92,18 @@ export default function ProfileScreen() {
             <ThemedText>{me?.photo_url ? 'Edit profile' : 'Add your photo and edit profile'}</ThemedText>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.button, { borderColor: theme.backgroundSelected }]}
-            onPress={() => router.push('/skills')}
-          >
-            <Ionicons name="ribbon-outline" size={18} color={theme.text} />
-            <ThemedText>My skills</ThemedText>
-          </TouchableOpacity>
+          {/* Skills are the field team's (technician, supervisor), as on the website. */}
+          {(me?.field_staff ?? true) ? (
+            <TouchableOpacity
+              style={[styles.button, { borderColor: theme.backgroundSelected }]}
+              onPress={() => router.push('/skills')}
+            >
+              <Ionicons name="ribbon-outline" size={18} color={theme.text} />
+              <ThemedText>My skills</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+
+          <NotificationCheck />
 
           <TouchableOpacity
             style={[styles.button, { borderColor: theme.backgroundSelected }]}
@@ -109,6 +117,11 @@ export default function ProfileScreen() {
             <Ionicons name="log-out-outline" size={18} color={theme.danger} />
             <ThemedText themeColor="danger">Sign out</ThemedText>
           </TouchableOpacity>
+
+          {/* Which app this is — for the office when someone reports a problem. */}
+          <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
+            Profit Sports Solutions app {Constants.expoConfig?.version ?? ''} · {API_BASE_URL.replace(/^https?:\/\//, '')}
+          </ThemedText>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -124,6 +137,7 @@ const styles = StyleSheet.create({
   initials: { alignItems: 'center', justifyContent: 'center' },
   initialsText: { fontSize: 34, fontWeight: '700' },
   name: { textAlign: 'center' },
+  version: { textAlign: 'center' },
   badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: 2 },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.three },
   detail: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, backgroundColor: 'transparent' },

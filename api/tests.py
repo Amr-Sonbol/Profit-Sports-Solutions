@@ -445,6 +445,145 @@ class TicketListTests(ApiTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class WaitingForMeTests(ApiTestCase):
+    """Tasks → Waiting for me and the Dashboard's top: one item per decision, for whoever makes it."""
+
+    def waiting(self, username):
+        return self.client.get('/api/waiting/', **self.auth(self.token_for(username))).json()
+
+    def test_a_report_waits_on_its_supervisor_then_on_the_technical_support_manager(self):
+        manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.SUPPORT_MANAGER, employment_type='staff')
+        self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save()
+        self.assertEqual([item['kind'] for item in self.waiting('supervisor1')], ['review_report'])
+        self.assertEqual(self.waiting('tech1'), [])
+        self.task.status = Task.Status.COMPLETED
+        self.task.save()
+        item = self.waiting('manager1')[0]
+        self.assertEqual((item['kind'], item['opens']), ('approve_report', {'screen': 'team-task', 'id': self.task.pk}))
+        dashboard = self.client.get('/api/dashboard/', **self.auth(self.token_for('manager1'))).json()
+        self.assertEqual([entry['kind'] for entry in dashboard['waiting']], ['approve_report'])
+        # Not twice: the count it replaces is gone from the list below.
+        self.assertFalse([entry for entry in dashboard['actions'] if 'status=completed' in entry['url']])
+
+    def test_a_blocked_task_waits_on_its_owner(self):
+        self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.task.status = Task.Status.BLOCKED
+        self.task.save()
+        self.assertEqual([item['kind'] for item in self.waiting('supervisor1')], ['blocked'])
+
+
+class TeamTodayTests(ApiTestCase):
+    """Team → Today: who's where right now, for those who oversee people."""
+
+    def test_working_off_and_free(self):
+        self.task.scheduled_for = timezone.now()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED, actor=self.technician.user, occurred_at=timezone.now(),
+        )
+        helper = Technician.objects.create(
+            user=User.objects.create_user('sick1', password='pass12345'), country=self.country, full_name='Sami Sick',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+            is_available=False, unavailable_reason=Technician.UnavailableReason.SICK,
+        )
+        rows = {row['name']: row for row in self.client.get(
+            '/api/team-today/', **self.auth(self.token_for('supervisor1'))).json()}
+        working = rows[self.technician.full_name]
+        self.assertEqual((working['state'], working['task']['id'], working['today_total']), ('working', self.task.pk, 1))
+        self.assertEqual((rows[helper.full_name]['state'], rows[helper.full_name]['off_reason']), ('off', 'Sick'))
+
+    def test_a_technician_may_not(self):
+        self.assertEqual(self.client.get('/api/team-today/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class TicketScreenTests(ApiTestCase):
+    """The app's Tickets tab and request screen: the website's request page,
+    with the same rules (tasks.views.ticket_access, decide_request_next)."""
+
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('support1', password='pass12345'), country=self.country,
+            full_name='Dana Support', language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0701', customer=self.customer, site=self.site,
+            company_name='Fitness First', site_description='Marina Branch', contact_name='Ali',
+            contact_phone='0501234567', contact_email='ali@example.invalid', description='(from the machines)',
+            submitted_at=timezone.now(),
+        )
+        self.treadmill, self.bike = [
+            TicketMachine.objects.create(
+                ticket=self.ticket, model_name=name, serial_no=serial, problem=TicketMachine.Problem.NOT_WORKING,
+                position=i, description=f'{name} stops',
+            )
+            for i, (name, serial) in enumerate([('Treadmill', 'T-1'), ('Bike', 'B-1')])
+        ]
+        self.token = self.token_for('support1')
+
+    def post(self, path, body):
+        return self.client.post(path, json.dumps(body), content_type='application/json', **self.auth(self.token))
+
+    def test_tabs_count_and_page(self):
+        body = self.client.get('/api/tickets/?status=new', **self.auth(self.token)).json()
+        self.assertEqual((body['counts']['new'], body['count'], body['has_more']), (1, 1, False))
+        self.assertEqual(body['results'][0]['ticket_number'], 'AE-T0701')
+        closed = self.client.get('/api/tickets/?status=closed', **self.auth(self.token)).json()
+        self.assertEqual(closed['results'], [])
+        # Apps from before the tabs still get the plain list.
+        self.assertIsInstance(self.client.get('/api/tickets/', **self.auth(self.token)).json(), list)
+
+    def test_the_request_screen_shows_the_page_and_what_happens_next(self):
+        body = self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(self.token)).json()
+        self.assertEqual([machine['name'] for machine in body['machines']], ['Treadmill', 'Bike'])
+        self.assertTrue(body['machines'][0]['urgent'])
+        self.assertTrue(body['can_reply'])
+        self.assertTrue(body['next']['urgent'])
+        self.assertIn('supervisor1', [str(User.objects.get(technician__pk=person['value']).username)
+                                      for person in body['next']['supervisors']])
+        self.assertTrue(all(option['suggestion'] for group in body['next']['reasons'] for option in group['options']))
+
+    def test_a_visit_for_one_machine_then_an_answer_for_the_other(self):
+        supervisor = Technician.objects.get(user__username='supervisor1')
+        response = self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'visit', 'machines': [self.treadmill.pk], 'supervisor': supervisor.pk,
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        task = Task.objects.get(pk=response.json()['task']['id'])
+        self.assertEqual((task.responsible_supervisor, task.priority), (supervisor, Task.Priority.HIGH))
+        reason = self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(self.token)).json()['next']['reasons'][0]['options'][0]['value']
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'answer', 'machines': [self.bike.pk], 'reason': reason,
+        }).json()['detail'], 'Please write your answer to the customer.')
+        response = self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'answer', 'machines': [self.bike.pk], 'reason': reason, 'answer': 'Fixed on the phone.',
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_reply_goes_to_the_customer_and_a_note_stays_with_staff(self):
+        from django.core import mail
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/reply/', {'message': 'On our way.'}).status_code, 201)
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/reply/', {'message': 'Check the warranty', 'note': True}).status_code, 201)
+        self.assertEqual(self.ticket.replies.get().message, 'On our way.')
+        self.assertEqual(self.ticket.internal_notes.get().message, 'Check the warranty')
+        self.assertIn('ali@example.invalid', [address for message in mail.outbox for address in message.to])
+
+    def test_who_may_not(self):
+        for username in ('supervisor1', 'tech1'):
+            token = self.token_for(username)
+            self.assertEqual(self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(token)).status_code, 403)
+            response = self.client.post(f'/api/tickets/{self.ticket.pk}/reply/', json.dumps({'message': 'x'}),
+                                        content_type='application/json', **self.auth(token))
+            self.assertEqual(response.status_code, 403)
+
+
 class ApiSecurityTests(ApiTestCase):
     """Auth and isolation edge cases — every endpoint here handles real
     customer data, so these lock in the boundaries that matter: no token,
@@ -719,7 +858,10 @@ class TeamTaskApiTests(ApiTestCase):
         # The supervisor can't do the manager's step.
         self.assertEqual(self._post(supervisor_token, 'approve', {}).status_code, 403)
 
+        # The final approval is the Technical Support Manager's (docs/access_rules.md), not a Manager's.
         manager_token = self.token_for('manager1')
+        self.assertEqual(self._post(manager_token, 'approve', {}).status_code, 403)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.SUPPORT_MANAGER)
         response = self._post(manager_token, 'approve', {})
         self.assertEqual(response.json()['status'], Task.Status.CLOSED)
         self.assertEqual(self._post(manager_token, 'approve', {}).status_code, 400)
@@ -781,6 +923,18 @@ class PushDeviceTests(ApiTestCase):
     """Registering phones, and pushes going out (Expo's service mocked)."""
 
     TOKEN = 'ExponentPushToken[abc123]'
+
+    def test_a_test_notification_needs_a_registered_phone_then_goes_to_it(self):
+        from unittest.mock import patch
+        token = self.token_for('tech1')
+        response = self.client.post('/api/push-device/test/', {}, content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 409)
+        self.client.post('/api/push-device/', json.dumps({'token': self.TOKEN}), content_type='application/json',
+                         **self.auth(token))
+        with patch('people.push.send_push') as push:
+            response = self.client.post('/api/push-device/test/', {}, content_type='application/json', **self.auth(token))
+        self.assertEqual((response.status_code, response.json()['phones']), (200, 1))
+        self.assertEqual(push.call_args.args[3], {'type': 'test'})
 
     def _register(self, token, username='tech1'):
         return self.client.post(
@@ -1338,6 +1492,28 @@ class MyProfileApiTests(ApiTestCase):
 
 class PersonApiTests(ApiTestCase):
     # A person's page in the app: details, skills to confirm, availability.
+
+    def test_the_page_shows_their_work_tasks_and_reports(self):
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual(set(page['workload']), {'today', 'upcoming', 'overdue'})
+        self.assertEqual([task['id'] for task in page['tasks']], [self.task.pk])
+        self.assertEqual((page['tasks'][0]['my_role'], page['tasks'][0]['still_on_it']), ('Lead', True))
+        self.assertEqual((page['reports'], page['trips']), ([], []))
+
+    def test_a_colleague_here_on_a_trip_opens_too(self):
+        from people.models import TechnicianTrip
+        from reference.models import Country
+        egypt = Country.objects.create(name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP')
+        visitor = Technician.objects.create(
+            user=User.objects.create_user('cairo9', password='pass12345'), country=egypt, full_name='Omar Visitor',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).status_code, 404)
+        today = timezone.localdate()
+        TechnicianTrip.objects.create(technician=visitor, country=self.country, start_date=today, end_date=today,
+                                      created_at=timezone.now(), created_by=self.supervisor_user)
+        self.assertEqual(self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).status_code, 200)
 
     def test_a_supervisor_confirms_a_skill_and_sets_availability(self):
         token = self.token_for('supervisor1')

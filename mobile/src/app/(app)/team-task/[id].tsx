@@ -599,7 +599,7 @@ export default function TeamTaskScreen() {
               style={[styles.button, { backgroundColor: theme.primary }, isBusy && styles.buttonDisabled]}
               onPress={() => run(
                 () => approveTaskReport(Number(id)),
-                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Awaiting manager approval.',
+                task.can_manager_approve ? 'Report approved. Task closed.' : 'Approved. Waiting for the Technical Support Manager.',
                 task.can_manager_approve
                   ? ['Approve and close?', 'The task closes, and the customer can then be asked to rate the visit.']
                   : ['Approve the report?', 'It goes to a manager for the final approval.'],

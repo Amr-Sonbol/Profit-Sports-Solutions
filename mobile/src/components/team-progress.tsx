@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { ApiRequestError } from '@/api/client';
+import { Avatar } from '@/components/avatar';
 import { fetchTeamProgress } from '@/api/endpoints';
 import { monthLabel, Sparkline } from '@/components/line-chart';
 import { ThemedText } from '@/components/themed-text';
@@ -78,15 +79,18 @@ export function TeamProgressList() {
           onPress={() => router.push({ pathname: '/people/[id]', params: { id: String(item.id) } })}
         >
           <ThemedView style={styles.top}>
-            <ThemedText type="smallBold">{item.rank ? `#${item.rank}  ` : ''}{item.name}</ThemedText>
+            <Avatar name={item.name} url={item.photo_url} />
+            <ThemedView style={styles.who}>
+              <ThemedText type="smallBold">{item.rank ? `#${item.rank}  ` : ''}{item.name}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{item.role}</ThemedText>
+            </ThemedView>
             <Sparkline values={item.months} />
           </ThemedView>
-          <ThemedText type="small" themeColor="textSecondary">{item.role}</ThemedText>
           <ThemedText type="small">
             <ThemedText type="smallBold">{item.completed}</ThemedText> completed
             {item.change > 0 ? ` ▲ ${item.change}` : item.change < 0 ? ` ▼ ${-item.change}` : ''}
             {' · '}{hm(item.hours)} h
-            {' · '}{item.is_certified ? 'Certified' : `${item.certified}/${item.required} skills confirmed`}
+            {' · '}{item.is_certified ? 'Certified' : `${item.required - item.certified} of ${item.required} skills to confirm`}
           </ThemedText>
           <ThemedText type="small" themeColor="primary">Open ›</ThemedText>
         </TouchableOpacity>
@@ -99,5 +103,6 @@ const styles = StyleSheet.create({
   message: { paddingHorizontal: Spacing.three },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' },
+  top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  who: { flex: 1, backgroundColor: 'transparent' },
 });

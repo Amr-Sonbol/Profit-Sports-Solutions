@@ -1457,7 +1457,7 @@ def home_summary(request, technician):
         add(_('Tasks not scheduled'), open_tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True).count(),
             f'{task_list_url}?scheduled=none')
     if RolePermission.Permission.VIEW_TASKS in allowed:
-        if technician.is_manager_tier:
+        if technician.role == Technician.Role.SUPPORT_MANAGER:
             add(_('Reports awaiting your approval'), open_tasks.filter(status=Task.Status.COMPLETED).count(),
                 f'{task_list_url}?status=completed')
         else:
@@ -1502,6 +1502,72 @@ def home_summary(request, technician):
         'show_visits': bool(visits) or not technician.is_manager_tier,
         'today': today,
     }
+
+
+def waiting_for(technician, country):
+    """What's waiting on this person's decision, one item each, oldest first —
+    the app's Tasks → Waiting for me and the top of its Dashboard. The same
+    rules as the actions themselves: a report to review (its supervisor), a
+    report to approve (a manager), a schedule change to approve (a manager
+    who owns the task), a blocked task they own, an escalated request sent to
+    them, an internal task given to them.
+    """
+    allowed = set(RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True))
+    items = []
+
+    def task_item(kind, title, task, at, detail=''):
+        items.append({
+            'kind': kind, 'title': title, 'at': at, 'detail': detail,
+            'text': f'{task.task_number} · {task.site.customer.name} — {task.site.name}',
+            'opens': {'screen': 'team-task', 'id': task.pk},
+        })
+
+    if RolePermission.Permission.VIEW_TASKS in allowed:
+        open_tasks = tasks_for_role(technician, Task.objects.filter(
+            status__in=OPEN_STATUSES, site__customer__country=country,
+        )).select_related('site__customer')
+        if technician.role == Technician.Role.SUPPORT_MANAGER:  # the final approval is theirs
+            for task in open_tasks.filter(status=Task.Status.COMPLETED).annotate(
+                    at=Max('events__occurred_at')).order_by('at')[:50]:
+                task_item('approve_report', _('Report to approve'), task, task.at)
+        for task in open_tasks.filter(
+                status=Task.Status.PENDING_SUPERVISOR_REVIEW, responsible_supervisor=technician,
+        ).annotate(at=Max('events__occurred_at')).order_by('at')[:50]:
+            task_item('review_report', _('Report to review'), task, task.at)
+        if technician.is_manager_tier:
+            for change in ScheduleChangeRequest.objects.filter(
+                    status=ScheduleChangeRequest.Status.PENDING, task__in=open_tasks,
+            ).select_related('task__site__customer', 'requested_by').order_by('created_at')[:50]:
+                if task_owned_by(technician, change.task):
+                    when = formats.date_format(timezone.localtime(change.requested_scheduled_for), 'D j M, H:i')
+                    task_item('schedule_change', _('Visit time change to approve'), change.task, change.created_at,
+                              _('Asked for %(when)s') % {'when': when} + (f' — {change.reason}' if change.reason else ''))
+        for task in open_tasks.filter(status=Task.Status.BLOCKED, responsible_supervisor=technician).annotate(
+                at=Max('events__occurred_at', filter=Q(events__event_type=TaskEvent.EventType.BLOCKED))).order_by('at')[:50]:
+            task_item('blocked', _('Blocked'), task, task.at)
+    from tasks.alarms import late_reports
+    for task in late_reports(technician)[:50]:  # the Operations Manager's safety net
+        task_item('late_report', _('Report waiting %(days)s days for approval') % {'days': task.waiting_days},
+                  task, task.waiting_since, _('Waiting for the Technical Support Manager — you may approve it instead.'))
+    for escalation in TicketEscalation.objects.filter(
+            escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
+    ).select_related('ticket').order_by('escalated_at')[:50]:
+        items.append({
+            'kind': 'escalation', 'title': _('Escalated to you'), 'at': escalation.escalated_at,
+            'text': f'{escalation.ticket.ticket_number} · {escalation.ticket.company_name}', 'detail': escalation.reason,
+            'opens': {'screen': 'ticket', 'id': escalation.ticket_id},
+        })
+    if technician.role != Technician.Role.TECHNICIAN:
+        for ticket in CustomerTicket.objects.filter(
+                assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
+        ).exclude(kind=CustomerTicket.Kind.CUSTOMER).order_by('submitted_at')[:50]:
+            items.append({
+                'kind': 'internal', 'title': _('Internal task for you'), 'at': ticket.submitted_at,
+                'text': f'{ticket.ticket_number} · {ticket.subject or ticket.get_kind_display()}', 'detail': '',
+                'opens': {'screen': 'website', 'path': reverse('tasks:internal_ticket', args=[ticket.pk])},
+            })
+    items.sort(key=lambda item: item['at'] or timezone.now())
+    return items
 
 
 def technician_workload(technicians, country):
@@ -1784,7 +1850,46 @@ def approve_report_as_supervisor(task, actor):
     TaskEvent.objects.create(
         task=task, event_type=TaskEvent.EventType.SUPERVISOR_APPROVED, occurred_at=timezone.now(), actor=actor,
     )
+    name = getattr(getattr(actor, 'technician', None), 'full_name', '') or actor.get_username()
+    transaction.on_commit(lambda: push_report_to_approve(task, name))
     return True
+
+
+def can_give_final_approval(technician):
+    """The final approval of a report, which closes the task, is the Technical
+    Support Manager's (docs/access_rules.md); the Operations Manager and Admin
+    may step in. The website's button, the app and Waiting for me."""
+    return technician.role in (
+        Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN,
+    )
+
+
+def require_final_approver(request, task):
+    """403 unless this person gives the final approval; when the Operations
+    Manager or Admin does it instead, that's recorded (stepped_in), once."""
+    technician = require_technician(request)
+    if not can_give_final_approval(technician):
+        raise PermissionDenied
+    if technician.role != Technician.Role.SUPPORT_MANAGER and request.method == 'POST':
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.STEPPED_IN, occurred_at=timezone.now(),
+            actor=request.user, note=_('Instead of the Technical Support Manager'),
+        )
+    return technician
+
+
+def push_report_to_approve(task, by_name):
+    """A report now waiting for the final approval: every Technical Support
+    Manager is told on the phone (it's in their Waiting for me too)."""
+    for person in Technician.objects.filter(role=Technician.Role.SUPPORT_MANAGER, is_active=True):
+        push_in_their_language(
+            person,
+            lambda: _('Report to approve'),
+            lambda: _('%(number)s — %(site)s, reviewed by %(name)s') % {
+                'number': task.task_number, 'site': task.site.name, 'name': by_name,
+            },
+            {'type': 'team_task', 'task_id': task.pk},
+        )
 
 
 def approve_report_as_manager(task, actor):
@@ -2134,13 +2239,13 @@ def task_detail(request, pk):
         if not can_supervisor_approve(requesting_technician, task):
             raise PermissionDenied
         if approve_report_as_supervisor(task, request.user):
-            messages.success(request, _('Approved. The task now awaits manager approval before closure.'))
+            messages.success(request, _('Approved. The task now awaits the Technical Support Manager\'s approval.'))
         else:
             messages.error(request, _('This task has no report awaiting supervisor review.'))
         return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_report':
-        require_manager(request)
+        require_final_approver(request, task)
         if approve_report_as_manager(task, request.user):
             messages.success(request, _('Report approved. Task closed.'))
         else:
@@ -2334,6 +2439,7 @@ def task_detail(request, pk):
         'customer_has_current_time': customer_has_current_time(task),
         'can_upload_staff_document': can_upload_staff_document,
         'staff_upload_form': staff_upload_form,
+        'can_give_final_approval': can_give_final_approval(requesting_technician),
         'can_approve_as_supervisor': (
             requesting_technician.is_manager_tier
             or requesting_technician.id == task.responsible_supervisor_id
@@ -3094,12 +3200,21 @@ def send_new_ticket_email_to_staff(request, ticket):
     bell). Public (no leading underscore): customers.views.portal_ticket_
     new calls this directly, the same way it already calls save_new_ticket.
     """
-    switches = NotificationSettings.load()
-    if not switches.new_ticket_email:
-        return
     # The chosen roles (by default the Technical Support Manager and the country's
     # Country Support Manager); nobody of those: the admins (tasks.alarms).
     from tasks.alarms import new_ticket_people
+    # Their phones too, opening the request in the app — whatever the email switch says.
+    people = list(new_ticket_people(ticket.country))
+    urgent = ticket.machines.filter(problem=TicketMachine.Problem.NOT_WORKING).exists()
+    transaction.on_commit(lambda: [push_in_their_language(
+        person,
+        lambda: _('New request — a machine is not working') if urgent else _('New request'),
+        lambda: _('%(number)s — %(company)s') % {'number': ticket.ticket_number, 'company': ticket.company_name},
+        {'type': 'ticket', 'ticket_id': ticket.pk},
+    ) for person in people])
+    switches = NotificationSettings.load()
+    if not switches.new_ticket_email:
+        return
     recipients = list(
         new_ticket_people(ticket.country).exclude(user__email='').values_list('user__email', flat=True).distinct()
     )
@@ -3338,13 +3453,81 @@ def ticket_list(request):
 
 
 @login_required
-def ticket_review(request, pk):
-    """Dismiss, assign, or convert a ticket — restricted to manage_tickets
-    like the rest of ticket triage. Whoever it's currently assigned to can
-    also open it read-only, even without that permission, so they can see
-    what they've been asked to look into; they can't act on it themselves.
+def decide_request_next(request, technician, ticket, choice, machine_ids, supervisor_id='', lead_id='', when='',
+                        reason=None, answer=''):
+    """A request's "What happens next?" for its machines still waiting — a
+    visit or a part shipment (the task, to a supervisor, maybe with its
+    technician and time), or an answer without a visit (a reason, our words
+    to the customer; once no machine waits, closed and the customer told).
+    The website's request page and the app (api.views.TicketNextView).
+    Returns (error, success message, the new task or None).
     """
-    technician = require_technician(request)
+    undecided = ticket.machines.filter(decision='')
+    selected = list(undecided.filter(pk__in=[str(v) for v in machine_ids if str(v).isdigit()]))
+    if undecided.exists() and not selected:
+        return _('Please select at least one machine that has not been decided yet.'), '', None
+    if choice in ('visit', 'ship'):
+        if not ticket.site_id:
+            return _('This request has no branch yet: use More options to choose one.'), '', None
+        lead = supervisor = None
+        fields = _task_form_for(technician, ticket).fields
+        if str(lead_id).isdigit() and 'lead' in fields:  # only with assign_tasks
+            lead = fields['lead'].queryset.filter(pk=lead_id).first()
+        # The supervisor it goes to: he plans it (the day, the technician) unless that's done here.
+        if str(supervisor_id).isdigit() and 'responsible_supervisor' in fields:
+            supervisor = fields['responsible_supervisor'].queryset.filter(pk=supervisor_id).first()
+        task, errors = task_from_request(
+            request, technician, ticket, selected, ship=choice == 'ship', lead=lead,
+            when=(when or '').strip(), supervisor=supervisor,
+        )
+        if task is None:
+            return ' '.join(str(error) for field in errors.values() for error in field), '', None
+        return '', _('Task %(number)s created.') % {'number': task.task_number}, task
+    if choice == 'answer':
+        reason = answers.reason_from(reason)
+        answer = (answer or '').strip()
+        if reason is None:
+            return _('Please choose why.'), '', None
+        if not answer:
+            return _('Please write your answer to the customer.'), '', None
+        # Each selected machine gets the reason's decision and the reason itself; once none is
+        # waiting, the request closes with the answer (customer told: page, bell, email).
+        TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
+            decision=answers.decision_for(reason), decision_reason=reason, decision_note=answer[:255],
+            decided_by=request.user, decided_at=timezone.now(),
+        )
+        if ticket.machines.filter(decision='').exists():
+            return '', _('Decision saved.'), None  # other machines still waiting
+        close_request_with_answer(request, ticket, answer)
+        return '', _('Answered and closed. The customer has been told.'), None
+    return _('Please choose what happens next.'), '', None
+
+
+def send_staff_reply(request, ticket, message, uploads=()):
+    """Our reply on a request: in the conversation, by email, in the customer's bell."""
+    reply = TicketReply.objects.create(
+        ticket=ticket, sender=TicketReply.Sender.STAFF, sent_by=request.user, message=message, sent_at=timezone.now(),
+    )
+    for upload in uploads:
+        TicketReplyFile.objects.create(reply=reply, file=upload)
+    _send_reply_to_customer(request, reply)
+    notify_customer.staff_replied(ticket)
+    return reply
+
+
+def add_ticket_note(user, ticket, message, uploads=()):
+    """A note for staff only on a request — never shown to the customer."""
+    note = TicketInternalNote.objects.create(ticket=ticket, author=user, message=message, created_at=timezone.now())
+    for upload in uploads:
+        TicketInternalNoteFile.objects.create(note=note, file=upload)
+    return note
+
+
+def ticket_access(request, technician, pk):
+    """Who may open a customer request and what they may do there — the
+    website's request page and the app (api.views.TicketDetailView): 404
+    outside their reach, 403 when they may not open it at all.
+    """
     can_manage = _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS)
     # Whoever handles every country's tickets (tickets_all_countries)
     # reaches any of them — the point of the all-countries ticket list — and
@@ -3359,8 +3542,7 @@ def ticket_review(request, pk):
     else:
         ticket = _scoped_or_404(CustomerTicket.objects, pk, technician, get_active_country(request), 'country')
     if ticket.kind != CustomerTicket.Kind.CUSTOMER:
-        return redirect('tasks:internal_ticket', pk=ticket.pk)
-
+        return {'ticket': ticket}  # an internal one has its own page and rules (internal_ticket)
     is_assignee = ticket.assigned_to_id == technician.id
     escalations = list(ticket.escalations.select_related('escalated_by', 'escalated_to'))
     # Whoever a ticket was escalated to can open it (read-only, like an
@@ -3382,6 +3564,27 @@ def ticket_review(request, pk):
     can_escalate = (
         can_manage and _ticket_is_open(ticket) and technician.escalates_to_role is not None
         and (pending_escalation is None or holds_pending)
+    )
+    return {
+        'ticket': ticket, 'can_manage': can_manage, 'is_assignee': is_assignee, 'escalations': escalations,
+        'pending_escalation': pending_escalation, 'can_decide': can_decide, 'can_escalate': can_escalate,
+    }
+
+
+def ticket_review(request, pk):
+    """Dismiss, assign, or convert a ticket — restricted to manage_tickets
+    like the rest of ticket triage. Whoever it's currently assigned to can
+    also open it read-only, even without that permission, so they can see
+    what they've been asked to look into; they can't act on it themselves.
+    """
+    technician = require_technician(request)
+    access = ticket_access(request, technician, pk)
+    ticket = access['ticket']
+    if ticket.kind != CustomerTicket.Kind.CUSTOMER:
+        return redirect('tasks:internal_ticket', pk=ticket.pk)
+    can_manage, escalations = access['can_manage'], access['escalations']
+    pending_escalation, can_decide, can_escalate = (
+        access['pending_escalation'], access['can_decide'], access['can_escalate'],
     )
 
     if can_manage and not request.viewing_as_user:
@@ -3416,55 +3619,18 @@ def ticket_review(request, pk):
         and ticket.status == CustomerTicket.Status.NEW
     ):
         # "What happens next?": send a technician, ship a part, or answer without a visit.
-        choice = request.POST.get('choice')
-        undecided = ticket.machines.filter(decision='')
-        selected = list(undecided.filter(pk__in=[v for v in request.POST.getlist('machines') if v.isdigit()]))
-        if undecided.exists() and not selected:
-            messages.error(request, _('Please select at least one machine that has not been decided yet.'))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-        if choice in ('visit', 'ship'):
-            if not ticket.site_id:
-                messages.error(request, _('This request has no branch yet: use More options to choose one.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-            lead = supervisor = None
-            fields = _task_form_for(technician, ticket).fields
-            lead_id = request.POST.get('technician', '')
-            if lead_id.isdigit() and 'lead' in fields:  # only with assign_tasks
-                lead = fields['lead'].queryset.filter(pk=lead_id).first()
-            # The supervisor it goes to: he plans it (the day, the technician) unless that's done here.
-            supervisor_id = request.POST.get('supervisor', '')
-            if supervisor_id.isdigit() and 'responsible_supervisor' in fields:
-                supervisor = fields['responsible_supervisor'].queryset.filter(pk=supervisor_id).first()
-            task, errors = task_from_request(
-                request, technician, ticket, selected, ship=choice == 'ship', lead=lead,
-                when=request.POST.get('scheduled_for', '').strip(), supervisor=supervisor,
-            )
-            if task is None:
-                messages.error(request, ' '.join(str(error) for field in errors.values() for error in field))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-            messages.success(request, _('Task %(number)s created.') % {'number': task.task_number})
+        error, done, task = decide_request_next(
+            request, technician, ticket, request.POST.get('choice'), request.POST.getlist('machines'),
+            supervisor_id=request.POST.get('supervisor', ''), lead_id=request.POST.get('technician', ''),
+            when=request.POST.get('scheduled_for', ''), reason=request.POST.get('reason'),
+            answer=request.POST.get('answer', ''),
+        )
+        if error:
+            messages.error(request, error)
+        elif done:
+            messages.success(request, done)
+        if task is not None:
             return redirect('tasks:task_detail', pk=task.pk)
-        if choice == 'answer':
-            reason = answers.reason_from(request.POST.get('reason'))
-            answer = request.POST.get('answer', '').strip()
-            if reason is None:
-                messages.error(request, _('Please choose why.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-            if not answer:
-                messages.error(request, _('Please write your answer to the customer.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-            # Each selected machine gets the reason's decision and the reason itself; once none is
-            # waiting, the request closes with the answer (customer told: page, bell, email).
-            TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
-                decision=answers.decision_for(reason), decision_reason=reason, decision_note=answer[:255],
-                decided_by=request.user, decided_at=timezone.now(),
-            )
-            if ticket.machines.filter(decision='').exists():
-                messages.success(request, _('Decision saved.'))  # other machines still waiting
-            else:
-                close_request_with_answer(request, ticket, answer)
-                messages.success(request, _('Answered and closed. The customer has been told.'))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
         return redirect('tasks:ticket_review', pk=ticket.pk)
 
     if (
@@ -3570,26 +3736,17 @@ def ticket_review(request, pk):
         if action == 'add_internal_note' and can_manage:
             internal_note_form = TicketInternalNoteForm(request.POST, request.FILES)
             if internal_note_form.is_valid():
-                note = TicketInternalNote.objects.create(
-                    ticket=ticket, author=request.user,
-                    message=internal_note_form.cleaned_data['message'], created_at=timezone.now(),
+                add_ticket_note(
+                    request.user, ticket, internal_note_form.cleaned_data['message'],
+                    internal_note_form.cleaned_data['attachments'],
                 )
-                for upload in internal_note_form.cleaned_data['attachments']:
-                    TicketInternalNoteFile.objects.create(note=note, file=upload)
                 messages.success(request, _('Note added.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
         elif action == 'add_reply' and can_reply:
             reply_form = TicketReplyForm(request.POST, request.FILES)
             if reply_form.is_valid():
-                reply = TicketReply.objects.create(
-                    ticket=ticket, sender=TicketReply.Sender.STAFF, sent_by=request.user,
-                    message=reply_form.cleaned_data['message'], sent_at=timezone.now(),
-                )
-                for upload in reply_form.cleaned_data['attachments']:
-                    TicketReplyFile.objects.create(reply=reply, file=upload)
-                _send_reply_to_customer(request, reply)
-                notify_customer.staff_replied(ticket)
+                send_staff_reply(request, ticket, reply_form.cleaned_data['message'], reply_form.cleaned_data['attachments'])
                 messages.success(request, _('Reply sent.'))
                 return redirect('tasks:ticket_review', pk=ticket.pk)
 
@@ -4454,6 +4611,91 @@ def team_progress(request):
     })
 
 
+# What a person's last tap today says about where they are now (team_today).
+_NOW_FROM_TAP = {
+    TaskEvent.EventType.EN_ROUTE: 'on_the_way', TaskEvent.EventType.ARRIVED: 'on_site',
+    TaskEvent.EventType.STARTED: 'working', TaskEvent.EventType.RESUMED: 'working',
+    TaskEvent.EventType.PAUSED: 'paused', TaskEvent.EventType.BLOCKED: 'blocked',
+}
+
+
+def team_today(viewer, country):
+    """The field team `viewer` oversees, as it is right now — the app's Team →
+    Today: off (sick, leave, holiday) or abroad on a trip; otherwise what their
+    last tap today says (on the way, on site, working, paused, blocked) or free,
+    with the task it's about, their next job today, how many of today's jobs are
+    done, where their last tap was, and their phone. People visiting from another
+    country on a trip are in it too. Same people as Team progress (team_progress_rows).
+    """
+    tz = ZoneInfo(country.timezone)
+    today = timezone.now().astimezone(tz).date()
+    visiting = TechnicianTrip.objects.filter(country=country, start_date__lte=today, end_date__gte=today)
+    abroad = {
+        trip.technician_id: trip for trip in TechnicianTrip.objects.filter(
+            start_date__lte=today, end_date__gte=today,
+        ).exclude(country=country).select_related('country')
+    }
+    people = list(_people_i_oversee(viewer).filter(
+        Q(country=country) | Q(pk__in=visiting.values('technician_id')),
+        is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
+    ).select_related('country', 'user').order_by('full_name'))
+    user_ids = [person.user_id for person in people if person.user_id]
+    last_taps = {}
+    for tap in TaskEvent.objects.filter(
+        actor_id__in=user_ids, occurred_at__date=today, event_type__in=list(_NOW_FROM_TAP) + [
+            TaskEvent.EventType.COMPLETED,
+        ],
+    ).select_related('task__site__customer').order_by('-occurred_at'):
+        last_taps.setdefault(tap.actor_id, tap)
+    todays = TaskAssignment.objects.filter(
+        technician__in=people, is_active=True, task__scheduled_for__date=today,
+    ).exclude(task__status=Task.Status.CANCELLED).select_related('task__site__customer').order_by('task__scheduled_for')
+    by_person = {}
+    for assignment in todays:
+        by_person.setdefault(assignment.technician_id, []).append(assignment.task)
+
+    def task_ref(task):
+        return {'id': task.pk, 'task_number': task.task_number, 'customer': task.site.customer.name,
+                'site': task.site.name, 'scheduled_for': task.scheduled_for}
+
+    rows = []
+    for person in people:
+        tasks = by_person.get(person.pk, [])
+        done = [task for task in tasks if task.status in (
+            Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
+        )]
+        tap = last_taps.get(person.user_id)
+        state, about = 'free', None
+        if not person.is_available:
+            state = 'off'
+        elif person.pk in abroad and person.country_id == country.pk:
+            state = 'abroad'
+        elif tap is not None and tap.event_type in _NOW_FROM_TAP and tap.task.status not in (
+            Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED,
+        ):
+            state, about = _NOW_FROM_TAP[tap.event_type], tap.task
+        upcoming = [task for task in tasks if task not in done and task != about and task.scheduled_for
+                    and task.scheduled_for >= timezone.now() - timedelta(hours=1)]
+        trip = abroad.get(person.pk)
+        rows.append({
+            'technician': person, 'state': state,
+            'off_reason': person.get_unavailable_reason_display() if state == 'off' else '',
+            'abroad': {'country': trip.country.display_name, 'until': trip.end_date} if state == 'abroad' else None,
+            'visiting_from': person.country.display_name if person.country_id != country.pk else '',
+            'since': tap.occurred_at if about is not None else None,
+            'task': task_ref(about) if about is not None else None,
+            'next': task_ref(upcoming[0]) if upcoming else None,
+            'today_total': len(tasks), 'today_done': len(done),
+            'location': ({'lat': float(tap.latitude), 'lng': float(tap.longitude),
+                          'away': tap.location_status == TaskEvent.LocationStatus.AWAY}
+                         if tap is not None and tap.latitude is not None else None),
+        })
+    # Who needs attention first: blocked, then at work, on the way, free, then away.
+    order = ['blocked', 'working', 'on_site', 'paused', 'on_the_way', 'free', 'abroad', 'off']
+    rows.sort(key=lambda row: order.index(row['state']))
+    return rows
+
+
 def team_progress_rows(viewer, country, month_first):
     """Team progress's rows — the field team `viewer` oversees in
     `country`, by rank. Shared with the app (api.views.TeamProgressView)."""
@@ -4728,7 +4970,7 @@ def my_profile(request):
         'technician': technician,
         'profile_form': profile_form,
         'password_form': password_form,
-        'is_field_staff': not technician.is_manager_tier,
+        'is_field_staff': technician.is_field_staff,
     }
     if not technician.is_manager_tier:
         certification = _certification_status(technician)
@@ -4798,13 +5040,17 @@ def technician_create(request):
 
 def overseen_roles(viewer):
     """Whose records `viewer` can open — the list, each person's progress,
-    schedule, skills and edit page: an admin everyone (None); any manager
-    the supervisors and technicians; anyone else the technicians.
+    schedule, skills and edit page: an admin everyone (None); the manager
+    tier (Manager, Project, Technical Support and Operations Manager) the
+    supervisors and technicians; a supervisor the technicians. The Warehouse
+    Manager and Country Support oversee nobody (docs/access_rules.md).
     """
     if viewer.role == Technician.Role.ADMIN:
         return None
-    if viewer.is_any_manager:
+    if viewer.is_manager_tier:
         return [Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN]
+    if viewer.role in (Technician.Role.WAREHOUSE_MANAGER, Technician.Role.COUNTRY_SUPPORT):
+        return []
     return [Technician.Role.TECHNICIAN]
 
 
@@ -5186,6 +5432,32 @@ TECHNICIAN_TAB_ROWS = 25
 
 
 @login_required
+def technician_overview(technician):
+    """One person's work at a glance — the website's technician page and the
+    app's person page: work still to do (today, upcoming, overdue), visits this
+    month, the customers' satisfaction, their assignments and the reports they
+    filed (newest first, as querysets), and their trips from today on."""
+    led = Task.objects.filter(assignments__technician=technician, assignments__role=TaskAssignment.Role.LEAD).distinct()
+    reports = WorkReport.objects.filter(task__in=led)
+    month_start = timezone.localdate().replace(day=1)
+    rating = CustomerFeedback.objects.filter(task__in=led, rating__isnull=False).aggregate(
+        average=Avg('rating'), count=Count('pk'),
+    )
+    assignments = TaskAssignment.objects.filter(technician=technician)
+    return {
+        'workload': technician_workload([technician], technician.country)[technician.id],
+        'visits_this_month': reports.filter(submitted_at__date__gte=month_start).count(),
+        'rating_average': round(rating['average'], 1) if rating['average'] is not None else None,
+        'rating_count': rating['count'],
+        'counts': {'tasks': assignments.values('task').distinct().count(), 'reports': reports.count()},
+        'assignments': assignments.select_related('task__site__customer', 'task__task_type').order_by(
+            '-task__reported_at', '-pk',
+        ),
+        'reports': reports.select_related('task__site__customer', 'task__feedback').order_by('-submitted_at'),
+        'trips': technician.trips.filter(end_date__gte=timezone.localdate()).select_related('country').order_by('start_date'),
+    }
+
+
 def technician_detail(request, pk):
     """Everything about one staff member, for whoever oversees them: their
     work still to do (today, upcoming, overdue), visits this month and
@@ -5197,34 +5469,17 @@ def technician_detail(request, pk):
     technician = _scoped_or_404(
         _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
-    led = Task.objects.filter(assignments__technician=technician, assignments__role=TaskAssignment.Role.LEAD).distinct()
-    reports = WorkReport.objects.filter(task__in=led)
-    month_start = timezone.localdate().replace(day=1)
-    rating = CustomerFeedback.objects.filter(task__in=led, rating__isnull=False).aggregate(
-        average=Avg('rating'), count=Count('pk'),
-    )
+    overview = technician_overview(technician)
     tab = request.GET.get('tab') if request.GET.get('tab') in TECHNICIAN_TABS else 'tasks'
-    assignments = TaskAssignment.objects.filter(technician=technician)
     context = {
         'technician': technician, 'tab': tab,
-        'workload': technician_workload([technician], technician.country)[technician.id],
-        'visits_this_month': reports.filter(submitted_at__date__gte=month_start).count(),
-        'rating_average': round(rating['average'], 1) if rating['average'] is not None else None,
-        'rating_count': rating['count'],
-        'counts': {'tasks': assignments.values('task').distinct().count(), 'reports': reports.count()},
+        **{key: overview[key] for key in ('workload', 'visits_this_month', 'rating_average', 'rating_count', 'counts')},
         'can_view_as': (
             requesting_technician.role == Technician.Role.ADMIN and technician.role != Technician.Role.ADMIN
             and technician.user_id and technician.user.is_active
         ),
     }
-    if tab == 'tasks':
-        context['rows'] = assignments.select_related('task__site__customer', 'task__task_type').order_by(
-            '-task__reported_at', '-pk',
-        )[:TECHNICIAN_TAB_ROWS]
-    else:
-        context['rows'] = reports.select_related('task__site__customer', 'task__feedback').order_by(
-            '-submitted_at',
-        )[:TECHNICIAN_TAB_ROWS]
+    context['rows'] = overview['assignments' if tab == 'tasks' else 'reports'][:TECHNICIAN_TAB_ROWS]
     return render(request, 'tasks/technician_detail.html', context)
 
 
@@ -6273,6 +6528,109 @@ def request_for_task(task, with_conversation=True):
     return {'ticket': ticket, 'files': files, 'replies': replies, 'report': customer_report(ticket, task)}
 
 
+def media_for_app(request, entries):
+    """customer_report items as the app shows them: signed links (spots.media); `key` stays the
+    same while the link changes, so the phone caches each photo once, for offline."""
+    return [{
+        'kind': entry['kind'], 'url': signed_media_url(request, entry['file'].url), 'key': entry['file'].name,
+        'name': entry['file'].name.rsplit('/', 1)[-1], 'serial_plate': entry['label'] == 'serial',
+        'added_by_staff': entry['added_by'] is not None,
+    } for entry in entries]
+
+
+def _staff_name(user):
+    technician = getattr(user, 'technician', None) if user else None
+    return technician.full_name if technician else (user.get_username() if user else '')
+
+
+def ticket_for_app(request, technician, access):
+    """A customer request as the app's request screen shows it — the website
+    request page's content: each machine with what the customer reported and
+    what's been decided, the conversation, staff notes, an escalation, its
+    tasks, and what "What happens next?" offers. Plain values, signed links.
+    """
+    from tasks.customer_report import _item
+
+    ticket, can_manage = access['ticket'], access['can_manage']
+    report = _report_without_later(ticket)
+
+    def files_of(files):
+        return media_for_app(request, [_item(file) for file in files if file])
+
+    conversation = [{
+        'from_us': reply.sender == TicketReply.Sender.STAFF,
+        'name': _staff_name(reply.sent_by) if reply.sender == TicketReply.Sender.STAFF else ticket.contact_name,
+        'message': reply.message, 'sent_at': reply.sent_at,
+        'files': files_of([reply.attachment] + [item.file for item in reply.files.all()]),
+    } for reply in ticket.replies.select_related('sent_by__technician').prefetch_related('files').order_by('sent_at')]
+    pending = access['pending_escalation']
+    tasks = list(Task.objects.filter(ticket_machines__ticket=ticket).distinct().order_by('pk')) or (
+        [ticket.task] if ticket.task_id else []
+    )
+    next_step = None
+    if can_manage and ticket.status == CustomerTicket.Status.NEW:
+        context = _next_step_context(technician, ticket, can_manage)
+        plan = context['next_plan']
+        technicians = context['next_technicians']
+        next_step = {
+            'supervisors': [{'value': person.pk, 'label': person.full_name}
+                            for person in context['next_supervisors'] or []],
+            # None: this person can't pick the technician (no assign_tasks) — the supervisor will.
+            'technicians': ([{'value': person.pk, 'label': person.full_name} for person in technicians]
+                            if technicians is not None else None),
+            'reasons': [{'group': str(group), 'options': [
+                {'value': value, 'label': str(label), 'suggestion': suggestion}
+                for value, label, suggestion in options
+            ]} for group, options in context['next_reasons']],
+            'task_type': str(plan['task_type'].name) if plan['task_type'] else '',
+            'urgent': plan['priority'] == Task.Priority.HIGH,
+            'under_warranty': context['next_warranty'],
+        }
+    machines = []
+    for card in report['machines']:
+        machine = card['machine']
+        machines.append({
+            'id': machine.pk, 'name': machine.machine_name, 'serial': machine.serial,
+            'problem': machine.get_problem_display(), 'urgent': machine.problem == TicketMachine.Problem.NOT_WORKING,
+            'description': machine.description, 'items': media_for_app(request, card['items']),
+            'decision': machine.decision, 'decision_display': machine.get_decision_display() if machine.decision else '',
+            'decision_note': machine.decision_note,
+            'task': {'id': machine.task_id, 'task_number': machine.task.task_number} if machine.task_id else None,
+        })
+    return {
+        'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'status': ticket.status,
+        'status_display': ticket.get_status_display(), 'escalated': pending is not None,
+        'submitted_at': ticket.submitted_at, 'company_name': ticket.company_name,
+        'customer_name': ticket.customer.name if ticket.customer_id else ticket.company_name,
+        'site_name': ticket.site.name if ticket.site_id else ticket.site_description,
+        'site_address': (ticket.site.address if ticket.site_id else '') or ticket.site_address,
+        'has_branch': bool(ticket.site_id), 'country': ticket.country.display_name,
+        'contact_name': ticket.contact_name, 'contact_phone': ticket.contact_phone,
+        'contact_email': ticket.contact_email,
+        'about': ticket.get_about_display() if ticket.about else '',
+        'need': ticket.get_need_display() if ticket.need else '',
+        'subject': ticket.subject, 'message': '' if machines else ticket.description,
+        'machines': machines,
+        'other_files': media_for_app(request, report['other']),
+        'conversation': conversation,
+        'notes': [{
+            'name': _staff_name(note.author), 'message': note.message, 'created_at': note.created_at,
+            'files': files_of([item.file for item in note.files.all()]),
+        } for note in (ticket.internal_notes.select_related('author__technician').prefetch_related('files')
+                       if can_manage else [])],
+        'escalation': {
+            'to': pending.escalated_to.full_name, 'by': pending.escalated_by.full_name,
+            'reason': pending.reason, 'at': pending.escalated_at,
+        } if pending else None,
+        'tasks': [{'id': task.pk, 'task_number': task.task_number, 'status_display': task.get_status_display()}
+                  for task in tasks],
+        'close_reason': ticket.close_reason or '',
+        'can_manage': can_manage, 'can_reply': can_manage and _ticket_is_open(ticket),
+        'next': next_step,
+        'website_path': reverse('tasks:ticket_review', args=[ticket.pk]),
+    }
+
+
 def request_for_app(request, task):
     """request_for_task as the app shows it: plain values, and signed links to the files (spots.media)."""
     found = request_for_task(task, with_conversation=False)  # the technician: the job, not the talk
@@ -6281,12 +6639,7 @@ def request_for_app(request, task):
     ticket = found['ticket']
 
     def items(entries):
-        # `key` stays the same while the signed link changes: the phone caches each photo once, for offline.
-        return [{
-            'kind': entry['kind'], 'url': signed_media_url(request, entry['file'].url), 'key': entry['file'].name,
-            'name': entry['file'].name.rsplit('/', 1)[-1], 'serial_plate': entry['label'] == 'serial',
-            'added_by_staff': entry['added_by'] is not None,
-        } for entry in entries]
+        return media_for_app(request, entries)
     report = found['report']
     items_by_machine = [items(card['items']) for card in report['machines']]
     return {
@@ -6680,6 +7033,8 @@ def save_work_report(request, task, technician, report_form, part_rows):
                 },
                 {'type': 'team_task', 'task_id': task.pk},
             ))
+        else:
+            transaction.on_commit(lambda: push_report_to_approve(task, technician.full_name))
     return saved_report
 
 

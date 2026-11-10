@@ -1,15 +1,16 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
+import { fetchMyTasks, fetchMyToday, fetchWaiting, type WaitingItem } from '@/api/endpoints';
 import { AllTasks } from '@/components/all-tasks';
 import { BellButton } from '@/components/bell-button';
 import { TaskCard } from '@/components/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ToPlan } from '@/components/to-plan';
+import { WaitingForMe } from '@/components/waiting-for-me';
 import { useSession } from '@/context/auth';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -28,21 +29,35 @@ export default function TasksScreen() {
   const theme = useTheme();
   const { me } = useSession();
   const canSeeAll = me?.permissions?.includes('view_tasks') ?? false;
-  const [scope, setScope] = useState<'mine' | 'all'>('mine');
+  const canCreate = me?.permissions?.includes('create_tasks') ?? false;
+  // ?scope=all (the dashboard's "All open tasks"): open on All in the country, even when already open.
+  const params = useLocalSearchParams<{ scope?: string }>();
+  const [scope, setScope] = useState<'mine' | 'all'>(params.scope === 'all' ? 'all' : 'mine');
+  const [seenScope, setSeenScope] = useState(params.scope);
+  if (params.scope !== seenScope) {
+    setSeenScope(params.scope);
+    if (params.scope === 'all') {
+      setScope('all');
+    }
+  }
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [toPlan, setToPlan] = useState<PlanItem[]>([]);
+  const [waiting, setWaiting] = useState<WaitingItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [list, plan] = await Promise.all([
+      const [list, plan, decisions] = await Promise.all([
         withOfflineCopy('my-tasks', fetchMyTasks),
         withOfflineCopy('my-today', fetchMyToday),
+        // A technician has none; never let it stop the rest from loading.
+        withOfflineCopy('waiting', fetchWaiting).catch(() => ({ data: [] as WaitingItem[], offline: false })),
       ]);
       setTasks(list.data);
       setToPlan(plan.data.to_plan ?? []);
+      setWaiting(decisions.data);
       setIsOffline(list.offline || plan.offline);
       setError('');
     } catch {
@@ -59,7 +74,16 @@ export default function TasksScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ThemedView style={styles.headRow}>
           <ThemedText type="title" style={styles.heading}>My tasks</ThemedText>
-          <BellButton />
+          <ThemedView style={styles.headActions}>
+            {canCreate ? (
+              <TouchableOpacity
+                style={[styles.newTask, { backgroundColor: theme.primary }]} onPress={() => router.push('/new-task')}
+              >
+                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>+ New task</ThemedText>
+              </TouchableOpacity>
+            ) : null}
+            <BellButton />
+          </ThemedView>
         </ThemedView>
         {isOffline ? (
           <ThemedText themeColor="danger" type="small" style={styles.notice}>
@@ -94,6 +118,7 @@ export default function TasksScreen() {
             }} />}
             ListHeaderComponent={(
               <>
+                <WaitingForMe items={waiting} />
                 <ToPlan items={toPlan} />
                 <ThemedText type="smallBold">All my open tasks · newest first</ThemedText>
               </>
@@ -115,6 +140,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingEnd: Spacing.three },
+  headActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  newTask: { borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   notice: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   scopes: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },

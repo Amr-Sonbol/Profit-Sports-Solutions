@@ -89,6 +89,12 @@ def notification_bell(request):
         items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0]})
     elif overdue:
         items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue)})
+    from tasks.alarms import late_reports
+    late = late_reports(technician)
+    if len(late) == 1:
+        items.append({'kind': 'report_late', 'created_at': late[0].waiting_since, 'task': late[0]})
+    elif late:
+        items.append({'kind': 'report_late_many', 'created_at': late[0].waiting_since, 'count': len(late)})
     # Internal tickets (stock, vendor, other) waiting on this person — live,
     # so they stay until closed, like the overdue alarms above.
     from tasks.models import CustomerTicket
@@ -164,7 +170,7 @@ def notification_bell(request):
     items.sort(key=lambda item: item['created_at'], reverse=True)
     # The overdue-scheduling alarm is the oldest item by nature — kept on
     # top so it's never pushed out of the ten shown by newer ones.
-    items.sort(key=lambda item: not item['kind'].startswith('unscheduled_overdue'))
+    items.sort(key=lambda item: not item['kind'].startswith(('unscheduled_overdue', 'report_late')))
     return {
         'unseen_notifications': items[:10],
         'unseen_notification_count': len(items),
@@ -222,7 +228,7 @@ def nav_pages(technician, allowed):
     # Everyone has their own schedule (a manager's: tasks they're on or
     # responsible for); progress and skills are the field team's.
     add('tasks:my_week', _('My schedule'), 'calendar', 'mine')
-    if not technician.is_manager_tier:
+    if technician.is_field_staff:
         add('tasks:my_progress', _('My progress'), 'trending-up', 'mine')
         add('tasks:my_skills', _('My skills'), 'award', 'mine')
     if RolePermission.Permission.VIEW_DASHBOARD in allowed:

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiRequestError } from '@/api/client';
 import { fetchDashboard } from '@/api/endpoints';
 import { CountryChooser } from '@/components/country-chooser';
+import { WaitingForMe } from '@/components/waiting-for-me';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -88,6 +89,7 @@ export default function DashboardScreen() {
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
           {!data ? <ActivityIndicator /> : (
             <>
+              <WaitingForMe items={data.waiting ?? []} />
               <ThemedText type="subtitle">Needs your action</ThemedText>
               {data.actions.length ? data.actions.map((item, index) => (
                 <TouchableOpacity
@@ -103,7 +105,7 @@ export default function DashboardScreen() {
                   ) : null}
                   <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
                 </TouchableOpacity>
-              )) : <ThemedText themeColor="textSecondary">Nothing waiting on you.</ThemedText>}
+              )) : <ThemedText themeColor="textSecondary">Nothing else needs you.</ThemedText>}
 
               {data.follow_ups.length ? (
                 <>
@@ -148,7 +150,7 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               ))}
               {data.stats.open_task_count > data.tasks.length ? (
-                <TouchableOpacity onPress={() => router.push('/team')}>
+                <TouchableOpacity onPress={() => router.push('/tasks?scope=all')}>
                   <ThemedText themeColor="primary">All {data.stats.open_task_count} open tasks ›</ThemedText>
                 </TouchableOpacity>
               ) : null}

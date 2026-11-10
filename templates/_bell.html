@@ -35,6 +35,16 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                         <a href="{% url 'tasks:task_list' %}?alarm=unscheduled" class="notif-alarm">
                             {% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}
                         </a>
+                        {% elif notification.kind == 'report_late' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% translate "Report waiting more than 2 working days for approval" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'report_late_many' %}
+                        <a href="{% url 'tasks:task_list' %}?status=completed&amp;country=all" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} report waiting more than 2 working days for approval{% plural %}{{ count }} reports waiting more than 2 working days for approval{% endblocktranslate %}
+                        </a>
                         {% elif notification.kind == 'schedule_change_pending' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
                             {% translate "Change of visit time requested — approval required" %}

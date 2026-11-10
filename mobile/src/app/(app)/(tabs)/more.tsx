@@ -16,17 +16,17 @@ import { useSession } from '@/context/auth';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
+/** Website pages that are tabs in the app (each shows with the same permission): not repeated here. */
+const TABS = new Set(['/tasks/', '/tasks/dashboard/', '/tasks/tickets/', '/tasks/technicians/', '/tasks/technicians/progress/']);
+
 /** Website pages the app has its own screen for: those open natively. */
 const NATIVE: Record<string, string> = {
-  '/tasks/': '/team',
   '/customers/': '/customers',
   '/tasks/machines/': '/machines',
   '/tasks/technicians/hours/': '/hours',
   '/tasks/tickets/internal/': '/internal-tickets',
   '/tasks/technicians/map/': '/team-map',
   '/tasks/technicians/accounts/': '/staff-accounts',
-  '/tasks/technicians/progress/': '/team?view=progress',
-  '/tasks/technicians/': '/team?view=progress',
 };
 
 /** The website menu's icon names, as the nearest Ionicons. */
@@ -56,7 +56,10 @@ export default function MoreScreen() {
 
   const load = useCallback(async () => {
     try {
-      setGroups(await fetchWebsiteMenu());
+      // Pages that are already tabs are left out; a group left empty goes too.
+      setGroups((await fetchWebsiteMenu())
+        .map((group) => ({ ...group, pages: group.pages.filter((page) => !TABS.has(page.url)) }))
+        .filter((group) => group.pages.length > 0));
       setError('');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not load the menu.');

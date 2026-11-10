@@ -18,3 +18,20 @@ export function when(task: TaskDetail) {
   }
   return 'Not scheduled yet';
 }
+
+/** How long ago something arrived: "just now", "3 h ago", "yesterday", "4 days ago"; from a week on, its date ("2 Nov"). */
+export function ago(at: string): string {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000));
+  if (minutes < 60) {
+    return minutes < 2 ? 'just now' : `${minutes} min ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours} h ago`;
+  }
+  const days = Math.round(hours / 24);
+  if (days < 7) {
+    return days === 1 ? 'yesterday' : `${days} days ago`;
+  }
+  return new Date(at).toLocaleDateString([], { day: 'numeric', month: 'short' });
+}

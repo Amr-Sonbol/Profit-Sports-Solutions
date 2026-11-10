@@ -53,6 +53,28 @@ the owner, November 2026.
 - Tasks with no owner yet (from before this rule) stay open to whoever the
   role allows, until one is set.
 
+### The work report: review, then approval
+
+1. The technician submits it → **the task's supervisor (owner)** reviews it;
+   he is told on his phone and it's in his *Waiting for me*. A supervisor's own
+   report skips this step.
+2. Reviewed → **the Technical Support Manager** gives the final approval,
+   which closes the task. Every Technical Support Manager is told on the phone
+   and it's in their *Waiting for me* (and the Dashboard's top).
+3. The **Operations Manager** and **Admin** may approve instead — recorded in
+   the history ("Instead of the Technical Support Manager"). They aren't told
+   of each report — but a report **waiting more than 2 working days** shows in
+   the Operations Manager's bell and Waiting for me until it's approved. A Manager, the Project Manager and a supervisor see the
+   report but don't approve it.
+
+## People (their pages, schedules, skills, progress)
+
+- **Admin:** everyone.
+- **Manager, Project Manager, Technical Support Manager, Operations Manager:**
+  supervisors and technicians.
+- **Supervisor:** technicians.
+- **Warehouse Manager and Country Support:** nobody.
+
 ## Internal tasks (office work)
 
 Kinds: **Part request** (anyone, technicians included — part codes and
@@ -76,3 +98,7 @@ request**, **Vendor follow-up**, **Other** (office roles).
 
 Unchanged: Technical Support Manager, Country Support Manager, Operations
 Manager and Admin (the Project Manager has no Tickets).
+
+A **new request** is told to the Technical Support Manager and that country's
+Country Support Manager — the roles chosen on the admin's Notifications page —
+by email, in the bell and on their phones (opening the request in the app).

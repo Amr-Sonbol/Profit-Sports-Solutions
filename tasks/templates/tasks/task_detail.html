@@ -542,7 +542,7 @@
         {% endif %}
     {% elif task.status == 'completed' %}
     <p class="flash flash--info">{% translate "Awaiting manager approval before this task can be closed." %}</p>
-        {% if user.technician.is_manager_tier %}
+        {% if can_give_final_approval %}
         <form method="post" novalidate data-confirm="{% translate "Approve and close? The task closes." %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="approve_report">

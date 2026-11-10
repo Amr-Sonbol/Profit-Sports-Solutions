@@ -47,6 +47,8 @@ export default function BellScreen() {
     }
     if (item.opens.screen === 'website') {
       router.push({ pathname: '/website', params: { path: item.opens.path ?? '/', title: item.text } });
+    } else if (item.opens.screen === 'app') {
+      router.push((item.opens.path ?? '/') as never);
     } else {
       router.push(`/${item.opens.screen}/${item.opens.id}` as never);
     }

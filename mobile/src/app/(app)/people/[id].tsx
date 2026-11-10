@@ -15,6 +15,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { MySkills, Person, SkillRow } from '@/types';
 import { ChoicePicker } from '@/components/choice-picker';
+import { PersonWork } from '@/components/person-work';
 
 /**
  * Someone on the viewer's team (Team → a name): photo and contacts,
@@ -157,6 +158,8 @@ export default function PersonScreen() {
               <ThemedText type="small" themeColor="primary">Edit details</ThemedText>
             </TouchableOpacity>
           </ThemedView>
+
+          <PersonWork person={person} />
 
           <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">Availability</ThemedText>

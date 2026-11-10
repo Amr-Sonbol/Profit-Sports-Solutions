@@ -21,6 +21,8 @@ export interface Me {
   permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */
   must_change_password?: boolean;
+  /** Does visits (technician, supervisor): has the Progress tab. Older servers: absent. */
+  field_staff?: boolean;
 }
 
 export interface PasswordInput {
@@ -244,6 +246,101 @@ export interface Ticket {
   submitted_at: string;
 }
 
+/** A page of the request list: the tab's rows, the badge counts, whether more follow. */
+/** One person on Team → Today (tasks.views.team_today). */
+export interface TeamTodayRow {
+  id: number;
+  name: string;
+  role: string;
+  photo_url: string;
+  phone: string;
+  state: 'blocked' | 'working' | 'on_site' | 'paused' | 'on_the_way' | 'free' | 'abroad' | 'off';
+  off_reason: string;
+  abroad: { country: string; until: string } | null;
+  visiting_from: string;
+  since: string | null;
+  task: { id: number; task_number: string; customer: string; site: string; scheduled_for: string | null } | null;
+  next: { id: number; task_number: string; customer: string; site: string; scheduled_for: string | null } | null;
+  today_total: number;
+  today_done: number;
+  location: { lat: number; lng: number; away: boolean } | null;
+}
+
+export interface TicketPage {
+  counts: { new: number; escalated: number };
+  count: number;
+  page: number;
+  has_more: boolean;
+  results: (Ticket & { escalated: boolean })[];
+}
+
+export interface TicketMachine {
+  id: number;
+  name: string;
+  serial: string;
+  problem: string;
+  urgent: boolean;
+  description: string;
+  items: RequestFile[];
+  /** '' while waiting for "What happens next?". */
+  decision: string;
+  decision_display: string;
+  decision_note: string;
+  task: { id: number; task_number: string } | null;
+}
+
+export interface TicketDetail {
+  id: number;
+  ticket_number: string;
+  status: string;
+  status_display: string;
+  escalated: boolean;
+  submitted_at: string;
+  company_name: string;
+  customer_name: string;
+  site_name: string;
+  site_address: string;
+  has_branch: boolean;
+  country: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  about: string;
+  need: string;
+  subject: string;
+  /** Their message, when the request has no machines. */
+  message: string;
+  machines: TicketMachine[];
+  other_files: RequestFile[];
+  conversation: { from_us: boolean; name: string; message: string; sent_at: string; files: RequestFile[] }[];
+  notes: { name: string; message: string; created_at: string; files: RequestFile[] }[];
+  escalation: { to: string; by: string; reason: string; at: string } | null;
+  tasks: { id: number; task_number: string; status_display: string }[];
+  close_reason: string;
+  can_manage: boolean;
+  can_reply: boolean;
+  /** "What happens next?" — only while new and for whoever handles requests. */
+  next: {
+    supervisors: { value: number; label: string }[];
+    /** null: this person can't pick the technician — the supervisor will. */
+    technicians: { value: number; label: string }[] | null;
+    reasons: { group: string; options: { value: string; label: string; suggestion: string }[] }[];
+    task_type: string;
+    urgent: boolean;
+    under_warranty: boolean;
+  } | null;
+  website_path: string;
+}
+
+export interface TicketDecision {
+  choice: 'visit' | 'ship' | 'answer';
+  machines: number[];
+  supervisor?: number | '';
+  technician?: number | '';
+  reason?: string;
+  answer?: string;
+}
+
 export interface ApiError {
   detail?: string;
   [field: string]: unknown;
@@ -372,6 +469,8 @@ export interface MyProgress {
 
 /** One person on Team progress (/api/team-progress/). */
 export interface TeamProgressRow {
+  /** Their profile photo, or '' (initials). Older servers: absent. */
+  photo_url?: string;
   id: number;
   name: string;
   role: string;
@@ -482,6 +581,24 @@ export interface Person {
   move_to_choices?: Choice[];
   skills: MySkills;
   record: { completed: number; helped: number; on_time_percent: number | null; acceptance_minutes: number | null };
+  /** The website's technician page (tasks.views.technician_overview). Older servers: absent. */
+  workload?: { today: number; upcoming: number; overdue: number };
+  visits_this_month?: number;
+  rating_average?: number | null;
+  rating_count?: number;
+  tasks?: (PersonTaskRef & { my_role: string; still_on_it: boolean })[];
+  reports?: (PersonTaskRef & { submitted_at: string; resolved: boolean; rating: number | null; comment: string })[];
+  trips?: { country: string; start: string; end: string; note: string }[];
+}
+
+interface PersonTaskRef {
+  id: number;
+  task_number: string;
+  customer: string;
+  site: string;
+  status: string;
+  status_display: string;
+  scheduled_for: string | null;
 }
 
 /** The More tab: the website's menu (api/views.py WebsiteMenuView). */
@@ -591,6 +708,8 @@ export interface TeamMap {
 /** The manager's Dashboard (api/views.py DashboardView). */
 export interface Dashboard {
   country: string;
+  /** The decisions waiting on me (tasks.views.waiting_for). Older servers: absent. */
+  waiting?: import('@/api/endpoints').WaitingItem[];
   actions: { label: string; count: number | null; level: 'critical' | 'warning'; url: string }[];
   follow_ups: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   stats: {

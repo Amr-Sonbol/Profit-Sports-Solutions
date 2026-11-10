@@ -163,6 +163,12 @@ class Technician(models.Model):
         )
 
     @property
+    def is_field_staff(self):
+        """Who does the visits — technicians and supervisors: they have their
+        own progress and skills (website menu, the app's Progress tab)."""
+        return self.role in (self.Role.TECHNICIAN, self.Role.SUPERVISOR)
+
+    @property
     def reaches_all_countries(self):
         """Who works across every country (docs/access_rules.md): another
         country's tasks, customers and people, the all-countries boards, the

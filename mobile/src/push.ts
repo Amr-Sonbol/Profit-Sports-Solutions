@@ -73,7 +73,7 @@ export async function unregisterForPush(): Promise<void> {
 }
 
 /** Where tapping a notification should take you (data set in people/push.py). */
-export function routeForNotification(data: Record<string, unknown>, role: string | null): string | null {
+export function routeForNotification(data: Record<string, unknown>, role: string | null): string {
   const taskId = data.task_id;
   switch (data.type) {
     case 'my_task':
@@ -83,9 +83,17 @@ export function routeForNotification(data: Record<string, unknown>, role: string
     case 'task_message':
     case 'task_update':  // something happened to a task they're on (tasks.updates)
       return role === 'technician' ? `/task/${taskId}` : `/team-task/${taskId}`;
-    case 'ticket':
-      return '/tickets';
-    default:
-      return null;
+    case 'ticket':  // that request's own screen; older notifications: the list
+      return data.ticket_id ? `/ticket/${data.ticket_id}` : '/tickets';
+    case 'internal_ticket':  // its page (the website's, inside the app)
+      return `/website?path=${encodeURIComponent(`/tasks/tickets/internal/${data.ticket_id}/`)}&title=Internal%20task`;
+    case 'task_cancelled':  // the office still opens it; the field team's job is gone from their list
+      return role === 'technician' ? '/tasks' : `/team-task/${taskId}`;
+    case 'task_removed':  // no longer theirs: their own list
+      return '/tasks';
+    case 'test':  // Profile → Send me a test notification
+      return '/profile';
+    default:  // anything newer than this app: the bell, never nothing
+      return '/bell';
   }
 }

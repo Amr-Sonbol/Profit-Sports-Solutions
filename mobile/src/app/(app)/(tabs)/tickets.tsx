@@ -1,102 +1,160 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
-import { fetchNewTickets } from '@/api/endpoints';
+import { fetchTicketsPage } from '@/api/endpoints';
+import { BellButton } from '@/components/bell-button';
+import { CountryChooser } from '@/components/country-chooser';
 import { SearchBox } from '@/components/search-box';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTheme } from '@/hooks/use-theme';
-import type { Ticket } from '@/types';
+import { ago } from '@/task-time';
+import type { TicketPage } from '@/types';
+
+/** The website request list's statuses, and Escalated (waiting on someone above). */
+const TABS: [string, string][] = [
+  ['new', 'New'], ['escalated', 'Escalated'], ['converted', 'Task created'], ['closed', 'Closed'],
+  ['dismissed', 'Dismissed'], ['all', 'All'],
+];
 
 /**
- * New customer tickets still needing a decision — same manage_tickets
- * permission as the web Tickets screen (api/views.py TicketListView).
- * A ticket opens its full website page inside the app (website.tsx) —
- * replying, deciding each machine, assigning, escalating, dismissing.
+ * Customer requests in the country — the website's Tickets list (manage_tickets):
+ * a tab per status (New and Escalated with how many), a search across them,
+ * 30 at a time. A request opens its own screen (ticket/[id]).
  */
 export default function TicketsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const [tickets, setTickets] = useState<Ticket[] | null>(null);
+  const [tab, setTab] = useState('new');
+  const [rows, setRows] = useState<TicketPage['results'] | null>(null);
+  const [counts, setCounts] = useState<TicketPage['counts'] | null>(null);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const query = useDebouncedValue(search.trim());
+  // Only the newest answer counts when tabs or the search change quickly.
+  const asked = useRef(0);
 
   const load = useCallback(async () => {
+    const mine = ++asked.current;
     try {
-      setTickets(await fetchNewTickets(query));
+      const result = await fetchTicketsPage(tab, query, 1);
+      if (mine !== asked.current) {
+        return;
+      }
+      setRows(result.results);
+      setCounts(result.counts);
+      setCount(result.count);
+      setPage(1);
+      setHasMore(result.has_more);
       setError('');
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError && err.status === 403
-          ? "You do not have permission to view tickets."
-          : 'Could not load tickets.',
-      );
+      if (mine === asked.current) {
+        setError(err instanceof ApiRequestError && err.status === 403
+          ? 'You do not have permission to see customer requests.' : 'Could not load the requests.');
+      }
     }
-  }, [query]);
+  }, [tab, query]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  useFocusEffect(useCallback(() => {
+    load();
+  }, [load]));
 
-  const onRefresh = async () => {
-    setIsRefreshing(true);
-    await load();
-    setIsRefreshing(false);
+  const loadMore = async () => {
+    if (!hasMore || loadingMore) {
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      const result = await fetchTicketsPage(tab, query, page + 1);
+      setRows((current) => [...(current ?? []), ...result.results]);
+      setPage(result.page);
+      setHasMore(result.has_more);
+    } catch {
+      // Scrolling again tries again.
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ThemedText type="title" style={styles.heading}>
-          Tickets
-        </ThemedText>
-        <SearchBox value={search} onChangeText={setSearch} placeholder="Search by ticket, gym, contact, phone or PAK" />
-        {error ? (
-          <ThemedText themeColor="textSecondary" style={styles.message}>
-            {error}
-          </ThemedText>
-        ) : (
-          <FlatList
-            data={tickets ?? []}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={
-              tickets !== null ? (
-                <ThemedText themeColor="textSecondary">{query ? 'No tickets match your search.' : 'No new tickets.'}</ThemedText>
-              ) : undefined
-            }
-            renderItem={({ item }) => (
-              // The full ticket — reply, decide each machine, assign, escalate — is the website's page.
+        <ThemedView style={styles.headRow}>
+          <ThemedText type="title" style={styles.heading}>Tickets</ThemedText>
+          <BellButton />
+        </ThemedView>
+        <CountryChooser onChange={load} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs} style={styles.tabsBar}>
+          {TABS.map(([value, label]) => {
+            const on = tab === value;
+            const badge = value === 'new' ? counts?.new : value === 'escalated' ? counts?.escalated : undefined;
+            return (
               <TouchableOpacity
-                style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-                onPress={() => router.push({
-                  pathname: '/website', params: { path: `/tasks/tickets/${item.id}/`, title: item.ticket_number },
-                })}
+                key={value} onPress={() => {
+                  if (value !== tab) {
+                    setRows(null);
+                    setTab(value);
+                  }
+                }}
+                style={[styles.tab, { borderColor: theme.backgroundSelected }, on && { backgroundColor: theme.primary, borderColor: theme.primary }]}
               >
-                <ThemedView style={styles.row}>
-                  <ThemedText type="smallBold">{item.ticket_number} — {item.company_name}</ThemedText>
-                  {query ? <ThemedText themeColor="primary" type="small">{item.status_display}</ThemedText> : null}
-                </ThemedView>
-                <ThemedText themeColor="textSecondary" type="small">{item.site_description}</ThemedText>
-                <ThemedText>{item.description}</ThemedText>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {item.contact_name} — {item.contact_phone}
+                <ThemedText type="small" style={on ? { color: theme.onPrimary } : undefined}>
+                  {label}{badge ? ` · ${badge}` : ''}
                 </ThemedText>
-                <ThemedText type="small" themeColor="primary">Open ›</ThemedText>
               </TouchableOpacity>
-            )}
-          />
-        )}
+            );
+          })}
+        </ScrollView>
+        <SearchBox value={search} onChangeText={setSearch} placeholder="Search by request, gym, contact, phone or PAK" />
+        {error ? <ThemedText themeColor="danger" style={styles.message}>{error}</ThemedText> : null}
+        <FlatList
+          data={rows ?? []}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={async () => {
+            setIsRefreshing(true);
+            await load();
+            setIsRefreshing(false);
+          }} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          ListHeaderComponent={rows ? (
+            <ThemedText type="small" themeColor="textSecondary">{count} request{count === 1 ? '' : 's'} · newest first</ThemedText>
+          ) : <ActivityIndicator />}
+          ListFooterComponent={loadingMore ? <ActivityIndicator /> : undefined}
+          ListEmptyComponent={rows && !error ? (
+            <ThemedText themeColor="textSecondary">{query ? 'No requests match your search.' : 'Nothing here.'}</ThemedText>
+          ) : undefined}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+              onPress={() => router.push(`/ticket/${item.id}` as never)}
+            >
+              <ThemedView style={styles.row}>
+                <ThemedText type="smallBold" style={styles.grow}>{item.ticket_number} — {item.company_name}</ThemedText>
+                <ThemedText type="small" themeColor={item.escalated ? 'danger' : 'primary'}>
+                  {item.escalated ? 'Escalated' : item.status_display}
+                </ThemedText>
+              </ThemedView>
+              {item.site_description ? <ThemedText type="small" themeColor="textSecondary">{item.site_description}</ThemedText> : null}
+              <ThemedText numberOfLines={2}>{item.description}</ThemedText>
+              <ThemedView style={styles.row}>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.grow}>{item.contact_name}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">Received {ago(item.submitted_at)}</ThemedText>
+              </ThemedView>
+            </TouchableOpacity>
+          )}
+        />
       </SafeAreaView>
     </ThemedView>
   );
@@ -105,11 +163,14 @@ export default function TicketsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingEnd: Spacing.three },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  tabsBar: { flexGrow: 0 },
+  tabs: { gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
+  tab: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   message: { paddingHorizontal: Spacing.three },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
-  row: {
-    flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two, backgroundColor: 'transparent',
-  },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: Spacing.two, backgroundColor: 'transparent' },
+  grow: { flex: 1 },
 });

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 02:14+0000\n"
+"POT-Creation-Date: 2026-11-10 15:00+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -189,6 +189,16 @@ msgstr[2] "تقريران يتجاوزان الوقت المسجَّل"
 msgstr[3] "%(count)s تقارير تتجاوز الوقت المسجَّل"
 msgstr[4] "%(count)s تقريراً يتجاوز الوقت المسجَّل"
 msgstr[5] "%(count)s تقرير يتجاوز الوقت المسجَّل"
+
+#, python-format
+msgid "%(count)s report waiting more than 2 working days for approval"
+msgid_plural "%(count)s reports waiting more than 2 working days for approval"
+msgstr[0] "لا توجد تقارير تنتظر الاعتماد أكثر من يومي عمل"
+msgstr[1] "تقرير واحد ينتظر الاعتماد أكثر من يومي عمل"
+msgstr[2] "تقريران ينتظران الاعتماد أكثر من يومي عمل"
+msgstr[3] "%(count)s تقارير تنتظر الاعتماد أكثر من يومي عمل"
+msgstr[4] "%(count)s تقريرًا ينتظر الاعتماد أكثر من يومي عمل"
+msgstr[5] "%(count)s تقرير ينتظر الاعتماد أكثر من يومي عمل"
 
 #, python-format
 msgid "%(count)s task"
@@ -377,6 +387,10 @@ msgstr "%(number)s — %(site)s"
 #, python-format
 msgid "%(number)s — %(site)s, %(when)s"
 msgstr "%(number)s — %(site)s، %(when)s"
+
+#, python-format
+msgid "%(number)s — %(site)s, reviewed by %(name)s"
+msgstr "%(number)s — %(site)s، راجعه %(name)s"
 
 #, python-format
 msgid "%(number)s — %(site)s. Your attendance is no longer required."
@@ -897,8 +911,8 @@ msgstr "معتمد"
 msgid "Approved by supervisor"
 msgstr "اعتمده المشرف"
 
-msgid "Approved. The task now awaits manager approval before closure."
-msgstr "تمت الموافقة. المهمة الآن بانتظار موافقة المدير قبل إغلاقها."
+msgid "Approved. The task now awaits the Technical Support Manager's approval."
+msgstr "تمت الموافقة. المهمة الآن بانتظار موافقة مدير الدعم الفني."
 
 msgid "Arabic"
 msgstr "العربية"
@@ -935,6 +949,10 @@ msgstr "بناءً على طلبك، أغلقنا هذا الطلب. إذا اح
 
 msgid "Ask for this schedule change? A manager decides."
 msgstr "طلب هذا التغيير في الموعد؟ يقرّر المدير."
+
+#, python-format
+msgid "Asked for %(when)s"
+msgstr "الموعد المطلوب: %(when)s"
 
 msgid "Assign"
 msgstr "التعيين"
@@ -2355,6 +2373,9 @@ msgstr "صعّدها %(by)s إلى %(to)s بتاريخ %(when)s"
 msgid "Escalated to %(name)s."
 msgstr "تم التصعيد إلى %(name)s."
 
+msgid "Escalated to you"
+msgstr "مُصعَّد إليك"
+
 msgid "Escalated to you — decision required"
 msgstr "مصعَّدة إليك — يلزم اتخاذ قرار"
 
@@ -2799,6 +2820,9 @@ msgstr "بدلًا منه"
 msgid "Instead of %(name)s"
 msgstr "بدلاً من %(name)s"
 
+msgid "Instead of the Technical Support Manager"
+msgstr "بدلاً من مدير الدعم الفني"
+
 msgid "Instead:"
 msgstr "بدلًا من:"
 
@@ -2823,6 +2847,9 @@ msgstr "مهمة داخلية مُسندة إليك"
 
 msgid "Internal task closed"
 msgstr "تم إغلاق المهمة الداخلية"
+
+msgid "Internal task for you"
+msgstr "مهمة داخلية لك"
 
 msgid "Internal tasks"
 msgstr "المهام الداخلية"
@@ -3282,6 +3309,9 @@ msgstr "رد جديد على طلبك %(number)s — %(site)s"
 
 msgid "New request"
 msgstr "طلب جديد"
+
+msgid "New request — a machine is not working"
+msgstr "طلب جديد — جهاز لا يعمل"
 
 msgid "New sign-in email"
 msgstr "بريد تسجيل الدخول الجديد"
@@ -3749,6 +3779,9 @@ msgstr "تم تحديث إعدادات الإشعارات."
 msgid "Notifications"
 msgstr "الإشعارات"
 
+msgid "Notifications work on this phone."
+msgstr "الإشعارات تعمل على هذا الهاتف."
+
 #, python-format
 msgid "Notified on %(time)s"
 msgstr "تم الإشعار في %(time)s"
@@ -4185,6 +4218,9 @@ msgstr "يرجى اختيار شركة الشحن."
 msgid "Please choose the technician who will ship it."
 msgstr "يرجى اختيار الفني الذي سيشحنه."
 
+msgid "Please choose what happens next."
+msgstr "يرجى اختيار الخطوة التالية."
+
 msgid "Please choose why."
 msgstr "يرجى اختيار السبب."
 
@@ -4270,6 +4306,9 @@ msgstr "يرجى رفع ملف بصيغة CSV."
 
 msgid "Please visit the following page to choose a new password:"
 msgstr "يرجى زيارة الصفحة التالية لاختيار كلمة مرور جديدة:"
+
+msgid "Please write a message."
+msgstr "يرجى كتابة رسالة."
 
 msgid "Please write your answer to the customer."
 msgstr "يرجى كتابة ردك على العميل."
@@ -4608,11 +4647,24 @@ msgstr "تم تقديم التقرير — بانتظار موافقة المد�
 msgid "Report submitted — awaiting your supervisor's review."
 msgstr "تم تقديم التقرير — بانتظار مراجعة مشرفك."
 
+msgid "Report to approve"
+msgstr "تقرير بانتظار اعتمادك"
+
+msgid "Report to review"
+msgstr "تقرير بانتظار مراجعتك"
+
 msgid "Report updated — approval still pending."
 msgstr "تم تحديث التقرير — لا يزال بانتظار الموافقة."
 
 msgid "Report updated."
 msgstr "تم تحديث التقرير."
+
+#, python-format
+msgid "Report waiting %(days)s days for approval"
+msgstr "تقرير ينتظر الاعتماد منذ %(days)s أيام"
+
+msgid "Report waiting more than 2 working days for approval"
+msgstr "تقرير ينتظر الاعتماد أكثر من يومي عمل"
 
 msgid "Reported"
 msgstr "تاريخ الإبلاغ"
@@ -5551,6 +5603,9 @@ msgstr "الشروط"
 msgid "Terms expired %(date)s"
 msgstr "انتهت الشروط في %(date)s"
 
+msgid "Test notification"
+msgstr "إشعار تجريبي"
+
 msgid "Thank you for contacting us. As discussed with your team, the issue was resolved remotely and the machine is working normally again. If the problem returns, please send us a new request."
 msgstr "شكراً لتواصلكم معنا. كما تم الاتفاق مع فريقكم، حُلّت المشكلة عن بُعد ويعمل الجهاز الآن بشكل طبيعي. إذا تكررت المشكلة، يرجى إرسال طلب جديد."
 
@@ -6020,6 +6075,9 @@ msgstr "غادر هذا الشخص الشركة، لذا فإن تسجيل دخ�
 msgid "This person has no active login to view, or is an admin."
 msgstr "لا يملك هذا الشخص حساب دخول نشطًا لعرضه، أو أنه مسؤول."
 
+msgid "This phone is not set up for notifications yet. Allow notifications for the app, then try again."
+msgstr "هذا الهاتف غير مُعدّ لاستقبال الإشعارات بعد. اسمح بالإشعارات للتطبيق ثم حاول مرة أخرى."
+
 #, python-format
 msgid "This report has been changed since the customer signed it on %(date)s. Please ask the customer to sign the updated report, or refer to the signed version."
 msgstr "تم تعديل هذا التقرير بعد أن وقّعه العميل بتاريخ %(date)s. يُرجى أن تطلب من العميل توقيع التقرير المُحدَّث، أو الرجوع إلى النسخة الموقّعة."
@@ -6457,6 +6515,9 @@ msgstr "الزيارة مجدولة في %(date)s"
 msgid "Visit scheduled on %(date)s at %(time)s"
 msgstr "الزيارة مجدولة في %(date)s الساعة %(time)s"
 
+msgid "Visit time change to approve"
+msgstr "تغيير موعد زيارة بانتظار موافقتك"
+
 msgid "Visit type"
 msgstr "نوع الزيارة"
 
@@ -6484,6 +6545,9 @@ msgstr "بانتظار التأكيد"
 
 msgid "Waiting for supervisor review"
 msgstr "بانتظار مراجعة المشرف"
+
+msgid "Waiting for the Technical Support Manager — you may approve it instead."
+msgstr "بانتظار مدير الدعم الفني — يمكنك اعتماده بدلاً منه."
 
 msgid "Warehouse"
 msgstr "المستودع"

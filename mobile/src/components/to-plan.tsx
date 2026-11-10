@@ -5,21 +5,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ago } from '@/task-time';
 import type { PlanItem } from '@/types';
 
-// How long ago it arrived: "just now", "3 h ago", "2 days ago".
-function ago(at: string): string {
-  const minutes = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000));
-  if (minutes < 60) {
-    return minutes < 2 ? 'just now' : `${minutes} min ago`;
-  }
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) {
-    return `${hours} h ago`;
-  }
-  const days = Math.round(hours / 24);
-  return days === 1 ? 'yesterday' : `${days} days ago`;
-}
 
 const MISSING: Record<'date' | 'lead', string> = { date: 'No date yet', lead: 'No technician yet' };
 

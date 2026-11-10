@@ -17,7 +17,8 @@ import type {
   Person,
   MySkills,
   Brand, Candidate, CataloguePart, Choice, Me, MyProgress, MySchedule, PasswordInput, ReportHelper, ReportMachine, SiteMachine,
-  TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, Ticket, TodayPlan, WorkReport, WorkReportInput,
+  TaskDetail, TaskListItem, TeamProgressRow, TeamTaskDetail, TeamTodayRow, TicketDecision, TicketDetail, TicketPage, TodayPlan,
+  WorkReport, WorkReportInput,
 } from '@/types';
 
 export function login(username: string, password: string) {
@@ -196,13 +197,6 @@ export function fetchParts() {
   return apiRequest<CataloguePart[]>('/api/parts/');
 }
 
-/** Open tasks; with `search`, matches across every status (newest 50). */
-/** The country's tasks, with the website task list's filters (status, lead=none, scheduled_from, …) and `q`. */
-export function fetchTeamTasks(search = '', filters: Record<string, string> = {}) {
-  const params = new URLSearchParams({ ...filters, ...(search ? { q: search } : {}) }).toString();
-  return apiRequest<TaskListItem[]>(params ? `/api/tasks/?${params}` : '/api/tasks/');
-}
-
 /** A page of the country's tasks (30), with the website task list's filters; how many in all, and whether there's more. */
 export function fetchTeamTasksPage(filters: Record<string, string>, page: number) {
   const params = new URLSearchParams({ ...filters, page: String(page) }).toString();
@@ -266,7 +260,8 @@ export interface BellItem {
   about: string;
   at: string;
   alarm: boolean;
-  opens: { screen: 'team-task' | 'task' | 'website'; id?: number; path?: string } | null;
+  /** An app screen by name and id, an app path ('app'), or a website page inside the app ('website'). */
+  opens: { screen: 'team-task' | 'task' | 'ticket' | 'app' | 'website'; id?: number; path?: string } | null;
 }
 
 /** The bell: the newest items and how many there are in all. */
@@ -278,9 +273,47 @@ export function approveTaskReport(id: number) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/approve/`, { method: 'POST', body: {} });
 }
 
-/** New tickets; with `search`, matches across every status (newest 50). */
-export function fetchNewTickets(search = '') {
-  return apiRequest<Ticket[]>(search ? `/api/tickets/?q=${encodeURIComponent(search)}` : '/api/tickets/');
+/** Something waiting on my decision (tasks.views.waiting_for). */
+export interface WaitingItem {
+  kind: 'approve_report' | 'review_report' | 'schedule_change' | 'blocked' | 'escalation' | 'internal' | 'late_report';
+  title: string;
+  text: string;
+  detail: string;
+  at: string | null;
+  opens: { screen: 'team-task' | 'ticket' | 'website'; id?: number; path?: string };
+}
+
+/** Waiting for me: the decisions others are waiting on, oldest first. */
+export function fetchWaiting() {
+  return apiRequest<WaitingItem[]>('/api/waiting/');
+}
+
+/** Team → Today: the field team I oversee, right now. */
+export function fetchTeamToday() {
+  return apiRequest<TeamTodayRow[]>('/api/team-today/');
+}
+
+/** A page (30) of customer requests on one tab (new, escalated, converted, closed, dismissed, all), searchable. */
+export function fetchTicketsPage(status: string, search: string, page: number) {
+  const params = new URLSearchParams({ status, page: String(page), ...(search ? { q: search } : {}) }).toString();
+  return apiRequest<TicketPage>(`/api/tickets/?${params}`);
+}
+
+/** One customer request, as on the website's request page. */
+export function fetchTicket(id: number) {
+  return apiRequest<TicketDetail>(`/api/tickets/${id}/`);
+}
+
+/** Our reply to the customer (email + their bell), or with `note` a note for staff only. */
+export function sendTicketMessage(id: number, message: string, note = false) {
+  return apiRequest<{ message: string }>(`/api/tickets/${id}/reply/`, { method: 'POST', body: { message, note } });
+}
+
+/** "What happens next?": a visit or a part shipment (a task), or an answer without a visit. */
+export function decideTicket(id: number, body: TicketDecision) {
+  return apiRequest<{ message: string; task: { id: number; task_number: string } | null }>(
+    `/api/tickets/${id}/next/`, { method: 'POST', body },
+  );
 }
 
 export function fetchMyToday() {

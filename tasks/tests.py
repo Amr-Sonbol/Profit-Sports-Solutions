@@ -1154,8 +1154,11 @@ class TaskApprovalTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
-    def test_manager_approves_and_closes(self):
+    def test_the_technical_support_manager_approves_and_closes(self):
+        # The final approval is the Technical Support Manager's (docs/access_rules.md): a Manager is refused.
         self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self.client.post(self.url, {'action': 'approve_report'}).status_code, 403)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.SUPPORT_MANAGER)
         response = self.client.post(self.url, {'action': 'approve_report'})
         self.assertEqual(response.status_code, 302)
 
@@ -1168,7 +1171,7 @@ class TaskApprovalTests(TaskTestCase):
     def test_cannot_approve_a_task_with_no_report_awaiting_approval(self):
         self.task.status = Task.Status.IN_PROGRESS
         self.task.save()
-
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.SUPPORT_MANAGER)
         self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {'action': 'approve_report'}, follow=True)
 
@@ -1335,7 +1338,7 @@ class TaskSupervisorApprovalTests(TaskTestCase):
     def test_manager_cannot_approve_report_while_pending_supervisor_review(self):
         self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
         self.task.save(update_fields=['status'])
-
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.SUPPORT_MANAGER)
         self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {'action': 'approve_report'}, follow=True)
 

@@ -99,3 +99,77 @@ class AccessRulesTests(TaskTestCase):
         support = self.person('cs1', Technician.Role.COUNTRY_SUPPORT)
         self.assertEqual(support.get(f'/tasks/{self.task.pk}/').status_code, 200)
         self.assertEqual(support.get(f'/tasks/{self.task.pk}/edit/').status_code, 403)
+
+    def test_progress_and_skills_are_the_field_teams(self):
+        from django.urls import reverse
+        office = self.person('wm2', Technician.Role.WAREHOUSE_MANAGER)
+        self.assertNotContains(office.get('/tasks/'), reverse('tasks:my_progress'))
+        self.assertFalse(Technician.objects.get(user__username='wm2').is_field_staff)
+        self.client.login(username='tech1', password='pass12345')
+        self.assertContains(self.client.get(reverse('tasks:my_week')), reverse('tasks:my_progress'))
+
+    def test_the_final_approval_is_the_technical_support_managers(self):
+        from unittest.mock import patch
+
+        from tasks.views import approve_report_as_supervisor
+        tsm = self.person('tsm1', Technician.Role.SUPPORT_MANAGER)
+        manager = self.person('uae_manager', Technician.Role.MANAGER)
+        ops = self.person('ops1', Technician.Role.OPERATIONS_MANAGER)
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save()
+        # The supervisor's review tells every Technical Support Manager.
+        with patch('tasks.views.push_in_their_language') as push, self.captureOnCommitCallbacks(execute=True):
+            approve_report_as_supervisor(self.task, self.supervisor_user)
+        self.assertEqual([call.args[0].user.username for call in push.call_args_list], ['tsm1'])
+        self.assertEqual(manager.post(f'/tasks/{self.task.pk}/', {'action': 'approve_report'}).status_code, 403)
+        # The Operations Manager may step in — recorded.
+        self.assertEqual(ops.post(f'/tasks/{self.task.pk}/', {'action': 'approve_report'}).status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.CLOSED)
+        self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.STEPPED_IN).get().note,
+                         'Instead of the Technical Support Manager')
+        self.assertIsNotNone(tsm)
+
+    def test_a_new_request_reaches_supports_phones(self):
+        from unittest.mock import patch
+
+        from django.test import RequestFactory
+
+        from tasks.models import CustomerTicket
+        from tasks.views import send_new_ticket_email_to_staff
+        self.person('tsm1', Technician.Role.SUPPORT_MANAGER)
+        self.person('desk_uae', Technician.Role.COUNTRY_SUPPORT)
+        self.person('desk_eg', Technician.Role.COUNTRY_SUPPORT, country=self.egypt)
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0900', company_name='Fitness First', site_description='Marina',
+            contact_name='Ali', contact_phone='050', description='Stops', submitted_at=timezone.now(),
+        )
+        with patch('tasks.views.push_in_their_language') as push, self.captureOnCommitCallbacks(execute=True):
+            send_new_ticket_email_to_staff(RequestFactory().get('/'), ticket)
+        self.assertEqual(sorted(call.args[0].user.username for call in push.call_args_list), ['desk_uae', 'tsm1'])
+        self.assertEqual(push.call_args_list[0].args[3], {'type': 'ticket', 'ticket_id': ticket.pk})
+
+    def test_the_warehouse_manager_and_country_support_open_no_one(self):
+        from tasks.views import overseen_roles
+        for username, role in (('wm9', Technician.Role.WAREHOUSE_MANAGER), ('cs9', Technician.Role.COUNTRY_SUPPORT)):
+            client = self.person(username, role)
+            self.assertEqual(overseen_roles(Technician.objects.get(user__username=username)), [])
+            self.assertIn(client.get(f'/tasks/technicians/{self.technician.pk}/').status_code, (403, 404))
+
+    def test_a_report_waiting_over_two_working_days_reaches_the_operations_manager(self):
+        from datetime import timedelta
+
+        from tasks.alarms import late_reports
+        ops = self.person('ops2', Technician.Role.OPERATIONS_MANAGER)
+        self.task.status = Task.Status.COMPLETED
+        self.task.save()
+        event = TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.SUPERVISOR_APPROVED,
+                                         occurred_at=timezone.now() - timedelta(hours=20), actor=self.supervisor_user)
+        operations = Technician.objects.get(user__username='ops2')
+        self.assertEqual(late_reports(operations), [])  # not yet
+        event.occurred_at = timezone.now() - timedelta(days=6)
+        event.save()
+        self.assertEqual([task.pk for task in late_reports(operations)], [self.task.pk])
+        self.assertEqual(late_reports(Technician.objects.get(user__username='supervisor1')), [])  # his alone
+        page = ops.get(f'/tasks/{self.task.pk}/')  # the bell, on any page
+        self.assertContains(page, 'Report waiting more than 2 working days for approval')

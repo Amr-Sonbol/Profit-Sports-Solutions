@@ -33,14 +33,16 @@ export default function AppTabsLayout() {
   const theme = useTheme();
   const { me } = useSession();
   const can = (permission: string) => me?.permissions?.includes(permission) ?? false;
-  const showTeam = can('view_tasks') || can('view_technicians');
+  // The people: their progress, skills and pages. (Tasks are on the Tasks tab.)
+  const showTeam = can('view_technicians');
   const showTickets = can('manage_tickets');
   // A technician's website pages are all their own (schedule, progress,
   // skills, profile) — tabs here already — so More would be empty.
   const showMore = Boolean(me?.role) && me?.role !== 'technician';
   // A manager's home screen; they have no My progress (field staff's), as on the website.
   const showDashboard = can('view_dashboard');
-  const isManagerTier = me?.role === 'manager' || me?.role === 'admin';
+  // Their own month and skills: the field team's (the server says, as the website's My progress).
+  const showProgress = me?.field_staff ?? (me?.role === 'technician' || me?.role === 'supervisor');
   // Who plans others' work (a supervisor) opens on Tasks, where "To plan" is.
   const plansWork = can('assign_tasks');
   const router = useRouter();
@@ -78,7 +80,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
       <Tabs.Screen
         name="progress"
-        options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up'), href: isManagerTier ? null : undefined }}
+        options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up'), href: showProgress ? undefined : null }}
       />
       <Tabs.Screen
         name="team" options={{ title: 'Team', tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}

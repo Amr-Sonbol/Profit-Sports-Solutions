@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 
 from customers import notify as notify_customer
 from customers.models import Asset, Customer
-from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill
+from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill, TechnicianTrip
 from customers.accounts import locked_usernames, log_account_action
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
@@ -70,6 +70,8 @@ from tasks.views import (
     create_staff_user,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
+    add_ticket_note, decide_request_next, send_staff_reply, ticket_access, ticket_for_app, team_today,
+    waiting_for, can_give_final_approval, require_final_approver, technician_overview,
 )
 
 from spots.media import signed_media_url
@@ -132,6 +134,8 @@ def _me_payload(user, request=None):
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
         'must_change_password': technician.must_change_password,
+        # Does visits (technician, supervisor): has the Progress tab, as the website's My progress.
+        'field_staff': technician.is_field_staff,
         # What this role may do (RolePermission), so the app shows only
         # the tabs that will open — the API still checks every request.
         'permissions': sorted(
@@ -663,11 +667,16 @@ class DashboardView(APIView):
         follow_ups = team_map_data(country)['attention'] if has_role_permission(
             request, RolePermission.Permission.VIEW_TECHNICIANS,
         ) else []
+        # The decisions themselves on top (waiting_for); the counts below leave out what that lists.
+        waiting = waiting_for(viewer, country)
+        listed = ('status=completed', 'status=pending_supervisor_review', '/tasks/tickets/internal/')
         return Response({
             'country': country.display_name,
+            'waiting': [{**item, 'title': str(item['title']), 'detail': str(item['detail'])} for item in waiting],
             'actions': [
                 {'label': str(item['label']), 'count': item['count'], 'level': item['level'], 'url': item['url']}
                 for item in summary['actions']
+                if not any(part in item['url'] for part in listed) and item['count'] is not None
             ],
             'follow_ups': [
                 {'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']} for item in follow_ups
@@ -852,7 +861,13 @@ def _person(request, pk):
     if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
         raise PermissionDenied
     viewer = request.user.technician
-    return get_object_or_404(_people_i_oversee(viewer).filter(country=get_active_country(request)), pk=pk)
+    country = get_active_country(request)
+    # Their own country's people, and anyone here on a trip today (as on Team → Today).
+    today = timezone.localdate()
+    visiting = TechnicianTrip.objects.filter(country=country, start_date__lte=today, end_date__gte=today)
+    return get_object_or_404(
+        _people_i_oversee(viewer).filter(Q(country=country) | Q(pk__in=visiting.values('technician_id'))), pk=pk,
+    )
 
 
 class PersonView(APIView):
@@ -868,6 +883,12 @@ class PersonView(APIView):
         person = _person(request, pk)
         skills = MySkillsView._summary(request, person)
         reliability = _reliability_stats(person)
+        overview = technician_overview(person)
+
+        def task_ref(task):
+            return {'id': task.pk, 'task_number': task.task_number, 'customer': task.site.customer.name,
+                    'site': task.site.name, 'status': task.status, 'status_display': task.get_status_display(),
+                    'scheduled_for': task.scheduled_for}
         return Response({
             'id': person.pk,
             'name': person.full_name,
@@ -900,6 +921,20 @@ class PersonView(APIView):
                 'on_time_percent': reliability['on_time_percent'],
                 'acceptance_minutes': reliability['acceptance_latency_minutes'],
             },
+            # The website's technician page: work to do, this month, satisfaction, their tasks and reports, trips.
+            'workload': overview['workload'],
+            'visits_this_month': overview['visits_this_month'],
+            'rating_average': overview['rating_average'], 'rating_count': overview['rating_count'],
+            'tasks': [{**task_ref(assignment.task), 'my_role': assignment.get_role_display(),
+                       'still_on_it': assignment.is_active}
+                      for assignment in overview['assignments'][:20]],
+            'reports': [{
+                **task_ref(report.task), 'submitted_at': report.submitted_at, 'resolved': report.resolved,
+                'rating': getattr(getattr(report.task, 'feedback', None), 'rating', None),
+                'comment': getattr(getattr(report.task, 'feedback', None), 'comment', '') or '',
+            } for report in overview['reports'][:20]],
+            'trips': [{'country': trip.country.display_name, 'start': trip.start_date, 'end': trip.end_date,
+                       'note': trip.note} for trip in overview['trips']],
         })
 
 
@@ -1049,6 +1084,43 @@ class MyProgressView(APIView):
         })
 
 
+class WaitingForMeView(APIView):
+    """What's waiting on my decision (tasks.views.waiting_for): the app's
+    Tasks → Waiting for me, and the top of its Dashboard."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        return Response([
+            {**item, 'title': str(item['title']), 'detail': str(item['detail'])}
+            for item in waiting_for(request.user.technician, get_active_country(request))
+        ])
+
+
+class TeamTodayView(APIView):
+    """The app's Team → Today (tasks.views.team_today): the field team this
+    person oversees, right now — off or abroad, or what their last tap today
+    says, with the task, their next job, today's count, phone and last place."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TECHNICIANS)]
+
+    def get(self, request):
+        rows = team_today(request.user.technician, get_active_country(request))
+        return Response([{
+            'id': row['technician'].pk,
+            'name': row['technician'].full_name,
+            'role': row['technician'].get_role_display(),
+            'photo_url': (signed_media_url(request, row['technician'].photo.url)
+                          if row['technician'].photo else ''),
+            'phone': row['technician'].phone,
+            'state': row['state'], 'off_reason': row['off_reason'], 'abroad': row['abroad'],
+            'visiting_from': row['visiting_from'], 'since': row['since'],
+            'task': row['task'], 'next': row['next'],
+            'today_total': row['today_total'], 'today_done': row['today_done'],
+            'location': row['location'],
+        } for row in rows])
+
+
 class TeamProgressView(APIView):
     """The app's team progress — the website's Team progress
     (tasks.views.team_progress_rows): the field team this person oversees
@@ -1068,6 +1140,8 @@ class TeamProgressView(APIView):
                     'id': row['technician'].pk,
                     'name': row['technician'].full_name,
                     'role': row['technician'].get_role_display(),
+                    'photo_url': (signed_media_url(request, row['technician'].photo.url)
+                                  if row['technician'].photo else ''),
                     'rank': row['rank'],
                     'completed': row['completed'],
                     'change': row['change'],
@@ -1699,7 +1773,7 @@ def _team_task_response(request, task):
         'can_supervisor_approve': (
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
         ),
-        'can_manager_approve': task.status == Task.Status.COMPLETED and technician.is_manager_tier,
+        'can_manager_approve': task.status == Task.Status.COMPLETED and can_give_final_approval(technician),
         # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
         'from_request': request_for_app(request, task),
         # A part shipment's steps, as the office's panel offers them to this person.
@@ -2105,17 +2179,25 @@ class BellView(APIView):
                 opens = {'screen': 'team-task' if can_view_tasks else 'task', 'id': task.pk}
             if ticket is not None:
                 about = f'{ticket.company_name} ({ticket.ticket_number})'
-                opens = {'screen': 'website', 'path': reverse('tasks:ticket_review', args=[ticket.pk])}
+                opens = {'screen': 'ticket', 'id': ticket.pk}  # the app's own request screen
             if kind == 'new_task':
                 text = _('New task')
             elif kind == 'unscheduled_overdue':
                 text, alarm = _('Not scheduled within 24 working hours'), True
+            elif kind == 'report_late':
+                text, alarm = _('Report waiting more than 2 working days for approval'), True
+            elif kind == 'report_late_many':
+                text = ngettext(
+                    '%(count)s report waiting more than 2 working days for approval',
+                    '%(count)s reports waiting more than 2 working days for approval', item['count'],
+                ) % {'count': item['count']}
+                alarm, opens = True, {'screen': 'app', 'path': '/tasks'}  # each one is in Waiting for me
             elif kind == 'unscheduled_overdue_many':
                 text = ngettext(
                     '%(count)s task not scheduled within 24 working hours',
                     '%(count)s tasks not scheduled within 24 working hours', item['count'],
                 ) % {'count': item['count']}
-                alarm, opens = True, {'screen': 'website', 'path': reverse('tasks:task_list') + '?alarm=unscheduled'}
+                alarm, opens = True, {'screen': 'app', 'path': '/tasks?scope=all'}  # Tasks → All in the country
             elif kind == 'schedule_change_pending':
                 text, alarm = _('Change of visit time requested — approval required'), True
             elif kind == 'escalation_pending':
@@ -2128,7 +2210,7 @@ class BellView(APIView):
                 opens = {'screen': 'website', 'path': reverse('customers:customer_accounts') + '?status=locked'}
             elif kind == 'staff_locked':
                 text, alarm, about = _('Staff login locked'), True, item['person'].full_name
-                opens = {'screen': 'website', 'path': reverse('tasks:staff_accounts') + '?status=locked'}
+                opens = {'screen': 'app', 'path': '/staff-accounts'}
             elif kind == 'task_update':
                 text = f"{item['what']} · {_('by %(name)s') % {'name': item['sender']}}" if item.get('sender') else item['what']
             elif kind == 'task_message':
@@ -2400,7 +2482,7 @@ class TeamTaskApproveView(APIView):
                 raise PermissionDenied
             approve_report_as_supervisor(task, request.user)
         elif task.status == Task.Status.COMPLETED:
-            require_manager(request)
+            require_final_approver(request, task)
             approve_report_as_manager(task, request.user)
         else:
             return Response(
@@ -2437,6 +2519,27 @@ class PushDeviceView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class TestPushView(APIView):
+    """Profile → "Send me a test notification": one to every phone this person
+    is registered on, so they (and the office) can tell notifications work.
+    409 when no phone is registered — the app explains how to fix it."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request):
+        from people.push import send_push
+
+        technician = request.user.technician
+        phones = PushDevice.objects.filter(technician=technician).count()
+        if not phones:
+            return Response({'detail': _(
+                'This phone is not set up for notifications yet. Allow notifications for the app, then try again.',
+            )}, status=status.HTTP_409_CONFLICT)
+        with translation.override(technician.language or 'en'):
+            send_push([technician], _('Test notification'), _('Notifications work on this phone.'), {'type': 'test'})
+        return Response({'phones': phones})
+
+
 class PartListView(APIView):
     """The active parts catalogue, for the report screen's picker — each
     part's photo too, so the technician can check it's the right one."""
@@ -2461,15 +2564,113 @@ class TicketListView(APIView):
 
     permission_classes = [require_role_permission(RolePermission.Permission.MANAGE_TICKETS)]
 
+    # The app's tabs: the website ticket list's statuses, and "Escalated" (waiting on someone above).
+    TABS = ('new', 'escalated', 'converted', 'closed', 'dismissed', 'all')
+
     def get(self, request):
+        from django.db.models import Exists, OuterRef
+
+        from tasks.models import TicketEscalation
+
         active_country = get_active_country(request)
         tickets = CustomerTicket.objects.filter(
             country=active_country, kind=CustomerTicket.Kind.CUSTOMER,
-        ).select_related('country')
+        ).select_related('country').annotate(escalated=Exists(TicketEscalation.objects.filter(
+            ticket=OuterRef('pk'), decision=TicketEscalation.Decision.PENDING,
+        )))
         text = request.query_params.get('q', '').strip()
+        status = request.query_params.get('status')
+        if status is None:
+            # Apps from before the tabs: new ones, or a search across every status.
+            if text:
+                tickets = search_tickets(tickets, text).order_by('-submitted_at')[:SEARCH_RESULT_LIMIT]
+            else:
+                tickets = tickets.filter(status=CustomerTicket.Status.NEW).order_by('-submitted_at')
+            return Response(CustomerTicketSerializer(tickets, many=True).data)
+        counts = {
+            'new': tickets.filter(status=CustomerTicket.Status.NEW).count(),
+            'escalated': tickets.filter(escalated=True).count(),
+        }
+        if status == 'escalated':
+            tickets = tickets.filter(escalated=True)
+        elif status in CustomerTicket.Status.values:
+            tickets = tickets.filter(status=status)
         if text:
-            # A search looks at every ticket, not just new ones.
-            tickets = search_tickets(tickets, text).order_by('-submitted_at')[:SEARCH_RESULT_LIMIT]
-        else:
-            tickets = tickets.filter(status=CustomerTicket.Status.NEW).order_by('-submitted_at')
-        return Response(CustomerTicketSerializer(tickets, many=True).data)
+            tickets = search_tickets(tickets, text)
+        # 30 a page, newest first, as the app's task list.
+        count = tickets.count()
+        page = int(request.query_params['page']) if request.query_params.get('page', '').isdigit() else 1
+        page = max(page, 1)
+        tickets = list(tickets.order_by('-submitted_at')[(page - 1) * 30:page * 30])
+        rows = CustomerTicketSerializer(tickets, many=True).data
+        for row, ticket in zip(rows, tickets):
+            row['escalated'] = ticket.escalated
+        return Response({'counts': counts, 'count': count, 'page': page, 'has_more': page * 30 < count, 'results': rows})
+
+
+def _ticket_for(request, pk):
+    """The customer request this person may open (tasks.views.ticket_access), or 404."""
+    access = ticket_access(request, request.user.technician, pk)
+    if access['ticket'].kind != CustomerTicket.Kind.CUSTOMER:
+        raise Http404
+    return access
+
+
+class TicketDetailView(APIView):
+    """A customer request, as on the website's request page (tasks.views.ticket_for_app).
+    Opening it reads its bell items, as the website does."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        access = _ticket_for(request, pk)
+        if access['can_manage']:
+            access['ticket'].notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
+        return Response(ticket_for_app(request, request.user.technician, access))
+
+
+class TicketReplyView(APIView):
+    """Our reply to the customer (conversation, email, their bell) — or, with
+    "note": true, a note for staff only. The website's reply and note boxes."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        access = _ticket_for(request, pk)
+        ticket = access['ticket']
+        message = str(request.data.get('message', '')).strip()
+        if not message:
+            return Response({'detail': _('Please write a message.')}, status=400)
+        if request.data.get('note'):
+            if not access['can_manage']:
+                raise PermissionDenied
+            add_ticket_note(request.user, ticket, message)
+            return Response({'message': _('Note added.')}, status=201)
+        if not (access['can_manage'] and ticket.status not in (
+                CustomerTicket.Status.CLOSED, CustomerTicket.Status.DISMISSED)):
+            raise PermissionDenied
+        send_staff_reply(request, ticket, message)
+        return Response({'message': _('Reply sent.')}, status=201)
+
+
+class TicketNextView(APIView):
+    """ "What happens next?" for a new request's machines still waiting: a visit
+    or a part shipment (a task), or an answer without a visit — the website's
+    own (tasks.views.decide_request_next)."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        access = _ticket_for(request, pk)
+        ticket = access['ticket']
+        if not access['can_manage'] or ticket.status != CustomerTicket.Status.NEW:
+            raise PermissionDenied
+        data = request.data
+        error, done, task = decide_request_next(
+            request, request.user.technician, ticket, data.get('choice'), data.get('machines') or [],
+            supervisor_id=str(data.get('supervisor') or ''), lead_id=str(data.get('technician') or ''),
+            when=str(data.get('scheduled_for') or ''), reason=data.get('reason'), answer=str(data.get('answer') or ''),
+        )
+        if error:
+            return Response({'detail': str(error)}, status=400)
+        return Response({'message': str(done), 'task': {'id': task.pk, 'task_number': task.task_number} if task else None})

@@ -70,7 +70,7 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
 
 // Photos (cached on the phone under a key that doesn't change, so they show
 // offline), videos and files; a tap opens it full size, or in the phone's player.
-function MediaStrip({ items }: { items: RequestFile[] }) {
+export function MediaStrip({ items }: { items: RequestFile[] }) {
   const theme = useTheme();
   return (
     <ThemedView style={styles.mediaRow}>
