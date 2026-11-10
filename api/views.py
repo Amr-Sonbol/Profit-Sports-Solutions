@@ -31,7 +31,7 @@ from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_manager,
     scoped_or_404,
 )
-from people.push import push_assigned, push_rebooked, push_removed
+from people.push import push_assigned, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
@@ -50,7 +50,7 @@ from tasks.views import (
     report_copy_default,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
-    apply_task_edit, _form_values, customer_has_current_time,
+    apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
@@ -1109,28 +1109,53 @@ class MyTaskListView(APIView):
         return Response(TaskListSerializer(tasks, many=True, context={'unread': _unread_messages(technician)}).data)
 
 
-class TaskListView(APIView):
-    """Every open task in the requester's active country — the supervisor/
-    manager/admin view, same scope as the web task list. With ?q=, a
-    search across every status instead (tasks.views.search_tasks), newest
-    first, at most SEARCH_RESULT_LIMIT.
-    """
+class TaskFilterChoicesView(APIView):
+    """What the app's task filters offer, as the website's task list does:
+    the statuses (its tabs), the country's technicians and the couriers."""
 
     permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
 
     def get(self, request):
-        active_country = get_active_country(request)
-        tasks = _with_lead_prefetch(
-            Task.objects.filter(site__customer__country=active_country).select_related('site__customer'),
-        )
-        text = request.query_params.get('q', '').strip()
-        if text:
-            tasks = search_tasks(tasks, text)
-        else:
-            tasks = tasks.filter(status__in=OPEN_STATUSES)
-        return Response(TaskListSerializer(
-            tasks, many=True, context={'unread': _unread_messages(request.user.technician)},
-        ).data)
+        country = get_active_country(request)
+        return Response({
+            'statuses': [{'value': value, 'label': str(label)} for value, label in Task.Status.choices],
+            'technicians': [
+                {'value': str(person.pk), 'label': person.full_name}
+                for person in Technician.objects.filter(is_active=True, country=country).order_by('full_name')
+            ],
+            'shipping_companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
+        })
+
+
+TEAM_LIST_PAGE_SIZE = 30
+
+
+class TaskListView(APIView):
+    """The country's tasks — the website's task list, with the same filters
+    (tasks.views.filtered_tasks: status, q, lead=none, scheduled=none,
+    scheduled_from/to, priority, technician, supervisor, …). With only ?q=
+    (older apps), every status, as before. Newest first."""
+
+    permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
+
+    def get(self, request):
+        params = request.query_params.copy()
+        if params.get('q', '').strip() and 'status' not in params:
+            params['status'] = 'all'
+        technician = request.user.technician
+        tasks = filtered_tasks(params, technician, get_active_country(request))
+        context = {'unread': _unread_messages(technician)}
+        if 'page' not in params:  # older apps: the whole list
+            return Response(TaskListSerializer(tasks, many=True, context=context).data)
+        # A page at a time (?page=1, 2…, 30 each), with how many there are in all.
+        page_number = int(params['page']) if str(params['page']).isdigit() and int(params['page']) > 0 else 1
+        size = TEAM_LIST_PAGE_SIZE
+        total = tasks.count()
+        page = list(tasks[(page_number - 1) * size:page_number * size])
+        return Response({
+            'count': total, 'page': page_number, 'has_more': page_number * size < total,
+            'results': TaskListSerializer(page, many=True, context=context).data,
+        })
 
 
 def _get_my_assignment(request, pk):
@@ -1152,6 +1177,7 @@ class MyTaskDetailView(APIView):
     def get(self, request, pk):
         assignment = _get_my_assignment(request, pk)
         task = assignment.task
+        read_task_updates(task, request.user.technician)
         is_lead = assignment.role == TaskAssignment.Role.LEAD
         next_action = _next_technician_action(task) if is_lead else None
         is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
@@ -2102,6 +2128,8 @@ class BellView(APIView):
             elif kind == 'staff_locked':
                 text, alarm, about = _('Staff login locked'), True, item['person'].full_name
                 opens = {'screen': 'website', 'path': reverse('tasks:staff_accounts') + '?status=locked'}
+            elif kind == 'task_update':
+                text = f"{item['what']} · {_('by %(name)s') % {'name': item['sender']}}" if item.get('sender') else item['what']
             elif kind == 'task_message':
                 text = _('New message from %(name)s') % {'name': item['sender']} if item.get('sender') else _('New message')
             elif kind == 'new_ticket':
@@ -2219,7 +2247,9 @@ class TeamTaskDetailView(APIView):
     permission_classes = [require_role_permission(RolePermission.Permission.VIEW_TASKS)]
 
     def get(self, request, pk):
-        return _team_task_response(request, _get_team_task(request, pk))
+        task = _get_team_task(request, pk)
+        read_task_updates(task, request.user.technician)
+        return _team_task_response(request, task)
 
 
 class TeamTaskCandidatesView(APIView):
@@ -2329,8 +2359,7 @@ class TeamTaskAssignView(APIView):
                     task=task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(), actor=request.user,
                 )
                 notify_customer.visit_booked(task)
-            if active_lead:
-                push_rebooked(active_lead.technician, task)
+            # Everyone on the task hears of the new time from its history entry (tasks.updates).
         elif action == 'remove_helper':
             helper = get_object_or_404(
                 TaskAssignment, pk=request.data.get('assignment_id'), task=task,

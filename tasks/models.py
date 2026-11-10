@@ -1083,6 +1083,29 @@ class TaskEvent(models.Model):
         return self.corrected_at or self.occurred_at
 
 
+
+class TaskEventRecipient(models.Model):
+    """Who an action on a task (a TaskEvent) notifies, and whether they've
+    seen it — everyone on the task (active lead and helpers, the responsible
+    supervisor) except whoever did it (tasks.updates). Their own bell entry
+    until they open the task, like TaskMessageRecipient."""
+
+    event = models.ForeignKey(
+        TaskEvent, on_delete=models.CASCADE, related_name='recipients', verbose_name=_('event'),
+    )
+    technician = models.ForeignKey(
+        Technician, on_delete=models.CASCADE, related_name='task_event_notifications', verbose_name=_('technician'),
+    )
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('task update recipient')
+        verbose_name_plural = _('task update recipients')
+        indexes = [models.Index(fields=['technician', 'seen_at'])]
+
+    def __str__(self):
+        return f'{self.event} → {self.technician}'
+
 class ScheduleChangeRequest(models.Model):
     """A supervisor asking to move a task's schedule once a manager has
     locked it (Task.schedule_time_locked) — the only case a supervisor

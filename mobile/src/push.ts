@@ -81,6 +81,7 @@ export function routeForNotification(data: Record<string, unknown>, role: string
     case 'team_task':
       return `/team-task/${taskId}`;
     case 'task_message':
+    case 'task_update':  // something happened to a task they're on (tasks.updates)
       return role === 'technician' ? `/task/${taskId}` : `/team-task/${taskId}`;
     case 'ticket':
       return '/tickets';

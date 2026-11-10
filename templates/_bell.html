@@ -63,6 +63,12 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                             {% translate "Staff login locked" %}
                             — {{ notification.person.full_name }}
                         </a>
+                        {% elif notification.kind == 'task_update' %}
+                        <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
+                            {{ notification.what }}{% if notification.sender %} · {% blocktranslate with name=notification.sender %}by {{ name }}{% endblocktranslate %}{% endif %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
                         {% elif notification.kind == 'task_message' %}
                         <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
                             {% if notification.sender %}{% blocktranslate with name=notification.sender %}New message from {{ name }}{% endblocktranslate %}{% else %}{% translate "New message" %}{% endif %}

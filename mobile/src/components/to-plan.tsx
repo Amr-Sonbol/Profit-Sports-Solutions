@@ -21,7 +21,7 @@ function ago(at: string): string {
   return days === 1 ? 'yesterday' : `${days} days ago`;
 }
 
-const MISSING: Record<'date' | 'lead', string> = { date: 'No day yet', lead: 'No technician yet' };
+const MISSING: Record<'date' | 'lead', string> = { date: 'No date yet', lead: 'No technician yet' };
 
 /**
  * A supervisor's tasks waiting for his decision — no day or no technician

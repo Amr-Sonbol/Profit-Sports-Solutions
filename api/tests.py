@@ -1969,3 +1969,32 @@ class BellApiTests(TaskMessagesApiTests):
         self.assertEqual((item['kind'], item['opens']), ('task_message', {'screen': 'task', 'id': self.task.pk}))
         sender = self.supervisor_user.technician.full_name
         self.assertEqual(item['text'], f'New message from {sender}')  # who wrote it
+
+
+class TeamListPagesAndFiltersTests(TeamTaskApiTests):
+    """The app's All in the country: the website task list's filters, 30 at a time."""
+
+    def test_pages_of_thirty_and_older_apps_get_the_list(self):
+        for n in range(35):
+            Task.objects.create(
+                task_number=f'AE-{8000 + n}', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            )
+        token = self.token_for('supervisor1')
+        first = self.client.get('/api/tasks/?page=1', **self.auth(token)).json()
+        self.assertEqual((first['count'], len(first['results']), first['has_more']), (36, 30, True))
+        second = self.client.get('/api/tasks/?page=2', **self.auth(token)).json()
+        self.assertEqual((len(second['results']), second['has_more']), (6, False))
+        self.assertIsInstance(self.client.get('/api/tasks/', **self.auth(token)).json(), list)
+        no_lead = self.client.get('/api/tasks/?page=1&lead=none', **self.auth(token)).json()
+        self.assertEqual(no_lead['count'], 35)  # the website's "no technician" filter
+
+    def test_search_finds_a_task_by_its_technician(self):
+        token = self.token_for('supervisor1')
+        found = self.client.get('/api/tasks/?page=1&q=Tarek', **self.auth(token)).json()
+        self.assertEqual([t['id'] for t in found['results']], [self.task.pk])
+
+    def test_the_filter_choices(self):
+        choices = self.client.get('/api/tasks/filters/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertIn('blocked', [s['value'] for s in choices['statuses']])
+        self.assertIn('Tarek Tech', [t['label'] for t in choices['technicians']])

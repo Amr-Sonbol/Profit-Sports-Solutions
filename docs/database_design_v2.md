@@ -850,6 +850,16 @@ A hand count of one code at a warehouse — the opening stock when this starts (
 | created_by_id | FK → user | |
 | created_at | timestamptz | |
 
+### task_event_recipient
+Who an action on a task notifies, and whether they've seen it. Every `task_event` (the time moved, a step on site, the report submitted or approved, blocked, cancelled, reopened…) tells everyone on the task — the active lead and helpers, and the responsible supervisor — except whoever did it (`tasks.updates`, on the event being saved, after the commit): a row each here, shown in their bell (website and app) until they open the task, and a phone notification. Assignment changes and cancelling already have their own notification, so those get the bell entry only; a negligence flag tells no one.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| event_id | FK → task_event | |
+| technician_id | FK → technician | indexed with seen_at |
+| seen_at | timestamptz, nullable | set when they open the task |
+
 ### task_attachment
 Photos, videos and links. The supervisor attaches the customer's evidence at creation, before any report exists.
 

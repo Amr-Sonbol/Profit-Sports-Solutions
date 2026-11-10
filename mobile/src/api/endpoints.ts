@@ -197,8 +197,22 @@ export function fetchParts() {
 }
 
 /** Open tasks; with `search`, matches across every status (newest 50). */
-export function fetchTeamTasks(search = '') {
-  return apiRequest<TaskListItem[]>(search ? `/api/tasks/?q=${encodeURIComponent(search)}` : '/api/tasks/');
+/** The country's tasks, with the website task list's filters (status, lead=none, scheduled_from, …) and `q`. */
+export function fetchTeamTasks(search = '', filters: Record<string, string> = {}) {
+  const params = new URLSearchParams({ ...filters, ...(search ? { q: search } : {}) }).toString();
+  return apiRequest<TaskListItem[]>(params ? `/api/tasks/?${params}` : '/api/tasks/');
+}
+
+/** A page of the country's tasks (30), with the website task list's filters; how many in all, and whether there's more. */
+export function fetchTeamTasksPage(filters: Record<string, string>, page: number) {
+  const params = new URLSearchParams({ ...filters, page: String(page) }).toString();
+  return apiRequest<{ count: number; page: number; has_more: boolean; results: TaskListItem[] }>(`/api/tasks/?${params}`);
+}
+
+/** What the task filters offer: the website's status tabs, the country's technicians, the couriers. */
+export function fetchTaskFilterChoices() {
+  type Option = { value: string; label: string };
+  return apiRequest<{ statuses: Option[]; technicians: Option[]; shipping_companies: Option[] }>('/api/tasks/filters/');
 }
 
 export function fetchTeamTaskDetail(id: number) {

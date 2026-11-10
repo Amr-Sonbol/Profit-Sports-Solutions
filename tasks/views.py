@@ -59,7 +59,7 @@ from tasks.shipments import is_part_shipment, part_shipment_type
 from spots.hosts import portal_url, staff_url
 from tasks import answers
 from spots.media import signed_media_url
-from people.push import push_assigned, push_cancelled, push_in_their_language, push_rebooked, push_removed
+from people.push import push_assigned, push_cancelled, push_in_their_language, push_removed
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
@@ -732,10 +732,16 @@ def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
         asset__in=Asset.objects.filter(serial_no__icontains=text).values('pk'),
     ).values('task_id')
     by_product = TaskProduct.objects.filter(serial_number__icontains=text).values('task_id')
+    by_technician = TaskAssignment.objects.filter(
+        is_active=True, technician__full_name__icontains=text,
+    ).values('task_id')
+    by_request = CustomerTicket.objects.filter(ticket_number__icontains=text).values('task_id')
     ids = set()
     for condition in (
         Q(task_number__icontains=text), Q(pak_reference_number__icontains=text),
         Q(site__in=sites), Q(site__customer__in=customers), Q(pk__in=by_asset), Q(pk__in=by_product),
+        Q(pk__in=by_technician), Q(pk__in=by_request),
+        Q(site__contact_phone__icontains=text), Q(site__customer__contact_phone__icontains=text),
     ):
         ids.update(tasks.filter(condition).order_by('-reported_at').values_list('pk', flat=True)[:limit])
     return tasks.filter(pk__in=ids).order_by('-reported_at')[:limit]
@@ -903,6 +909,15 @@ def _task_message_recipients(task):
         ),
     )
     return recipients
+
+
+def read_task_updates(task, technician):
+    """Opening the task reads what happened to it (tasks.updates)."""
+    from tasks.models import TaskEventRecipient
+
+    TaskEventRecipient.objects.filter(
+        event__task=task, technician=technician, seen_at__isnull=True,
+    ).update(seen_at=timezone.now())
 
 
 def _post_task_message(request, task, text):
@@ -1573,6 +1588,74 @@ def dashboard(request):
     return render(request, 'tasks/dashboard.html', context)
 
 
+def filtered_tasks(params, technician, active_country, all_countries=False):
+    """The task list's filters, from its query string — the website's task
+    list (task_list) and the app's (api.views.TaskListView) alike: status
+    (open | all | one status), q (any of number, PAK, branch, customer,
+    serial, technician, request number, customer phone), task_id, site,
+    pak_reference, serial_number, customer / customer_name, technician,
+    supervisor, shipping_company, scheduled_from / scheduled_to, priority,
+    lead=none, scheduled=none, alarm=unscheduled. Newest first."""
+    tasks = _with_lead_prefetch(Task.objects.select_related('site__customer__country', 'task_type'))
+    if not all_countries:
+        tasks = tasks.filter(site__customer__country=active_country)
+    status = params.get('status', 'open')
+    if status == 'open':
+        tasks = tasks.filter(status__in=OPEN_STATUSES)
+    elif status != 'all':
+        tasks = tasks.filter(status=status)
+    text = params.get('q', '').strip()
+    if text:
+        tasks = search_tasks(tasks, text, limit=None)
+    if params.get('alarm') == 'unscheduled':
+        from tasks.alarms import overdue_unscheduled_tasks
+        tasks = tasks.filter(pk__in=[task.pk for task in overdue_unscheduled_tasks(active_country, technician)])
+    task_id = params.get('task_id', '').strip()
+    if task_id:
+        tasks = tasks.filter(task_number__icontains=task_id)
+    site = params.get('site', '').strip()
+    if site:
+        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
+    pak_reference = params.get('pak_reference', '').strip()
+    if pak_reference:
+        tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
+    serial_number = params.get('serial_number', '').strip()
+    if serial_number:
+        tasks = tasks.filter(
+            Q(task_assets__asset__serial_no__icontains=serial_number) | Q(products__serial_number__icontains=serial_number)
+        ).distinct()
+    customer_id = params.get('customer', '')
+    customer_name = params.get('customer_name', '').strip()
+    if customer_id:
+        tasks = tasks.filter(site__customer_id=customer_id)
+    elif customer_name:
+        tasks = tasks.filter(site__customer__name__icontains=customer_name)
+    technician_id = params.get('technician', '')
+    if technician_id:
+        tasks = tasks.filter(assignments__technician_id=technician_id, assignments__is_active=True).distinct()
+    shipping_company = params.get('shipping_company', '')
+    if shipping_company:
+        tasks = tasks.filter(shipping_company=shipping_company)
+    scheduled_from = parse_date(params.get('scheduled_from', '') or '')
+    if scheduled_from:
+        tasks = tasks.filter(scheduled_for__date__gte=scheduled_from)
+    scheduled_to = parse_date(params.get('scheduled_to', '') or '')
+    if scheduled_to:
+        tasks = tasks.filter(scheduled_for__date__lte=scheduled_to)
+    priority = params.get('priority', '')
+    if priority in Task.Priority.values:
+        tasks = tasks.filter(priority=priority)
+    if params.get('lead') == 'none':
+        tasks = tasks.exclude(HAS_ACTIVE_LEAD)
+    if params.get('scheduled') == 'none':
+        tasks = tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True)
+    supervisor_id = params.get('supervisor', '')
+    if supervisor_id.isdigit():
+        tasks = tasks.filter(responsible_supervisor_id=supervisor_id)
+    # Newest first: the latest opened task at the top.
+    return tasks.order_by('-reported_at', '-pk')
+
+
 @login_required
 def task_list(request):
     """Tasks in the active country, or — for the manager tier, with
@@ -1607,65 +1690,15 @@ def task_list(request):
     if not supervisor_id.isdigit():
         supervisor_id = ''
 
-    tasks = _with_lead_prefetch(Task.objects.select_related('site__customer__country', 'task_type'))
     customers = Customer.objects.filter(is_active=True)
     technicians = Technician.objects.filter(is_active=True)
     if not all_countries:
-        tasks = tasks.filter(site__customer__country=active_country)
         customers = customers.filter(country=active_country)
         technicians = technicians.filter(country=active_country)
-
-    if status == 'open':
-        tasks = tasks.filter(status__in=OPEN_STATUSES)
-    elif status != 'all':
-        tasks = tasks.filter(status=status)
-
-    if overdue_scheduling:
-        from tasks.alarms import overdue_unscheduled_tasks
-        tasks = tasks.filter(pk__in=[task.pk for task in overdue_unscheduled_tasks(active_country, technician)])
-    if task_id:
-        tasks = tasks.filter(task_number__icontains=task_id)
-    if site:
-        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
-    if pak_reference:
-        tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
-    if serial_number:
-        tasks = tasks.filter(
-            Q(task_assets__asset__serial_no__icontains=serial_number)
-            | Q(products__serial_number__icontains=serial_number)
-        ).distinct()
-
-    if customer_id:
-        tasks = tasks.filter(site__customer_id=customer_id)
-        if not customer_name:
-            customer_name = Customer.objects.filter(pk=customer_id).values_list('name', flat=True).first() or ''
-    elif customer_name:
-        tasks = tasks.filter(site__customer__name__icontains=customer_name)
-
-    if technician_id:
-        tasks = tasks.filter(
-            assignments__technician_id=technician_id, assignments__is_active=True,
-        ).distinct()
-
-    if shipping_company:
-        tasks = tasks.filter(shipping_company=shipping_company)
-
-    if scheduled_from:
-        tasks = tasks.filter(scheduled_for__date__gte=scheduled_from)
-    if scheduled_to:
-        tasks = tasks.filter(scheduled_for__date__lte=scheduled_to)
-
-    if priority:
-        tasks = tasks.filter(priority=priority)
-    if unassigned:
-        tasks = tasks.exclude(HAS_ACTIVE_LEAD)
-    if unscheduled:
-        tasks = tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True)
-    if supervisor_id:
-        tasks = tasks.filter(responsible_supervisor_id=supervisor_id)
-
-    # Newest first: the latest opened task at the top.
-    tasks = tasks.order_by('-reported_at', '-pk')
+    if customer_id and not customer_name:
+        customer_name = Customer.objects.filter(pk=customer_id).values_list('name', flat=True).first() or ''
+    # The filters themselves: shared with the app (api.views.TaskListView).
+    tasks = filtered_tasks(request.GET, technician, active_country, all_countries)
 
     paginator = Paginator(tasks, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -1949,8 +1982,7 @@ def rebook_visit(task, user, scheduled_for, note):
             note=note or _('New visit after the work stopped on site.'),
         )
         notify_customer.visit_booked(task)
-    if lead:
-        push_rebooked(lead.technician, task)
+    # The lead (and everyone on the task) hears of the new time from its history entry (tasks.updates).
     if task.site.effective_contact_email and NotificationSettings.load().auto_notify_on_reschedule:
         _send_schedule_notification(task)
         task.schedule_notified_at = timezone.now()
@@ -1997,6 +2029,7 @@ def task_detail(request, pk):
         TaskMessageRecipient.objects.filter(
             message__task=task, technician=requesting_technician, seen_at__isnull=True,
         ).update(seen_at=timezone.now())
+        read_task_updates(task, requesting_technician)
 
     message_form = TaskMessageForm()
     if request.method == 'POST' and request.POST.get('action') == 'add_message':
@@ -6403,6 +6436,7 @@ def my_task_detail(request, pk):
         TaskMessageRecipient.objects.filter(
             message__task=task, technician=technician, seen_at__isnull=True,
         ).update(seen_at=timezone.now())
+        read_task_updates(task, technician)
 
     upload_form = TaskAttachmentUploadForm()
     block_form = BlockTaskForm()

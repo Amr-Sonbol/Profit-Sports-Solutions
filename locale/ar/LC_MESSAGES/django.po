@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 01:04+0000\n"
+"POT-Creation-Date: 2026-11-10 01:28+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -7023,6 +7023,10 @@ msgstr "العلامة التجارية"
 msgid "brands"
 msgstr "العلامات التجارية"
 
+#, python-format
+msgid "by %(name)s"
+msgstr "بواسطة %(name)s"
+
 msgid "calculated at check-in from the site location at that time"
 msgstr "يُحسب عند تسجيل النقرة استناداً إلى موقع الموقع في ذلك الوقت"
 
@@ -7279,6 +7283,9 @@ msgstr "المتوقع %(hours)s س"
 
 msgid "estimated hours"
 msgstr "الساعات المقدرة"
+
+msgid "event"
+msgstr "حدث"
 
 msgid "event type"
 msgstr "نوع الحدث"
@@ -7972,6 +7979,12 @@ msgstr "نوع المهمة"
 
 msgid "task types"
 msgstr "أنواع المهام"
+
+msgid "task update recipient"
+msgstr "مستلم تحديث المهمة"
+
+msgid "task update recipients"
+msgstr "مستلمو تحديثات المهمة"
 
 msgid "tasks"
 msgstr "المهام"

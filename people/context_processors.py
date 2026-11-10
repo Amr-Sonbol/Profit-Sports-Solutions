@@ -129,6 +129,21 @@ def notification_bell(request):
                     login__in=list(locked), is_active=True,
                 )
             ]
+    # What happened to tasks they're on (tasks.updates): theirs until they open the task.
+    from tasks.models import TaskEventRecipient
+    from tasks.updates import describe
+    unseen_updates = TaskEventRecipient.objects.filter(
+        technician=technician, seen_at__isnull=True, event__task__site__customer__country=country,
+    ).select_related('event__task__site', 'event__actor__technician')
+    items += [
+        {
+            'kind': 'task_update', 'created_at': recipient.event.occurred_at, 'task': recipient.event.task,
+            'what': describe(recipient.event),
+            'sender': getattr(getattr(recipient.event.actor, 'technician', None), 'full_name', '')
+            if recipient.event.actor_id else '',
+        }
+        for recipient in unseen_updates
+    ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
     ).select_related('message__task', 'message__sent_by__technician')

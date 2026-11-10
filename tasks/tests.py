@@ -7797,7 +7797,8 @@ class RebookStoppedTaskTests(TaskTestCase):
     def test_manager_books_a_new_visit_and_the_lead_is_told(self):
         self.client.login(username='manager1', password='pass12345')
         self.assertContains(self.client.get(self.url), 'Gym closed')
-        with patch('tasks.views.push_rebooked') as push:
+        # The lead hears of it from the new visit's history entry (tasks.updates).
+        with patch('tasks.updates.push_in_their_language') as push, self.captureOnCommitCallbacks(execute=True):
             self._rebook(self.new_time, 'Customer confirmed it reopens')
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, Task.Status.ASSIGNED)
@@ -7805,7 +7806,7 @@ class RebookStoppedTaskTests(TaskTestCase):
         self.assertEqual(self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).get().note,
                          'Customer confirmed it reopens')
         self.assertTrue(self.task.events.filter(event_type=TaskEvent.EventType.BLOCKED).exists())
-        push.assert_called_once_with(self.technician, self.task)
+        self.assertIn(self.technician, [call.args[0] for call in push.call_args_list])
 
     def test_a_time_in_the_past_is_refused(self):
         self.client.login(username='manager1', password='pass12345')
@@ -9618,3 +9619,43 @@ class ScheduleChangeBellTests(TaskTestCase):
         )
         self.client.login(username='supervisor1', password='pass12345')
         self.assertNotContains(self.client.get('/tasks/'), 'Change of visit time requested')
+
+
+class TaskUpdatesTellTheTeamTests(TaskTestCase):
+    """Every action on a task tells the people on it, except whoever did it (tasks.updates)."""
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0960', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            responsible_supervisor=self.supervisor_user.technician,
+        )
+        TaskAssignment.objects.create(task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now())
+
+    def _record(self, event_type, actor):
+        with self.captureOnCommitCallbacks(execute=True):
+            return TaskEvent.objects.create(task=self.task, event_type=event_type, occurred_at=timezone.now(), actor=actor)
+
+    def test_the_lead_arriving_tells_the_supervisor_not_the_lead(self):
+        from unittest.mock import patch
+        from tasks.models import TaskEventRecipient
+        with patch('tasks.updates.push_in_their_language') as push:
+            self._record(TaskEvent.EventType.ARRIVED, self.tech_user)
+        told = set(TaskEventRecipient.objects.values_list('technician__user__username', flat=True))
+        self.assertEqual(told, {'supervisor1'})
+        self.assertEqual(push.call_count, 1)
+
+    def test_it_waits_in_the_bell_until_the_task_is_opened(self):
+        self._record(TaskEvent.EventType.RESCHEDULED, self.supervisor_user)
+        self.client.login(username='tech1', password='pass12345')
+        kinds = lambda: [i['kind'] for i in self.client.get('/tasks/my-week/').context.get('unseen_notifications', [])]
+        self.assertIn('task_update', kinds())
+        self.client.get(f'/tasks/my/{self.task.pk}/')
+        self.assertNotIn('task_update', kinds())
+
+    def test_a_negligence_flag_tells_no_one(self):
+        from tasks.models import TaskEventRecipient
+        self._record(TaskEvent.EventType.NEGLIGENCE, self.supervisor_user)
+        self.assertFalse(TaskEventRecipient.objects.exists())

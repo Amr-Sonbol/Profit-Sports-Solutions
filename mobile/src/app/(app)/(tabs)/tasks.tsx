@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FlatList, RefreshControl, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyTasks, fetchMyToday, fetchTeamTasks } from '@/api/endpoints';
+import { fetchMyTasks, fetchMyToday } from '@/api/endpoints';
+import { AllTasks } from '@/components/all-tasks';
 import { BellButton } from '@/components/bell-button';
-import { StatusBadge } from '@/components/status-badge';
+import { TaskCard } from '@/components/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ToPlan } from '@/components/to-plan';
@@ -17,36 +18,22 @@ import type { PlanItem, TaskListItem } from '@/types';
 
 /**
  * My tasks, apart from the schedule: a supervisor's "To plan" first (no day
- * or no technician yet), then every open task of mine, newest received first,
- * each with its status in colour. The supervisor's home tab. Whoever sees the
- * country's tasks (a supervisor: he's responsible for them) can switch to All —
- * every open task in the country, with search; a task opens its full screen.
+ * or no technician yet), then every open task of mine, newest received first.
+ * The supervisor's home tab. Whoever sees the country's tasks (a supervisor:
+ * he's responsible for them) can switch to All in the country — the website
+ * task list's search and filters (components/all-tasks).
  */
-// Done: the lead is who did it.
-const DONE = ['pending_supervisor_review', 'completed', 'closed'];
-
 export default function TasksScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const { me } = useSession();
+  const canSeeAll = me?.permissions?.includes('view_tasks') ?? false;
+  const [scope, setScope] = useState<'mine' | 'all'>('mine');
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
   const [toPlan, setToPlan] = useState<PlanItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState('');
-  const { me } = useSession();
-  const canSeeAll = me?.permissions?.includes('view_tasks') ?? false;
-  const [scope, setScope] = useState<'mine' | 'all'>('mine');
-  const [allTasks, setAllTasks] = useState<TaskListItem[] | null>(null);
-  const [query, setQuery] = useState('');
-
-  const loadAll = useCallback(async (search: string) => {
-    try {
-      setAllTasks(await fetchTeamTasks(search));
-      setError('');
-    } catch {
-      setError('Could not load the tasks.');
-    }
-  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -63,26 +50,9 @@ export default function TasksScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  const onRefresh = async () => {
-    setIsRefreshing(true);
-    await (scope === 'all' ? loadAll(query) : load());
-    setIsRefreshing(false);
-  };
-
-  const showAll = (next: 'mine' | 'all') => {
-    setScope(next);
-    if (next === 'all' && allTasks === null) {
-      loadAll('');
-    }
-  };
-
-  const list = scope === 'all' ? allTasks : tasks;
+  useFocusEffect(useCallback(() => {
+    load();
+  }, [load]));
 
   return (
     <ThemedView style={styles.container}>
@@ -101,12 +71,9 @@ export default function TasksScreen() {
           <ThemedView style={styles.scopes}>
             {(['mine', 'all'] as const).map((option) => (
               <TouchableOpacity
-                key={option}
-                style={[
-                  styles.scope, { borderColor: theme.backgroundSelected },
-                  scope === option && { backgroundColor: theme.primary, borderColor: theme.primary },
-                ]}
-                onPress={() => showAll(option)}
+                key={option} onPress={() => setScope(option)}
+                style={[styles.scope, { borderColor: theme.backgroundSelected },
+                  scope === option && { backgroundColor: theme.primary, borderColor: theme.primary }]}
               >
                 <ThemedText type="small" style={scope === option ? { color: theme.onPrimary } : undefined}>
                   {option === 'mine' ? 'Mine' : 'All in the country'}
@@ -115,69 +82,29 @@ export default function TasksScreen() {
             ))}
           </ThemedView>
         ) : null}
-        <FlatList
-          data={list ?? []}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
-          ListHeaderComponent={scope === 'all' ? (
-            <TextInput
-              style={[styles.search, { color: theme.text, borderColor: theme.backgroundSelected }]}
-              value={query} onChangeText={setQuery} placeholder="Search: number, customer, branch, serial"
-              placeholderTextColor={theme.textSecondary} returnKeyType="search"
-              onSubmitEditing={() => loadAll(query.trim())}
-            />
-          ) : (
-            <>
-              <ToPlan items={toPlan} />
-              <ThemedText type="smallBold">All my open tasks · newest first</ThemedText>
-            </>
-          )}
-          ListEmptyComponent={
-            list !== null ? (
-              <ThemedText themeColor="textSecondary">
-                {scope === 'all' ? 'No open tasks found.' : 'You have no open tasks assigned.'}
-              </ThemedText>
-            ) : undefined
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-              // Mine: my own screen (my steps, my report); All: the task's full screen.
-              onPress={() => router.push(scope === 'all' ? `/team-task/${item.id}` : `/task/${item.id}`)}
-            >
-              <ThemedView style={styles.row}>
-                <ThemedText type="smallBold">{item.task_number}</ThemedText>
-                <StatusBadge status={item.status} label={item.status_display} />
-              </ThemedView>
-              <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
-              {item.unread_messages ? (
-                <ThemedView style={[styles.unread, { backgroundColor: theme.primary }]}>
-                  <ThemedText type="small" style={{ color: theme.onPrimary }}>
-                    {item.unread_messages === 1 ? '1 new message' : `${item.unread_messages} new messages`}
-                  </ThemedText>
-                </ThemedView>
-              ) : null}
-              {item.lead_name !== undefined ? (
-                item.lead_name ? (
-                  <ThemedText type="small">
-                    {DONE.includes(item.status) ? 'Done by' : 'Lead'}: {item.lead_name}
-                  </ThemedText>
-                ) : <ThemedText type="small" themeColor="danger">No technician yet</ThemedText>
-              ) : null}
-              <ThemedView style={styles.row}>
-                <ThemedText themeColor="textSecondary" type="small">
-                  {item.scheduled_for
-                    ? new Date(item.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                    : 'No day yet'}
-                </ThemedText>
-                <ThemedText themeColor={item.priority === 'high' ? 'danger' : 'textSecondary'} type="small">
-                  {item.priority_display}
-                </ThemedText>
-              </ThemedView>
-            </TouchableOpacity>
-          )}
-        />
+        {scope === 'all' ? <AllTasks /> : (
+          <FlatList
+            data={tasks ?? []}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={async () => {
+              setIsRefreshing(true);
+              await load();
+              setIsRefreshing(false);
+            }} />}
+            ListHeaderComponent={(
+              <>
+                <ToPlan items={toPlan} />
+                <ThemedText type="smallBold">All my open tasks · newest first</ThemedText>
+              </>
+            )}
+            ListEmptyComponent={tasks !== null ? (
+              <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText>
+            ) : undefined}
+            // My own screen (my steps, my report); "Plan this task" there opens the full one.
+            renderItem={({ item }) => <TaskCard item={item} onPress={() => router.push(`/task/${item.id}`)} />}
+          />
+        )}
       </SafeAreaView>
     </ThemedView>
   );
@@ -190,10 +117,6 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingEnd: Spacing.three },
   notice: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
-  card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' },
-  unread: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 2 },
   scopes: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   scope: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
-  search: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, marginBottom: Spacing.one },
 });
