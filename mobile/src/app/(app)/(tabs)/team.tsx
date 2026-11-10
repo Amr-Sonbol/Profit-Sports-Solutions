@@ -132,6 +132,13 @@ export default function TeamTasksScreen() {
               >
                 <ThemedText type="smallBold">{item.task_number}</ThemedText>
                 <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
+                {item.unread_messages ? (
+                  <ThemedView style={[styles.unread, { backgroundColor: theme.primary }]}>
+                    <ThemedText type="small" style={{ color: theme.onPrimary }}>
+                      {item.unread_messages === 1 ? '1 new message' : `${item.unread_messages} new messages`}
+                    </ThemedText>
+                  </ThemedView>
+                ) : null}
                 {item.lead_name !== undefined ? (
                   item.lead_name
                     ? <ThemedText type="small">{['pending_supervisor_review', 'completed', 'closed'].includes(item.status) ? 'Done by' : 'Lead'}: {item.lead_name}</ThemedText>
@@ -153,6 +160,7 @@ export default function TeamTasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  unread: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 2 },
   headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingEnd: Spacing.three, backgroundColor: 'transparent',

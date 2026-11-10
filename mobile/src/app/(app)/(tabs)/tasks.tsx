@@ -147,6 +147,13 @@ export default function TasksScreen() {
                 <StatusBadge status={item.status} label={item.status_display} />
               </ThemedView>
               <ThemedText>{item.customer_name} — {item.site_name}</ThemedText>
+              {item.unread_messages ? (
+                <ThemedView style={[styles.unread, { backgroundColor: theme.primary }]}>
+                  <ThemedText type="small" style={{ color: theme.onPrimary }}>
+                    {item.unread_messages === 1 ? '1 new message' : `${item.unread_messages} new messages`}
+                  </ThemedText>
+                </ThemedView>
+              ) : null}
               {item.lead_name !== undefined ? (
                 item.lead_name ? (
                   <ThemedText type="small">
@@ -180,6 +187,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'transparent' },
+  unread: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: Spacing.two, paddingVertical: 2 },
   scopes: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   scope: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
   search: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, marginBottom: Spacing.one },

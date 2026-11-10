@@ -14,13 +14,19 @@ class TaskListSerializer(serializers.ModelSerializer):
     priority_display = serializers.CharField(source='get_priority_display')
     # Who it's assigned to — or, once done, who did it: the lead.
     lead_name = serializers.SerializerMethodField()
+    # Team messages this person hasn't read yet (context "unread": {task id: count}).
+    unread_messages = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             'id', 'task_number', 'site_name', 'customer_name', 'status', 'status_display',
             'priority', 'priority_display', 'scheduled_for', 'promised_at', 'reported_at', 'lead_name',
+            'unread_messages',
         ]
+
+    def get_unread_messages(self, obj):
+        return self.context.get('unread', {}).get(obj.pk, 0)
 
     def get_lead_name(self, obj):
         leads = getattr(obj, 'lead_assignments', None)  # prefetched for the team list (_with_lead_prefetch)

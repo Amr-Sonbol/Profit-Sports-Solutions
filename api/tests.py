@@ -1941,3 +1941,17 @@ class TellTheCustomerTheTimeTests(TeamTaskApiTests):
         )
         self.assertFalse(offered())
         self.assertEqual(self._post(token, 'action', {'action': 'notify_schedule'}).status_code, 400)
+
+
+class UnreadMessagesOnListsTests(TaskMessagesApiTests):
+    def test_the_list_counts_new_messages_until_read(self):
+        tech, supervisor = self.token_for('tech1'), self.token_for('supervisor1')
+        self.task.responsible_supervisor = self.supervisor_user.technician
+        self.task.save(update_fields=['responsible_supervisor'])
+        url = f'/api/tasks/{self.task.pk}/messages/'
+        self.client.post(url, json.dumps({'message': 'Bring the belt.'}), content_type='application/json', **self.auth(supervisor))
+        mine = {t['id']: t for t in self.client.get('/api/my-tasks/', **self.auth(tech)).json()}
+        self.assertEqual(mine[self.task.pk]['unread_messages'], 1)
+        self.client.get(url, **self.auth(tech))  # reading the thread
+        mine = {t['id']: t for t in self.client.get('/api/my-tasks/', **self.auth(tech)).json()}
+        self.assertEqual(mine[self.task.pk]['unread_messages'], 0)

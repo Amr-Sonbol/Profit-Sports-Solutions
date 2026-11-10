@@ -35,6 +35,8 @@ export interface TaskListItem {
   site_name: string;
   customer_name: string;
   /** Who it's assigned to (the lead) — or, once done, who did it. Older servers: absent. */
+  /** Team messages I haven't read yet. Older servers: absent. */
+  unread_messages?: number;
   lead_name?: string;
   status: string;
   status_display: string;

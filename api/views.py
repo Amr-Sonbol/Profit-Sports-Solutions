@@ -1080,6 +1080,15 @@ class TeamProgressView(APIView):
         })
 
 
+def _unread_messages(technician):
+    """{task id: how many team messages this person hasn't read}, for the task lists."""
+    from django.db.models import Count
+    return dict(
+        TaskMessageRecipient.objects.filter(technician=technician, seen_at__isnull=True)
+        .values_list('message__task').annotate(n=Count('pk')).values_list('message__task', 'n')
+    )
+
+
 class MyTaskListView(APIView):
     """Every task this technician is actively assigned to, lead or helper
     — same pool as the my_week board, without the week-boundary filter
@@ -1095,7 +1104,7 @@ class MyTaskListView(APIView):
         ).select_related('task__site__customer').prefetch_related('task__assignments__technician')
         # Newest received first (when it was given to them): Today shows the day in time order.
         tasks = [a.task for a in sorted(assignments, key=lambda a: a.assigned_at, reverse=True)]
-        return Response(TaskListSerializer(tasks, many=True).data)
+        return Response(TaskListSerializer(tasks, many=True, context={'unread': _unread_messages(technician)}).data)
 
 
 class TaskListView(APIView):
@@ -1117,7 +1126,9 @@ class TaskListView(APIView):
             tasks = search_tasks(tasks, text)
         else:
             tasks = tasks.filter(status__in=OPEN_STATUSES)
-        return Response(TaskListSerializer(tasks, many=True).data)
+        return Response(TaskListSerializer(
+            tasks, many=True, context={'unread': _unread_messages(request.user.technician)},
+        ).data)
 
 
 def _get_my_assignment(request, pk):
