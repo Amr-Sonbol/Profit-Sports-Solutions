@@ -1372,6 +1372,8 @@ class TaskMessageTests(TaskTestCase):
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
             responsible_supervisor=self.supervisor_user.technician, pak_reference_number='PAK-42',
+            # Stock-related work, which the Warehouse Manager sees (docs/access_rules.md).
+            task_type=TaskType.objects.create(code='inst-msg', name='Installation', category='installation'),
         )
         TaskAssignment.objects.create(
             task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
@@ -1656,14 +1658,15 @@ class TaskListTests(TaskTestCase):
         )
         self.client.login(username='manager1', password='pass12345')
 
-    def test_manager_can_list_every_country(self):
+    def test_a_manager_lists_their_country_and_a_project_manager_every_country(self):
         self._make_task('AE-0001')
         self._make_other_country_task()
         self._login_manager()
-
-        response = self.client.get('/tasks/', {'status': 'all'})
+        # A Manager is one per country (docs/access_rules.md): ?country=all changes nothing.
+        response = self.client.get('/tasks/', {'status': 'all', 'country': 'all'})
         self.assertEqual([t.task_number for t in response.context['page_obj']], ['AE-0001'])
 
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.PROJECT_MANAGER)
         response = self.client.get('/tasks/', {'status': 'all', 'country': 'all'})
         self.assertEqual(
             sorted(t.task_number for t in response.context['page_obj']), ['AE-0001', 'EG-0001'],
@@ -2318,7 +2321,8 @@ class TicketReviewTests(TaskTestCase):
         self.client.login(username='manager1', password='pass12345')
 
         self.assertEqual(self.client.get(self.url).status_code, 403)
-        self.assertEqual(self.client.get(f'/tasks/tickets/{other_ticket.pk}/').status_code, 403)
+        # Another country's request: not even found for a Manager, who has one country.
+        self.assertIn(self.client.get(f'/tasks/tickets/{other_ticket.pk}/').status_code, (403, 404))
 
     def test_support_manager_converts_other_country_ticket_without_switching(self):
         other_ticket = self._make_other_country_ticket()
@@ -5304,7 +5308,7 @@ class SkillListTests(TaskTestCase):
         self.manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Maya Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+            language='en', role=Technician.Role.PROJECT_MANAGER, employment_type='staff',  # every country (docs/access_rules.md)
         )
 
     def test_supervisor_gets_403(self):
@@ -5529,7 +5533,7 @@ class MonthlyReportTests(TaskTestCase):
         self.manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Mona Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+            language='en', role=Technician.Role.PROJECT_MANAGER, employment_type='staff',  # every country (docs/access_rules.md)
         )
         self.this_month = timezone.now().replace(day=15)
         self.last_month = (self.this_month.replace(day=1) - timedelta(days=1)).replace(day=15)
@@ -5614,7 +5618,7 @@ class ActiveCountryTests(TaskTestCase):
         self.manager_user = User.objects.create_user('manager1', password='pass12345')
         self.manager = Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Mona Manager',
-            language='en', role=Technician.Role.MANAGER, employment_type='staff',
+            language='en', role=Technician.Role.PROJECT_MANAGER, employment_type='staff',  # every country (docs/access_rules.md)
         )
         self.admin_user = User.objects.create_user('admin1', password='pass12345')
         Technician.objects.create(
@@ -5720,7 +5724,9 @@ class HomeRedirectTests(TaskTestCase):
     def test_manager_sees_manager_pages_but_not_admin_ones(self):
         self._make_staff('manager1', Technician.Role.MANAGER)
         urls = self._tile_urls(self.client.get('/'))
-        self.assertIn('/tasks/countries/', urls)
+        # Company-wide pages are the every-country roles' (docs/access_rules.md); a Manager has his country.
+        self.assertNotIn('/tasks/countries/', urls)
+        self.assertIn('/tasks/technicians/accounts/', urls)
         # Their own schedule and the team's progress; not the field team's own progress page.
         self.assertIn('/tasks/my-week/', urls)
         self.assertIn('/tasks/technicians/progress/', urls)
@@ -9287,7 +9293,7 @@ class EquipmentChainTests(TaskTestCase):
         self.manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=self.manager_user, country=self.country, full_name='Dana Manager', language='en',
-            role=Technician.Role.MANAGER, employment_type='staff',
+            role=Technician.Role.PROJECT_MANAGER, employment_type='staff',  # every country (docs/access_rules.md)
         )
 
     def _task(self, number, task_type):

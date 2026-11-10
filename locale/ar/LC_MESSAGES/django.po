@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 01:28+0000\n"
+"POT-Creation-Date: 2026-11-10 02:14+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1259,6 +1259,9 @@ msgstr "تغيير كلمة المرور"
 
 msgid "Changed"
 msgstr "تم التعديل"
+
+msgid "Changed instead of the owner"
+msgstr "تغيير بدلاً من المسؤول"
 
 msgid "Chargeable"
 msgstr "مدفوعة"
@@ -2791,6 +2794,10 @@ msgstr "تاريخ التركيب"
 
 msgid "Instead"
 msgstr "بدلًا منه"
+
+#, python-format
+msgid "Instead of %(name)s"
+msgstr "بدلاً من %(name)s"
 
 msgid "Instead:"
 msgstr "بدلًا من:"
@@ -4360,6 +4367,9 @@ msgstr "التقدم متأخر عن هدف التسعين يوماً. يرجى 
 #, python-format
 msgid "Progress — %(name)s"
 msgstr "التقدّم — %(name)s"
+
+msgid "Project Manager"
+msgstr "مدير المشاريع"
 
 msgid "Promised"
 msgstr "الموعد الموعود"

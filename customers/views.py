@@ -20,7 +20,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
-from people.permissions import get_active_country, require_admin, require_manager, require_permission, scoped_or_404
+from people.permissions import (
+    get_active_country, require_admin, require_all_countries, require_manager, require_permission, scoped_or_404,
+)
 from reference.models import Country
 from tasks.forms import ChangePasswordForm, CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
 from tasks.models import CustomerTicket, CustomerTicketAttachment, Task, TicketMachine, TicketNotification
@@ -106,7 +108,7 @@ def all_customers(request):
     the same customer_detail/edit screens, which allow manager-tier
     cross-country access for exactly this reason.
     """
-    require_manager(request)
+    require_all_countries(request)
 
     search = request.GET.get('q', '').strip()
     customers = Customer.objects.filter(is_active=True).select_related('country').prefetch_related('sites')

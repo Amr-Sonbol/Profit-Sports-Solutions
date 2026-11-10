@@ -44,13 +44,24 @@ def get_active_country(request):
     chosen_in_app = getattr(request, 'api_active_country', None)
     if chosen_in_app is not None:
         return chosen_in_app
-    if technician.is_manager_tier:
+    if technician.reaches_all_countries:
         active_id = request.session.get(ACTIVE_COUNTRY_SESSION_KEY)
         if active_id:
             country = Country.objects.filter(pk=active_id).first()
             if country is not None:
                 return country
     return technician.country
+
+
+def require_all_countries(request):
+    """The every-country screens (all-countries boards, switching country, the
+    company-wide report, the shared lists): the Project, Technical Support and
+    Operations Managers and Admin — not a Manager, who has one country
+    (docs/access_rules.md)."""
+    technician = getattr(request.user, 'technician', None)
+    if technician is None or not technician.reaches_all_countries:
+        raise PermissionDenied
+    return technician
 
 
 def require_manager(request):
@@ -66,6 +77,18 @@ def require_manager(request):
     return technician
 
 
+# The work that touches the warehouse — all a Warehouse Manager sees of tasks (docs/access_rules.md).
+STOCK_TASK_CATEGORIES = ('part_shipment', 'receiving', 'loading', 'installation')
+
+
+def tasks_for_role(technician, tasks):
+    """A task list as this role sees it: a Warehouse Manager, only stock-related
+    tasks; everyone else, as their country (or every country) allows."""
+    if technician.role == technician.Role.WAREHOUSE_MANAGER:
+        return tasks.filter(task_type__category__in=STOCK_TASK_CATEGORIES)
+    return tasks
+
+
 def scoped_or_404(queryset, pk, requesting_technician, active_country, country_lookup):
     """A manager can open any task, technician, or customer regardless of
     their own active country — the point of the all-countries task list
@@ -75,8 +98,10 @@ def scoped_or_404(queryset, pk, requesting_technician, active_country, country_l
     before. Shared across apps (tasks, customers) rather than duplicated,
     since the rule is identical regardless of what's being looked up.
     """
-    if not requesting_technician.is_manager_tier:
+    if not requesting_technician.reaches_all_countries:
         queryset = queryset.filter(**{country_lookup: active_country})
+    if queryset.model._meta.label == 'tasks.Task':
+        queryset = tasks_for_role(requesting_technician, queryset)
     return get_object_or_404(queryset, pk=pk)
 
 

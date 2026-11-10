@@ -1014,6 +1014,8 @@ class TaskEvent(models.Model):
         # A part shipment's two steps (tasks.shipments).
         PARTS_READY = 'parts_ready', _('Parts ready to ship')
         SHIPPED = 'shipped', _('Shipped')
+        # Someone changed it instead of its owner, while away (docs/access_rules.md).
+        STEPPED_IN = 'stepped_in', _('Changed instead of the owner')
 
     task = models.ForeignKey(
         Task, on_delete=models.CASCADE, related_name='events',

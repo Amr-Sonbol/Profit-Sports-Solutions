@@ -126,7 +126,7 @@ def _me_payload(user, request=None):
         'countries': [
             {'value': str(country.pk), 'label': country.display_name}
             for country in Country.objects.filter(is_active=True).order_by('name')
-        ] if technician.is_manager_tier else [],
+        ] if technician.reaches_all_countries else [],
         'home_country_id': str(technician.country_id),
         'language_choices': [{'value': value, 'label': str(label)} for value, label in technician.Language.choices],
         # Still on a temporary password: the app shows only its "choose
@@ -659,7 +659,7 @@ class DashboardView(APIView):
         viewer = require_role_permission_or_403(request, RolePermission.Permission.VIEW_DASHBOARD)
         country = get_active_country(request) or viewer.country
         summary = home_summary(request, viewer)
-        technicians, tasks, stats = dashboard_overview(country)
+        technicians, tasks, stats = dashboard_overview(country, viewer)
         follow_ups = team_map_data(country)['attention'] if has_role_permission(
             request, RolePermission.Permission.VIEW_TECHNICIANS,
         ) else []
@@ -1890,6 +1890,7 @@ class TaskManageView(APIView):
     def post(self, request, pk):
         task = _get_team_task(request, pk)
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in (docs/access_rules.md)
         action = request.data.get('action')
         note = {'note': request.data.get('note', '')}
         if action == 'cancel':
@@ -2180,6 +2181,7 @@ class TaskActionView(APIView):
                 )
         elif action in ('approve_schedule_change', 'deny_schedule_change'):
             require_manager(request)
+            _require_task_owner(request, task)
             change_request = get_object_or_404(
                 ScheduleChangeRequest, pk=data.get('request_id'), task=task,
                 status=ScheduleChangeRequest.Status.PENDING,
@@ -2190,6 +2192,7 @@ class TaskActionView(APIView):
                 deny_schedule_change(task, change_request, request.user, data.get('note', ''))
         elif action == 'rebook':
             require_manager(request)
+            _require_task_owner(request, task)
             if task.status != Task.Status.BLOCKED:
                 error = _('Only a task stopped on site can be given a new visit here.')
             else:

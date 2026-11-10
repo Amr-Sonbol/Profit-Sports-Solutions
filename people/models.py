@@ -51,6 +51,8 @@ class Technician(models.Model):
         COUNTRY_SUPPORT = 'country_support', _('Country Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
         OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
+        # Like a Manager, in every country; no customer requests (docs/access_rules.md).
+        PROJECT_MANAGER = 'project_manager', _('Project Manager')
         ADMIN = 'admin', _('Admin')
 
     class EmploymentType(models.TextChoices):
@@ -157,7 +159,19 @@ class Technician(models.Model):
         """
         return self.role in (
             self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER,
         )
+
+    @property
+    def reaches_all_countries(self):
+        """Who works across every country (docs/access_rules.md): another
+        country's tasks, customers and people, the all-countries boards, the
+        company-wide report and the shared lists (brands, countries, skills).
+        A Manager is one per country, so stays in their own."""
+        return self.role in (
+            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+        )
+
 
     @property
     def is_any_manager(self):
@@ -166,7 +180,7 @@ class Technician(models.Model):
         """
         return self.role in (
             self.Role.MANAGER, self.Role.SUPPORT_MANAGER, self.Role.COUNTRY_SUPPORT,
-            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN, self.Role.PROJECT_MANAGER,
         )
 
     @property

@@ -7,7 +7,7 @@
 <div class="page__header">
     <h1>{% translate "Customers" %}</h1>
     <div class="button-row">
-        {% if user.technician.is_manager_tier %}
+        {% if user.technician.reaches_all_countries %}
         <a href="{% url 'customers:all_customers' %}" class="button button--secondary">{% translate "All customers" %}</a>
         {% endif %}
         {% if user.technician.role == 'admin' %}

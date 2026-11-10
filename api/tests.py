@@ -1503,7 +1503,8 @@ class ManagerChoosesTheCountryTests(ApiTestCase):
         manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=manager_user, country=self.country, full_name='Dana Manager', language='en',
-            role=Technician.Role.MANAGER, employment_type='staff',
+            # Reaching every country is the Project Manager's, not a country Manager's (docs/access_rules.md).
+            role=Technician.Role.PROJECT_MANAGER, employment_type='staff',
         )
         self.cairo_tech = Technician.objects.create(
             user=User.objects.create_user('cairo1', password='pass12345'), country=self.egypt,
@@ -1522,6 +1523,15 @@ class ManagerChoosesTheCountryTests(ApiTestCase):
             self.client.get(f'/api/people/{self.cairo_tech.pk}/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk),
                             **self.auth(token)).status_code, 200,
         )
+
+    def test_a_country_manager_cannot_switch(self):
+        manager = User.objects.create_user('uae_manager', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Uae Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        token = self.token_for('uae_manager')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).json()['countries'], [])
+        rows = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()['rows']
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in rows])
 
     def test_a_supervisor_cannot_switch(self):
         token = self.token_for('supervisor1')

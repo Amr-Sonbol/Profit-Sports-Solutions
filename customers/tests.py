@@ -320,13 +320,17 @@ class CustomerEditTests(CustomerTestCase):
         self.customer.refresh_from_db()
         self.assertTrue(self.customer.must_change_password)
 
-    def test_manager_can_reach_a_customer_in_another_country(self):
+    def test_an_every_country_role_reaches_a_customer_in_another_country(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
 
+        # Every country is the Project Manager's (and Operations, Technical Support, Admin) — a Manager has
+        # one country and is refused (docs/access_rules.md).
         self.client.login(username='manager1', password='pass12345')
+        self.assertIn(self.client.get(f'/customers/{other_customer.pk}/edit/').status_code, (403, 404))
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.PROJECT_MANAGER)
         response = self.client.get(f'/customers/{other_customer.pk}/edit/')
         self.assertEqual(response.status_code, 200)
 
@@ -400,13 +404,17 @@ class AllCustomersTests(CustomerTestCase):
         response = self.client.get('/customers/all/')
         self.assertEqual(response.status_code, 403)
 
-    def test_manager_sees_customers_from_every_country(self):
+    def test_every_country_roles_see_customers_from_every_country(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
 
+        # Every country is the Project Manager's (and Operations, Technical Support, Admin) — a Manager has
+        # one country and is refused (docs/access_rules.md).
         self.client.login(username='manager1', password='pass12345')
+        self.assertIn(self.client.get('/customers/all/').status_code, (403, 404))
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.PROJECT_MANAGER)
         response = self.client.get('/customers/all/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Fitness First')

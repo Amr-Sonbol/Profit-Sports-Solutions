@@ -51,8 +51,8 @@ from people.models import (
 )
 from people.permissions import (
     ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_admin,
-    require_manager, require_permission,
-    require_technician, scoped_or_404 as _scoped_or_404,
+    require_all_countries, require_manager, require_permission,
+    require_technician, scoped_or_404 as _scoped_or_404, tasks_for_role,
 )
 from spots.email_failures import current_user_id, record_failed_email
 from tasks.shipments import is_part_shipment, part_shipment_type
@@ -1442,7 +1442,7 @@ def home_summary(request, technician):
         RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
     )
     task_list_url = reverse('tasks:task_list')
-    open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country)
+    open_tasks = tasks_for_role(technician, Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country))
     actions = []
 
     def add(label, count, url, level='warning'):
@@ -1522,7 +1522,7 @@ def technician_workload(technicians, country):
     return workload
 
 
-def dashboard_overview(active_country):
+def dashboard_overview(active_country, viewer=None):
     """The dashboard's figures for a country: its technicians (with their
     work still to do: today, upcoming, overdue), every open task in "needs someone first" order
     (emergencies, then no lead, then no date) and the counts. The website's
@@ -1535,8 +1535,11 @@ def dashboard_overview(active_country):
     for technician in technicians:
         technician.workload = workload[technician.id]
 
+    open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
+    if viewer is not None:  # as this role sees tasks (a Warehouse Manager: stock work only)
+        open_tasks = tasks_for_role(viewer, open_tasks)
     tasks = list(_with_lead_prefetch(
-        Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
+        open_tasks
         .select_related('site__customer', 'task_type')
         .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
     ))
@@ -1571,7 +1574,7 @@ def dashboard(request):
     viewer = require_permission(request, RolePermission.Permission.VIEW_DASHBOARD)
     chart_period = 'week' if request.GET.get('period') == 'week' else 'month'
     active_country = get_active_country(request)
-    technicians, tasks, stats = dashboard_overview(active_country)
+    technicians, tasks, stats = dashboard_overview(active_country, viewer)
 
     context = {
         'technicians': technicians,
@@ -1599,6 +1602,7 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     tasks = _with_lead_prefetch(Task.objects.select_related('site__customer__country', 'task_type'))
     if not all_countries:
         tasks = tasks.filter(site__customer__country=active_country)
+    tasks = tasks_for_role(technician, tasks)
     status = params.get('status', 'open')
     if status == 'open':
         tasks = tasks.filter(status__in=OPEN_STATUSES)
@@ -1664,7 +1668,7 @@ def task_list(request):
     """
     technician = require_permission(request, RolePermission.Permission.VIEW_TASKS)
     active_country = get_active_country(request)
-    all_countries = technician.is_manager_tier and request.GET.get('country') == 'all'
+    all_countries = technician.reaches_all_countries and request.GET.get('country') == 'all'
 
     status = request.GET.get('status', 'open')
     task_id = request.GET.get('task_id', '').strip()
@@ -1753,7 +1757,7 @@ def task_list(request):
         'scheduled_from': request.GET.get('scheduled_from', ''),
         'scheduled_to': request.GET.get('scheduled_to', ''),
         'filter_qs': urlencode(filter_params),
-        'can_view_all_countries': technician.is_manager_tier,
+        'can_view_all_countries': technician.reaches_all_countries,
         'all_countries': all_countries,
     }
     return render(request, 'tasks/task_list.html', context)
@@ -2074,6 +2078,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'approve_schedule_change':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         change_request = get_object_or_404(
             ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
             status=ScheduleChangeRequest.Status.PENDING,
@@ -2084,6 +2089,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'deny_schedule_change':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         change_request = get_object_or_404(
             ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
             status=ScheduleChangeRequest.Status.PENDING,
@@ -2143,6 +2149,7 @@ def task_detail(request, pk):
 
     if request.method == 'POST' and request.POST.get('action') == 'correct_event':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         event = get_object_or_404(
             task.events, pk=request.POST.get('event_id'), event_type__in=CORRECTABLE_EVENTS,
         )
@@ -2172,6 +2179,7 @@ def task_detail(request, pk):
     close_task_form = CloseTaskForm()
     if request.method == 'POST' and request.POST.get('action') == 'close_directly':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         if task.status == Task.Status.CLOSED:
             messages.error(request, _('This task is already closed.'))
             return redirect('tasks:task_detail', pk=task.pk)
@@ -2188,6 +2196,7 @@ def task_detail(request, pk):
     rebook_form = RebookVisitForm()
     if request.method == 'POST' and request.POST.get('action') == 'rebook':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         if task.status != Task.Status.BLOCKED:
             messages.error(request, _('Only a task stopped on site can be given a new visit here.'))
             return redirect('tasks:task_detail', pk=task.pk)
@@ -2201,6 +2210,7 @@ def task_detail(request, pk):
     cancel_task_form = CancelTaskForm()
     if request.method == 'POST' and request.POST.get('action') == 'cancel_task':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         if task.status not in CANCELLABLE_STATUSES:
             messages.error(request, _('This task can no longer be cancelled.'))
             return redirect('tasks:task_detail', pk=task.pk)
@@ -2213,6 +2223,7 @@ def task_detail(request, pk):
     negligence_form = NegligenceFlagForm()
     if request.method == 'POST' and request.POST.get('action') == 'flag_negligence':
         require_manager(request)
+        _require_task_owner(request, task)  # the owner, or someone stepping in
         if task.status != Task.Status.CLOSED:
             messages.error(request, _('Only closed tasks can be flagged.'))
             return redirect('tasks:task_detail', pk=task.pk)
@@ -2622,6 +2633,9 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
             machine_decision = TicketMachine.Decision.SHIP_PART
         task.task_type = task_type
         task.created_by = request.user
+        # One owner from the start (docs/access_rules.md): the supervisor it's given to, else whoever created it.
+        if not task.responsible_supervisor_id and creator.role != Technician.Role.TECHNICIAN:
+            task.responsible_supervisor = creator
         task.status = Task.Status.NEW
         if ticket is not None:
             task.pak_reference_number = ticket.pak_reference_number
@@ -3668,18 +3682,41 @@ def ticket_review(request, pk):
     return render(request, 'tasks/ticket_review.html', context)
 
 
+def can_step_in(technician, task):
+    """Who may change a task instead of its owner, while they're away: the
+    Operations Manager and Admin anywhere, the country Manager in their own
+    country (docs/access_rules.md)."""
+    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN):
+        return True
+    return technician.role == Technician.Role.MANAGER and technician.country_id == task.site.customer.country_id
+
+
+def task_owned_by(technician, task):
+    """True for the task's owner (its responsible supervisor), and for anyone
+    while it has no owner yet (from before the rule) — the role decides then."""
+    return not task.responsible_supervisor_id or task.responsible_supervisor_id == technician.id
+
+
+def can_change_task(technician, task):
+    return task_owned_by(technician, task) or can_step_in(technician, task)
+
+
 def _require_task_owner(request, task):
-    """Once a task has a responsible supervisor, only they (or a manager)
-    can edit it, manage its assignment, or act on it from its detail page.
-    An unowned task (no responsible supervisor set yet) stays open to
-    anyone the usual permission already let in — same as before this
-    field existed, and how it gets claimed in the first place.
-    """
+    """Only the task's owner changes it — its details, time, team and the
+    actions on it (docs/access_rules.md). Someone allowed to step in may too:
+    a change they post is recorded in the history (once per request), and the
+    owner hears of it from that entry (tasks.updates). Everyone else asks."""
     technician = request.user.technician
-    if technician.is_manager_tier:
+    if task_owned_by(technician, task):
         return
-    if task.responsible_supervisor_id and task.responsible_supervisor_id != technician.id:
+    if not can_step_in(technician, task):
         raise PermissionDenied
+    if request.method == 'POST' and not getattr(request, '_stepped_in', False):
+        request._stepped_in = True
+        TaskEvent.objects.create(
+            task=task, event_type=TaskEvent.EventType.STEPPED_IN, occurred_at=timezone.now(), actor=request.user,
+            note=_('Instead of %(name)s') % {'name': task.responsible_supervisor.full_name},
+        )
 
 
 def _set_lead(task, active_lead, technician, end_reason, actor, hours_worked=None):
@@ -3978,9 +4015,9 @@ def _year_months(year, days, country):
 @login_required
 def task_week(request):
     """The schedule calendar for the active country, by week or by month."""
-    require_permission(request, RolePermission.Permission.VIEW_TASKS)
+    viewer = require_permission(request, RolePermission.Permission.VIEW_TASKS)
     country = get_active_country(request)
-    tasks = Task.objects.filter(site__customer__country=country)
+    tasks = tasks_for_role(viewer, Task.objects.filter(site__customer__country=country))
     return render(request, 'tasks/task_week.html', _calendar_context(request, tasks, country))
 
 
@@ -4144,7 +4181,7 @@ def all_week_tasks(request):
     day or week, grouped as the schedule counts them — overdue and blocked
     first — each linking to its task. Manager-only, like the grid.
     """
-    require_manager(request)
+    require_all_countries(request)
     country = get_object_or_404(Country, pk=request.GET.get('country'))
     start = parse_date(request.GET.get('start', '') or '')
     end = parse_date(request.GET.get('end', '') or '') or start
@@ -4194,7 +4231,7 @@ def all_week(request):
     technician's opens their board. Manager-only, same fixed floor as the
     other "all ..." boards.
     """
-    require_manager(request)
+    require_all_countries(request)
     return render(request, 'tasks/all_week.html', _all_countries_grid(request))
 
 
@@ -4852,7 +4889,7 @@ def all_technicians(request):
     overview, so auditing someone doesn't mean switching active country
     first. Manager-only, same fixed floor as the other "all ..." boards.
     """
-    viewer = require_manager(request)
+    viewer = require_all_countries(request)
 
     search = request.GET.get('q', '').strip()
     technicians = _people_i_oversee(viewer).filter(is_active=True).select_related('country').order_by('full_name')
@@ -5640,7 +5677,7 @@ def set_active_country(request):
     manager's own technician.country. POST only, since this changes what
     every other screen shows for the rest of the session.
     """
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         country = get_object_or_404(Country, pk=request.POST.get('country'))
@@ -5789,7 +5826,7 @@ def monthly_report(request):
     """
     from .monthly import month_report
 
-    technician = require_manager(request)
+    technician = require_all_countries(request)
     period_start_date = _resolve_report_month(request)
     previous_month = _shift_month(period_start_date, -1)
     context = {
@@ -5806,7 +5843,7 @@ def monthly_report(request):
 
 @login_required
 def monthly_report_export(request):
-    require_manager(request)
+    require_all_countries(request)
 
     period_start_date = _resolve_report_month(request)
     tickets, tasks = _month_report_querysets(period_start_date)
@@ -5843,7 +5880,7 @@ def skill_list(request):
     the screen that manages them be subject to its own permission row
     would risk a bad edit locking every role out of fixing it.
     """
-    require_manager(request)
+    require_all_countries(request)
     basic_skills, cardio_skills = _split_by_category(Skill.objects.filter(is_active=True))
     conduct_areas = ConductArea.objects.filter(is_active=True)
     return render(request, 'tasks/skill_list.html', {
@@ -5853,7 +5890,7 @@ def skill_list(request):
 
 @login_required
 def skill_create(request):
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         form = SkillCreateForm(request.POST)
@@ -5869,7 +5906,7 @@ def skill_create(request):
 
 @login_required
 def conduct_area_create(request):
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         form = ConductAreaCreateForm(request.POST)
@@ -5889,14 +5926,14 @@ def brand_list(request):
     reasoning as skill_list: brands are global reference data, not scoped
     to any country.
     """
-    require_manager(request)
+    require_all_countries(request)
     brands = Brand.objects.filter(is_active=True)
     return render(request, 'tasks/brand_list.html', {'brands': brands})
 
 
 @login_required
 def brand_create(request):
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         form = BrandCreateForm(request.POST)
@@ -6164,7 +6201,7 @@ def country_list(request):
     Shows both active and inactive, since toggling and deleting both
     happen from here.
     """
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         country = get_object_or_404(Country, pk=request.POST.get('country_id'))
@@ -6193,7 +6230,7 @@ def country_list(request):
 
 @login_required
 def country_create(request):
-    require_manager(request)
+    require_all_countries(request)
 
     if request.method == 'POST':
         form = CountryCreateForm(request.POST)
@@ -6753,7 +6790,7 @@ def next_step_sites(viewer, step):
     tier (the chain crosses borders; only they send machines on)."""
     sites = Site.objects.filter(customer__is_active=True).select_related('customer__country')
     sites = sites.filter(customer__is_internal=(step == TaskType.Category.LOADING))
-    if not viewer.is_manager_tier:
+    if not viewer.reaches_all_countries:
         sites = sites.filter(customer__country=viewer.country)
     return sites.order_by('customer__country__name', 'customer__name', 'name')
 

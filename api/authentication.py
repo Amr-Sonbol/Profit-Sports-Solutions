@@ -26,7 +26,7 @@ class CountryTimezoneTokenAuthentication(TokenAuthentication):
                 # A manager looking at another country (people.permissions
                 # .get_active_country reads it, like the website's session).
                 chosen = request.META.get(ACTIVE_COUNTRY_HEADER, '')
-                if technician.is_manager_tier and chosen.isdigit():
+                if technician.reaches_all_countries and chosen.isdigit():
                     country = Country.objects.filter(pk=chosen).first() or country
                     request.api_active_country = country
                 timezone.activate(country.timezone)

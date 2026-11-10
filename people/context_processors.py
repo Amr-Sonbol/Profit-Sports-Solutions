@@ -258,10 +258,13 @@ def nav_pages(technician, allowed):
     # vendor follow-up: an internal task (CustomerTicket of an internal kind).
     if technician.role != technician.Role.TECHNICIAN:
         add('tasks:internal_tickets', _('Internal tasks'), 'inbox', 'tasks')
-    if technician.is_manager_tier:
+    if technician.reaches_all_countries:
         add('tasks:all_week', _('All countries — schedule'), 'calendar-range', 'tasks')
         add('tasks:all_technicians', _('All technicians'), 'id-card', 'team')
+    if technician.is_manager_tier:
         add('tasks:staff_accounts', _('Staff accounts'), 'key', 'team')
+    # Company-wide (every country): not a Manager's, who has one (docs/access_rules.md).
+    if technician.reaches_all_countries:
         add('tasks:monthly_report', _('Monthly report'), 'bar-chart', 'team')
         add('tasks:skill_list', _('Skills'), 'graduation-cap', 'team')
         add('tasks:brand_list', _('Brands'), 'tag', 'setup')
@@ -301,6 +304,6 @@ def active_country(request):
     if technician is None:
         return {}
     context = {'active_country': get_active_country(request)}
-    if technician.is_manager_tier:
+    if technician.reaches_all_countries:
         context['switchable_countries'] = Country.objects.filter(is_active=True).order_by('name')
     return context
