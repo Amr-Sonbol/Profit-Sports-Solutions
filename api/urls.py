@@ -47,6 +47,7 @@ urlpatterns = [
     path('tasks/<int:pk>/assign/', views.TeamTaskAssignView.as_view(), name='team_task_assign'),
     path('tasks/<int:pk>/messages/', views.TaskMessagesView.as_view(), name='task_messages'),
     path('tasks/<int:pk>/action/', views.TaskActionView.as_view(), name='task_action'),
+    path('bell/', views.BellView.as_view(), name='bell'),
     path('tasks/<int:pk>/edit/', views.TaskEditView.as_view(), name='task_edit'),
     path('tasks/<int:pk>/documents/', views.TaskDocumentView.as_view(), name='task_document'),
     path('tasks/<int:pk>/approve/', views.TeamTaskApproveView.as_view(), name='team_task_approve'),

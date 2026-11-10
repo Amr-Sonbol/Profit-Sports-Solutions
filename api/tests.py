@@ -1955,3 +1955,15 @@ class UnreadMessagesOnListsTests(TaskMessagesApiTests):
         self.client.get(url, **self.auth(tech))  # reading the thread
         mine = {t['id']: t for t in self.client.get('/api/my-tasks/', **self.auth(tech)).json()}
         self.assertEqual(mine[self.task.pk]['unread_messages'], 0)
+
+
+class BellApiTests(TaskMessagesApiTests):
+    """The app's bell: the website bell's items for the same person, worded and openable."""
+
+    def test_a_team_message_is_in_the_technicians_bell(self):
+        self.client.post(f'/api/tasks/{self.task.pk}/messages/', json.dumps({'message': 'Call the gym first.'}),
+                         content_type='application/json', **self.auth(self.token_for('supervisor1')))
+        bell = self.client.get('/api/bell/', **self.auth(self.token_for('tech1'))).json()
+        self.assertEqual(bell['count'], 1)
+        item = bell['items'][0]
+        self.assertEqual((item['kind'], item['text'], item['opens']), ('task_message', 'New message', {'screen': 'task', 'id': self.task.pk}))

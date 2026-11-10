@@ -4,6 +4,7 @@ import { FlatList, RefreshControl, StyleSheet, TextInput, TouchableOpacity } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyTasks, fetchMyToday, fetchTeamTasks } from '@/api/endpoints';
+import { BellButton } from '@/components/bell-button';
 import { StatusBadge } from '@/components/status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -86,7 +87,10 @@ export default function TasksScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ThemedText type="title" style={styles.heading}>My tasks</ThemedText>
+        <ThemedView style={styles.headRow}>
+          <ThemedText type="title" style={styles.heading}>My tasks</ThemedText>
+          <BellButton />
+        </ThemedView>
         {isOffline ? (
           <ThemedText themeColor="danger" type="small" style={styles.notice}>
             No connection — showing your tasks as they were last loaded.
@@ -183,6 +187,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingEnd: Spacing.three },
   notice: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },

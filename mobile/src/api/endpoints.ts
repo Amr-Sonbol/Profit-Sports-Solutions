@@ -245,6 +245,21 @@ export function taskAction(id: number, body: Record<string, unknown>) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/action/`, { method: 'POST', body });
 }
 
+/** One bell item (api.views.BellView): its words, what it's about, and what a tap opens. */
+export interface BellItem {
+  kind: string;
+  text: string;
+  about: string;
+  at: string;
+  alarm: boolean;
+  opens: { screen: 'team-task' | 'task' | 'website'; id?: number; path?: string } | null;
+}
+
+/** The bell: the newest items and how many there are in all. */
+export function fetchBell() {
+  return apiRequest<{ count: number; items: BellItem[] }>('/api/bell/');
+}
+
 export function approveTaskReport(id: number) {
   return apiRequest<TeamTaskDetail>(`/api/tasks/${id}/approve/`, { method: 'POST', body: {} });
 }

@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyToday } from '@/api/endpoints';
+import { BellButton } from '@/components/bell-button';
 import { TodayPlanView } from '@/components/today-plan';
 import { type ScheduleMode, ScheduleView } from '@/components/schedule-view';
 import { type PendingReport, sendPendingReports, withOfflineCopy } from '@/offline';
@@ -58,9 +59,12 @@ export default function MyScheduleScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ThemedText type="title" style={styles.heading}>
-          My schedule
-        </ThemedText>
+        <ThemedView style={styles.headRow}>
+          <ThemedText type="title" style={styles.heading}>
+            My schedule
+          </ThemedText>
+          <BellButton />
+        </ThemedView>
         {isOffline ? (
           <ThemedText themeColor="danger" type="small" style={styles.notice}>
             No connection — showing your tasks as they were last loaded.
@@ -126,6 +130,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
   heading: { fontSize: 22, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingEnd: Spacing.three },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   tabs: { flexDirection: 'row', gap: Spacing.two, paddingBottom: Spacing.three, backgroundColor: 'transparent' },
   tab: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },

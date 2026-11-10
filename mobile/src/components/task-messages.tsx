@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 
@@ -29,9 +30,18 @@ export function TaskMessages({ taskId }: { taskId: number }) {
     }
   }, [taskId]);
 
-  // On opening the task and on coming back to it: new messages show.
+  // On opening the task, on coming back to it, every 10 seconds while it's open, and the moment
+  // a notification arrives: new messages show without leaving the task.
   useFocusEffect(useCallback(() => {
     load();
+    const timer = setInterval(load, 10000);
+    const subscription = Notifications.addNotificationReceivedListener(() => {
+      load();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
   }, [load]));
 
   const send = async () => {

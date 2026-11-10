@@ -7,12 +7,14 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from django.http import Http404, HttpResponseRedirect
 from django.utils import translation
 from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
+from django.utils.translation import ngettext
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
@@ -2051,6 +2053,67 @@ class TaskEditView(APIView):
         response.data['message'] = done
         response.data['warnings'] = warnings
         return response
+
+
+class BellView(APIView):
+    """The website bell in the app (people.context_processors.notification_bell
+    — the same items for the same person): each with its words, what it's
+    about, when, whether it's an alarm, and what to open. Opening the task
+    or request reads it, as on the website."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        from people.context_processors import notification_bell
+
+        bell = notification_bell(request)
+        can_view_tasks = has_role_permission(request, RolePermission.Permission.VIEW_TASKS)
+        items = []
+        for item in bell.get('unseen_notifications', []):
+            kind = item['kind']
+            task, ticket = item.get('task'), item.get('ticket')
+            text, about, alarm, opens = '', '', False, None
+            if task is not None:
+                about = f'{task.site.name} ({task.task_number})'
+                opens = {'screen': 'team-task' if can_view_tasks else 'task', 'id': task.pk}
+            if ticket is not None:
+                about = f'{ticket.company_name} ({ticket.ticket_number})'
+                opens = {'screen': 'website', 'path': reverse('tasks:ticket_review', args=[ticket.pk])}
+            if kind == 'new_task':
+                text = _('New task')
+            elif kind == 'unscheduled_overdue':
+                text, alarm = _('Not scheduled within 24 working hours'), True
+            elif kind == 'unscheduled_overdue_many':
+                text = ngettext(
+                    '%(count)s task not scheduled within 24 working hours',
+                    '%(count)s tasks not scheduled within 24 working hours', item['count'],
+                ) % {'count': item['count']}
+                alarm, opens = True, {'screen': 'website', 'path': reverse('tasks:task_list') + '?alarm=unscheduled'}
+            elif kind == 'schedule_change_pending':
+                text, alarm = _('Change of visit time requested — approval required'), True
+            elif kind == 'escalation_pending':
+                text, alarm = _('Escalated to you — decision required'), True
+            elif kind == 'internal_ticket':
+                text, about = _('Internal task assigned to you'), f'{ticket.subject} ({ticket.ticket_number})'
+                opens = {'screen': 'website', 'path': reverse('tasks:internal_ticket', args=[ticket.pk])}
+            elif kind == 'customer_locked':
+                text, alarm, about = _('Customer account locked'), True, item['customer'].name
+                opens = {'screen': 'website', 'path': reverse('customers:customer_accounts') + '?status=locked'}
+            elif kind == 'staff_locked':
+                text, alarm, about = _('Staff login locked'), True, item['person'].full_name
+                opens = {'screen': 'website', 'path': reverse('tasks:staff_accounts') + '?status=locked'}
+            elif kind == 'task_message':
+                text = _('New message')
+            elif kind == 'new_ticket':
+                text = _('New ticket')
+            elif kind == 'escalation_decided':
+                text = _('Escalation decided')
+            else:
+                text = _('New reply')
+            items.append({
+                'kind': kind, 'text': str(text), 'about': about, 'at': item['created_at'], 'alarm': alarm, 'opens': opens,
+            })
+        return Response({'count': bell.get('unseen_notification_count', 0), 'items': items})
 
 
 class TaskActionView(APIView):
