@@ -61,8 +61,8 @@ class UserAdmin(DjangoUserAdmin):
     linked_technician.short_description = 'Technician'
 
     def linked_customer(self, obj):
-        customer = getattr(obj, 'customer', None)
-        return customer.name if customer else '—'
+        person = getattr(obj, 'portal_user', None)
+        return person.customer.name if person else '—'
     linked_customer.short_description = 'Customer'
 
 

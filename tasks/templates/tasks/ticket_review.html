@@ -270,7 +270,7 @@
             {% if ticket.shipping_address %}<div><dt>{% translate "Shipping address" %}</dt><dd class="pre-line">{{ ticket.shipping_address }}</dd></div>{% endif %}
             <div>
                 <dt>{% translate "Submitted" %}</dt>
-                <dd>{{ ticket.submitted_at|date:"j M Y, P" }}<span class="compact-table__sub">{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {% endif %}{{ ticket.get_source_display }}</span></dd>
+                <dd>{{ ticket.submitted_at|date:"j M Y, P" }}<span class="compact-table__sub">{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {% elif ticket.submitted_by %}{% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %} · {% endif %}{{ ticket.get_source_display }}</span></dd>
             </div>
         </dl>
     </section>

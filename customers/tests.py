@@ -8,7 +8,7 @@ from people.models import Technician
 from reference.models import Country
 from tasks.models import CustomerTicket, TicketNotification
 
-from .models import Asset, Customer, Site
+from .models import PortalUser, Asset, Customer, Site
 
 User = get_user_model()
 
@@ -115,7 +115,7 @@ class CustomerCreateTests(CustomerTestCase):
         self.assertEqual((customer.country, customer.segment, customer.contact_name), (self.country, 'gym', 'Omar'))
         self.assertEqual(list(customer.sites.values_list('name', 'address')), [('Al Barsha', 'Al Barsha 1, Dubai')])
         # The portal login, invited at once (ticked by default).
-        self.assertEqual(customer.user.username, 'omar@goldgym.example')
+        self.assertEqual(customer.portal_users.get().user.username, 'omar@goldgym.example')
         self.assertEqual(mail.outbox[0].to, ['omar@goldgym.example'])
         self.assertTrue(LogEntry.objects.filter(change_message='Customer created and portal welcome email sent').exists())
 
@@ -128,7 +128,7 @@ class CustomerCreateTests(CustomerTestCase):
         self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
         # Not invited: created without a login, nothing sent.
         self._new(contact_email='', invite='')
-        self.assertIsNone(Customer.objects.get(name='Gold Gym').user)
+        self.assertFalse(Customer.objects.get(name='Gold Gym').portal_users.exists())
         self.assertEqual(len(mail.outbox), 0)
 
     def test_same_name_refused_similar_name_asked(self):
@@ -319,55 +319,6 @@ class CustomerEditTests(CustomerTestCase):
         self.assertEqual(self.customer.code, 'ACC-42')
         self.assertEqual(self.customer.shipping_address, 'Head office, Warehouse 3')
 
-    def test_supervisor_cannot_create_a_login(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'create_login', 'email': 'contact@fitnessfirst.example'})
-        self.assertEqual(response.status_code, 200)
-        self.customer.refresh_from_db()
-        self.assertIsNone(self.customer.user_id)
-
-    def test_manager_can_create_a_login(self):
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'create_login', 'email': 'contact@fitnessfirst.example'})
-        self.assertEqual(response.status_code, 302)
-        self.customer.refresh_from_db()
-        self.assertIsNotNone(self.customer.user_id)
-        self.assertEqual(self.customer.user.username, 'contact@fitnessfirst.example')
-        self.assertEqual(self.customer.user.email, 'contact@fitnessfirst.example')
-        self.assertTrue(self.customer.must_change_password)
-        self.assertIsNotNone(self.customer.invited_at)
-        # No password exists until the customer sets one through the link.
-        self.assertFalse(self.customer.user.has_usable_password())
-
-        self.assertEqual(len(mail.outbox), 1)
-        sent = mail.outbox[0]
-        self.assertEqual(sent.to, ['contact@fitnessfirst.example'])
-        self.assertIn(self.customer.user.username, sent.body)
-        self.assertIn('/customers/portal/account/', sent.body)
-
-    def test_cannot_create_a_second_login_with_the_same_email(self):
-        User.objects.create_user('taken@example.com', password='pass12345')
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(self.url, {'action': 'create_login', 'email': 'taken@example.com'})
-        self.assertEqual(response.status_code, 200)
-        self.customer.refresh_from_db()
-        self.assertIsNone(self.customer.user_id)
-
-    def test_manager_can_reset_the_customer_password(self):
-        portal_user = User.objects.create_user('fitnessfirst', password='old-password')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
-
-        self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(self.url, {
-            'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
-        })
-        self.assertEqual(response.status_code, 302)
-        portal_user.refresh_from_db()
-        self.assertTrue(portal_user.check_password('br4nd-New-Pass!'))
-        self.customer.refresh_from_db()
-        self.assertTrue(self.customer.must_change_password)
-
     def test_an_every_country_role_reaches_a_customer_in_another_country(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
@@ -402,8 +353,7 @@ class CustomerDeactivateTests(CustomerTestCase):
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.url = f'/customers/{self.customer.pk}/edit/'
 
     def test_manager_deactivates_a_customer_and_blocks_their_login(self):
@@ -493,8 +443,7 @@ class PortalLoginTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
 
     def test_customer_can_log_in_and_reaches_portal_home(self):
         response = self.client.post('/customers/portal/login/', {
@@ -518,8 +467,7 @@ class PortalLoginTests(CustomerTestCase):
         self.assertRedirects(response, '/customers/portal/')
 
     def test_temporary_password_redirects_to_first_login(self):
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['must_change_password'])
+        self.customer.portal_users.update(must_change_password=True)
 
         response = self.client.post('/customers/portal/login/', {
             'username': 'fitnessfirst', 'password': 'pass12345',
@@ -541,8 +489,7 @@ class PortalLoginLockoutTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
 
     def test_locks_out_after_repeated_failures(self):
         for _ in range(5):
@@ -558,9 +505,7 @@ class PortalFirstLoginTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['user', 'must_change_password'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user, must_change_password=True)
         self.client.login(username='fitnessfirst', password='pass12345')
 
     def test_shown_while_must_change_password_is_set(self):
@@ -568,8 +513,7 @@ class PortalFirstLoginTests(CustomerTestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_redirects_to_portal_home_once_cleared(self):
-        self.customer.must_change_password = False
-        self.customer.save(update_fields=['must_change_password'])
+        self.customer.portal_users.update(must_change_password=False)
 
         response = self.client.get('/customers/portal/first-login/')
         self.assertRedirects(response, '/customers/portal/')
@@ -585,7 +529,7 @@ class PortalFirstLoginTests(CustomerTestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.billing_address, 'PO Box 1, Dubai')
         self.assertEqual(self.customer.shipping_address, 'Warehouse 3, Al Quoz')
-        self.assertFalse(self.customer.must_change_password)
+        self.assertFalse(self.customer.portal_users.get().must_change_password)
         self.assertEqual(self.customer.contact_name, 'Sara Ali')
         self.assertEqual(self.customer.contact_phone, '0509876543')
         self.assertEqual(self.customer.contact_email, 'sara@fitnessfirst.ae')
@@ -602,8 +546,7 @@ class PortalHomeTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
 
     def test_anonymous_is_redirected_to_portal_login(self):
         response = self.client.get('/customers/portal/')
@@ -660,8 +603,7 @@ class PortalVisitReportTests(CustomerTestCase):
         from reports.models import WorkReport
         from tasks.models import Task
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.task = Task.objects.create(
             task_number='AE-0801', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
             billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
@@ -683,8 +625,7 @@ class PortalVisitReportTests(CustomerTestCase):
 
     def test_another_customers_report_is_not_found(self):
         other = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
-        other.user = User.objects.create_user('othergym', password='pass12345')
-        other.save(update_fields=['user'])
+        PortalUser.objects.create(customer=other, user=User.objects.create_user('othergym', password='pass12345'))
         self.client.login(username='othergym', password='pass12345')
         self.assertEqual(self.client.get(self.url).status_code, 404)
 
@@ -704,8 +645,7 @@ class PortalProgressTests(CustomerTestCase):
 
     def setUp(self):
         super().setUp()
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.client.login(username='fitnessfirst', password='pass12345')
 
     def _visit(self, number, status='assigned', **dates):
@@ -796,8 +736,7 @@ class PortalVisitPageTests(CustomerTestCase):
         super().setUp()
         from reference.models import Brand
         from tasks.models import Task
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.machine = Asset.objects.create(
             site=self.site, brand=Brand.objects.create(name='Technogym'), model_name='Excite Run 700', serial_no='TG-77',
         )
@@ -923,8 +862,7 @@ class PortalSettingsTests(CustomerTestCase):
 
     def setUp(self):
         super().setUp()
-        self.customer.user = User.objects.create_user('ali@fitnessfirst.ae', email='ali@fitnessfirst.ae', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('ali@fitnessfirst.ae', email='ali@fitnessfirst.ae', password='pass12345'))
         self.client.login(username='ali@fitnessfirst.ae', password='pass12345')
 
     def test_details_and_language_are_saved(self):
@@ -956,8 +894,7 @@ class PortalSettingsTests(CustomerTestCase):
         self.assertNotIn('username', page.context['details_form'].fields)
 
     def test_staff_and_unfinished_accounts_cannot_use_it(self):
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['must_change_password'])
+        self.customer.portal_users.update(must_change_password=True)
         self.assertRedirects(
             self.client.get('/customers/portal/settings/'), '/customers/portal/first-login/', fetch_redirect_response=False,
         )
@@ -972,8 +909,7 @@ class PortalBellTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         from tasks.models import Task
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.visit = Task.objects.create(
             task_number='AE-0970', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
             billing_type=Task.BillingType.CONTRACT, reported_at=timezone.now(), created_by=self.supervisor_user,
@@ -1067,8 +1003,7 @@ class CustomerAddsMachineTests(CustomerTestCase):
         from reference.models import Brand
         from people.models import RolePermission
         self.brand = Brand.objects.create(name='Technogym')
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         for permission in ('manage_customers', 'view_machines'):
             RolePermission.objects.update_or_create(role='admin', permission=permission, defaults={'allowed': True})
         self.client.login(username='fitnessfirst', password='pass12345')
@@ -1129,8 +1064,7 @@ class PortalTicketNewTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
         self.other_site = Site.objects.create(customer=self.other_customer, name='Other Branch', address='Elsewhere')
 
@@ -1224,8 +1158,7 @@ class PortalTicketNewTests(CustomerTestCase):
         self.assertFalse(CustomerTicket.objects.exists())
 
     def test_customer_on_a_temporary_password_is_redirected_to_first_login(self):
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['must_change_password'])
+        self.customer.portal_users.update(must_change_password=True)
 
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/customers/portal/tickets/new/')
@@ -1400,8 +1333,7 @@ class PortalMachinesTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
         from reference.models import Brand
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.brand = Brand.objects.create(name='Technogym')
         self.machine = Asset.objects.create(
             site=self.site, brand=self.brand, model_name='Excite Run 700', serial_no='TG-77', code='EXC-RUN-700',
@@ -1593,9 +1525,9 @@ class CustomerAccountsTests(CustomerTestCase):
         })
         self.assertRedirects(response, '/customers/portal/')
         self.customer.refresh_from_db()
-        self.assertFalse(self.customer.must_change_password)
+        self.assertFalse(self.customer.portal_users.get().must_change_password)
         self.assertEqual(self.customer.billing_address, 'PO Box 1, Dubai')
-        self.assertTrue(self.customer.user.check_password('br4nd-New-Pass!'))
+        self.assertTrue(self.customer.portal_users.get().user.check_password('br4nd-New-Pass!'))
 
         self.client.logout()
         self.assertEqual(self.client.get(path).status_code, 400)
@@ -1603,47 +1535,126 @@ class CustomerAccountsTests(CustomerTestCase):
     def test_an_expired_invitation_shows_and_can_be_resent(self):
         self.client.login(username='admin1', password='pass12345')
         self.client.post(self.url, {'action': 'invite', 'customer': self.customer.pk})
-        Customer.objects.filter(pk=self.customer.pk).update(invited_at=timezone.now() - timezone.timedelta(days=8))
+        PortalUser.objects.filter(customer=self.customer).update(invited_at=timezone.now() - timezone.timedelta(days=8))
         self.assertEqual(self._statuses()['Fitness First'], 'expired')
-        self.client.post(self.url, {'action': 'invite', 'customer': self.customer.pk})
+        self.client.post(self.url, {'action': 'resend', 'person': self.customer.portal_users.get().pk})
         self.assertEqual(self._statuses()['Fitness First'], 'invited')
         self.assertEqual(len(mail.outbox), 2)
 
     def test_disable_enable_and_temporary_password(self):
         user = User.objects.create_user('contact@fitnessfirst.example', password='pass12345')
-        self.customer.user = user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=user)
         self.client.login(username='admin1', password='pass12345')
 
-        self.client.post(self.url, {'action': 'disable', 'customer': self.customer.pk})
+        self.client.post(self.url, {'action': 'disable', 'person': self.customer.portal_users.get().pk})
         self.assertEqual(self._statuses()['Fitness First'], 'disabled')
-        self.client.post(self.url, {'action': 'enable', 'customer': self.customer.pk})
+        self.client.post(self.url, {'action': 'enable', 'person': self.customer.portal_users.get().pk})
         self.assertEqual(self._statuses()['Fitness First'], 'active')
 
-        response = self.client.post(self.url, {'action': 'temporary_password', 'customer': self.customer.pk})
+        response = self.client.post(self.url, {'action': 'temporary_password', 'person': self.customer.portal_users.get().pk})
         password = response.context['password']
         user.refresh_from_db()
         self.assertTrue(user.check_password(password))
         self.customer.refresh_from_db()
-        self.assertTrue(self.customer.must_change_password)
+        self.assertTrue(self.customer.portal_users.get().must_change_password)
         self.assertEqual(len(mail.outbox), 0)
 
     def test_change_login_email(self):
         user = User.objects.create_user('old@example.com', email='old@example.com', password='pass12345')
-        self.customer.user = user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=user)
         self.client.login(username='admin1', password='pass12345')
-        self.client.post(self.url, {'action': 'change_email', 'customer': self.customer.pk, 'email': 'new@example.com'})
+        self.client.post(self.url, {'action': 'change_email', 'person': self.customer.portal_users.get().pk,
+                                    'email': 'new@example.com'})
         user.refresh_from_db()
         self.assertEqual((user.username, user.email), ('new@example.com', 'new@example.com'))
 
 
+class PortalPeopleTests(CustomerTestCase):
+    """Several people at one customer, each with their own login, all seeing
+    the whole customer; our staff add and remove them (docs/go_live_plan.md)."""
+
+    url = '/customers/portal-login/'
+
+    def setUp(self):
+        super().setUp()
+        self.jbr = Site.objects.create(customer=self.customer, name='JBR Branch', address='JBR')
+        self.client.login(username='admin1', password='pass12345')
+
+    def add(self, name, email):
+        return self.client.post(self.url, {'action': 'add_person', 'customer': self.customer.pk, 'name': name,
+                                           'email': email})
+
+    def set_up(self, email):
+        """The person opens their welcome link and sets their password."""
+        link = next(line for line in mail.outbox[-1].body.splitlines() if '/customers/portal/account/' in line)
+        client = self.client_class()
+        client.post(link[link.index('/customers/'):], {
+            'contact_name': 'Sara Ali', 'contact_phone': '0509876543', 'contact_email': 'sara@fitnessfirst.ae',
+            'billing_address': 'PO Box 1', 'shipping_address': 'Warehouse 3',
+            'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
+        })
+        return client
+
+    def test_two_people_each_with_their_own_login_both_see_every_branch(self):
+        self.add('Omar Head Office', 'omar@fitnessfirst.example')
+        self.assertEqual(mail.outbox[-1].to, ['omar@fitnessfirst.example'])
+        omar = self.set_up('omar@fitnessfirst.example')
+        self.add('Lina JBR', 'lina@fitnessfirst.example')
+        lina = self.set_up('lina@fitnessfirst.example')
+        self.assertEqual(self.customer.portal_users.count(), 2)
+        for client in (omar, lina):
+            page = client.get('/customers/portal/tickets/new/')
+            self.assertEqual(set(page.context['form'].fields['site'].queryset), {self.site, self.jbr})
+        # On the customer's page, each with their own status.
+        people = self.client.get(f'/customers/{self.customer.pk}/').context['portal_people']
+        self.assertEqual([(row['person'].name, row['status']) for row in people],
+                         [('Omar Head Office', 'active'), ('Lina JBR', 'active')])
+
+    def test_the_same_email_is_refused(self):
+        self.add('Omar', 'omar@fitnessfirst.example')
+        self.add('Someone else', 'OMAR@fitnessfirst.example')
+        self.assertEqual(self.customer.portal_users.count(), 1)
+
+    def test_removing_one_leaves_the_other(self):
+        self.add('Omar', 'omar@fitnessfirst.example')
+        self.set_up('omar@fitnessfirst.example')
+        self.add('Lina', 'lina@fitnessfirst.example')
+        lina = self.set_up('lina@fitnessfirst.example')
+        omar = self.customer.portal_users.get(user__username='omar@fitnessfirst.example')
+        self.client.post(self.url, {'action': 'remove', 'person': omar.pk})
+        self.assertEqual([p.user.username for p in self.customer.portal_users.all()], ['lina@fitnessfirst.example'])
+        self.assertFalse(self.client_class().login(username='omar@fitnessfirst.example', password='br4nd-New-Pass!'))
+        self.assertEqual(lina.get('/customers/portal/').status_code, 200)
+
+    def test_a_request_shows_who_sent_it_and_its_confirmation_goes_to_them(self):
+        self.add('Lina JBR', 'lina@fitnessfirst.example')
+        lina = self.set_up('lina@fitnessfirst.example')
+        form = lina.get('/customers/portal/tickets/new/').context['form']
+        self.assertEqual((form['contact_name'].value(), form['contact_email'].value()),
+                         ('Lina JBR', 'lina@fitnessfirst.example'))
+        lina.post('/customers/portal/tickets/new/', {
+            'site': self.jbr.pk, 'about': 'other', 'need': 'assistance', 'subject': 'Lockers',
+            'message': 'Two lockers do not close.', 'contact_name': 'Lina JBR', 'contact_phone': '0501112223',
+            'contact_email': 'lina@fitnessfirst.example',
+            **{f'machines-{key}': value for key, value in {'TOTAL_FORMS': '0', 'INITIAL_FORMS': '0'}.items()},
+        })
+        ticket = CustomerTicket.objects.get(customer=self.customer)
+        self.assertEqual(ticket.submitted_by.username, 'lina@fitnessfirst.example')
+        self.assertContains(self.client.get(f'/tasks/tickets/{ticket.pk}/'), 'Sent by Lina JBR')
+        self.assertTrue(any('lina@fitnessfirst.example' in message.to for message in mail.outbox))
+
+    def test_deactivating_the_customer_stops_everyone(self):
+        self.add('Omar', 'omar@fitnessfirst.example')
+        self.add('Lina', 'lina@fitnessfirst.example')
+        self.customer.set_active(False, reason='Closed')
+        self.assertFalse(User.objects.filter(portal_user__customer=self.customer, is_active=True).exists())
+
+
 class PortalPasswordHelpTests(CustomerTestCase):
     def test_sends_a_link_to_a_customer_and_says_the_same_to_anyone(self):
-        self.customer.user = User.objects.create_user(
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user(
             'contact@fitnessfirst.example', email='contact@fitnessfirst.example', password='pass12345',
-        )
-        self.customer.save(update_fields=['user'])
+        ))
 
         known = self.client.post('/customers/portal/password-help/', {'email': 'contact@fitnessfirst.example'})
         unknown = self.client.post('/customers/portal/password-help/', {'email': 'nobody@example.com'})
@@ -1661,8 +1672,7 @@ class PortalPasswordHelpTests(CustomerTestCase):
 class CustomerAccountUnlockTests(CustomerTestCase):
     def setUp(self):
         super().setUp()
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
 
     def test_locked_account_shows_in_the_bell_and_unlocks_at_once(self):
         for _ in range(5):
@@ -1679,7 +1689,7 @@ class CustomerAccountUnlockTests(CustomerTestCase):
         kinds = [item['kind'] for item in response.context['unseen_notifications']]
         self.assertIn('customer_locked', kinds)
 
-        staff.post('/customers/portal-login/', {'action': 'unlock', 'customer': self.customer.pk})
+        staff.post('/customers/portal-login/', {'action': 'unlock', 'person': self.customer.portal_users.get().pk})
         self.assertNotIn('fitnessfirst', locked_usernames())
         response = self.client.post('/customers/portal/login/', {'username': 'fitnessfirst', 'password': 'pass12345'})
         self.assertEqual(response.status_code, 302)

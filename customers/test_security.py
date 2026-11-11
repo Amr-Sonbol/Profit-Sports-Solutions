@@ -12,7 +12,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from customers.models import Asset, Customer, Site
+from customers.models import Asset, Customer, PortalUser, Site
 from people.models import Technician
 from reference.models import Brand, Country
 from reports.models import CustomerFeedback, WorkReport
@@ -36,7 +36,8 @@ class SecurityTestCase(TestCase):
 
     def _customer(self, username, name):
         user = User.objects.create_user(username, password=PASSWORD)
-        customer = Customer.objects.create(country=self.country, name=name, segment='gym', user=user)
+        customer = Customer.objects.create(country=self.country, name=name, segment='gym')
+        PortalUser.objects.create(customer=customer, user=user)
         site = Site.objects.create(customer=customer, name=f'{name} Main', address='Dubai')
         asset = Asset.objects.create(site=site, brand=self.brand, model_name='Excite Run 700', serial_no=f'{username}-1')
         task = Task.objects.create(
@@ -304,8 +305,12 @@ class CopyWelcomeLinkTests(SecurityTestCase):
                                            contact_email='owner@newgym.example')
         Site.objects.create(customer=self.new, name='New Gym Main', address='Dubai')
 
+    def person(self):
+        from customers.accounts import add_person
+        return self.new.portal_users.first() or add_person(self.new, self.new.contact_email)
+
     def copy(self, client):
-        return client.post('/customers/portal-login/', {'action': 'copy_welcome_link', 'customer': self.new.pk})
+        return client.post('/customers/portal-login/', {'action': 'copy_welcome_link', 'person': self.person().pk})
 
     def test_an_admin_gets_the_link_and_it_opens_the_account_set_up(self):
         page = self.copy(self.login('admin1'))
@@ -314,8 +319,8 @@ class CopyWelcomeLinkTests(SecurityTestCase):
         self.assertIn('/customers/portal/account/', link)
         self.assertContains(page, link)
         self.new.refresh_from_db()
-        self.assertEqual(self.new.user.username, 'owner@newgym.example')
-        self.assertTrue(self.new.must_change_password)
+        self.assertEqual(self.new.portal_users.get().user.username, 'owner@newgym.example')
+        self.assertTrue(self.new.portal_users.get().must_change_password)
         # It opens the account set-up page, exactly as the email's link does.
         self.assertTemplateUsed(self.client_class().get(link.split('testserver', 1)[1]), 'customers/portal_account_link.html')
 
@@ -327,22 +332,21 @@ class CopyWelcomeLinkTests(SecurityTestCase):
 
     def test_customers_cannot_get_it(self):
         self.assertNotEqual(self.copy(self.login('gyma')).status_code, 200)
-        self.assertIsNone(Customer.objects.get(pk=self.new.pk).user)
+        self.assertIsNone(self.new.portal_users.get().invited_at)  # nothing issued
 
-    def test_a_temporary_password_in_one_click_for_a_customer_with_no_login_yet(self):
-        page = self.login('admin1').post('/customers/portal-login/', {'action': 'temporary_password', 'customer': self.new.pk})
+    def test_a_temporary_password_in_one_click(self):
+        page = self.login('admin1').post('/customers/portal-login/', {'action': 'temporary_password', 'person': self.person().pk})
         self.assertEqual(page.status_code, 200)
         password = page.context['password']
         self.new.refresh_from_db()
-        self.assertTrue(self.new.must_change_password)
+        self.assertTrue(self.new.portal_users.get().must_change_password)
         self.assertTrue(self.client_class().login(username='owner@newgym.example', password=password))
 
     def test_no_login_is_made_for_a_customer_without_an_email(self):
         self.new.contact_email = ''
         self.new.save(update_fields=['contact_email'])
-        self.login('admin1').post('/customers/portal-login/', {'action': 'temporary_password', 'customer': self.new.pk})
-        self.new.refresh_from_db()
-        self.assertIsNone(self.new.user)
+        self.login('admin1').post('/customers/portal-login/', {'action': 'invite', 'customer': self.new.pk})
+        self.assertFalse(self.new.portal_users.exists())
 
 
 class KeepMeSignedInTests(SecurityTestCase):

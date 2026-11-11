@@ -3293,8 +3293,10 @@ def ticket_status(request, token):
     only be submitted while signed in), so this only renders it for
     that same customer, never anyone else who happens to have the link.
     """
+    from customers.models import portal_customer
+
     ticket = get_object_or_404(CustomerTicket, token=token)
-    customer = getattr(request.user, 'customer', None)
+    customer = portal_customer(request.user)
     if customer is not None and ticket.customer_id != customer.id:
         # A link from an email for another account (two accounts, one inbox): say so plainly —
         # never whose it is — and show this account's own requests.
@@ -6618,6 +6620,8 @@ def ticket_for_app(request, technician, access):
         'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'status': ticket.status,
         'status_display': ticket.get_status_display(), 'escalated': pending is not None,
         'submitted_at': ticket.submitted_at, 'company_name': ticket.company_name,
+        # The person at the customer who sent it from the portal; '' when staff opened it.
+        'sent_by': (ticket.submitted_by.first_name or ticket.submitted_by.email) if ticket.submitted_by_id else '',
         'customer_name': ticket.customer.name if ticket.customer_id else ticket.company_name,
         'site_name': ticket.site.name if ticket.site_id else ticket.site_description,
         'site_address': (ticket.site.address if ticket.site_id else '') or ticket.site_address,

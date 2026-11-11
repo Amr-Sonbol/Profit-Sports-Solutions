@@ -18,8 +18,10 @@ class TechnicianLocaleMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        from customers.models import portal_customer
+
         technician = getattr(request.user, 'technician', None)
-        customer = getattr(request.user, 'customer', None)
+        customer = portal_customer(request.user)
         person = technician or customer
         if person is not None:
             translation.activate(person.language)
@@ -71,16 +73,19 @@ class ViewAsCustomerMiddleware:
             from django.urls import reverse
             from django.utils.translation import gettext as _
 
-            from customers.models import Customer
+            from customers.models import PortalUser
             from people.models import Technician
 
             technician = getattr(request.user, 'technician', None)
             is_admin = technician is not None and technician.role == Technician.Role.ADMIN
             customer = person = None
+            customer_login = None
             if is_admin and customer_id:
-                customer = Customer.objects.select_related('user', 'country').filter(
-                    pk=customer_id, user__isnull=False, user__is_active=True,
+                # One of its people who can sign in: everyone sees the whole customer, the same.
+                customer_login = PortalUser.objects.select_related('user', 'customer__country').filter(
+                    customer_id=customer_id, user__is_active=True,
                 ).first()
+                customer = customer_login.customer if customer_login else None
             elif is_admin and user_id:
                 person = Technician.objects.select_related('user', 'country').filter(
                     user_id=user_id, user__is_active=True,
@@ -94,7 +99,7 @@ class ViewAsCustomerMiddleware:
                     messages.error(request, _('View only: nothing can be sent or changed while viewing as someone else.'))
                     return redirect(request.META.get('HTTP_REFERER') or reverse('home'))
                 request.real_user = request.user
-                request.user = (customer or person).user
+                request.user = customer_login.user if customer is not None else person.user
                 request.viewing_as = customer
                 request.viewing_as_user = person
         return self.get_response(request)

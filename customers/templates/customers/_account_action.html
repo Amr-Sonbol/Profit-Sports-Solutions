@@ -1,6 +1,6 @@
-{% load i18n %}<form method="post" action="{% url 'customers:portal_login_action' %}">
+{% load i18n %}{% comment %}One action on a person's portal login (customers.views.portal_login_action): `action`, `label`; `primary` for the row's main one; `confirm`, a question asked first.{% endcomment %}<form method="post" action="{% url 'customers:portal_login_action' %}"{% if confirm %} data-confirm="{{ confirm }}"{% endif %}>
     {% csrf_token %}
     <input type="hidden" name="action" value="{{ action }}">
-    <input type="hidden" name="customer" value="{{ customer.pk }}">
-    <button type="submit" class="button button--secondary">{{ label }}</button>
+    <input type="hidden" name="person" value="{{ person.pk }}">
+    <button type="submit" class="button{% if not primary %} button--secondary{% endif %}">{{ label }}</button>
 </form>

@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
 
-from customers.models import Customer, Site
+from customers.models import PortalUser, Customer, Site
 from people.models import Technician
 from reference.models import Country
 
@@ -49,7 +49,14 @@ class PortalAccountTests(TestCase):
         return self.client_class(HTTP_HOST=PORTAL)
 
     def accounts(self, action, **extra):
-        return self.staff.post('/customers/portal-login/', {'action': action, 'customer': self.customer.pk, **extra})
+        """An action on the customer (invite its contact) or on its one person (made first, if need be)."""
+        from customers.accounts import add_person
+        if action in ('invite', 'add_person'):
+            target = {'customer': self.customer.pk}
+        else:
+            person = self.customer.portal_users.first() or add_person(self.customer, self.customer.contact_email)
+            target = {'person': person.pk}
+        return self.staff.post('/customers/portal-login/', {'action': action, **target, **extra})
 
     def can_sign_in(self, password, username='ali@newgym.example'):
         response = self.visitor().post('/customers/portal/login/', {'username': username, 'password': password})
@@ -65,7 +72,7 @@ class PortalAccountTests(TestCase):
         self.assertEqual(response.status_code, 302, getattr(response.context, 'get', lambda _: None)('form') and response.context['form'].errors)
         self.assertEqual(customer.get('/customers/portal/').status_code, 200)  # signed in, home opens
         self.customer.refresh_from_db()
-        self.assertFalse(self.customer.must_change_password)
+        self.assertFalse(self.customer.portal_users.get().must_change_password)
         self.assertEqual(self.customer.billing_address, 'Office 4, Dubai')
         self.assertTrue(self.can_sign_in('Strong-Pass-2026!'))
         # The link works once.
@@ -85,7 +92,7 @@ class PortalAccountTests(TestCase):
 
     def test_a_forgotten_password(self):
         self.accounts('temporary_password')
-        Customer.objects.filter(pk=self.customer.pk).update(must_change_password=False)
+        PortalUser.objects.filter(customer=self.customer).update(must_change_password=False)
         mail.outbox.clear()
         self.visitor().post('/customers/portal/password-help/', {'email': 'ali@newgym.example'})
         self.assertEqual(len(mail.outbox), 1)
@@ -102,8 +109,8 @@ class PortalAccountTests(TestCase):
 
     def test_changing_the_sign_in_email(self):
         self.accounts('temporary_password')
-        Customer.objects.filter(pk=self.customer.pk).update(must_change_password=False)
-        user = Customer.objects.get(pk=self.customer.pk).user
+        PortalUser.objects.filter(customer=self.customer).update(must_change_password=False)
+        user = self.customer.portal_users.get().user
         user.set_password('Strong-Pass-2026!')
         user.save()
         customer = self.visitor()
@@ -121,8 +128,8 @@ class PortalAccountTests(TestCase):
 
     def test_a_wrong_password_never_changes_the_email(self):
         self.accounts('temporary_password')
-        Customer.objects.filter(pk=self.customer.pk).update(must_change_password=False)
-        user = Customer.objects.get(pk=self.customer.pk).user
+        PortalUser.objects.filter(customer=self.customer).update(must_change_password=False)
+        user = self.customer.portal_users.get().user
         user.set_password('Strong-Pass-2026!')
         user.save()
         customer = self.visitor()

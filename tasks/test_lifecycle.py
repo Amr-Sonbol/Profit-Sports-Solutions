@@ -16,7 +16,7 @@ from django.core import mail
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from customers.models import Customer, Site
+from customers.models import Customer, PortalUser, Site
 from people.models import Technician
 from reference.models import Country
 from reports.models import CustomerFeedback
@@ -63,9 +63,8 @@ class LifecycleTestCase(TestCase):
         self.supervisor = self._staff('supervisor1', 'Sara Super', Technician.Role.SUPERVISOR)
         self.tech = self._staff('tech1', 'Tarek Tech', Technician.Role.TECHNICIAN)
         self.customer_user = User.objects.create_user('fitnessfirst', email='ali@fitnessfirst.example', password=PASSWORD)
-        self.customer = Customer.objects.create(
-            country=self.country, name='Fitness First', segment='gym', user=self.customer_user,
-        )
+        self.customer = Customer.objects.create(country=self.country, name='Fitness First', segment='gym')
+        PortalUser.objects.create(customer=self.customer, user=self.customer_user)
         self.site = Site.objects.create(
             customer=self.customer, name='Marina Branch', address='Dubai Marina',
             contact_name='Ali', contact_email='ali@fitnessfirst.example',

@@ -32,18 +32,18 @@ from tasks.views import (
 )
 
 from .accounts import (
-    LINK_VALID_DAYS, AccountStatus, account_status, email_change_for_token, locked_usernames, log_account_action,
-    send_email_change_link, send_email_changed_notice, send_password_link, send_welcome, user_for_link_token,
-    welcome_link,
+    LINK_VALID_DAYS, AccountStatus, account_status, add_person, customer_status, customer_statuses,
+    email_change_for_token, invite_customer, locked_usernames, log_account_action, send_email_change_link,
+    send_email_changed_notice, send_password_link, send_welcome, user_for_link_token, welcome_link,
 )
 from .forms import (
-    ChangeLoginEmailForm, CreateLoginForm, CustomerEditForm, NewCustomerForm, CustomerFirstLoginForm,
+    AddPortalUserForm, ChangeLoginEmailForm, CustomerEditForm, NewCustomerForm, CustomerFirstLoginForm,
     CustomerTermsForm, PortalBranchRequestForm, SiteTermsForm,
     CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
     PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm,
     SiteCreateForm, SiteEditForm,
 )
-from .models import Asset, Customer, Site
+from .models import Asset, Customer, PortalUser, Site, portal_customer
 from . import notify
 from .progress import (
     DONE_STATUSES, is_booked, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress,
@@ -114,9 +114,10 @@ def customer_list(request):
         customers = customers.filter(country=get_active_country(request))
     if search:
         customers = customers.filter(
-            Q(name__icontains=search) | Q(contact_email__icontains=search) | Q(user__username__icontains=search),
-        )
-    customers = customers.select_related('country', 'user').prefetch_related('sites').order_by('name')
+            Q(name__icontains=search) | Q(contact_email__icontains=search)
+            | Q(portal_users__user__username__icontains=search),
+        ).distinct()
+    customers = customers.select_related('country').prefetch_related('sites', 'portal_users__user').order_by('name')
 
     rows = [{'customer': customer} for customer in customers]
     portal = ''
@@ -126,13 +127,20 @@ def customer_list(request):
         counts = {value: 0 for value in AccountStatus.values}
         for row in rows:
             # Our own account (the warehouses) never gets a portal login.
-            if not row['customer'].is_internal:
-                row['portal'] = account_status(row['customer'], locked, now)
-                counts[row['portal']] += 1
+            customer = row['customer']
+            if not customer.is_internal:
+                # One status for the row (what most needs doing first); a tab finds a customer by any of its people's.
+                row['statuses'] = customer_statuses(customer, locked, now)
+                row['portal'] = customer_status(row['statuses'])
+                row['people'] = len(customer.portal_users.all())
+                row['last_login'] = max((person.user.last_login for person in customer.portal_users.all()
+                                         if person.user.last_login), default=None)
+                for status in row['statuses']:
+                    counts[status] += 1
         status_counts = [(value, label, counts[value]) for value, label in AccountStatus.choices]
         portal = request.GET.get('portal', '')
         if portal in AccountStatus.values:
-            rows = [row for row in rows if row.get('portal') == portal]
+            rows = [row for row in rows if portal in row.get('statuses', ())]
         else:
             portal = ''
 
@@ -170,7 +178,7 @@ def customer_create(request):
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
             customer, site = form.save()
-        invited = form.cleaned_data['invite'] and send_welcome(request, customer, email=customer.contact_email)
+        invited = form.cleaned_data['invite'] and invite_customer(request, customer)
         log_account_action(request, customer, 'Customer created and portal welcome email sent' if invited
                            else 'Customer created')
         if invited:
@@ -242,10 +250,11 @@ def customer_detail(request, pk):
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
         'can_add_site': can_add_site,
-        # The portal login and what can be done to it (portal_login_action); never our own warehouses.
-        'portal_status': account_status(customer, locked_usernames())
-        if can_add_site and not customer.is_internal else None,
-        'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
+        # Its people who sign in to the portal, and what can be done to each (portal_login_action);
+        # never our own warehouses.
+        'portal_section': can_add_site and not customer.is_internal,
+        'portal_people': _portal_people(customer) if can_add_site and not customer.is_internal else [],
+        'link_days': LINK_VALID_DAYS, 'add_person_form': AddPortalUserForm(),
         'can_see_terms': can_see_terms, 'terms_form': terms_form, 'from_request': from_request,
         'today': timezone.localdate(),
         **_customer_overview(request, customer),
@@ -267,8 +276,8 @@ def view_as_start(request, pk):
     technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
     if technician.role != Technician.Role.ADMIN or request.method != 'POST':
         raise PermissionDenied
-    customer = get_object_or_404(Customer.objects.select_related('user'), pk=pk)
-    if customer.user is None or not customer.user.is_active:
+    customer = get_object_or_404(Customer, pk=pk)
+    if not customer.portal_users.filter(user__is_active=True).exists():
         messages.error(request, _('This customer has no active portal login to view.'))
         return redirect('customers:customer_detail', pk=customer.pk)
     log_account_action(request, customer, f'Admin viewed the portal as this customer ({request.user.get_username()})')
@@ -338,8 +347,8 @@ def _customer_overview(request, customer):
 @login_required
 def customer_edit(request, pk):
     """Everything about an existing customer in one place — their own
-    details, their portal login (create it, reset its password), and
-    deactivating them. A manager or admin reaches any customer regardless
+    details, and deactivating them. Their portal logins are on their page's
+    Portal login section. A manager or admin reaches any customer regardless
     of active country, same reasoning as customer_detail.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
@@ -347,34 +356,9 @@ def customer_edit(request, pk):
     customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
     form = CustomerEditForm(instance=customer)
-    login_form = CreateLoginForm() if is_manager and customer.user_id is None else None
-    password_form = NewPasswordForm(user=customer.user) if is_manager and customer.user_id else None
     deactivate_form = DeactivateCustomerForm()
 
-    if request.method == 'POST' and request.POST.get('action') == 'create_login' and login_form is not None:
-        login_form = CreateLoginForm(request.POST)
-        if login_form.is_valid():
-            email = login_form.cleaned_data['email']
-            send_welcome(request, customer, email=email)
-            log_account_action(request, customer, 'Portal account created; welcome email sent')
-            messages.success(request, _(
-                'A welcome email with a secure activation link has been sent to %(email)s.',
-            ) % {'email': email})
-            return redirect('customers:customer_edit', pk=customer.pk)
-
-    elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
-        password_form = NewPasswordForm(user=customer.user, data=request.POST)
-        if password_form.is_valid():
-            password_form.save()
-            # Temporary, same as a technician's: they choose their own next time.
-            customer.must_change_password = True
-            customer.save(update_fields=['must_change_password'])
-            log_account_action(request, customer, 'Portal temporary password set')
-            messages.success(request, _('The password has been reset. They will be asked to choose their own '
-                                        'at their next sign-in.'))
-            return redirect('customers:customer_edit', pk=customer.pk)
-
-    elif request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
+    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
         deactivate_form = DeactivateCustomerForm(request.POST)
         if deactivate_form.is_valid():
             customer.set_active(False, reason=deactivate_form.cleaned_data['reason'])
@@ -390,18 +374,11 @@ def customer_edit(request, pk):
         form = CustomerEditForm(request.POST, instance=customer)
         if form.is_valid():
             form.save()
-            # The login email stays in lockstep with the business contact
-            # email whenever there is one — one address to keep current,
-            # not two that can quietly drift apart.
-            if customer.user_id and customer.contact_email and customer.user.email != customer.contact_email:
-                customer.user.email = customer.contact_email
-                customer.user.save(update_fields=['email'])
             messages.success(request, _('Customer updated.'))
             return redirect('customers:customer_detail', pk=customer.pk)
 
     context = {
-        'customer': customer, 'form': form, 'login_form': login_form,
-        'password_form': password_form, 'deactivate_form': deactivate_form, 'is_manager': is_manager,
+        'customer': customer, 'form': form, 'deactivate_form': deactivate_form, 'is_manager': is_manager,
     }
     return render(request, 'customers/customer_edit.html', context)
 
@@ -614,10 +591,15 @@ def customer_import_template(request):
 def require_customer(request):
     """Restrict a view to a customer's own portal login — the customer-
     side counterpart to people.permissions.require_technician."""
-    customer = getattr(request.user, 'customer', None)
+    customer = portal_customer(request.user)
     if customer is None:
         raise PermissionDenied
     return customer
+
+
+def _needs_setup(user):
+    """Still to set their own password (invited, or given a temporary one)."""
+    return user.portal_user.must_change_password
 
 
 def _portal_landing(user):
@@ -625,7 +607,7 @@ def _portal_landing(user):
     setup screen if they're still on a temporary password, their account
     home otherwise.
     """
-    if user.customer.must_change_password:
+    if _needs_setup(user):
         return redirect('customers:portal_first_login')
     return redirect('customers:portal_home')
 
@@ -638,20 +620,20 @@ def portal_login(request):
     (PortalLoginForm), so it never says which accounts exist.
     """
     if request.user.is_authenticated:
-        return _portal_landing(request.user) if hasattr(request.user, 'customer') else redirect('home')
+        return _portal_landing(request.user) if hasattr(request.user, 'portal_user') else redirect('home')
 
     next_url = request.POST.get('next') or request.GET.get('next') or ''
 
     form = PortalLoginForm(request, data=request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.get_user()
-        if hasattr(user, 'customer'):
+        if hasattr(user, 'portal_user'):
             login(request, user)
             # "Keep me signed in" (ticked by default): the usual two weeks; unticked — a shared
             # computer — the sign-in ends when the browser closes.
             if not request.POST.get('remember'):
                 request.session.set_expiry(0)
-            if user.customer.must_change_password:
+            if _needs_setup(user):
                 return redirect('customers:portal_first_login')
             if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
                 return redirect(next_url)
@@ -672,14 +654,16 @@ def _setup_initial(customer):
 
 
 def _complete_setup(customer, user, form):
-    """Save what the customer filled in at first sign-in and their new
-    password; the portal opens normally from then on. `user` is the very
-    object the session holds, so its new password hash is the one the
-    session is re-keyed to."""
+    """Save what the person filled in at first sign-in — the company's
+    details, prefilled with what's on file — and their new password; the
+    portal opens normally from then on. `user` is the very object the
+    session holds, so its new password hash is the one the session is
+    re-keyed to."""
     for field in SETUP_FIELDS:
         setattr(customer, field, form.cleaned_data[field])
-    customer.must_change_password = False
-    customer.save(update_fields=SETUP_FIELDS + ['must_change_password'])
+    customer.save(update_fields=SETUP_FIELDS)
+    user.portal_user.must_change_password = False
+    user.portal_user.save(update_fields=['must_change_password'])
     user.set_password(form.cleaned_data['new_password1'])
     user.save(update_fields=['password'])
 
@@ -693,7 +677,7 @@ def portal_first_login(request):
     straight through, same as it always did.
     """
     customer = require_customer(request)
-    if not customer.must_change_password:
+    if not _needs_setup(request.user):
         return redirect('customers:portal_home')
 
     if request.method == 'POST':
@@ -712,7 +696,7 @@ def portal_first_login(request):
 def _portal_customer(request):
     """The signed-in customer, or a redirect to finish their first sign-in."""
     customer = require_customer(request)
-    return customer, redirect('customers:portal_first_login') if customer.must_change_password else None
+    return customer, redirect('customers:portal_first_login') if _needs_setup(request.user) else None
 
 
 def _portal_requests(customer):
@@ -846,7 +830,7 @@ def portal_visit_report_pdf(request, pk):
     from reports.pdf import render_visit_report_pdf, report_language
 
     customer = require_customer(request)
-    if customer.must_change_password:
+    if _needs_setup(request.user):
         return redirect('customers:portal_first_login')
     task = get_object_or_404(
         Task.objects.select_related('site__customer__country', 'task_type', 'report'), pk=pk, site__customer=customer,
@@ -892,7 +876,7 @@ def portal_settings(request):
         email_form = PortalEmailChangeForm(request.POST, user=request.user)
         if email_form.is_valid():
             new_email = email_form.cleaned_data['email']
-            send_email_change_link(request, customer, new_email)
+            send_email_change_link(request, request.user.portal_user, new_email)
             messages.success(request, _(
                 'We have sent a confirmation link to %(email)s. Your sign-in email changes once you open it.'
             ) % {'email': new_email})
@@ -1073,7 +1057,7 @@ def portal_branch_request(request):
     created from it. An admin adds the branch from that request
     (tasks.views.ticket_review's "Add this branch")."""
     customer = require_customer(request)
-    if customer.must_change_password:
+    if _needs_setup(request.user):
         return redirect('customers:portal_first_login')
     form = PortalBranchRequestForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
@@ -1092,7 +1076,7 @@ def portal_branch_request(request):
             lines.append(data['message'])
         with transaction.atomic():
             ticket = CustomerTicket(
-                customer=customer, country=customer.country, company_name=customer.name,
+                customer=customer, submitted_by=request.user, country=customer.country, company_name=customer.name,
                 customer_code=customer.code, site_description=data['name'], site_address=data['address'],
                 contact_name=data['contact_name'] or customer.contact_name or customer.name,
                 contact_phone=data['contact_phone'] or customer.contact_phone,
@@ -1124,7 +1108,7 @@ def portal_ticket_new(request):
     description, with its files on the ticket itself.
     """
     customer = require_customer(request)
-    if customer.must_change_password:
+    if _needs_setup(request.user):
         return redirect('customers:portal_first_login')
 
     if request.method == 'POST':
@@ -1151,6 +1135,7 @@ def portal_ticket_new(request):
             with transaction.atomic():
                 ticket = form.save(commit=False)
                 ticket.customer = customer
+                ticket.submitted_by = request.user
                 ticket.site = site
                 ticket.country = customer.country
                 ticket.company_name = customer.name
@@ -1188,8 +1173,9 @@ def portal_ticket_new(request):
             return redirect('customers:portal_home')
     else:
         form = CustomerPortalTicketForm(customer=customer, initial={
-            'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
-            'contact_email': customer.contact_email, 'shipping_address': customer.shipping_address,
+            # The person sending it: they hear back about it.
+            'contact_name': request.user.first_name or customer.contact_name, 'contact_phone': customer.contact_phone,
+            'contact_email': request.user.email or customer.contact_email, 'shipping_address': customer.shipping_address,
         })
         machine_initial = []
         # From a machine's page ("Report a problem with this machine"): it and its site are chosen.
@@ -1221,25 +1207,46 @@ def _account_redirect(request, customer=None):
 INVITEABLE = (AccountStatus.NOT_INVITED, AccountStatus.INVITED, AccountStatus.EXPIRED)
 
 
+def _portal_people(customer):
+    """A customer's people who sign in to the portal, each with their login's status."""
+    locked, now = locked_usernames(), timezone.now()
+    return [{'person': person, 'status': account_status(person, locked, now)}
+            for person in customer.portal_users.select_related('user')]
+
+
 @login_required
 def portal_login_action(request):
-    """What's done to a customer's portal login (POST `action`, `customer`),
-    from its Portal login section on the customer's page — or welcome emails
-    to several at once (`invite_selected`, `customers`) from the Customers
-    list. For whoever manages portal logins (customer_accounts); each action
-    is recorded in the Audit log.
+    """What's done to a customer's portal logins, from its Portal login
+    section on the customer's page: invite the contact as the first person
+    (`invite`, `customer`), add a person (`add_person`, `customer`, `name`,
+    `email`), or act on one (`person` — resend the welcome email or copy its
+    link, send a password link, unlock, disable or enable, change the login
+    email, set a temporary password, remove). From the Customers list,
+    welcome emails to several customers at once (`invite_selected`,
+    `customers`). For whoever manages portal logins (customer_accounts); each
+    action is recorded in the Audit log, on the customer.
     """
     require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
     if request.method != 'POST':
         return redirect('customers:customer_list')
     locked = locked_usernames()
     action = request.POST.get('action')
+    taken = _('The email address %(email)s already belongs to another account.')
+
     if action == 'invite_selected':
+        # No one yet: their contact is invited. Invited but not set up: sent again.
         sent, skipped = 0, 0
         selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True, is_internal=False)
-        for customer in selected.select_related('user'):
-            if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
+        for customer in selected.prefetch_related('portal_users__user'):
+            people = [person for person in customer.portal_users.all()
+                      if account_status(person, locked) in (AccountStatus.INVITED, AccountStatus.EXPIRED)]
+            if not customer.portal_users.all() and invite_customer(request, customer):
                 log_account_action(request, customer, 'Portal welcome email sent')
+                sent += 1
+            elif people:
+                for person in people:
+                    send_welcome(request, person)
+                    log_account_action(request, customer, f'Portal welcome email sent to {person.user.email}')
                 sent += 1
             else:
                 skipped += 1
@@ -1248,49 +1255,61 @@ def portal_login_action(request):
         })
         return _account_redirect(request)
 
-    customer = get_object_or_404(
-        Customer.objects.select_related('user'), pk=request.POST.get('customer'), is_active=True,
-    )
-    user = customer.user
-    status = account_status(customer, locked)
-    if action == 'invite' and status in INVITEABLE:
-        if send_welcome(request, customer):
-            log_account_action(request, customer, 'Portal welcome email sent')
-            messages.success(request, _('Welcome email sent to %(email)s.') % {'email': customer.user.email})
-        else:
-            messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                'email': customer.contact_email,
-            })
-    elif action == 'copy_welcome_link' and status in INVITEABLE:
-        # The welcome email's own link, shown to copy and send another way.
-        link = welcome_link(request, customer)
-        if link is None:
-            messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                'email': customer.contact_email,
-            })
+    if action in ('invite', 'add_person'):
+        customer = get_object_or_404(Customer, pk=request.POST.get('customer'), is_active=True, is_internal=False)
+        if action == 'invite':
+            if invite_customer(request, customer):
+                log_account_action(request, customer, 'Portal welcome email sent')
+                messages.success(request, _('Welcome email sent to %(email)s.') % {'email': customer.contact_email})
+            else:
+                messages.error(request, taken % {'email': customer.contact_email})
             return _account_redirect(request, customer)
-        log_account_action(request, customer, 'Portal welcome link copied')
+        form = AddPortalUserForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, ' '.join(error for errors in form.errors.values() for error in errors))
+            return _account_redirect(request, customer)
+        person = add_person(customer, form.cleaned_data['email'], form.cleaned_data['name'])
+        send_welcome(request, person)
+        log_account_action(request, customer, f'Portal login added for {person.user.email}; welcome email sent')
+        messages.success(request, _('%(name)s can now sign in: a welcome email was sent to %(email)s.') % {
+            'name': person.name, 'email': person.user.email,
+        })
+        return _account_redirect(request, customer)
+
+    person = get_object_or_404(
+        PortalUser.objects.select_related('user', 'customer__country'), pk=request.POST.get('person'),
+        customer__is_active=True,
+    )
+    customer, user = person.customer, person.user
+    status = account_status(person, locked)
+    if action == 'resend' and status in (AccountStatus.INVITED, AccountStatus.EXPIRED):
+        send_welcome(request, person)
+        log_account_action(request, customer, f'Portal welcome email sent to {user.email}')
+        messages.success(request, _('Welcome email sent to %(email)s.') % {'email': user.email})
+    elif action == 'copy_welcome_link' and status in (AccountStatus.INVITED, AccountStatus.EXPIRED):
+        # The welcome email's own link, shown to copy and send another way.
+        link = welcome_link(request, person)
+        log_account_action(request, customer, f'Portal welcome link copied for {user.email}')
         return render(request, 'customers/customer_account_link.html', {
-            'customer': customer, 'link': link, 'days': LINK_VALID_DAYS,
+            'customer': customer, 'person': person, 'link': link, 'days': LINK_VALID_DAYS,
             'portal_address': settings.PORTAL_HOST or request.get_host(),
-            'return_query': request.POST.get('return_query', ''),
         })
     elif action == 'password_link' and status in (AccountStatus.ACTIVE, AccountStatus.LOCKED):
-        send_password_link(request, customer)
-        log_account_action(request, customer, 'Portal password link sent')
+        send_password_link(request, person)
+        log_account_action(request, customer, f'Portal password link sent to {user.email}')
         messages.success(request, _('A password link has been sent to %(email)s.') % {'email': user.email})
-    elif action == 'unlock' and user is not None:
+    elif action == 'unlock':
         axes_reset(username=user.username)
-        log_account_action(request, customer, 'Portal account unlocked')
-        messages.success(request, _('%(name)s has been unlocked.') % {'name': customer.name})
-    elif action in ('disable', 'enable') and user is not None:
+        log_account_action(request, customer, f'Portal login unlocked: {user.email}')
+        messages.success(request, _('%(name)s has been unlocked.') % {'name': person.name})
+    elif action in ('disable', 'enable'):
         user.is_active = action == 'enable'
         user.save(update_fields=['is_active'])
         log_account_action(
-            request, customer, 'Portal access enabled' if user.is_active else 'Portal access disabled',
+            request, customer, f'Portal access {"enabled" if user.is_active else "disabled"}: {user.email}',
         )
         messages.success(request, _('Portal access enabled.') if user.is_active else _('Portal access disabled.'))
-    elif action == 'change_email' and user is not None:
+    elif action == 'change_email':
         form = ChangeLoginEmailForm(request.POST, user=user)
         if form.is_valid():
             old_email = user.email
@@ -1300,25 +1319,25 @@ def portal_login_action(request):
             messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
         else:
             messages.error(request, form.errors['email'][0])
-    elif action == 'temporary_password' and (user.is_active if user else status in INVITEABLE):
+    elif action == 'remove':
+        # Their login stops working; what they sent keeps their name (user.first_name).
+        user.is_active = False
+        user.save(update_fields=['is_active'])
+        email = user.email
+        person.delete()
+        log_account_action(request, customer, f'Portal login removed: {email}')
+        messages.success(request, _('%(email)s can no longer sign in.') % {'email': email})
+    elif action == 'temporary_password' and user.is_active:
         # Shown once, right here, for reading out over the phone — never
-        # emailed, never stored anywhere readable. A customer with no login
-        # yet gets one on the spot (as the welcome email would create it).
-        if user is None:
-            if welcome_link(request, customer) is None:
-                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                    'email': customer.contact_email,
-                })
-                return _account_redirect(request, customer)
-            user = customer.user
+        # emailed, never stored anywhere readable.
         password = _generate_temporary_password()
         user.set_password(password)
         user.save(update_fields=['password'])
-        customer.must_change_password = True
-        customer.save(update_fields=['must_change_password'])
-        log_account_action(request, customer, 'Portal temporary password set')
+        person.must_change_password = True
+        person.save(update_fields=['must_change_password'])
+        log_account_action(request, customer, f'Portal temporary password set for {user.email}')
         return render(request, 'customers/customer_account_password.html', {
-            'customer': customer, 'password': password, 'return_query': request.POST.get('return_query', ''),
+            'customer': customer, 'person': person, 'password': password,
         })
     return _account_redirect(request, customer)
 
@@ -1335,13 +1354,13 @@ def portal_email_confirm(request, token):
         user.username = user.email = new_email
         user.save(update_fields=['username', 'email'])
         log_account_action(
-            request, user.customer, f'Portal sign-in email changed by the customer from {old_email} to {new_email}',
+            request, user.portal_user.customer, f'Portal sign-in email changed by {old_email} to {new_email}',
             user=user,
         )
         if old_email:
-            send_email_changed_notice(user.customer, old_email)
+            send_email_changed_notice(user.portal_user, old_email)
         messages.success(request, _('Your sign-in email is now %(email)s.') % {'email': new_email})
-    if request.user.is_authenticated and hasattr(request.user, 'customer'):
+    if request.user.is_authenticated and hasattr(request.user, 'portal_user'):
         return redirect('customers:portal_settings')
     return redirect('customers:portal_login')
 
@@ -1357,8 +1376,8 @@ def portal_account_link(request, token):
         return render(request, 'customers/portal_link_invalid.html', status=400)
     if request.user.is_authenticated and request.user != user:
         logout(request)
-    customer = user.customer
-    first_time = customer.must_change_password
+    customer = user.portal_user.customer
+    first_time = user.portal_user.must_change_password
 
     if first_time:
         form = CustomerFirstLoginForm(request.POST or None, user=user, initial=_setup_initial(customer))
@@ -1382,13 +1401,13 @@ def portal_password_help(request):
     find out who our customers are."""
     form = PortalPasswordHelpForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        customer = Customer.objects.filter(
-            is_active=True, user__is_active=True, user__username__iexact=form.cleaned_data['email'],
-        ).select_related('user').first()
-        if customer is not None:
-            if customer.must_change_password:
-                send_welcome(request, customer)
+        person = PortalUser.objects.filter(
+            customer__is_active=True, user__is_active=True, user__username__iexact=form.cleaned_data['email'],
+        ).select_related('user', 'customer__country').first()
+        if person is not None:
+            if person.must_change_password:
+                send_welcome(request, person)
             else:
-                send_password_link(request, customer)
+                send_password_link(request, person)
         return render(request, 'customers/portal_password_help.html', {'sent': True})
     return render(request, 'customers/portal_password_help.html', {'form': form})

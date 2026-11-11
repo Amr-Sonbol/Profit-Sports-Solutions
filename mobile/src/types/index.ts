@@ -298,6 +298,8 @@ export interface TicketDetail {
   status_display: string;
   escalated: boolean;
   submitted_at: string;
+  /** The person at the customer who sent it from the portal; '' when staff opened it. */
+  sent_by?: string;
   company_name: string;
   customer_name: string;
   site_name: string;

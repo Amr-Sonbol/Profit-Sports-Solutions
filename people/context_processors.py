@@ -112,14 +112,14 @@ def notification_bell(request):
         from django.db.models.functions import Lower
 
         from customers.accounts import locked_usernames
-        from customers.models import Customer
+        from customers.models import PortalUser
         locked = locked_usernames()
         if locked:
             items += [
-                {'kind': 'customer_locked', 'created_at': locked[customer.login], 'customer': customer}
-                for customer in Customer.objects.annotate(login=Lower('user__username')).filter(
-                    login__in=list(locked), is_active=True,
-                )
+                {'kind': 'customer_locked', 'created_at': locked[person.login], 'customer': person.customer}
+                for person in PortalUser.objects.annotate(login=Lower('user__username')).filter(
+                    login__in=list(locked), customer__is_active=True,
+                ).select_related('customer')
             ]
     # The phone app's errors not looked at yet — the admins'; gone once the list is opened.
     if technician.role == Technician.Role.ADMIN:

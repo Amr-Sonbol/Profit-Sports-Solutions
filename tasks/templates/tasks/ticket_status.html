@@ -43,7 +43,7 @@
         </div>
         <div>
             <dt>{% translate "Submitted" %}</dt>
-            <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
+            <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}{% if ticket.submitted_by %} · {% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %}{% endif %}</dd>
         </div>
         <div>
             <dt>{% translate "Request type" %}</dt>

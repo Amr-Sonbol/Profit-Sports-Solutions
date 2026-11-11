@@ -490,7 +490,7 @@ class CustomerView(APIView):
             'is_internal': customer.is_internal,
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             'contact_email': customer.contact_email, 'billing_address': customer.billing_address,
-            'has_portal': customer.user_id is not None,
+            'has_portal': customer.portal_users.filter(user__is_active=True).exists(),
             'sites': [
                 {
                     'id': site.pk, 'name': site.name, 'address': site.address,

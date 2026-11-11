@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 11:25+0000\n"
+"POT-Creation-Date: 2026-11-11 12:51+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -297,6 +297,10 @@ msgid "%(distance)s from the site"
 msgstr "%(distance)s من الموقع"
 
 #, python-format
+msgid "%(email)s can no longer sign in."
+msgstr "لم يعد بإمكان %(email)s تسجيل الدخول."
+
+#, python-format
 msgid "%(event)s at %(time)s"
 msgstr "%(event)s الساعة %(time)s"
 
@@ -343,6 +347,16 @@ msgid "%(minutes)s minutes"
 msgstr "%(minutes)s دقيقة"
 
 #, python-format
+msgid "%(n)s person"
+msgid_plural "%(n)s people"
+msgstr[0] "%(n)s أشخاص"
+msgstr[1] "شخص واحد"
+msgstr[2] "%(n)s أشخاص"
+msgstr[3] "%(n)s أشخاص"
+msgstr[4] "%(n)s أشخاص"
+msgstr[5] "%(n)s أشخاص"
+
+#, python-format
 msgid "%(name)s added without a login — add their email on their page so they can sign in."
 msgstr "تمت إضافة %(name)s بدون حساب دخول — أضف بريده الإلكتروني في صفحته ليتمكن من تسجيل الدخول."
 
@@ -353,6 +367,10 @@ msgstr "تمت إضافة %(name)s. أُرسل رابط الإعداد إلى %(
 #, python-format
 msgid "%(name)s already has %(jobs)s that day."
 msgstr "لدى %(name)s بالفعل %(jobs)s في ذلك اليوم."
+
+#, python-format
+msgid "%(name)s can now sign in: a welcome email was sent to %(email)s."
+msgstr "يمكن لـ %(name)s تسجيل الدخول الآن: أُرسلت رسالة الترحيب إلى %(email)s."
 
 #, python-format
 msgid "%(name)s has been signed out of the mobile app on all devices."
@@ -417,6 +435,9 @@ msgstr "%(start)s–%(end)s (متوقع)"
 #, python-format
 msgid "%(where)s: “%(text)s” is not in %(language)s, but the report is in %(language)s."
 msgstr "%(where)s: «%(text)s» ليس باللغة %(language)s، بينما التقرير باللغة %(language)s."
+
+msgid "+ Add a person"
+msgstr "+ إضافة شخص"
 
 msgid "+ Add new brand"
 msgstr "+ إضافة علامة تجارية جديدة"
@@ -613,10 +634,6 @@ msgstr ""
 msgid "A visit, created in one step"
 msgstr "زيارة تُنشأ بخطوة واحدة"
 
-#, python-format
-msgid "A welcome email with a secure activation link has been sent to %(email)s."
-msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آمناً إلى %(email)s."
-
 msgid "About"
 msgstr "الموضوع"
 
@@ -645,6 +662,9 @@ msgstr "الإجراء المتخذ: %(text)s"
 msgid "Action undone."
 msgstr "تم التراجع عن الإجراء."
 
+msgid "Actions"
+msgstr "الإجراءات"
+
 msgid "Activate"
 msgstr "تفعيل"
 
@@ -659,9 +679,6 @@ msgstr "نشط"
 
 msgid "Actual time of occurrence"
 msgstr "الوقت الفعلي للحدوث"
-
-msgid "Add a contact email"
-msgstr "إضافة بريد إلكتروني للتواصل"
 
 msgid "Add a contact email address first (Edit details)."
 msgstr "أضف بريدًا إلكترونيًا للتواصل أولًا (تعديل التفاصيل)."
@@ -686,6 +703,9 @@ msgstr "إضافة فرع"
 
 msgid "Add a tracking number (Edit) first; then you can send it to the customer."
 msgstr "أضف رقم تتبع أولًا (تعديل)، ثم يمكنك إرساله إلى العميل."
+
+msgid "Add and send welcome email"
+msgstr "إضافة وإرسال رسالة الترحيب"
 
 msgid "Add another machine"
 msgstr "إضافة جهاز آخر"
@@ -2180,11 +2200,15 @@ msgstr "التفاصيل"
 msgid "Directions"
 msgstr "الاتجاهات"
 
+#, python-format
+msgid "Disable %(name)s's portal access? They can't sign in until it's enabled again."
+msgstr "تعطيل وصول %(name)s إلى البوابة؟ لن يتمكن من تسجيل الدخول حتى يُعاد التفعيل."
+
+msgid "Disable access"
+msgstr "تعطيل الوصول"
+
 msgid "Disable login"
 msgstr "تعطيل تسجيل الدخول"
-
-msgid "Disable portal access"
-msgstr "تعطيل الوصول إلى البوابة"
 
 msgid "Disabled"
 msgstr "معطَّل"
@@ -2311,11 +2335,11 @@ msgstr "فارغ: شروط العميل."
 msgid "En route"
 msgstr "في الطريق"
 
+msgid "Enable"
+msgstr "تفعيل"
+
 msgid "Enable login"
 msgstr "تفعيل تسجيل الدخول"
-
-msgid "Enable portal access"
-msgstr "تفعيل الوصول إلى البوابة"
 
 msgid "English"
 msgstr "الإنجليزية"
@@ -2430,6 +2454,9 @@ msgstr "جميع الفنيين في الدولة حسب الترتيب. الم�
 
 msgid "Every visit report, newest first, to download and rate."
 msgstr "جميع تقارير الزيارات، الأحدث أولًا، للتنزيل والتقييم."
+
+msgid "Everyone here sees all of this customer's branches, requests, visits and reports."
+msgstr "يرى كل شخص هنا جميع فروع هذا العميل وطلباته وزياراته وتقاريره."
 
 msgid "Evidence"
 msgstr "الدليل"
@@ -2876,11 +2903,12 @@ msgstr "المهام الداخلية المُسندة إليك"
 msgid "Invitation expired"
 msgstr "انتهت صلاحية الدعوة"
 
+#, python-format
+msgid "Invite %(email)s"
+msgstr "دعوة %(email)s"
+
 msgid "Invite to the portal"
 msgstr "دعوة إلى البوابة"
-
-msgid "Invited"
-msgstr "تاريخ الدعوة"
 
 msgid "Invited — awaiting setup"
 msgstr "مدعو — بانتظار الإعداد"
@@ -3040,9 +3068,6 @@ msgstr "تسجيل الدخول معطّل"
 #, python-format
 msgid "Login disabled for %(name)s."
 msgstr "تم تعطيل تسجيل الدخول لـ %(name)s."
-
-msgid "Login email"
-msgstr "البريد الإلكتروني لتسجيل الدخول"
 
 #, python-format
 msgid "Login email changed to %(email)s."
@@ -3209,6 +3234,9 @@ msgstr "التقرير التشغيلي الشهري"
 
 msgid "Monthly report"
 msgstr "التقرير الشهري"
+
+msgid "More"
+msgstr "المزيد"
 
 msgid "More options: the full task form"
 msgstr "خيارات أكثر: نموذج المهمة الكامل"
@@ -3543,6 +3571,9 @@ msgstr "لا توجد إشعارات بعد."
 msgid "No one assigned"
 msgstr "لم يُسند إلى أحد"
 
+msgid "No one can sign in to the portal for this customer yet."
+msgstr "لا يستطيع أحد تسجيل الدخول إلى البوابة لهذا العميل بعد."
+
 msgid "No one has been assigned."
 msgstr "لم يتم إسناد أي شخص."
 
@@ -3575,9 +3606,6 @@ msgstr "لا صور بعد"
 
 msgid "No photos."
 msgstr "لا توجد صور."
-
-msgid "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in."
-msgstr "لم يتم إنشاء بيانات دخول إلى البوابة بعد. يرجى إنشاؤها لتمكين هذا العميل من متابعة تذاكره وسجل الخدمة. سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني مع رابط تسجيل الدخول، وسيعيّن العميل كلمة مروره الخاصة ويؤكد بيانات التواصل عند تسجيل الدخول لأول مرة."
 
 msgid "No power or an electrical fault"
 msgstr "انقطاع الطاقة أو عطل كهربائي"
@@ -4148,6 +4176,9 @@ msgstr "صلاحيات كل دور. لا تُدرج هنا شاشات الخدم
 msgid "Permissions updated."
 msgstr "تم تحديث الصلاحيات."
 
+msgid "Person"
+msgstr "الشخص"
+
 msgid "Phone"
 msgstr "هاتف"
 
@@ -4354,6 +4385,9 @@ msgstr "تم تفعيل الوصول إلى البوابة."
 
 msgid "Portal login"
 msgstr "حساب البوابة"
+
+msgid "Portal logins"
+msgstr "حسابات البوابة"
 
 msgid "Portal welcome and password link"
 msgstr "الترحيب في البوابة ورابط كلمة المرور"
@@ -4583,6 +4617,14 @@ msgstr "الموثوقية"
 msgid "Remove"
 msgstr "إزالة"
 
+#, python-format
+msgid "Remove %(name)s"
+msgstr "إزالة %(name)s"
+
+#, python-format
+msgid "Remove %(name)s? They can no longer sign in; what they sent keeps their name."
+msgstr "إزالة %(name)s؟ لن يتمكن من تسجيل الدخول بعد ذلك، ويبقى اسمه على ما أرسله."
+
 msgid "Remove it"
 msgstr "إزالته"
 
@@ -4592,8 +4634,8 @@ msgstr "إزالة هذا الجهاز"
 msgid "Removed from a task"
 msgstr "أُزيل من مهمة"
 
-msgid "Removes the customer from the customer list and disables their login, if any. Use this when a contract has ended or the business has closed."
-msgstr "يزيل العميل من قائمة العملاء ويعطّل بيانات دخوله إن وُجدت. يُستخدم عند انتهاء العقد أو إغلاق النشاط التجاري."
+msgid "Removes the customer from the customer list and disables their portal logins, if any. Use this when a contract has ended or the business has closed."
+msgstr "يزيل العميل من قائمة العملاء ويعطّل حسابات الدخول إلى البوابة إن وُجدت. يُستخدم عند انتهاء العقد أو إغلاق النشاط التجاري."
 
 msgid "Removes the staff member from the roster, prevents new assignments and disables their login, if any. Use this when a staff member has resigned, been dismissed or otherwise left the company."
 msgstr "يزيل الموظف من قائمة الفريق ويمنع إسناد مهام جديدة إليه ويعطّل بيانات دخوله إن وُجدت. يُستخدم عند استقالة الموظف أو إنهاء خدمته أو مغادرته الشركة لأي سبب آخر."
@@ -4785,6 +4827,9 @@ msgstr "أُعيد جدولته"
 
 msgid "Rescheduling — we'll contact you with a new date"
 msgstr "جارٍ إعادة الجدولة — سنتواصل معك بموعد جديد"
+
+msgid "Resend invitation"
+msgstr "إعادة إرسال الدعوة"
 
 msgid "Reset password"
 msgstr "إعادة تعيين كلمة المرور"
@@ -5126,9 +5171,6 @@ msgstr "إرسال إلى الفريق"
 msgid "Send us a request, follow your requests and visits, and download your reports."
 msgstr "أرسل إلينا طلبًا، وتابع طلباتك وزياراتك، وحمّل تقاريرك."
 
-msgid "Send welcome email"
-msgstr "إرسال رسالة الترحيب"
-
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
 
@@ -5137,6 +5179,10 @@ msgstr "تُرسل رسالة الترحيب إلى بريد جهة الاتصا
 
 msgid "Sent"
 msgstr "أُرسل"
+
+#, python-format
+msgid "Sent by %(name)s"
+msgstr "أرسله %(name)s"
 
 msgid "Sent by courier, no visit"
 msgstr "تُرسل عبر شركة الشحن، دون زيارة"
@@ -5185,6 +5231,10 @@ msgstr "تعيين كلمة مرور جديدة لحسابكم في بوابة P
 msgid "Set a temporary password"
 msgstr "تعيين كلمة مرور مؤقتة"
 
+#, python-format
+msgid "Set a temporary password for %(name)s? Their current password stops working."
+msgstr "تعيين كلمة مرور مؤقتة لـ %(name)s؟ ستتوقف كلمة المرور الحالية عن العمل."
+
 msgid "Set as lead"
 msgstr "تعيين كفني رئيسي"
 
@@ -5227,9 +5277,6 @@ msgstr "عيّن كلمة المرور"
 msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in and will be signed out of the mobile app."
 msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي، وسيُسجَّل خروجه من تطبيق الجوال."
 
-msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in."
-msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
-
 msgid "Setting"
 msgstr "الإعداد"
 
@@ -5241,9 +5288,6 @@ msgstr "انتهت صلاحية رابط الإعداد"
 
 msgid "Setup link sent"
 msgstr "أُرسل رابط الإعداد"
-
-msgid "Share their login page: "
-msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
 
 msgid "Ship a part"
 msgstr "شحن قطعة"
@@ -5982,6 +6026,10 @@ msgstr "تم إلغاء تفعيل هؤلاء الموظفين، لكنهم لا
 msgid "They cannot sign in until a login is created on their page."
 msgstr "لا يمكنه تسجيل الدخول حتى يُنشأ له حساب دخول من صفحته."
 
+#, python-format
+msgid "They get a welcome email to set their own password; its link is valid for %(days)s days."
+msgstr "يصله بريد ترحيب ليختار كلمة المرور الخاصة به؛ ورابطه صالح لمدة %(days)s أيام."
+
 msgid "They take over as lead; anything they only helped on is simply taken off them."
 msgstr "يصبح الزميل قائد المهمة؛ والمهام التي كان مساعدًا فيها فقط تُزال عنه."
 
@@ -6011,10 +6059,6 @@ msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً"
 
 msgid "This customer already has a site with this name."
 msgstr "لدى هذا العميل موقع بهذا الاسم مسبقاً."
-
-#, python-format
-msgid "This customer can sign in as “%(username)s” to view their tickets and service history."
-msgstr "يمكن لهذا العميل تسجيل الدخول باسم «%(username)s» للاطلاع على تذاكره وسجل الخدمة."
 
 msgid "This customer has no active portal login to view."
 msgstr "لا يملك هذا العميل حسابًا نشطًا في البوابة لعرضه."
@@ -6379,6 +6423,9 @@ msgstr "التراجع عن «%(step)s»"
 msgid "Unknown segment \"%(segment)s\". Please use gym, hotel, club or other."
 msgstr "قطاع غير معروف \"%(segment)s\". يرجى استخدام gym أو hotel أو club أو other."
 
+msgid "Unlock"
+msgstr "إلغاء القفل"
+
 msgid "Unlock now"
 msgstr "إلغاء القفل الآن"
 
@@ -6641,6 +6688,9 @@ msgstr "أسبوعي"
 
 msgid "Welcome"
 msgstr "أهلاً بك"
+
+msgid "Welcome and password emails are in English, and also in Arabic for customers in Arab countries."
+msgstr "تُرسل رسائل الترحيب وكلمة المرور بالإنجليزية، وبالعربية أيضاً للعملاء في الدول العربية."
 
 #, python-format
 msgid "Welcome email sent to %(email)s."
@@ -7501,6 +7551,9 @@ msgstr "داخلي — لا يظهر للعميل أبدًا"
 msgid "invited at"
 msgstr "تاريخ الدعوة"
 
+msgid "invited or given a temporary password: at the next sign-in they set their own before anything else"
+msgstr "تمت دعوته أو أُعطي كلمة مرور مؤقتة: عند تسجيل الدخول التالي يختار كلمة المرور الخاصة به قبل أي شيء آخر"
+
 msgid "invoice"
 msgstr "الفاتورة"
 
@@ -7612,9 +7665,6 @@ msgstr "منها قيد التنفيذ الآن"
 msgid "of them, need a new date (missed, or stopped on site)"
 msgstr "منها تحتاج إلى موعد جديد (فائتة، أو توقف العمل في الموقع)"
 
-msgid "one account covers every site under this customer; created by staff only, no self-registration"
-msgstr "حساب واحد يشمل جميع مواقع هذا العميل؛ يُنشئه الموظفون فقط، ولا يتاح التسجيل الذاتي"
-
 msgid "opened by"
 msgstr "فتحها"
 
@@ -7702,6 +7752,12 @@ msgstr "رابط بوابة الشركة"
 
 msgid "portal color"
 msgstr "لون البوابة"
+
+msgid "portal user"
+msgstr "مستخدم البوابة"
+
+msgid "portal users"
+msgstr "مستخدمو البوابة"
 
 msgid "position"
 msgstr "الترتيب"
@@ -7924,9 +7980,6 @@ msgstr "يُعيَّن عندما يجدول المدير باليوم فقط؛ 
 
 msgid "set when a signed-in customer selected one of their registered sites; carried directly to the resulting task without re-matching, and only an administrator can change it once set"
 msgstr "يُعيَّن عندما يختار عميل مسجَّل الدخول أحد مواقعه المسجَّلة؛ ويُنقل مباشرة إلى المهمة الناتجة دون إعادة مطابقة، ولا يمكن تغييره بعد تعيينه إلا من قِبل مسؤول النظام"
-
-msgid "set when staff create the login with a temporary system-generated password; at first sign-in, the customer is guided through setting their own password and confirming their contact details before accessing the rest of the portal"
-msgstr "يُعيَّن عندما ينشئ الموظفون بيانات الدخول بكلمة مرور مؤقتة يولدها النظام؛ وعند تسجيل الدخول لأول مرة يُرشَد العميل إلى تعيين كلمة مروره وتأكيد بيانات التواصل قبل الوصول إلى بقية البوابة"
 
 msgid "setup link sent at"
 msgstr "وقت إرسال رابط الإعداد"
@@ -8164,6 +8217,9 @@ msgstr "الحقل الوحيد المعروف بيقين عند الإنشاء"
 
 msgid "the person accountable for staffing this task; not necessarily its creator, nor the technician assigned to perform the work"
 msgstr "الشخص المسؤول عن توفير الكادر لهذه المهمة؛ وليس بالضرورة منشئها، ولا الفني المكلَّف بتنفيذ العمل"
+
+msgid "the person at the customer who sent it from the portal; empty if staff opened it"
+msgstr "الشخص لدى العميل الذي أرسله من البوابة؛ فارغ إذا فتحه الموظفون"
 
 msgid "the person handling this ticket: a supervisor or manager, not necessarily the person who converts it"
 msgstr "الشخص الذي يتولى هذه التذكرة: مشرف أو مدير، وليس بالضرورة من يحوّلها"
@@ -8418,11 +8474,18 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "A problem with a machine"
 #~ msgstr "مشكلة في جهاز"
 
+#, python-format
+#~ msgid "A welcome email with a secure activation link has been sent to %(email)s."
+#~ msgstr "تم إرسال رسالة ترحيب تتضمن رابط تفعيل آمناً إلى %(email)s."
+
 #~ msgid "Accept task"
 #~ msgstr "قبول المهمة"
 
 #~ msgid "Accepted"
 #~ msgstr "مقبولة"
+
+#~ msgid "Add a contact email"
+#~ msgstr "إضافة بريد إلكتروني للتواصل"
 
 #~ msgid "Add customer"
 #~ msgstr "إضافة عميل"
@@ -8533,9 +8596,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Create a visit task"
 #~ msgstr "إنشاء مهمة زيارة"
 
-#~ msgid "Create and send welcome email"
-#~ msgstr "إنشاء العميل وإرسال رسالة الترحيب"
-
 #~ msgid "Current tasks"
 #~ msgstr "المهام الحالية"
 
@@ -8550,6 +8610,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Download (PDF)"
 #~ msgstr "تنزيل (PDF)"
+
+#~ msgid "Enable portal access"
+#~ msgstr "تفعيل الوصول إلى البوابة"
 
 #~ msgid "Enter at least a brand, model, and outcome for each new machine, or leave the row blank."
 #~ msgstr "أدخل العلامة التجارية والموديل والنتيجة على الأقل لكل جهاز جديد، أو اترك الصف فارغًا."
@@ -8579,8 +8642,14 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Invite a new customer"
 #~ msgstr "دعوة عميل جديد"
 
+#~ msgid "Invited"
+#~ msgstr "تاريخ الدعوة"
+
 #~ msgid "Is this machine in your list?"
 #~ msgstr "هل هذا الجهاز موجود في قائمتك؟"
+
+#~ msgid "Login email"
+#~ msgstr "البريد الإلكتروني لتسجيل الدخول"
 
 #, python-format
 #~ msgid "Manage account — %(name)s"
@@ -8597,6 +8666,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "No customers match the selected filters."
 #~ msgstr "لا يوجد عملاء مطابقون لعوامل التصفية المحددة."
+
+#~ msgid "No portal login has been created yet. Create one to allow this customer to track their tickets and service history. A temporary password will be generated automatically and emailed with the sign-in link; the customer will set their own password and confirm their contact details at first sign-in."
+#~ msgstr "لم يتم إنشاء بيانات دخول إلى البوابة بعد. يرجى إنشاؤها لتمكين هذا العميل من متابعة تذاكره وسجل الخدمة. سيتم إنشاء كلمة مرور مؤقتة تلقائياً وإرسالها بالبريد الإلكتروني مع رابط تسجيل الدخول، وسيعيّن العميل كلمة مروره الخاصة ويؤكد بيانات التواصل عند تسجيل الدخول لأول مرة."
 
 #~ msgid "No records to display."
 #~ msgstr "لا توجد سجلات لعرضها."
@@ -8652,6 +8724,15 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"
 
+#~ msgid "Send welcome email"
+#~ msgstr "إرسال رسالة الترحيب"
+
+#~ msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in."
+#~ msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
+
+#~ msgid "Share their login page: "
+#~ msgstr "شارك صفحة تسجيل الدخول الخاصة به: "
+
 #~ msgid "Signed version"
 #~ msgstr "النسخة الموقّعة"
 
@@ -8685,6 +8766,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "These can be set from the task's Edit screen."
 #~ msgstr "يمكن تحديد هذه البيانات من شاشة تعديل المهمة."
+
+#, python-format
+#~ msgid "This customer can sign in as “%(username)s” to view their tickets and service history."
+#~ msgstr "يمكن لهذا العميل تسجيل الدخول باسم «%(username)s» للاطلاع على تذاكره وسجل الخدمة."
 
 #~ msgid "This is not a customer account."
 #~ msgstr "هذا ليس حساب عميل."
@@ -8777,8 +8862,14 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "of them blocked, or overdue (their day has passed with the work still to do)"
 #~ msgstr "منها متوقفة أو متأخرة (مضى يومها والعمل لم يُنجز بعد)"
 
+#~ msgid "one account covers every site under this customer; created by staff only, no self-registration"
+#~ msgstr "حساب واحد يشمل جميع مواقع هذا العميل؛ يُنشئه الموظفون فقط، ولا يتاح التسجيل الذاتي"
+
 #~ msgid "request type"
 #~ msgstr "نوع الطلب"
+
+#~ msgid "set when staff create the login with a temporary system-generated password; at first sign-in, the customer is guided through setting their own password and confirming their contact details before accessing the rest of the portal"
+#~ msgstr "يُعيَّن عندما ينشئ الموظفون بيانات الدخول بكلمة مرور مؤقتة يولدها النظام؛ وعند تسجيل الدخول لأول مرة يُرشَد العميل إلى تعيين كلمة مروره وتأكيد بيانات التواصل قبل الوصول إلى بقية البوابة"
 
 #~ msgid "showing the issue and the serial number"
 #~ msgstr "توضّح المشكلة والرقم التسلسلي"

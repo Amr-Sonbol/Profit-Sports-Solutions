@@ -11,7 +11,7 @@ from .models import CustomerNotification
 
 
 def _notify(customer, kind, task=None, ticket=None):
-    if customer is None or customer.is_internal or not customer.user_id:
+    if customer is None or customer.is_internal or not customer.portal_users.exists():
         return
     CustomerNotification.objects.filter(
         customer=customer, kind=kind, task=task, ticket=ticket, seen_at__isnull=True,

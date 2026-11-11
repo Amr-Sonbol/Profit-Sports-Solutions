@@ -10,7 +10,7 @@
         <h1>{{ customer.name }}</h1>
     </div>
     <div class="badge-row">
-        {% if is_admin and customer.user and customer.user.is_active %}
+        {% if is_admin and portal_people %}
         {# See their portal exactly as they do, to check a complaint — view only, nothing sent to them. #}
         <form method="post" action="{% url 'customers:view_as_start' customer.pk %}">
             {% csrf_token %}
@@ -214,57 +214,118 @@
     {% endif %}
 </div>
 
-{% if portal_status %}
-{# Their portal login and everything done to it (customers.views.portal_login_action); each action is in the Audit log. #}
-{% with account=customer.user status=portal_status %}
+{% if portal_section %}
+{# The people at this customer who sign in to the portal — each their own login, all seeing the whole customer (customers.views.portal_login_action; each action in the Audit log). One row each: the action that matters now, the rest under More. #}
 <div class="section" id="portal">
-    <h2>{% translate "Portal login" %}</h2>
-    <dl class="detail-grid">
-        <div><dt>{% translate "Status" %}</dt><dd>{% include "customers/_account_status.html" %}</dd></div>
-        <div><dt>{% translate "Login email" %}</dt><dd>{{ account.email|default:customer.contact_email|default:"—" }}</dd></div>
-        <div><dt>{% translate "Invited" %}</dt><dd>{{ customer.invited_at|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd></div>
-        <div><dt>{% translate "Last sign-in" %}</dt><dd>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd></div>
-    </dl>
-    <div class="account-panel__actions">
-        {% if status in inviteable %}
-        {% include "customers/_account_action.html" with action="invite" label=_("Send welcome email") %}
-        {# When the email doesn't arrive: the same link, to send by WhatsApp or text. #}
-        {% include "customers/_account_action.html" with action="copy_welcome_link" label=_("Copy welcome link") %}
-        {% endif %}
-        {% if not account and status in inviteable %}
-        {# No login yet (and an email to make it with): one click creates it with a password to read out over the phone. #}
-        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
-        {% endif %}
-        {% if status == 'active' or status == 'locked' %}
-        {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
-        {% endif %}
-        {% if status == 'locked' %}
-        {% include "customers/_account_action.html" with action="unlock" label=_("Unlock now") %}
-        {% endif %}
-        {% if account %}
-        {% if account.is_active %}
-        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
-        {% include "customers/_account_action.html" with action="disable" label=_("Disable portal access") %}
-        {% else %}
-        {% include "customers/_account_action.html" with action="enable" label=_("Enable portal access") %}
-        {% endif %}
-        <form method="post" action="{% url 'customers:portal_login_action' %}" class="row-actions__inline">
+    <h2>{% translate "Portal logins" %}</h2>
+    <p class="field__help">{% translate "Everyone here sees all of this customer's branches, requests, visits and reports." %}</p>
+    <details class="disclosure portal-add">
+        <summary class="button button--secondary">{% translate "+ Add a person" %}</summary>
+        <form method="post" action="{% url 'customers:portal_login_action' %}" class="disclosure__body portal-add__form" novalidate>
             {% csrf_token %}
-            <input type="hidden" name="action" value="change_email">
+            <input type="hidden" name="action" value="add_person">
             <input type="hidden" name="customer" value="{{ customer.pk }}">
-            <input type="email" name="email" required placeholder="{% translate 'New login email' %}" aria-label="{% translate 'New login email' %}">
-            <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+            {% for field in add_person_form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+            </div>
+            {% endfor %}
+            <p class="field__help">{% blocktranslate with days=link_days %}They get a welcome email to set their own password; its link is valid for {{ days }} days.{% endblocktranslate %}</p>
+            <button type="submit" class="button">{% translate "Add and send welcome email" %}</button>
+        </form>
+    </details>
+
+    {% if portal_people %}
+    <div class="table-wrap">
+        <table class="portal-people">
+            <thead>
+                <tr>
+                    <th>{% translate "Person" %}</th>
+                    <th>{% translate "Status" %}</th>
+                    <th>{% translate "Last sign-in" %}</th>
+                    <th><span class="visually-hidden">{% translate "Actions" %}</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in portal_people %}{% with person=row.person account=row.person.user status=row.status %}
+                <tr>
+                    <td>
+                        <strong>{{ person.name }}</strong>
+                        <span class="compact-table__sub" dir="ltr">{{ account.email }}</span>
+                    </td>
+                    <td>{% include "customers/_account_status.html" %}</td>
+                    <td>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</td>
+                    <td>
+                        <div class="portal-people__actions">
+                            {# The one action that matters now. #}
+                            {% if status == 'locked' %}
+                            {% include "customers/_account_action.html" with action="unlock" label=_("Unlock") primary=True %}
+                            {% elif status == 'invited' or status == 'expired' %}
+                            {% include "customers/_account_action.html" with action="resend" label=_("Resend invitation") primary=True %}
+                            {% elif status == 'disabled' %}
+                            {% include "customers/_account_action.html" with action="enable" label=_("Enable") primary=True %}
+                            {% endif %}
+
+                            <details class="disclosure portal-people__more">
+                                <summary class="button button--secondary">{% translate "More" %}</summary>
+                                <div class="portal-people__menu">
+                                    {% if status == 'invited' or status == 'expired' %}
+                                    {# When the email doesn't arrive: the same link, to send by WhatsApp or text. #}
+                                    {% include "customers/_account_action.html" with action="copy_welcome_link" label=_("Copy welcome link") %}
+                                    {% endif %}
+                                    {% if status == 'active' or status == 'locked' %}
+                                    {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
+                                    {% endif %}
+                                    {% if account.is_active %}
+                                    {% blocktranslate asvar confirm_password with name=person.name %}Set a temporary password for {{ name }}? Their current password stops working.{% endblocktranslate %}
+                                    {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") confirm=confirm_password %}
+                                    {% blocktranslate asvar confirm_disable with name=person.name %}Disable {{ name }}'s portal access? They can't sign in until it's enabled again.{% endblocktranslate %}
+                                    {% include "customers/_account_action.html" with action="disable" label=_("Disable access") confirm=confirm_disable %}
+                                    {% endif %}
+                                    <form method="post" action="{% url 'customers:portal_login_action' %}" class="portal-people__email">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="change_email">
+                                        <input type="hidden" name="person" value="{{ person.pk }}">
+                                        <label for="email-{{ person.pk }}">{% translate "New login email" %}</label>
+                                        <input type="email" id="email-{{ person.pk }}" name="email" required dir="ltr">
+                                        <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+                                    </form>
+                                </div>
+                            </details>
+
+                            <form method="post" action="{% url 'customers:portal_login_action' %}"
+                                  data-confirm="{% blocktranslate with name=person.name %}Remove {{ name }}? They can no longer sign in; what they sent keeps their name.{% endblocktranslate %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove">
+                                <input type="hidden" name="person" value="{{ person.pk }}">
+                                {% blocktranslate asvar remove_label with name=person.name %}Remove {{ name }}{% endblocktranslate %}
+                                <button type="submit" class="machine-card__remove portal-person__remove" title="{{ remove_label }}">
+                                    {% include "_icon.html" with name="x" %}<span class="visually-hidden">{{ remove_label }}</span>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endwith %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>{% translate "No one can sign in to the portal for this customer yet." %}</p>
+        {% if customer.contact_email %}
+        <form method="post" action="{% url 'customers:portal_login_action' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="invite">
+            <input type="hidden" name="customer" value="{{ customer.pk }}">
+            <button type="submit" class="button">{% blocktranslate with email=customer.contact_email %}Invite {{ email }}{% endblocktranslate %}</button>
         </form>
         {% endif %}
-        {% if status == 'no_email' %}
-        <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Add a contact email" %}</a>
-        {% endif %}
     </div>
-    {% if status in inviteable %}
-    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %}</p>
     {% endif %}
+    <p class="field__help">{% translate "Welcome and password emails are in English, and also in Arabic for customers in Arab countries." %}</p>
 </div>
-{% endwith %}
 {% endif %}
 
 {% if can_add_site %}

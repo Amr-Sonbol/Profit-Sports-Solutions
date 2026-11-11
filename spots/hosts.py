@@ -50,7 +50,7 @@ class StaffAuthenticationForm(AuthenticationForm):
 
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
-        if settings.PORTAL_HOST and getattr(user, 'customer', None) is not None:
+        if settings.PORTAL_HOST and getattr(user, 'portal_user', None) is not None:
             self.customer_account = True
             raise ValidationError(
                 _('This is the staff sign-in. Customers sign in at %(address)s') % {'address': settings.PORTAL_HOST},
@@ -85,7 +85,7 @@ class PortalHostMiddleware:
 
             if not request.session.get(VIEW_AS_SESSION_KEY):
                 return HttpResponseRedirect(portal_url(request, request.get_full_path()))
-        elif getattr(request.user, 'customer', None) is not None:
+        elif getattr(request.user, 'portal_user', None) is not None:
             # A customer's sign-in has no place on the staff address (one left from before
             # the portal moved): end it, and this address shows its own sign-in.
             logout(request)

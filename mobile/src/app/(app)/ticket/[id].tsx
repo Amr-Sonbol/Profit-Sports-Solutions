@@ -188,6 +188,7 @@ export default function TicketScreen() {
         </ThemedView>
         <ThemedText type="small" themeColor="textSecondary">
           {[ticket.about, ticket.need].filter(Boolean).join(' · ')} · received {ago(ticket.submitted_at)}
+          {ticket.sent_by ? ` · ${t('sent by {name}', { name: ticket.sent_by })}` : ''}
         </ThemedText>
         <OfflineNotice offline={offline} />
         {notice ? <ThemedText themeColor="primary">{notice}</ThemedText> : null}

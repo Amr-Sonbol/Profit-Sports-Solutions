@@ -104,7 +104,7 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                 <p class="empty-state">{% translate "No new notifications." %}</p>
                 {% endif %}
             </div>
-        {% elif user.customer %}
+        {% elif portal_customer %}
             {# A customer's bell (spots.context_processors.portal_nav): reports to rate, replies, visits booked. #}
             <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
             <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">

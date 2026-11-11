@@ -887,4 +887,5 @@ export const AR: Record<string, string> = {
   "opened by {name}": "فتحها {name}",
   "{name} is told on their phone.": "سيصل إشعار إلى هاتف {name}.",
   "“{name}” was not sent. Check your connection and try again.": "لم يُرسل «{name}». تحقق من الاتصال وحاول مرة أخرى.",
+  "sent by {name}": "أرسله {name}",
 };

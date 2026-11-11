@@ -26,12 +26,12 @@ class PortalLoginForm(AuthenticationForm):
     }
 
 
-class CreateLoginForm(forms.Form):
-    """Just an email — it becomes both the login username and the address
-    the welcome link is sent to (accounts.send_welcome), one thing for the
-    customer to remember instead of a separate invented username. The
-    customer sets their own password through that link.
+class AddPortalUserForm(forms.Form):
+    """One more person at a customer who signs in to the portal: their name,
+    and their email — both their username and where the welcome link goes
+    (accounts.add_person, send_welcome). They set their own password there.
     """
+    name = forms.CharField(max_length=150, label=_('Name'))
     email = forms.EmailField(label=_('Email'))
 
     def clean_email(self):

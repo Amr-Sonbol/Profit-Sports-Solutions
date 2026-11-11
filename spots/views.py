@@ -7,6 +7,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.shortcuts import redirect, render
 
+from customers.models import portal_customer
 from spots.hosts import StaffAuthenticationForm
 from tasks.forms import NewPasswordForm
 from tasks.views import home_summary, send_password_changed_email
@@ -35,7 +36,7 @@ def set_language(request):
         return response
 
     technician = getattr(request.user, 'technician', None)
-    customer = getattr(request.user, 'customer', None)
+    customer = portal_customer(request.user)
     if technician is not None:
         technician.language = language
         technician.save(update_fields=['language'])
@@ -79,9 +80,9 @@ def home(request):
     set a real one first — same reasoning as customers.views.portal_login,
     just the staff-side entry point.
     """
-    customer = getattr(request.user, 'customer', None)
-    if customer is not None:
-        if customer.must_change_password:
+    person = getattr(request.user, 'portal_user', None)
+    if person is not None:
+        if person.must_change_password:
             return redirect('customers:portal_first_login')
         return redirect('customers:portal_home')
     technician = getattr(request.user, 'technician', None)
@@ -97,7 +98,7 @@ def bell(request):
     when someone comes back to the tab — the same reads as any page's header.
     Nothing for anyone else."""
     if not request.user.is_authenticated or not (
-        getattr(request.user, 'technician', None) or getattr(request.user, 'customer', None)
+        getattr(request.user, 'technician', None) or getattr(request.user, 'portal_user', None)
     ):
         return HttpResponse(status=204)
     request.bell_only = True  # a page's one-time notices (spots.email_failures) wait for a real page

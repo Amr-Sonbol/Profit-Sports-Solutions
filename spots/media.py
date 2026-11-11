@@ -70,7 +70,9 @@ def may_see(request, path):
     technician = getattr(user, 'technician', None)
     if technician is not None:
         return technician.is_active
-    customer = getattr(user, 'customer', None)
+    from customers.models import portal_customer
+
+    customer = portal_customer(user)
     return customer is not None and _customer_owns(customer, path)
 
 

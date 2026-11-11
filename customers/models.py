@@ -77,24 +77,6 @@ class Customer(models.Model):
         help_text=_('delivery address for replacement parts, if different from the site, such as a warehouse or '
                     'head office'),
     )
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='customer', verbose_name=_('login account'),
-        help_text=_('one account covers every site under this customer; created by staff only, no '
-                    'self-registration'),
-    )
-    must_change_password = models.BooleanField(
-        _('must change password'), default=False,
-        help_text=_(
-            'set when staff create the login with a temporary system-generated password; at first sign-in, the '
-            'customer is guided through setting their own password and confirming their contact details before '
-            'accessing the rest of the portal',
-        ),
-    )
-    invited_at = models.DateTimeField(
-        _('invited at'), null=True, blank=True,
-        help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
-    )
     is_active = models.BooleanField(_('active'), default=True)
     # The company's own account in a country: its sites are the warehouses
     # that equipment is received at and loaded from. Never a portal login,
@@ -141,9 +123,56 @@ class Customer(models.Model):
         self.is_active = is_active
         self.deactivation_reason = reason if not is_active else ''
         self.save(update_fields=['is_active', 'deactivation_reason'])
-        if self.user_id is not None and self.user.is_active != is_active:
-            self.user.is_active = is_active
-            self.user.save(update_fields=['is_active'])
+        for person in self.portal_users.select_related('user'):
+            if person.user.is_active != is_active:
+                person.user.is_active = is_active
+                person.user.save(update_fields=['is_active'])
+
+
+class PortalUser(models.Model):
+    """One person at a customer who signs in to the portal, with their own
+    email and password. Everyone sees the whole customer — every branch,
+    request, visit, report and machine — so head office sees it all in one
+    place; there are no per-branch limits (docs/go_live_plan.md). Created by
+    our staff only (the customer's Portal login section), never by sign-up.
+    Their name is the login's own (`user.first_name`), so it stays on what
+    they sent after they're removed.
+    """
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='portal_users', verbose_name=_('customer'),
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='portal_user',
+        verbose_name=_('login account'),
+    )
+    must_change_password = models.BooleanField(
+        _('must change password'), default=False,
+        help_text=_('invited or given a temporary password: at the next sign-in they set their own before '
+                    'anything else'),
+    )
+    invited_at = models.DateTimeField(
+        _('invited at'), null=True, blank=True,
+        help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
+    )
+
+    class Meta:
+        verbose_name = _('portal user')
+        verbose_name_plural = _('portal users')
+        ordering = ['pk']
+
+    def __str__(self):
+        return f'{self.name} ({self.customer})'
+
+    @property
+    def name(self):
+        return self.user.first_name or self.user.email or self.user.username
+
+
+def portal_customer(user):
+    """The customer this login belongs to, or None for anyone else (staff, anonymous)."""
+    person = getattr(user, 'portal_user', None) if user is not None else None
+    return person.customer if person is not None else None
 
 
 # New customers and new branches: the warranty from installation, and when

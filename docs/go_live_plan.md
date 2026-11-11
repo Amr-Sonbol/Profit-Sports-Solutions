@@ -6,9 +6,9 @@ are used for real. Items are added here as they're agreed; each is ticked off
 
 ## 1. Before go-live: to build
 
-### Personal portal logins (several people per customer)
+### ✅ Personal portal logins (several people per customer) — built 2026-11-11
 
-Agreed 2026-11-11. Today a customer has one portal login (`customer.user`),
+Now described in `database_design_v2.md` (`portal_user`). Agreed 2026-11-11. Today a customer has one portal login (`customer.user`),
 shared by everyone at the company. That hides who sent what, and an employee
 who leaves keeps access until the shared password changes for everyone. Fine
 while few customers use the portal; it must be fixed before it's rolled out

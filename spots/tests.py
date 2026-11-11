@@ -3,6 +3,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
 
+from customers.models import PortalUser
 from people.models import Technician
 from reports.models import CustomerFeedback, WorkReport
 from tasks.models import CustomerTicket, Task, TaskAssignment
@@ -62,8 +63,7 @@ class PageSmokeTests(TaskTestCase):
             task=self.task, requested_at=timezone.now(), requested_by=self.supervisor_user,
         )
         self.portal_user = User.objects.create_user('portal1', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
 
     def _kwargs_for(self, route, name):
         """Real objects for each URL's placeholders."""

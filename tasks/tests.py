@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone, translation
 
-from customers.models import Asset, Customer, Site
+from customers.models import PortalUser, Asset, Customer, Site
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
@@ -2824,8 +2824,7 @@ class TicketReviewTests(TaskTestCase):
 
     def test_customer_reply_creates_a_new_reply_notification(self):
         portal_user = User.objects.create_user('fitnessfirst_portal2', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.ticket.customer = self.customer
         self.ticket.save(update_fields=['customer'])
 
@@ -2871,8 +2870,7 @@ class TicketStatusAccessTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.ticket = CustomerTicket.objects.create(
             country=self.country, customer=self.customer,
             ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
@@ -2889,8 +2887,7 @@ class TicketStatusAccessTests(TaskTestCase):
     def test_a_different_customer_is_told_the_link_is_for_another_account(self):
         other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
         other_user = User.objects.create_user('other_portal', password='pass12345')
-        other_customer.user = other_user
-        other_customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=other_customer, user=other_user)
 
         self.client.login(username='other_portal', password='pass12345')
         response = self.client.get(self.url, follow=True)
@@ -5764,8 +5761,7 @@ class HomeRedirectTests(TaskTestCase):
 
     def test_customer_lands_on_portal_home(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/')
         self.assertRedirects(response, '/customers/portal/')
@@ -5779,9 +5775,7 @@ class HomeRedirectTests(TaskTestCase):
 
     def test_customer_on_a_temporary_password_lands_on_portal_first_login(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['user', 'must_change_password'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user, must_change_password=True)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/')
         self.assertRedirects(response, '/customers/portal/first-login/')
@@ -5839,8 +5833,7 @@ class SetLanguageTests(TaskTestCase):
 
     def test_customer_switch_persists_to_their_own_language_field(self):
         portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
 
         self.client.login(username='fitnessfirst_portal', password='pass12345')
         response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/customers/portal/'})
@@ -7087,8 +7080,7 @@ class TicketEscalationTests(TaskTestCase):
             language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
         )
         self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.ticket = CustomerTicket.objects.create(
             country=self.country, customer=self.customer, ticket_number='AE-T0001', company_name='Fitness First',
             site_description='Marina Branch', contact_name='Ali Manager', contact_phone='0501234567',
@@ -7358,8 +7350,7 @@ class CountrySupportManagerTests(TaskTestCase):
         self._escalate('csm1', self.support)
         self._escalate('support1', self.ops, customer_message='A manager is reviewing your request.')
         self.client.get(self.url)  # shows (and clears) the staff confirmation
-        self.customer.user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst_portal', password='pass12345'))
         self.ticket.customer = self.customer
         self.ticket.save(update_fields=['customer'])
         self.client.login(username='fitnessfirst_portal', password='pass12345')
@@ -8032,7 +8023,7 @@ class StaffOpenedTicketTests(TaskTestCase):
         self.assertEqual(customer.country, self.country)
         self.assertRedirects(response, f'/tasks/tickets/open/?site={site.pk}', fetch_redirect_response=False)
         self.assertEqual(self.client.get(response.url).context['form']['site'].value(), str(site.pk))
-        self.assertEqual(customer.user.username, 'omar@irondengym.example')  # invited
+        self.assertEqual(customer.portal_users.get().user.username, 'omar@irondengym.example')  # invited
 
         response = self._customer_ticket(site=site.pk, description='Rower display is dead')
         ticket = CustomerTicket.objects.get(customer=customer)
@@ -8050,8 +8041,7 @@ class StaffOpenedTicketTests(TaskTestCase):
     @override_settings(PORTAL_HOST='')  # the portal on this same address, not its own
     def test_the_customer_sees_it_in_their_portal_and_gets_the_email(self):
         portal_user = get_user_model().objects.create_user('fitnessportal', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='support1', password='pass12345')
         self._customer_ticket(contact_email='ali@example.com')
         ticket = CustomerTicket.objects.get()
@@ -8678,8 +8668,7 @@ class VisibleLinksTests(TaskTestCase):
             )
         ]
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         users.append('fitnessfirst')
 
         problems = {username: self._crawl(username) for username in users}
@@ -8710,8 +8699,7 @@ class SidebarPerUserTests(TaskTestCase):
 
     def test_customers_get_the_same_sidebar_with_their_own_pages(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/customers/portal/')
         self.assertContains(response, 'site-header__nav"')
@@ -8924,8 +8912,7 @@ class TicketMachineDecisionTests(TaskTestCase):
 
     def test_the_customer_sees_each_machines_status(self):
         self._decide([self.rower], 'not_covered', note='Under the gym supplier warranty.')
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.client.login(username='fitnessfirst', password='pass12345')  # the customer, not staff
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Under review')
@@ -8997,8 +8984,7 @@ class TicketMachineFindingsTests(TaskTestCase):
         notes = sorted(machine.get('note') for machine in report_content(self.task.report)['machines'])
         self.assertEqual(notes, ['Belt tightened.', 'Console replaced.'])
 
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Belt tightened.')

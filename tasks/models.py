@@ -352,6 +352,11 @@ class CustomerTicket(models.Model):
         related_name='tickets_opened', verbose_name=_('opened by'),
         help_text=_('the staff member who opened it; empty if opened by the customer'),
     )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets_submitted', verbose_name=_('sent by'),
+        help_text=_('the person at the customer who sent it from the portal; empty if staff opened it'),
+    )
     subject = models.CharField(
         _('subject'), max_length=200, blank=True,
         help_text=_(

@@ -76,7 +76,7 @@
                     <th>{% translate "Segment" %}</th>
                     <th>{% translate "Sites" %}</th>
                     {% if manages_logins %}
-                    <th>{% translate "Portal login" %}</th>
+                    <th>{% translate "Portal logins" %}</th>
                     <th>{% translate "Last sign-in" %}</th>
                     {% endif %}
                     <th></th>
@@ -94,8 +94,8 @@
                     <td>{{ customer.get_segment_display }}</td>
                     <td>{{ customer.sites.all|length }}</td>
                     {% if manages_logins %}
-                    <td>{% if row.portal %}{% include "customers/_account_status.html" with status=row.portal %}{% else %}<span class="muted">—</span>{% endif %}</td>
-                    <td>{{ customer.user.last_login|date:"SHORT_DATE_FORMAT"|default:"—" }}</td>
+                    <td>{% if row.portal %}{% include "customers/_account_status.html" with status=row.portal %}{% if row.people > 1 %} <span class="muted">{% blocktranslate count n=row.people %}{{ n }} person{% plural %}{{ n }} people{% endblocktranslate %}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{{ row.last_login|date:"SHORT_DATE_FORMAT"|default:"—" }}</td>
                     {% endif %}
                     <td>
                         {% if user.technician.is_manager_tier %}

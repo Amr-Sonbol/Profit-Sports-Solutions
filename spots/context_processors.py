@@ -32,7 +32,10 @@ def portal_nav(request):
     Machines, Settings — with the current section marked: a request's or a
     machine's own page counts as its list's, and a visit's page counts as
     Visits."""
-    if not hasattr(getattr(request, 'user', None), 'customer'):
+    from customers.models import portal_customer
+
+    customer = portal_customer(getattr(request, 'user', None))
+    if customer is None:
         return {}
     from django.urls import reverse
     from django.utils.translation import gettext as _
@@ -48,13 +51,15 @@ def portal_nav(request):
         ('customers:portal_settings', _('Settings'), 'user', {'portal_settings'}),
     ]
     return {
+        # The customer whose portal this is — templates read it instead of the login.
+        'portal_customer': customer,
         'portal_nav': [
             {'url': reverse(url_name), 'label': label, 'icon': icon, 'active': name in names}
             for url_name, label, icon, names in sections
         ],
         # The sidebar's account header: up to two initials of the gym's name.
-        'portal_initials': ''.join(word[0] for word in request.user.customer.name.split()[:2]).upper(),
-        'portal_bell': (bell := portal_bell(request.user.customer)),
+        'portal_initials': ''.join(word[0] for word in customer.name.split()[:2]).upper(),
+        'portal_bell': (bell := portal_bell(customer)),
         'portal_bell_new': sum(1 for item in bell if item['new']),
     }
 
