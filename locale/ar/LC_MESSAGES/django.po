@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 17:14+0000\n"
+"POT-Creation-Date: 2026-11-11 17:59+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -542,10 +542,6 @@ msgstr "حدّد المدير هذا الموعد: اطلب نقل الزيار�
 #, python-format
 msgid "A manager has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
 msgstr "قام أحد المديرين بتعيين كلمة مرور مؤقتة لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s). سيُطلب منك اختيار كلمة مرورك عند تسجيل الدخول التالي، وقد تم تسجيل خروجك من تطبيق الجوال."
-
-#, python-format
-msgid "A maximum of %(count)d files may be attached."
-msgstr "يمكن إرفاق %(count)d ملفات كحد أقصى."
 
 msgid "A member of this task team has left the company."
 msgstr "غادر أحد أعضاء فريق هذه المهمة الشركة."
@@ -2315,10 +2311,6 @@ msgstr "مكرر لطلب آخر"
 #, python-format
 msgid "Each change is against %(month)s."
 msgstr "كل تغيير مقارنةً بشهر %(month)s."
-
-#, python-format
-msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
-msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. الملف «%(name)s» يتجاوز هذا الحد."
 
 msgid "Each helper is credited with the time on site. Enter a value only if it is less, for example for a team member who left early."
 msgstr "يُحتسب لكل مساعد وقت العمل في الموقع. أدخل قيمة فقط إذا كانت أقل، مثلًا لعضو في الفريق غادر مبكرًا."
@@ -4320,10 +4312,6 @@ msgstr "يُرجى الإجابة عن السؤالين."
 msgid "Please ask your manager to send you a new link. If you have already set your password, you may sign in."
 msgstr "يُرجى أن تطلب من مديرك إرسال رابط جديد. إذا كنت قد عيّنت كلمة المرور بالفعل، يمكنك تسجيل الدخول."
 
-#, python-format
-msgid "Please attach at most %(count)d files."
-msgstr "يرجى إرفاق %(count)d ملفات كحد أقصى."
-
 msgid "Please check your email"
 msgstr "يرجى مراجعة بريدك الإلكتروني"
 
@@ -5898,11 +5886,11 @@ msgstr "رفضه خادم البريد أو تعذّر الوصول إليه. ت
 msgid "The feedback request has been sent."
 msgstr "تم إرسال طلب التقييم."
 
-msgid "The file is too large. The maximum size is 10 MB."
-msgstr "حجم الملف كبير جداً. الحد الأقصى هو 10 ميغابايت."
+msgid "The file exceeds the 10 MB limit. Please select a smaller file."
+msgstr "يتجاوز الملف الحد المسموح به وهو 10 ميغابايت. يرجى اختيار ملف أصغر."
 
-msgid "The file is too large. The maximum size is 25 MB."
-msgstr "حجم الملف كبير جداً. الحد الأقصى هو 25 ميغابايت."
+msgid "The file exceeds the 25 MB limit. Please select a smaller file or a shorter video."
+msgstr "يتجاوز الملف الحد المسموح به وهو 25 ميغابايت. يرجى اختيار ملف أصغر أو مقطع فيديو أقصر."
 
 msgid "The file is too large. The maximum size is 5 MB."
 msgstr "حجم الملف كبير جداً. الحد الأقصى هو 5 ميغابايت."
@@ -5987,11 +5975,8 @@ msgstr "تمت إعادة تعيين كلمة المرور. سيُطلب منه 
 msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tasks."
 msgstr "الشخص المسؤول عن متابعتها. سيتم إشعاره، وستظهر ضمن مهامه الداخلية."
 
-msgid "The photo is too large. The maximum size is 25 MB."
-msgstr "الصورة كبيرة جدًا. الحد الأقصى 25 ميغابايت."
-
-msgid "The photo is too large. The maximum size is 5 MB."
-msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
+msgid "The photo exceeds the 5 MB limit. Please select a smaller photo."
+msgstr "تتجاوز الصورة الحد المسموح به وهو 5 ميغابايت. يرجى اختيار صورة أصغر."
 
 msgid "The product code shown on the sticker, if available."
 msgstr "رمز المنتج الموضح على الملصق، إن وُجد."
@@ -6996,6 +6981,10 @@ msgstr "أنت تستعرض الآن %(country)s."
 
 msgid "You are receiving this email because a password reset was requested for your Profit Sports Solutions account."
 msgstr "تتلقى هذه الرسالة لأنه تم طلب إعادة تعيين كلمة المرور لحسابك في Profit Sports Solutions."
+
+#, python-format
+msgid "You can attach up to %(count)d files. Please remove some and send again."
+msgstr "يمكنك إرفاق %(count)d ملفات كحد أقصى. يرجى إزالة بعضها والإرسال مرة أخرى."
 
 msgid "You cannot disable your own login."
 msgstr "لا يمكنك تعطيل تسجيل دخولك بنفسك."
@@ -8537,8 +8526,12 @@ msgid "“%(code)s” is not in the parts list. Please select one from the list 
 msgstr "«%(code)s» غير موجود في قائمة القطع. يرجى اختيار قطعة من القائمة أو طلب إضافتها."
 
 #, python-format
-msgid "“%(name)s” is too large. The maximum size is 25 MB."
-msgstr "«%(name)s» كبير جدًا. الحد الأقصى 25 ميغابايت."
+msgid "“%(name)s” could not be uploaded because it is not a valid photo, video or PDF. Please select the original file from your device and try again."
+msgstr "تعذّر رفع الملف «%(name)s» لأنه ليس صورة أو فيديو أو ملف PDF صالحاً. يرجى اختيار الملف الأصلي من جهازك والمحاولة مرة أخرى."
+
+#, python-format
+msgid "“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video."
+msgstr "يتجاوز الملف «%(name)s» الحد المسموح به وهو 25 ميغابايت. يرجى اختيار ملف أصغر أو مقطع فيديو أقصر."
 
 #, python-format
 msgid "“%(name)s” still has technicians, customers or tickets linked to it. Please deactivate it instead of deleting it."
@@ -8560,6 +8553,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "%(active)s of %(total)s customers have an active portal account."
 #~ msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في البوابة."
+
+#, python-format
+#~ msgid "A maximum of %(count)d files may be attached."
+#~ msgstr "يمكن إرفاق %(count)d ملفات كحد أقصى."
 
 #~ msgid "A problem with a machine"
 #~ msgstr "مشكلة في جهاز"
@@ -8701,6 +8698,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Download (PDF)"
 #~ msgstr "تنزيل (PDF)"
 
+#, python-format
+#~ msgid "Each file must be smaller than 25 MB. “%(name)s” exceeds this limit."
+#~ msgstr "يجب ألا يتجاوز حجم كل ملف 25 ميغابايت. الملف «%(name)s» يتجاوز هذا الحد."
+
 #~ msgid "Enable portal access"
 #~ msgstr "تفعيل الوصول إلى البوابة"
 
@@ -8787,6 +8788,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Pink"
 #~ msgstr "وردي"
 
+#, python-format
+#~ msgid "Please attach at most %(count)d files."
+#~ msgstr "يرجى إرفاق %(count)d ملفات كحد أقصى."
+
 #~ msgid "Please choose what kind of task it is."
 #~ msgstr "يرجى اختيار نوع المهمة."
 
@@ -8842,8 +8847,20 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
 #~ msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
 
+#~ msgid "The file is too large. The maximum size is 10 MB."
+#~ msgstr "حجم الملف كبير جداً. الحد الأقصى هو 10 ميغابايت."
+
+#~ msgid "The file is too large. The maximum size is 25 MB."
+#~ msgstr "حجم الملف كبير جداً. الحد الأقصى هو 25 ميغابايت."
+
 #~ msgid "The machine cannot be used"
 #~ msgstr "لا يمكن استخدام الجهاز"
+
+#~ msgid "The photo is too large. The maximum size is 25 MB."
+#~ msgstr "الصورة كبيرة جدًا. الحد الأقصى 25 ميغابايت."
+
+#~ msgid "The photo is too large. The maximum size is 5 MB."
+#~ msgstr "حجم الصورة كبير جداً. الحد الأقصى هو 5 ميغابايت."
 
 #~ msgid "The schedule for all countries. This view is not affected by the country selector above."
 #~ msgstr "الجدول الزمني لجميع الدول. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
@@ -8909,6 +8926,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Waiting for review"
 #~ msgstr "بانتظار المراجعة"
 
+#, python-format
+#~ msgid "We couldn't open “%(name)s” as a photo, video or PDF. Please choose the original file."
+#~ msgstr "تعذّر فتح «%(name)s» كصورة أو فيديو أو ملف PDF. يرجى اختيار الملف الأصلي."
+
 #~ msgid "What to tell the customer (optional)"
 #~ msgstr "ما تريد إبلاغه للعميل (اختياري)"
 
@@ -8973,3 +8994,7 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "vendor"
 #~ msgstr "المورّد"
+
+#, python-format
+#~ msgid "“%(name)s” is too large. The maximum size is 25 MB."
+#~ msgstr "«%(name)s» كبير جدًا. الحد الأقصى 25 ميغابايت."

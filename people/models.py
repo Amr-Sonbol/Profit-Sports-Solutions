@@ -2,11 +2,11 @@ import secrets
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
-from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import ConductArea, Country, Skill
+from spots.uploads import SafeFileValidator
 
 # Shared by TechnicianSkill, TechnicianConduct, and their assessment logs.
 SKILL_LEVEL_CHOICES = [(i, str(i)) for i in range(1, 5)]
@@ -129,7 +129,7 @@ class Technician(models.Model):
     )
     photo = models.FileField(
         _('photo'), upload_to=_technician_photo_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
         help_text=_('shown on the roster, boards and task details'),
     )
 
@@ -413,7 +413,7 @@ class TechnicianSkill(models.Model):
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician performing this repair'),
     )
 
@@ -456,7 +456,7 @@ class TechnicianSkillAssessment(models.Model):
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician performing this repair'),
     )
 

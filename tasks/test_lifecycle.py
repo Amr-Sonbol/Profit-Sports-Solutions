@@ -17,6 +17,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from customers.models import Customer, PortalUser, Site
+from spots.test_files import REAL_JPEG, REAL_MP4
 from people.models import Technician
 from reference.models import Country
 from reports.models import CustomerFeedback
@@ -819,7 +820,7 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
             self.send_request(contact_name='Ali Hassan', contact_phone='0501112222', **{
-                'machines-0-files': [SimpleUploadedFile('belt.jpg', b'jpg', content_type='image/jpeg')],
+                'machines-0-files': [SimpleUploadedFile('belt.jpg', REAL_JPEG, content_type='image/jpeg')],
             })
             ticket = self.newest_request()
             url = f'/tasks/tickets/{ticket.pk}/'
@@ -978,8 +979,8 @@ class CustomerReportTests(LifecycleTestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         self.send_request(machines=[
             {'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
-             'description': 'Dead.', 'files': [SimpleUploadedFile('dead.jpg', b'jpg', content_type='image/jpeg'),
-                                                SimpleUploadedFile('noise.mp4', b'mp4', content_type='video/mp4')]},
+             'description': 'Dead.', 'files': [SimpleUploadedFile('dead.jpg', REAL_JPEG, content_type='image/jpeg'),
+                                                SimpleUploadedFile('noise.mp4', REAL_MP4, content_type='video/mp4')]},
             {'which': 'new', 'model_name': 'Bike', 'serial_no': 'BK-2', 'problem': 'noise', 'description': 'Squeaks.'},
         ])
         self.ticket = self.newest_request()
@@ -997,12 +998,12 @@ class CustomerReportTests(LifecycleTestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         bike = self.ticket.machines.get(serial_no='BK-2')
         self.staff.post(self.url, {'action': 'add_customer_photos', 'machine': bike.pk,
-                                   'attachments': [SimpleUploadedFile('whatsapp.jpg', b'jpg', content_type='image/jpeg')]})
+                                   'attachments': [SimpleUploadedFile('whatsapp.jpg', REAL_JPEG, content_type='image/jpeg')]})
         attachment = bike.attachments.get()
         self.assertEqual(attachment.added_by, self.admin.user)
         # Photos sent later in the conversation reach the technician too (never support's messages).
         self.portal.post(f'/tasks/tickets/status/{self.ticket.token}/', {
-            'message': 'Here is the plate.', 'attachments': [SimpleUploadedFile('plate.jpg', b'jpg', content_type='image/jpeg')],
+            'message': 'Here is the plate.', 'attachments': [SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg')],
         })
         self.staff.post(self.url, {'action': 'next', 'machines': [str(m.pk) for m in self.ticket.machines.all()],
                                    'choice': 'visit', 'technician': self.tech.pk})
@@ -1091,7 +1092,7 @@ class ReportMachinesTests(LifecycleTestCase):
         elsewhere = Asset.objects.create(site=other_site, brand=self.brand, model_name='Bike', serial_no='X-1')
         api = APIClient()
         api.force_authenticate(self.tech.user)
-        jpeg = lambda: SimpleUploadedFile('fault.jpg', b'\xff\xd8\xff\xe0' + b'0' * 64, content_type='image/jpeg')
+        jpeg = lambda: SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         url = f'/api/my-tasks/{self.task.pk}/attachments/'
         response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': self.asset.pk}, format='multipart')
         self.assertEqual(response.status_code, 201, response.content)

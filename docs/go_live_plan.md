@@ -55,6 +55,12 @@ undone for it. Likewise a customer admin role who manages their own people.
   - database connections are reused for a minute (`DB_CONN_MAX_AGE`); the
     cache lives in the database, its table made at start-up
     (`createcachetable` in `docker-entrypoint.sh`).
+  - every upload, customers' and staff's, must really be what its name says
+    (`spots.uploads.SafeFileValidator`: a photo opens as that image, a PDF
+    starts with `%PDF-`, a video carries its marker) — a renamed page or
+    program is refused; uploaded files are served so nothing in them can run
+    (`spots.media`: a "sandbox" policy; anything not a photo, video or PDF
+    downloads instead of opening).
 - **Backups** of the database (daily, kept at least 30 days, a copy outside
   the hosting company), **and a restore actually tried once** — a backup
   never restored is only a hope. Uploaded files (photos, reports) backed up

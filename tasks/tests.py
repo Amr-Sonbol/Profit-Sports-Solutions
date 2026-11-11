@@ -28,6 +28,7 @@ from .models import (
     TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
     TicketMachine, TicketNotification, TicketReply,
 )
+from spots.test_files import REAL_JPEG, REAL_PNG
 
 User = get_user_model()
 
@@ -2715,7 +2716,7 @@ class TicketReviewTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_support_manager_can_attach_files_to_an_internal_note(self):
         quote = SimpleUploadedFile('vendor_quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
-        photo = SimpleUploadedFile('part.jpg', b'jpeg', content_type='image/jpeg')
+        photo = SimpleUploadedFile('part.jpg', REAL_JPEG, content_type='image/jpeg')
 
         self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
@@ -2814,11 +2815,11 @@ class TicketReviewTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_a_reply_takes_several_files_up_to_the_limit(self):
         self.client.login(username='support1', password='pass12345')
-        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(11)]
+        files = [SimpleUploadedFile(f'photo{n}.jpg', REAL_JPEG, content_type='image/jpeg') for n in range(11)]
         response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Too many', 'attachments': files})
-        self.assertContains(response, 'Please attach at most 10 files.')
+        self.assertContains(response, 'You can attach up to 10 files.')
         self.assertFalse(TicketReply.objects.exists())
-        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(3)]
+        files = [SimpleUploadedFile(f'photo{n}.jpg', REAL_JPEG, content_type='image/jpeg') for n in range(3)]
         self.client.post(self.url, {'action': 'add_reply', 'message': 'Three photos', 'attachments': files})
         self.assertEqual(len(TicketReply.objects.get().all_files), 3)
 
@@ -4262,7 +4263,7 @@ class MySkillsTests(TaskTestCase):
         response = self.client.get('/tasks/my-skills/')
         self.assertEqual(response.status_code, 302)
 
-    def _evidence(self, name='proof.jpg', content=b'not a real image', content_type='image/jpeg'):
+    def _evidence(self, name='proof.jpg', content=REAL_JPEG, content_type='image/jpeg'):
         return SimpleUploadedFile(name, content, content_type=content_type)
 
     def test_self_rate_skill_creates_self_sourced_rating(self):
@@ -4414,7 +4415,7 @@ class MyProfileTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_technician_updates_own_photo_and_language(self):
         self.client.login(username='tech1', password='pass12345')
-        photo = SimpleUploadedFile('me.jpg', b'not a real image', content_type='image/jpeg')
+        photo = SimpleUploadedFile('me.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/tasks/my-profile/', {
             'action': 'save_profile', 'photo': photo, 'language': Technician.Language.EN,
         })
@@ -4948,7 +4949,7 @@ class TechnicianSkillsTests(TaskTestCase):
         )
 
     def test_confirming_a_self_rating_keeps_its_evidence(self):
-        evidence = SimpleUploadedFile('proof.jpg', b'not a real image', content_type='image/jpeg')
+        evidence = SimpleUploadedFile('proof.jpg', REAL_JPEG, content_type='image/jpeg')
         TechnicianSkill.objects.create(
             technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
             set_by=self.technician, set_on=timezone.now().date(), evidence=evidence,
@@ -5170,7 +5171,7 @@ class TechnicianEditTests(TaskTestCase):
         )
         self.url = f'/tasks/technicians/{self.technician.pk}/edit/'
 
-    def _photo(self, name='photo.jpg', content=b'not a real image', content_type='image/jpeg'):
+    def _photo(self, name='photo.jpg', content=REAL_JPEG, content_type='image/jpeg'):
         return SimpleUploadedFile(name, content, content_type=content_type)
 
     def _base_payload(self, **overrides):
@@ -6080,7 +6081,7 @@ class MyTaskDetailTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_upload_creates_photo_attachment(self):
         self.client.login(username='tech1', password='pass12345')
-        upload = SimpleUploadedFile('serial.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        upload = SimpleUploadedFile('serial.jpg', REAL_JPEG, content_type='image/jpeg')
 
         response = self.client.post(self.url, {
             'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE,
@@ -6097,7 +6098,7 @@ class MyTaskDetailTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_helper_can_upload_a_photo(self):
         self.client.login(username='helper1', password='pass12345')
-        upload = SimpleUploadedFile('before.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        upload = SimpleUploadedFile('before.jpg', REAL_JPEG, content_type='image/jpeg')
 
         response = self.client.post(self.url, {
             'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
@@ -6322,7 +6323,7 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-        signature = SimpleUploadedFile('sig.png', b'png bytes', content_type='image/png')
+        signature = SimpleUploadedFile('sig.png', REAL_PNG, content_type='image/png')
         response = self.client.post(self.url, {**self._base_payload(), 'signature': signature})
         self.assertEqual(response.status_code, 302)
 
@@ -6577,7 +6578,7 @@ class MyReportFormTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_signature_upload_sets_absolute_url(self):
         self.client.login(username='tech1', password='pass12345')
-        signature = SimpleUploadedFile('sig.png', b'fake-png-bytes', content_type='image/png')
+        signature = SimpleUploadedFile('sig.png', REAL_PNG, content_type='image/png')
         payload = self._base_payload()
         payload['signature'] = signature
         self.client.post(self.url, payload)
@@ -7645,7 +7646,7 @@ class PartsCatalogueTests(TaskTestCase):
             self.client.login(username='warehouse1', password='pass12345')
             self.client.post('/tasks/parts/', {
                 'action': 'edit', 'part_id': part.pk, 'description': 'Treadmill belt', 'colour': 'Grey',
-                'photo': SimpleUploadedFile('belt.jpg', b'jpeg', content_type='image/jpeg'),
+                'photo': SimpleUploadedFile('belt.jpg', REAL_JPEG, content_type='image/jpeg'),
             })
             part.refresh_from_db()
             self.assertEqual((part.description, part.colour), ('Treadmill belt', 'Grey'))

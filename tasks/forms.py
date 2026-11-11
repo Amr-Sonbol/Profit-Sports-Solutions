@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib.auth import forms as auth_forms
 from django.contrib.auth import get_user_model, password_validation
-from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import lazy
@@ -15,6 +15,8 @@ from people.models import (
 )
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.phrases import Action, Finding
+
+from spots.uploads import SafeFileValidator
 
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, STEP_DONE_LABELS, MAX_TICKET_ATTACHMENT_BYTES,
@@ -436,7 +438,7 @@ class TaskEditForm(forms.ModelForm):
     def _clean_document(self, field_name):
         document = self.cleaned_data[field_name]
         if document and document.size > MAX_TASK_DOCUMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 10 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 10 MB limit. Please select a smaller file.'))
         return document
 
     def clean_quotation(self):
@@ -675,14 +677,14 @@ class SelfRateSkillForm(SelfRateLevelForm):
     evidence = forms.FileField(
         label=_('Photo or video of you performing this task'),
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
     )
     note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
     def clean_evidence(self):
         evidence = self.cleaned_data['evidence']
         if evidence.size > MAX_SKILL_EVIDENCE_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return evidence
 
 
@@ -713,7 +715,7 @@ class TaskAttachmentUploadForm(forms.Form):
         # instead of a generic file browser — doesn't force the camera, so
         # attaching an existing photo (e.g. one a customer sent) still works.
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
     )
     # Explicit choices, not TaskAttachment.Purpose.choices wholesale — the
     # delivery-note/written-report/other values further down belong to
@@ -732,7 +734,7 @@ class TaskAttachmentUploadForm(forms.Form):
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return file
 
 
@@ -747,7 +749,7 @@ class StaffAttachmentUploadForm(forms.Form):
 
     file = forms.FileField(
         label=_('Document'),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS + ['pdf'])],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS + ['pdf'])],
     )
     purpose = forms.ChoiceField(
         choices=[
@@ -761,7 +763,7 @@ class StaffAttachmentUploadForm(forms.Form):
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return file
 
 
@@ -769,7 +771,7 @@ class PhotoSizeMixin:
     def clean_photo(self):
         photo = self.cleaned_data['photo']
         if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 5 MB.'))
+            raise forms.ValidationError(_('The photo exceeds the 5 MB limit. Please select a smaller photo.'))
         return photo
 
 
@@ -1170,7 +1172,7 @@ class TaskProductCheckForm(forms.Form):
     note = forms.CharField(required=False, label=_('Note'), widget=forms.Textarea(attrs={'rows': 2}))
     photo = forms.FileField(
         required=False, label=_('Photo'), widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
 
     # Receiving, when fewer arrived than listed: what happened to the rest.
@@ -1242,7 +1244,7 @@ class TaskProductCheckForm(forms.Form):
             self.add_error('note', _('Say what is wrong, or add a photo.'))
         photo = cleaned.get('photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            self.add_error('photo', _('The photo is too large. The maximum size is 25 MB.'))
+            self.add_error('photo', _('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return cleaned
 
 
@@ -1358,7 +1360,7 @@ def message_files_field(label):
     return MultipleFileField(
         required=False, label=label,
         help_text=_filled_in_later(_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each'), FILES_LIMIT),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
 
@@ -1369,12 +1371,12 @@ class MessageFilesMixin:
         files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
         if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
         for upload in files:
             if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
                 raise forms.ValidationError(
-                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
+                    _('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {'name': upload.name},
                 )
         return files
 
@@ -1388,18 +1390,18 @@ class TicketAttachmentsForm(forms.Form):
             _('showing the issue and the serial number; up to %(count)d files, %(size)d MB each'), FILES_LIMIT,
         ),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     def clean_attachments(self):
         files = self.cleaned_data['attachments']
         if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                     'name': file.name,
                 })
         return files
@@ -1519,7 +1521,7 @@ class TicketMachineForm(forms.Form):
         required=False, label=_('Photo of the sticker (optional)'),
         help_text=_('A clear photo helps our team confirm the details. Take a photo or upload one.'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
     problem = forms.ChoiceField(
         choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
@@ -1540,7 +1542,7 @@ class TicketMachineForm(forms.Form):
         help_text=_('What helps us most: a photo of the problem, a photo of the serial plate, and if it makes a '
                     'noise, a short video (up to 30 seconds). Up to 25 MB each.'),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     def __init__(self, *args, customer, for_parts=False, **kwargs):
@@ -1580,7 +1582,7 @@ class TicketMachineForm(forms.Form):
         files = self.cleaned_data['files'] or []
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                     'name': file.name,
                 })
         return files
@@ -1613,7 +1615,7 @@ class TicketMachineForm(forms.Form):
                 )
         photo = cleaned.get('serial_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            self.add_error('serial_photo', _('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+            self.add_error('serial_photo', _('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                 'name': photo.name,
             })
         if self.for_parts:
@@ -1637,7 +1639,7 @@ class BaseTicketMachineFormSet(forms.BaseFormSet):
             raise forms.ValidationError(_('Please add at least one machine.'))
         if sum(len(form.cleaned_data.get('files') or []) for form in filled) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
 
 
@@ -1737,12 +1739,12 @@ class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
 class InternalTicketFileForm(forms.Form):
     """One file the app adds to an internal ticket or to a note on it — the
     same kinds and size as the website's boxes (the app sends one at a time)."""
-    file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
+    file = forms.FileField(validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
 
     def clean_file(self):
         upload = self.cleaned_data['file']
         if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name})
+            raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {'name': upload.name})
         return upload
 
 
@@ -1973,7 +1975,7 @@ class PartForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+        self.fields['photo'].validators.append(SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_code(self):
         code = self.cleaned_data['code'].strip().upper()
@@ -1984,7 +1986,7 @@ class PartForm(forms.ModelForm):
     def clean_photo(self):
         photo = self.cleaned_data.get('photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return photo
 
 
@@ -1994,7 +1996,7 @@ class PartImportForm(forms.Form):
         help_text=_('A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse '
                     'stock sheet — Code, Description, the colour, and each part\'s picture placed in its code cell. '
                     'New codes are added; existing ones get what the sheet has; nothing is deleted.'),
-        validators=[FileExtensionValidator(allowed_extensions=['csv', 'xlsx'])],
+        validators=[SafeFileValidator(allowed_extensions=['csv', 'xlsx'])],
     )
     warehouse = forms.ModelChoiceField(
         queryset=Site.objects.none(), required=False, label=_('Warehouse for the quantities'),

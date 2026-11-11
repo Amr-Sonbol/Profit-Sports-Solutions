@@ -2,20 +2,26 @@ import os
 
 from django.conf import settings
 
-_BASE_CSS_PATH = settings.BASE_DIR / 'static' / 'css' / 'base.css'
+_STATIC_DIRS = [settings.BASE_DIR / 'static' / 'css', settings.BASE_DIR / 'static' / 'js']
 
 
 def static_version(request):
-    """The CSS file's own last-modified time, appended to its URL as a
-    cache-buster (?v=...). Editing base.css during development was
-    repeatedly invisible in a browser that had already cached the old
-    file — this forces every real change to be a new URL, no manual
-    Ctrl+Shift+R required.
+    """The newest last-modified time among the site's own stylesheets and
+    scripts, appended to their URLs as a cache-buster (?v=...): any change to
+    one is a new URL, so a browser never keeps an old copy — editing only a
+    script used to leave the number (then base.css's alone) unchanged. A few
+    dozen files' dates, read per page. (On the live site WhiteNoise's manifest
+    gives each version its own file name as well.)
     """
-    try:
-        version = int(os.path.getmtime(_BASE_CSS_PATH))
-    except OSError:
-        version = 0
+    version = 0
+    for folder in _STATIC_DIRS:
+        try:
+            with os.scandir(folder) as entries:
+                for entry in entries:
+                    if entry.is_file():
+                        version = max(version, int(entry.stat().st_mtime))
+        except OSError:
+            pass
     return {'css_version': version}
 
 

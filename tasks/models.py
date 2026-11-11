@@ -3,7 +3,6 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -12,6 +11,7 @@ from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
 from reports.phrases import Action, Finding
 from spots.indexes import contains_search_index
+from spots.uploads import SafeFileValidator
 
 # A customer's own phone photos/videos of the fault — kept separate from
 # TaskAttachment's own list (tasks/forms.py) since this one has no LINK
@@ -189,17 +189,17 @@ class Task(models.Model):
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
     quotation = models.FileField(
         _('quotation'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     quotation_uploaded_at = models.DateTimeField(_('quotation uploaded at'), null=True, blank=True)
     factory_offer = models.FileField(
         _('factory offer'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     factory_offer_uploaded_at = models.DateTimeField(_('factory offer uploaded at'), null=True, blank=True)
     invoice = models.FileField(
         _('invoice'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
     invoice_visible_to_supervisor = models.BooleanField(
@@ -211,7 +211,7 @@ class Task(models.Model):
     )
     delivery_note = models.FileField(
         _('delivery note'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
         help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
@@ -517,7 +517,7 @@ class TicketReply(models.Model):
     message = models.TextField(_('message'))
     attachment = models.FileField(
         _('attachment'), upload_to=_ticket_reply_attachment_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     sent_at = models.DateTimeField(_('sent at'))
 
@@ -543,7 +543,7 @@ class TicketReplyFile(models.Model):
     reply = models.ForeignKey(TicketReply, on_delete=models.CASCADE, related_name='files', verbose_name=_('reply'))
     file = models.FileField(
         _('file'), upload_to=_ticket_reply_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     class Meta:
@@ -735,7 +735,7 @@ class TicketInternalNote(models.Model):
     message = models.TextField(_('note'))
     attachment = models.FileField(
         _('attachment'), upload_to=_ticket_internal_note_attachment_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     created_at = models.DateTimeField(_('created at'))
 
@@ -759,7 +759,7 @@ class TicketInternalNoteFile(models.Model):
     note = models.ForeignKey(TicketInternalNote, on_delete=models.CASCADE, related_name='files', verbose_name=_('note'))
     file = models.FileField(
         _('file'), upload_to=_ticket_internal_note_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     class Meta:
@@ -835,7 +835,7 @@ class TicketMachine(models.Model):
     code = models.CharField(_('code'), max_length=100, blank=True, help_text=_('the product code, if the customer knows it'))
     serial_photo = models.FileField(
         _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
         help_text=_("a photo of the machine's serial-number sticker, instead of or as well as typing it"),
     )
     problem = models.CharField(_('problem'), max_length=20, choices=Problem.choices)
@@ -911,7 +911,7 @@ class CustomerTicketAttachment(models.Model):
     )
     file = models.FileField(
         _('file'), upload_to=_ticket_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     # A photo staff added for the customer (sent on WhatsApp or by email); empty: the customer's own upload.
     added_by = models.ForeignKey(

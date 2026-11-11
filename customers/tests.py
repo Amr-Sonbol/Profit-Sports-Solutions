@@ -9,6 +9,7 @@ from reference.models import Country
 from tasks.models import CustomerTicket, TicketNotification
 
 from .models import PortalUser, Asset, Customer, Site
+from spots.test_files import REAL_JPEG
 
 User = get_user_model()
 
@@ -1195,7 +1196,7 @@ class PortalTicketNewTests(CustomerTestCase):
         # predictable path (the original filename alone) would let anyone
         # who guesses it — a common phone-camera name like IMG_0001.jpg —
         # view another customer's fault photo with no login at all.
-        photo = SimpleUploadedFile('IMG_0001.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        photo = SimpleUploadedFile('IMG_0001.jpg', REAL_JPEG, content_type='image/jpeg')
         self.client.login(username='fitnessfirst', password='pass12345')
         self.client.post('/customers/portal/tickets/new/', self._payload(**{'machines-0-files': [photo]}))
 
@@ -1283,14 +1284,14 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         # The typed number is how the machine is tracked; a sticker photo
         # alone isn't enough, but it's kept alongside to check it.
         self.client.login(username='fitnessfirst', password='pass12345')
-        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        sticker = SimpleUploadedFile('sticker.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
             {'model_name': 'Old bike', 'problem': 'display', 'serial_photo': sticker},
         ]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(CustomerTicket.objects.exists())
 
-        sticker = SimpleUploadedFile('sticker.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        sticker = SimpleUploadedFile('sticker.jpg', REAL_JPEG, content_type='image/jpeg')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
             {'model_name': 'Old bike', 'serial_no': 'OB-9', 'problem': 'display', 'serial_photo': sticker},
         ]))
@@ -1306,7 +1307,7 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
         self.assertEqual(CustomerTicket.objects.get().machines.get().serial, 'TG-77')
 
     def test_photos_belong_to_their_machine(self):
-        photo = SimpleUploadedFile('belt.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        photo = SimpleUploadedFile('belt.jpg', REAL_JPEG, content_type='image/jpeg')
         self.client.login(username='fitnessfirst', password='pass12345')
         self.client.post('/customers/portal/tickets/new/', self._payload(machines=[
             {'model_name': 'Treadmill', 'serial_no': 'T-1', 'problem': 'noise'},

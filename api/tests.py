@@ -10,6 +10,7 @@ from people.models import RolePermission, Technician
 from reports.models import WorkReport
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent, TicketMachine
 from tasks.tests import TaskTestCase
+from spots.test_files import REAL_JPEG
 
 User = get_user_model()
 
@@ -207,7 +208,7 @@ class MyTaskActionTests(ApiTestCase):
 class MyTaskAttachmentTests(ApiTestCase):
     def test_upload_creates_an_attachment(self):
         token = self.token_for('tech1')
-        photo = SimpleUploadedFile('fault.jpg', b'not a real image', content_type='image/jpeg')
+        photo = SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post(
             f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'fault'},
             **self.auth(token),
@@ -652,7 +653,7 @@ class ApiSecurityTests(ApiTestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_attachment_upload_requires_a_token(self):
-        photo = SimpleUploadedFile('fault.jpg', b'not a real image', content_type='image/jpeg')
+        photo = SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post(f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'fault'})
         self.assertEqual(response.status_code, 401)
 
@@ -689,7 +690,7 @@ class ApiSecurityTests(ApiTestCase):
             assigned_at=timezone.now(), is_active=True,
         )
         token = self.token_for('helper1')
-        photo = SimpleUploadedFile('fault.jpg', b'not a real image', content_type='image/jpeg')
+        photo = SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post(
             f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'fault'}, **self.auth(token),
         )
@@ -1492,7 +1493,7 @@ class MySkillsApiTests(ApiTestCase):
         self.assertEqual((row['status'], row['can_rate']), ('none', True))
         self.assertEqual(len(body['levels']), 4)
 
-        evidence = SimpleUploadedFile('doing-it.jpg', b'jpeg bytes', content_type='image/jpeg')
+        evidence = SimpleUploadedFile('doing-it.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/api/my-skills/', {
             'kind': 'skill', 'id': self.skill.pk, 'level': '3', 'note': 'belt change', 'evidence': evidence,
         }, **self.auth(token))
@@ -1528,7 +1529,7 @@ class MyProfileApiTests(ApiTestCase):
         token = self.token_for('tech1')
         technician = Technician.objects.get(user__username='tech1')
         role, country = technician.role, technician.country_id
-        photo = SimpleUploadedFile('me.jpg', b'jpeg bytes', content_type='image/jpeg')
+        photo = SimpleUploadedFile('me.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/api/me/', {
             'phone': '+971500000001', 'language': 'ar', 'email': 'tech1@example.com', 'photo': photo,
             'role': 'manager',
@@ -1892,7 +1893,7 @@ class InstallationChecklistApiTests(ApiTestCase):
         self.assertEqual([row['product_code'] for row in screen['checklist']], ['EXCITE-RUN'])
         self.assertIn('done', [choice['value'] for choice in screen['checklist_statuses']])
 
-        photo = SimpleUploadedFile('run.jpg', b'jpeg bytes', content_type='image/jpeg')
+        photo = SimpleUploadedFile('run.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post(f'/api/my-tasks/{self.task.pk}/lines/{self.line.pk}/photo/', {'photo': photo},
                                     **self.auth(token))
         self.assertTrue(response.json()['photo_url'].startswith('http'))

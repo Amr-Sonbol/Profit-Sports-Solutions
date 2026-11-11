@@ -76,10 +76,26 @@ def may_see(request, path):
     return customer is not None and _customer_owns(customer, path)
 
 
+# An uploaded file can never act as a page of this site: nothing in it runs
+# (no script, no form, no frame) and it loads nothing from elsewhere. Photos,
+# videos and PDFs open in the browser to look at; anything else downloads.
+UPLOAD_POLICY = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox"
+SHOWN_INLINE = ('image/', 'video/', 'application/pdf')
+
+
 def serve_media(request, path):
     if '..' in path.split('/') or not may_see(request, path):
         raise Http404
     response = serve(request, path, document_root=settings.MEDIA_ROOT)
     # Shared and cached by nobody but the viewer's own browser.
     response['Cache-Control'] = 'private, max-age=3600'
+    content_type = response.get('Content-Type', '')
+    if content_type.startswith('application/pdf'):
+        # The browser's own PDF viewer has to run, so no sandbox here: the policy still
+        # lets the PDF load nothing and send nothing anywhere.
+        response['Content-Security-Policy'] = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"
+    else:
+        response['Content-Security-Policy'] = UPLOAD_POLICY
+    if not content_type.startswith(SHOWN_INLINE):
+        response['Content-Disposition'] = 'attachment'
     return response

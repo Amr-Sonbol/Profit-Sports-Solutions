@@ -26,11 +26,16 @@
   const arabic = document.documentElement.lang === 'ar';
   const text = {
     tooBig: (name) => (arabic
-      ? `الملف «${name}» أكبر من 25 ميغابايت. يرجى إرسال فيديو أقصر.`
-      : `“${name}” is larger than 25 MB. Please send a shorter video.`),
-    tooMany: (max) => (arabic ? `${max} ملفات كحد أقصى.` : `At most ${max} files.`),
+      ? `يتجاوز الملف «${name}» الحد المسموح به وهو 25 ميغابايت. يرجى اختيار ملف أصغر أو مقطع فيديو أقصر.`
+      : `“${name}” exceeds the 25 MB limit. Please select a smaller file or a shorter video.`),
+    tooMany: (max) => (arabic
+      ? `يمكنك إرفاق ${max} ملفات كحد أقصى. لم تتم إضافة الملفات الزائدة.`
+      : `You can attach up to ${max} files. The additional files were not added.`),
     count: (n, max) => (arabic ? `${n} من ${max}` : `${n} of ${max}`),
     remove: arabic ? 'إزالة' : 'Remove',
+    notReal: (name) => (arabic
+      ? `تعذّر رفع الملف «${name}» لأنه ليس صورة أو فيديو أو ملف PDF صالحاً. يرجى اختيار الملف الأصلي من جهازك والمحاولة مرة أخرى.`
+      : `“${name}” could not be uploaded because it is not a valid photo, video or PDF. Please select the original file from your device and try again.`),
   };
   const chosen = new WeakMap(); // input → File[]
   const lists = new WeakMap(); // input → its <ul>
@@ -173,13 +178,40 @@
 
   const same = (a, b) => a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
 
+  // The same check the server makes (spots.uploads), from the file's first bytes, so a
+  // file that isn't what its name says is refused when it's picked, not after Send.
+  const IMAGE_SIGNATURES = [[0xff, 0xd8, 0xff], [0x89, 0x50, 0x4e, 0x47], [0x47, 0x49, 0x46, 0x38]];
+  const ISO_BOXES = ['ftyp', 'moov', 'mdat', 'wide', 'free', 'skip', 'pnot'];
+  async function isReal(file) {
+    const extension = (file.name.split('.').pop() || '').toLowerCase();
+    let head;
+    try {
+      head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    } catch {
+      return true; // can't read it here: the server still checks
+    }
+    const ascii = (from, to) => String.fromCharCode(...head.slice(from, to));
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+      // Any real image under any image name (a screenshot saved as .jpg is still a photo).
+      return IMAGE_SIGNATURES.some((sig) => sig.every((byte, i) => head[i] === byte))
+        || (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP');
+    }
+    if (extension === 'pdf') return ascii(0, head.length).includes('%PDF-');
+    if (['mp4', 'mov', 'heic'].includes(extension)) return ISO_BOXES.includes(ascii(4, 8));
+    if (extension === 'webm') return head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3;
+    return true;
+  }
+
   document.addEventListener('change', async (event) => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement) || input.type !== 'file') return;
     busy.add(input);
     try {
-      const picked = await Promise.all([...input.files].map(shrink));
-      const problems = picked.filter((file) => file.size > MAX_BYTES).map((file) => text.tooBig(file.name));
+      const originals = [...input.files];
+      const real = await Promise.all(originals.map(isReal));
+      const problems = originals.filter((_, i) => !real[i]).map((file) => text.notReal(file.name));
+      const picked = await Promise.all(originals.filter((_, i) => real[i]).map(shrink));
+      problems.push(...picked.filter((file) => file.size > MAX_BYTES).map((file) => text.tooBig(file.name)));
       const fitting = picked.filter((file) => file.size <= MAX_BYTES);
       if (!input.multiple) {
         const transfer = new DataTransfer();

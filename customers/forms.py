@@ -6,14 +6,13 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.utils.translation import gettext_lazy as _
 
-from django.core.validators import FileExtensionValidator
-
 from reference.models import Brand, Country
 from tasks.forms import new_password_fields
 from tasks.models import MAX_TICKET_ATTACHMENT_BYTES, SERIAL_PHOTO_EXTENSIONS
 from tasks.location import parse_coordinates
 
 from .models import Asset, Customer, Site
+from spots.uploads import SafeFileValidator
 
 
 class PortalLoginForm(AuthenticationForm):
@@ -493,12 +492,12 @@ class CustomerMachineForm(forms.ModelForm):
             self.fields['site'].initial = sites[0].pk
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True).order_by('name')
         self.fields['serial_no'].required = True
-        self.fields['sticker_photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+        self.fields['sticker_photo'].validators.append(SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_sticker_photo(self):
         photo = self.cleaned_data.get('sticker_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return photo
 
     def clean(self):

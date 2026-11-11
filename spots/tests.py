@@ -156,3 +156,57 @@ class BrowserProtectionTests(TestCase):
         for _ in range(3):
             self.client.post('/accounts/password-reset/', {'email': 'sara@example.com'})
         self.assertEqual(len(mail.outbox), 1)
+
+
+class UploadSafetyTests(TestCase):
+    """Every upload is what its name says (spots.uploads), and an uploaded file
+    can never act as a page of this site (spots.media.serve_media)."""
+
+    def check(self, name, content):
+        from django.core.exceptions import ValidationError
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from spots.uploads import SafeFileValidator
+        try:
+            SafeFileValidator(allowed_extensions=['jpg', 'png', 'pdf', 'mp4', 'webm', 'heic'])(
+                SimpleUploadedFile(name, content))
+            return True
+        except ValidationError:
+            return False
+
+    def test_real_files_pass_and_disguised_ones_do_not(self):
+        from spots.test_files import REAL_JPEG, REAL_MP4, REAL_PDF, REAL_PNG
+        self.assertTrue(self.check('photo.jpg', REAL_JPEG))
+        self.assertTrue(self.check('sign.png', REAL_PNG))
+        self.assertTrue(self.check('report.pdf', REAL_PDF))
+        self.assertTrue(self.check('noise.mp4', REAL_MP4))
+        self.assertFalse(self.check('photo.jpg', b'<html><script>alert(1)</script></html>'))  # a page, renamed
+        self.assertTrue(self.check('photo.jpg', REAL_PNG))  # a real screenshot a phone app named .jpg: still a photo
+        self.assertFalse(self.check('report.pdf', b'MZ not a pdf, a program'))
+        self.assertFalse(self.check('noise.mp4', b'not a video at all'))
+        self.assertFalse(self.check('tool.exe', b'MZ'))  # not an allowed kind at all
+
+    def test_uploaded_files_run_nothing_and_others_download(self):
+        import os
+        import tempfile
+
+        from django.test import override_settings
+        from spots.test_files import REAL_JPEG, REAL_PDF
+
+        media = tempfile.mkdtemp()
+        for name, content in (('a.jpg', REAL_JPEG), ('b.pdf', REAL_PDF), ('c.csv', b'a,b')):
+            with open(os.path.join(media, name), 'wb') as handle:
+                handle.write(content)
+        staff = get_user_model().objects.create_user('staff1', password='pass12345')
+        from reference.models import Country
+        Technician.objects.create(user=staff, country=Country.objects.create(
+            name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED'),
+            full_name='Staff', language='en', role=Technician.Role.SUPERVISOR, employment_type='staff')
+        self.client.force_login(staff)
+        with override_settings(MEDIA_ROOT=media):
+            photo, pdf, other = (self.client.get(f'/media/{name}') for name in ('a.jpg', 'b.pdf', 'c.csv'))
+        self.assertIn('sandbox', photo['Content-Security-Policy'])
+        self.assertFalse(photo.get('Content-Disposition', '').startswith('attachment'))  # shown in the browser
+        self.assertIn("default-src 'none'", pdf['Content-Security-Policy'])
+        self.assertNotIn('sandbox', pdf['Content-Security-Policy'])  # the browser's PDF viewer runs
+        self.assertEqual(other['Content-Disposition'], 'attachment')
