@@ -18,7 +18,8 @@
                 <dd>{{ technician.full_name }}</dd>
             </div>
             <div>
-                <dt>{% translate "Role" %}</dt>
+                {# What they're called: their job title, or their role's name without one — never the access role behind a title. #}
+                <dt>{% if technician.job_title %}{% translate "Job title" %}{% else %}{% translate "Role" %}{% endif %}</dt>
                 <dd>{{ technician.title }}</dd>
             </div>
             <div>

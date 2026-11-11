@@ -5058,6 +5058,14 @@ class TechnicianCreateTests(TaskTestCase):
         token = Token.objects.create(user=karim.user)
         me = self.client_class().get('/api/me/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
         self.assertEqual((me['role'], me['role_display']), ('operations_manager', 'General Manager'))
+        # They see it themselves, on their profile and in the app — not the access role behind it.
+        karim.user.set_password('pass12345')
+        karim.user.save()
+        self.client.login(username='karim@example.com', password='pass12345')
+        profile = self.client.get('/tasks/my-profile/')
+        self.assertContains(profile, 'Job title')
+        self.assertContains(profile, 'General Manager')
+        self.assertNotContains(profile, 'Operations Manager')
         # Without one, the role's name.
         self.assertEqual(Technician(role=Technician.Role.SUPERVISOR).title, 'Supervisor')
 
@@ -9754,3 +9762,96 @@ class TaskUpdatesTellTheTeamTests(TaskTestCase):
         from tasks.models import TaskEventRecipient
         self._record(TaskEvent.EventType.NEGLIGENCE, self.supervisor_user)
         self.assertFalse(TaskEventRecipient.objects.exists())
+
+
+class CompanyWatchTests(TaskTestCase):
+    """The Technical Support and Operations Managers watch every country
+    (tasks.alarms): a task still blocked after 2 working hours, or with no
+    day after 24, reaches their bell wherever it is; their Dashboard (and the
+    app's) opens on the company's summary. Not a country Manager's."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth.models import User
+
+        def staff(username, role):
+            return Technician.objects.create(
+                user=User.objects.create_user(username, password='pass12345'), country=self.country,
+                full_name=username.title(), language='en', role=role, employment_type='staff',
+            )
+        self.support = staff('support1', Technician.Role.SUPPORT_MANAGER)
+        staff('manager1', Technician.Role.MANAGER)
+        egypt = Country.objects.create(name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP')
+        site = Site.objects.create(customer=Customer.objects.create(country=egypt, name='Nile Gym', segment='gym'),
+                                   name='Zamalek', address='Cairo')
+        long_ago = timezone.now() - timezone.timedelta(days=5)
+
+        def task(number, status):
+            made = Task.objects.create(
+                task_number=number, site=site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=long_ago, created_by=self.supervisor_user,
+                status=status,
+            )
+            TaskEvent.objects.create(task=made, event_type=TaskEvent.EventType.CREATED, occurred_at=long_ago,
+                                     actor=self.supervisor_user)
+            return made
+        self.blocked = task('EG-0001', Task.Status.BLOCKED)
+        TaskEvent.objects.create(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED, occurred_at=long_ago,
+                                 actor=self.tech_user)
+        self.unscheduled = task('EG-0002', Task.Status.NEW)
+
+    def bell(self, username):
+        self.client.login(username=username, password='pass12345')
+        return {item['kind']: item for item in self.client.get('/tasks/dashboard/').context['unseen_notifications']}
+
+    def test_their_bell_has_every_countrys_alarms(self):
+        bell = self.bell('support1')  # looking at the UAE; the tasks are in Egypt
+        self.assertEqual(bell['blocked_long']['task'], self.blocked)
+        self.assertEqual(bell['unscheduled_overdue']['task'], self.unscheduled)
+        manager = self.bell('manager1')
+        self.assertNotIn('blocked_long', manager)
+        self.assertNotIn('unscheduled_overdue', manager)
+        # The Operations Manager: the urgent alarms too, but not the summary (the Technical Support Manager's).
+        from django.contrib.auth.models import User
+        Technician.objects.create(
+            user=User.objects.create_user('ops1', password='pass12345'), country=self.country, full_name='Ops',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        ops = self.bell('ops1')
+        self.assertEqual(ops['blocked_long']['task'], self.blocked)
+        self.assertEqual(ops['unscheduled_overdue']['task'], self.unscheduled)
+        self.assertIsNone(self.client.get('/tasks/dashboard/').context['company_summary'])
+
+    def test_their_dashboard_opens_on_the_company(self):
+        self.client.login(username='support1', password='pass12345')
+        summary = self.client.get('/tasks/dashboard/').context['company_summary']
+        self.assertEqual((summary['blocked'], summary['blocked_long'], summary['unscheduled_overdue']), (1, 1, 1))
+        listed = self.client.get('/tasks/', {'alarm': 'blocked_long', 'country': 'all'}).context['page_obj']
+        self.assertEqual([task.pk for task in listed], [self.blocked.pk])
+        # The same in the app.
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=self.support.user)
+        app = self.client_class().get('/api/dashboard/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
+        self.assertEqual(app['company_summary']['blocked_long'], 1)
+        # Not a country Manager's.
+        self.client.login(username='manager1', password='pass12345')
+        self.assertIsNone(self.client.get('/tasks/dashboard/').context['company_summary'])
+
+    def test_the_operations_manager_hears_later(self):
+        # Blocked for about a working day: the Technical Support Manager knows; the Operations
+        # Manager not yet (after 2 working days) — only what stayed stuck reaches them.
+        from django.contrib.auth.models import User
+        from tasks.alarms import long_blocked_tasks
+        ops = Technician.objects.create(
+            user=User.objects.create_user('ops1', password='pass12345'), country=self.country, full_name='Ops',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
+            occurred_at=timezone.now() - timezone.timedelta(hours=20))
+        self.assertEqual(long_blocked_tasks(self.support), [self.blocked])
+        self.assertEqual(long_blocked_tasks(ops), [])
+
+    def test_a_task_blocked_a_moment_ago_is_not_yet_an_alarm(self):
+        TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
+            occurred_at=timezone.now() - timezone.timedelta(minutes=30))
+        self.assertNotIn('blocked_long', self.bell('support1'))

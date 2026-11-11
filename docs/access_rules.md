@@ -73,6 +73,35 @@ by; a role with less power is a new role, added in the code with its rules.
    the Operations Manager's bell and Waiting for me until it's approved. A Manager, the Project Manager and a supervisor see the
    report but don't approve it.
 
+## Watching the whole company
+
+The **Technical Support Manager** keeps an eye on every country (`tasks.alarms`)
+— act, escalate, summarise, rather than every alert on their phone. The
+**Operations Manager** gets only the urgent ones: the escalations below, and
+its own reports waiting over 2 working days — not the summary.
+
+- **Act:** whoever must do something is told at once, as above (the task's
+  supervisor, the approver). Unchanged.
+- **Escalate, in tiers:** in their bell, from **every country** whichever one
+  they're looking at — each level up hears later, of what the level below
+  didn't solve (`tasks.alarms.ALARM_HOURS`), so the Operations Manager's list
+  stays short:
+
+  | Problem | Technical Support Manager | Operations Manager |
+  |---|---|---|
+  | A task still blocked on site | after 2 working hours | after 2 working days |
+  | A task with no day | after 24 working hours | after 3 working days |
+  | A report waiting for final approval | (their own job) | after 2 working days |
+
+  Live: each clears once it's handled. (On the phone once the scheduled job
+  of the go-live plan runs.)
+- **Summarise (the Technical Support Manager):** the top of their **Dashboard**, "Across the company" —
+  blocked tasks (and those blocked over 2 working hours), tasks with no day
+  after 24 working hours, new tasks in the last 24 hours, reports to review,
+  to approve and waiting over 2 working days, new and escalated customer
+  requests, locked staff and customer logins. Live counts, each opening its
+  list. The same in the app.
+
 ## People (their pages, schedules, skills, progress)
 
 - **Admin:** everyone.

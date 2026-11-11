@@ -797,8 +797,12 @@ class DashboardView(APIView):
         # The decisions themselves on top (waiting_for); the counts below leave out what that lists.
         waiting = waiting_for(viewer, country)
         listed = ('status=completed', 'status=pending_supervisor_review', '/tasks/tickets/internal/')
+        from tasks.alarms import company_summary
+
         return Response({
             'country': country.display_name,
+            # Everything to watch across the company, for whoever watches it; null for anyone else.
+            'company_summary': company_summary(viewer),
             'waiting': [{**item, 'title': str(item['title']), 'detail': str(item['detail'])} for item in waiting],
             'actions': [
                 {'label': str(item['label']), 'count': item['count'], 'level': item['level'], 'url': item['url']}
@@ -2317,9 +2321,25 @@ class BellView(APIView):
             if kind == 'new_task':
                 text = _('New task')
             elif kind == 'unscheduled_overdue':
-                text, alarm = _('Not scheduled within 24 working hours'), True
+                text = _('Not scheduled within 3 working days') if item.get('later') else _(
+                    'Not scheduled within 24 working hours')
+                alarm = True
             elif kind == 'report_late':
                 text, alarm = _('Report waiting more than 2 working days for approval'), True
+            elif kind == 'blocked_long':
+                text = _('Blocked for more than 2 working days') if item.get('later') else _(
+                    'Blocked for more than 2 working hours')
+                alarm = True
+            elif kind == 'blocked_long_many':
+                text = (ngettext(
+                    '%(count)s task blocked for more than 2 working days',
+                    '%(count)s tasks blocked for more than 2 working days', item['count'],
+                ) if item.get('later') else ngettext(
+                    '%(count)s task blocked for more than 2 working hours',
+                    '%(count)s tasks blocked for more than 2 working hours', item['count'],
+                )) % {'count': item['count']}
+                # Their Dashboard's company summary lists what needs watching.
+                alarm, opens = True, {'screen': 'app', 'path': '/dashboard'}
             elif kind == 'report_late_many':
                 text = ngettext(
                     '%(count)s report waiting more than 2 working days for approval',
@@ -2327,10 +2347,13 @@ class BellView(APIView):
                 ) % {'count': item['count']}
                 alarm, opens = True, {'screen': 'app', 'path': '/tasks'}  # each one is in Waiting for me
             elif kind == 'unscheduled_overdue_many':
-                text = ngettext(
+                text = (ngettext(
+                    '%(count)s task not scheduled within 3 working days',
+                    '%(count)s tasks not scheduled within 3 working days', item['count'],
+                ) if item.get('later') else ngettext(
                     '%(count)s task not scheduled within 24 working hours',
                     '%(count)s tasks not scheduled within 24 working hours', item['count'],
-                ) % {'count': item['count']}
+                )) % {'count': item['count']}
                 alarm, opens = True, {'screen': 'app', 'path': '/tasks?scope=all'}  # Tasks → All in the country
             elif kind == 'schedule_change_pending':
                 text, alarm = _('Change of visit time requested — approval required'), True

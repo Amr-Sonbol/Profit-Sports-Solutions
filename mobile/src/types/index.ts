@@ -738,6 +738,12 @@ export interface Dashboard {
   /** The decisions waiting on me (tasks.views.waiting_for). Older servers: absent. */
   waiting?: import('@/api/endpoints').WaitingItem[];
   actions: { label: string; count: number | null; level: 'critical' | 'warning'; url: string }[];
+  /** The whole company at a glance, for the Technical Support and Operations Managers (tasks.alarms.company_summary). */
+  company_summary?: {
+    blocked: number; blocked_long: number; unscheduled_overdue: number; new_tasks_today: number;
+    reports_to_review: number; reports_to_approve: number; reports_late: number;
+    new_requests: number; escalated_requests: number; locked_staff: number; locked_customers: number;
+  } | null;
   follow_ups: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   stats: {
     available_count: number; technician_count: number; open_task_count: number;

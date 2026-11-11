@@ -82,13 +82,28 @@ def notification_bell(request):
             escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
         ).select_related('ticket')
     ]
-    from tasks.alarms import overdue_unscheduled_tasks
+    from tasks.alarms import company_unscheduled_tasks, long_blocked_tasks, overdue_unscheduled_tasks, watches_company
     # One entry for them all, so a busy day of them never pushes newer news (a new ticket) out of the ten shown.
-    overdue = overdue_unscheduled_tasks(country, technician)
+    # Whoever watches the whole company hears of every country's, whichever one they're looking at.
+    overdue = (company_unscheduled_tasks(technician) if watches_company(technician)
+               else overdue_unscheduled_tasks(country, technician))
+    # The Operations Manager hears later than the Technical Support Manager (tasks.alarms.ALARM_HOURS).
+    later = technician.role == Technician.Role.OPERATIONS_MANAGER
     if len(overdue) == 1:
-        items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0]})
+        items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0],
+                      'later': later})
     elif overdue:
-        items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue)})
+        items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue),
+                      'later': later})
+    # Tasks still blocked on site after 2 working hours — for whoever watches the company
+    # (their supervisor heard at once); live, gone once unblocked.
+    blocked = long_blocked_tasks(technician)
+    if len(blocked) == 1:
+        items.append({'kind': 'blocked_long', 'created_at': blocked[0].blocked_since, 'task': blocked[0],
+                      'later': later})
+    elif blocked:
+        items.append({'kind': 'blocked_long_many', 'created_at': blocked[0].blocked_since, 'count': len(blocked),
+                      'later': later})
     from tasks.alarms import late_reports
     late = late_reports(technician)
     if len(late) == 1:
@@ -177,7 +192,7 @@ def notification_bell(request):
     items.sort(key=lambda item: item['created_at'], reverse=True)
     # The overdue-scheduling alarm is the oldest item by nature — kept on
     # top so it's never pushed out of the ten shown by newer ones.
-    items.sort(key=lambda item: not item['kind'].startswith(('unscheduled_overdue', 'report_late')))
+    items.sort(key=lambda item: not item['kind'].startswith(('unscheduled_overdue', 'report_late', 'blocked_long')))
     return {
         'unseen_notifications': items[:10],
         'unseen_notification_count': len(items),

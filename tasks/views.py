@@ -1649,7 +1649,11 @@ def dashboard(request):
     active_country = get_active_country(request)
     technicians, tasks, stats = dashboard_overview(active_country, viewer)
 
+    from tasks.alarms import company_summary
+
     context = {
+        # Everything to watch across the company, for whoever watches it (tasks.alarms).
+        'company_summary': company_summary(viewer),
         'technicians': technicians,
         'tasks': tasks[:DASHBOARD_TASK_LIMIT],
         'stats': stats,
@@ -1685,8 +1689,13 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     if text:
         tasks = search_tasks(tasks, text, limit=None)
     if params.get('alarm') == 'unscheduled':
-        from tasks.alarms import overdue_unscheduled_tasks
-        tasks = tasks.filter(pk__in=[task.pk for task in overdue_unscheduled_tasks(active_country, technician)])
+        from tasks.alarms import company_unscheduled_tasks, overdue_unscheduled_tasks, watches_company
+        alarmed = (company_unscheduled_tasks(technician) if all_countries and watches_company(technician)
+                   else overdue_unscheduled_tasks(active_country, technician))
+        tasks = tasks.filter(pk__in=[task.pk for task in alarmed])
+    elif params.get('alarm') == 'blocked_long':
+        from tasks.alarms import long_blocked_tasks
+        tasks = tasks.filter(pk__in=[task.pk for task in long_blocked_tasks(technician)])
     task_id = params.get('task_id', '').strip()
     if task_id:
         tasks = tasks.filter(task_number__icontains=task_id)

@@ -27,13 +27,23 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                         </a>
                         {% elif notification.kind == 'unscheduled_overdue' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
-                            {% translate "Not scheduled within 24 working hours" %}
+                            {% if notification.later %}{% translate "Not scheduled within 3 working days" %}{% else %}{% translate "Not scheduled within 24 working hours" %}{% endif %}
                             — {{ notification.task.site.name }}
                             <span class="muted">({{ notification.task.task_number }})</span>
                         </a>
+                        {% elif notification.kind == 'blocked_long' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% if notification.later %}{% translate "Blocked for more than 2 working days" %}{% else %}{% translate "Blocked for more than 2 working hours" %}{% endif %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'blocked_long_many' %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=blocked_long&amp;country=all" class="notif-alarm">
+                            {% if notification.later %}{% blocktranslate count count=notification.count %}{{ count }} task blocked for more than 2 working days{% plural %}{{ count }} tasks blocked for more than 2 working days{% endblocktranslate %}{% else %}{% blocktranslate count count=notification.count %}{{ count }} task blocked for more than 2 working hours{% plural %}{{ count }} tasks blocked for more than 2 working hours{% endblocktranslate %}{% endif %}
+                        </a>
                         {% elif notification.kind == 'unscheduled_overdue_many' %}
-                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled" class="notif-alarm">
-                            {% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled{% if user.technician.role == 'support_manager' or user.technician.role == 'operations_manager' %}&amp;country=all{% endif %}" class="notif-alarm">
+                            {% if notification.later %}{% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 3 working days{% plural %}{{ count }} tasks not scheduled within 3 working days{% endblocktranslate %}{% else %}{% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}{% endif %}
                         </a>
                         {% elif notification.kind == 'report_late' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">

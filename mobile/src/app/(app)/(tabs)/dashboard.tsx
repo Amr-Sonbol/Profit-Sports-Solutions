@@ -98,6 +98,24 @@ export default function DashboardScreen() {
           {!data ? <ActivityIndicator /> : (
             <>
               <WaitingForMe items={data.waiting ?? []} />
+              {data.company_summary ? (
+                <>
+                  <ThemedText type="subtitle">Across the company</ThemedText>
+                  <ThemedView style={styles.figures}>
+                    {figure(data.company_summary.blocked_long, 'Blocked over 2 working hours', data.company_summary.blocked_long > 0)}
+                    {figure(data.company_summary.blocked, 'Blocked', data.company_summary.blocked > 0)}
+                    {figure(data.company_summary.unscheduled_overdue, 'No day after 24 working hours', data.company_summary.unscheduled_overdue > 0)}
+                    {figure(data.company_summary.new_tasks_today, 'New tasks, last 24 hours')}
+                    {figure(data.company_summary.reports_to_review, 'Reports to review')}
+                    {figure(data.company_summary.reports_to_approve, 'Reports to approve')}
+                    {figure(data.company_summary.reports_late, 'Reports waiting over 2 working days', data.company_summary.reports_late > 0)}
+                    {figure(data.company_summary.new_requests, 'New customer requests')}
+                    {figure(data.company_summary.escalated_requests, 'Escalated requests', data.company_summary.escalated_requests > 0)}
+                    {figure(data.company_summary.locked_staff, 'Locked staff logins', data.company_summary.locked_staff > 0)}
+                    {figure(data.company_summary.locked_customers, 'Locked customer logins', data.company_summary.locked_customers > 0)}
+                  </ThemedView>
+                </>
+              ) : null}
               <ThemedText type="subtitle">Needs your action</ThemedText>
               {data.actions.length ? data.actions.map((item, index) => (
                 <TouchableOpacity

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 16:15+0000\n"
+"POT-Creation-Date: 2026-11-11 17:14+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -217,6 +217,26 @@ msgstr[4] "%(count)s مهمة"
 msgstr[5] "%(count)s مهمة"
 
 #, python-format
+msgid "%(count)s task blocked for more than 2 working days"
+msgid_plural "%(count)s tasks blocked for more than 2 working days"
+msgstr[0] "%(count)s مهام متوقفة لأكثر من يومي عمل"
+msgstr[1] "مهمة واحدة متوقفة لأكثر من يومي عمل"
+msgstr[2] "%(count)s مهام متوقفة لأكثر من يومي عمل"
+msgstr[3] "%(count)s مهام متوقفة لأكثر من يومي عمل"
+msgstr[4] "%(count)s مهام متوقفة لأكثر من يومي عمل"
+msgstr[5] "%(count)s مهام متوقفة لأكثر من يومي عمل"
+
+#, python-format
+msgid "%(count)s task blocked for more than 2 working hours"
+msgid_plural "%(count)s tasks blocked for more than 2 working hours"
+msgstr[0] "%(count)s مهام متوقفة لأكثر من ساعتي عمل"
+msgstr[1] "مهمة واحدة متوقفة لأكثر من ساعتي عمل"
+msgstr[2] "%(count)s مهام متوقفة لأكثر من ساعتي عمل"
+msgstr[3] "%(count)s مهام متوقفة لأكثر من ساعتي عمل"
+msgstr[4] "%(count)s مهام متوقفة لأكثر من ساعتي عمل"
+msgstr[5] "%(count)s مهام متوقفة لأكثر من ساعتي عمل"
+
+#, python-format
 msgid "%(count)s task not scheduled within 24 working hours"
 msgid_plural "%(count)s tasks not scheduled within 24 working hours"
 msgstr[0] "لا توجد مهام لم تُجدول خلال 24 ساعة عمل"
@@ -225,6 +245,16 @@ msgstr[2] "مهمتان لم تُجدولا خلال 24 ساعة عمل"
 msgstr[3] "%(count)s مهام لم تُجدول خلال 24 ساعة عمل"
 msgstr[4] "%(count)s مهمة لم تُجدول خلال 24 ساعة عمل"
 msgstr[5] "%(count)s مهمة لم تُجدول خلال 24 ساعة عمل"
+
+#, python-format
+msgid "%(count)s task not scheduled within 3 working days"
+msgid_plural "%(count)s tasks not scheduled within 3 working days"
+msgstr[0] "%(count)s مهام لم تُجدول خلال 3 أيام عمل"
+msgstr[1] "مهمة واحدة لم تُجدول خلال 3 أيام عمل"
+msgstr[2] "%(count)s مهام لم تُجدول خلال 3 أيام عمل"
+msgstr[3] "%(count)s مهام لم تُجدول خلال 3 أيام عمل"
+msgstr[4] "%(count)s مهام لم تُجدول خلال 3 أيام عمل"
+msgstr[5] "%(count)s مهام لم تُجدول خلال 3 أيام عمل"
 
 #, python-format
 msgid "%(count)s task significantly over estimate"
@@ -648,6 +678,9 @@ msgstr "الإكسسوارات"
 
 msgid "Account"
 msgstr "الحساب"
+
+msgid "Across the company"
+msgstr "على مستوى الشركة"
 
 msgid "Action"
 msgstr "الإجراء"
@@ -1161,6 +1194,15 @@ msgstr "نوع الفوترة"
 
 msgid "Blocked"
 msgstr "معطّلة"
+
+msgid "Blocked for more than 2 working days"
+msgstr "متوقفة لأكثر من يومي عمل"
+
+msgid "Blocked for more than 2 working hours"
+msgstr "متوقفة لأكثر من ساعتي عمل"
+
+msgid "Blocked over 2 working hours"
+msgstr "متوقفة أكثر من ساعتي عمل"
 
 msgid "Board"
 msgstr "اللوحة"
@@ -2403,6 +2445,9 @@ msgstr "مُصعّدة"
 msgid "Escalated by %(by)s to %(to)s on %(when)s"
 msgstr "صعّدها %(by)s إلى %(to)s بتاريخ %(when)s"
 
+msgid "Escalated requests"
+msgstr "طلبات مُصعّدة"
+
 #, python-format
 msgid "Escalated to %(name)s."
 msgstr "تم التصعيد إلى %(name)s."
@@ -3052,6 +3097,12 @@ msgstr "شركة توصيل محلية"
 msgid "Locked"
 msgstr "مُقفل"
 
+msgid "Locked customer logins"
+msgstr "حسابات عملاء مقفلة"
+
+msgid "Locked staff logins"
+msgstr "حسابات موظفين مقفلة"
+
 msgid "Lockers"
 msgstr "الخزائن"
 
@@ -3327,6 +3378,9 @@ msgstr "تم إنشاء عميل جديد"
 msgid "New customer reply — ticket %(number)s"
 msgstr "رد جديد من العميل — الطلب %(number)s"
 
+msgid "New customer requests"
+msgstr "طلبات عملاء جديدة"
+
 msgid "New customer ticket"
 msgstr "بلاغ جديد من عميل"
 
@@ -3392,6 +3446,9 @@ msgstr "أُسندت إليك مهمة جديدة"
 
 msgid "New task type"
 msgstr "نوع مهمة جديد"
+
+msgid "New tasks, last 24 hours"
+msgstr "مهام جديدة، آخر 24 ساعة"
 
 msgid "New ticket"
 msgstr "طلب جديد"
@@ -3495,6 +3552,9 @@ msgstr "لم يتم إعداد أي مجالات سلوك."
 
 msgid "No customers match your search."
 msgstr "لا يوجد عملاء مطابقون لبحثك."
+
+msgid "No day after 24 working hours"
+msgstr "بلا موعد بعد 24 ساعة عمل"
 
 msgid "No deactivated customers in your country."
 msgstr "لا يوجد عملاء موقوفون في دولتك."
@@ -3757,6 +3817,9 @@ msgstr "غير مجدولة"
 
 msgid "Not scheduled within 24 working hours"
 msgstr "لم تتم الجدولة خلال 24 ساعة عمل"
+
+msgid "Not scheduled within 3 working days"
+msgstr "لم تُجدول خلال 3 أيام عمل"
 
 msgid "Not sent"
 msgstr "لم تُرسل"
@@ -4764,6 +4827,15 @@ msgstr "تقارير بانتظار مراجعتك"
 
 msgid "Reports filed"
 msgstr "التقارير المقدمة"
+
+msgid "Reports to approve"
+msgstr "تقارير بانتظار الاعتماد"
+
+msgid "Reports to review"
+msgstr "تقارير بانتظار المراجعة"
+
+msgid "Reports waiting over 2 working days"
+msgstr "تقارير تنتظر أكثر من يومي عمل"
 
 msgid "Request"
 msgstr "الطلب"
@@ -6057,6 +6129,9 @@ msgstr "هذا الرمز موجود في القائمة مسبقاً."
 msgid "This confirmation link has expired or was already used. Please request a new one."
 msgstr "انتهت صلاحية رابط التأكيد هذا أو سبق استخدامه. يُرجى طلب رابط جديد."
 
+msgid "This country"
+msgstr "هذه الدولة"
+
 msgid "This country has no warehouse yet. Our warehouses are the sites of our own account in Customers."
 msgstr "لا يوجد مستودع في هذه الدولة بعد. مستودعاتنا هي مواقع حسابنا الخاص في العملاء."
 
@@ -6936,6 +7011,9 @@ msgstr "قيّمتنا بـ %(rating)s/5"
 #, python-format
 msgid "You sign in with <strong dir=\"ltr\">%(email)s</strong>. To change it, enter the new address and your password: we send a confirmation link there, and the change happens once you open it."
 msgstr "تسجّل الدخول باستخدام <strong dir=\"ltr\">%(email)s</strong>. لتغييره، أدخل العنوان الجديد وكلمة المرور: سنرسل رابط تأكيد إليه، ويتم التغيير بمجرد فتحه."
+
+msgid "You were signed out after 30 days without using the app. Please sign in again."
+msgstr "تم تسجيل خروجك بعد 30 يوماً دون استخدام التطبيق. يرجى تسجيل الدخول مرة أخرى."
 
 #, python-format
 msgid "You're viewing the portal as <strong>%(name)s</strong> · view only, nothing is sent to them"
