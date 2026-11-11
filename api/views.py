@@ -80,6 +80,7 @@ from tasks.views import (
 
 from spots.media import signed_media_url
 
+from .authentication import renew
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
     CustomerTicketSerializer, TaskAttachmentSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
@@ -108,6 +109,7 @@ class LoginView(APIView):
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
 
         token, _created = Token.objects.get_or_create(user=user)
+        renew(token)  # a fresh 30 days (api.authentication.TOKEN_IDLE_DAYS)
         # So Staff accounts' "Last sign-in" counts the app, not only the website.
         update_last_login(None, user)
         return Response({'token': token.key, **_me_payload(user, request)})

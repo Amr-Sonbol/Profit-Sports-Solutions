@@ -70,6 +70,44 @@ class LoginTests(ApiTestCase):
         self.assertEqual(response.json()['full_name'], 'Tarek Tech')
 
 
+class SignInExpiryTests(ApiTestCase):
+    """An app sign-in ends after 30 days unused (api.authentication.TOKEN_IDLE_DAYS);
+    each use renews it, so someone using the app never notices."""
+
+    def age(self, token, days):
+        from rest_framework.authtoken.models import Token
+        Token.objects.filter(key=token).update(created=timezone.now() - timezone.timedelta(days=days))
+
+    def test_used_within_30_days_it_works_and_is_renewed(self):
+        from rest_framework.authtoken.models import Token
+        token = self.token_for('tech1')
+        self.age(token, 29)
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).status_code, 200)
+        self.assertLess(timezone.now() - Token.objects.get(key=token).created, timezone.timedelta(minutes=1))
+
+    def test_unused_for_30_days_every_phone_is_signed_out(self):
+        from people.models import PushDevice
+        from rest_framework.authtoken.models import Token
+        token = self.token_for('tech1')
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[lost-phone]',
+                                  created_at=timezone.now())
+        self.age(token, 31)
+        response = self.client.get('/api/me/', **self.auth(token))
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('30 days', response.json()['detail'])
+        self.assertFalse(Token.objects.filter(key=token).exists())
+        self.assertFalse(PushDevice.objects.filter(technician=self.technician).exists())  # no more alerts there
+        # Signing in again works, with a fresh 30 days.
+        fresh = self.token_for('tech1')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(fresh)).status_code, 200)
+
+    def test_signing_in_renews_an_old_unused_token(self):
+        token = self.token_for('tech1')
+        self.age(token, 40)  # never asked for since: still there
+        again = self.token_for('tech1')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(again)).status_code, 200)
+
+
 class MyTasksTests(ApiTestCase):
     def test_technician_sees_their_own_task(self):
         token = self.token_for('tech1')
