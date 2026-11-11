@@ -7695,7 +7695,8 @@ def ticket_open(request):
     if not _has_permission(technician, RolePermission.Permission.OPEN_TICKETS):
         raise PermissionDenied
     country = get_active_country(request)
-    form = StaffTicketForm(request.POST, request.FILES, country=country) if request.method == 'POST'         else StaffTicketForm(country=country)
+    # ?site= — back from New customer (customers.views.customer_create): its new branch, chosen.
+    form = StaffTicketForm(request.POST, request.FILES, country=country) if request.method == 'POST'         else StaffTicketForm(country=country, initial={'site': request.GET.get('site')})
     if request.method == 'POST' and form.is_valid():
         now = timezone.now()
         ticket = form.save(commit=False)
@@ -7727,7 +7728,11 @@ def ticket_open(request):
             return redirect('tasks:ticket_review', pk=ticket.pk)
         return redirect('home')
 
-    return render(request, 'tasks/staff_ticket_new.html', {'form': form, 'kind': CustomerTicket.Kind.CUSTOMER})
+    return render(request, 'tasks/staff_ticket_new.html', {
+        'form': form, 'kind': CustomerTicket.Kind.CUSTOMER,
+        # A caller who isn't a customer yet: whoever creates customers adds them from here.
+        'can_create_customer': _has_permission(technician, RolePermission.Permission.CUSTOMER_ACCOUNTS),
+    })
 
 
 @login_required

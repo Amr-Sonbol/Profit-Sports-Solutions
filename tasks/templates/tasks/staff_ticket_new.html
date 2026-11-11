@@ -16,6 +16,9 @@
 <div class="section">
     {% if kind == 'customer' %}
     <p class="field__help">{% translate "For a customer who contacted us by phone, message or email. This becomes a standard ticket: the customer receives the usual confirmation and can follow and reply to it through their portal." %}</p>
+    {% if can_create_customer %}
+    <p><a href="{% url 'customers:customer_create' %}?next=ticket">{% translate "Not a customer yet? New customer" %}</a></p>
+    {% endif %}
     {% else %}
     <p class="field__help">{% translate "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the task is closed." %}</p>
     {% endif %}

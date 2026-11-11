@@ -214,7 +214,7 @@
     {% endif %}
 </div>
 
-{% if is_admin %}
+{% if can_add_site %}
 <div class="section" id="add-site">
     <h2>{% translate "Add a site" %}</h2>
     <form method="post" novalidate>

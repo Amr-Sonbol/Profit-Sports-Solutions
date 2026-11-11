@@ -12,7 +12,9 @@
         {% endif %}
         {% if user.technician.role == 'admin' %}
         <a href="{% url 'customers:customer_import' %}" class="button button--secondary">{% translate "Import customers" %}</a>
-        <a href="{% url 'customers:customer_create' %}" class="button">{% translate "Add customer" %}</a>
+        {% endif %}
+        {% if can_create %}
+        <a href="{% url 'customers:customer_create' %}" class="button">{% translate "New customer" %}</a>
         {% endif %}
     </div>
 </div>

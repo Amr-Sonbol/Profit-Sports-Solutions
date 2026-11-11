@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 08:58+0000\n"
+"POT-Creation-Date: 2026-11-11 09:37+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -470,8 +470,12 @@ msgid "A corrected time cannot be in the future."
 msgstr "لا يمكن أن يكون الوقت المصحَّح في المستقبل."
 
 #, python-format
-msgid "A customer named %(name)s already exists in this country. Please send the invitation from their row instead."
-msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقاً. يرجى إرسال الدعوة من الصف الخاص به."
+msgid "A customer in %(country)s. Saving takes you back to the ticket with this branch chosen."
+msgstr "عميل في %(country)s. عند الحفظ تعود إلى التذكرة وقد اختير هذا الفرع."
+
+#, python-format
+msgid "A customer named %(name)s already exists in this country. Add a branch to it instead."
+msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقاً. أضف فرعاً له بدلاً من ذلك."
 
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
@@ -698,9 +702,6 @@ msgstr "إضافة مجال سلوك"
 
 msgid "Add country"
 msgstr "إضافة دولة"
-
-msgid "Add customer"
-msgstr "إضافة عميل"
 
 msgid "Add document"
 msgstr "إضافة مستند"
@@ -1098,6 +1099,9 @@ msgstr "العودة إلى المهام"
 
 msgid "Back to technicians"
 msgstr "العودة إلى الفنيين"
+
+msgid "Back to the ticket"
+msgstr "العودة إلى التذكرة"
 
 msgid "Back to tickets"
 msgstr "العودة إلى التذاكر"
@@ -1586,8 +1590,8 @@ msgstr "إنشاء مهمة متابعة لها"
 msgid "Create account and send login details"
 msgstr "إنشاء الحساب وإرسال بيانات الدخول"
 
-msgid "Create and send welcome email"
-msgstr "إنشاء العميل وإرسال رسالة الترحيب"
+msgid "Create customer"
+msgstr "إنشاء العميل"
 
 msgid "Create internal task"
 msgstr "إنشاء مهمة داخلية"
@@ -2511,6 +2515,9 @@ msgstr "النتائج والإجراءات"
 msgid "Findings: %(text)s"
 msgstr "الملاحظات: %(text)s"
 
+msgid "First branch"
+msgstr "الفرع الأول"
+
 #, python-format
 msgid "Fit the parts shipped in %(number)s."
 msgstr "تركيب القطع المشحونة في %(number)s."
@@ -2559,6 +2566,9 @@ msgstr "لكل جهاز: اختر ما وجدته وما قمت به وحالت�
 
 msgid "For each machine: what happened, its serial number from the sticker, and its colors (black unless custom). A serial already filled in came from loading — check it against the sticker. One you type here: add a clear photo of the sticker. Damaged or wrong item: say what, or add a photo. A machine that wasn't on the delivery note goes in the last card."
 msgstr "لكل جهاز: ما الذي حدث، ورقمه التسلسلي من الملصق، وألوانه (أسود ما لم يكن مخصصًا). الرقم المكتوب مسبقًا جاء من التحميل — طابقه مع الملصق. الرقم الذي تكتبه هنا: أضف صورة واضحة للملصق. إذا كان تالفًا أو صنفًا خاطئًا: اذكر السبب أو أضف صورة. الجهاز غير المذكور في إذن التسليم يُضاف في البطاقة الأخيرة."
+
+msgid "For example the area, or the main branch."
+msgstr "مثلاً اسم المنطقة، أو الفرع الرئيسي."
 
 msgid "For example: 3 adjustable dumbbells."
 msgstr "مثال: 3 دمبلز قابلة للتعديل."
@@ -2876,8 +2886,8 @@ msgstr "المهام الداخلية المُسندة إليك"
 msgid "Invitation expired"
 msgstr "انتهت صلاحية الدعوة"
 
-msgid "Invite a new customer"
-msgstr "دعوة عميل جديد"
+msgid "Invite to the portal"
+msgstr "دعوة إلى البوابة"
 
 msgid "Invited"
 msgstr "تاريخ الدعوة"
@@ -2890,6 +2900,12 @@ msgstr "الفاتورة"
 
 msgid "Invoice address"
 msgstr "عنوان الفاتورة"
+
+msgid "Is it one of these customers? If not, tick \"It is a new customer\" and save again."
+msgstr "هل هو أحد هؤلاء العملاء؟ إن لم يكن، فاختر «عميل جديد، ليس أحد هؤلاء» واحفظ مرة أخرى."
+
+msgid "It is a new customer, not one of these"
+msgstr "عميل جديد، ليس أحد هؤلاء"
 
 msgid "It joins your list at once, waiting for our team to confirm it — at the next visit, or from the photo of its sticker."
 msgstr "يُضاف إلى قائمتك فورًا، بانتظار تأكيد فريقنا — في الزيارة القادمة، أو من صورة الملصق."
@@ -3254,6 +3270,9 @@ msgstr "الاحتياج"
 msgid "Needed for certification"
 msgstr "مطلوب للاعتماد"
 
+msgid "Needed to send the portal invitation."
+msgstr "مطلوب لإرسال دعوة البوابة."
+
 msgid "Needs attention"
 msgstr "يحتاج إلى اهتمام"
 
@@ -3274,6 +3293,9 @@ msgstr "جديدة"
 
 msgid "New brand"
 msgstr "علامة تجارية جديدة"
+
+msgid "New customer"
+msgstr "عميل جديد"
 
 msgid "New customer created"
 msgstr "تم إنشاء عميل جديد"
@@ -3672,6 +3694,9 @@ msgstr "عادية"
 
 msgid "Normally the installation or handover date. Everything at this branch is free while under warranty."
 msgstr "عادةً تاريخ التركيب أو التسليم. كل شيء في هذا الفرع مجاني أثناء الضمان."
+
+msgid "Not a customer yet? New customer"
+msgstr "ليس عميلاً بعد؟ عميل جديد"
 
 msgid "Not at the site"
 msgstr "ليس في الموقع"
@@ -5127,6 +5152,9 @@ msgstr "إرسال رسالة الترحيب"
 msgid "Send welcome email to selected"
 msgstr "إرسال رسالة الترحيب إلى المحددين"
 
+msgid "Sends the welcome email to the contact email: the customer sets a password and completes their details, then follows their requests there."
+msgstr "تُرسل رسالة الترحيب إلى بريد جهة الاتصال: يختار العميل كلمة مرور ويكمل بياناته، ثم يتابع طلباته هناك."
+
 msgid "Sent"
 msgstr "أُرسل"
 
@@ -5695,9 +5723,6 @@ msgstr "قائمة الحاوية: كل كود وكميته — الأجهزة �
 
 msgid "The count matches — nothing to change."
 msgstr "الجرد مطابق — لا شيء يتغيّر."
-
-msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
-msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
 
 msgid "The customer has been notified automatically."
 msgstr "تم إشعار العميل تلقائياً."
@@ -8409,6 +8434,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Accepted"
 #~ msgstr "مقبولة"
 
+#~ msgid "Add customer"
+#~ msgstr "إضافة عميل"
+
 #~ msgid "Add this branch"
 #~ msgstr "إضافة هذا الفرع"
 
@@ -8509,6 +8537,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Create a visit task"
 #~ msgstr "إنشاء مهمة زيارة"
 
+#~ msgid "Create and send welcome email"
+#~ msgstr "إنشاء العميل وإرسال رسالة الترحيب"
+
 #~ msgid "Current tasks"
 #~ msgstr "المهام الحالية"
 
@@ -8545,6 +8576,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "How the matter was resolved without a task, for example advice given or resolved by phone."
 #~ msgstr "كيفية حل الطلب دون إنشاء مهمة، مثل تقديم المشورة أو الحل عبر الهاتف."
+
+#~ msgid "Invite a new customer"
+#~ msgstr "دعوة عميل جديد"
 
 #~ msgid "Is this machine in your list?"
 #~ msgstr "هل هذا الجهاز موجود في قائمتك؟"
@@ -8624,6 +8658,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Teal"
 #~ msgstr "أزرق مخضر"
+
+#~ msgid "The customer completes their password, contact details, invoice and delivery addresses, and sites through the link."
+#~ msgstr "يستكمل العميل كلمة المرور وبيانات التواصل وعنواني الفواتير والتسليم ومواقعه من خلال الرابط."
 
 #~ msgid "The machine cannot be used"
 #~ msgstr "لا يمكن استخدام الجهاز"

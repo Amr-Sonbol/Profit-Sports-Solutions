@@ -37,10 +37,10 @@ from .accounts import (
     welcome_link,
 )
 from .forms import (
-    ChangeLoginEmailForm, CreateLoginForm, CustomerCreateForm, CustomerEditForm, CustomerFirstLoginForm,
+    ChangeLoginEmailForm, CreateLoginForm, CustomerEditForm, NewCustomerForm, CustomerFirstLoginForm,
     CustomerTermsForm, PortalBranchRequestForm, SiteTermsForm,
     CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
-    PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm, QuickInviteForm,
+    PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm,
     SiteCreateForm, SiteEditForm,
 )
 from .models import Asset, Customer, Site
@@ -86,7 +86,7 @@ def customer_list(request):
     """Every customer in the viewer's active country — gyms, hotels, clubs,
     whatever "other" turns out to mean — with a way to add a new one.
     """
-    require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
 
     show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
@@ -98,6 +98,9 @@ def customer_list(request):
 
     return render(request, 'customers/customer_list.html', {
         'customers': customers, 'search': search, 'show_inactive': show_inactive,
+        'can_create': RolePermission.objects.filter(
+            role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+        ).exists(),
     })
 
 
@@ -124,37 +127,56 @@ def all_customers(request):
 
 @login_required
 def customer_create(request):
-    """Admin-only — same reasoning as tasks.views.technician_create:
-    creating the record is the one place a country gets assigned to it,
-    and letting manage_customers alone reach this (a permission the
-    supervisor role has by default) put customer creation in more hands
-    than intended.
+    """The one way to create a customer (NewCustomerForm): the customer, its
+    first branch and contact, and the portal invitation, ticked by default.
+    For whoever manages customer accounts (customer_accounts — Admin, the
+    Operations and the Technical Support Manager by default): creating a
+    customer is also where its country is set, so not every manage_customers
+    role (supervisors have it).
+
+    ?next=ticket — from "New ticket", for a caller who isn't a customer yet:
+    the country is the ticket's (the active one), and saving goes back to
+    the ticket with the new branch chosen. ?next=accounts — from Customer
+    accounts, back there.
     """
-    require_admin(request)
-
-    if request.method == 'POST':
-        form = CustomerCreateForm(request.POST)
-        if form.is_valid():
-            customer = form.save(commit=False)
-            customer.country = get_active_country(request)
-            customer.save()
+    require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
+    next_page = request.GET.get('next', '')
+    country = get_active_country(request) if next_page == 'ticket' else None
+    form = NewCustomerForm(request.POST or None, country=country)
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            customer, site = form.save()
+        invited = form.cleaned_data['invite'] and send_welcome(request, customer, email=customer.contact_email)
+        log_account_action(request, customer, 'Customer created and portal welcome email sent' if invited
+                           else 'Customer created')
+        if invited:
+            messages.success(request, _('Customer %(name)s created and welcome email sent to %(email)s.') % {
+                'name': customer.name, 'email': customer.contact_email,
+            })
+        else:
             messages.success(request, _('Customer added.'))
-            return redirect('customers:customer_detail', pk=customer.pk)
-    else:
-        form = CustomerCreateForm()
+        if next_page == 'ticket':
+            return redirect(f"{reverse('tasks:ticket_open')}?site={site.pk}")
+        if next_page == 'accounts':
+            return redirect('customers:customer_accounts')
+        return redirect('customers:customer_detail', pk=customer.pk)
 
-    return render(request, 'customers/customer_create.html', {'form': form})
+    return render(request, 'customers/customer_create.html', {'form': form, 'next_page': next_page, 'country': country})
 
 
 @login_required
 def customer_detail(request, pk):
-    """The customer's sites, and — admin-only, same reasoning as
-    customer_create — a way to add another one. A manager or admin
+    """The customer's sites, and — for whoever creates customers
+    (customer_create) — a way to add another one. A manager or admin
     reaches any customer regardless of active country (the point of
     all_customers); everyone else stays scoped to it, as before.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
     is_admin = requesting_technician.role == Technician.Role.ADMIN
+    # Adding a branch: whoever creates customers (customer_create).
+    can_add_site = RolePermission.objects.filter(
+        role=requesting_technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+    ).exists()
     customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
     # Commercial terms: managers and admins only; every change to the Audit log.
@@ -174,13 +196,13 @@ def customer_detail(request, pk):
             ('branch_contact', 'contact_name'), ('branch_phone', 'contact_phone'),
         ) if request.GET.get(param)
     }
-    form = SiteCreateForm(customer=customer, initial=branch_initial) if is_admin else None
+    form = SiteCreateForm(customer=customer, initial=branch_initial) if can_add_site else None
     # The new-branch request it comes from, if any: still waiting for its branch.
     request_id = request.POST.get('from_request') or request.GET.get('from_request') or ''
     from_request = CustomerTicket.objects.filter(
         pk=request_id, customer=customer, about=CustomerTicket.About.NEW_BRANCH, site__isnull=True,
     ).first() if request_id.isdigit() else None
-    if request.method == 'POST' and is_admin and request.POST.get('action') != 'terms':
+    if request.method == 'POST' and can_add_site and request.POST.get('action') != 'terms':
         form = SiteCreateForm(request.POST, customer=customer)
         if form.is_valid():
             site = form.save(commit=False)
@@ -199,6 +221,7 @@ def customer_detail(request, pk):
 
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
+        'can_add_site': can_add_site,
         'can_see_terms': can_see_terms, 'terms_form': terms_form, 'from_request': from_request,
         'today': timezone.localdate(),
         **_customer_overview(request, customer),
@@ -1196,25 +1219,6 @@ def customer_accounts(request):
             })
             return _account_redirect(request)
 
-        if action == 'quick_invite':
-            form = QuickInviteForm(request.POST)
-            if form.is_valid():
-                data = form.cleaned_data
-                with transaction.atomic():
-                    customer = Customer.objects.create(
-                        name=data['name'].strip(), country=data['country'], segment=data['segment'],
-                        contact_email=data['email'],
-                    )
-                    send_welcome(request, customer, email=data['email'])
-                log_account_action(request, customer, 'Customer created and portal welcome email sent')
-                messages.success(request, _('Customer %(name)s created and welcome email sent to %(email)s.') % {
-                    'name': customer.name, 'email': data['email'],
-                })
-            else:
-                for errors in form.errors.values():
-                    messages.error(request, errors[0])
-            return _account_redirect(request)
-
         customer = get_object_or_404(
             Customer.objects.select_related('user'), pk=request.POST.get('customer'), is_active=True,
         )
@@ -1319,7 +1323,6 @@ def customer_accounts(request):
         'status': status, 'search': search, 'country_id': country_id,
         'countries': Country.objects.filter(is_active=True).order_by('name'),
         'return_query': request.GET.urlencode(), 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
-        'quick_invite_form': QuickInviteForm(),
     })
 
 

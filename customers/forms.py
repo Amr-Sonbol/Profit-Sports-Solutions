@@ -1,6 +1,7 @@
 import re
 
 from django import forms
+from django.db.models import Q
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.utils.translation import gettext_lazy as _
@@ -74,14 +75,86 @@ class CustomerFirstLoginForm(forms.Form):
         return password2
 
 
-class CustomerCreateForm(forms.ModelForm):
-    """Country comes from the supervisor creating it, set in the view —
-    never a field here, same scoping every other per-country screen uses.
+class NewCustomerForm(forms.Form):
+    """The one way a customer is created (customers.views.customer_create):
+    the customer, its first branch, its contact, and — ticked by default —
+    the portal invitation, sent to the contact email. The country is chosen
+    every time, never pre-filled, so nobody files a customer under the
+    wrong country by leaving a default alone — except from "New ticket",
+    where it's the ticket's own (`country`).
+
+    A customer of the same name in that country is refused (add a branch to
+    it instead); one with a similar name is shown first ("Is it one of
+    these?") and needs "It is a new customer" ticked to go ahead.
     """
 
-    class Meta:
-        model = Customer
-        fields = ['name', 'segment']
+    name = forms.CharField(max_length=150, label=_('Customer name'))
+    segment = forms.ChoiceField(
+        choices=[('', _('Select a segment'))] + list(Customer.Segment.choices), label=_('Segment'),
+    )
+    country = forms.ModelChoiceField(
+        queryset=Country.objects.filter(is_active=True).order_by('name'), label=_('Country'),
+        empty_label=_('Select a country'),
+    )
+    branch_name = forms.CharField(
+        max_length=150, label=_('Branch name'), help_text=_('For example the area, or the main branch.'),
+    )
+    branch_address = forms.CharField(label=_('Branch address'), widget=forms.Textarea(attrs={'rows': 2}))
+    contact_name = forms.CharField(max_length=150, required=False, label=_('Contact name'))
+    contact_phone = forms.CharField(max_length=30, required=False, label=_('Contact phone'))
+    contact_email = forms.EmailField(required=False, label=_('Contact email'))
+    invite = forms.BooleanField(
+        required=False, initial=True, label=_('Invite to the portal'),
+        help_text=_('Sends the welcome email to the contact email: the customer sets a password and completes '
+                    'their details, then follows their requests there.'),
+    )
+    confirmed_new = forms.BooleanField(required=False, label=_('It is a new customer, not one of these'))
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fixed_country = country
+        if country is not None:
+            del self.fields['country']
+        self.similar = []
+
+    def clean(self):
+        cleaned = super().clean()
+        name = (cleaned.get('name') or '').strip()
+        country = self.fixed_country or cleaned.get('country')
+        email = cleaned.get('contact_email')
+        if cleaned.get('invite'):
+            if not email:
+                self.add_error('contact_email', _('Needed to send the portal invitation.'))
+            elif get_user_model().objects.filter(username__iexact=email).exists():
+                self.add_error('contact_email', _('An account with this email address already exists.'))
+        if name and country:
+            customers = Customer.objects.filter(country=country, is_internal=False)
+            if customers.filter(name__iexact=name).exists():
+                raise forms.ValidationError(_(
+                    'A customer named %(name)s already exists in this country. Add a branch to it instead.',
+                ) % {'name': name})
+            if not cleaned.get('confirmed_new'):
+                from django.contrib.postgres.search import TrigramSimilarity
+
+                self.similar = list(
+                    customers.annotate(similarity=TrigramSimilarity('name', name))
+                    .filter(Q(similarity__gt=0.3) | Q(name__icontains=name)).order_by('-similarity')[:5]
+                )
+                if self.similar:
+                    raise forms.ValidationError(_(
+                        'Is it one of these customers? If not, tick "It is a new customer" and save again.',
+                    ))
+        return cleaned
+
+    def save(self):
+        data = self.cleaned_data
+        customer = Customer.objects.create(
+            name=data['name'].strip(), country=self.fixed_country or data['country'], segment=data['segment'],
+            contact_name=data['contact_name'], contact_phone=data['contact_phone'],
+            contact_email=data['contact_email'] or '',
+        )
+        site = Site.objects.create(customer=customer, name=data['branch_name'].strip(), address=data['branch_address'])
+        return customer, site
 
 
 class CustomerEditForm(forms.ModelForm):
@@ -338,39 +411,6 @@ class PortalBranchRequestForm(forms.Form):
 
 class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
-
-
-class QuickInviteForm(forms.Form):
-    """A new customer from just a name and an email, invited straight
-    away; they complete everything else through the welcome link. Country
-    and segment are chosen every time — never pre-filled — so nobody
-    files a customer under the wrong country by leaving a default alone.
-    """
-    name = forms.CharField(max_length=150, label=_('Customer name'))
-    email = forms.EmailField(label=_('Email'))
-    country = forms.ModelChoiceField(
-        queryset=Country.objects.filter(is_active=True).order_by('name'), label=_('Country'),
-        empty_label=_('Select a country'),
-    )
-    segment = forms.ChoiceField(
-        choices=[('', _('Select a segment'))] + list(Customer.Segment.choices), label=_('Segment'),
-    )
-
-    def clean_email(self):
-        email = self.cleaned_data['email']
-        if get_user_model().objects.filter(username__iexact=email).exists():
-            raise forms.ValidationError(_('An account with this email address already exists.'))
-        return email
-
-    def clean(self):
-        cleaned = super().clean()
-        name, country = cleaned.get('name'), cleaned.get('country')
-        if name and country and Customer.objects.filter(name__iexact=name.strip(), country=country).exists():
-            raise forms.ValidationError(_(
-                'A customer named %(name)s already exists in this country. Please send the invitation from '
-                'their row instead.',
-            ) % {'name': name.strip()})
-        return cleaned
 
 
 class CustomerSettingsForm(forms.ModelForm):

@@ -5681,14 +5681,14 @@ class ActiveCountryTests(TaskTestCase):
         )
         self.assertRedirects(response, '/tasks/dashboard/')
 
-    def test_new_customer_is_created_in_the_active_country(self):
-        # customer_create is admin-only (see customers.views), so this
-        # exercises the active-country switch and the creation itself
-        # under the same admin login.
+    def test_new_customer_from_a_ticket_is_created_in_the_active_country(self):
+        # From New ticket the country isn't asked: it's the ticket's, the active one.
         self.client.login(username='admin1', password='pass12345')
         self.client.post('/tasks/active-country/', {'country': self.egypt.pk})
 
-        response = self.client.post('/customers/new/', {'name': 'Nile Gym', 'segment': 'gym'})
+        response = self.client.post('/customers/new/?next=ticket', {
+            'name': 'Nile Gym', 'segment': 'gym', 'branch_name': 'Zamalek', 'branch_address': 'Zamalek, Cairo',
+        })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Customer.objects.get(name='Nile Gym').country, self.egypt)
 
@@ -8015,6 +8015,37 @@ class StaffOpenedTicketTests(TaskTestCase):
         # They're on the ticket desk too, so they land on its review page.
         self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
         self.assertEqual(ticket.opened_by, self.ops.user)
+
+    def test_a_caller_who_is_not_a_customer_yet(self):
+        # The Technical Support Manager, on the phone: New ticket → New
+        # customer (with its first branch, invited) → back to the ticket with
+        # that branch chosen → the ticket.
+        self.client.login(username='support1', password='pass12345')
+        self.assertContains(self.client.get('/tasks/tickets/open/'), '/customers/new/?next=ticket')
+        response = self.client.post('/customers/new/?next=ticket', {
+            'name': 'Iron Den Gym', 'segment': 'gym', 'branch_name': 'Iron Den Main', 'branch_address': 'Al Barsha',
+            'contact_name': 'Omar', 'contact_phone': '0509998877', 'contact_email': 'omar@irondengym.example',
+            'invite': 'on',
+        })
+        customer = Customer.objects.get(name='Iron Den Gym')
+        site = customer.sites.get()
+        self.assertEqual(customer.country, self.country)
+        self.assertRedirects(response, f'/tasks/tickets/open/?site={site.pk}', fetch_redirect_response=False)
+        self.assertEqual(self.client.get(response.url).context['form']['site'].value(), str(site.pk))
+        self.assertEqual(customer.user.username, 'omar@irondengym.example')  # invited
+
+        response = self._customer_ticket(site=site.pk, description='Rower display is dead')
+        ticket = CustomerTicket.objects.get(customer=customer)
+        self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
+        self.assertEqual((ticket.site, ticket.kind, ticket.opened_by), (site, 'customer', self.support.user))
+        self.assertRegex(ticket.ticket_number, r'-T0001$')
+        # The customer's contact is the branch's, and gets the confirmation too.
+        self.assertEqual(ticket.contact_name, 'Omar')
+        self.assertEqual(sum('omar@irondengym.example' in message.to for message in mail.outbox), 2)
+
+    def test_a_supervisor_cannot_create_a_customer(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get('/customers/new/').status_code, 403)
 
     @override_settings(PORTAL_HOST='')  # the portal on this same address, not its own
     def test_the_customer_sees_it_in_their_portal_and_gets_the_email(self):

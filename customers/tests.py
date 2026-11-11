@@ -81,9 +81,8 @@ class CustomerCreateTests(CustomerTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_supervisor_gets_403(self):
-        # Creating a customer used to be open to anyone with
-        # manage_customers (supervisors have it by default) — narrowed to
-        # admin-only, same reasoning as technician_create.
+        # Not every manage_customers role (supervisors have it): creating a
+        # customer is for whoever manages customer accounts.
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/customers/new/')
         self.assertEqual(response.status_code, 403)
@@ -98,20 +97,69 @@ class CustomerCreateTests(CustomerTestCase):
         response = self.client.post('/customers/new/', {'name': 'Gold Gym', 'segment': 'gym'})
         self.assertEqual(response.status_code, 403)
 
-    def test_admin_creates_a_customer(self):
-        self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/customers/new/', {'name': 'Gold Gym', 'segment': 'gym'})
-        self.assertEqual(response.status_code, 302)
+    def _new(self, url='/customers/new/', **overrides):
+        return self.client.post(url, {
+            'name': 'Gold Gym', 'segment': 'gym', 'country': self.country.pk,
+            'branch_name': 'Al Barsha', 'branch_address': 'Al Barsha 1, Dubai',
+            'contact_name': 'Omar', 'contact_phone': '0509998877', 'contact_email': 'omar@goldgym.example',
+            'invite': 'on', **overrides,
+        })
 
+    def test_admin_creates_a_customer_with_its_branch_and_invites_it(self):
+        from django.contrib.admin.models import LogEntry
+
+        self.client.login(username='admin1', password='pass12345')
+        response = self._new()
         customer = Customer.objects.get(name='Gold Gym')
-        self.assertEqual(customer.country, self.country)
-        self.assertEqual(customer.segment, 'gym')
+        self.assertRedirects(response, f'/customers/{customer.pk}/', fetch_redirect_response=False)
+        self.assertEqual((customer.country, customer.segment, customer.contact_name), (self.country, 'gym', 'Omar'))
+        self.assertEqual(list(customer.sites.values_list('name', 'address')), [('Al Barsha', 'Al Barsha 1, Dubai')])
+        # The portal login, invited at once (ticked by default).
+        self.assertEqual(customer.user.username, 'omar@goldgym.example')
+        self.assertEqual(mail.outbox[0].to, ['omar@goldgym.example'])
+        self.assertTrue(LogEntry.objects.filter(change_message='Customer created and portal welcome email sent').exists())
 
-    def test_hotel_segment_works(self):
+    def test_invite_ticked_by_default_and_needs_the_email(self):
         self.client.login(username='admin1', password='pass12345')
-        response = self.client.post('/customers/new/', {'name': 'Grand Hotel', 'segment': 'hotel'})
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Customer.objects.filter(name='Grand Hotel', segment='hotel').exists())
+        form = self.client.get('/customers/new/').context['form']
+        self.assertTrue(form['invite'].value())
+        self.assertIsNone(form['country'].value())  # chosen every time
+        self._new(contact_email='')
+        self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
+        # Not invited: created without a login, nothing sent.
+        self._new(contact_email='', invite='')
+        self.assertIsNone(Customer.objects.get(name='Gold Gym').user)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_same_name_refused_similar_name_asked(self):
+        self.client.login(username='admin1', password='pass12345')
+        self._new(name='fitness first')
+        self.assertEqual(Customer.objects.filter(name__iexact='fitness first').count(), 1)
+        response = self._new(name='Fitness First Marina')
+        self.assertIn(self.customer, response.context['form'].similar)
+        self.assertFalse(Customer.objects.filter(name='Fitness First Marina').exists())
+        self._new(name='Fitness First Marina', confirmed_new='on')
+        self.assertTrue(Customer.objects.filter(name='Fitness First Marina').exists())
+
+    def test_rejects_a_taken_email(self):
+        User.objects.create_user('omar@goldgym.example', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
+        self._new()
+        self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
+
+    def test_arabic_welcome_only_in_arab_countries(self):
+        self.client.login(username='admin1', password='pass12345')
+        self._new()
+        self.assertIn('dir="rtl"', mail.outbox[0].alternatives[0][0])
+        canada = Country.objects.create(name='Canada', iso_code='CA', timezone='America/Toronto', currency_code='CAD')
+        self._new(name='Maple Fitness', contact_email='hello@maple.example', country=canada.pk)
+        self.assertNotIn('dir="rtl"', mail.outbox[1].alternatives[0][0])
+
+    def test_from_customer_accounts_goes_back_there(self):
+        self.client.login(username='admin1', password='pass12345')
+        self.assertContains(self.client.get('/customers/accounts/'), '/customers/new/?next=accounts')
+        response = self._new(url='/customers/new/?next=accounts')
+        self.assertRedirects(response, '/customers/accounts/', fetch_redirect_response=False)
 
 
 class CustomerImportTests(CustomerTestCase):
@@ -203,9 +251,9 @@ class CustomerDetailTests(CustomerTestCase):
         self.assertContains(response, 'Marina Branch')
 
     def test_supervisor_cannot_add_a_site(self):
-        # Adding a site is admin-only now, same reasoning as
-        # customer_create — a supervisor still sees the customer's
-        # existing sites, just not the "Add a site" form.
+        # Adding a site is for whoever creates customers (customer_create)
+        # — a supervisor still sees the customer's existing sites, just not
+        # the "Add a site" form.
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(f'/customers/{self.customer.pk}/', {
             'name': 'JBR Branch', 'address': 'JBR', 'contact_name': '', 'contact_phone': '',
@@ -1568,62 +1616,6 @@ class CustomerAccountsTests(CustomerTestCase):
         self.client.post(self.url, {'action': 'change_email', 'customer': self.customer.pk, 'email': 'new@example.com'})
         user.refresh_from_db()
         self.assertEqual((user.username, user.email), ('new@example.com', 'new@example.com'))
-
-
-class QuickInviteTests(CustomerTestCase):
-    """A new customer from just a name and an email, invited at once."""
-
-    def setUp(self):
-        super().setUp()
-        self.client.login(username='admin1', password='pass12345')
-        self.url = '/customers/accounts/'
-
-    def _invite(self, **overrides):
-        return self.client.post(self.url, {
-            'action': 'quick_invite', 'name': 'Gold Gym', 'email': 'info@goldgym.example',
-            'country': self.country.pk, 'segment': 'gym', **overrides,
-        })
-
-    def test_creates_the_customer_and_sends_the_welcome_email(self):
-        from django.contrib.admin.models import LogEntry
-
-        self._invite()
-        customer = Customer.objects.get(name='Gold Gym')
-        self.assertEqual(customer.country, self.country)
-        self.assertEqual(customer.user.username, 'info@goldgym.example')
-        self.assertTrue(customer.must_change_password)
-        self.assertEqual(mail.outbox[0].to, ['info@goldgym.example'])
-        self.assertTrue(LogEntry.objects.filter(change_message='Customer created and portal welcome email sent').exists())
-
-    def test_country_and_segment_must_be_chosen(self):
-        form = self.client.get(self.url).context['quick_invite_form']
-        self.assertIsNone(form['country'].value())
-        self._invite(country='', segment='')
-        self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_rejects_a_taken_email_or_an_existing_name(self):
-        User.objects.create_user('info@goldgym.example', password='pass12345')
-        self._invite()
-        self._invite(name='fitness first', email='new@example.com')
-        self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
-        self.assertEqual(Customer.objects.filter(name__iexact='fitness first').count(), 1)
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_arabic_only_for_customers_in_arab_countries(self):
-        self._invite()
-        self.assertIn('dir="rtl"', mail.outbox[0].alternatives[0][0])
-        self.assertIn('|', mail.outbox[0].subject)
-
-        canada = Country.objects.create(name='Canada', iso_code='CA', timezone='America/Toronto', currency_code='CAD')
-        self._invite(name='Maple Fitness', email='hello@maple.example', country=canada.pk)
-        self.assertNotIn('dir="rtl"', mail.outbox[1].alternatives[0][0])
-        self.assertNotIn('|', mail.outbox[1].subject)
-
-    def test_other_roles_cannot_invite(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        self.assertEqual(self._invite().status_code, 403)
-        self.assertFalse(Customer.objects.filter(name='Gold Gym').exists())
 
 
 class PortalPasswordHelpTests(CustomerTestCase):
