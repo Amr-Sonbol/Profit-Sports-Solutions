@@ -173,3 +173,22 @@ class AccessRulesTests(TaskTestCase):
         self.assertEqual(late_reports(Technician.objects.get(user__username='supervisor1')), [])  # his alone
         page = ops.get(f'/tasks/{self.task.pk}/')  # the bell, on any page
         self.assertContains(page, 'Report waiting more than 2 working days for approval')
+
+    def test_a_negligence_flag_never_reaches_the_technician_in_the_app(self):
+        from rest_framework.authtoken.models import Token
+
+        from tasks.models import TaskAssignment
+        TaskAssignment.objects.create(task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now())
+        TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.NEGLIGENCE, occurred_at=timezone.now(),
+                                 actor=self.supervisor_user, note='Left the site early')
+
+        def history(username, path):
+            token, _ = Token.objects.get_or_create(user=User.objects.get(username=username))
+            body = self.client.get(path, HTTP_AUTHORIZATION=f'Token {token.key}').json()
+            return [event['event_type'] for event in body['events']]
+
+        self.assertNotIn('negligence', history('tech1', f'/api/my-tasks/{self.task.pk}/'))
+        self.assertNotIn('negligence', history('supervisor1', f'/api/tasks/{self.task.pk}/'))
+        self.person('mgr1', Technician.Role.MANAGER)
+        self.assertIn('negligence', history('mgr1', f'/api/tasks/{self.task.pk}/'))

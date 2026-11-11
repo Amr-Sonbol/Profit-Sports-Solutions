@@ -856,19 +856,22 @@ class MySkillsView(APIView):
         return Response(self._summary(request, technician))
 
 
-def _person(request, pk):
+def _person(request, pk, visitors=False):
     """Someone the viewer oversees, in their country — like the website's
-    technician pages; anyone else is a 404. Needs view_technicians."""
+    technician pages; anyone else is a 404. Needs view_technicians. With
+    `visitors`, also someone here on a trip today — to look at only: their
+    skills, availability and account stay with their own country."""
     if not has_role_permission(request, RolePermission.Permission.VIEW_TECHNICIANS):
         raise PermissionDenied
     viewer = request.user.technician
     country = get_active_country(request)
     # Their own country's people, and anyone here on a trip today (as on Team → Today).
-    today = timezone.localdate()
-    visiting = TechnicianTrip.objects.filter(country=country, start_date__lte=today, end_date__gte=today)
-    return get_object_or_404(
-        _people_i_oversee(viewer).filter(Q(country=country) | Q(pk__in=visiting.values('technician_id'))), pk=pk,
-    )
+    here = Q(country=country)
+    if visitors:
+        today = timezone.localdate()
+        visiting = TechnicianTrip.objects.filter(country=country, start_date__lte=today, end_date__gte=today)
+        here |= Q(pk__in=visiting.values('technician_id'))
+    return get_object_or_404(_people_i_oversee(viewer).filter(here), pk=pk)
 
 
 class PersonView(APIView):
@@ -881,7 +884,8 @@ class PersonView(APIView):
     permission_classes = [IsTechnician]
 
     def get(self, request, pk):
-        person = _person(request, pk)
+        person = _person(request, pk, visitors=True)
+        visiting = person.country_id != get_active_country(request).pk
         skills = MySkillsView._summary(request, person)
         reliability = _reliability_stats(person)
         overview = technician_overview(person)
@@ -905,7 +909,7 @@ class PersonView(APIView):
             ],
             # A manager or admin can deactivate them, handing their open tasks to a colleague.
             'can_deactivate': (
-                request.user.technician.is_manager_tier and person.is_active and person.pk != request.user.technician.pk
+                not visiting and request.user.technician.is_manager_tier and person.is_active and person.pk != request.user.technician.pk
                 and can_manage_account(request.user.technician, person) and not is_last_active_admin(person)
             ),
             'open_tasks': [task.task_number for task in _tasks_to_reassign(person)] if person.is_active else [],
@@ -913,8 +917,9 @@ class PersonView(APIView):
                 {'value': str(other.pk), 'label': other.full_name}
                 for other in DeactivateTechnicianForm(technician=person).fields['move_to'].queryset
             ],
-            'can_review_skills': has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS),
-            'can_set_availability': has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS),
+            # A visitor on a trip: to look at only — their own country confirms skills and sets availability.
+            'can_review_skills': not visiting and has_role_permission(request, RolePermission.Permission.REVIEW_SKILLS),
+            'can_set_availability': not visiting and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS),
             'skills': skills,
             'record': {
                 'completed': reliability['total_completed'],
@@ -1775,6 +1780,8 @@ def _team_task_response(request, task):
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
         ),
         'can_manager_approve': task.status == Task.Status.COMPLETED and can_give_final_approval(technician),
+        # Negligence flags: the manager tier's only (TaskDetailSerializer.get_events).
+        'show_negligence': technician.is_manager_tier,
         # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
         'from_request': request_for_app(request, task),
         # A part shipment's steps, as the office's panel offers them to this person.

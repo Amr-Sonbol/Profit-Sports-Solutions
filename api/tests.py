@@ -1537,7 +1537,12 @@ class PersonApiTests(ApiTestCase):
         today = timezone.localdate()
         TechnicianTrip.objects.create(technician=visitor, country=self.country, start_date=today, end_date=today,
                                       created_at=timezone.now(), created_by=self.supervisor_user)
-        self.assertEqual(self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).status_code, 200)
+        page = self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).json()
+        # To look at only: their skills, availability and account stay with their own country.
+        self.assertEqual((page['can_review_skills'], page['can_set_availability'], page['can_deactivate']), (False, False, False))
+        response = self.client.post(f'/api/people/{visitor.pk}/availability/', json.dumps({'available': False}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 404)
 
     def test_a_supervisor_confirms_a_skill_and_sets_availability(self):
         token = self.token_for('supervisor1')

@@ -44,7 +44,7 @@ class TaskEventSerializer(serializers.ModelSerializer):
         fields = ['id', 'event_type', 'event_type_display', 'occurred_at', 'corrected_at', 'actor_name', 'note']
 
     def get_actor_name(self, obj):
-        technician = getattr(obj.actor, 'technician', None)
+        technician = getattr(obj.actor, 'technician', None) if obj.actor_id else None
         return technician.full_name if technician else (obj.actor.get_username() if obj.actor else '')
 
 
@@ -87,7 +87,7 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     task_type_name = serializers.CharField(source='task_type.display_name', default='')
     brand_name = serializers.CharField(source='brand.name', default='')
     required_skill_name = serializers.CharField(source='required_skill.display_name', default='')
-    events = TaskEventSerializer(many=True, read_only=True)
+    events = serializers.SerializerMethodField()
     attachments = TaskAttachmentSerializer(many=True, read_only=True)
     next_action = serializers.SerializerMethodField()
     shipment = serializers.SerializerMethodField()
@@ -114,6 +114,16 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'events', 'attachments', 'next_action', 'shipment', 'from_request', 'is_lead', 'can_file_report',
             'requires_signature', 'undoable_step',
         ]
+
+    def get_events(self, obj):
+        """The history, everyone's name fetched with it. A negligence flag is a
+        manager-tier record: never shown to the technician flagged or to a
+        supervisor (as on the website's task page) — hidden unless the screen
+        says this viewer is manager tier (context "show_negligence")."""
+        events = obj.events.select_related('actor__technician').order_by('occurred_at')
+        if not self.context.get('show_negligence'):
+            events = events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE)
+        return TaskEventSerializer(events, many=True).data
 
     def get_next_action(self, obj):
         return self.context.get('next_action')

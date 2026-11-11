@@ -702,7 +702,10 @@ def _reliability_stats(technician):
 
 
 def _with_lead_prefetch(queryset):
-    """Attach each task's active lead assignment as `.lead_assignments`, for _attach_lead_technician."""
+    """Attach each task's active lead assignment as `.lead_assignments`, for _attach_lead_technician.
+    Once only: a list that already has it (_my_tasks, say) is returned as it is."""
+    if any(getattr(lookup, 'to_attr', None) == 'lead_assignments' for lookup in queryset._prefetch_related_lookups):
+        return queryset
     return queryset.prefetch_related(
         Prefetch(
             'assignments',
@@ -1870,7 +1873,8 @@ def require_final_approver(request, task):
     technician = require_technician(request)
     if not can_give_final_approval(technician):
         raise PermissionDenied
-    if technician.role != Technician.Role.SUPPORT_MANAGER and request.method == 'POST':
+    if (technician.role != Technician.Role.SUPPORT_MANAGER and request.method == 'POST'
+            and task.status == Task.Status.COMPLETED):  # only when there's a report to approve
         TaskEvent.objects.create(
             task=task, event_type=TaskEvent.EventType.STEPPED_IN, occurred_at=timezone.now(),
             actor=request.user, note=_('Instead of the Technical Support Manager'),
@@ -4412,9 +4416,10 @@ def _my_tasks(technician):
         'pk', flat=True,
     ):
         roles[task_id] = 'responsible'
-    mine = Task.objects.filter(pk__in=roles).exclude(status=Task.Status.CANCELLED).select_related(
+    # Each one's lead fetched with the rest — not one task at a time (lead_name, on every list of them).
+    mine = _with_lead_prefetch(Task.objects.filter(pk__in=roles).exclude(status=Task.Status.CANCELLED).select_related(
         'site__customer', 'task_type',
-    )
+    ))
 
     def with_role(tasks):
         tasks = list(tasks)
