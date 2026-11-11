@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from django.contrib.auth import forms as auth_forms
 from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -599,6 +600,28 @@ class ChangePasswordForm(auth_forms.PasswordChangeForm):
         self.fields['old_password'].label = _('Current password')
 
 
+class CustomRoleForm(forms.ModelForm):
+    """A role the Admin makes (or renames) on Roles & permissions: its name in
+    English and Arabic, and — when made — the built-in role it's based on."""
+
+    class Meta:
+        from people.models import CustomRole
+
+        model = CustomRole
+        fields = ['name', 'name_ar', 'based_on']
+
+    def __init__(self, *args, renaming=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if renaming:  # what it's based on is chosen once, when made
+            del self.fields['based_on']
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        if name.lower() in {str(label).lower() for _value, label in Technician.Role.choices}:
+            raise forms.ValidationError(_('This is already the name of a built-in role.'))
+        return name
+
+
 class LimitedPasswordResetForm(auth_forms.PasswordResetForm):
     """The staff "Forgot your password?" (Django's own), sending at most one
     link per address in a while (spots.throttle) — it's open to anyone, so
@@ -833,7 +856,40 @@ class CountryCreateForm(forms.ModelForm):
         return ','.join(sorted(self.cleaned_data['weekend_days']))
 
 
-class TechnicianCreateForm(forms.ModelForm):
+class CustomRoleChoiceMixin:
+    """The Role list with the Admin's own roles too (people.CustomRole).
+    Choosing one sets the person's base role (its `based_on`: the fixed rules)
+    and their custom role (its switches); a built-in role clears the custom one."""
+
+    def offer_custom_roles(self):
+        from people.models import CustomRole
+
+        if 'role' not in self.fields:
+            return
+        choices = list(Technician.Role.choices) + [(role.key, role.display_name) for role in CustomRole.objects.all()]
+        field = forms.ChoiceField(choices=[('', '---------')] + choices, label=self.fields['role'].label)
+        if self.instance.pk:
+            field.initial = self.instance.custom_role.key if self.instance.custom_role_id else self.instance.role
+        self.fields['role'] = field  # same place in the form
+
+    def apply_custom_role(self, cleaned):
+        from people.models import CustomRole
+
+        value = cleaned.get('role') or ''
+        if 'role' not in self.fields or not value:
+            return
+        if value.startswith('custom-'):
+            role = CustomRole.objects.filter(pk=value.split('-', 1)[1]).first()
+            if role is None:
+                self.add_error('role', _('Please choose a role.'))
+                return
+            cleaned['role'] = role.based_on
+            self.instance.custom_role = role
+        else:
+            self.instance.custom_role = None
+
+
+class TechnicianCreateForm(CustomRoleChoiceMixin, forms.ModelForm):
     """Adding anyone on the staff, in one step: role, name, the country
     they work in (chosen here, not whichever one the admin happens to be
     viewing), and their email — which becomes their login, with a setup
@@ -868,9 +924,11 @@ class TechnicianCreateForm(forms.ModelForm):
         # The email goes right after the name and country.
         order = ['role', 'full_name', 'country', 'email']
         self.order_fields(order + [name for name in self.fields if name not in order])
+        self.offer_custom_roles()
 
     def clean(self):
         cleaned = super().clean()
+        self.apply_custom_role(cleaned)
         if not cleaned.get('language') and cleaned.get('country'):
             cleaned['language'] = cleaned['country'].report_language
             self.instance.language = cleaned['language']
@@ -883,7 +941,7 @@ class TechnicianCreateForm(forms.ModelForm):
         return email
 
 
-class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
+class TechnicianEditForm(CustomRoleChoiceMixin, PhotoSizeMixin, forms.ModelForm):
     """A supervisor or manager editing someone else's record, from the
     roster. Photo/name/phone/language/email are open to anyone with
     manage_technicians; country/employment details are manager-only HR
@@ -931,6 +989,12 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
                 self.fields['country'].queryset = Country.objects.filter(is_active=True)
             if not is_admin:
                 del self.fields['role']
+        self.offer_custom_roles()
+
+    def clean(self):
+        cleaned = super().clean()
+        self.apply_custom_role(cleaned)
+        return cleaned
 
     def save(self, commit=True):
         technician = super().save(commit=commit)
@@ -1857,11 +1921,10 @@ class AssignTicketForm(forms.Form):
 
     def __init__(self, *args, country=None, **kwargs):
         super().__init__(*args, **kwargs)
-        ticket_manager_roles = RolePermission.objects.filter(
-            permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-        ).values_list('role', flat=True)
+        from people.models import with_permission
+
         self.fields['assigned_to'].queryset = Technician.objects.filter(
-            is_active=True, country=country, role__in=list(ticket_manager_roles),
+            with_permission(RolePermission.Permission.MANAGE_TICKETS), is_active=True, country=country,
         ).order_by('full_name')
 
 
@@ -1900,15 +1963,18 @@ def escalation_deciders(escalated_by, country):
     tickets is reachable wherever it's based; otherwise only someone in
     the ticket's own country.
     """
+    from people.models import with_permission
+
     next_role = escalated_by.escalates_to_role
-    allowed = set(
-        RolePermission.objects.filter(role=next_role, allowed=True).values_list('permission', flat=True),
-    )
-    if next_role is None or RolePermission.Permission.DECIDE_ESCALATED_TICKETS not in allowed:
+    if next_role is None:
         return Technician.objects.none()
-    deciders = Technician.objects.filter(is_active=True, role=next_role).exclude(pk=escalated_by.pk)
-    if RolePermission.Permission.TICKETS_ALL_COUNTRIES not in allowed:
-        deciders = deciders.filter(country=country)
+    # The next role up — a custom role based on it too — but each person by their own
+    # switches: deciding escalations, and reaching this country (or every country's tickets).
+    deciders = Technician.objects.filter(
+        with_permission(RolePermission.Permission.DECIDE_ESCALATED_TICKETS),
+        Q(country=country) | with_permission(RolePermission.Permission.TICKETS_ALL_COUNTRIES),
+        is_active=True, role=next_role,
+    ).exclude(pk=escalated_by.pk)
     return deciders.order_by('full_name')
 
 

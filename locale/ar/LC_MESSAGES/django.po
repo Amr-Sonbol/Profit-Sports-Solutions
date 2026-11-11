@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 17:59+0000\n"
+"POT-Creation-Date: 2026-11-11 19:29+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -478,6 +478,9 @@ msgstr "+ إضافة موقع جديد"
 msgid "+ Add new task type"
 msgstr "+ إضافة نوع مهمة جديد"
 
+msgid "+ New role"
+msgstr "+ دور جديد"
+
 #, python-format
 msgid "+%(count)s more"
 msgstr "+%(count)s أخرى"
@@ -771,6 +774,9 @@ msgstr "إضافة القطعة"
 
 msgid "Add photos the customer sent another way (WhatsApp, email)"
 msgstr "إضافة صور أرسلها العميل بطريقة أخرى (واتساب، بريد إلكتروني)"
+
+msgid "Add role"
+msgstr "إضافة الدور"
 
 msgid "Add site"
 msgstr "إضافة الفرع"
@@ -1150,6 +1156,9 @@ msgstr "العودة إلى التذاكر"
 
 msgid "Back to visits"
 msgstr "العودة إلى الزيارات"
+
+msgid "Based on"
+msgstr "مبني على"
 
 msgid "Basic"
 msgstr "أساسي"
@@ -2205,6 +2214,14 @@ msgstr "تم إرسال إشعار تأخير"
 msgid "Delete"
 msgstr "حذف"
 
+#, python-format
+msgid "Delete %(name)s"
+msgstr "حذف %(name)s"
+
+#, python-format
+msgid "Delete the role “%(name)s”?"
+msgstr "حذف الدور «%(name)s»؟"
+
 msgid "Deleted"
 msgstr "تم الحذف"
 
@@ -3192,6 +3209,9 @@ msgstr "إدارة قائمة قطع الغيار"
 
 msgid "Maintenance"
 msgstr "صيانة"
+
+msgid "Make a role for a position the built-in roles don't fit, such as a COO: choose the role it's based on, then change its switches below. Its people follow the fixed rules of the role it's based on."
+msgstr "أنشئ دوراً لمنصب لا تناسبه الأدوار الأساسية، مثل الرئيس التنفيذي للعمليات: اختر الدور الذي يُبنى عليه، ثم عدّل صلاحياته أدناه. يتبع أصحابه القواعد الثابتة للدور الذي بُني عليه."
 
 msgid "Manage"
 msgstr "إدارة"
@@ -4219,6 +4239,9 @@ msgstr "طلب تغيير موعد قيد الانتظار"
 msgid "Pending supervisor review"
 msgstr "بانتظار مراجعة المشرف"
 
+msgid "People"
+msgstr "الأشخاص"
+
 msgid "Performance overview"
 msgstr "نظرة عامة على الأداء"
 
@@ -4314,6 +4337,9 @@ msgstr "يُرجى أن تطلب من مديرك إرسال رابط جديد. �
 
 msgid "Please check your email"
 msgstr "يرجى مراجعة بريدك الإلكتروني"
+
+msgid "Please choose a role."
+msgstr "يرجى اختيار دور."
 
 msgid "Please choose at least one file."
 msgstr "يرجى اختيار ملف واحد على الأقل."
@@ -4697,6 +4723,9 @@ msgstr "يزيل العميل من قائمة العملاء ويعطّل حسا
 msgid "Removes the staff member from the roster, prevents new assignments and disables their login, if any. Use this when a staff member has resigned, been dismissed or otherwise left the company."
 msgstr "يزيل الموظف من قائمة الفريق ويمنع إسناد مهام جديدة إليه ويعطّل بيانات دخوله إن وُجدت. يُستخدم عند استقالة الموظف أو إنهاء خدمته أو مغادرته الشركة لأي سبب آخر."
 
+msgid "Rename"
+msgstr "إعادة التسمية"
+
 msgid "Reopen"
 msgstr "إعادة الفتح"
 
@@ -4963,6 +4992,16 @@ msgstr "مراجعة المهارات"
 
 msgid "Role"
 msgstr "الدور"
+
+msgid "Role deleted."
+msgstr "تم حذف الدور."
+
+msgid "Role renamed."
+msgstr "تمت إعادة تسمية الدور."
+
+#, python-format
+msgid "Role “%(name)s” added, with the switches of %(base)s. Change them below."
+msgstr "تمت إضافة الدور «%(name)s» بصلاحيات %(base)s. عدّلها أدناه."
 
 msgid "Roles"
 msgstr "الأدوار"
@@ -6141,6 +6180,9 @@ msgstr "تعذّرت قراءة هذا الملف. احفظه مجددًا بص�
 msgid "This internal task is closed."
 msgstr "هذه المهمة الداخلية مغلقة."
 
+msgid "This is already the name of a built-in role."
+msgstr "هذا الاسم مستخدم لدور أساسي."
+
 msgid "This is already your sign-in email."
 msgstr "هذا هو بريد تسجيل الدخول الحالي لديك."
 
@@ -7101,6 +7143,9 @@ msgstr "تم حل طلبك"
 msgid "Your request was escalated to our management team for review on %(when)s."
 msgstr "تم تصعيد طلبكم إلى فريق الإدارة لدينا للمراجعة بتاريخ %(when)s."
 
+msgid "Your roles"
+msgstr "أدواركم"
+
 msgid "Your self-rating was not saved. Please correct the form below."
 msgstr "لم يتم حفظ تقييمك الذاتي. يُرجى تصحيح النموذج أدناه."
 
@@ -7140,6 +7185,9 @@ msgstr "زياراتك القادمة والزيارات المنتهية. تق�
 
 msgid "a photo of the machine's serial-number sticker, instead of or as well as typing it"
 msgstr "صورة لملصق الرقم التسلسلي على الجهاز، بدلًا من كتابته أو إضافةً إليه"
+
+msgid "a role the Admin made, based on `role`; its own switches replace the base role's"
+msgstr "دور أنشأه المسؤول مبني على الدور الأساسي؛ تحل صلاحياته محل صلاحيات الدور الأساسي"
 
 msgid "a self-assessment is an initial estimate; only a supervisor review counts toward certification"
 msgstr "التقييم الذاتي تقدير مبدئي؛ ولا يُحتسب للاعتماد إلا تقييم المشرف"
@@ -7237,6 +7285,13 @@ msgstr "يُنشأ تلقائياً لكل دولة، مثل AE-T0001؛ ويست
 
 msgid "available"
 msgstr "متاح"
+
+msgid "based on"
+msgstr "مبني على"
+
+#, python-format
+msgid "based on %(base)s"
+msgstr "مبني على %(base)s"
 
 msgid "billing type"
 msgstr "نوع الفوترة"
@@ -7368,6 +7423,12 @@ msgstr "ينشئه المدير من شاشة تعديل الفني، بالطر
 
 msgid "currency code"
 msgstr "رمز العملة"
+
+msgid "custom role"
+msgstr "دور مخصص"
+
+msgid "custom roles"
+msgstr "أدوار مخصصة"
 
 msgid "customer"
 msgstr "العميل"
@@ -8532,6 +8593,10 @@ msgstr "تعذّر رفع الملف «%(name)s» لأنه ليس صورة أو 
 #, python-format
 msgid "“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video."
 msgstr "يتجاوز الملف «%(name)s» الحد المسموح به وهو 25 ميغابايت. يرجى اختيار ملف أصغر أو مقطع فيديو أقصر."
+
+#, python-format
+msgid "“%(name)s” is still given to someone. Give them another role first."
+msgstr "الدور «%(name)s» ما زال مُسنداً لشخص ما. أسند إليه دوراً آخر أولاً."
 
 #, python-format
 msgid "“%(name)s” still has technicians, customers or tickets linked to it. Please deactivate it instead of deleting it."

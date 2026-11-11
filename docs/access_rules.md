@@ -10,7 +10,12 @@ A role is what someone **can do**, not what they're **called**: each person
 can have a job title (a General Manager with the Operations Manager's role, a
 "Customer Service Coordinator" with Country Support's), shown wherever they're
 listed. Give someone the role whose powers fit, and the title they're known
-by; a role with less power is a new role, added in the code with its rules.
+by. For a position no role fits (a COO, a General Manager), the Admin makes a
+**role of their own** on Roles & permissions: based on a built-in role, whose
+fixed rules it follows, with its own switches — a COO based on the Operations
+Manager, with Tickets switched off. Stage 1 of capability-based roles; later
+stages turn the remaining fixed rules (stepping in, approvals, company watch,
+whose pages one opens, area…) into switches as well.
 
 | Role | Area |
 |---|---|

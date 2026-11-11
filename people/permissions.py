@@ -17,7 +17,7 @@ def require_permission(request, permission):
     if technician is None:
         raise PermissionDenied
     if not RolePermission.objects.filter(
-        role=technician.role, permission=permission, allowed=True,
+        role=technician.permission_role, permission=permission, allowed=True,
     ).exists():
         raise PermissionDenied
     return technician

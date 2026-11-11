@@ -147,7 +147,7 @@ def _me_payload(user, request=None):
         # What this role may do (RolePermission), so the app shows only
         # the tabs that will open — the API still checks every request.
         'permissions': sorted(
-            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
         ),
     }
 
@@ -894,7 +894,7 @@ class WebsiteMenuView(APIView):
     def get(self, request):
         technician = request.user.technician
         allowed = set(
-            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
         )
         with translation.override(technician.app_language):
             groups = nav_groups(nav_pages(technician, allowed), '')

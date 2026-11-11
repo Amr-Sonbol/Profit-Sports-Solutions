@@ -122,16 +122,17 @@ def new_ticket_people(country):
     """Who is told of a new ticket in this country, by email and in the bell:
     the roles chosen on the Notifications page — in this country, or any
     country for a role that handles tickets in all of them (the Technical
-    Support Manager). Nobody of those, active with a login: the admins, so
-    a ticket is never left unseen."""
-    from people.models import NotificationSettings, RolePermission
+    Support Manager). Only someone whose own switches handle tickets — a
+    custom role based on a chosen one but with Tickets off is not told.
+    Nobody of those, active with a login: the admins, so a ticket is never
+    left unseen."""
+    from people.models import NotificationSettings, RolePermission, with_permission
 
     roles = NotificationSettings.load().new_ticket_roles
-    everywhere = RolePermission.objects.filter(
-        permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
-    ).values('role')
     people = Technician.objects.filter(
-        Q(country=country) | Q(role__in=everywhere), is_active=True, role__in=roles, user__isnull=False,
+        Q(country=country) | with_permission(RolePermission.Permission.TICKETS_ALL_COUNTRIES),
+        with_permission(RolePermission.Permission.MANAGE_TICKETS),
+        is_active=True, role__in=roles, user__isnull=False,
     )
     if not people.exists():
         people = Technician.objects.filter(role=Technician.Role.ADMIN, is_active=True, user__isnull=False)

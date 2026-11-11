@@ -28,7 +28,7 @@ def notification_bell(request):
     if technician is None:
         return {}
     can_manage_tickets = RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
+        role=technician.permission_role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
     ).exists()
     from tasks.models import TaskMessageRecipient, TaskNotification, TicketNotification
     country = get_active_country(request)
@@ -37,7 +37,7 @@ def notification_bell(request):
         unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket__country')
         # The company-wide roles hear of every country's tickets, whichever country they're looking at.
         if not RolePermission.objects.filter(
-            role=technician.role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
+            role=technician.permission_role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
         ).exists():
             unseen_tickets = unseen_tickets.filter(ticket__country=country)
         # A new ticket: only to whoever is told of it, as by its email (tasks.alarms.new_ticket_people —
@@ -122,7 +122,7 @@ def notification_bell(request):
     # Customer logins locked out right now — live, so they clear the moment
     # someone unlocks them (or the lockout times out on its own).
     if RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+        role=technician.permission_role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
     ).exists():
         from django.db.models.functions import Lower
 
@@ -209,7 +209,7 @@ def role_permissions(request):
     if technician is None:
         return {}
     allowed = set(
-        RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
     )
     pages = nav_pages(technician, allowed)
     # My profile is the row at the top of the sidebar, not a menu page; on

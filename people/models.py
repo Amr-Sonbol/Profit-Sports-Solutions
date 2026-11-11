@@ -105,7 +105,15 @@ class Technician(models.Model):
         _('language'), max_length=2, choices=Language.choices,
         help_text=_('per person, not per country'),
     )
+    # The built-in role whose fixed rules apply (what the code checks: area,
+    # stepping in, approvals...). With a custom role, its base: the person's own
+    # switches then come from the custom role (permission_role).
     role = models.CharField(_('role'), max_length=20, choices=Role.choices)
+    custom_role = models.ForeignKey(
+        'people.CustomRole', on_delete=models.PROTECT, null=True, blank=True, related_name='people',
+        verbose_name=_('custom role'),
+        help_text=_('a role the Admin made, based on `role`; its own switches replace the base role\'s'),
+    )
     employment_type = models.CharField(
         _('employment type'), max_length=20, choices=EmploymentType.choices,
     )
@@ -212,6 +220,21 @@ class Technician(models.Model):
         """
         return ESCALATION_CHAIN.get(self.role)
 
+    def get_role_display(self):
+        """The role's name: a custom role's own, or the built-in one's."""
+        if self.custom_role_id:
+            return self.custom_role.display_name
+        return str(dict(self.Role.choices).get(self.role, self.role))
+
+    @property
+    def permission_role(self):
+        """Whose switches (RolePermission rows) are this person's: their custom
+        role's, or their built-in role's."""
+        return self.custom_role.key if self.custom_role_id else self.role
+
+    def has_permission(self, permission):
+        return RolePermission.objects.filter(role=self.permission_role, permission=permission, allowed=True).exists()
+
     @property
     def title(self):
         """What to call them: their job title, or their role's name without one."""
@@ -229,6 +252,53 @@ class Technician(models.Model):
         if self.user_id is not None and self.user.is_active != is_active:
             self.user.is_active = is_active
             self.user.save(update_fields=['is_active'])
+
+
+class CustomRole(models.Model):
+    """A role the Admin made on Roles & permissions — "COO", "General Manager"
+    — based on a built-in role (`based_on`, any but Admin): its people follow
+    that role's fixed rules in the code, and its own switches (RolePermission
+    rows under `key`), which start as the base role's and the Admin then
+    changes (docs/access_rules.md).
+    """
+
+    name = models.CharField(_('name'), max_length=60, unique=True)
+    name_ar = models.CharField(_('name (Arabic)'), max_length=60, blank=True)
+    based_on = models.CharField(
+        _('based on'), max_length=20,
+        choices=[choice for choice in Technician.Role.choices if choice[0] != Technician.Role.ADMIN],
+    )
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('custom role')
+        verbose_name_plural = _('custom roles')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def key(self):
+        """Its switches' role key in RolePermission."""
+        return f'custom-{self.pk}'
+
+    @property
+    def display_name(self):
+        from django.utils.translation import get_language
+
+        return self.name_ar if self.name_ar and (get_language() or '').startswith('ar') else self.name
+
+
+def with_permission(permission):
+    """A Q for the people whose own switches allow `permission`: built-in roles
+    by role, custom roles by their key."""
+    from django.db.models import Q
+
+    keys = list(RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True))
+    builtin = [key for key in keys if not key.startswith('custom-')]
+    custom = [int(key.split('-', 1)[1]) for key in keys if key.startswith('custom-')]
+    return Q(custom_role__isnull=True, role__in=builtin) | Q(custom_role_id__in=custom)
 
 
 ESCALATION_CHAIN = {
@@ -265,7 +335,8 @@ class RolePermission(models.Model):
         CUSTOMER_ACCOUNTS = 'customer_accounts', _('Manage customer portal accounts')
         VIEW_STOCK = 'view_stock', _('View warehouse stock')
 
-    role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
+    # A built-in role's code, or a custom role's key ("custom-7": CustomRole.key).
+    role = models.CharField(_('role'), max_length=20)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)
     allowed = models.BooleanField(_('allowed'), default=False)
 

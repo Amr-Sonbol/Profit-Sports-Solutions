@@ -28,7 +28,7 @@ from .models import (
     TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
     TicketMachine, TicketNotification, TicketReply,
 )
-from spots.test_files import REAL_JPEG, REAL_PNG
+from spots.test_files import REAL_JPEG, REAL_MP4, REAL_PNG
 
 User = get_user_model()
 
@@ -4300,7 +4300,8 @@ class MySkillsTests(TaskTestCase):
         )
         self.client.login(username='tech1', password='pass12345')
         self.client.post('/tasks/my-skills/', {
-            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'evidence': self._evidence('better.mp4'),
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3,
+            'evidence': self._evidence('better.mp4', content=REAL_MP4, content_type='video/mp4'),
         })
         rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
         self.assertEqual(rating.level, 3)
@@ -9856,3 +9857,91 @@ class CompanyWatchTests(TaskTestCase):
         TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
             occurred_at=timezone.now() - timezone.timedelta(minutes=30))
         self.assertNotIn('blocked_long', self.bell('support1'))
+
+
+class CustomRoleTests(TaskTestCase):
+    """Roles the Admin makes (people.CustomRole, docs/access_rules.md): a COO
+    based on the Operations Manager, with Tickets switched off, follows the
+    Operations Manager's fixed rules and its own switches."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth.models import User
+        self.admin = Technician.objects.create(
+            user=User.objects.create_user('admin9', password='pass12345'), country=self.country, full_name='Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin9', password='pass12345')
+        self.client.post('/tasks/roles/', {
+            'action': 'new_role', 'new-name': 'COO', 'new-name_ar': 'الرئيس التنفيذي للعمليات',
+            'new-based_on': Technician.Role.OPERATIONS_MANAGER,
+        })
+        from people.models import CustomRole
+        self.coo_role = CustomRole.objects.get(name='COO')
+        # Its switches start as the Operations Manager's; the Admin turns Tickets off.
+        allowed = set(RolePermission.objects.filter(role=self.coo_role.key, allowed=True).values_list('permission', flat=True))
+        ops = set(RolePermission.objects.filter(role=Technician.Role.OPERATIONS_MANAGER, allowed=True)
+                  .values_list('permission', flat=True))
+        self.assertEqual(allowed, ops)
+        tickets = {RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.OPEN_TICKETS,
+                   RolePermission.Permission.TICKETS_ALL_COUNTRIES, RolePermission.Permission.DECIDE_ESCALATED_TICKETS}
+        RolePermission.objects.filter(role=self.coo_role.key, permission__in=tickets).update(allowed=False)
+
+    def add_coo(self, username='karim'):
+        self.client.login(username='admin9', password='pass12345')
+        self.client.post('/tasks/technicians/new/', {
+            'role': self.coo_role.key, 'full_name': 'Karim COO', 'country': self.country.pk, 'email': f'{username}@example.com',
+            'employment_type': 'staff', 'language': 'en',
+        })
+        coo = Technician.objects.get(full_name='Karim COO')
+        coo.user.set_password('pass12345')
+        coo.user.save()
+        return coo
+
+    def test_the_role_screen_lists_every_role(self):
+        page = self.client.get('/tasks/roles/')
+        keys = [column['key'] for column in page.context['columns']]
+        self.assertIn(Technician.Role.PROJECT_MANAGER, keys)  # missing from the screen before
+        self.assertIn(self.coo_role.key, keys)
+
+    def test_a_coo_is_an_operations_manager_without_tickets(self):
+        coo = self.add_coo()
+        self.assertEqual((coo.role, coo.custom_role, coo.get_role_display()),
+                         (Technician.Role.OPERATIONS_MANAGER, self.coo_role, 'COO'))
+        # The Operations Manager's fixed rules: steps in on any task, sees every country.
+        task = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        from tasks.views import can_step_in
+        self.assertTrue(can_step_in(coo, task))
+        self.assertTrue(coo.reaches_all_countries)
+        # Its own switches: no Tickets.
+        self.client.login(username='karim@example.com', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/tickets/').status_code, 403)
+        self.assertEqual(self.client.get('/tasks/').status_code, 200)
+
+    def test_a_coo_without_tickets_is_never_picked_for_requests(self):
+        from people.models import NotificationSettings
+        from tasks.alarms import new_ticket_people
+        from tasks.forms import escalation_deciders
+        coo = self.add_coo()
+        settings_row = NotificationSettings.load()
+        settings_row.new_ticket_roles = [Technician.Role.OPERATIONS_MANAGER]
+        settings_row.save()
+        self.assertNotIn(coo, list(new_ticket_people(self.country)))
+        support = Technician.objects.create(
+            user=__import__('django.contrib.auth.models', fromlist=['User']).User.objects.create_user('tsm9', password='x'),
+            country=self.country, full_name='TSM', language='en', role=Technician.Role.SUPPORT_MANAGER,
+            employment_type='staff',
+        )
+        self.assertNotIn(coo, list(escalation_deciders(support, self.country)))
+
+    def test_a_role_in_use_cannot_be_deleted(self):
+        self.add_coo()
+        self.client.post('/tasks/roles/', {'action': 'delete_role', 'role': self.coo_role.pk})
+        self.assertTrue(type(self.coo_role).objects.filter(pk=self.coo_role.pk).exists())
+        Technician.objects.filter(custom_role=self.coo_role).update(custom_role=None)
+        self.client.post('/tasks/roles/', {'action': 'delete_role', 'role': self.coo_role.pk})
+        self.assertFalse(type(self.coo_role).objects.filter(pk=self.coo_role.pk).exists())
+        self.assertFalse(RolePermission.objects.filter(role=self.coo_role.key).exists())

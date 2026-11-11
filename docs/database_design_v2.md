@@ -260,7 +260,8 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | job_title | varchar | blank — what they're called, apart from what they can do (`role`): a General Manager with an Operations Manager's access, a "Customer Service Coordinator" with Country Support's. Shown wherever a person is listed (`Technician.title`: the job title, or the role's name without one); the access role itself only where access is managed (Staff accounts, the Audit log, Roles & permissions). Set by a manager or the Admin, on adding or editing someone. Not translated: it's written the way they're called |
 | phone | varchar | |
 | language | varchar | `ar` or `en` — per person, not per country |
-| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), country_support (Country Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), project_manager (Project Manager — like a Manager in every country, no customer requests), admin. Who sees and changes what: `docs/access_rules.md` |
+| role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), country_support (Country Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), project_manager (Project Manager — like a Manager in every country, no customer requests), admin. Who sees and changes what: `docs/access_rules.md`. With a custom role, its base (`custom_role.based_on`) — the fixed rules in the code read this |
+| custom_role_id | FK → custom_role | nullable — a role the Admin made; the person's own switches are its (`Technician.permission_role`), and its name is their role's name |
 | employment_type | varchar | staff, freelance |
 | has_transport | bool | |
 | can_carry_large | bool | can move a treadmill motor or locker bank |
@@ -294,7 +295,7 @@ Which role can do what — configurable, not hardcoded. One row per (role, permi
 | Column | Type | Notes |
 |---|---|---|
 | id | PK | |
-| role | varchar | technician, supervisor, manager, support_manager, country_support, warehouse_manager, operations_manager, project_manager, admin |
+| role | varchar | a built-in role (technician, supervisor, manager, support_manager, country_support, warehouse_manager, operations_manager, project_manager, admin), or a custom role's key (`custom-<id>`: `CustomRole.key`) |
 | permission | varchar | see below |
 | allowed | bool | |
 
@@ -307,6 +308,18 @@ Unique on (role, permission).
 **`country_support` (Country Support Manager) runs one country's ticket desk.** Seeded by `0043_seed_country_support_manager` with the Technical Support Manager's permissions minus `tickets_all_countries` and `decide_escalated_tickets`: it handles, converts and opens tickets in its own country (`technician.country`) and gets that country's new-ticket email and bell alerts, nothing more. Its own country is all it ever reaches — another country's ticket is a 404, same as any other country-scoped lookup.
 
 **`warehouse_manager` exists for exactly one job: receiving shipments.** It gets `view_dashboard` and `view_tasks` and nothing else — `view_tasks` alone is enough to search the task list by PAK reference number (already a filter there, for anyone who can reach it), open a task to read its shipping details (PAK, carrier, tracking number — never gated beyond `view_tasks` itself), and post a task message confirming a part arrived. No ticket, technician, or customer access, same narrow-by-design shape as `support_manager` before it. Only the supervisor-side actions — the ones that plausibly differ by role. Self-service technician screens (My week, My progress, My skills, task detail, report form) stay open to any signed-in technician regardless of role; there's no case yet for excluding a role from their own record, so they aren't part of this table. Filing a report is also not gated by a separate permission — it's the technician's own action, marking the task completed. Approving it closed is the one exception on this whole screen: it's manager-only, a fixed floor like `role_permissions` itself rather than a row in this table (see task's status-flow note).
+
+### custom_role
+
+A role the Admin makes on Roles & permissions for a position the built-in roles don't fit — a COO, a General Manager — **based on a built-in role** (any but Admin). Its people follow that role's fixed rules in the code (area, stepping in, approvals, alerts…) and its **own switches** (`role_permission` rows under its key), which start as the base role's and the Admin then changes — a COO based on the Operations Manager with Tickets switched off. Wherever people are picked by a switch (who's told of a new request, who a request can be assigned or escalated to, new-task emails), each person's own switches decide (`people.models.with_permission`), so such a COO is never picked for requests. Renamed any time; deleted only once nobody has it. Later stages turn the fixed rules into switches too (docs/access_rules.md).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| name | varchar | unique; not a built-in role's name |
+| name_ar | varchar | blank — its name in Arabic |
+| based_on | varchar | the built-in role it's based on, any but `admin` |
+| created_at | timestamptz | |
 
 **Managed from its own screen (`/tasks/roles/`), admin-only, and deliberately not itself gated by a `role_permission` row.** If "who can manage permissions" were just another row in the table it manages, a bad edit could disable it for every role at once with no way back in short of a database fix. Admin access to that one screen is a fixed floor (`require_admin`), everything else runs through it.
 

@@ -88,7 +88,7 @@ def _manages_logins(technician):
     Operations and the Technical Support Manager by default): they also create
     customers and add branches."""
     return RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+        role=technician.permission_role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
     ).exists()
 
 

@@ -65,7 +65,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    CustomerPhotosForm,
+    CustomerPhotosForm, CustomRoleForm,
     AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
@@ -1446,7 +1446,7 @@ def home_summary(request, technician):
     """
     country = get_active_country(request)
     allowed = set(
-        RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+        RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
     )
     task_list_url = reverse('tasks:task_list')
     open_tasks = tasks_for_role(technician, Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country))
@@ -1519,7 +1519,7 @@ def waiting_for(technician, country):
     who owns the task), a blocked task they own, an escalated request sent to
     them, an internal task given to them.
     """
-    allowed = set(RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True))
+    allowed = set(RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True))
     items = []
 
     def task_item(kind, title, task, at, detail=''):
@@ -3199,13 +3199,15 @@ def _staff_notification_recipients(country, roles, everywhere=None):
     `everywhere`: a permission whose roles hear from every country, not
     only their own (a new ticket: tickets_all_countries).
     """
+    from people.models import with_permission
+
     in_reach = Q(country=country)
     if everywhere:
-        in_reach |= Q(role__in=RolePermission.objects.filter(
-            permission=everywhere, allowed=True,
-        ).values('role'))
+        in_reach |= with_permission(everywhere)
     return list(
-        Technician.objects.filter(in_reach, is_active=True, role__in=roles, user__isnull=False)
+        # Only someone who can open tasks (a custom role may have that switched off).
+        Technician.objects.filter(in_reach, with_permission(RolePermission.Permission.VIEW_TASKS),
+                                  is_active=True, role__in=roles, user__isnull=False)
         .exclude(user__email='').values_list('user__email', flat=True).distinct()
     )
 
@@ -3581,7 +3583,7 @@ def ticket_access(request, technician, pk):
     can_decide = bool(
         pending_escalation and pending_escalation.escalated_to_id == technician.id
         and RolePermission.objects.filter(
-            role=technician.role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
+            role=technician.permission_role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
         ).exists()
     )
     # Strictly one level up (Technician.escalates_to_role). Whoever holds
@@ -5997,22 +5999,63 @@ def role_permissions(request):
     edit here could lock every role out of ever fixing it again. Also
     the one screen a manager doesn't get, unlike every other manager-tier
     screen (see require_admin).
+
+    Every built-in role, and the roles the Admin made (CustomRole): a new one
+    is based on a built-in role (any but Admin) — its people follow that
+    role's fixed rules, and its own switches, which start as the base role's.
+    One can be renamed, or deleted once nobody has it (docs/access_rules.md).
     """
+    from django.db.models import Count
+
+    from people.models import CustomRole
+
     require_admin(request)
-
-    roles = [
-        Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER,
-        Technician.Role.COUNTRY_SUPPORT, Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER,
-        Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
-    ]
+    custom_roles = list(CustomRole.objects.annotate(people_count=Count('people')))
+    columns = [{'key': value, 'label': label, 'custom': None} for value, label in Technician.Role.choices]
+    columns += [{'key': role.key, 'label': role.display_name, 'custom': role} for role in custom_roles]
     permissions = list(RolePermission.Permission)
+    new_role_form = CustomRoleForm(prefix='new')
+    action = request.POST.get('action') if request.method == 'POST' else None
 
-    if request.method == 'POST':
+    if action == 'new_role':
+        new_role_form = CustomRoleForm(request.POST, prefix='new')
+        if new_role_form.is_valid():
+            role = new_role_form.save()
+            # Its switches start as the base role's; the Admin changes them below.
+            base = set(RolePermission.objects.filter(role=role.based_on, allowed=True).values_list('permission', flat=True))
+            RolePermission.objects.bulk_create([
+                RolePermission(role=role.key, permission=permission, allowed=permission in base)
+                for permission in permissions
+            ])
+            log_account_action(request, role, f'Role "{role.name}" made, based on {role.get_based_on_display()}')
+            messages.success(request, _('Role “%(name)s” added, with the switches of %(base)s. Change them below.') % {
+                'name': role.name, 'base': role.get_based_on_display(),
+            })
+            return redirect('tasks:role_permissions')
+    elif action in ('rename_role', 'delete_role'):
+        role = get_object_or_404(CustomRole, pk=request.POST.get('role'))
+        if action == 'rename_role':
+            form = CustomRoleForm(request.POST, instance=role, renaming=True, prefix=f'role{role.pk}')
+            if form.is_valid():
+                form.save()
+                messages.success(request, _('Role renamed.'))
+            else:
+                messages.error(request, ' '.join(error for errors in form.errors.values() for error in errors))
+        elif role.people.exists():
+            messages.error(request, _('“%(name)s” is still given to someone. Give them another role first.') % {
+                'name': role.name})
+        else:
+            RolePermission.objects.filter(role=role.key).delete()
+            log_account_action(request, role, f'Role "{role.name}" deleted')
+            role.delete()
+            messages.success(request, _('Role deleted.'))
+        return redirect('tasks:role_permissions')
+    elif request.method == 'POST' and action in ('save_permissions', None, ''):  # the switches (as ever, the default)
         for permission in permissions:
-            for role in roles:
+            for column in columns:
                 RolePermission.objects.update_or_create(
-                    role=role, permission=permission,
-                    defaults={'allowed': f'{role}__{permission}' in request.POST},
+                    role=column['key'], permission=permission,
+                    defaults={'allowed': f'{column["key"]}__{permission}' in request.POST},
                 )
         messages.success(request, _('Permissions updated.'))
         return redirect('tasks:role_permissions')
@@ -6022,18 +6065,19 @@ def role_permissions(request):
         {
             'permission': permission,
             'cells': [
-                {
-                    'field_name': f'{role}__{permission}',
-                    'allowed': (role, permission) in allowed_pairs,
-                }
-                for role in roles
+                {'field_name': f'{column["key"]}__{permission}', 'allowed': (column['key'], permission) in allowed_pairs}
+                for column in columns
             ],
         }
         for permission in permissions
     ]
-
-    context = {'roles': roles, 'matrix': matrix}
-    return render(request, 'tasks/role_permissions.html', context)
+    custom_rows = [
+        {'role': role, 'form': CustomRoleForm(instance=role, renaming=True, prefix=f'role{role.pk}')}
+        for role in custom_roles
+    ]
+    return render(request, 'tasks/role_permissions.html', {
+        'columns': columns, 'matrix': matrix, 'new_role_form': new_role_form, 'custom_rows': custom_rows,
+    })
 
 
 @login_required
@@ -7702,7 +7746,7 @@ def _report_form(request, task, technician, back_url):
 
 
 def _has_permission(technician, permission):
-    return RolePermission.objects.filter(role=technician.role, permission=permission, allowed=True).exists()
+    return RolePermission.objects.filter(role=technician.permission_role, permission=permission, allowed=True).exists()
 
 
 @login_required
