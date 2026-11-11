@@ -55,11 +55,38 @@ undone for it. Likewise a customer admin role who manages their own people.
   - database connections are reused for a minute (`DB_CONN_MAX_AGE`); the
     cache lives in the database, its table made at start-up
     (`createcachetable` in `docker-entrypoint.sh`).
-- **Backups** of the database, and a check that one can be restored.
-- **A daily scheduled job**, so warnings that today only show in the bell
-  (a report waiting over 2 working days) also reach people's phones.
+- **Backups** of the database (daily, kept at least 30 days, a copy outside
+  the hosting company), **and a restore actually tried once** — a backup
+  never restored is only a hope. Uploaded files (photos, reports) backed up
+  too, not just the database.
+- **Monitoring:** switch on error monitoring (Sentry — `SENTRY_DSN`, already
+  wired in `spots/settings.py`), and an uptime check that alerts someone when
+  the site or the portal stops answering.
+- **A scheduled job** (every 15 minutes, and once a day), so the warnings that
+  today only show in the bell reach people's phones: a task still blocked, one
+  with no day, a report waiting — and later the daily summary by email.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.
+- **A staging copy** of the site (its own address, its own database with test
+  data): every release goes there first and is tried before the live site.
+- **Smaller releases:** `app-today` holds 135 commits not yet in `master`.
+  Merge it once, then release in small steps (a branch per piece of work,
+  through staging), so each release is easy to check and to roll back.
+- **Dependabot** (`.github/dependabot.yml`, added 2026-11-11) opens a pull
+  request when a library has an update or a security fix; switch on
+  "Dependabot alerts" and "security updates" in the GitHub repository's
+  Settings → Code security, and look at its pull requests weekly.
+
+## 2b. Personal data (UAE and Saudi data-protection law)
+
+- **A privacy notice** on the portal (and linked from the app's sign-in):
+  what we keep about customers and staff, why, who sees it, how long.
+- **How long data is kept:** a written rule for requests, photos, reports,
+  logins and the Audit log (for example: reports as long as the machine is
+  under service; logins of people who left removed after N months).
+- **Export and deletion:** how a customer asks for their data, or for it to
+  be deleted, and who at the company handles it — and where photos and
+  backups are kept (which country).
 
 ## 3. Accounts to create on the live server
 
