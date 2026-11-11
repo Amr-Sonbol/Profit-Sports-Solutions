@@ -160,7 +160,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | service_cost | decimal(10,2) | nullable — the agreed cost per visit, in the country's `currency_code` |
 | terms_valid_until | date | nullable — when these terms end; shown as "Terms expired" after it. Every change to the terms is recorded in the Audit log, from → to |
 | terms_note | text | blank — e.g. the contract or agreement they come from |
-| user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff |
+| user_id | FK → user | nullable — the customer's own portal login, one per customer, created by staff. **Planned before go-live:** several people per customer, each with their own login (`docs/go_live_plan.md`) |
 | is_active | bool | |
 | must_change_password | bool | set when the welcome email goes out (or staff set a temporary password) — cleared once the customer sets their own password and completes their details |
 | invited_at | timestamptz | nullable — when the welcome email was last sent; its link is valid for 7 days, after which the account shows as "Invitation expired" |
