@@ -92,6 +92,14 @@ class Technician(models.Model):
         verbose_name=_('country'),
     )
     full_name = models.CharField(_('full name'), max_length=150)
+    # What they're called, apart from what they can do (`role`): a General
+    # Manager with an Operations Manager's access, a "Customer Service
+    # Coordinator" with Country Support's. Shown wherever a person is listed
+    # (`title`); the access role itself only where access is managed.
+    job_title = models.CharField(
+        _('job title'), max_length=100, blank=True,
+        help_text=_("What they're called, for example General Manager. Leave empty to use the role's name."),
+    )
     phone = models.CharField(_('phone'), max_length=30, blank=True)
     language = models.CharField(
         _('language'), max_length=2, choices=Language.choices,
@@ -203,6 +211,11 @@ class Technician(models.Model):
         Manager -> Operations Manager, who decides. None at the top.
         """
         return ESCALATION_CHAIN.get(self.role)
+
+    @property
+    def title(self):
+        """What to call them: their job title, or their role's name without one."""
+        return self.job_title or self.get_role_display()
 
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login

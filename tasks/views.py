@@ -6952,7 +6952,7 @@ def my_task_detail(request, pk):
         # never saw either before, even when the creator is the manager.
         'teammates': teammates,
         'created_by_name': created_by_technician.full_name if created_by_technician else task.created_by.get_username(),
-        'created_by_role_display': created_by_technician.get_role_display() if created_by_technician else '',
+        'created_by_role_display': created_by_technician.title if created_by_technician else '',
         'task_messages': task.messages.select_related('sent_by__technician'),
         'message_form': message_form,
     }
@@ -7849,7 +7849,7 @@ def internal_ticket_for_app(request, technician, ticket):
         'close_reason': ticket.close_reason if not is_open else '',
         'task': {'id': ticket.task_id, 'task_number': ticket.task.task_number} if ticket.task_id else None,
         'can_convert': is_open and technician.is_any_manager,
-        'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'} for person in people],
+        'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'} for person in people],
         'website_path': reverse('tasks:internal_ticket', args=[ticket.pk]),
     }
 

@@ -5039,6 +5039,28 @@ class TechnicianCreateTests(TaskTestCase):
         me = app.get('/api/me/', HTTP_AUTHORIZATION=f'Token {token}').json()
         self.assertEqual(me['role'], Technician.Role.SUPERVISOR)
 
+    def test_a_job_title_is_what_they_are_called_the_role_what_they_can_do(self):
+        # A General Manager with the Operations Manager's access: listed by title everywhere,
+        # the role itself where access is managed.
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(self.url, self._payload(
+            full_name='Karim Boss', role=Technician.Role.OPERATIONS_MANAGER, job_title='General Manager',
+            country=self.country.pk, email='karim@example.com',
+        ))
+        karim = Technician.objects.get(full_name='Karim Boss')
+        self.assertEqual((karim.role, karim.title), (Technician.Role.OPERATIONS_MANAGER, 'General Manager'))
+        self.assertContains(self.client.get(f'/tasks/technicians/{karim.pk}/'), 'General Manager')
+        panel = self.client.get(f'/tasks/technicians/accounts/?manage={karim.pk}')
+        self.assertContains(panel, 'Operations Manager')  # the access role, where access is managed
+        self.assertContains(panel, 'General Manager')
+        # The app shows the title too.
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=karim.user)
+        me = self.client_class().get('/api/me/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
+        self.assertEqual((me['role'], me['role_display']), ('operations_manager', 'General Manager'))
+        # Without one, the role's name.
+        self.assertEqual(Technician(role=Technician.Role.SUPERVISOR).title, 'Supervisor')
+
     def test_one_step_with_their_country_and_login(self):
         # The country is chosen, not whichever one the admin is viewing; the
         # email becomes their login, with a setup link — no password sent.

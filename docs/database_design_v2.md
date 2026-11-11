@@ -257,6 +257,7 @@ Covers technicians, supervisors, and managers. One table, different roles.
 | user_id | FK → auth user | nullable — a manager creates this from Edit, same as a customer's portal login |
 | country_id | FK → country | |
 | full_name | varchar | |
+| job_title | varchar | blank — what they're called, apart from what they can do (`role`): a General Manager with an Operations Manager's access, a "Customer Service Coordinator" with Country Support's. Shown wherever a person is listed (`Technician.title`: the job title, or the role's name without one); the access role itself only where access is managed (Staff accounts, the Audit log, Roles & permissions). Set by a manager or the Admin, on adding or editing someone. Not translated: it's written the way they're called |
 | phone | varchar | |
 | language | varchar | `ar` or `en` — per person, not per country |
 | role | varchar | technician, supervisor, manager, support_manager (Technical Support Manager), country_support (Country Support Manager), warehouse_manager (Warehouse Manager), operations_manager (Operations Manager), project_manager (Project Manager — like a Manager in every country, no customer requests), admin. Who sees and changes what: `docs/access_rules.md` |

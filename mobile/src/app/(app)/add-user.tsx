@@ -98,6 +98,7 @@ export default function AddUserScreen() {
             </TouchableOpacity>
             <ThemedText type="title">Add a user</ThemedText>
             {picker('role')}
+            {text('job_title', { hint: "What they're called, if not the role's name: for example General Manager." })}
             {text('full_name')}
             {picker('country')}
             {text('email', { keyboardType: 'email-address', hint: 'Their login: they get a link to choose their own password.' })}

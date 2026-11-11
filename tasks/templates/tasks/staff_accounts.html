@@ -42,7 +42,8 @@
     </div>
     <dl class="detail-grid">
         <div><dt>{% translate "Status" %}</dt><dd>{% include "tasks/_staff_account_status.html" with status=row.status %}</dd></div>
-        <div><dt>{% translate "Role" %}</dt><dd>{{ person.get_role_display }}</dd></div>
+        <div><dt>{% translate "Access role" %}</dt><dd>{{ person.get_role_display }}</dd></div>
+        {% if person.job_title %}<div><dt>{% translate "Job title" %}</dt><dd>{{ person.job_title }}</dd></div>{% endif %}
         <div><dt>{% translate "Country" %}</dt><dd>{{ person.country.display_name }}</dd></div>
         <div><dt>{% translate "Sign-in name" %}</dt><dd dir="ltr">{{ account.username|default:"—" }}</dd></div>
         <div><dt>{% translate "Email" %}</dt><dd dir="ltr">{{ account.email|default:"—" }}</dd></div>
@@ -106,7 +107,7 @@
                 {% with person=row.person account=row.person.user %}
                 <tr>
                     <td><a href="?{% if list_query %}{{ list_query }}&{% endif %}manage={{ person.pk }}#manage">{{ person.full_name }}</a></td>
-                    <td>{{ person.get_role_display }}</td>
+                    <td>{{ person.title }}</td>
                     <td>{{ person.country.display_name }}</td>
                     <td dir="ltr">{{ account.username|default:"—" }}</td>
                     <td>{% include "tasks/_staff_account_status.html" with status=row.status %}</td>

@@ -133,7 +133,7 @@
         <ul class="internal-notes">
             {% for note in internal_notes %}
             <li class="internal-note">
-                <p class="internal-note__meta"><strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>{% if note.author.technician %} · {{ note.author.technician.get_role_display }}{% endif %} · {{ note.created_at|date:"j M Y, P" }}</p>
+                <p class="internal-note__meta"><strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>{% if note.author.technician %} · {{ note.author.technician.title }}{% endif %} · {{ note.created_at|date:"j M Y, P" }}</p>
                 <p class="pre-line">{{ note.message }}</p>
                 {% with files=note.all_files %}{% if files %}<p class="chat-attachment attachment-list">{% for file in files %}{% include "_attachment.html" with file=file %}{% endfor %}</p>{% endif %}{% endwith %}
             </li>
@@ -215,7 +215,7 @@
             <div><dt>{% translate "Status" %}</dt><dd>{{ ticket.get_status_display }}</dd></div>
             <div>
                 <dt>{% translate "Assigned to" %}</dt>
-                <dd>{% if ticket.assigned_to %}{{ ticket.assigned_to.full_name }} <span class="muted">({{ ticket.assigned_to.get_role_display }})</span>{% else %}<span class="muted">{% translate "Not yet assigned." %}</span>{% endif %}</dd>
+                <dd>{% if ticket.assigned_to %}{{ ticket.assigned_to.full_name }} <span class="muted">({{ ticket.assigned_to.title }})</span>{% else %}<span class="muted">{% translate "Not yet assigned." %}</span>{% endif %}</dd>
             </div>
             {% if ticket.status == 'converted' and ticket_tasks %}
             <div><dt>{% translate "Tasks" %}</dt><dd>{% for task in ticket_tasks %}<a class="task-number" href="{% url 'tasks:task_detail' task.pk %}" dir="ltr">{{ task.task_number }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</dd></div>

@@ -848,7 +848,7 @@ class TechnicianCreateForm(forms.ModelForm):
         model = Technician
         # Role first: this one screen adds every kind of staff account.
         fields = [
-            'role', 'full_name', 'country', 'phone', 'language', 'employment_type',
+            'role', 'job_title', 'full_name', 'country', 'phone', 'language', 'employment_type',
             'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
@@ -906,7 +906,7 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
     class Meta:
         model = Technician
         fields = [
-            'photo', 'full_name', 'phone', 'language', 'country', 'role',
+            'photo', 'full_name', 'phone', 'language', 'country', 'role', 'job_title',
             'employment_type', 'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
@@ -921,7 +921,8 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
         else:
             del self.fields['email']
         if not is_manager:
-            for field_name in ['country', 'role', 'employment_type', 'has_transport', 'can_carry_large', 'hired_on']:
+            for field_name in ['country', 'role', 'job_title', 'employment_type', 'has_transport', 'can_carry_large',
+                               'hired_on']:
                 del self.fields[field_name]
         else:
             if 'country' in self.fields:
@@ -1722,7 +1723,7 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
         self.fields['assigned_to'].label_from_instance = (
-            lambda technician: f'{technician.full_name} — {technician.get_role_display()}'
+            lambda technician: f'{technician.full_name} — {technician.title}'
         )
 
 

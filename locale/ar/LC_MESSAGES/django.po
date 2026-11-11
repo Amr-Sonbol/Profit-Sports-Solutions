@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 12:51+0000\n"
+"POT-Creation-Date: 2026-11-11 16:15+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -639,6 +639,9 @@ msgstr "الموضوع"
 
 msgid "Access notes"
 msgstr "ملاحظات الدخول"
+
+msgid "Access role"
+msgstr "دور الصلاحيات"
 
 msgid "Accessories"
 msgstr "الإكسسوارات"
@@ -2933,6 +2936,9 @@ msgstr "مضى يومها ولم يُنجز العمل."
 
 msgid "Job"
 msgstr "المهمة"
+
+msgid "Job title"
+msgstr "المسمى الوظيفي"
 
 msgid "Keep me signed in on this device"
 msgstr "إبقائي مسجّلاً على هذا الجهاز"
@@ -6747,6 +6753,9 @@ msgstr "ما أبلغ به العميل"
 msgid "What the levels mean"
 msgstr "ماذا تعني المستويات"
 
+msgid "What they're called, for example General Manager. Leave empty to use the role's name."
+msgstr "المسمى الذي يُعرف به، مثل المدير العام. اتركه فارغاً لاستخدام اسم الدور."
+
 msgid "WhatsApp"
 msgstr "واتساب"
 
@@ -7565,6 +7574,9 @@ msgstr "وقت رفع الفاتورة"
 
 msgid "is warranty"
 msgstr "ضمن الضمان"
+
+msgid "job title"
+msgstr "المسمى الوظيفي"
 
 msgid "kind"
 msgstr "النوع"

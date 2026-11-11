@@ -124,7 +124,7 @@ def _me_payload(user, request=None):
         'phone': technician.phone,
         'photo_url': signed_media_url(request, technician.photo.url) if technician.photo and request else '',
         'role': technician.role,
-        'role_display': technician.get_role_display(),
+        'role_display': technician.title,
         'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
@@ -672,7 +672,7 @@ class NewInternalTicketView(APIView):
         country = get_active_country(request) or technician.country
         people = ReassignInternalTicketForm(country=country).fields['assigned_to'].queryset
         return Response({
-            'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'}
+            'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'}
                        for person in people],
             'me': technician.pk,
         })
@@ -843,7 +843,7 @@ class StaffAccountsView(APIView):
         for person in people[:200]:
             status_value = staff_account_status(person, locked, now)
             rows.append({
-                'id': person.pk, 'name': person.full_name, 'role': person.get_role_display(),
+                'id': person.pk, 'name': person.full_name, 'role': person.title,
                 'username': person.user.username if person.user_id else '',
                 'status': status_value, 'status_display': str(StaffAccountStatus(status_value).label),
                 'has_login': person.user_id is not None,
@@ -1023,7 +1023,7 @@ class PersonView(APIView):
         return Response({
             'id': person.pk,
             'name': person.full_name,
-            'role': person.get_role_display(),
+            'role': person.title,
             'photo_url': signed_media_url(request, person.photo.url) if person.photo else '',
             'phone': person.phone,
             'email': person.user.email if person.user_id else '',
@@ -1241,7 +1241,7 @@ class TeamTodayView(APIView):
         return Response([{
             'id': row['technician'].pk,
             'name': row['technician'].full_name,
-            'role': row['technician'].get_role_display(),
+            'role': row['technician'].title,
             'photo_url': (signed_media_url(request, row['technician'].photo.url)
                           if row['technician'].photo else ''),
             'phone': row['technician'].phone,
@@ -1271,7 +1271,7 @@ class TeamProgressView(APIView):
                 {
                     'id': row['technician'].pk,
                     'name': row['technician'].full_name,
-                    'role': row['technician'].get_role_display(),
+                    'role': row['technician'].title,
                     'photo_url': (signed_media_url(request, row['technician'].photo.url)
                                   if row['technician'].photo else ''),
                     'rank': row['rank'],
@@ -1848,7 +1848,7 @@ class TaskMessagesView(APIView):
                 'id': message.pk, 'message': message.message, 'sent_at': message.sent_at,
                 'sent_by': getattr(getattr(message.sent_by, 'technician', None), 'full_name', '')
                 or message.sent_by.get_username(),
-                'role': getattr(getattr(message.sent_by, 'technician', None), 'get_role_display', lambda: '')(),
+                'role': getattr(getattr(message.sent_by, 'technician', None), 'title', ''),
                 'mine': message.sent_by_id == request.user.pk,
             }
             for message in task.messages.select_related('sent_by__technician').order_by('sent_at')

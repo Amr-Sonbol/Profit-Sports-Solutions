@@ -6,6 +6,12 @@ the owner, November 2026.
 
 ## Roles
 
+A role is what someone **can do**, not what they're **called**: each person
+can have a job title (a General Manager with the Operations Manager's role, a
+"Customer Service Coordinator" with Country Support's), shown wherever they're
+listed. Give someone the role whose powers fit, and the title they're known
+by; a role with less power is a new role, added in the code with its rules.
+
 | Role | Area |
 |---|---|
 | Technician | their own tasks |

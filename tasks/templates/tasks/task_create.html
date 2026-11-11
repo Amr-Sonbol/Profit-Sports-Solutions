@@ -191,7 +191,7 @@
                 {% for person in team_schedule %}
                 <tr>
                     <td>{{ person.full_name }}</td>
-                    <td>{{ person.get_role_display }}</td>
+                    <td>{{ person.title }}</td>
                     <td>{{ active_country.display_name }}</td>
                     <td>
                         {% if person.next_scheduled_task %}

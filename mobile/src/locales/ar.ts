@@ -888,4 +888,5 @@ export const AR: Record<string, string> = {
   "{name} is told on their phone.": "سيصل إشعار إلى هاتف {name}.",
   "“{name}” was not sent. Check your connection and try again.": "لم يُرسل «{name}». تحقق من الاتصال وحاول مرة أخرى.",
   "sent by {name}": "أرسله {name}",
+  "What they're called, if not the role's name: for example General Manager.": "المسمى الوظيفي إن كان غير اسم الدور، مثل المدير العام.",
 };

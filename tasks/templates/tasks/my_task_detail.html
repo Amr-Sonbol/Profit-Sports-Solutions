@@ -233,7 +233,7 @@
         {% for task_message in task_messages %}
         <div class="chat-message {% if task_message.sent_by == user %}chat-message--mine{% endif %}">
             <div class="chat-meta">
-                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}{% if task_message.sent_by.technician %} <span class="muted">· {{ task_message.sent_by.technician.get_role_display }}</span>{% endif %}</span>
+                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}{% if task_message.sent_by.technician %} <span class="muted">· {{ task_message.sent_by.technician.title }}</span>{% endif %}</span>
                 <span class="muted">{{ task_message.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             </div>
             <div class="chat-bubble">

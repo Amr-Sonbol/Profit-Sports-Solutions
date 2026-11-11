@@ -9,7 +9,7 @@
     <div>
         <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
         <h1>{{ technician.full_name }}</h1>
-        <p class="muted">{{ technician.get_role_display }} · {{ technician.country.display_name }}{% if technician.phone %} · <span dir="ltr">{{ technician.phone }}</span>{% endif %}</p>
+        <p class="muted">{{ technician.title }} · {{ technician.country.display_name }}{% if technician.phone %} · <span dir="ltr">{{ technician.phone }}</span>{% endif %}</p>
     </div>
     <div class="badge-row">
         {% if can_view_as %}
