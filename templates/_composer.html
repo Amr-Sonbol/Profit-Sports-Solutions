@@ -1,11 +1,11 @@
 {% comment %}
-A message box, chat-style: the text, then the files chosen so far (each a
-chip with ×), and on the box's bottom edge a paperclip — use it as often as
-needed, or pick several at once (static/js/composer.js) — and the send
-button. `form` has `message` and `attachments`; `action` is the form's
+A message box, chat-style: the text, then the files chosen so far (each
+with a red X to take it back), and on the box's bottom edge a paperclip —
+use it as often as needed, or pick several at once (static/js/file-picker.js,
+on every page) — and the send button. `form` has `message` and `attachments`; `action` is the form's
 hidden action, if the page has several; `button` the send label.
 {% endcomment %}{% load i18n %}
-{% load static %}<form method="post" enctype="multipart/form-data" class="composer" novalidate data-remove-label="{% translate 'Remove' %}">
+<form method="post" enctype="multipart/form-data" class="composer" novalidate>
     {% csrf_token %}
     {% if action %}<input type="hidden" name="action" value="{{ action }}">{% endif %}
     {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
@@ -25,4 +25,3 @@ hidden action, if the page has several; `button` the send label.
     {% for error in form.message.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
     {% for error in form.attachments.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
 </form>
-<script src="{% static 'js/composer.js' %}?v={{ css_version }}" defer></script>

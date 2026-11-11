@@ -3390,18 +3390,85 @@ tbody tr:hover {
     overflow: hidden;
 }
 
-.attachment__remove {
-    border: 0;
-    background: none;
+/* The files chosen in a box that takes several (static/js/file-picker.js):
+   each a thumbnail (a photo) or its name, with a red X in a box to take just
+   that one back, then "3 of 10". */
+.file-picks {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block: 0.5rem 0;
+    margin-inline: 0;
     padding: 0;
-    color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1;
+    list-style: none;
+}
+
+.file-picks[hidden] {
+    display: none;
+}
+
+.file-picks__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    inline-size: 6.5rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.file-picks__item img {
+    display: block;
+    inline-size: 100%;
+    block-size: 4.5rem;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.file-picks__name {
+    max-inline-size: 100%;
+    overflow: hidden;
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-picks__remove {
+    position: absolute;
+    inset-block-start: 0.2rem;
+    inset-inline-end: 0.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.6rem;
+    block-size: 1.6rem;
+    padding: 0;
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
     cursor: pointer;
 }
 
-.attachment__remove:hover {
-    color: var(--color-danger);
+.file-picks__remove .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+}
+
+.file-picks__remove:hover,
+.file-picks__remove:focus-visible {
+    background: var(--color-danger);
+    color: #fff;
+}
+
+.file-picks__count {
+    color: var(--color-muted);
+    font-size: 0.85rem;
 }
 
 /* With a bell, the language switch sits right beside it at the end of the
