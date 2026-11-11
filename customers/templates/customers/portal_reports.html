@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Reports" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{% translate "Reports" %}</h1>
+            <p class="muted">{% translate "Every visit report, newest first, to download and rate." %}</p>
+        </div>
+    </div>
+
+    <section class="section">
+        {% if reports %}
+        <ul class="action-list">
+            {% for visit in reports %}
+            <li class="row-with-actions">
+                {# Waiting for their rating: the row opens the visit at its rating form. #}
+                <a href="{% url 'customers:portal_visit' visit.pk %}{% if visit.to_rate %}#rate{% endif %}" class="action-row portal-row">
+                    <span class="portal-row__day">{{ visit.report.submitted_at|date:"j M Y" }}</span>
+                    <span class="portal-row__main">
+                        <strong>{{ visit.task_type.display_name|default:_("Service visit") }}</strong>
+                        <span class="muted">{{ visit.site.name }}</span>
+                    </span>
+                    {% if visit.to_rate %}<span class="badge badge--warning">{% translate "Rate this visit" %}</span>
+                    {% elif visit.rating %}<span class="portal-stars" title="{% blocktranslate with rating=visit.rating %}You rated it {{ rating }} out of 5.{% endblocktranslate %}">{% for n in "12345" %}{% if forloop.counter <= visit.rating %}★{% else %}☆{% endif %}{% endfor %}</span>{% endif %}
+                </a>
+                {% include "customers/_report_download.html" with visit=visit changed=visit.report_changed %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="empty-state">{% translate "No reports yet. A visit's report appears here once our team has finished." %}</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

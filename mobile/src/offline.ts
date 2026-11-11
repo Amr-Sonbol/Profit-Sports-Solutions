@@ -1,6 +1,6 @@
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 
-import { ApiRequestError } from '@/api/client';
+import { ApiRequestError, getActiveCountry } from '@/api/client';
 import { submitMyReport } from '@/api/endpoints';
 import type { WorkReportInput } from '@/types';
 
@@ -39,7 +39,8 @@ function writeJson(name: string, value: unknown) {
     if (!file.exists) {
       file.create();
     }
-    file.write(JSON.stringify(value));
+    // writeSync: write() is async from SDK 58, and callers read the file straight back.
+    file.writeSync(JSON.stringify(value));
   } catch {
     // Storage full or unavailable — offline support just doesn't kick in.
   }
@@ -51,6 +52,23 @@ export function isNetworkError(err: unknown): boolean {
 }
 
 // ---- last-loaded copies of screen data ----
+
+/**
+ * Signing out: nothing of this person's stays on the phone — their screens'
+ * copies and any report not sent yet — so the next one to sign in here
+ * (a shared phone) never sees it, even with no signal.
+ */
+export function clearOfflineData() {
+  try {
+    for (const entry of new Directory(Paths.document).list()) {
+      if (entry instanceof File && (entry.name.startsWith('cache-') || entry.name === PENDING_FILE)) {
+        entry.delete();
+      }
+    }
+  } catch {
+    // Nothing stored, or storage unavailable: nothing to clear.
+  }
+}
 
 export function cacheScreenData(key: string, value: unknown) {
   writeJson(`cache-${key}.json`, value);
@@ -77,6 +95,14 @@ export async function withOfflineCopy<T>(key: string, load: () => Promise<T>): P
     }
     return { data: cached, offline: true };
   }
+}
+
+/**
+ * withOfflineCopy for the office's screens, one copy per country chosen — a
+ * manager who switched country never sees the other one's last copy.
+ */
+export async function withCountryCopy<T>(key: string, load: () => Promise<T>): Promise<{ data: T; offline: boolean }> {
+  return withOfflineCopy(`${key}-${(await getActiveCountry()) ?? 'home'}`, load);
 }
 
 // ---- reports waiting to be sent ----

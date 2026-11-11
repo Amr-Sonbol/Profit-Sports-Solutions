@@ -1,5 +1,9 @@
+import secrets
+
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from people.models import Technician
@@ -27,6 +31,33 @@ class Customer(models.Model):
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
         help_text=_('for the portal login, if this customer has one'),
+    )
+    # Their portal in their own gym's color (buttons, highlights); grey until they choose.
+    brand_color = models.CharField(
+        _('portal color'), max_length=7, default='#c8c8c8',
+        validators=[RegexValidator(r'^#[0-9a-fA-F]{6}$', _('Choose a color.'))],
+        help_text=_("the customer's own color for their portal, as #RRGGBB"),
+    )
+    # Commercial terms, managers' and admins' only: the discount on
+    # quotations, and the agreed shipping (per shipment) and service (per
+    # visit) costs, in the customer's country currency. Empty: not agreed.
+    quotation_discount = models.DecimalField(
+        _('quotation discount (%)'), max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    shipping_cost = models.DecimalField(
+        _('shipping cost per shipment'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    service_cost = models.DecimalField(
+        _('service cost per visit'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    terms_valid_until = models.DateField(
+        _('terms valid until'), null=True, blank=True, help_text=_('empty: no end date'),
+    )
+    terms_note = models.TextField(
+        _('terms note'), blank=True, help_text=_('for example the contract or agreement these terms come from'),
     )
     contact_name = models.CharField(_('contact name'), max_length=150, blank=True)
     contact_phone = models.CharField(_('contact phone'), max_length=30, blank=True)
@@ -65,6 +96,13 @@ class Customer(models.Model):
         help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
     )
     is_active = models.BooleanField(_('active'), default=True)
+    # The company's own account in a country: its sites are the warehouses
+    # that equipment is received at and loaded from. Never a portal login,
+    # a ticket or an email to it.
+    is_internal = models.BooleanField(
+        _('internal (our warehouses)'), default=False,
+        help_text=_("the company's own account — its sites are our warehouses"),
+    )
     deactivation_reason = models.CharField(
         _('deactivation reason'), max_length=255, blank=True,
         help_text=_('reason for deactivation, e.g. contract ended or business closed'),
@@ -79,6 +117,20 @@ class Customer(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def brand_text_color(self):
+        """Black or white, whichever reads better on their portal color
+        (WCAG relative luminance)."""
+        def channel(hex_pair):
+            value = int(hex_pair, 16) / 255
+            return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+        color = self.brand_color.lstrip('#')
+        red, green, blue = (channel(color[i:i + 2]) for i in (0, 2, 4))
+        luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+        # Contrast with black (L + 0.05) / 0.05 against white 1.05 / (L + 0.05).
+        return '#000000' if (luminance + 0.05) ** 2 > 0.0525 else '#ffffff'
+
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login
         (if any) in lockstep, so a deactivated customer can't just log
@@ -92,6 +144,12 @@ class Customer(models.Model):
         if self.user_id is not None and self.user.is_active != is_active:
             self.user.is_active = is_active
             self.user.save(update_fields=['is_active'])
+
+
+# New customers and new branches: the warranty from installation, and when
+# to start warning that it's about to end.
+WARRANTY_YEARS = 2
+WARRANTY_SOON_DAYS = 60
 
 
 class Site(models.Model):
@@ -124,6 +182,30 @@ class Site(models.Model):
     location_source = models.CharField(
         _('location source'), max_length=10, choices=LocationSource.choices, blank=True,
     )
+    # The warranty on everything at this branch: new customers and new
+    # branches get WARRANTY_YEARS from installation. The end fills itself in
+    # from the start unless agreed otherwise.
+    warranty_start = models.DateField(
+        _('warranty start'), null=True, blank=True, help_text=_('normally the installation or handover date'),
+    )
+    warranty_until = models.DateField(
+        _('warranty until'), null=True, blank=True,
+        help_text=_('two years after the start, unless agreed otherwise'),
+    )
+    # This branch's own commercial terms, where they differ from its
+    # customer's; empty: the customer's (Site.commercial_terms).
+    quotation_discount = models.DecimalField(
+        _('quotation discount (%)'), max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    shipping_cost = models.DecimalField(
+        _('shipping cost per shipment'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    service_cost = models.DecimalField(
+        _('service cost per visit'), max_digits=10, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
 
     class Meta:
         verbose_name = _('site')
@@ -136,6 +218,58 @@ class Site(models.Model):
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
+
+    def save(self, *args, **kwargs):
+        if self.warranty_start and not self.warranty_until:
+            start = self.warranty_start
+            try:
+                self.warranty_until = start.replace(year=start.year + WARRANTY_YEARS)
+            except ValueError:  # 29 February
+                self.warranty_until = start.replace(year=start.year + WARRANTY_YEARS, day=28)
+        super().save(*args, **kwargs)
+
+    def warranty_state(self, today=None):
+        """'active', 'ending' (within WARRANTY_SOON_DAYS), 'ended', or None (no warranty recorded)."""
+        if not self.warranty_until:
+            return None
+        today = today or timezone.localdate()
+        if self.warranty_until < today:
+            return 'ended'
+        if self.warranty_start and self.warranty_start > today:
+            return None
+        return 'ending' if (self.warranty_until - today).days <= WARRANTY_SOON_DAYS else 'active'
+
+    @property
+    def commercial_terms(self):
+        """This branch's terms: each its own where set, else the customer's.
+        {'quotation_discount' | 'shipping_cost' | 'service_cost': (value or
+        None, 'branch' | 'customer'), 'currency', 'valid_until', 'expired',
+        'note', 'free'}. Under warranty everything is free (`free`), whatever
+        the terms; they apply again once it ends."""
+        customer = self.customer
+        terms = {}
+        for name in ('quotation_discount', 'shipping_cost', 'service_cost'):
+            own = getattr(self, name)
+            terms[name] = (own, 'branch') if own is not None else (getattr(customer, name), 'customer')
+        terms.update(
+            currency=customer.country.currency_code, valid_until=customer.terms_valid_until,
+            expired=bool(customer.terms_valid_until and customer.terms_valid_until < timezone.localdate()),
+            note=customer.terms_note,
+        )
+        terms['any'] = any(
+            terms[name][0] is not None for name in ('quotation_discount', 'shipping_cost', 'service_cost')
+        )
+        # Under warranty, everything is free: parts, shipping and service.
+        terms['free'] = self.under_warranty
+        return terms
+
+    @property
+    def under_warranty(self):
+        return self.warranty_state() in ('active', 'ending')
+
+    @property
+    def warranty_days_left(self):
+        return (self.warranty_until - timezone.localdate()).days if self.warranty_until else None
 
     @property
     def effective_contact_name(self):
@@ -161,6 +295,10 @@ class Site(models.Model):
         return bool(self.contact_name or self.contact_phone or self.contact_email)
 
 
+def _asset_sticker_path(instance, filename):
+    return f'asset_stickers/{secrets.token_hex(16)}/{filename}'
+
+
 class Asset(models.Model):
     """One physical machine. Created by the technician at the first service visit."""
 
@@ -168,6 +306,9 @@ class Asset(models.Model):
         ACTIVE = 'active', _('Active')
         FAULTY = 'faulty', _('Faulty')
         RETIRED = 'retired', _('Retired')
+        # Added by the customer from their portal: theirs to see, ours once a
+        # technician records it at a visit or the office confirms it.
+        PENDING = 'pending', _('Waiting for confirmation')
 
     site = models.ForeignKey(
         Site, on_delete=models.PROTECT, related_name='assets',
@@ -181,9 +322,12 @@ class Asset(models.Model):
         _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    # The product code (e.g. BENCH-01) — on the delivery note and the sticker, beside the serial.
+    code = models.CharField(_('code'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)
-    warranty_end = models.DateField(_('warranty end'), null=True, blank=True)
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    # The customer's photo of the sticker, when they added it themselves — what the office checks it against.
+    sticker_photo = models.FileField(_('sticker photo'), upload_to=_asset_sticker_path, null=True, blank=True)
 
     class Meta:
         verbose_name = _('asset')
@@ -197,3 +341,42 @@ class Asset(models.Model):
 
     def __str__(self):
         return f'{self.site.name} — {self.brand.name} {self.model_name}'
+
+
+class CustomerNotification(models.Model):
+    """One item in a customer's portal bell: a visit report ready (and to
+    rate), our team's reply to their request, a visit booked or moved, or
+    a request resolved (with our answer).
+    Written where each happens (customers.notify); cleared once the
+    customer opens what it's about."""
+
+    class Kind(models.TextChoices):
+        REPORT_READY = 'report_ready', _('Visit report ready')
+        REPLY = 'reply', _('Reply to a request')
+        VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
+        REQUEST_CLOSED = 'request_closed', _('Request resolved')
+        PART_SHIPPED = 'part_shipped', _('Part shipped')
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='notifications', verbose_name=_('customer'),
+    )
+    kind = models.CharField(_('kind'), max_length=20, choices=Kind.choices)
+    task = models.ForeignKey(
+        'tasks.Task', on_delete=models.CASCADE, null=True, blank=True, related_name='customer_notifications',
+        verbose_name=_('visit'),
+    )
+    ticket = models.ForeignKey(
+        'tasks.CustomerTicket', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='customer_notifications', verbose_name=_('request'),
+    )
+    created_at = models.DateTimeField(_('created at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('customer notification')
+        verbose_name_plural = _('customer notifications')
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['customer', 'seen_at'])]
+
+    def __str__(self):
+        return f'{self.customer} — {self.get_kind_display()}'

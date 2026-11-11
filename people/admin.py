@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
-    NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
+    AppError, NotificationSettings, RolePermission, Technician, TechnicianConduct, TechnicianConductAssessment,
     PushDevice, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 
@@ -139,6 +139,25 @@ class TechnicianTripAdmin(admin.ModelAdmin):
     list_display = ['technician', 'country', 'start_date', 'end_date', 'created_by']
     list_filter = ['country']
     search_fields = ['technician__full_name']
+
+
+@admin.register(AppError)
+class AppErrorAdmin(admin.ModelAdmin):
+    """The phone app's errors (api.views.AppErrorView). Opening the list marks them seen —
+    that clears the count in the admins' bell."""
+
+    list_display = ('occurred_at', 'technician', 'screen', 'message', 'app_version', 'platform')
+    list_filter = ('platform', 'app_version')
+    search_fields = ('message', 'screen', 'technician__full_name')
+    readonly_fields = [field.name for field in AppError._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.utils import timezone
+        AppError.objects.filter(seen_at__isnull=True).update(seen_at=timezone.now())
+        return super().changelist_view(request, extra_context)
 
 
 @admin.register(PushDevice)

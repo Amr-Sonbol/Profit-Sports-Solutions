@@ -84,7 +84,10 @@
                 <tr>
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Status" %}</th>
-                    <th>{% translate "Current tasks" %}</th>
+                    {# Work still to do, by its day in this country. #}
+                    <th>{% translate "Today" %}</th>
+                    <th>{% translate "Upcoming" %}</th>
+                    <th>{% translate "Overdue" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -98,7 +101,9 @@
                         <span class="badge badge--bad">{% translate "Unavailable" %} ({{ technician.get_unavailable_reason_display }})</span>
                         {% endif %}
                     </td>
-                    <td>{{ technician.active_task_count }}</td>
+                    <td>{{ technician.workload.today }}</td>
+                    <td>{{ technician.workload.upcoming }}</td>
+                    <td>{% if technician.workload.overdue %}<span class="badge badge--bad">{{ technician.workload.overdue }}</span>{% else %}0{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

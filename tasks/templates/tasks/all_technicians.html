@@ -35,7 +35,7 @@
                 <tr>
                     <td>
                         {% include "_avatar.html" with technician=row.technician %}
-                        {{ row.technician.full_name }}
+                        <a href="{% url 'tasks:technician_detail' row.technician.pk %}">{{ row.technician.full_name }}</a>
                     </td>
                     <td>{{ row.technician.country.display_name }}</td>
                     <td>{{ row.technician.get_role_display }}</td>

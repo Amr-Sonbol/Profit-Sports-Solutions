@@ -1,0 +1,4 @@
+{% load i18n %}{% comment %}
+A branch's warranty as a label (customers.models.Site.warranty_state):
+under warranty until a date, ending soon, ended — nothing when none is recorded.
+{% endcomment %}{% with state=site.warranty_state %}{% if state == 'active' %}<span class="badge badge--good">{% blocktranslate with date=site.warranty_until|date:"j M Y" %}Under warranty · until {{ date }}{% endblocktranslate %}</span>{% elif state == 'ending' %}<span class="badge badge--warning">{% blocktranslate count days=site.warranty_days_left %}Warranty ends in {{ days }} day{% plural %}Warranty ends in {{ days }} days{% endblocktranslate %}</span>{% elif state == 'ended' %}<span class="badge badge--muted">{% blocktranslate with date=site.warranty_until|date:"j M Y" %}Warranty ended {{ date }}{% endblocktranslate %}</span>{% endif %}{% endwith %}

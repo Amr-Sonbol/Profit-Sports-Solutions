@@ -11,9 +11,10 @@
     {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
     <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
-<body>
+{# A customer sees the portal's look (theme-portal in base.css) in their own color (Customer.brand_color, validated as #RRGGBB). #}
+<body{% if user.customer %} class="theme-portal" style="--brand: {{ user.customer.brand_color }}; --brand-text: {{ user.customer.brand_text_color }}"{% endif %}>
     <header class="site-header">
-        {% if user.technician %}
+        {% if user.technician or user.customer %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
             <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}" role="button" tabindex="0" aria-expanded="false">
                 <span></span><span></span><span></span>
@@ -27,80 +28,7 @@
         {% if active_country %}
         <span class="badge badge--muted">{{ active_country.display_name }}</span>
         {% endif %}
-        {% if user.technician %}
-            <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
-            <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                </svg>
-                {% if unseen_notification_count %}
-                <span class="notif-bell__badge">{{ unseen_notification_count }}</span>
-                {% endif %}
-            </label>
-            <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
-            <div class="notif-dropdown">
-                <h2>{% translate "Notifications" %}</h2>
-                {% if unseen_notifications %}
-                <ul class="plain-list">
-                    {% for notification in unseen_notifications %}
-                    <li>
-                        {% if notification.kind == 'new_task' %}
-                        <a href="{% url 'tasks:task_detail' notification.task.pk %}">
-                            {% translate "New task" %}
-                            — {{ notification.task.site.name }}
-                            <span class="muted">({{ notification.task.task_number }})</span>
-                        </a>
-                        {% elif notification.kind == 'unscheduled_overdue' %}
-                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
-                            {% translate "Not scheduled within 24 working hours" %}
-                            — {{ notification.task.site.name }}
-                            <span class="muted">({{ notification.task.task_number }})</span>
-                        </a>
-                        {% elif notification.kind == 'escalation_pending' %}
-                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
-                            {% translate "Escalated to you — decision required" %}
-                            — {{ notification.ticket.company_name }}
-                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
-                        </a>
-                        {% elif notification.kind == 'internal_ticket' %}
-                        <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
-                            {% translate "Internal ticket assigned to you" %}
-                            — {{ notification.ticket.subject }}
-                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
-                        </a>
-                        {% elif notification.kind == 'customer_locked' %}
-                        <a href="{% url 'customers:customer_accounts' %}?status=locked" class="notif-alarm">
-                            {% translate "Customer account locked" %}
-                            — {{ notification.customer.name }}
-                        </a>
-                        {% elif notification.kind == 'staff_locked' %}
-                        <a href="{% url 'tasks:staff_accounts' %}?status=locked" class="notif-alarm">
-                            {% translate "Staff login locked" %}
-                            — {{ notification.person.full_name }}
-                        </a>
-                        {% elif notification.kind == 'task_message' %}
-                        <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
-                            {% translate "New message" %}
-                            — {{ notification.task.site.name }}
-                            <span class="muted">({{ notification.task.task_number }})</span>
-                        </a>
-                        {% else %}
-                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}">
-                            {% if notification.kind == 'new_ticket' %}{% translate "New ticket" %}{% elif notification.kind == 'escalation_decided' %}{% translate "Escalation decided" %}{% else %}{% translate "New reply" %}{% endif %}
-                            — {{ notification.ticket.company_name }}
-                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
-                        </a>
-                        {% endif %}
-                        <span class="muted">{{ notification.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <p class="empty-state">{% translate "No new notifications." %}</p>
-                {% endif %}
-            </div>
-        {% endif %}
+        {% if user.technician or user.customer %}{% include "_bell.html" %}{% endif %}
         <div class="lang-switch__group lang-switch__group--header">
             <form method="post" action="{% url 'set_language' %}">
                 {% csrf_token %}
@@ -113,19 +41,40 @@
                 <button type="submit" name="language" value="ar" class="lang-switch__option {% if LANGUAGE_CODE == 'ar' %}lang-switch__option--active{% endif %}">AR</button>
             </form>
         </div>
-        {% if user.is_authenticated and not user.technician %}
-            {# Customers (and any login without a staff record) have a page or two, not a menu: their links sit in the header. #}
+        {% if user.is_authenticated and not user.technician and not user.customer %}
+            {# A login with neither a staff record nor a customer account: just who it is, and logging out. #}
             <nav class="site-header__links">
-                {% if user.customer %}
-                {% url 'customers:portal_home' as portal_url %}
-                <a href="{{ portal_url }}" class="nav-link{% if request.path == portal_url %} nav-link--active{% endif %}"{% if request.path == portal_url %} aria-current="page"{% endif %}>{% translate "My account" %}</a>
-                {% else %}
                 <span class="site-header__user">{{ user.get_username }}</span>
-                {% endif %}
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="link-button">{% translate "Log out" %}</button>
                 </form>
+            </nav>
+        {% endif %}
+        {% if user.customer %}
+            {# A customer gets the same menu as the staff: a sidebar on a computer, slide-in on a phone. #}
+            <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
+            <nav class="site-header__nav">
+                {# Whose portal this is. "New request" is on Home and Requests. #}
+                <div class="portal-account">
+                    <span class="portal-account__badge" aria-hidden="true">{{ portal_initials }}</span>
+                    <span class="portal-account__name">
+                        <strong>{{ user.customer.name }}</strong>
+                        <span>{% translate "Customer portal" %}</span>
+                    </span>
+                </div>
+                {% for item in portal_nav %}
+                <a href="{{ item.url }}" class="nav-link{% if item.active %} nav-link--active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+                    {% include "_icon.html" with name=item.icon %}
+                    <span>{{ item.label }}</span>
+                </a>
+                {% endfor %}
+                <div class="site-header__nav-footer">
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="link-button">{% translate "Log out" %}</button>
+                    </form>
+                </div>
             </nav>
         {% endif %}
         {% if user.technician %}
@@ -175,18 +124,44 @@
             </nav>
         {% endif %}
     </header>
+    {% if request.viewing_as or request.viewing_as_user %}
+    {# An admin seeing the site as this customer or staff member (view only); always a way back. #}
+    <div class="view-as-bar" role="status">
+        {% if request.viewing_as %}
+        <span>{% blocktranslate with name=request.viewing_as.name %}You're viewing the portal as <strong>{{ name }}</strong> · view only, nothing is sent to them{% endblocktranslate %}</span>
+        {% else %}
+        <span>{% blocktranslate with name=request.viewing_as_user.full_name %}You're viewing the website as <strong>{{ name }}</strong> · view only, nothing is sent to them{% endblocktranslate %}</span>
+        {% endif %}
+        <form method="post" action="{% url 'customers:view_as_stop' %}">
+            {% csrf_token %}
+            <button type="submit" class="view-as-bar__back">{% translate "Back to admin" %}</button>
+        </form>
+    </div>
+    {% endif %}
     <main class="page">
-        {% if request.path != '/' %}
+        {# Not where there's nowhere to go back to (spots.context_processors.page_back). #}
+        {% if show_page_back %}
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
         <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
         {% endif %}
+        {# An email that couldn't be sent, once, to whoever sent it (spots.email_failures). #}
+        {% for failure in failed_emails %}
+            <p class="flash flash--error">{% blocktranslate with subject=failure.subject recipients=failure.recipients %}An email could not be sent: “{{ subject }}” to {{ recipients }}.{% endblocktranslate %}
+            {% translate "The email server refused it or could not be reached. Check the email settings, then send it again." %}
+            <span class="muted" dir="ltr">({{ failure.error|truncatechars:140 }})</span></p>
+        {% endfor %}
         {% for message in messages %}
             <p class="flash flash--{{ message.tags }}">{{ message }}</p>
         {% endfor %}
         {% block content %}{% endblock %}
     </main>
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
-{% if user.technician %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>{% endif %}
+{% if user.technician or user.customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>
+<script src="{% static 'js/bell.js' %}?v={{ css_version }}" defer></script>{% endif %}
+{# Photos made smaller on the phone before they upload; too-big files refused before a long upload. #}
+<script src="{% static 'js/file-picker.js' %}?v={{ css_version }}" defer></script>
+{# "Are you sure?" before any form with a data-confirm message (a task's steps, mostly). #}
+<script src="{% static 'js/confirm-actions.js' %}?v={{ css_version }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

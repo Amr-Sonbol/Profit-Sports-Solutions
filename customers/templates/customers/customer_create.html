@@ -1,31 +1,55 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Add customer" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "New customer" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
 <div class="page__header">
     <div>
+        {% if next_page == 'ticket' %}
+        <a href="{% url 'tasks:ticket_open' %}" class="back-link">{% translate "Back to the ticket" %}</a>
+        {% else %}
         <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
-        <h1>{% translate "Add customer" %}</h1>
+        {% endif %}
+        <h1>{% translate "New customer" %}</h1>
     </div>
 </div>
 
 <div class="section">
+    {% if next_page == 'ticket' %}
+    <p class="field__help">{% blocktranslate with country=country.display_name %}A customer in {{ country }}. Saving takes you back to the ticket with this branch chosen.{% endblocktranslate %}</p>
+    {% endif %}
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}
-        {% for field in form %}
-        <div class="field {% if field.errors %}field--error{% endif %}">
-            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
-            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
-            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-        </div>
-        {% endfor %}
-        <button type="submit" class="button">{% translate "Add customer" %}</button>
+        {% if form.similar %}
+        {# "Is it one of these?" — open the existing one, or confirm it's new. #}
+        <ul class="plain-list">
+            {% for customer in form.similar %}
+            <li><a href="{% url 'customers:customer_detail' customer.pk %}">{{ customer.name }}</a></li>
+            {% endfor %}
+        </ul>
+        {% include "customers/_new_customer_field.html" with field=form.confirmed_new %}
+        {% endif %}
+
+        <h2>{% translate "Customer" %}</h2>
+        {% include "customers/_new_customer_field.html" with field=form.name %}
+        {% include "customers/_new_customer_field.html" with field=form.segment %}
+        {% if form.country %}{% include "customers/_new_customer_field.html" with field=form.country %}{% endif %}
+
+        <h2>{% translate "First branch" %}</h2>
+        {% include "customers/_new_customer_field.html" with field=form.branch_name %}
+        {% include "customers/_new_customer_field.html" with field=form.branch_address %}
+
+        <h2>{% translate "Contact" %}</h2>
+        {% include "customers/_new_customer_field.html" with field=form.contact_name %}
+        {% include "customers/_new_customer_field.html" with field=form.contact_phone %}
+        {% include "customers/_new_customer_field.html" with field=form.contact_email %}
+        {% include "customers/_new_customer_field.html" with field=form.invite %}
+
+        <button type="submit" class="button">{% translate "Create customer" %}</button>
     </form>
 </div>
 {% endblock %}

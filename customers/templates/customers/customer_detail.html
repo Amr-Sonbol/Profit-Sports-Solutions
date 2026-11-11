@@ -9,8 +9,21 @@
         <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
         <h1>{{ customer.name }}</h1>
     </div>
-    <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+    <div class="badge-row">
+        {% if is_admin and customer.user and customer.user.is_active %}
+        {# See their portal exactly as they do, to check a complaint — view only, nothing sent to them. #}
+        <form method="post" action="{% url 'customers:view_as_start' customer.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--secondary" title="{% translate 'See their portal exactly as they do: view only, their password untouched, nothing sent to them.' %}">{% translate "View as customer" %}</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+    </div>
 </div>
+
+{% if customer.is_internal %}
+<p class="flash flash--info">{% translate "This is our own account in this country: each site below is one of our warehouses, where equipment is received from the factory and loaded for installation. Add each warehouse as a site." %}</p>
+{% endif %}
 
 <div class="section">
     <dl class="detail-grid">
@@ -47,34 +60,149 @@
     {% endif %}
 </div>
 
+{# Everything about this customer: headline numbers, then one tab at a time (customers.views._customer_overview). #}
+<div class="stat-row">
+    {% url 'customers:customer_detail' customer.pk as here %}
+    {% translate "Open requests" as open_requests_label %}{% include "_stat_tile.html" with value=open_requests label=open_requests_label url=here query="tab=requests" %}
+    {% translate "Open tasks" as open_tasks_label %}{% include "_stat_tile.html" with value=open_tasks label=open_tasks_label url=here query="tab=tasks" %}
+    {% translate "Machines" as machines_label %}{% include "_stat_tile.html" with value=machine_count label=machines_label url=here query="tab=machines" %}
+    {% if rating_average is not None %}{% translate "Satisfaction (out of 5)" as rating_label %}{% include "_stat_tile.html" with value=rating_average label=rating_label url=here query="tab=reports" %}{% endif %}
+</div>
+
+<nav class="tabs customer-tabs" aria-label="{% translate 'Customer' %}">
+    <a href="?tab=sites" {% if tab == 'sites' %}class="is-active" aria-current="page"{% endif %}>{% translate "Sites" %} ({{ counts.sites }})</a>
+    <a href="?tab=requests" {% if tab == 'requests' %}class="is-active" aria-current="page"{% endif %}>{% translate "Requests" %} ({{ counts.requests }})</a>
+    <a href="?tab=tasks" {% if tab == 'tasks' %}class="is-active" aria-current="page"{% endif %}>{% translate "Tasks" %} ({{ counts.tasks }})</a>
+    <a href="?tab=machines" {% if tab == 'machines' %}class="is-active" aria-current="page"{% endif %}>{% translate "Machines" %} ({{ counts.machines }})</a>
+    <a href="?tab=reports" {% if tab == 'reports' %}class="is-active" aria-current="page"{% endif %}>{% translate "Reports & ratings" %} ({{ counts.reports }})</a>
+</nav>
+
+{% if tab == 'requests' %}
+<div class="section">
+    <div class="customer-tab__head">
+        <h2>{% translate "Requests" %}</h2>
+        {% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_list' %}?customer={{ customer.pk }}&status=all&country=all">{% translate "See all in Tickets" %}</a>{% endif %}
+    </div>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Ticket" %}</th><th>{% translate "Site" %}</th><th>{% translate "Request" %}</th><th>{% translate "Status" %}</th></tr></thead>
+        <tbody>
+            {% for ticket in rows %}
+            <tr>
+                <td>{% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_review' ticket.pk %}" dir="ltr">{{ ticket.ticket_number }}</a>{% else %}<span dir="ltr">{{ ticket.ticket_number }}</span>{% endif %}<span class="compact-table__sub">{{ ticket.submitted_at|date:"j M Y" }}</span></td>
+                <td>{{ ticket.site_description }}</td>
+                <td>{{ ticket.request_type }}{% if ticket.subject %}<span class="compact-table__sub">{{ ticket.subject }}</span>{% endif %}</td>
+                <td><span class="badge">{{ ticket.get_status_display }}</span>{% if ticket.task %}<span class="compact-table__sub"><a href="{% url 'tasks:task_detail' ticket.task.pk %}" dir="ltr">{{ ticket.task.task_number }}</a></span>{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="empty-state">{% translate "No requests yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% elif tab == 'tasks' %}
+<div class="section">
+    <div class="customer-tab__head">
+        <h2>{% translate "Tasks" %}</h2>
+        <a href="{% url 'tasks:task_list' %}?status=all&customer={{ customer.pk }}&country=all">{% translate "See all in Tasks" %}</a>
+    </div>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Task #" %}</th><th>{% translate "Site" %}</th><th>{% translate "Type" %}</th><th>{% translate "Status" %}</th><th>{% translate "Scheduled" %}</th></tr></thead>
+        <tbody>
+            {% for task in rows %}
+            <tr>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}" dir="ltr">{{ task.task_number }}</a><span class="compact-table__sub">{{ task.reported_at|date:"j M Y" }}</span></td>
+                <td>{{ task.site.name }}</td>
+                <td>{{ task.task_type.display_name|default:"—" }}</td>
+                <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+                <td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j M, P" }}{% elif task.scheduled_date %}{{ task.scheduled_date|date:"j M" }}{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="5" class="empty-state">{% translate "No tasks yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% elif tab == 'machines' %}
+<div class="section">
+    <div class="customer-tab__head">
+        <h2>{% translate "Machines" %}</h2>
+        <a href="{% url 'tasks:machine_list' %}?q={{ customer.name|urlencode }}">{% translate "See all in Machines" %}</a>
+    </div>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Machine" %}</th><th>{% translate "Site" %}</th><th>{% translate "Serial number" %}</th><th>{% translate "Status" %}</th></tr></thead>
+        <tbody>
+            {% for machine in rows %}
+            <tr>
+                <td><a href="{% url 'tasks:machine_detail' machine.pk %}">{{ machine.brand.name }} {{ machine.model_name }}</a>{% if machine.code %}<span class="compact-table__sub" dir="ltr">{{ machine.code }}</span>{% endif %}</td>
+                <td>{{ machine.site.name }}</td>
+                <td dir="ltr">{{ machine.serial_no|default:"—" }}</td>
+                <td><span class="badge">{{ machine.get_status_display }}</span></td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="empty-state">{% translate "No machines yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% elif tab == 'reports' %}
+<div class="section">
+    <h2>{% translate "Reports & ratings" %}</h2>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Task #" %}</th><th>{% translate "Site" %}</th><th>{% translate "Resolved" %}</th><th>{% translate "Rating" %}</th></tr></thead>
+        <tbody>
+            {% for report in rows %}
+            <tr>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' report.task.pk %}" dir="ltr">{{ report.task.task_number }}</a><span class="compact-table__sub">{{ report.submitted_at|date:"j M Y" }}{% if report.task.task_type %} · {{ report.task.task_type.display_name }}{% endif %}</span></td>
+                <td>{{ report.task.site.name }}</td>
+                <td>{% if report.resolved %}{% translate "Yes" %}{% else %}<span class="muted">{% translate "Follow-up needed" %}</span>{% endif %}</td>
+                <td>{% with feedback=report.task.feedback %}{% if feedback.rating %}<span class="portal-stars" title="{{ feedback.comment }}">{% for n in "12345" %}{% if forloop.counter <= feedback.rating %}★{% else %}☆{% endif %}{% endfor %}</span>{% if feedback.comment %}<span class="compact-table__sub">{{ feedback.comment|truncatechars:80 }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}{% endwith %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="empty-state">{% translate "No visit reports yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% else %}
+{% if can_see_terms %}
+{# The customer's commercial terms (managers and admins): what every branch gets unless it has its own. Under warranty, everything is free. #}
+<div class="section" id="terms">
+    <h2>{% translate "Commercial terms" %}</h2>
+    <p class="field__help">{% blocktranslate with currency=customer.country.currency_code %}The discount on quotations, and the agreed shipping cost (per shipment) and service cost (per visit), in {{ currency }}. A branch can have its own; a branch under warranty gets everything free.{% endblocktranslate %}{% if customer.terms_valid_until and customer.terms_valid_until < today %} <span class="badge badge--bad">{% blocktranslate with date=customer.terms_valid_until|date:"j M Y" %}Terms expired {{ date }}{% endblocktranslate %}</span>{% endif %}</p>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="terms">
+        {% for field in terms_form %}
+        <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'terms_note' %} field--wide{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="form-actions field--wide">
+            <button type="submit" class="button">{% translate "Save terms" %}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
 <div class="section">
     <h2>{% translate "Sites" %}</h2>
     {% if sites %}
     <div class="table-wrap">
-        <table>
+        <table class="compact-table">
             <thead>
                 <tr>
-                    <th>{% translate "Name" %}</th>
-                    <th>{% translate "Address" %}</th>
-                    <th>{% translate "Contact name" %}</th>
-                    <th>{% translate "Phone" %}</th>
-                    <th>{% translate "Email" %}</th>
+                    <th>{% translate "Branch" %}</th>
+                    <th>{% translate "Contact" %}</th>
+                    <th>{% translate "Warranty" %}</th>
+                    {% if can_see_terms %}<th>{% translate "Terms" %}</th>{% endif %}
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for site in sites %}
                 <tr>
-                    <td>{{ site.name }}</td>
-                    <td>{{ site.address }}</td>
+                    <td><strong>{{ site.name }}</strong><span class="compact-table__sub">{{ site.address }}</span></td>
                     <td>
-                        {{ site.effective_contact_name|default:"—" }}
-                        {% if not site.has_own_contact and site.effective_contact_name %}
-                        <span class="badge badge--muted">{% translate "From customer" %}</span>
-                        {% endif %}
+                        {{ site.effective_contact_name|default:"—" }}{% if not site.has_own_contact and site.effective_contact_name %} <span class="badge badge--muted">{% translate "From customer" %}</span>{% endif %}
+                        <span class="compact-table__sub" dir="ltr">{{ site.effective_contact_phone|default:"" }}{% if site.effective_contact_phone and site.effective_contact_email %} · {% endif %}{{ site.effective_contact_email|default:"" }}</span>
                     </td>
-                    <td>{{ site.effective_contact_phone|default:"—" }}</td>
-                    <td>{{ site.effective_contact_email|default:"—" }}</td>
+                    <td>{% include "_warranty_label.html" %}{% if not site.warranty_until %}<span class="muted">—</span>{% endif %}</td>
+                    {% if can_see_terms %}<td>{% include "_terms_labels.html" %}</td>{% endif %}
                     <td><a href="{% url 'customers:site_edit' site.pk %}">{% translate "Edit" %}</a></td>
                 </tr>
                 {% endfor %}
@@ -86,13 +214,69 @@
     {% endif %}
 </div>
 
-{% if is_admin %}
-<div class="section">
+{% if portal_status %}
+{# Their portal login and everything done to it (customers.views.portal_login_action); each action is in the Audit log. #}
+{% with account=customer.user status=portal_status %}
+<div class="section" id="portal">
+    <h2>{% translate "Portal login" %}</h2>
+    <dl class="detail-grid">
+        <div><dt>{% translate "Status" %}</dt><dd>{% include "customers/_account_status.html" %}</dd></div>
+        <div><dt>{% translate "Login email" %}</dt><dd>{{ account.email|default:customer.contact_email|default:"—" }}</dd></div>
+        <div><dt>{% translate "Invited" %}</dt><dd>{{ customer.invited_at|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd></div>
+        <div><dt>{% translate "Last sign-in" %}</dt><dd>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd></div>
+    </dl>
+    <div class="account-panel__actions">
+        {% if status in inviteable %}
+        {% include "customers/_account_action.html" with action="invite" label=_("Send welcome email") %}
+        {# When the email doesn't arrive: the same link, to send by WhatsApp or text. #}
+        {% include "customers/_account_action.html" with action="copy_welcome_link" label=_("Copy welcome link") %}
+        {% endif %}
+        {% if not account and status in inviteable %}
+        {# No login yet (and an email to make it with): one click creates it with a password to read out over the phone. #}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% endif %}
+        {% if status == 'active' or status == 'locked' %}
+        {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
+        {% endif %}
+        {% if status == 'locked' %}
+        {% include "customers/_account_action.html" with action="unlock" label=_("Unlock now") %}
+        {% endif %}
+        {% if account %}
+        {% if account.is_active %}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% include "customers/_account_action.html" with action="disable" label=_("Disable portal access") %}
+        {% else %}
+        {% include "customers/_account_action.html" with action="enable" label=_("Enable portal access") %}
+        {% endif %}
+        <form method="post" action="{% url 'customers:portal_login_action' %}" class="row-actions__inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_email">
+            <input type="hidden" name="customer" value="{{ customer.pk }}">
+            <input type="email" name="email" required placeholder="{% translate 'New login email' %}" aria-label="{% translate 'New login email' %}">
+            <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+        </form>
+        {% endif %}
+        {% if status == 'no_email' %}
+        <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Add a contact email" %}</a>
+        {% endif %}
+    </div>
+    {% if status in inviteable %}
+    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %}</p>
+    {% endif %}
+</div>
+{% endwith %}
+{% endif %}
+
+{% if can_add_site %}
+<div class="section" id="add-site">
     <h2>{% translate "Add a site" %}</h2>
     <form method="post" novalidate>
         {% csrf_token %}
+        {# Added from a customer's new-branch request: saving links the branch to it (customers.views.customer_detail). #}
+        {% if from_request %}<input type="hidden" name="from_request" value="{{ from_request.pk }}">
+        <p class="field__help">{% blocktranslate with number=from_request.ticket_number %}From request {{ number }}: saving links the new branch to it.{% endblocktranslate %}</p>{% endif %}
         {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}
         {% for field in form %}
         <div class="field {% if field.errors %}field--error{% endif %}">
@@ -106,4 +290,5 @@
     </form>
 </div>
 {% endif %}
+{% endif %}{# end of the sites tab #}
 {% endblock %}

@@ -1,0 +1,8 @@
+{% comment %}A request's way to its visit: Received → Being arranged → Visit booked → Done (customers.progress.progress_steps).{% endcomment %}
+{% if steps %}
+<ol class="progress-steps" aria-label="{{ label }}">
+    {% for step, state in steps %}
+    <li class="progress-steps__step progress-steps__step--{{ state }}"{% if state == 'current' %} aria-current="step"{% endif %}>{{ step }}</li>
+    {% endfor %}
+</ol>
+{% endif %}

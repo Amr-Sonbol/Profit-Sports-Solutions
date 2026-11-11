@@ -1,0 +1,15 @@
+{% comment %}One field of the New customer form: a tick box with its label beside it, anything else with its label above.{% endcomment %}
+{% if field.field.widget.input_type == 'checkbox' %}
+<div class="field field--checkbox {% if field.errors %}field--error{% endif %}">
+    <label>{{ field }} {{ field.label }}</label>
+    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+</div>
+{% else %}
+<div class="field {% if field.errors %}field--error{% endif %}">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+</div>
+{% endif %}

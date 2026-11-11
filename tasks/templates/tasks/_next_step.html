@@ -1,0 +1,138 @@
+{% load i18n %}{% comment %}A new request's "What happens next?" (tasks.views.ticket_review, action "next"): its machines, pre-ticked, then one of three — send a technician (a task made in one step, everything the request already says filled in: tasks.views.task_from_request), ship a part, or answer without a visit. The full New task form is "More options".{% endcomment %}
+{% with machines=ticket.machines.all %}
+<section class="section review-card review-card--decision">
+    <h2>{% translate "What happens next?" %}</h2>
+    {% if ticket.about == 'new_branch' and not ticket.site %}
+    {# A branch that doesn't exist yet: nowhere to send a task until it's added (and linked) above. #}
+    <p class="field__help">{% translate "Add the branch first (button above); then you can create its task here." %}</p>
+    {% else %}
+    <form method="post" id="next-step" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="next">
+
+        {% if machines %}
+        <div class="table-wrap">
+            <table class="compact-table">
+                <thead><tr><th></th><th>{% translate "Machine" %}</th><th>{% translate "Problem" %}</th><th>{% translate "Decision" %}</th></tr></thead>
+                <tbody>
+                    {% for machine in machines %}
+                    <tr>
+                        <td>{% if not machine.decision %}<input type="checkbox" name="machines" value="{{ machine.pk }}" checked aria-label="{{ machine.machine_name }}">{% endif %}</td>
+                        <td>{{ machine.machine_name }}<span class="compact-table__sub" dir="ltr">{{ machine.serial|default:"—" }}</span></td>
+                        <td>{{ machine.get_problem_display }}</td>
+                        <td>
+                            {% if machine.decision %}
+                            {{ machine.get_decision_display }}{% if machine.task %} · <a class="task-number" href="{% url 'tasks:task_detail' machine.task.pk %}">{{ machine.task.task_number }}</a>{% endif %}
+                            {% if machine.decision_reason %}<span class="compact-table__sub">{{ machine.get_decision_reason_display }}</span>{% endif %}
+                            {% if machine.decision_note %}<span class="compact-table__sub">{{ machine.decision_note }}</span>{% endif %}
+                            {% else %}<span class="muted">{% translate "Waiting" %}</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="field__help">{% translate "All waiting machines are ticked: they go together. Untick any to handle them separately afterwards." %}</p>
+        {% endif %}
+
+        {# Choose one of three; only its form shows, full width (CSS: .next-choices:has(...)). #}
+        <div class="next-choices">
+            <fieldset class="next-tabs">
+                <legend class="visually-hidden">{% translate "What happens next?" %}</legend>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="visit" checked>
+                    <span class="next-tab__title">{% translate "Send a technician" %}</span>
+                    <span class="next-tab__hint">{% translate "A visit, created in one step" %}</span>
+                </label>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="ship">
+                    <span class="next-tab__title">{% translate "Ship a part" %}</span>
+                    <span class="next-tab__hint">{% translate "Sent by courier, no visit" %}</span>
+                </label>
+                <label class="next-tab">
+                    <input type="radio" name="next_choice" value="answer">
+                    <span class="next-tab__title">{% translate "Answer without a visit" %}</span>
+                    <span class="next-tab__hint">{% translate "Our answer closes it" %}</span>
+                </label>
+            </fieldset>
+
+            {# 1. A technician: who and when; everything else from the request. #}
+            <div class="next-choice next-choice--visit">
+                <p class="field__help">{% if next_plan.task_type %}{{ next_plan.task_type.display_name|default:next_plan.task_type.name }}{% endif %}{% if next_plan.priority == 'high' %} · {% translate "High priority (a machine isn't working)" %}{% endif %}{% if next_warranty %} · {% translate "Under warranty: free" %}{% endif %}</p>
+                {% if ticket.site %}
+                <div class="next-choice__fields">
+                    {% if next_supervisors is not None %}
+                    <div class="field">
+                        <label for="next-supervisor">{% translate "Supervisor" %}</label>
+                        <select id="next-supervisor" name="supervisor">
+                            <option value="">{% translate "None" %}</option>
+                            {% for person in next_supervisors %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
+                        </select>
+                        <p class="field__help">{% translate "Receives it to plan: the day and the technician." %}</p>
+                    </div>
+                    {% endif %}
+                    {% if next_technicians is not None %}
+                    <div class="field">
+                        <label for="next-technician">{% translate "Technician" %}</label>
+                        <select id="next-technician" name="technician">
+                            <option value="">{% translate "The supervisor decides" %}</option>
+                            {% for person in next_technicians %}<option value="{{ person.pk }}">{{ person.full_name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="field">
+                        <label for="next-when">{% translate "Day and time" %}</label>
+                        <input type="datetime-local" id="next-when" name="scheduled_for">
+                        <p class="field__help">{% translate "Optional: the customer is told once it's set." %}</p>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" name="choice" value="visit" class="button">{% translate "Create the visit" %}</button>
+                </div>
+                {% else %}
+                <p class="muted">{% translate "This request has no branch yet: use More options to choose one." %}</p>
+                {% endif %}
+            </div>
+
+            {# 2. A part: to the warehouse manager to prepare (tasks.shipments). #}
+            <div class="next-choice next-choice--ship">
+                <p class="field__help">{% translate "Goes to the warehouse manager to prepare, then a technician hands it to the courier. No visit." %}</p>
+                {% if ticket.site %}
+                <div class="form-actions">
+                    <button type="submit" name="choice" value="ship" class="button">{% translate "Ship a part" %}</button>
+                </div>
+                {% else %}
+                <p class="muted">{% translate "This request has no branch yet: use More options to choose one." %}</p>
+                {% endif %}
+            </div>
+
+            {# 3. No visit: the reason (recorded on each machine) and our answer, which closes it. #}
+            <div class="next-choice next-choice--answer">
+                <div class="next-choice__fields">
+                    <div class="field">
+                        <label for="next-reason">{% translate "Reason" %}</label>
+                        <select id="next-reason" name="reason" data-answer-reason>
+                            <option value="">{% translate "Choose a reason" %}</option>
+                            {% for group, reasons in next_reasons %}
+                            <optgroup label="{{ group }}">
+                                {% for value, label, suggestion in reasons %}<option value="{{ value }}" data-suggestion="{{ suggestion }}">{{ label }}</option>{% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                        <p class="field__help">{% translate "Choosing one fills in a suggested answer: edit it as needed." %}</p>
+                    </div>
+                    <div class="field">
+                        <label for="next-answer">{% translate "Your answer to the customer" %}</label>
+                        <textarea id="next-answer" name="answer" rows="4" data-answer-text></textarea>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" name="choice" value="answer" class="button">{% translate "Send the answer and close" %}</button>
+                </div>
+            </div>
+        </div>
+    </form>
+    <p class="review-next__more"><a href="{% url 'tasks:task_create' %}?ticket={{ ticket.pk }}{% if machines %}&amp;machines={% for machine in machines %}{% if not machine.decision %}{{ machine.pk }},{% endif %}{% endfor %}&amp;decision=visit{% endif %}">{% translate "More options: the full task form" %}</a></p>
+    {% endif %}
+</section>
+{% endwith %}

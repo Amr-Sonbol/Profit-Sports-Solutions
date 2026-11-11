@@ -1,3 +1,9 @@
+/* Anything marked hidden stays hidden, whatever display a component sets
+   (a heading styled as flex, say) — scripts show and hide with it. */
+[hidden] {
+    display: none !important;
+}
+
 :root {
     color-scheme: light;
     /* Black and white, straight from the logo — the accent is black too.
@@ -509,6 +515,11 @@ html[dir="rtl"] .notif-dropdown > * {
     color: var(--color-accent);
 }
 
+.flash--warning {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
 .filters {
     display: flex;
     flex-direction: row;
@@ -749,6 +760,11 @@ tbody tr:hover {
     font-size: 0.85rem;
 }
 
+/* The bubble keeps a message's line breaks (pre-wrap); the links' own markup shouldn't. */
+.chat-bubble .chat-attachment {
+    white-space: normal;
+}
+
 .muted {
     color: var(--color-muted);
 }
@@ -813,6 +829,13 @@ tbody tr:hover {
 
 [dir="rtl"] .forward-link::after {
     content: "←";
+}
+
+/* A month/week button that can't be used right now (e.g. "Next month"
+   on the current month): kept in place so the others don't move. */
+.week-nav [aria-disabled="true"] {
+    opacity: 0.45;
+    pointer-events: none;
 }
 
 .button-row {
@@ -1005,34 +1028,247 @@ tbody tr:hover {
     flex: 1 1 18rem;
 }
 
-.contact-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+/* A week board's missed jobs, above the days. */
+.week-overdue {
+    border-inline-start: 4px solid var(--color-danger);
 }
 
-.contact-row {
+/* My week, Today: the next job as a large card, what's done greyed out. */
+.today-summary {
+    margin-block: 0.75rem;
+}
+
+.next-job {
+    border-inline-start: 4px solid var(--color-accent);
+}
+
+.next-job__label {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-muted);
+}
+
+.next-job__time {
+    margin-block: 0.25rem 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.next-job__where {
+    margin-block: 0.25rem;
+}
+
+.next-job .badge-row {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.next-job__actions {
+    flex-wrap: wrap;
+    margin-block-start: 0.75rem;
+}
+
+.today-done {
+    opacity: 0.6;
+}
+
+/* An installation's on-site checklist: one card per machine. */
+.checklist {
+    display: grid;
+    gap: 0.75rem;
+    margin-block-end: 1rem;
+}
+
+.checklist-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+}
+
+.checklist-card--error {
+    border-color: var(--color-danger, #c0392b);
+}
+
+.checklist-card legend {
+    font-weight: 600;
+    padding-inline: 0.35rem;
+}
+
+/* The report form's numbered steps, like the app's. */
+.report-step {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-block: 1.25rem 0.5rem;
+}
+
+.report-step__number {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.9rem;
+    block-size: 1.9rem;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 700;
+}
+
+.report-step__title {
+    margin: 0;
+}
+
+.report-step .field__help {
+    margin: 0.15rem 0 0;
+}
+
+/* A machine's finding / action: the list, with the "other" box under it. */
+.report-pick select,
+.report-pick input {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 12rem;
+}
+
+.report-pick input {
+    margin-block-start: 0.35rem;
+}
+
+/* Notifications page: the same column widths in all three tables. */
+.notification-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.notification-table__message {
+    inline-size: 50%;
+}
+
+.notification-table__channel {
+    inline-size: 18%;
+}
+
+.role-choices {
+    margin-block: 0.5rem 0;
+    padding: 0;
+    border: none;
+}
+
+.role-choices legend {
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+/* Inputs in a table are stretched to the full width (.table-wrap input);
+   here a tick box sits right next to its words. */
+.notification-table input[type="checkbox"] {
+    inline-size: 1.15rem;
+    min-inline-size: 0;
+    block-size: 1.15rem;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.notification-table .checkbox-label {
+    display: inline-flex;
+    padding-block: 0;
+}
+
+.role-choices > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.15rem 0.75rem;
+}
+
+.role-choices label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+}
+
+/* My skills: the four level sentences, and the "Rate" button that opens
+   one row's form at a time (a <details>, so no JavaScript). */
+.level-rubric {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.level-rubric dt {
+    font-weight: 600;
+}
+
+.level-rubric dd {
+    margin: 0;
+}
+
+/* The three skill tables share column widths, so their columns line up. */
+.skills-table {
+    table-layout: fixed;
+    inline-size: 100%;
+    min-inline-size: 36rem;
+}
+
+.skills-table__name {
+    inline-size: 42%;
+}
+
+.skills-table__level {
+    inline-size: 20%;
+}
+
+/* Status at the start, the Rate button at the row's end; an open form
+   drops below both, across the whole cell. */
+.skill-status {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
-    padding-block: 0.6rem;
-    border-block-end: 1px solid var(--color-border);
-}
-
-.contact-row:last-child {
-    border-block-end: none;
-}
-
-.contact-row__name {
-    flex: 1 1 10rem;
-}
-
-.contact-row__actions {
-    display: flex;
-    flex-direction: row;
+    justify-content: space-between;
     gap: 0.5rem;
+}
+
+.skill-status .rate-form {
+    margin-block-start: 0;
+}
+
+.skill-status .rate-form[open] {
+    flex-basis: 100%;
+}
+
+.skill-status .rate-form[open] summary {
+    margin-inline-start: auto;
+    inline-size: fit-content;
+    display: block;
+}
+
+.rate-form {
+    margin-block-start: 0.4rem;
+}
+
+.rate-form summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.rate-form summary::-webkit-details-marker {
+    display: none;
+}
+
+.rate-form[open] summary {
+    margin-block-end: 0.5rem;
 }
 
 /* Dashboard chart: tasks opened vs completed per week (dashboard.html).
@@ -1173,6 +1409,117 @@ tbody tr:hover {
 
 .chart-key--opened { background: var(--chart-opened, #2a78d6); }
 .chart-key--completed { background: var(--chart-completed, #eb6834); }
+
+/* My progress: one series as a line over the year. The line is an SVG
+   stretched over the plot (its stroke kept at 2px); each month's point
+   is an HTML dot so it gets the same hover/focus value as the bars. The
+   months run right to left in Arabic, so the line is mirrored there. */
+.trend-chart__line {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: calc(100% - var(--chart-label-height));
+    overflow: visible;
+    pointer-events: none;
+}
+
+[dir="rtl"] .trend-chart__line {
+    transform: scaleX(-1);
+}
+
+.trend-chart__line polyline {
+    fill: none;
+    stroke: var(--chart-completed);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.trend-chart__column {
+    position: relative;
+    flex: 1 1 auto;
+}
+
+.trend-chart__point {
+    position: absolute;
+    inset-inline-start: 50%;
+    inline-size: 10px;
+    block-size: 10px;
+    margin-inline-start: -5px;
+    margin-block-end: -5px;
+    border-radius: 50%;
+    background: var(--chart-completed);
+    box-shadow: 0 0 0 2px var(--color-surface);
+    cursor: default;
+}
+
+.trend-chart__point:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.trend-chart__point:hover::after,
+.trend-chart__point:focus-visible::after {
+    content: attr(data-tip);
+    position: absolute;
+    inset-block-end: calc(100% + 6px);
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    padding-block: 0.15rem;
+    padding-inline: 0.4rem;
+    border-radius: 4px;
+    background: var(--color-text);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 5;
+}
+
+[dir="rtl"] .trend-chart__point:hover::after,
+[dir="rtl"] .trend-chart__point:focus-visible::after {
+    transform: translateX(50%);
+}
+
+/* Team progress: each technician's year as a small line, months
+   running right to left in Arabic like the big chart. */
+.sparkline {
+    display: block;
+    inline-size: 7rem;
+    block-size: 1.75rem;
+    overflow: visible;
+}
+
+[dir="rtl"] .sparkline {
+    transform: scaleX(-1);
+}
+
+.sparkline polyline {
+    fill: none;
+    stroke: var(--chart-completed, #eb6834);
+    stroke-width: 2px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.trend-summary {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.trend-summary__value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.trend-summary__change {
+    display: block;
+    color: var(--color-text);
+    font-weight: 600;
+}
 
 .chart-table summary {
     cursor: pointer;
@@ -1380,7 +1727,7 @@ tbody tr:hover {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
-    min-block-size: 6.5rem;
+    min-block-size: 4.75rem;  /* six weeks fit one screen */
     min-inline-size: 0;
     padding: 0.3rem 0.4rem;
     border-block-end: 1px solid var(--color-border);
@@ -1397,6 +1744,101 @@ tbody tr:hover {
 
 .cal-cell--other-month .cal-cell__date {
     color: var(--color-muted);
+}
+
+/* A country's days off, shaded on the week and the month. */
+.cal-day--weekend,
+.cal-cell--weekend {
+    background: var(--color-neutral-bg);
+}
+
+/* The year: twelve small months on one screen, a day with visits filled
+   in (and its count when more than one). */
+.cal-year {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-block-end: 0.75rem;
+}
+
+@media (min-width: 700px) {
+    .cal-year {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* The whole year on one screen. */
+@media (min-width: 1100px) {
+    .cal-year {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+.cal-mini {
+    padding: 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.cal-mini__head {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-block: 0 0.35rem;
+    font-size: 0.85rem;
+}
+
+.cal-mini__head a {
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__head .muted {
+    font-size: 0.72rem;
+    font-weight: 400;
+}
+
+.cal-mini__grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.cal-mini__weekday {
+    color: var(--color-muted);
+}
+
+.cal-mini__day {
+    position: relative;
+    display: block;
+    padding-block: 0.15rem;
+    border-radius: 4px;
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.cal-mini__day--weekend {
+    color: var(--color-muted);
+    background: var(--color-neutral-bg);
+}
+
+.cal-mini__day--busy {
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.cal-mini__day--busy sup {
+    font-size: 0.6rem;
+    margin-inline-start: 1px;
+}
+
+.cal-mini__day--today {
+    box-shadow: inset 0 0 0 2px var(--color-danger);
 }
 
 .cal-cell__date {
@@ -1700,6 +2142,17 @@ tbody tr:hover {
     opacity: 0;
 }
 
+/* Square numbers, like the portal; the chosen one gets the customer's color
+   underneath (signed in), as the active tab does. Also on the emailed
+   rating page, which has no sign-in. */
+.rating-choice label {
+    border-radius: 2px;
+}
+
+.rating-choice label:has(input:checked) {
+    box-shadow: inset 0 -3px 0 var(--brand, var(--color-accent));
+}
+
 .rating-choice label:hover {
     border-color: var(--color-accent);
 }
@@ -1806,6 +2259,28 @@ tbody tr:hover {
 }
 
 .checkbox-label input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+}
+
+/* Django's tick lists (CheckboxSelectMultiple), rendered as <div>s:
+   the box beside its text, like .field ul above. */
+.field div > label:has(> input[type="checkbox"]),
+.field div > label:has(> input[type="radio"]) {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.3rem;
+    color: var(--color-text);
+    font-size: 0.95rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.field label > input[type="checkbox"],
+.field label > input[type="radio"] {
     width: 1.15rem;
     height: 1.15rem;
     flex-shrink: 0;
@@ -1936,15 +2411,367 @@ tbody tr:hover {
 
 /* Portal ticket form: one card per machine (static/js/ticket-machines.js). */
 .machine-card {
+    position: relative;
     margin: 0 0 0.75rem;
     padding: 0.75rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
 }
 
+/* The card's X: top corner at the end of the line (flips with dir). */
+.machine-card__remove {
+    position: absolute;
+    inset-block-start: 0.4rem;
+    inset-inline-end: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    cursor: pointer;
+}
+
+.machine-card__remove[hidden] {
+    display: none;
+}
+
+.machine-card__remove .icon {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+.machine-card__remove:hover,
+.machine-card__remove:focus-visible {
+    background: var(--color-danger);
+    color: #fff;
+}
+
 .machine-card legend {
     padding-inline: 0.35rem;
     font-weight: 600;
+}
+
+/* Portal ticket form, "Check and send": what they filled in (report-steps.js). */
+/* The customer's sidebar: whose portal it is (initials in their color,
+   the gym's name, "Customer portal"). */
+.portal-account {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.65rem;
+    padding-block: 0.4rem 0.9rem;
+    margin-block-end: 0.75rem;
+    border-block-end: 1px solid var(--color-border);
+}
+
+.portal-account__badge {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    border-radius: 2px;
+    background: var(--brand, var(--color-text));
+    color: var(--brand-text, #fff);
+    font-weight: 800;
+    letter-spacing: 0.03em;
+}
+
+.portal-account__name {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.portal-account__name strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.portal-account__name span {
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
+/* A request's status, first on its page: large status words, what it means,
+   and the visit's progress; the edge says open (their color), resolved
+   (green) or closed without action (grey). */
+.status-card {
+    padding-block: 1.1rem;
+    padding-inline: 1.25rem;
+    border-inline-start: 6px solid var(--brand, var(--color-text));
+}
+
+.status-card--closed {
+    border-inline-start-color: var(--color-success);
+}
+
+.status-card--dismissed {
+    border-inline-start-color: var(--color-border);
+}
+
+.status-card__label {
+    margin-block: 0 0.4rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.status-card--closed .status-card__label {
+    color: var(--color-success);
+}
+
+.status-card p {
+    margin-block: 0 0.5rem;
+}
+
+/* Our answer when we resolved it: set apart like a quoted reply. */
+.status-card__answer {
+    padding-block: 0.6rem;
+    padding-inline: 0.85rem;
+    border-radius: 4px;
+    background: var(--color-bg);
+}
+
+.status-card .progress-steps {
+    margin-block: 0.85rem 0;
+}
+
+/* Portal Settings: roomy sections, each with a short intro, its fields in
+   titled groups, and its button in a footer at the row's end. */
+.settings .section {
+    padding-block: 1.25rem;
+    padding-inline: 1.25rem;
+    margin-block-end: 1rem;
+}
+
+.settings .section h2 {
+    margin-block-end: 0.25rem;
+    font-size: 1.15rem;
+}
+
+.settings__intro {
+    margin-block: 0 1.25rem;
+    color: var(--color-muted);
+}
+
+.settings__group {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.settings__group + .settings__group {
+    margin-block-start: 1.25rem;
+    padding-block-start: 1.25rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.settings__group legend {
+    margin-block-end: 0.75rem;
+    padding: 0;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.settings .form-grid {
+    margin-block-end: 0;
+}
+
+/* Fields one under the other, at a comfortable width (the password). */
+.settings__stack {
+    display: grid;
+    gap: 1rem;
+    max-inline-size: 26rem;
+}
+
+/* A form's buttons: under a thin line, at the end of the row. */
+.form-actions {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-block-start: 1.5rem;
+    padding-block-start: 1rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+/* Portal Settings: choosing the portal color (brand-color.js). */
+.color-choice {
+    margin: 0;
+}
+
+
+
+
+
+
+.color-choice__own label {
+    display: block;
+    margin-block-end: 0.3rem;
+    font-weight: 600;
+}
+
+
+.color-choice__own input[data-color-code] {
+    max-inline-size: 9rem;
+    font-family: ui-monospace, Consolas, monospace;
+    text-transform: uppercase;
+}
+
+/* The bar and its Save button, side by side (stacked on a narrow phone). */
+.color-choice__bar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-block: 0.6rem 1rem;
+}
+
+/* The main way to choose: a wide bar of their color that opens the full
+   picker, with its words beside it. Any color, no fixed list. */
+.color-choice__pick {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    flex: 1 1 16rem;
+    max-inline-size: 26rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.color-choice__pick:hover,
+.color-choice__pick:focus-within {
+    border-color: var(--color-text);
+}
+
+.color-choice__native {
+    flex: 0 0 9rem;
+    block-size: 3rem;
+    padding: 0;
+    border: 1px solid rgb(0 0 0 / 0.15);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.color-choice__native::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-choice__native::-webkit-color-swatch {
+    border: 0;
+    border-radius: 3px;
+}
+
+.color-choice__native::-moz-color-swatch {
+    border: 0;
+    border-radius: 3px;
+}
+
+
+
+.color-choice__save {
+    flex: none;
+    align-self: stretch;
+}
+
+.request-summary {
+    margin-block-end: 1.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg);
+}
+
+.request-summary h3 {
+    margin-block: 0 0.5rem;
+}
+
+.request-summary__list {
+    margin: 0;
+}
+
+.request-summary__row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.request-summary__row:first-child {
+    border-block-start: 0;
+}
+
+.request-summary__row dt {
+    flex: 0 0 9rem;
+    font-weight: 600;
+}
+
+.request-summary__row dd {
+    flex: 1;
+    margin: 0;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.request-summary__edit {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.request-summary__edit .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+}
+
+.request-summary__edit:hover,
+.request-summary__edit:focus-visible {
+    background: var(--color-hover);
+}
+
+@media (max-width: 600px) {
+    .request-summary__row {
+        flex-wrap: wrap;
+    }
+
+    .request-summary__row dt {
+        flex-basis: calc(100% - 2.75rem);
+    }
+
+    .request-summary__row dd {
+        flex-basis: 100%;
+        order: 3;
+    }
 }
 
 .machine-card .form-grid {
@@ -2141,4 +2968,2436 @@ tbody tr:hover {
     font-family: ui-monospace, Consolas, monospace;
     font-size: 1.5rem;
     letter-spacing: 0.1em;
+}
+
+/* Parts screen: each part's photo, and its description, colour and photo edited in one row. */
+.part-photo {
+    inline-size: 56px;
+    block-size: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--color-border);
+}
+
+.part-edit {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.part-edit input[type="text"] {
+    flex: 1 1 12rem;
+    min-inline-size: 0;
+}
+
+.part-edit__photo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.85rem;
+}
+
+/* Customer portal (customers/templates/customers/portal_*.html): the same
+   rows and tiles as the staff home page, laid out for a customer — the
+   next visit up front, then requests, visits to come and the history. */
+.badge--booked {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--color-text);
+}
+
+.portal .page__header p {
+    margin-block: 0.2rem 0;
+    margin-inline: 0;
+}
+
+.portal-next__body {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.portal-next__day {
+    display: flex;
+    flex-direction: column;
+    padding-inline-end: 1rem;
+    border-inline-end: 1px solid var(--color-border);
+}
+
+.portal-next__weekday {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.portal-next__date {
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.portal-next__what {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+/* A request or a visit: wraps onto a second line on a phone instead of squeezing. */
+.portal-row {
+    flex-wrap: wrap;
+}
+
+.portal-row__day {
+    flex: 0 0 6.5rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A list row with icon buttons beside it (a report's download): the row
+   stays one link, the icons sit outside it at the end. */
+.row-with-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.row-with-actions > .action-row {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A small square icon button; its words are in the hover title. */
+.icon-button {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+.icon-button .icon {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+    background: var(--color-text);
+    color: var(--color-surface);
+}
+
+.portal-row__main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.portal-row__links {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.empty-state .button {
+    margin-block-start: 0.5rem;
+}
+
+.portal-row__meta {
+    font-size: 0.85rem;
+}
+
+.badge--warning { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.portal-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block-start: 0.75rem;
+}
+
+.portal-text {
+    white-space: pre-line;
+}
+
+.portal-list {
+    margin-block: 0.25rem 0.75rem;
+    padding-inline-start: 1.25rem;
+}
+
+.portal-stars {
+    font-size: 1.2rem;
+    letter-spacing: 0.1em;
+    color: var(--color-warning);
+}
+
+/* The next visit is one link to its page. */
+.portal-next__link {
+    color: var(--color-text);
+    text-decoration: none;
+    border-radius: 6px;
+}
+
+.portal-next__link:hover {
+    background: var(--color-hover);
+}
+
+/* The customer menu's main action, above its links. */
+.nav-cta {
+    display: block;
+    margin-block: 0.25rem 0.75rem;
+    text-align: center;
+}
+
+/* A request's way to its visit (templates/_progress_steps.html): one
+   segment per step, filled up to where it has got. */
+.progress-steps {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+}
+
+.progress-steps__step {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-block-start: 0.35rem;
+    border-block-start: 4px solid var(--color-border);
+    color: var(--color-muted);
+}
+
+.progress-steps__step--done {
+    border-block-start-color: var(--color-success);
+}
+
+.progress-steps__step--current {
+    border-block-start-color: var(--color-text);
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.portal .tabs {
+    margin-block-end: 0.75rem;
+}
+
+.portal-row__main .progress-steps {
+    margin-block-start: 0.4rem;
+}
+
+/* "New request" in steps (static/js/report-steps.js). */
+.report-steps__bar {
+    margin-block-end: 0.75rem;
+}
+
+.report-steps__nav {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-block-start: 1rem;
+}
+
+/* "What do you need?": the request types as cards to pick from. */
+.topic-choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 0.5rem;
+}
+
+.topic-choice {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    padding-block: 0.85rem;
+    padding-inline: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.topic-choice:has(input:checked) {
+    border-color: var(--color-accent);
+    outline: 1px solid var(--color-accent);
+}
+
+.topic-choice input {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+}
+
+/* Every choice dot and tick box in the portal's ink, not the browser's blue. */
+.theme-portal input[type="radio"],
+.theme-portal input[type="checkbox"] {
+    accent-color: var(--color-text);
+}
+
+.theme-portal .topic-choice {
+    border-radius: 2px;
+}
+
+/* Other's "what is it about?" box, right under the choices. */
+.topic-other {
+    max-inline-size: 30rem;
+    margin-block-start: 1rem;
+}
+
+.section > .progress-steps {
+    margin-block-end: 1rem;
+}
+
+/* An attached file (templates/_attachment.html): paperclip, its name, download. */
+.attachment {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding-block: 0.2rem;
+    padding-inline: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    font-size: 0.85rem;
+}
+
+.attachment .icon {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+}
+
+.attachment__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attachment__download {
+    display: inline-flex;
+    color: var(--color-muted);
+}
+
+.attachment__download:hover {
+    color: var(--color-text);
+}
+
+/* Several files on one message: side by side, onto more lines as needed. */
+.attachment-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+/* A message box (templates/_composer.html): the text, the chosen files,
+   and the paperclip and send button on its bottom edge — all one box. */
+.composer__box {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.composer__box:focus-within {
+    border-color: var(--color-text);
+}
+
+.composer__box--error {
+    border-color: var(--color-danger);
+}
+
+.composer__box textarea {
+    display: block;
+    inline-size: 100%;
+    border: 0;
+    background: transparent;
+    resize: vertical;
+    padding-block: 0.6rem;
+    padding-inline: 0.75rem;
+}
+
+.composer__box textarea:focus {
+    outline: none;
+}
+
+.composer__files {
+    margin: 0;
+    padding-block: 0 0.4rem;
+    padding-inline: 0.75rem;
+    list-style: none;
+}
+
+.composer__bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-block: 0.4rem;
+    padding-inline: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.composer__attach {
+    position: relative;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    padding-block: 0.3rem;
+    padding-inline: 0.5rem;
+    border-radius: 6px;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.composer__attach:hover,
+.composer__attach:focus-within {
+    color: var(--color-text);
+    background: var(--color-hover);
+}
+
+.composer__attach .icon {
+    inline-size: 18px;
+    block-size: 18px;
+}
+
+/* The file input stays in the label (a click on the paperclip opens it) but out of sight. */
+.composer__attach input[type="file"] {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    opacity: 0;
+    overflow: hidden;
+}
+
+/* The files chosen in a box that takes several (static/js/file-picker.js):
+   each a thumbnail (a photo) or its name, with a red X in a box to take just
+   that one back, then "3 of 10". */
+.file-picks {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block: 0.5rem 0;
+    margin-inline: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.file-picks[hidden] {
+    display: none;
+}
+
+.file-picks__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    inline-size: 6.5rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.file-picks__item img {
+    display: block;
+    inline-size: 100%;
+    block-size: 4.5rem;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.file-picks__name {
+    max-inline-size: 100%;
+    overflow: hidden;
+    font-size: 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-picks__remove {
+    position: absolute;
+    inset-block-start: 0.2rem;
+    inset-inline-end: 0.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1.6rem;
+    block-size: 1.6rem;
+    padding: 0;
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    cursor: pointer;
+}
+
+.file-picks__remove .icon {
+    inline-size: 1rem;
+    block-size: 1rem;
+}
+
+.file-picks__remove:hover,
+.file-picks__remove:focus-visible {
+    background: var(--color-danger);
+    color: #fff;
+}
+
+.file-picks__count {
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+/* With a bell, the language switch sits right beside it at the end of the
+   header (the bell takes the push to the end), so its list opens under both. */
+/* Right next to the bell (its holder, templates/_bell.html), not pushed away from it. */
+.bell-slot ~ .lang-switch__group--header {
+    margin-inline-start: 0;
+}
+
+/* A customer's bell lists recent notifications; the new ones stand out. */
+.notif-item--new {
+    font-weight: 600;
+    border-inline-start: 3px solid var(--color-danger);
+    padding-inline-start: 0.5rem;
+}
+
+/* ===== The customer portal's look, "sporty and bold", on every page a
+   logged-in customer sees (body.theme-portal, set in base.html).
+   Built from the logo: black, italic condensed lettering, sharp corners,
+   and the customer's own color (--brand, from base.html) as the accent,
+   with black or white text on it, whichever reads better. ===== */
+.theme-portal {
+    --sporty-volt: var(--brand, #c8c8c8);
+    --sporty-on-volt: var(--brand-text, #000000);
+    --sporty-ink: #0a0a0a;
+    --sporty-radius: 2px;
+}
+
+/* The page's top band: one fixed height on every page, so nothing jumps
+   when moving between pages. Only the back link and the title sit in it,
+   the title always at the same spot; the description, buttons and badges
+   flow below it on the page's own background. */
+.theme-portal {
+    --band-size: 5.5rem;
+}
+
+.theme-portal .page__header {
+    position: relative;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+    padding: 0;
+}
+
+/* The black band itself, behind the title. */
+.theme-portal .page__header::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    block-size: var(--band-size);
+    border-radius: var(--sporty-radius);
+    background: var(--sporty-ink);
+}
+
+/* A short slash in their color at the band's top far corner, leaning like
+   the logo, the same size on every page; the title stays clear of it. */
+.theme-portal .page__header::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    block-size: 2.5rem;
+    inset-inline-end: 1.5rem;
+    inline-size: 1.75rem;
+    background: var(--sporty-volt);
+    transform: skewX(-18deg);
+    pointer-events: none;
+}
+
+html[dir="rtl"] .theme-portal .page__header::after {
+    transform: skewX(18deg);
+}
+
+.theme-portal .page__header > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* The title alone in the band, centred in its height, at the same spot on
+   every page; the back link and description follow below the band. */
+.theme-portal .page__header > div:first-child {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+    box-sizing: border-box;
+    inline-size: 100%;
+    padding-block-start: calc((var(--band-size) - 2.25rem) / 2);
+    padding-inline: 1.5rem 5rem;
+}
+
+/* One line, cut with "…" when long, so the band never grows. */
+.theme-portal .page__header h1 {
+    order: -1;
+    max-inline-size: 100%;
+    margin-block: 0 calc((var(--band-size) - 2.25rem) / 2 + 0.6rem);
+    block-size: 2.25rem;
+    overflow: hidden;
+    color: #fff;
+    font-size: 1.9rem;
+    line-height: 2.25rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* Below the band, the back link and description line up with the page. */
+.theme-portal .page__header > div:first-child > :not(h1) {
+    margin-block: 0;
+    margin-inline-start: -1.5rem;
+}
+
+.theme-portal .page__header > :not(div:first-child) {
+    margin-inline-start: 0;
+}
+
+/* Buttons: like the list rows — white, with a thick edge in their color
+   on the start side; square, bold caps. The main one has a black outline,
+   secondary ones a grey one; danger keeps its red. */
+.theme-portal .button {
+    border-radius: var(--sporty-radius);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.theme-portal .button:not(.button--danger) {
+    border: 1px solid var(--sporty-ink);
+    border-inline-start: 5px solid var(--sporty-volt);
+    background: var(--color-surface);
+    color: var(--sporty-ink);
+}
+
+.theme-portal .button--secondary {
+    border-color: var(--color-border);
+    border-inline-start-color: var(--sporty-volt);
+}
+
+.theme-portal .button:not(.button--danger):hover,
+.theme-portal .button:not(.button--danger):focus-visible {
+    background: var(--color-hover);
+    color: var(--sporty-ink);
+}
+
+/* Section titles: condensed caps with a short volt bar before them. */
+.theme-portal h2 {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+html[dir="rtl"] .theme-portal h2 {
+    font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+}
+
+.theme-portal h2::before {
+    content: "";
+    flex: none;
+    inline-size: 1.25rem;
+    block-size: 0.35rem;
+    background: var(--sporty-volt);
+    box-shadow: 0 0 0 1px var(--sporty-ink);
+    transform: skewX(-18deg);
+}
+
+/* The numbers: big italic figures on square tiles with a black top bar. */
+.theme-portal .stat-row {
+    gap: 0.75rem;
+    margin-block-end: 1.25rem;
+}
+
+.theme-portal .stat-tile {
+    padding-block: 1rem 0.85rem;
+    border: 0;
+    border-block-start: 5px solid var(--sporty-ink);
+    border-radius: var(--sporty-radius);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+    text-align: start;
+    padding-inline: 1rem;
+}
+
+.theme-portal .stat-tile--link:hover,
+.theme-portal .stat-tile--link:focus-visible {
+    border-block-start-color: var(--sporty-volt);
+    background: var(--sporty-ink);
+}
+
+.theme-portal .stat-tile--link:hover .stat-tile__value,
+.theme-portal .stat-tile--link:hover .stat-tile__label,
+.theme-portal .stat-tile--link:focus-visible .stat-tile__value,
+.theme-portal .stat-tile--link:focus-visible .stat-tile__label {
+    color: #fff;
+}
+
+.theme-portal .stat-tile__value {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-size: 2.75rem;
+    font-weight: 800;
+    line-height: 1;
+    font-style: italic;
+}
+
+.theme-portal .stat-tile__label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+}
+
+/* Next visit: a white card with a thick black edge and a big date. */
+.theme-portal .portal-next__body {
+    padding: 1rem;
+    border: 0;
+    background: var(--color-surface);
+    border-inline-start: 6px solid var(--sporty-ink);
+    border-radius: var(--sporty-radius);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+.theme-portal .portal-next__date {
+    font-family: "Saira Condensed", "IBM Plex Sans Arabic", sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    font-style: italic;
+    text-transform: uppercase;
+}
+
+/* Rows that need attention: square, with a volt edge. */
+.theme-portal .action-row {
+    border-radius: var(--sporty-radius);
+}
+
+.theme-portal .action-row--warning {
+    border-inline-start: 5px solid var(--color-warning);
+}
+
+.theme-portal .badge {
+    border-radius: var(--sporty-radius);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+}
+
+/* Their color in a few small places only, as markers of "you are here":
+   the current menu item's edge, the active tab's underline, the
+   current step of a request's progress, and list rows' start edge. */
+.theme-portal .nav-link--active,
+.theme-portal .nav-link--active:hover {
+    border-inline-start: 4px solid var(--sporty-volt);
+}
+
+.theme-portal .tabs a {
+    border-radius: var(--sporty-radius);
+}
+
+.theme-portal .tabs a.is-active {
+    border-color: var(--sporty-ink);
+    background: var(--sporty-ink);
+    box-shadow: inset 0 -3px 0 var(--sporty-volt);
+}
+
+.theme-portal .progress-steps__step--current {
+    border-block-start-color: var(--sporty-volt);
+}
+
+/* Every list row's thick start edge (reports, requests, visits). */
+.theme-portal .action-row {
+    border-inline-start-color: var(--sporty-volt);
+}
+
+@media (max-width: 600px) {
+    .theme-portal .page__header > div:first-child {
+        padding-inline: 1rem 3.5rem;
+    }
+
+    .theme-portal .page__header > div:first-child > :not(h1) {
+        margin-inline-start: -1rem;
+    }
+
+    .theme-portal .page__header::after {
+        inset-inline-end: 0.75rem;
+    }
+}
+
+/* ===== The monthly operations report (tasks/monthly_report.html): for
+   management, on screen and printed on A4. ===== */
+.mreport-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-block-end: 1rem;
+}
+
+/* Previous / This / Next month: the same buttons, the same height, one row. */
+.mreport-months {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.5rem;
+}
+
+.mreport-months .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+}
+
+.mreport-months .button.is-current {
+    border-color: var(--color-text);
+    font-weight: 700;
+}
+
+html[dir="rtl"] .mreport-months__arrow {
+    display: inline-block;
+    transform: scaleX(-1);
+}
+
+.mreport-toolbar__actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.mreport {
+    padding-block: 1.75rem;
+    padding-inline: 2rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.mreport__head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 1.5rem;
+    padding-block-end: 1.25rem;
+    border-block-end: 3px solid var(--color-text);
+}
+
+.mreport__logo {
+    inline-size: 9rem;
+    block-size: auto;
+}
+
+.mreport__title h1 {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.mreport__period {
+    margin: 0.2rem 0 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.mreport__meta {
+    display: grid;
+    gap: 0.2rem;
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.mreport__meta div {
+    display: flex;
+    flex-direction: row;
+    gap: 0.4rem;
+}
+
+.mreport__meta dt {
+    color: var(--color-muted);
+}
+
+.mreport__meta dd {
+    margin: 0;
+    font-weight: 600;
+}
+
+.mreport__section {
+    margin-block-start: 1.75rem;
+    break-inside: avoid;
+}
+
+.mreport__section h2 {
+    margin-block: 0 0.35rem;
+    padding-block-end: 0.35rem;
+    border-block-end: 1px solid var(--color-border);
+    font-size: 1.05rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mreport__note {
+    margin-block: 0 0.75rem;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+/* Two smaller sections side by side (one under the other on a phone). */
+.mreport__pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 0 2rem;
+}
+
+/* Headline figures: four to a row. */
+.mreport-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.75rem;
+}
+
+.mreport-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.85rem;
+    border: 1px solid var(--color-border);
+    border-block-start: 4px solid var(--color-text);
+    break-inside: avoid;
+}
+
+.mreport-kpi__value {
+    font-size: 1.9rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.mreport-kpi__label {
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.mreport-kpi__change {
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
+.mreport-kpi__change.is-good {
+    color: var(--color-success);
+    font-weight: 700;
+}
+
+.mreport-kpi__change.is-bad {
+    color: var(--color-danger);
+    font-weight: 700;
+}
+
+.mreport-table {
+    inline-size: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.mreport-table th,
+.mreport-table td {
+    padding-block: 0.4rem;
+    padding-inline: 0.5rem;
+    border-block-end: 1px solid var(--color-border);
+    text-align: start;
+}
+
+.mreport-table td:not(:first-child),
+.mreport-table th:not(:first-child) {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.mreport-table thead th {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mreport-table tfoot th,
+.mreport-table tfoot td {
+    border-block-start: 2px solid var(--color-text);
+    font-weight: 700;
+}
+
+/* Ratings 5 to 1 as bars. */
+.mreport-bars {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.mreport-bar {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 3rem;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.mreport-bar__track {
+    block-size: 0.75rem;
+    background: var(--color-neutral-bg);
+}
+
+.mreport-bar__fill {
+    display: block;
+    block-size: 100%;
+    background: var(--color-text);
+}
+
+.mreport-bar__value {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.mreport__foot {
+    margin-block-start: 2rem;
+    padding-block-start: 0.75rem;
+    border-block-start: 1px solid var(--color-border);
+    color: var(--color-muted);
+    font-size: 0.75rem;
+}
+
+.mreport__foot p {
+    margin-block: 0 0.25rem;
+}
+
+@media (max-width: 700px) {
+    .mreport {
+        padding: 1rem;
+    }
+
+    .mreport__head {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Printed (or saved as PDF): the report alone, on A4, colours kept. */
+@page {
+    size: A4;
+    margin: 14mm;
+}
+
+@media print {
+    .site-header,
+    .site-header__nav,
+    .nav-overlay,
+    .page-back,
+    .flash,
+    .mreport-toolbar {
+        display: none !important;
+    }
+
+    body,
+    body:has(.site-header__nav) .page,
+    .page {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: none;
+        background: #fff;
+    }
+
+    .mreport {
+        padding: 0;
+        border: 0;
+    }
+
+    .mreport,
+    .mreport * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .mreport-kpis {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .mreport__pair {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .mreport__head,
+    .mreport__section h2 {
+        break-after: avoid;
+    }
+}
+
+/* ===== The all-countries schedule (tasks/all_week.html): a summary grid of
+   countries and their technicians by day or week. ===== */
+.sgrid-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+    margin-block-end: 0.75rem;
+}
+
+.sgrid-toolbar .tabs {
+    margin: 0;
+}
+
+.sgrid-toolbar__period {
+    font-size: 1.05rem;
+}
+
+.sgrid-legend {
+    margin-block: 0 0.75rem;
+    font-size: 0.85rem;
+}
+
+.sgrid {
+    inline-size: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--color-surface);
+    font-size: 0.9rem;
+}
+
+.sgrid th,
+.sgrid td {
+    padding-block: 0.45rem;
+    padding-inline: 0.6rem;
+    border-block-end: 1px solid var(--color-border);
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* Names stay in view while the days scroll sideways. */
+.sgrid th[scope="row"],
+.sgrid thead th:first-child {
+    position: sticky;
+    inset-inline-start: 0;
+    z-index: 1;
+    min-inline-size: 12rem;
+    background: var(--color-surface);
+    text-align: start;
+}
+
+.sgrid thead th {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.sgrid .is-today {
+    background: var(--color-neutral-bg);
+}
+
+.sgrid thead th.is-today {
+    color: var(--color-text);
+    box-shadow: inset 0 3px 0 var(--color-text);
+}
+
+.sgrid-country__row th[scope="row"],
+.sgrid-country__row td {
+    border-block-start: 2px solid var(--color-text);
+    font-weight: 700;
+}
+
+.sgrid-country__name {
+    display: block;
+}
+
+.sgrid-toggle {
+    margin-block-start: 0.15rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sgrid-toggle[aria-expanded="true"] span {
+    display: inline-block;
+    transform: rotate(90deg);
+}
+
+.sgrid-person th[scope="row"] {
+    padding-inline-start: 1.5rem;
+    font-weight: 400;
+}
+
+.sgrid-person--none th[scope="row"] {
+    color: var(--color-muted);
+    font-style: italic;
+}
+
+.sgrid td form {
+    display: inline;
+}
+
+/* A count: select it to see those tasks. */
+.sgrid-count {
+    display: inline-block;
+    min-inline-size: 2rem;
+    padding-block: 0.15rem;
+    padding-inline: 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.sgrid-count:hover,
+.sgrid-count:focus-visible {
+    border-color: var(--color-text);
+    background: var(--color-text);
+    color: var(--color-surface);
+}
+
+/* The legend's empty box standing for "a number of tasks". */
+.sgrid-count--key {
+    min-inline-size: 1.5rem;
+    block-size: 1.1rem;
+    vertical-align: middle;
+    cursor: default;
+}
+
+/* In progress: work being done right now. */
+.sgrid-busy {
+    display: inline-block;
+    margin-inline-start: 0.25rem;
+    color: var(--color-text);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.sgrid-alert {
+    display: inline-block;
+    margin-inline-start: 0.25rem;
+    color: var(--color-danger);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.sgrid-zero {
+    color: var(--color-border);
+}
+
+.sgrid tfoot th,
+.sgrid tfoot td {
+    border-block-start: 2px solid var(--color-text);
+    font-weight: 700;
+}
+
+/* The tasks behind a schedule number (tasks/all_week_tasks.html): a chip per
+   group that jumps to it, then each group; overdue and blocked marked red. */
+.sgroup-summary {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-block-end: 1rem;
+}
+
+.sgroup-chip {
+    padding-block: 0.3rem;
+    padding-inline: 0.7rem;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.sgroup-chip:hover,
+.sgroup-chip:focus-visible {
+    border-color: var(--color-text);
+}
+
+.sgroup-chip.is-attention {
+    border-color: var(--color-danger);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.sgroup--attention {
+    border-inline-start: 4px solid var(--color-danger);
+}
+
+.sgroup--attention h2 {
+    color: var(--color-danger);
+}
+
+/* A stopped task's reason, in the technician's words. */
+.sgroup-reason {
+    color: var(--color-danger);
+    font-size: 0.85rem;
+}
+
+/* A schedule cell's three fixed slots — total | ▶ in progress | ⚠ new date —
+   so each kind sits exactly under the one above, down the whole column. */
+.sgrid-cell {
+    display: inline-grid;
+    grid-template-columns: 2.4rem 2.6rem 2.8rem;
+    align-items: center;
+    column-gap: 0.15rem;
+    text-align: start;
+}
+
+.sgrid-cell .sgrid-count,
+.sgrid-cell .sgrid-total {
+    justify-self: center;
+}
+
+.sgrid-total {
+    font-weight: 700;
+}
+
+.sgrid-cell .sgrid-busy,
+.sgrid-cell .sgrid-alert {
+    margin-inline-start: 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Empty days keep the same width, so the dot sits where the total would. */
+.sgrid td .sgrid-zero {
+    display: inline-block;
+    inline-size: 7.95rem;
+    text-align: center;
+}
+
+/* Compact enough for a whole week on screen, no sideways scrolling. */
+.sgrid {
+    font-size: 0.8rem;
+}
+
+.sgrid th,
+.sgrid td {
+    padding-block: 0.35rem;
+    padding-inline: 0.25rem;
+}
+
+.sgrid th[scope="row"],
+.sgrid thead th:first-child {
+    min-inline-size: 8.5rem;
+    max-inline-size: 11rem;
+    padding-inline: 0.5rem;
+    white-space: normal;
+}
+
+.sgrid thead th {
+    font-size: 0.7rem;
+}
+
+.sgrid-cell {
+    grid-template-columns: 1.9rem 1.8rem 2rem;
+    column-gap: 0.1rem;
+}
+
+.sgrid-count {
+    min-inline-size: 1.7rem;
+    padding-block: 0.05rem;
+    padding-inline: 0.2rem;
+}
+
+.sgrid-cell .sgrid-busy,
+.sgrid-cell .sgrid-alert {
+    font-size: 0.72rem;
+}
+
+.sgrid td .sgrid-zero {
+    inline-size: 5.9rem;
+}
+
+/* A list table that fits the page: text may wrap, and each column's
+   detail sits on a second, smaller line under its main value. */
+.compact-table td,
+.compact-table th {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.compact-table__sub {
+    display: block;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+}
+
+/* ===== A compact filter panel (Tasks, Tickets): equal fields in a grid,
+   each with a small label on top, the actions at the end of the grid,
+   lined up with the boxes. ===== */
+.filters--panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    align-items: end;
+    gap: 0.6rem 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.filters--panel .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-inline-size: 0;
+}
+
+.filters--panel label {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.filters--panel input[type="text"],
+.filters--panel input[type="date"],
+.filters--panel select {
+    box-sizing: border-box;
+    inline-size: 100%;
+    max-width: none;
+    block-size: 2rem;
+    padding-block: 0.2rem;
+    padding-inline: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.filters__actions {
+    display: flex;
+    flex-direction: row;
+    gap: 0.4rem;
+}
+
+.filters__actions .button {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    block-size: 2rem;
+    margin: 0;
+    padding-block: 0;
+    font-size: 0.85rem;
+}
+
+/* Smaller still: the filter panel and the compact list tables. */
+.filters--panel {
+    grid-template-columns: repeat(auto-fill, minmax(8.75rem, 1fr));
+    gap: 0.4rem 0.5rem;
+    padding: 0.5rem 0.6rem;
+    margin-block-end: 0.75rem;
+}
+
+.filters--panel .field {
+    gap: 0.1rem;
+}
+
+.filters--panel label {
+    font-size: 0.62rem;
+}
+
+.filters--panel input[type="text"],
+.filters--panel input[type="date"],
+.filters--panel select,
+.filters__actions .button {
+    block-size: 1.75rem;
+    font-size: 0.78rem;
+}
+
+.filters--panel input[type="text"],
+.filters--panel input[type="date"],
+.filters--panel select {
+    padding-inline: 0.4rem;
+}
+
+.compact-table {
+    font-size: 0.82rem;
+}
+
+.compact-table th {
+    font-size: 0.7rem;
+}
+
+.compact-table td,
+.compact-table th {
+    padding-block: 0.25rem;
+    padding-inline: 0.45rem;
+}
+
+.compact-table__sub {
+    font-size: 0.72rem;
+}
+
+.compact-table .badge {
+    font-size: 0.68rem;
+}
+
+/* ===== The compact size everywhere: every table and every search or
+   filter bar, the same as the Tasks and Tickets lists. ===== */
+table {
+    font-size: 0.82rem;
+}
+
+th,
+td {
+    padding-block: 0.25rem;
+    padding-inline: 0.45rem;
+}
+
+th {
+    font-size: 0.7rem;
+}
+
+td .badge {
+    font-size: 0.68rem;
+}
+
+td .muted,
+td .field__help {
+    font-size: 0.72rem;
+}
+
+.filters {
+    gap: 0.4rem 0.5rem;
+    margin-block-end: 0.75rem;
+}
+
+.filters label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+}
+
+.filters input[type="text"],
+.filters input[type="search"],
+.filters input[type="date"],
+.filters select {
+    box-sizing: border-box;
+    block-size: 1.75rem;
+    padding-block: 0.15rem;
+    padding-inline: 0.4rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+}
+
+.filters .button {
+    display: inline-flex;
+    align-items: center;
+    block-size: 1.75rem;
+    padding-block: 0;
+    padding-inline: 0.8rem;
+    font-size: 0.78rem;
+}
+
+/* A simple search bar: the box and its Search button side by side, the box
+   wide enough to read its hint, not stretched across the page. */
+.filters__search {
+    flex: 0 1 22rem;
+}
+
+.filters__search input[type="text"],
+.filters__search input[type="search"] {
+    inline-size: 100%;
+    max-width: none;
+}
+
+/* The report's "still open" rows that need a new date (missed, stopped). */
+.mreport-row--attention td {
+    color: var(--color-danger);
+    font-weight: 700;
+}
+
+/* A customer page tab's heading: its title, and "See all …" at the end. */
+.customer-tab__head {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.customer-tabs {
+    margin-block: 0.25rem 0.5rem;
+}
+
+/* An admin viewing the portal as a customer: always visible, always a way back. */
+.view-as-bar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem 1rem;
+    padding-block: 0.45rem;
+    padding-inline: 1rem;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+.view-as-bar form {
+    margin: 0;
+}
+
+.view-as-bar__back {
+    padding-block: 0.2rem;
+    padding-inline: 0.75rem;
+    border: 1px solid #fff;
+    border-radius: 2px;
+    background: #fff;
+    color: var(--color-danger);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* A branch's warranty and terms labels, on their own line under its name. */
+.terms-row,
+.terms-labels {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.terms-row {
+    margin-block-start: 0.25rem;
+}
+
+/* ===== A request's page (tasks/ticket_review.html): the work on the left,
+   the context on the right; one column on a phone. ===== */
+.review {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 1rem;
+    align-items: start;
+}
+
+@media (min-width: 1000px) {
+    .review {
+        grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+    }
+
+    .review__side {
+        position: sticky;
+        top: calc(var(--header-height, 3.5rem) + 0.5rem);
+    }
+}
+
+.review-card {
+    margin-block-end: 0.75rem;
+}
+
+.review-card h2 {
+    margin-block-end: 0.5rem;
+}
+
+.review-card h3 {
+    margin-block: 0.9rem 0.3rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.review-request__type {
+    margin-block: 0 0.25rem;
+}
+
+.review-message {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    border-radius: 4px;
+    background: var(--color-bg);
+}
+
+.review-callout {
+    margin-block: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    border-inline-start: 4px solid var(--color-text);
+    background: var(--color-bg);
+}
+
+.review-card--decision {
+    border-inline-start: 4px solid var(--color-text);
+}
+
+.review-decision__other {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 0.75rem;
+    margin-block-start: 0.75rem;
+    padding-block-start: 0.75rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.review-decision__other .field {
+    flex: 1 1 14rem;
+    margin: 0;
+}
+
+/* Label above, value under: the side column's facts. */
+.review-facts {
+    display: grid;
+    gap: 0.6rem;
+    margin: 0 0 0.6rem;
+}
+
+.review-facts dt {
+    color: var(--color-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.review-facts dd {
+    margin: 0.1rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+/* Reassign in one line: the choice and its button. */
+.review-inline {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-block-end: 0.5rem;
+}
+
+.review-inline select {
+    flex: 1 1 10rem;
+    min-inline-size: 0;
+}
+
+/* A fold-out for what's rarely needed. */
+.review-more > summary {
+    cursor: pointer;
+    font-weight: 700;
+    padding-block: 0.35rem;
+}
+
+.review-more[open] > summary {
+    margin-block-end: 0.5rem;
+}
+
+details.review-more:not(.section) {
+    margin-block-start: 0.6rem;
+    padding-block-start: 0.5rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.review-more__body {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.review-notes li + li {
+    margin-block-start: 0.6rem;
+    padding-block-start: 0.6rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+/* ===== Anything internal (request notes, a task's team messages): amber,
+   locked, and saying who sees it — never mistaken for what the customer
+   sees. ===== */
+.internal-box {
+    border: 1px solid #e8c37a;
+    border-inline-start: 5px solid var(--color-warning);
+    background: #fffaf0;
+}
+
+.internal-box__head {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.internal-box__head h2 {
+    margin: 0;
+}
+
+.internal-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding-block: 0.15rem;
+    padding-inline: 0.5rem;
+    border-radius: 2px;
+    background: var(--color-warning);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.internal-badge .icon {
+    inline-size: 0.85rem;
+    block-size: 0.85rem;
+}
+
+.internal-box__who {
+    margin-block: 0.35rem 0.75rem;
+    color: #8a5a00;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* Each note: a sticky note with who wrote it, their role and when. */
+.internal-notes {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+    padding: 0;
+    list-style: none;
+}
+
+.internal-note {
+    padding-block: 0.5rem;
+    padding-inline: 0.75rem;
+    border: 1px solid #f0d9a8;
+    border-radius: 2px;
+    background: #fff3d6;
+}
+
+.internal-note__meta {
+    margin: 0 0 0.25rem;
+    color: #8a5a00;
+    font-size: 0.75rem;
+}
+
+.internal-note p:last-child {
+    margin-block-end: 0;
+}
+
+/* Team messages: the chat bubbles in the same amber. */
+.internal-box .chat-bubble {
+    border-color: #f0d9a8;
+    background: #fff3d6;
+}
+
+.internal-box .chat-message--mine .chat-bubble {
+    background: #ffe9b8;
+}
+
+/* Shipping's two buttons on one row; Notify greyed out until it can be used. */
+.review-shipping__actions {
+    flex-wrap: wrap;
+}
+
+.button[disabled],
+.button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: auto;
+}
+
+/* The bell's holder (templates/_bell.html): no box of its own, so the header lays out its parts as before. */
+.bell-slot {
+    display: contents;
+}
+
+/* A part shipment's panel (tasks/_shipment_panel.html): its three steps, the parts rows. */
+.shipment-panel__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.shipment-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.75rem 0 1rem;
+    padding: 0;
+    list-style: none;
+}
+
+.shipment-steps li {
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    background: var(--color-bg);
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+.shipment-steps li.is-done {
+    color: var(--color-text);
+}
+
+.shipment-steps li.is-current {
+    background: var(--color-accent);
+    color: var(--color-surface);
+    font-weight: 600;
+}
+
+.shipment-form {
+    margin-block-start: 1.25rem;
+    padding-block-start: 1rem;
+    border-block-start: 1px solid var(--color-border);
+}
+
+.shipment-parts {
+    display: grid;
+    gap: 0.5rem;
+    margin-block-end: 1rem;
+}
+
+.shipment-parts__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 6rem;
+    gap: 0.5rem;
+}
+
+/* A value chosen elsewhere and locked here (task_create's branch from a customer's request). */
+.locked-value {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+}
+
+.locked-value svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+}
+
+/* Everything from the customer's request, on a task (tasks/_from_request.html). */
+.from-request__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.from-request__conversation li {
+    display: grid;
+    gap: 0.2rem;
+    padding-block: 0.5rem;
+    border-block-end: 1px solid var(--color-border);
+}
+
+/* Where a part shipment goes (tasks/_shipment_panel.html). */
+.shipment-send-to {
+    margin-block: 0.75rem 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+}
+
+.shipment-send-to h3,
+.shipment-send-to p {
+    margin: 0 0 0.25rem;
+}
+
+/* A new request's "What happens next?" (tasks/_next_step.html): three choices side by side, stacked on a phone. */
+.next-choices {
+    margin-block-start: 1rem;
+}
+
+/* The three ways forward as one segmented choice; only the chosen one's form
+   shows below, full width — no lopsided cards, no empty space beside them. */
+.next-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+@media (min-width: 640px) {
+    .next-tabs {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.next-tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    cursor: pointer;
+}
+
+.next-tab input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.next-tab__title {
+    font-weight: 700;
+}
+
+.next-tab__hint {
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.next-tab:hover {
+    background: var(--color-hover);
+}
+
+.next-tab:has(input:checked) {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+    background: var(--color-surface);
+}
+
+.next-tab:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.next-choice {
+    display: none;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    margin-block-start: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+}
+
+.next-choices:has(input[value="visit"]:checked) .next-choice--visit,
+.next-choices:has(input[value="ship"]:checked) .next-choice--ship,
+.next-choices:has(input[value="answer"]:checked) .next-choice--answer {
+    display: flex;
+}
+
+.next-choice > .field__help {
+    margin: 0;
+}
+
+/* Side by side when there's room: technician and time; reason and answer. */
+.next-choice__fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+    .next-choice__fields {
+        grid-template-columns: 1fr 1fr;
+        align-items: start;
+    }
+}
+
+.next-choice .form-actions {
+    justify-content: flex-end;
+}
+
+.review-next__more {
+    margin-block: 0.75rem 0;
+    font-size: 0.9rem;
+}
+
+/* What the customer reported, machine by machine (tasks/_customer_report.html). */
+.customer-report {
+    display: grid;
+    gap: 1rem;
+}
+
+.customer-report__summary {
+    margin: 0;
+    color: var(--color-muted);
+}
+
+.machine-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.machine-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.machine-card__head h3 {
+    margin: 0;
+}
+
+.machine-card__serial {
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+    font-family: ui-monospace, monospace;
+}
+
+.machine-card__words,
+.machine-card__history {
+    margin: 0;
+}
+
+.media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.5rem;
+}
+
+.media-item {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    min-width: 0;
+}
+
+.media-item img,
+.media-item video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--color-neutral-bg);
+}
+
+.media-item figcaption,
+.media-item__open {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+}
+
+/* The customer portal's sign-in: a brand half (who we are, what the portal
+   does) beside the form; stacked on a phone. Logical properties only, so it
+   mirrors itself in Arabic. Comes after .button, so .signin__submit wins. */
+.signin {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: 60rem;
+    margin-inline: auto;
+    margin-block-start: 1rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.signin__brand {
+    background: #000;
+    color: #fff;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.signin__logo {
+    height: 2.25rem;
+    width: auto;
+    align-self: flex-start;
+    filter: invert(1);
+}
+
+.signin__brand-title {
+    margin: 0;
+    color: #fff;
+    font-size: 2rem;
+}
+
+.signin__tagline {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.signin__features {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.signin__features li {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    align-items: flex-start;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.signin__features strong {
+    color: #fff;
+}
+
+.signin__features svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.signin__panel {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.signin__title {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.signin__form {
+    margin-block-start: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.signin__form .field input {
+    padding-block: 0.7rem;
+    font-size: 1rem;
+}
+
+.signin__row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.signin__submit {
+    width: 100%;
+    margin-block-start: 0.75rem;
+    padding-block: 0.8rem;
+    font-size: 1rem;
+    text-align: center;
+}
+
+@media (min-width: 800px) {
+    .signin {
+        grid-template-columns: 1fr 1fr;
+        margin-block-start: 3rem;
+        min-height: 30rem;
+    }
+
+    .signin__brand {
+        padding: 2.5rem;
+        justify-content: center;
+        gap: 1.25rem;
+    }
+
+    .signin__brand-title {
+        font-size: 2.6rem;
+    }
+
+    .signin__features {
+        display: flex;
+        margin-block-start: 0.5rem;
+    }
+
+    .signin__panel {
+        padding: 2.5rem;
+        justify-content: center;
+    }
+}
+
+/* The team's sign-in: one dark block with a slanted stripe (the logo's
+   italic), the form a white card inside it — unlike the portal's two halves.
+   Logical properties only; the stripe sits on the start side either way. */
+.team-signin {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    max-width: 60rem;
+    margin-inline: auto;
+    margin-block-start: 1rem;
+    padding: 1.5rem;
+    background: #000;
+    color: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.team-signin::before {
+    content: "";
+    position: absolute;
+    inset-block: -20%;
+    inset-inline-start: 38%;
+    inline-size: 4rem;
+    background: rgba(255, 255, 255, 0.08);
+    transform: skewX(-14deg);
+    pointer-events: none;
+}
+
+.team-signin__intro {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.team-signin__logo {
+    height: 2rem;
+    width: auto;
+    align-self: flex-start;
+    filter: invert(1);
+    margin-block-end: 0.5rem;
+}
+
+.team-signin__eyebrow {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.team-signin__title {
+    margin: 0;
+    color: #fff;
+    font-size: 2.2rem;
+}
+
+.team-signin__list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: none;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.team-signin__list li {
+    padding-inline-start: 0.9rem;
+    border-inline-start: 3px solid #fff;
+    font-weight: 600;
+}
+
+.team-signin__note {
+    margin: 0;
+    margin-block-start: 0.75rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.team-signin__card {
+    position: relative;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+.team-signin__card-title {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+@media (min-width: 800px) {
+    .team-signin {
+        grid-template-columns: 1fr 22rem;
+        align-items: center;
+        gap: 3rem;
+        margin-block-start: 3rem;
+        min-height: 30rem;
+        padding: 3rem;
+    }
+
+    .team-signin__title {
+        font-size: 3rem;
+    }
+
+    .team-signin__list {
+        display: flex;
+    }
+
+    .team-signin__card {
+        padding: 2rem;
+    }
 }

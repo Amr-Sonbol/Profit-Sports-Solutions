@@ -2,10 +2,13 @@ import secrets
 from decimal import Decimal
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from tasks.models import Task, TaskEvent
+
+from .phrases import Recommendation, WorkLine
 
 
 # Labour hours this far past the task's estimate get flagged to
@@ -26,8 +29,22 @@ class WorkReport(models.Model):
         Task, on_delete=models.CASCADE, related_name='report',
         verbose_name=_('task'),
     )
-    findings = models.TextField(_('findings'), help_text=_('what the technician found'))
-    action_taken = models.TextField(_('action taken'), blank=True)
+    findings = models.TextField(
+        _('findings'), blank=True,
+        help_text=_('overall, if needed — each machine has its own finding and action'),
+    )
+    action_taken = models.TextField(_('action taken'), blank=True, help_text=_('other work, one per line'))
+    # The standard wording (reports.phrases), so the report reads in its
+    # customer's language whoever filled it in.
+    work_lines = ArrayField(
+        models.CharField(max_length=20, choices=WorkLine.choices), default=list, blank=True,
+        verbose_name=_('work performed'),
+    )
+    recommendations = ArrayField(
+        models.CharField(max_length=20, choices=Recommendation.choices), default=list, blank=True,
+        verbose_name=_('recommendations'),
+    )
+    recommendation = models.TextField(_('other recommendation'), blank=True)
     resolved = models.BooleanField(_('resolved'))
     labour_hours = models.DecimalField(_('labour hours'), max_digits=5, decimal_places=2)
     customer_name = models.CharField(_('customer name'), max_length=150, help_text=_('who signed'))
@@ -119,9 +136,12 @@ class PartUsed(models.Model):
     part_code = models.CharField(_('part code'), max_length=50)
     description = models.CharField(_('description'), max_length=200, blank=True)
     quantity = models.PositiveIntegerField(_('quantity'))
-    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2)
+    # Prices are agreed by the managers with the customer before the visit,
+    # so a report records only the part and quantity; these stay for older
+    # reports that had a price.
+    unit_cost = models.DecimalField(_('unit cost'), max_digits=10, decimal_places=2, null=True, blank=True)
     currency_code = models.CharField(
-        _('currency code'), max_length=3,
+        _('currency code'), max_length=3, blank=True,
         help_text=_('an amount must never be stored without its currency'),
     )
 
@@ -135,9 +155,10 @@ class PartUsed(models.Model):
 
 
 class CustomerFeedback(models.Model):
-    """A rating request sent to the customer once their task is closed.
-    Reached through `token`, not a login — the customer is never a user of
-    this system, so the link is the only thing standing in for one.
+    """A customer's rating of a visit: asked for by email once their task
+    is closed and answered through `token` (no login), or given straight
+    from their portal (customers.views.portal_visit) — the same record
+    either way, so the emailed link then shows it as already answered.
     """
 
     RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
@@ -148,9 +169,10 @@ class CustomerFeedback(models.Model):
     )
     token = models.CharField(_('token'), max_length=43, unique=True, editable=False)
     requested_at = models.DateTimeField(_('requested at'))
+    # Empty when the customer rated the visit from their portal without being asked.
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='feedback_requests_sent',
-        verbose_name=_('requested by'),
+        verbose_name=_('requested by'), null=True, blank=True,
     )
     rating = models.PositiveSmallIntegerField(_('rating'), choices=RATING_CHOICES, null=True, blank=True)
     comment = models.TextField(_('comment'), blank=True)

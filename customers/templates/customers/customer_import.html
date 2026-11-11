@@ -18,12 +18,15 @@
     <p class="field__help">
         {% translate "Only customer_name is required. A file with just customer_name and customer_contact_email is enough: each customer then completes their details after receiving the welcome email from Customer accounts. Save the file from Excel as “CSV UTF-8” so Arabic names are kept." %}
     </p>
+    <p class="field__help">
+        {% translate "warranty_start (optional) is the branch's installation date, e.g. 2026-03-15 or 15/03/2026: the warranty runs two years from it, and everything at that branch is free meanwhile. Re-uploading with dates added fills them in for branches that have none yet." %}
+    </p>
     <p><a href="{% url 'customers:customer_import_template' %}">{% translate "Download a template CSV" %}</a></p>
 
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}
         {% for field in form %}
         <div class="field {% if field.errors %}field--error{% endif %}">

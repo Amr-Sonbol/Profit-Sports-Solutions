@@ -14,7 +14,7 @@
 {% if ticket %}
 <p class="flash flash--info">
     {% if ticket.kind != 'customer' %}
-        {% blocktranslate with number=ticket.ticket_number subject=ticket.subject %}This task is being created from internal ticket {{ number }} — {{ subject }}. Please select the site for this job.{% endblocktranslate %}
+        {% blocktranslate with number=ticket.ticket_number subject=ticket.subject %}This task is being created from internal task {{ number }} — {{ subject }}. Please select the site for this job.{% endblocktranslate %}
     {% elif ticket.site %}
         {% if user.technician.role == 'admin' %}
             {% blocktranslate with company=ticket.company_name site=ticket.site.name %}This task is being created from a customer ticket — {{ company }}. The customer selected {{ site }} from their registered sites. As an administrator, you may still change it below.{% endblocktranslate %}
@@ -37,14 +37,19 @@
     <form method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
-            <p class="flash flash--error">{{ form.non_field_errors }}</p>
+            <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
         {% endif %}
 
         <div class="creatable-field__row">
             <div class="field {% if form.site.errors %}field--error{% endif %}">
                 <label for="{{ form.site.id_for_label }}">{{ form.site.label }} *</label>
+                {% if form.site.field.disabled and ticket.site %}
+                {# Chosen by the customer and locked: shown plainly, not as a greyed-out list that reads as empty. #}
+                <p class="locked-value">{% include "_icon.html" with name='lock' %} <strong>{{ ticket.site.name }}</strong> <span class="muted">({% translate "chosen by the customer" %})</span></p>
+                {% else %}
                 {{ form.site }}
                 <p class="field__help">{{ form.site.help_text }}</p>
+                {% endif %}
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
             {% if user.technician.role == 'admin' %}
@@ -92,8 +97,10 @@
             <div class="field {% if form.task_type.errors %}field--error{% endif %}">
                 <label for="{{ form.task_type.id_for_label }}">{{ form.task_type.label }}</label>
                 {{ form.task_type }}
+                {% if form.task_type.field.disabled %}<p class="field__help">{% translate "Set by the request's decision: the parts are prepared and shipped, no visit." %}</p>{% endif %}
                 {% for error in form.task_type.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
+            {% if not form.task_type.field.disabled %}
             <input type="checkbox" id="toggle-new-task-type" class="toggle-checkbox" hidden>
             <label for="toggle-new-task-type" class="add-new-toggle">{% translate "+ Add new task type" %}</label>
             <fieldset class="new-item-fieldset">
@@ -121,6 +128,7 @@
                     </div>
                 </div>
             </fieldset>
+            {% endif %}
         </div>
 
         <div class="creatable-field__row">
@@ -192,7 +200,7 @@
                         </a>
                         {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
                     </td>
-                    <td>{% if 'view_technicians' in role_permissions %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View week" %}</a>{% endif %}</td>
+                    <td>{% if 'view_technicians' in role_permissions and person.can_open %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View schedule" %}</a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -202,4 +210,30 @@
     <p class="empty-state">{% translate "There are no active supervisors or technicians in this country." %}</p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ form.warranty_site_ids|json_script:"warranty-site-ids" }}
+<script>
+// A branch under warranty: everything is free, so billing switches to
+// Warranty when it's picked (still changeable, e.g. damage not covered).
+(function () {
+    var site = document.getElementById('id_site');
+    var billing = document.getElementById('id_billing_type');
+    var isWarranty = document.getElementById('id_is_warranty');
+    var ids = JSON.parse(document.getElementById('warranty-site-ids').textContent);
+    if (!site || !billing) {
+        return;
+    }
+    site.addEventListener('change', function () {
+        if (ids.indexOf(Number(site.value)) !== -1) {
+            billing.value = 'warranty';
+            if (isWarranty) {
+                isWarranty.value = 'true';
+                if (isWarranty.type === 'checkbox') { isWarranty.checked = true; }
+            }
+        }
+    });
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,3 @@
+# Shell scripts run inside the Linux container: always LF, or the
+# container fails to start ("no such file or directory").
+*.sh text eol=lf

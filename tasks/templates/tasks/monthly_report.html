@@ -1,114 +1,154 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
-{% block title %}{% translate "Monthly report" %} — Profit Sports Solutions{% endblock %}
+{% block title %}{% translate "Monthly operations report" %} — {{ period_start|date:"F Y" }} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="page__header">
-    <h1>{% translate "Monthly report" %}</h1>
-    <a href="{% url 'tasks:monthly_report_export' %}?month={{ period_start|date:'Y-m' }}" class="button">{% translate "Download CSV" %}</a>
-</div>
-
-<nav class="week-nav">
-    <a href="?month={{ prev_month|date:'Y-m' }}" class="back-link">{% translate "Previous month" %}</a>
-    <a href="?month={{ this_month|date:'Y-m' }}" class="button button--secondary">{% translate "This month" %}</a>
-    <a href="?month={{ next_month|date:'Y-m' }}" class="forward-link">{% translate "Next month" %}</a>
-</nav>
-
-<h2>{{ period_start|date:"F Y" }}</h2>
-<p class="muted">{% translate "All countries combined. This is the figure reported to leadership, not a per-country ranking." %}</p>
-
-<div class="section">
-    <h2>{% blocktranslate with total=ticket_total %}Tickets received ({{ total }}){% endblocktranslate %}</h2>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr><th>{% translate "Status" %}</th><th>{% translate "Count" %}</th></tr>
-            </thead>
-            <tbody>
-                {% for row in ticket_status_counts %}
-                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
-                {% empty %}
-                <tr><td colspan="2" class="empty-state">{% translate "No tickets this month." %}</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+{# For management: headline figures against last month, then the breakdowns. Prints (or saves as PDF) on A4 with the toolbar left off. #}
+<div class="mreport-toolbar">
+    {# Three matching buttons in one row; the arrows flip with the reading direction. #}
+    <nav class="mreport-months" aria-label="{% translate 'Month' %}">
+        <a href="?month={{ prev_month|date:'Y-m' }}" class="button button--secondary"><span class="mreport-months__arrow" aria-hidden="true">‹</span> {% translate "Previous month" %}</a>
+        <a href="?month={{ this_month|date:'Y-m' }}" class="button button--secondary{% if period_start == this_month %} is-current{% endif %}"{% if period_start == this_month %} aria-current="page"{% endif %}>{% translate "This month" %}</a>
+        <a href="?month={{ next_month|date:'Y-m' }}" class="button button--secondary">{% translate "Next month" %} <span class="mreport-months__arrow" aria-hidden="true">›</span></a>
+    </nav>
+    <div class="mreport-toolbar__actions">
+        <a href="{% url 'tasks:monthly_report_export' %}?month={{ period_start|date:'Y-m' }}" class="button button--secondary">{% translate "Download full list (CSV)" %}</a>
+        <button type="button" class="button" data-print>{% translate "Print or save as PDF" %}</button>
     </div>
 </div>
 
-<div class="section">
-    <h2>{% blocktranslate with total=task_total %}Tasks received ({{ total }}){% endblocktranslate %}</h2>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr><th>{% translate "Status" %}</th><th>{% translate "Count" %}</th></tr>
-            </thead>
-            <tbody>
-                {% for row in task_status_counts %}
-                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
-                {% empty %}
-                <tr><td colspan="2" class="empty-state">{% translate "No tasks this month." %}</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+<article class="mreport">
+    <header class="mreport__head">
+        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="mreport__logo">
+        <div class="mreport__title">
+            <h1>{% translate "Monthly operations report" %}</h1>
+            <p class="mreport__period">{{ period_start|date:"F Y" }}</p>
+        </div>
+        <dl class="mreport__meta">
+            <div><dt>{% translate "Scope" %}</dt><dd>{% translate "All countries" %}</dd></div>
+            <div><dt>{% translate "Prepared by" %}</dt><dd>{{ prepared_by }}</dd></div>
+            <div><dt>{% translate "Prepared on" %}</dt><dd>{{ prepared_at|date:"j F Y" }}</dd></div>
+        </dl>
+    </header>
 
-<div class="section">
-    <h3>{% translate "Tickets" %}</h3>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% translate "Country" %}</th>
-                    <th>{% translate "Company" %}</th>
-                    <th>{% translate "Status" %}</th>
-                    <th>{% translate "Submitted" %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ticket in tickets %}
-                <tr>
-                    <td>{{ ticket.country.display_name }}</td>
-                    <td>{% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.company_name }}</a>{% else %}{{ ticket.company_name }}{% endif %}</td>
-                    <td>{{ ticket.get_status_display }}</td>
-                    <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="4" class="empty-state">{% translate "No records to display." %}</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
+    <section class="mreport__section">
+        <h2>{% translate "Headline figures" %}</h2>
+        <p class="mreport__note">{% blocktranslate with month=prev_month|date:"F Y" %}Each change is against {{ month }}.{% endblocktranslate %}</p>
+        <div class="mreport-kpis">
+            {% for card in headlines %}
+            <div class="mreport-kpi">
+                <span class="mreport-kpi__value">{{ card.value }}</span>
+                <span class="mreport-kpi__label">{{ card.label }}</span>
+                {% if card.change %}<span class="mreport-kpi__change{% if card.good is True %} is-good{% elif card.good is False %} is-bad{% endif %}">{% if card.trend == 'up' %}▲{% else %}▼{% endif %} {{ card.change }}</span>
+                {% else %}<span class="mreport-kpi__change">{% translate "No change" %}</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
 
-<div class="section">
-    <h3>{% translate "Tasks" %}</h3>
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% translate "Task" %}</th>
-                    <th>{% translate "Country" %}</th>
-                    <th>{% translate "Customer" %}</th>
-                    <th>{% translate "Status" %}</th>
-                    <th>{% translate "Reported" %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for task in tasks %}
-                <tr>
-                    <td><a href="{% url 'tasks:task_detail' task.pk %}">{{ task.task_number }}</a></td>
-                    <td>{{ task.site.customer.country.display_name }}</td>
-                    <td>{{ task.site.customer.name }}</td>
-                    <td>{{ task.get_status_display }}</td>
-                    <td>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="5" class="empty-state">{% translate "No records to display." %}</td></tr>
+    <section class="mreport__section">
+        <h2>{% translate "By country" %}</h2>
+        <div class="table-wrap">
+            <table class="mreport-table">
+                <thead><tr>
+                    <th>{% translate "Country" %}</th><th>{% translate "Requests" %}</th><th>{% translate "Tasks" %}</th>
+                    <th>{% translate "Visits completed" %}</th><th>{% translate "Completion rate" %}</th><th>{% translate "Satisfaction" %}</th>
+                </tr></thead>
+                <tbody>
+                    {% for row in by_country %}
+                    <tr>
+                        <td>{{ row.country }}</td><td>{{ row.requests }}</td><td>{{ row.tasks }}</td><td>{{ row.visits }}</td>
+                        <td>{% if row.completion is not None %}{{ row.completion }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.rating is not None %}{{ row.rating }} / 5{% else %}—{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="empty-state">{% translate "Nothing recorded this month." %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="mreport__section">
+        <h2>{% blocktranslate with total=request_grid.total %}Requests by type ({{ total }}){% endblocktranslate %}</h2>
+        <p class="mreport__note">{% translate "What each request was about, against what the customer needed." %}</p>
+        <div class="table-wrap">
+            <table class="mreport-table mreport-table--grid">
+                <thead><tr>
+                    <th></th>{% for need in request_grid.needs %}<th>{{ need }}</th>{% endfor %}<th>{% translate "Total" %}</th>
+                </tr></thead>
+                <tbody>
+                    {% for row in request_grid.rows %}
+                    <tr><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td>{% if value %}{{ value }}{% else %}<span class="muted">0</span>{% endif %}</td>{% endfor %}<td><strong>{{ row.total }}</strong></td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr><th scope="row">{% translate "Total" %}</th>{% for value in request_grid.totals %}<td>{{ value }}</td>{% endfor %}<td>{{ request_grid.total }}</td></tr>
+                </tfoot>
+            </table>
+        </div>
+    </section>
+
+    <div class="mreport__pair">
+        <section class="mreport__section">
+            <h2>{% translate "Work by type" %}</h2>
+            <table class="mreport-table">
+                <tbody>
+                    {% for row in work_by_type %}<tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                    {% empty %}<tr><td class="empty-state">{% translate "No tasks this month." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="mreport__section">
+            <h2>{% blocktranslate count counter=rating_count %}Customer satisfaction ({{ counter }} rating){% plural %}Customer satisfaction ({{ counter }} ratings){% endblocktranslate %}</h2>
+            <div class="mreport-bars">
+                {% for row in rating_spread %}
+                <div class="mreport-bar">
+                    <span class="mreport-bar__label">{{ row.stars }} ★</span>
+                    <span class="mreport-bar__track"><span class="mreport-bar__fill" style="inline-size: {{ row.percent }}%"></span></span>
+                    <span class="mreport-bar__value">{{ row.count }}</span>
+                </div>
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+        </section>
     </div>
-</div>
+
+    <div class="mreport__pair">
+        <section class="mreport__section">
+            <h2>{% translate "Most active customers" %}</h2>
+            <table class="mreport-table">
+                <thead><tr><th>{% translate "Customer" %}</th><th>{% translate "Requests" %}</th><th>{% translate "Tasks" %}</th></tr></thead>
+                <tbody>
+                    {% for row in top_customers %}<tr><td>{{ row.name }}</td><td>{{ row.requests }}</td><td>{{ row.tasks }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="empty-state">{% translate "No activity this month." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="mreport__section">
+            <h2>{% translate "This month's tasks still open" %}</h2>
+            <table class="mreport-table">
+                <tbody>
+                    {% for row in still_open %}<tr{% if row.attention %} class="mreport-row--attention"{% endif %}><td>{{ row.label }}{% if row.attention %} ⚠{% endif %}</td><td>{{ row.count }}</td></tr>
+                    {% empty %}<tr><td class="empty-state">{% translate "Every task opened this month is finished." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <footer class="mreport__foot">
+        <p>Profit Sports Solutions · {% translate "Monthly operations report" %} · {{ period_start|date:"F Y" }}</p>
+        <p>{% translate "Requests are counted by the day they were sent, tasks by the day they were opened, visits by the day their report was filed, and ratings by the day they were given." %}</p>
+    </footer>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-print]').forEach(function (button) {
+    button.addEventListener('click', function () { window.print(); });
+});
+</script>
 {% endblock %}

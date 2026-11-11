@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ technician.full_name }} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+{# Everything about one staff member: their work, then their tasks or reports in tabs; the other pages a click away. #}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:technician_list' %}" class="back-link">{% translate "Back to technicians" %}</a>
+        <h1>{{ technician.full_name }}</h1>
+        <p class="muted">{{ technician.get_role_display }} · {{ technician.country.display_name }}{% if technician.phone %} · <span dir="ltr">{{ technician.phone }}</span>{% endif %}</p>
+    </div>
+    <div class="badge-row">
+        {% if can_view_as %}
+        {# See the website exactly as they do, to check a complaint — view only, nothing sent or marked read for them. #}
+        <form method="post" action="{% url 'tasks:view_as_user_start' technician.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="button button--secondary" title="{% translate 'See the website exactly as they do: view only, their password untouched, nothing sent or marked read for them.' %}">{% translate "View as user" %}</button>
+        </form>
+        {% endif %}
+        <a href="{% url 'tasks:technician_board' technician.pk %}" class="button button--secondary">{% translate "Schedule" %}</a>
+        <a href="{% url 'tasks:technician_progress' technician.pk %}" class="button button--secondary">{% translate "Progress" %}</a>
+        {# Only the pages this viewer may open. #}
+        {% if 'review_skills' in role_permissions %}<a href="{% url 'tasks:technician_skills' technician.pk %}" class="button button--secondary">{% translate "Skills" %}</a>{% endif %}
+        {% if 'manage_technicians' in role_permissions %}<a href="{% url 'tasks:technician_edit' technician.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
+    </div>
+</div>
+
+{% if not technician.is_available %}
+<p class="flash flash--error">{% translate "Unavailable" %} ({{ technician.get_unavailable_reason_display }})</p>
+{% endif %}
+
+<div class="stat-row">
+    {% translate "Today" as today_label %}{% include "_stat_tile.html" with value=workload.today label=today_label %}
+    {% translate "Upcoming" as upcoming_label %}{% include "_stat_tile.html" with value=workload.upcoming label=upcoming_label %}
+    {% translate "Overdue" as overdue_label %}{% if workload.overdue %}{% include "_stat_tile.html" with value=workload.overdue label=overdue_label level="critical" %}{% else %}{% include "_stat_tile.html" with value=0 label=overdue_label %}{% endif %}
+    {% translate "Visits this month" as visits_label %}{% include "_stat_tile.html" with value=visits_this_month label=visits_label %}
+    {% if rating_average is not None %}{% translate "Satisfaction (out of 5)" as rating_label %}{% include "_stat_tile.html" with value=rating_average label=rating_label %}{% endif %}
+</div>
+
+<nav class="tabs customer-tabs" aria-label="{% translate 'Technician' %}">
+    <a href="?tab=tasks" {% if tab == 'tasks' %}class="is-active" aria-current="page"{% endif %}>{% translate "Tasks" %} ({{ counts.tasks }})</a>
+    <a href="?tab=reports" {% if tab == 'reports' %}class="is-active" aria-current="page"{% endif %}>{% translate "Reports & ratings" %} ({{ counts.reports }})</a>
+</nav>
+
+{% if tab == 'tasks' %}
+<div class="section">
+    <div class="customer-tab__head">
+        <h2>{% translate "Tasks" %}</h2>
+        <a href="{% url 'tasks:task_list' %}?status=all&technician={{ technician.pk }}">{% translate "See all in Tasks" %}</a>
+    </div>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Task #" %}</th><th>{% translate "Customer / Site" %}</th><th>{% translate "Role" %}</th><th>{% translate "Status" %}</th><th>{% translate "Scheduled" %}</th></tr></thead>
+        <tbody>
+            {% for assignment in rows %}{% with task=assignment.task %}
+            <tr>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' task.pk %}" dir="ltr">{{ task.task_number }}</a><span class="compact-table__sub">{{ task.task_type.display_name|default:"" }}</span></td>
+                <td><strong>{{ task.site.customer.name }}</strong><span class="compact-table__sub">{{ task.site.name }}</span></td>
+                <td>{{ assignment.get_role_display }}{% if not assignment.is_active %}<span class="compact-table__sub">{% translate "No longer on it" %}</span>{% endif %}</td>
+                <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+                <td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"j M, P" }}{% elif task.scheduled_date %}{{ task.scheduled_date|date:"j M" }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endwith %}{% empty %}<tr><td colspan="5" class="empty-state">{% translate "No tasks yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% else %}
+<div class="section">
+    <h2>{% translate "Reports & ratings" %}</h2>
+    <div class="table-wrap"><table class="compact-table">
+        <thead><tr><th>{% translate "Task #" %}</th><th>{% translate "Customer / Site" %}</th><th>{% translate "Resolved" %}</th><th>{% translate "Rating" %}</th></tr></thead>
+        <tbody>
+            {% for report in rows %}
+            <tr>
+                <td><a class="task-number" href="{% url 'tasks:task_detail' report.task.pk %}" dir="ltr">{{ report.task.task_number }}</a><span class="compact-table__sub">{{ report.submitted_at|date:"j M Y" }}</span></td>
+                <td><strong>{{ report.task.site.customer.name }}</strong><span class="compact-table__sub">{{ report.task.site.name }}</span></td>
+                <td>{% if report.resolved %}{% translate "Yes" %}{% else %}<span class="muted">{% translate "Follow-up needed" %}</span>{% endif %}</td>
+                <td>{% with feedback=report.task.feedback %}{% if feedback.rating %}<span class="portal-stars" title="{{ feedback.comment }}">{% for n in "12345" %}{% if forloop.counter <= feedback.rating %}★{% else %}☆{% endif %}{% endfor %}</span>{% if feedback.comment %}<span class="compact-table__sub">{{ feedback.comment|truncatechars:80 }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}{% endwith %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="empty-state">{% translate "No visit reports yet." %}</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
 
@@ -112,3 +112,19 @@ class PageSmokeTests(TaskTestCase):
                 with self.subTest(user=who, url=url):
                     response = self.client.get(url)
                     self.assertLess(response.status_code, 500)
+
+
+class StaffKeepMeSignedInTests(TestCase):
+    def setUp(self):
+        get_user_model().objects.create_user('staffer', password='pass12345')
+
+    def test_ticked_keeps_the_sign_in_and_unticked_ends_it_with_the_browser(self):
+        for remember, ends_with_browser in (('1', False), ('', True)):
+            with self.subTest(remember=remember):
+                client = Client()
+                client.post('/accounts/login/', {'username': 'staffer', 'password': 'pass12345', 'remember': remember})
+                self.assertIn('_auth_user_id', client.session)
+                self.assertEqual(client.session.get_expire_at_browser_close(), ends_with_browser)
+
+    def test_the_box_is_ticked_to_begin_with(self):
+        self.assertContains(Client().get('/accounts/login/'), 'name="remember" value="1" checked')

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{{ country.display_name }} — {% translate "Scheduled tasks" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+{# The tasks behind one number on the all-countries schedule, grouped as it counts them: overdue and blocked first. #}
+<div class="page__header">
+    <div>
+        <a href="{% url 'tasks:all_week' %}?start={{ week_start|date:'Y-m-d' }}" class="back-link">{% translate "Back to all countries — schedule" %}</a>
+        <h1>{{ country.display_name }}{% if technician %} · {{ technician.full_name }}{% elif unassigned %} · {% translate "No technician yet" %}{% endif %}</h1>
+        <p class="muted">
+            {% if start == end %}{{ start|date:"l j F Y" }}{% else %}{{ start|date:"j M" }} – {{ end|date:"j M Y" }}{% endif %}
+            · {% blocktranslate count counter=total %}{{ counter }} task{% plural %}{{ counter }} tasks{% endblocktranslate %}
+        </p>
+    </div>
+    {% if technician %}
+    <a href="{% url 'tasks:technician_board' technician.pk %}?start={{ start|date:'Y-m-d' }}" class="button button--secondary">{% translate "Open the technician's board" %}</a>
+    {% else %}
+    <form method="post" action="{% url 'tasks:set_active_country' %}">
+        {% csrf_token %}
+        <input type="hidden" name="country" value="{{ country.pk }}">
+        <input type="hidden" name="next" value="{% url 'tasks:task_week' %}?start={{ start|date:'Y-m-d' }}">
+        <button type="submit" class="button button--secondary">{% translate "Open the country's calendar" %}</button>
+    </form>
+    {% endif %}
+</div>
+
+{# One line per group, as a quick summary that jumps to it. #}
+{% if groups %}
+<nav class="sgroup-summary" aria-label="{% translate 'Status' %}">
+    {% for group in groups %}
+    <a href="#{{ group.key }}" class="sgroup-chip{% if group.attention %} is-attention{% endif %}">{{ group.tasks|length }} {{ group.label }}</a>
+    {% endfor %}
+</nav>
+{% endif %}
+
+{% for group in groups %}
+<section class="section sgroup{% if group.attention %} sgroup--attention{% endif %}" id="{{ group.key }}">
+    <h2>{{ group.label }} <span class="muted">({{ group.tasks|length }})</span></h2>
+    <p class="field__help">{{ group.meaning }}{% if group.attention %} {% translate "These need a new date." %}{% endif %}</p>
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>{% translate "Task" %}</th><th>{% translate "Day" %}</th><th>{% translate "Customer" %}</th>
+                <th>{% translate "Type" %}</th><th>{% translate "Lead technician" %}</th><th>{% translate "Status" %}</th>
+            </tr></thead>
+            <tbody>
+                {% for task in group.tasks %}
+                <tr>
+                    <td><a href="{% url 'tasks:task_detail' task.pk %}" dir="ltr">{{ task.task_number }}</a></td>
+                    <td>{{ task.day|date:"D j M" }}</td>
+                    <td>{{ task.site.customer.name }} — {{ task.site.name }}{% if task.stop_reason %}<br><span class="sgroup-reason">{% translate "Reason:" %} {{ task.stop_reason }}</span>{% endif %}</td>
+                    <td>{{ task.task_type.display_name|default:"—" }}</td>
+                    <td>{{ task.lead_technician.full_name|default:"—" }}</td>
+                    <td><span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% empty %}
+<p class="empty-state">{% translate "No tasks here." %}</p>
+{% endfor %}
+{% endblock %}

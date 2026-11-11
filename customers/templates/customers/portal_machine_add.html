@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Add a machine" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <a href="{% url 'customers:portal_machines' %}" class="back-link">{% translate "Back to my machines" %}</a>
+            <h1>{% translate "Add a machine" %}</h1>
+            <p class="muted">{% translate "It joins your list at once, waiting for our team to confirm it — at the next visit, or from the photo of its sticker." %}</p>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="section form-grid" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+        {% for field in form %}
+        {# One site: already chosen, nothing to ask. #}
+        {% if field.name == 'site' and form.fields.site.queryset.count == 1 %}
+        <input type="hidden" name="{{ field.html_name }}" value="{{ field.value|default:'' }}">
+        {# One branch: chosen for them — but a new one may have opened. #}
+        <p class="field__help field--wide"><a href="{% url 'customers:portal_branch_request' %}">{% translate "Your branch isn't listed? Request a new branch" %}</a></p>
+        {% else %}
+        <div class="field{% if field.errors %} field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            {% if field.name == 'site' %}<p class="field__help"><a href="{% url 'customers:portal_branch_request' %}">{% translate "Your branch isn't listed? Request a new branch" %}</a></p>{% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Add the machine" %}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

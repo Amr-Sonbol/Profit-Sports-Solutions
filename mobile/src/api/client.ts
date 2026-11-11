@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:8000';
+/** The server's address — also the review page's base, so its images load. */
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://10.0.2.2:8000';
+const BASE_URL = API_BASE_URL;
 const TOKEN_KEY = 'auth_token';
 
 // expo-secure-store has no real implementation on web (no OS keychain to
@@ -68,11 +70,42 @@ interface RequestOptions {
  * response into a thrown error instead of every caller checking
  * response.ok by hand.
  */
+const ACTIVE_COUNTRY_KEY = 'active_country';
+
+/**
+ * The country a manager chose to look at (its id), or null for their own —
+ * sent with every request (X-Active-Country), like the website's header
+ * switcher. The server ignores it for anyone below a manager.
+ */
+export async function getActiveCountry(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(ACTIVE_COUNTRY_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setActiveCountry(id: string | null): Promise<void> {
+  try {
+    if (id) {
+      await SecureStore.setItemAsync(ACTIVE_COUNTRY_KEY, id);
+    } else {
+      await SecureStore.deleteItemAsync(ACTIVE_COUNTRY_KEY);
+    }
+  } catch {
+    // Not remembered across a restart; the choice still holds until then.
+  }
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = await getToken();
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Token ${token}`;
+  }
+  const activeCountry = await getActiveCountry();
+  if (activeCountry) {
+    headers['X-Active-Country'] = activeCountry;
   }
 
   let body: BodyInit | undefined;

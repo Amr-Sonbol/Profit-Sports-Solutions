@@ -1,0 +1,54 @@
+{% load i18n %}{% comment %}
+One series over the last 12 months as a line (views._my_trend_chart):
+the line itself is an SVG polyline; each month's point is an HTML dot in
+its own column, so the value shows on hover or keyboard focus like the
+bar charts, and the months run right to left in Arabic with the line
+mirrored to match. "Show as table" lists every month.
+{% endcomment %}
+<section class="section">
+    <div class="section__header">
+        <div>
+            <h2>{% if viewing_other %}{% translate "Tasks completed per month" %}{% else %}{% translate "Tasks you completed per month" %}{% endif %}</h2>
+            <p class="field__help">{% blocktranslate count months=chart.periods|length %}The last {{ months }} month. Completed means the work report was submitted.{% plural %}The last {{ months }} months. Completed means the work report was submitted.{% endblocktranslate %}</p>
+        </div>
+        <p class="trend-summary">
+            <span class="trend-summary__value">{{ chart.this_month }}</span> {% translate "this month" %}
+            {% if chart.change > 0 %}<span class="trend-summary__change">▲ {% blocktranslate with count=chart.change_size %}{{ count }} more than last month{% endblocktranslate %}</span>
+            {% elif chart.change < 0 %}<span class="trend-summary__change">▼ {% blocktranslate with count=chart.change_size %}{{ count }} fewer than last month{% endblocktranslate %}</span>
+            {% elif chart.change == 0 %}<span class="trend-summary__change">{% translate "the same as last month" %}</span>{% endif %}
+        </p>
+    </div>
+    <div class="chart trend-chart" role="group" aria-label="{% translate 'Tasks you completed per month' %}">
+        <div class="chart__grid" aria-hidden="true">
+            {% for tick in chart.ticks %}<span class="chart__tick" style="inset-block-end: {% widthratio tick chart.top 100 %}%">{{ tick }}</span>{% endfor %}
+        </div>
+        <div class="chart__plot">
+            <svg class="trend-chart__line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                <polyline points="{{ chart.line_points }}" />
+            </svg>
+            {% for month in chart.periods %}
+            <div class="chart__week{% if month.is_current %} chart__week--current{% endif %}">
+                <div class="trend-chart__column">
+                    <span class="trend-chart__point" style="inset-block-end: {{ month.completed_pct }}%" tabindex="0"
+                          data-tip="{{ month.completed }}"
+                          aria-label="{{ month.start|date:'F Y' }}: {{ month.completed }}"></span>
+                </div>
+                <span class="chart__label">{% if month.is_current %}{% translate "This month" %}{% else %}{{ month.start|date:"M Y" }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <details class="chart-table">
+        <summary>{% translate "Show as table" %}</summary>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>{% translate "Month" %}</th><th>{% translate "Completed" %}</th></tr></thead>
+                <tbody>
+                    {% for month in chart.periods %}
+                    <tr><td>{{ month.start|date:"F Y" }}</td><td>{{ month.completed }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+</section>

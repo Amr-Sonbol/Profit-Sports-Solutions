@@ -1,0 +1,18 @@
+{% load i18n files %}{% comment %}One photo, video or file the customer sent (tasks.customer_report item): a photo opens full size in a new tab; a video plays here, with a link for a format the browser can't play.{% endcomment %}
+<figure class="media-item">
+    {% if item.kind == 'image' %}
+    <a href="{{ item.file.url }}" target="_blank" rel="noopener"><img src="{{ item.file.url }}" alt="{{ item.file|filename }}" loading="lazy"></a>
+    {% elif item.kind == 'video' %}
+    <video src="{{ item.file.url }}" controls preload="metadata"></video>
+    <a href="{{ item.file.url }}" target="_blank" rel="noopener" class="media-item__open">{% translate "Open video" %}</a>
+    {% else %}
+    {% include "_attachment.html" with file=item.file %}
+    {% endif %}
+    {% if item.label == 'serial' or item.added_by or item.sent_at %}
+    <figcaption>
+        {% if item.label == 'serial' %}{% translate "Serial plate" %}{% endif %}
+        {% if item.added_by %}{% translate "Added by our team" %}{% endif %}
+        {% if item.sent_at %}{{ item.sent_at|date:"j M" }}{% endif %}
+    </figcaption>
+    {% endif %}
+</figure>

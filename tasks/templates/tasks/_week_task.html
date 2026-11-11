@@ -1,0 +1,30 @@
+{% load i18n %}{% comment %}
+One task on a week board: its time (or "Any time that day" when only
+the day is set), the day too when `show_day` (the overdue list), where,
+and the person's role, priority and status.
+{% endcomment %}
+<li>
+    <a class="task-number" href="{% url task_url task.pk %}">{{ task.task_number }}</a>
+    {% if not no_time %}
+    <span class="muted">
+        {% if show_day %}{% if task.scheduled_for %}{{ task.scheduled_for|date:"D j M" }}{% else %}{{ task.scheduled_date|date:"D j M" }}{% endif %} ·{% endif %}
+        {% if not task.scheduled_for %}
+        {% translate "Any time that day" %}
+        {% elif task.estimated_finish %}
+        {% blocktranslate with start=task.scheduled_for|date:"TIME_FORMAT" end=task.estimated_finish|date:"TIME_FORMAT" %}{{ start }}–{{ end }} (est.){% endblocktranslate %}
+        {% else %}
+        {{ task.scheduled_for|date:"TIME_FORMAT" }}
+        {% endif %}
+    </span>
+    {% endif %}
+    {{ task.site.customer.name }} — {{ task.site.name }}
+    {% if task.my_role == 'lead' %}
+        <span class="badge badge--role-lead">{% translate "Lead" %}</span>
+    {% elif task.my_role == 'helper' %}
+        <span class="badge badge--role-helper">{% translate "Helper" %}</span>
+    {% else %}
+        <span class="badge badge--muted">{% translate "Responsible" %}</span>
+    {% endif %}
+    <span class="badge badge--priority-{{ task.priority }}">{{ task.get_priority_display }}</span>
+    <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
+</li>

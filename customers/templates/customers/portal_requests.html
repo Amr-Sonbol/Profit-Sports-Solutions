@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Requests" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="portal">
+    <div class="page__header">
+        <div>
+            <h1>{% translate "Requests" %}</h1>
+            <p class="muted">{% translate "Every request you have sent us, and how far each has got." %}</p>
+        </div>
+        <a href="{% url 'customers:portal_ticket_new' %}" class="button">{% translate "New request" %}</a>
+    </div>
+
+    <nav class="tabs" aria-label="{% translate 'Requests' %}">
+        <a href="?" {% if not showing_closed %}class="is-active"{% endif %}{% if not showing_closed %} aria-current="page"{% endif %}>{% translate "Open" %} ({{ open_count }})</a>
+        <a href="?show=closed" {% if showing_closed %}class="is-active"{% endif %}{% if showing_closed %} aria-current="page"{% endif %}>{% translate "Closed" %} ({{ closed_count }})</a>
+    </nav>
+
+    <section class="section">
+        {% if tickets %}
+        <ul class="action-list">
+            {% for ticket in tickets %}
+            <li class="row-with-actions">
+                <a href="{% url 'tasks:ticket_status' ticket.token %}" class="action-row portal-row">
+                    <span class="portal-row__main">
+                        <strong dir="ltr">{{ ticket.ticket_number }}</strong>
+                        <span>{{ ticket.request_type }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</span>
+                        <span class="muted">{{ ticket.site_description }} · {{ ticket.submitted_at|date:"j M Y" }}</span>
+                        {% if ticket.is_open %}{% include "_progress_steps.html" with steps=ticket.steps label=ticket.progress.0 %}{% endif %}
+                    </span>
+                    <span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span>
+                </a>
+                {# Finished: its report, one click away. #}
+                {% if ticket.report_visit %}{% include "customers/_report_download.html" with visit=ticket.report_visit %}{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% elif showing_closed %}
+        <p class="empty-state">{% translate "No closed requests yet." %}</p>
+        {% else %}
+        <div class="empty-state">
+            <p>{% translate "No open requests. Send us a request whenever you need us." %}</p>
+            <a href="{% url 'customers:portal_ticket_new' %}" class="button button--secondary">{% translate "New request" %}</a>
+        </div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

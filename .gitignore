@@ -6,3 +6,12 @@ db.sqlite3
 staticfiles/
 media/
 *.log
+
+# Local test logins (never committed)
+test-accounts.local.txt
+
+# Real stock and customer data from the warehouse (never committed)
+docs/Stock.xlsx
+
+# This machine only: extra trusted certificates (e.g. an antivirus that scans outgoing mail), see .env SSL_CERT_FILE.
+local-certs/

@@ -1,19 +1,33 @@
+import { Children, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 
 import { Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { isRTL, t } from '@/i18n';
+
+/** Each piece of text in the app's language (i18n.t); numbers, names and everything else as they are. */
+function translated(children: ReactNode): ReactNode {
+  if (typeof children === 'string') {
+    return t(children);
+  }
+  return Array.isArray(children)
+    ? Children.map(children, (child) => (typeof child === 'string' ? t(child) : child))
+    : children;
+}
 
 export type ThemedTextProps = TextProps & {
   type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
   themeColor?: ThemeColor;
 };
 
-export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
+export function ThemedText({ style, type = 'default', themeColor, children, ...rest }: ThemedTextProps) {
   const theme = useTheme();
 
   return (
     <Text
       style={[
+        // Arabic reads from the right; a screen's own textAlign (centred, say) still wins.
+        isRTL() && styles.rtl,
         { color: theme[themeColor ?? 'text'] },
         type === 'default' && styles.default,
         type === 'title' && styles.title,
@@ -26,11 +40,14 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
         style,
       ]}
       {...rest}
-    />
+    >
+      {translated(children)}
+    </Text>
   );
 }
 
 const styles = StyleSheet.create({
+  rtl: { textAlign: 'right', writingDirection: 'rtl' },
   small: {
     fontSize: 14,
     lineHeight: 20,

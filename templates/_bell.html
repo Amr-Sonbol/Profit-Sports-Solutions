@@ -1,0 +1,134 @@
+{% load i18n %}{% comment %}The bell, staff's or a customer's: in every page's header, and alone at /bell/ for
+static/js/bell.js to refresh when someone comes back to the tab. display:contents, so the header lays out its parts as before.{% endcomment %}
+<div id="bell" class="bell-slot" data-url="{% url 'bell' %}">
+        {% if user.technician %}
+            <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
+            <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                {% if unseen_notification_count %}
+                <span class="notif-bell__badge">{{ unseen_notification_count }}</span>
+                {% endif %}
+            </label>
+            <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
+            <div class="notif-dropdown">
+                <h2>{% translate "Notifications" %}</h2>
+                {% if unseen_notifications %}
+                <ul class="plain-list">
+                    {% for notification in unseen_notifications %}
+                    <li>
+                        {% if notification.kind == 'new_task' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}">
+                            {% translate "New task" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'unscheduled_overdue' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% translate "Not scheduled within 24 working hours" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'unscheduled_overdue_many' %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'report_late' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% translate "Report waiting more than 2 working days for approval" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'report_late_many' %}
+                        <a href="{% url 'tasks:task_list' %}?status=completed&amp;country=all" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} report waiting more than 2 working days for approval{% plural %}{{ count }} reports waiting more than 2 working days for approval{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'schedule_change_pending' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% translate "Change of visit time requested — approval required" %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'escalation_pending' %}
+                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}" class="notif-alarm">
+                            {% translate "Escalated to you — decision required" %}
+                            — {{ notification.ticket.company_name }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'internal_ticket' %}
+                        <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
+                            {% translate "Internal task assigned to you" %}
+                            — {{ notification.ticket.subject }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'customer_locked' %}
+                        <a href="{% url 'customers:customer_detail' notification.customer.pk %}#portal" class="notif-alarm">
+                            {% translate "Customer account locked" %}
+                            — {{ notification.customer.name }}
+                        </a>
+                        {% elif notification.kind == 'app_errors' %}
+                        <a href="{% url 'admin:people_apperror_changelist' %}" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} new error in the phone app{% plural %}{{ count }} new errors in the phone app{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'staff_locked' %}
+                        <a href="{% url 'tasks:staff_accounts' %}?status=locked" class="notif-alarm">
+                            {% translate "Staff login locked" %}
+                            — {{ notification.person.full_name }}
+                        </a>
+                        {% elif notification.kind == 'task_update' %}
+                        <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
+                            {{ notification.what }}{% if notification.sender %} · {% blocktranslate with name=notification.sender %}by {{ name }}{% endblocktranslate %}{% endif %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'task_message' %}
+                        <a href="{% if 'view_tasks' in role_permissions %}{% url 'tasks:task_detail' notification.task.pk %}{% else %}{% url 'tasks:my_task_detail' notification.task.pk %}{% endif %}">
+                            {% if notification.sender %}{% blocktranslate with name=notification.sender %}New message from {{ name }}{% endblocktranslate %}{% else %}{% translate "New message" %}{% endif %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% else %}
+                        <a href="{% url 'tasks:ticket_review' notification.ticket.pk %}">
+                            {% if notification.kind == 'new_ticket' %}{% translate "New ticket" %}{% elif notification.kind == 'escalation_decided' %}{% translate "Escalation decided" %}{% else %}{% translate "New reply" %}{% endif %}
+                            — {{ notification.ticket.company_name }}
+                            <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
+                        {% endif %}
+                        <span class="muted">{{ notification.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-state">{% translate "No new notifications." %}</p>
+                {% endif %}
+            </div>
+        {% elif user.customer %}
+            {# A customer's bell (spots.context_processors.portal_nav): reports to rate, replies, visits booked. #}
+            <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
+            <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                {% if portal_bell_new %}<span class="notif-bell__badge">{{ portal_bell_new }}</span>{% endif %}
+            </label>
+            <label for="notif-toggle" class="notif-overlay" aria-hidden="true"></label>
+            <div class="notif-dropdown">
+                <h2>{% translate "Notifications" %}</h2>
+                {% if portal_bell %}
+                <ul class="plain-list">
+                    {% for item in portal_bell %}
+                    <li{% if item.new %} class="notif-item--new"{% endif %}>
+                        <a href="{{ item.url }}">{{ item.text }} <span class="muted">({{ item.about }})</span></a>
+                        <span class="muted">{{ item.created_at|date:"j M" }}, {{ item.created_at|time:"TIME_FORMAT" }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-state">{% translate "No notifications yet." %}</p>
+                {% endif %}
+            </div>
+        {% endif %}
+</div>

@@ -36,6 +36,23 @@ RENDER_EXTERNAL_HOSTNAME = config('RENDER_EXTERNAL_HOSTNAME', default='')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
+# The customer portal's own address (e.g. portal.example.com, or
+# portal.localhost:8000 locally), apart from the staff site: there only the
+# portal's pages open, and every link emailed to a customer points there
+# (spots.hosts). Empty: one address for both, as before.
+PORTAL_HOST = config('PORTAL_HOST', default='')
+# The staff site's own address (e.g. app.example.com, or localhost:8000
+# locally): links in staff emails a customer's action sends (a new request,
+# their reply) point here, not to the portal they were on (spots.hosts.staff_url).
+# Empty: the address the request came in on, as before.
+STAFF_HOST = config('STAFF_HOST', default='')
+# Tests run on one address whatever .env says; those about the separate
+# addresses set them themselves (override_settings).
+if 'test' in sys.argv:
+    PORTAL_HOST = STAFF_HOST = ''
+if PORTAL_HOST and PORTAL_HOST.split(':')[0] not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(PORTAL_HOST.split(':')[0])
+
 # Error monitoring — off unless SENTRY_DSN is set in .env, so local dev
 # and CI (which never set it) are completely unaffected. This is what
 # actually surfaces the errors behind the friendly 404/403/500 pages;
@@ -92,8 +109,17 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'spots.middleware.TechnicianLocaleMiddleware',
+    # The portal's own address shows only the portal; the staff address sends portal links there
+    # (spots.hosts). After sign-in handling: its "not found" page needs to know who is asking.
+    'spots.hosts.PortalHostMiddleware',
+    # Who is making the request, so an email that fails later can be shown to them (spots.email_failures).
+    'spots.email_failures.CurrentUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # An admin viewing the portal as a customer (customers.views.view_as_start):
+    # after messages (it uses them), before the language and timezone, so those
+    # are the customer's.
+    'spots.middleware.ViewAsCustomerMiddleware',
+    'spots.middleware.TechnicianLocaleMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Must be last — axes needs to see what every other middleware
     # already did to the request/response before it decides whether
@@ -132,6 +158,12 @@ AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
 # @override_settings.
 AXES_ENABLED = 'test' not in sys.argv
 
+# Emails go out on a background thread once the page's changes are saved, so
+# nobody waits on the mail server (or a visit report's PDF) — tasks.views
+# ._in_background. Under the test runner they're sent at once instead, so a
+# test can read them from mail.outbox.
+SEND_EMAILS_IN_BACKGROUND = 'test' not in sys.argv
+
 ROOT_URLCONF = 'spots.urls'
 
 TEMPLATES = [
@@ -149,6 +181,9 @@ TEMPLATES = [
                 'people.context_processors.active_country',
                 'people.context_processors.notification_bell',
                 'spots.context_processors.static_version',
+                'spots.context_processors.page_back',
+                'spots.context_processors.portal_nav',
+                'spots.email_failures.failed_emails',
             ],
         },
     },
@@ -310,7 +345,7 @@ if not DEBUG:
 # the web views underneath (see api/permissions.py), not a separate model.
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        'api.authentication.CountryTimezoneTokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',

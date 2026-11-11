@@ -12,8 +12,14 @@
     <div class="filters__search">
         <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by serial, model, brand, site, or customer' %}">
     </div>
+    {% if showing_pending %}<input type="hidden" name="status" value="pending">{% endif %}
     <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
+
+<nav class="tabs" aria-label="{% translate 'Machines' %}">
+    <a href="?"{% if not showing_pending %} class="is-active"{% endif %}>{% translate "All" %}</a>
+    <a href="?status=pending"{% if showing_pending %} class="is-active"{% endif %}>{% translate "Added by customers, to confirm" %} ({{ pending_count }})</a>
+</nav>
 
 <div class="section">
     {% if page_obj %}
@@ -34,10 +40,10 @@
                 <tr>
                     <td>{{ asset.site.customer.name }} — {{ asset.site.name }}</td>
                     <td>{{ asset.brand.name }}</td>
-                    <td>{{ asset.model_name }}</td>
+                    <td>{{ asset.model_name }}{% if asset.code %}<br><span class="muted" dir="ltr">{{ asset.code }}</span>{% endif %}</td>
                     <td>{{ asset.serial_no|default:"—" }}</td>
                     <td>
-                        <span class="badge badge--status-{% if asset.status == 'active' %}completed{% elif asset.status == 'faulty' %}blocked{% else %}muted{% endif %}">
+                        <span class="badge {% if asset.status == 'pending' %}badge--warning{% else %}badge--status-{% if asset.status == 'active' %}completed{% elif asset.status == 'faulty' %}blocked{% else %}muted{% endif %}{% endif %}">
                             {{ asset.get_status_display }}
                         </span>
                     </td>
@@ -50,11 +56,11 @@
     {% if page_obj.has_other_pages %}
     <div class="pagination">
         {% if page_obj.has_previous %}
-            <a href="?{% if search %}q={{ search }}&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+            <a href="?{% if search %}q={{ search|urlencode }}&{% endif %}{% if showing_pending %}status=pending&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
         {% endif %}
         <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
         {% if page_obj.has_next %}
-            <a href="?{% if search %}q={{ search }}&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+            <a href="?{% if search %}q={{ search|urlencode }}&{% endif %}{% if showing_pending %}status=pending&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
         {% endif %}
     </div>
     {% endif %}

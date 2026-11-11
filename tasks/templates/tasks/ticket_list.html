@@ -8,7 +8,8 @@
     <h1>{% translate "Tickets" %}</h1>
 </div>
 
-<form method="get" class="filters">
+{# A compact filter panel: equal fields in a grid, each labelled, actions at the end. #}
+<form method="get" class="filters filters--panel">
     <div class="field">
         <label for="filter-status">{% translate "Status" %}</label>
         <select id="filter-status" name="status">
@@ -19,21 +20,32 @@
         </select>
     </div>
     <div class="field">
+        <label for="filter-about">{% translate "About" %}</label>
+        <select id="filter-about" name="about">
+            <option value="">{% translate "All" %}</option>
+            {% for value, label in about_choices %}
+            <option value="{{ value }}" {% if about == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="field">
+        <label for="filter-need">{% translate "Need" %}</label>
+        <select id="filter-need" name="need">
+            <option value="">{% translate "All" %}</option>
+            {% for value, label in need_choices %}
+            <option value="{{ value }}" {% if need == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="field">
         <label for="filter-ticket-id">{% translate "Ticket number" %}</label>
         <input type="text" id="filter-ticket-id" name="ticket_id" value="{{ ticket_id }}">
     </div>
     <div class="field">
         <label for="filter-customer">{% translate "Customer" %}</label>
-        <select id="filter-customer" name="customer">
-            <option value="">{% translate "All customers" %}</option>
-            {% for customer in customers %}
-            <option value="{{ customer.pk }}" {% if selected_customer == customer.pk|stringformat:"s" %}selected{% endif %}>{{ customer.name }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="field">
-        <label for="filter-company">{% translate "Company (as entered)" %}</label>
-        <input type="text" id="filter-company" name="company" value="{{ company }}">
+        {# Type any part of the name; the list suggests as you type. #}
+        <input type="text" id="filter-customer" name="customer_name" value="{{ customer_name }}" list="customer-names" autocomplete="off" placeholder="{% translate 'Type a name' %}">
+        <datalist id="customer-names">{% for customer in customers %}<option value="{{ customer.name }}">{% endfor %}</datalist>
     </div>
     <div class="field">
         <label for="filter-site">{% translate "Site" %}</label>
@@ -56,18 +68,20 @@
         </select>
     </div>
     {% endif %}
-    <button type="submit" class="button">{% translate "Search" %}</button>
+    <div class="filters__actions">
+        <button type="submit" class="button">{% translate "Search" %}</button>
+        <a href="?" class="button button--secondary">{% translate "Clear" %}</a>
+    </div>
 </form>
 
 <div class="table-wrap">
-    <table>
+    {# Six columns, each with its detail on a second line, so the table fits the page. #}
+    <table class="compact-table">
         <thead>
             <tr>
                 <th>{% translate "Ticket" %}</th>
-                <th>{% translate "Submitted" %}</th>
-                {% if all_countries %}<th>{% translate "Country" %}</th>{% endif %}
-                <th>{% translate "Company" %}</th>
-                <th>{% translate "Site / location" %}</th>
+                <th>{% translate "Customer" %}</th>
+                <th>{% translate "Request" %}</th>
                 <th>{% translate "Contact" %}</th>
                 <th>{% translate "Assigned to" %}</th>
                 <th>{% translate "Status" %}</th>
@@ -76,12 +90,12 @@
         <tbody>
             {% for ticket in tickets %}
             <tr>
-                <td><a href="{% url 'tasks:ticket_review' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
-                <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
-                {% if all_countries %}<td>{{ ticket.country.display_name }}</td>{% endif %}
-                <td>{{ ticket.company_name }}</td>
-                <td>{{ ticket.site_description }}</td>
-                <td>{{ ticket.contact_name }} — {{ ticket.contact_phone }}</td>
+                <td><a href="{% url 'tasks:ticket_review' ticket.pk %}" dir="ltr">{{ ticket.ticket_number }}</a><span class="compact-table__sub">{{ ticket.submitted_at|date:"j M, P" }}</span></td>
+                <td><strong>{{ ticket.company_name }}</strong><span class="compact-table__sub">{{ ticket.site_description }}{% if all_countries %} · {{ ticket.country.display_name }}{% endif %}</span></td>
+                <td>{{ ticket.request_type }}{% if ticket.subject %}<span class="compact-table__sub">{{ ticket.subject }}</span>{% endif %}
+                    {# Photos and videos it came with: none yet, ask early. #}
+                    <span class="compact-table__sub{% if not ticket.media_count %} muted{% endif %}">{% if ticket.media_count %}{% blocktranslate count count=ticket.media_count %}{{ count }} photo or video{% plural %}{{ count }} photos or videos{% endblocktranslate %}{% else %}{% translate "No photos yet" %}{% endif %}</span></td>
+                <td>{{ ticket.contact_name }}<span class="compact-table__sub" dir="ltr">{{ ticket.contact_phone }}</span></td>
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>
                     {% if ticket.is_escalated %}
@@ -100,7 +114,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="8">
+                <td colspan="6">
                     <p class="empty-state">{% translate "No tickets match the selected filters." %}</p>
                 </td>
             </tr>
@@ -108,4 +122,15 @@
         </tbody>
     </table>
 </div>
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+    {% endif %}
+    <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+    {% if page_obj.has_next %}
+        <a href="?status={{ status }}{% if filter_qs %}&{{ filter_qs }}{% endif %}&page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,121 @@
+{% load i18n %}{% comment %}A part shipment's own steps (tasks.shipments): preparing (the warehouse manager picks the parts, the PAK number and who ships it), ready to ship (that technician hands it to the courier), shipped. `shipment` comes from tasks.views._shipment_context.{% endcomment %}
+<div class="section shipment-panel">
+    <div class="shipment-panel__head">
+        <h2>{% translate "Part shipment" %}</h2>
+        <span class="badge {% if shipment.stage == 'shipped' %}badge--good{% elif shipment.stage == 'cancelled' %}badge--muted{% else %}badge--status-assigned{% endif %}">{{ shipment.label }}</span>
+    </div>
+    <ol class="shipment-steps" aria-label="{% translate 'Part shipment' %}">
+        <li class="{% if shipment.stage == 'preparing' %}is-current{% else %}is-done{% endif %}">{% translate "Preparing" %}</li>
+        <li class="{% if shipment.stage == 'ready' %}is-current{% elif shipment.stage == 'shipped' %}is-done{% endif %}">{% translate "Ready to ship" %}</li>
+        <li class="{% if shipment.stage == 'shipped' %}is-current{% endif %}">{% translate "Shipped" %}</li>
+    </ol>
+
+    {# Where it goes and who takes it (tasks.shipments.send_to). #}
+    {% with to=shipment.send_to %}
+    <div class="shipment-send-to">
+        <h3>{% translate "Send to" %}</h3>
+        <p><strong>{{ to.customer }}</strong> — {{ to.branch }}</p>
+        {% if to.address %}<p><a href="{{ to.directions_url }}" target="_blank" rel="noopener" dir="auto">{{ to.address }}</a></p>{% endif %}
+        <p>{{ to.contact_name|default:"—" }}{% if to.contact_phone %} · <a href="tel:{{ to.contact_phone }}" dir="ltr">{{ to.contact_phone }}</a>{% endif %}</p>
+    </div>
+    {% endwith %}
+
+    <dl class="detail-grid">
+        <div>
+            <dt>{% translate "Parts" %}</dt>
+            <dd>{% for line in shipment.parts %}<span dir="ltr">{{ line.product_code }}</span> × {{ line.quantity }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">{% translate "Not picked yet" %}</span>{% endfor %}</dd>
+        </div>
+        <div>
+            <dt>{% translate "PAK reference number" %}</dt>
+            <dd dir="ltr">{{ task.pak_reference_number|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Ships it" %}</dt>
+            <dd>{{ shipment.shipper.full_name|default:"—" }}</dd>
+        </div>
+        {% if shipment.stage == 'shipped' %}
+        <div>
+            <dt>{% translate "Shipping company" %}</dt>
+            <dd>{{ task.get_shipping_company_display|default:"—" }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "Shipping tracking number" %}</dt>
+            <dd dir="ltr">{{ task.shipping_tracking_number|default:"—" }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+
+    {% if shipment.can_prepare %}
+    {# The warehouse manager: the parts picked (they leave stock), the PAK number, who ships it. Again while not shipped, to correct. #}
+    <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Ready to ship? The parts leave the stock and the technician is told.' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="shipment_ready">
+        <h3>{% if shipment.stage == 'preparing' %}{% translate "Prepare the parcel" %}{% else %}{% translate "Change the parcel" %}{% endif %}</h3>
+        <p class="field__help">{% translate "The parts you pick here leave the warehouse stock." %}</p>
+        <div class="shipment-parts">
+            {% for line in shipment.parts %}
+            <div class="shipment-parts__row">
+                <input type="text" name="part_code" value="{{ line.product_code }}" aria-label="{% translate 'Part code' %}" dir="ltr">
+                <input type="number" name="part_quantity" value="{{ line.quantity }}" min="1" aria-label="{% translate 'Quantity' %}">
+            </div>
+            {% endfor %}
+            {% for row in shipment.blank_rows %}
+            <div class="shipment-parts__row">
+                <input type="text" name="part_code" placeholder="{% translate 'Part code' %}" aria-label="{% translate 'Part code' %}" dir="ltr">
+                <input type="number" name="part_quantity" value="1" min="1" aria-label="{% translate 'Quantity' %}">
+            </div>
+            {% endfor %}
+        </div>
+        <div class="field">
+            <label for="shipment-pak">{% translate "PAK reference number" %}</label>
+            <input type="text" id="shipment-pak" name="pak_reference_number" value="{{ task.pak_reference_number }}" dir="ltr">
+        </div>
+        <div class="field">
+            <label for="shipment-technician">{% translate "The technician who will ship it" %}</label>
+            <select id="shipment-technician" name="technician">
+                <option value="">—</option>
+                {% for person in shipment.technicians %}
+                <option value="{{ person.pk }}"{% if shipment.shipper and person.pk == shipment.shipper.pk %} selected{% endif %}>{{ person.full_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-actions"><button type="submit" class="button">{% translate "Ready to ship" %}</button></div>
+    </form>
+    {% endif %}
+
+    {% if shipment.can_ship %}
+    {# Whoever hands it to the courier: the courier, and its tracking number when it has one. #}
+    <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Mark as shipped? The customer is emailed that the part is on its way.' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="shipment_shipped">
+        <h3>{% translate "Hand it to the courier" %}</h3>
+        <div class="field">
+            <label for="shipment-company">{% translate "Shipping company" %}</label>
+            <select id="shipment-company" name="shipping_company" required>
+                <option value="">—</option>
+                {% for value, label in shipment.companies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="shipment-tracking">{% translate "Shipping tracking number" %}</label>
+            <input type="text" id="shipment-tracking" name="shipping_tracking_number" dir="ltr">
+            <p class="field__help">{% translate "Leave empty when the courier has none (local couriers often don't)." %}</p>
+        </div>
+        <div class="form-actions"><button type="submit" class="button">{% translate "Shipped" %}</button></div>
+        <p class="field__help">{% translate "The customer is emailed that it's on its way, and the request is settled." %}</p>
+    </form>
+    {% endif %}
+
+    {% if shipment.stage == 'shipped' %}
+    {% for visit in shipment.fitting_visits %}
+    <p>{% translate "Fitting visit" %}: <a href="{% url 'tasks:task_detail' visit.pk %}" class="task-number" dir="ltr">{{ visit.task_number }}</a> · {{ visit.get_status_display }}</p>
+    {% endfor %}
+    {% if shipment.can_book_fitting %}
+    <form method="post" class="form-actions" data-confirm="{% translate 'Create a fitting visit? A new visit task is made for this branch.' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="book_fitting">
+        <button type="submit" class="button button--secondary">{% translate "Book a fitting visit" %}</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</div>

@@ -1,0 +1,13 @@
+{% comment %}
+One cell of the all-countries schedule: three fixed slots — total, ▶ in
+progress, ⚠ need a new date — so each kind lines up down the column. `url`
+opens its tasks; empty slots keep their space.
+{% endcomment %}<td{% if cell.is_today %} class="is-today"{% endif %}>
+    {% if cell.count %}
+    <span class="sgrid-cell" title="{{ cell.summary }}">
+        {% if url %}<a href="{{ url }}" class="sgrid-count">{{ cell.count }}</a>{% else %}<span class="sgrid-total">{{ cell.count }}</span>{% endif %}
+        <span class="sgrid-busy">{% if cell.groups.in_progress %}▶ {{ cell.groups.in_progress }}{% endif %}</span>
+        <span class="sgrid-alert">{% if cell.attention %}⚠ {{ cell.attention }}{% endif %}</span>
+    </span>
+    {% else %}<span class="sgrid-zero">·</span>{% endif %}
+</td>

@@ -1,6 +1,7 @@
 import secrets
 
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -50,6 +51,8 @@ class Technician(models.Model):
         COUNTRY_SUPPORT = 'country_support', _('Country Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
         OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
+        # Like a Manager, in every country; no customer requests (docs/access_rules.md).
+        PROJECT_MANAGER = 'project_manager', _('Project Manager')
         ADMIN = 'admin', _('Admin')
 
     class EmploymentType(models.TextChoices):
@@ -147,13 +150,41 @@ class Technician(models.Model):
 
     @property
     def is_manager_tier(self):
-        """Manager and admin share every manager-only screen and action —
-        cross-country reach, approvals, the fixed-floor reference-data
-        screens (skills, brands, countries, ...). Admin is the one thing
+        """Manager, the Operations Manager, the Technical Support Manager and
+        admin share every manager-only screen and action — cross-country
+        reach, approvals, the fixed-floor reference-data screens (skills,
+        brands, countries, ...), the monthly report. Admin is the one thing
         on top: only admin can reach Roles & permissions itself (see
         require_admin) — checked separately with role == Role.ADMIN.
         """
-        return self.role in (self.Role.MANAGER, self.Role.ADMIN)
+        return self.role in (
+            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER,
+        )
+
+    @property
+    def app_language(self):
+        """The phone app's language: their country's (Arabic in Egypt and Saudi
+        Arabia, English elsewhere — the same as its visit reports), not a choice
+        of their own. The website keeps their own `language`."""
+        return self.country.report_language if self.country_id else 'en'
+
+    @property
+    def is_field_staff(self):
+        """Who does the visits — technicians and supervisors: they have their
+        own progress and skills (website menu, the app's Progress tab)."""
+        return self.role in (self.Role.TECHNICIAN, self.Role.SUPERVISOR)
+
+    @property
+    def reaches_all_countries(self):
+        """Who works across every country (docs/access_rules.md): another
+        country's tasks, customers and people, the all-countries boards, the
+        company-wide report and the shared lists (brands, countries, skills).
+        A Manager is one per country, so stays in their own."""
+        return self.role in (
+            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+        )
+
 
     @property
     def is_any_manager(self):
@@ -162,7 +193,7 @@ class Technician(models.Model):
         """
         return self.role in (
             self.Role.MANAGER, self.Role.SUPPORT_MANAGER, self.Role.COUNTRY_SUPPORT,
-            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN, self.Role.PROJECT_MANAGER,
         )
 
     @property
@@ -198,7 +229,7 @@ class RolePermission(models.Model):
     one (role, permission) pair; `allowed` is the only thing an admin
     changes. Deliberately narrow: it only covers the supervisor-side
     actions that plausibly differ by role (dashboard, tasks, technicians,
-    reports). Self-service technician screens (My week, My skills, ...)
+    reports). Self-service technician screens (My schedule, My skills, ...)
     stay open to any signed-in technician regardless of role — there's no
     real case yet for excluding a role from their own record.
     """
@@ -219,6 +250,7 @@ class RolePermission(models.Model):
         OPEN_TICKETS = 'open_tickets', _('Open tickets for a customer (phone, WhatsApp, email)')
         TICKETS_ALL_COUNTRIES = 'tickets_all_countries', _('Handle tickets in all countries')
         CUSTOMER_ACCOUNTS = 'customer_accounts', _('Manage customer portal accounts')
+        VIEW_STOCK = 'view_stock', _('View warehouse stock')
 
     role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)
@@ -236,18 +268,60 @@ class RolePermission(models.Model):
         return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
 
 
+def _default_new_ticket_roles():
+    # Told of each new ticket, by email and in the bell: the Technical Support Manager
+    # (every country) and each country's Country Support Manager (their own). Nobody of
+    # these for a country: the admins instead (tasks.views.new_ticket_recipients).
+    return ['support_manager', 'country_support']
+
+
+def _default_new_task_roles():
+    return ['manager', 'admin']
+
+
 class NotificationSettings(models.Model):
-    """A single row, manager-controlled from the same Roles & permissions
-    screen — whether a schedule-change email to the customer happens
-    automatically or waits for a supervisor to send it deliberately.
-    Off by default: rescheduling never notified anyone by itself before
-    this setting existed, and that stays true until a manager turns it on.
+    """A single row: which automatic messages the system sends, and to
+    whom — set by an admin on the Notifications page (tasks.views.
+    notification_settings). Everything is on by default. Messages a person
+    sends with a button (running late, feedback request, ...) and the
+    security emails (password changed, set-up links) have no switch.
     """
 
-    auto_notify_on_reschedule = models.BooleanField(
-        _('email the customer automatically when a task is rescheduled'), default=False,
-        help_text=_('off by default; a supervisor sends it manually from the task details instead'),
+    # To customers.
+    ticket_received_email = models.BooleanField(
+        _('email the customer when their ticket is received'), default=True,
     )
+    reply_to_customer_email = models.BooleanField(
+        _('email the customer when the office replies to their ticket'), default=True,
+    )
+    auto_notify_on_reschedule = models.BooleanField(
+        _('email the customer automatically when a task is rescheduled'), default=True,
+        help_text=_('when off, a supervisor sends it by hand from the task details instead'),
+    )
+    # To staff.
+    new_ticket_email = models.BooleanField(_('email staff about a new customer ticket'), default=True)
+    new_ticket_roles = ArrayField(
+        models.CharField(max_length=20), default=_default_new_ticket_roles, blank=True,
+        verbose_name=_('roles emailed about a new customer ticket'),
+    )
+    new_task_email = models.BooleanField(_('email staff about a new task'), default=True)
+    new_task_roles = ArrayField(
+        models.CharField(max_length=20), default=_default_new_task_roles, blank=True,
+        verbose_name=_('roles emailed about a new task'),
+    )
+    reply_to_staff_email = models.BooleanField(
+        _('email the assigned person when a customer replies to a ticket'), default=True,
+    )
+    escalation_emails = models.BooleanField(
+        _('email about ticket escalations and their decisions'), default=True,
+    )
+    shipment_to_supervisor_email = models.BooleanField(
+        _("email the task's supervisor when parts are shipped"), default=True,
+    )
+    # To technicians' phones.
+    push_assigned = models.BooleanField(_('phone notification when assigned to a task'), default=True)
+    push_removed = models.BooleanField(_('phone notification when taken off a task'), default=True)
+    push_cancelled = models.BooleanField(_('phone notification when a task is cancelled'), default=True)
 
     class Meta:
         verbose_name = _('notification settings')
@@ -482,3 +556,57 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f'{self.technician} — {self.token[:24]}'
+
+
+class AppError(models.Model):
+    """Something that went wrong in the phone app — a screen that crashed, an
+    error nobody caught — sent by the app itself, so a failure on a
+    technician's phone in the field reaches the office instead of being lost.
+    The admins see how many are new in their bell; the list is in the Django
+    admin (opening it marks them seen)."""
+
+    technician = models.ForeignKey(
+        'Technician', on_delete=models.SET_NULL, null=True, blank=True, related_name='app_errors',
+        verbose_name=_('technician'),
+    )
+    message = models.TextField(_('message'))
+    stack = models.TextField(_('stack'), blank=True)
+    screen = models.CharField(_('screen'), max_length=200, blank=True)
+    app_version = models.CharField(_('app version'), max_length=40, blank=True)
+    platform = models.CharField(_('platform'), max_length=40, blank=True)
+    occurred_at = models.DateTimeField(_('occurred at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('app error')
+        verbose_name_plural = _('app errors')
+        ordering = ['-occurred_at']
+
+    def __str__(self):
+        return f'{self.occurred_at:%Y-%m-%d %H:%M} — {self.message[:80]}'
+
+
+class FailedEmail(models.Model):
+    """An email the app tried and failed to send (the mail server refused or
+    couldn't be reached) — emails go out in the background, so the person
+    who caused it would otherwise never know. Shown once, on their next
+    page, to the staff member whose action sent it; with nobody behind it (a
+    customer's own request, say), to the admins (spots.email_failures)."""
+
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='failed_emails', verbose_name=_('triggered by'),
+    )
+    recipients = models.TextField(_('recipients'))
+    subject = models.CharField(_('subject'), max_length=255)
+    error = models.TextField(_('error'))
+    failed_at = models.DateTimeField(_('failed at'))
+    seen_at = models.DateTimeField(_('seen at'), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _('failed email')
+        verbose_name_plural = _('failed emails')
+        ordering = ['-failed_at']
+
+    def __str__(self):
+        return f'{self.subject} → {self.recipients}'

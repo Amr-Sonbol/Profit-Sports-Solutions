@@ -7,10 +7,11 @@ import logging
 from urllib.request import Request, urlopen
 
 from django.conf import settings
-from django.utils import translation
+from django.utils import timezone, translation
+from django.utils.formats import date_format
 from django.utils.translation import gettext as _
 
-from .models import PushDevice
+from .models import NotificationSettings, PushDevice
 
 EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 TIMEOUT_SECONDS = 5
@@ -53,14 +54,16 @@ def send_push(technicians, title, body, data=None):
 
 
 def push_in_their_language(technician, title_fn, body_fn, data=None):
-    """Sends to one technician, worded in their own app language."""
+    """Sends to one technician, worded in the app's language (their country's)."""
     if technician is None:
         return
-    with translation.override(technician.language or 'en'):
+    with translation.override(technician.app_language):
         send_push([technician], title_fn(), body_fn(), data)
 
 
 def push_assigned(technician, task, is_lead):
+    if not NotificationSettings.load().push_assigned:  # the admin's Notifications page
+        return
     push_in_their_language(
         technician,
         lambda: _('New task assigned') if is_lead else _('Added as helper'),
@@ -69,9 +72,26 @@ def push_assigned(technician, task, is_lead):
     )
 
 
+def push_rebooked(technician, task):
+    """Tells the lead that a task stopped on site has a new visit."""
+    if not NotificationSettings.load().push_assigned:  # the admin's Notifications page
+        return
+    push_in_their_language(
+        technician,
+        lambda: _('New visit booked'),
+        lambda: _('%(number)s — %(site)s, %(when)s') % {
+            'number': task.task_number, 'site': task.site.name,
+            'when': date_format(timezone.localtime(task.scheduled_for), 'j F, P'),
+        },
+        {'type': 'my_task', 'task_id': task.pk},
+    )
+
+
 def push_removed(technician, task):
     """Tells someone they've been taken off a task, so they don't still
     head to the site. Skipped for someone who has left the company."""
+    if not NotificationSettings.load().push_removed:  # the admin's Notifications page
+        return
     if not technician.is_active:
         return
     push_in_their_language(
@@ -86,6 +106,8 @@ def push_removed(technician, task):
 
 def push_cancelled(technician, task):
     """Tells someone still on a task that it was cancelled."""
+    if not NotificationSettings.load().push_cancelled:  # the admin's Notifications page
+        return
     push_in_their_language(
         technician,
         lambda: _('Task cancelled'),

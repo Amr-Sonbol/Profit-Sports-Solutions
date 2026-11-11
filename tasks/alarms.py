@@ -41,7 +41,8 @@ def working_hours_between(start, end, tz, weekend_weekdays):
 
 def overdue_unscheduled_tasks(country, technician, now=None):
     """Open tasks in this country with no date yet, more than 24 working
-    hours after they were created. A supervisor sees the ones they're
+    hours after they were created — every hour counts for an emergency,
+    since the team works weekends for those. A supervisor sees the ones they're
     responsible for, plus any nobody is responsible for; the manager tier
     sees all of them. Everyone else, nothing.
     """
@@ -69,5 +70,64 @@ def overdue_unscheduled_tasks(country, technician, now=None):
     weekend = country.weekend_weekdays
     return [
         task for task in tasks
-        if working_hours_between(task.created_at, now, tz, weekend) > UNSCHEDULED_ALARM_HOURS
+        if working_hours_between(
+            task.created_at, now, tz, set() if task.priority == Task.Priority.EMERGENCY else weekend,
+        ) > UNSCHEDULED_ALARM_HOURS
     ]
+
+
+LATE_REPORT_HOURS = 48  # 2 working days
+
+
+def late_reports(technician, now=None):
+    """Reports waiting more than 2 working days (each country's weekend left
+    out) for the Technical Support Manager's final approval — the Operations
+    Manager's safety net (docs/access_rules.md); nobody else's. Oldest first,
+    each with `waiting_since` and `waiting_days`. Live: gone once approved.
+    """
+    if technician.role != Technician.Role.OPERATIONS_MANAGER:
+        return []
+    from django.db.models import Max
+
+    now = now or timezone.now()
+    late = []
+    for task in Task.objects.filter(status=Task.Status.COMPLETED).annotate(
+        # Since it reached the final approval: the supervisor's review, the report itself, or a reopen.
+        waiting_since=Max('events__occurred_at', filter=Q(events__event_type__in=[
+            TaskEvent.EventType.SUPERVISOR_APPROVED, TaskEvent.EventType.COMPLETED, TaskEvent.EventType.REOPENED,
+        ])),
+    ).filter(waiting_since__isnull=False).select_related('site__customer__country'):
+        country = task.site.customer.country
+        span = now - task.waiting_since
+        if span < timedelta(hours=LATE_REPORT_HOURS):
+            continue  # can't be 2 working days yet
+        if span > timedelta(days=14):
+            # Certainly late; counted day by day only when it's close — the bell renders this on every page.
+            hours = span.total_seconds() / 3600 * (7 - len(country.weekend_weekdays)) / 7
+        else:
+            hours = working_hours_between(task.waiting_since, now, ZoneInfo(country.timezone), country.weekend_weekdays)
+        if hours > LATE_REPORT_HOURS:
+            task.waiting_days = int(hours // 24)
+            late.append(task)
+    late.sort(key=lambda task: task.waiting_since)
+    return late
+
+
+def new_ticket_people(country):
+    """Who is told of a new ticket in this country, by email and in the bell:
+    the roles chosen on the Notifications page — in this country, or any
+    country for a role that handles tickets in all of them (the Technical
+    Support Manager). Nobody of those, active with a login: the admins, so
+    a ticket is never left unseen."""
+    from people.models import NotificationSettings, RolePermission
+
+    roles = NotificationSettings.load().new_ticket_roles
+    everywhere = RolePermission.objects.filter(
+        permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
+    ).values('role')
+    people = Technician.objects.filter(
+        Q(country=country) | Q(role__in=everywhere), is_active=True, role__in=roles, user__isnull=False,
+    )
+    if not people.exists():
+        people = Technician.objects.filter(role=Technician.Role.ADMIN, is_active=True, user__isnull=False)
+    return people

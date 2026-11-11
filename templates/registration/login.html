@@ -1,27 +1,47 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block title %}{% translate "Log in" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-<div class="auth-card">
-    <h1>{% translate "Log in" %}</h1>
-    <form method="post" novalidate>
-        {% csrf_token %}
-        {% if form.errors %}
-            <p class="flash flash--error">{% translate "Incorrect username or password." %}</p>
-        {% endif %}
-        <div class="field">
-            <label for="{{ form.username.id_for_label }}">{% translate "Username" %}</label>
-            {{ form.username }}
-        </div>
-        <div class="field">
-            <label for="{{ form.password.id_for_label }}">{% translate "Password" %}</label>
-            {{ form.password }}
-        </div>
-        <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit" class="button">{% translate "Log in" %}</button>
-    </form>
-    <p><a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a></p>
+{# The team's sign-in: one dark block, the form a white card inside it (the portal's is two halves). #}
+<div class="team-signin">
+    <section class="team-signin__intro">
+        <img src="{% static 'images/logo.png' %}" alt="Profit Sports Solutions" class="team-signin__logo">
+        <p class="team-signin__eyebrow">{% translate "Field service" %}</p>
+        <h1 class="team-signin__title">{% translate "Team sign-in" %}</h1>
+        <ul class="team-signin__list">
+            <li>{% translate "Customer requests" %}</li>
+            <li>{% translate "Tasks and visits" %}</li>
+            <li>{% translate "Reports and approvals" %}</li>
+        </ul>
+        <p class="team-signin__note">{% translate "Customers sign in on the customer portal." %}</p>
+    </section>
+
+    <section class="team-signin__card">
+        <h2 class="team-signin__card-title">{% translate "Log in" %}</h2>
+        <form method="post" class="signin__form" novalidate>
+            {% csrf_token %}
+            {% if form.errors %}
+                {# A customer's account: pointed to the portal (spots.hosts); otherwise the one message. #}
+                {% if form.customer_account %}<p class="flash flash--error">{{ form.non_field_errors.0 }}</p>
+                {% else %}<p class="flash flash--error">{% translate "Incorrect username or password." %}</p>{% endif %}
+            {% endif %}
+            <div class="field">
+                <label for="{{ form.username.id_for_label }}">{% translate "Username" %}</label>
+                {{ form.username }}
+            </div>
+            <div class="field">
+                <label for="{{ form.password.id_for_label }}">{% translate "Password" %}</label>
+                {{ form.password }}
+            </div>
+            <div class="signin__row">
+                <label class="checkbox-label"><input type="checkbox" name="remember" value="1"{% if remember %} checked{% endif %}> {% translate "Keep me signed in on this device" %}</label>
+                <a href="{% url 'password_reset' %}">{% translate "Forgot your password?" %}</a>
+            </div>
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit" class="button signin__submit">{% translate "Log in" %}</button>
+        </form>
+    </section>
 </div>
 {% endblock %}

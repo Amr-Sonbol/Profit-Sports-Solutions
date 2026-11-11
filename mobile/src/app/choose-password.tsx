@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useSession } from '@/context/auth';
+import { t } from '@/i18n';
 
 /**
  * Shown instead of the app while someone is on a temporary password (a
@@ -25,7 +26,7 @@ export default function ChoosePasswordScreen() {
               Choose your password
             </ThemedText>
             <ThemedText themeColor="textSecondary">
-              {me?.full_name ? `${me.full_name}, you have` : 'You have'} signed in with a temporary password. Please choose your own password to continue.
+              {me?.full_name ? t('{name}, you have', { name: me.full_name }) : 'You have'} signed in with a temporary password. Please choose your own password to continue.
             </ThemedText>
 
             <PasswordForm askCurrent={false} submitLabel="Save and continue" />

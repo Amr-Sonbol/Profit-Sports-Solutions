@@ -1,4 +1,6 @@
 import json
+from unittest.mock import patch
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -6,7 +8,7 @@ from django.utils import timezone
 
 from people.models import RolePermission, Technician
 from reports.models import WorkReport
-from tasks.models import Task, TaskAssignment, TaskAttachment, TaskEvent
+from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent, TicketMachine
 from tasks.tests import TaskTestCase
 
 User = get_user_model()
@@ -218,7 +220,6 @@ class MyTaskReportTests(ApiTestCase):
         response = self._file(token)
         self.assertEqual(response.status_code, 201)
         report = WorkReport.objects.get(task=self.task)
-        self.assertEqual(str(report.labour_hours), '2.50')
         self.assertTrue(report.resolved)
         self.assertTrue(report.signature_url.startswith('http'))
         self.assertEqual(list(report.parts_used.values_list('part_code', flat=True)), ['BELT-01'])
@@ -232,6 +233,49 @@ class MyTaskReportTests(ApiTestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual([m.to for m in mail.outbox], [['ali@example.com']])
         self.assertEqual(WorkReport.objects.get(task=self.task).copy_sent_to, 'ali@example.com')
+
+    def test_the_app_records_each_machine_starting_from_the_ticket(self):
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0801', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='-', submitted_at=timezone.now(), task=self.task, status=CustomerTicket.Status.CONVERTED,
+        )
+        TicketMachine.objects.create(
+            ticket=ticket, asset=self.asset, problem='noise', decision='visit', task=self.task,
+        )
+        unlisted = TicketMachine.objects.create(
+            ticket=ticket, model_name='Old bike', serial_no='OB-9', problem='display', decision='visit',
+            task=self.task, position=1,
+        )
+        token = self.token_for('tech1')
+        screen = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()
+        self.assertEqual([row.get('asset_id') for row in screen['machines']], [self.asset.pk, None])
+        self.assertEqual(screen['machines'][1]['ticket_machine_id'], unlisted.pk)
+        self.assertIn({'value': 'repaired', 'label': 'Repaired'}, screen['outcomes'])
+
+        response = self._file(token, machines=[
+            {'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': 'Belt tightened.'},
+            {'brand_id': self.brand.pk, 'model_name': 'Old bike', 'serial_no': 'OB-9', 'outcome': 'replaced',
+             'note': 'Console replaced.', 'ticket_machine_id': unlisted.pk},
+        ])
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            sorted(self.task.task_assets.values_list('note', flat=True)), ['Belt tightened.', 'Console replaced.'],
+        )
+        unlisted.refresh_from_db()
+        self.assertEqual(unlisted.result.outcome, 'replaced')
+
+    def test_a_machine_without_an_outcome_is_refused(self):
+        token = self.token_for('tech1')
+        response = self._file(token, machines=[{'asset_id': self.asset.pk, 'outcome': '', 'note': ''}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('machines', response.json())
+
+    def test_an_older_app_sending_no_machines_keeps_them(self):
+        from tasks.models import TaskAsset
+        TaskAsset.objects.create(task=self.task, asset=self.asset, outcome='repaired')
+        self.assertEqual(self._file(self.token_for('tech1')).status_code, 201)
+        self.assertEqual(self.task.task_assets.count(), 1)
 
     def test_technicians_report_goes_to_supervisor_review(self):
         token = self.token_for('tech1')
@@ -248,7 +292,7 @@ class MyTaskReportTests(ApiTestCase):
         response = self._file(token, labour_hours='3.00', signature=None, parts=[])
         self.assertEqual(response.status_code, 200)
         report = WorkReport.objects.get(task=self.task)
-        self.assertEqual(str(report.labour_hours), '3.00')
+        self.assertEqual(str(report.labour_hours), '0.00')  # typed hours are ignored; no Start tap here
         self.assertEqual(report.signature_url, first_signature)
         self.assertFalse(report.parts_used.exists())
         self.assertEqual(
@@ -261,19 +305,35 @@ class MyTaskReportTests(ApiTestCase):
         self.assertIsNone(response.json()['report'])
         self._file(token)
         body = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['report']
-        self.assertEqual(body['labour_hours'], '2.50')
         self.assertEqual(body['parts_used'][0]['part_code'], 'BELT-01')
 
-    def test_missing_labour_hours_is_rejected(self):
+    def test_the_hours_come_from_the_start_tap_not_from_typing(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=2), actor=self.supervisor_user,
+        )
         token = self.token_for('tech1')
+        self.assertEqual(
+            self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()['time_on_site'],
+            '2:00',
+        )
         response = self._file(token, labour_hours='')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('labour_hours', response.json())
-        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '2.00')
+
+    def test_a_report_filed_offline_counts_until_it_was_filed(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=5), actor=self.supervisor_user,
+        )
+        filed_at = (timezone.now() - timedelta(hours=4)).isoformat()
+        self._file(self.token_for('tech1'), filed_at=filed_at)
+        self.assertEqual(str(WorkReport.objects.get(task=self.task).labour_hours), '1.00')
 
     def test_half_filled_part_row_is_rejected(self):
         token = self.token_for('tech1')
-        response = self._file(token, parts=[{'part_code': 'BELT-01', 'quantity': 1}])
+        # A part code with no quantity (prices aren't asked for).
+        response = self._file(token, parts=[{'part_code': 'BELT-01', 'quantity': ''}])
         self.assertEqual(response.status_code, 400)
         self.assertIn('parts', response.json())
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
@@ -383,6 +443,145 @@ class TicketListTests(ApiTestCase):
         token = self.token_for('support1')
         response = self.client.get('/api/tickets/', **self.auth(token))
         self.assertEqual(response.status_code, 200)
+
+
+class WaitingForMeTests(ApiTestCase):
+    """Tasks → Waiting for me and the Dashboard's top: one item per decision, for whoever makes it."""
+
+    def waiting(self, username):
+        return self.client.get('/api/waiting/', **self.auth(self.token_for(username))).json()
+
+    def test_a_report_waits_on_its_supervisor_then_on_the_technical_support_manager(self):
+        manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.SUPPORT_MANAGER, employment_type='staff')
+        self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.task.status = Task.Status.PENDING_SUPERVISOR_REVIEW
+        self.task.save()
+        self.assertEqual([item['kind'] for item in self.waiting('supervisor1')], ['review_report'])
+        self.assertEqual(self.waiting('tech1'), [])
+        self.task.status = Task.Status.COMPLETED
+        self.task.save()
+        item = self.waiting('manager1')[0]
+        self.assertEqual((item['kind'], item['opens']), ('approve_report', {'screen': 'team-task', 'id': self.task.pk}))
+        dashboard = self.client.get('/api/dashboard/', **self.auth(self.token_for('manager1'))).json()
+        self.assertEqual([entry['kind'] for entry in dashboard['waiting']], ['approve_report'])
+        # Not twice: the count it replaces is gone from the list below.
+        self.assertFalse([entry for entry in dashboard['actions'] if 'status=completed' in entry['url']])
+
+    def test_a_blocked_task_waits_on_its_owner(self):
+        self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.task.status = Task.Status.BLOCKED
+        self.task.save()
+        self.assertEqual([item['kind'] for item in self.waiting('supervisor1')], ['blocked'])
+
+
+class TeamTodayTests(ApiTestCase):
+    """Team → Today: who's where right now, for those who oversee people."""
+
+    def test_working_off_and_free(self):
+        self.task.scheduled_for = timezone.now()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save()
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED, actor=self.technician.user, occurred_at=timezone.now(),
+        )
+        helper = Technician.objects.create(
+            user=User.objects.create_user('sick1', password='pass12345'), country=self.country, full_name='Sami Sick',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+            is_available=False, unavailable_reason=Technician.UnavailableReason.SICK,
+        )
+        rows = {row['name']: row for row in self.client.get(
+            '/api/team-today/', **self.auth(self.token_for('supervisor1'))).json()}
+        working = rows[self.technician.full_name]
+        self.assertEqual((working['state'], working['task']['id'], working['today_total']), ('working', self.task.pk, 1))
+        self.assertEqual((rows[helper.full_name]['state'], rows[helper.full_name]['off_reason']), ('off', 'Sick'))
+
+    def test_a_technician_may_not(self):
+        self.assertEqual(self.client.get('/api/team-today/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class TicketScreenTests(ApiTestCase):
+    """The app's Tickets tab and request screen: the website's request page,
+    with the same rules (tasks.views.ticket_access, decide_request_next)."""
+
+    def setUp(self):
+        super().setUp()
+        Technician.objects.create(
+            user=User.objects.create_user('support1', password='pass12345'), country=self.country,
+            full_name='Dana Support', language='en', role=Technician.Role.SUPPORT_MANAGER, employment_type='staff',
+        )
+        self.ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0701', customer=self.customer, site=self.site,
+            company_name='Fitness First', site_description='Marina Branch', contact_name='Ali',
+            contact_phone='0501234567', contact_email='ali@example.invalid', description='(from the machines)',
+            submitted_at=timezone.now(),
+        )
+        self.treadmill, self.bike = [
+            TicketMachine.objects.create(
+                ticket=self.ticket, model_name=name, serial_no=serial, problem=TicketMachine.Problem.NOT_WORKING,
+                position=i, description=f'{name} stops',
+            )
+            for i, (name, serial) in enumerate([('Treadmill', 'T-1'), ('Bike', 'B-1')])
+        ]
+        self.token = self.token_for('support1')
+
+    def post(self, path, body):
+        return self.client.post(path, json.dumps(body), content_type='application/json', **self.auth(self.token))
+
+    def test_tabs_count_and_page(self):
+        body = self.client.get('/api/tickets/?status=new', **self.auth(self.token)).json()
+        self.assertEqual((body['counts']['new'], body['count'], body['has_more']), (1, 1, False))
+        self.assertEqual(body['results'][0]['ticket_number'], 'AE-T0701')
+        closed = self.client.get('/api/tickets/?status=closed', **self.auth(self.token)).json()
+        self.assertEqual(closed['results'], [])
+        # Apps from before the tabs still get the plain list.
+        self.assertIsInstance(self.client.get('/api/tickets/', **self.auth(self.token)).json(), list)
+
+    def test_the_request_screen_shows_the_page_and_what_happens_next(self):
+        body = self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(self.token)).json()
+        self.assertEqual([machine['name'] for machine in body['machines']], ['Treadmill', 'Bike'])
+        self.assertTrue(body['machines'][0]['urgent'])
+        self.assertTrue(body['can_reply'])
+        self.assertTrue(body['next']['urgent'])
+        self.assertIn('supervisor1', [str(User.objects.get(technician__pk=person['value']).username)
+                                      for person in body['next']['supervisors']])
+        self.assertTrue(all(option['suggestion'] for group in body['next']['reasons'] for option in group['options']))
+
+    def test_a_visit_for_one_machine_then_an_answer_for_the_other(self):
+        supervisor = Technician.objects.get(user__username='supervisor1')
+        response = self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'visit', 'machines': [self.treadmill.pk], 'supervisor': supervisor.pk,
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        task = Task.objects.get(pk=response.json()['task']['id'])
+        self.assertEqual((task.responsible_supervisor, task.priority), (supervisor, Task.Priority.HIGH))
+        reason = self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(self.token)).json()['next']['reasons'][0]['options'][0]['value']
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'answer', 'machines': [self.bike.pk], 'reason': reason,
+        }).json()['detail'], 'Please write your answer to the customer.')
+        response = self.post(f'/api/tickets/{self.ticket.pk}/next/', {
+            'choice': 'answer', 'machines': [self.bike.pk], 'reason': reason, 'answer': 'Fixed on the phone.',
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.status, CustomerTicket.Status.CLOSED)
+
+    def test_reply_goes_to_the_customer_and_a_note_stays_with_staff(self):
+        from django.core import mail
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/reply/', {'message': 'On our way.'}).status_code, 201)
+        self.assertEqual(self.post(f'/api/tickets/{self.ticket.pk}/reply/', {'message': 'Check the warranty', 'note': True}).status_code, 201)
+        self.assertEqual(self.ticket.replies.get().message, 'On our way.')
+        self.assertEqual(self.ticket.internal_notes.get().message, 'Check the warranty')
+        self.assertIn('ali@example.invalid', [address for message in mail.outbox for address in message.to])
+
+    def test_who_may_not(self):
+        for username in ('supervisor1', 'tech1'):
+            token = self.token_for(username)
+            self.assertEqual(self.client.get(f'/api/tickets/{self.ticket.pk}/', **self.auth(token)).status_code, 403)
+            response = self.client.post(f'/api/tickets/{self.ticket.pk}/reply/', json.dumps({'message': 'x'}),
+                                        content_type='application/json', **self.auth(token))
+            self.assertEqual(response.status_code, 403)
 
 
 class ApiSecurityTests(ApiTestCase):
@@ -577,6 +776,45 @@ class TeamTaskApiTests(ApiTestCase):
         self.assertEqual(response.json()['lead']['technician_name'], 'Omar Other')
         self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.REASSIGNED).exists())
 
+    def test_the_supervisor_sets_the_visit_time_and_it_leaves_to_plan(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = None
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        token = self.token_for('supervisor1')
+        today = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual([(i['id'], i['missing']) for i in today['to_plan']], [(self.task.pk, ['date'])])
+
+        in_the_past = timezone.localtime(timezone.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': in_the_past}).status_code, 400)
+        tomorrow = timezone.localtime(timezone.now() + timedelta(days=1)).replace(hour=9, minute=0)
+        response = self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': tomorrow.strftime('%Y-%m-%dT%H:%M')})
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        # Read as the country's local time (the app sends what the supervisor picked there).
+        from zoneinfo import ZoneInfo
+        self.assertEqual(timezone.localtime(self.task.scheduled_for, ZoneInfo(self.country.timezone)).hour, 9)
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED).exists())
+        self.assertEqual(self.client.get('/api/my-today/', **self.auth(token)).json()['to_plan'], [])
+
+    def test_to_plan_includes_his_own_visit_with_no_day_and_never_a_technicians(self):
+        own = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED,
+        )
+        TaskAssignment.objects.create(task=own, technician=self.supervisor, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now())
+        to_plan = self.client.get('/api/my-today/', **self.auth(self.token_for('supervisor1'))).json()['to_plan']
+        self.assertIn((own.pk, ['date']), [(i['id'], i['missing']) for i in to_plan])
+        self.assertEqual(self.client.get('/api/my-today/', **self.auth(self.token_for('tech1'))).json()['to_plan'], [])
+
+    def test_the_time_is_fixed_once_the_visit_has_started(self):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        tomorrow = timezone.localtime(timezone.now() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        response = self._post(self.token_for('supervisor1'), 'assign', {'action': 'schedule', 'scheduled_for': tomorrow})
+        self.assertEqual(response.status_code, 400)
+
     def test_team_is_locked_once_work_starts(self):
         self.task.status = Task.Status.IN_PROGRESS
         self.task.save(update_fields=['status'])
@@ -620,7 +858,10 @@ class TeamTaskApiTests(ApiTestCase):
         # The supervisor can't do the manager's step.
         self.assertEqual(self._post(supervisor_token, 'approve', {}).status_code, 403)
 
+        # The final approval is the Technical Support Manager's (docs/access_rules.md), not a Manager's.
         manager_token = self.token_for('manager1')
+        self.assertEqual(self._post(manager_token, 'approve', {}).status_code, 403)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.SUPPORT_MANAGER)
         response = self._post(manager_token, 'approve', {})
         self.assertEqual(response.json()['status'], Task.Status.CLOSED)
         self.assertEqual(self._post(manager_token, 'approve', {}).status_code, 400)
@@ -645,7 +886,7 @@ class MyTaskUndoApiTests(ApiTestCase):
             content_type='application/json', **self.auth(token),
         )
         detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(token)).json()
-        self.assertEqual(detail['undoable_step'], 'Accepted')
+        self.assertEqual(detail['undoable_step'], 'Confirmed the task')
 
         response = self.client.post(
             f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': 'undo'}),
@@ -663,17 +904,61 @@ class PartListApiTests(ApiTestCase):
     def test_lists_active_parts_only(self):
         from reference.models import Part
 
-        Part.objects.create(code='BELT-01', description='Treadmill belt')
+        Part.objects.create(code='BELT-01', description='Treadmill belt', photo='part_photos/abc/BELT-01.png')
         Part.objects.create(code='OLD-9', is_active=False)
+        Part.objects.create(code='PAD-7')
         token = self.token_for('tech1')
         response = self.client.get('/api/parts/', **self.auth(token))
-        self.assertEqual(response.json(), [{'code': 'BELT-01', 'description': 'Treadmill belt'}])
+        # Each with its photo, so the technician can check it's the right part.
+        rows = response.json()
+        # The photo by a signed link: the app loads it without the website's sign-in (spots.media).
+        self.assertTrue(rows[0].pop('photo_url').startswith('http://testserver/media/part_photos/abc/BELT-01.png?t='))
+        self.assertEqual(rows, [
+            {'code': 'BELT-01', 'description': 'Treadmill belt'},
+            {'code': 'PAD-7', 'description': '', 'photo_url': ''},
+        ])
+
+
+class AppErrorTests(ApiTestCase):
+    """The phone app's errors reach the office: kept, with who and where, and in the admins' bell."""
+
+    def test_an_error_is_kept_with_who_and_where_then_shown_to_the_admins(self):
+        from people.models import AppError
+        body = {'message': 'Cannot read property x', 'stack': 'at Report', 'screen': 'screen',
+                'app_version': '1.0.0', 'platform': 'ios 18'}
+        response = self.client.post('/api/app-errors/', json.dumps(body), content_type='application/json',
+                                    **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 204)
+        error = AppError.objects.get()
+        self.assertEqual((error.technician, error.screen, error.app_version), (self.technician, 'screen', '1.0.0'))
+        # Before sign-in too, without a token.
+        self.client.post('/api/app-errors/', json.dumps({'message': 'At sign-in'}), content_type='application/json')
+        self.assertEqual(AppError.objects.count(), 2)
+        admin = User.objects.create_user('admin9', password='pass12345', is_staff=True, is_superuser=True)
+        Technician.objects.create(user=admin, country=self.country, full_name='Ada Admin', language='en',
+                                  role=Technician.Role.ADMIN, employment_type='staff')
+        self.client.login(username='admin9', password='pass12345')
+        self.assertContains(self.client.get('/tasks/'), '2 new errors in the phone app')
+        self.client.get('/admin/people/apperror/')  # opening the list marks them seen
+        self.assertNotContains(self.client.get('/tasks/'), 'new errors in the phone app')
 
 
 class PushDeviceTests(ApiTestCase):
     """Registering phones, and pushes going out (Expo's service mocked)."""
 
     TOKEN = 'ExponentPushToken[abc123]'
+
+    def test_a_test_notification_needs_a_registered_phone_then_goes_to_it(self):
+        from unittest.mock import patch
+        token = self.token_for('tech1')
+        response = self.client.post('/api/push-device/test/', {}, content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 409)
+        self.client.post('/api/push-device/', json.dumps({'token': self.TOKEN}), content_type='application/json',
+                         **self.auth(token))
+        with patch('people.push.send_push') as push:
+            response = self.client.post('/api/push-device/test/', {}, content_type='application/json', **self.auth(token))
+        self.assertEqual((response.status_code, response.json()['phones']), (200, 1))
+        self.assertEqual(push.call_args.args[3], {'type': 'test'})
 
     def _register(self, token, username='tech1'):
         return self.client.post(
@@ -991,3 +1276,940 @@ class MyPasswordApiTests(ApiTestCase):
         response = self._post(token, {'old_password': 'pass12345', 'new_password1': '1234', 'new_password2': '1234'})
         self.assertEqual(response.status_code, 400)
         self.assertIn('new_password2', response.json())
+
+
+class AppScheduleAndProgressTests(ApiTestCase):
+    # The app's Today, Progress and team progress screens: the website's
+    # own plan and figures (tasks.views.today_plan, progress_context,
+    # team_progress_rows).
+
+    def test_today_has_the_next_job_with_its_tap_and_directions(self):
+        from zoneinfo import ZoneInfo
+        dubai = ZoneInfo('Asia/Dubai')
+        today = timezone.localtime(timezone.now(), dubai).date()
+        self.task.scheduled_for = datetime.combine(today, time(23), dubai)
+        self.task.save(update_fields=['scheduled_for'])
+        token = self.token_for('tech1')
+        plan = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual(plan['today_count'], 1)
+        self.assertEqual(plan['next_job']['task_number'], 'UAE-0001')
+        self.assertEqual(plan['next_job']['next_action'], 'accept')
+        self.assertEqual(plan['next_job']['my_role'], 'lead')
+        self.assertTrue(plan['next_job']['directions_url'].startswith('https://www.google.com/maps/'))
+
+    def test_progress_has_the_years_line_and_the_month(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.REPORT_SUBMITTED, occurred_at=timezone.now(),
+            actor=self.tech_user,
+        )
+        token = self.token_for('tech1')
+        progress = self.client.get('/api/my-progress/', **self.auth(token)).json()
+        self.assertEqual(progress['trend']['this_month'], 1)
+        self.assertEqual(progress['trend']['months'][-1]['completed'], 1)
+        self.assertIn('hours', progress['month'])
+        self.assertIn('certified', progress['certification'])
+
+    def test_team_progress_is_for_those_who_oversee_a_team(self):
+        self.assertEqual(
+            self.client.get('/api/team-progress/', **self.auth(self.token_for('tech1'))).status_code, 403,
+        )
+        rows = self.client.get('/api/team-progress/', **self.auth(self.token_for('supervisor1'))).json()['rows']
+        self.assertEqual([row['name'] for row in rows], [self.technician.full_name])
+        self.assertTrue(rows[0]['months'])  # their year, month by month
+
+
+class AppIdentityTests(ApiTestCase):
+    # What the app needs to look right: tabs by permission, the profile,
+    # and the task screen's contact, directions and machines.
+
+    def test_me_carries_the_roles_permissions_and_profile(self):
+        token = self.token_for('tech1')
+        me = self.client.get('/api/me/', **self.auth(token)).json()
+        self.assertNotIn('manage_tickets', me['permissions'])  # so no Tickets tab
+        self.assertEqual(me['username'], 'tech1')
+        self.assertIn('photo_url', me)
+        supervisor = self.client.get('/api/me/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertIn('view_tasks', supervisor['permissions'])
+
+    def test_the_task_has_its_contact_directions_and_machines(self):
+        from tasks.models import CustomerTicket, TicketMachine
+        self.site.contact_phone = '+971500000001'
+        self.site.save(update_fields=['contact_phone'])
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0990', company_name='Fitness First', contact_name='Ali',
+            contact_phone='0501234567', description='-', submitted_at=timezone.now(), task=self.task,
+        )
+        TicketMachine.objects.create(ticket=ticket, model_name='Old bike', serial_no='OB-9', problem='display', task=self.task)
+        detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(self.token_for('tech1'))).json()
+        self.assertEqual(detail['site_contact_phone'], '+971500000001')
+        self.assertTrue(detail['directions_url'].startswith('https://www.google.com/maps/'))
+        self.assertEqual(detail['machines'][0]['serial'], 'OB-9')
+
+
+class AppScheduleTests(ApiTestCase):
+    # The app's Week / Month / Year: the website's calendar of one's own
+    # tasks, and a supervisor opening a technician's.
+
+    def setUp(self):
+        super().setUp()
+        from zoneinfo import ZoneInfo
+        self.task.scheduled_for = datetime(2026, 9, 9, 10, tzinfo=ZoneInfo('Asia/Dubai'))
+        self.task.save(update_fields=['scheduled_for'])
+
+    def _get(self, username, **params):
+        query = '&'.join(f'{key}={value}' for key, value in params.items())
+        return self.client.get(f'/api/my-schedule/?{query}', **self.auth(self.token_for(username)))
+
+    def test_week_month_and_year(self):
+        week = self._get('tech1', view='week', start='2026-09-09').json()
+        self.assertEqual(len(week['days']), 7)
+        busy = [day for day in week['days'] if day['tasks']]
+        self.assertEqual(busy[0]['date'], '2026-09-09')
+        self.assertEqual(busy[0]['tasks'][0]['my_role'], 'lead')
+        self.assertIn('is_weekend', busy[0])
+
+        month = self._get('tech1', view='month', month='2026-09').json()
+        self.assertEqual(sum(len(day['tasks']) for day in month['days']), 1)
+
+        year = self._get('tech1', view='year', year='2026').json()
+        self.assertEqual([m['count'] for m in year['months']][8], 1)
+        self.assertEqual(len(year['months']), 12)
+
+    def test_a_supervisor_opens_a_technicians_schedule_but_not_the_reverse(self):
+        response = self._get('supervisor1', view='week', start='2026-09-09', technician=self.technician.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['person']['name'], self.technician.full_name)
+        self.assertEqual(
+            self._get('tech1', technician=self.supervisor_user.technician.pk).status_code, 403,
+        )
+        # Someone the supervisor doesn't oversee (another supervisor) isn't found.
+        from people.models import Technician
+        other = Technician.objects.create(
+            user=User.objects.create_user('supervisor2', password='pass12345'), country=self.country,
+            full_name='Other Supervisor', language='en', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        self.assertEqual(self._get('supervisor1', technician=other.pk).status_code, 404)
+
+
+class ReportReviewTests(ApiTestCase):
+    # "Review report": the report exactly as it would be sent, with what to
+    # fix — and nothing saved, sent or notified.
+
+    def setUp(self):
+        super().setUp()
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+
+    def test_the_preview_shows_the_report_and_its_problems_and_saves_nothing(self):
+        from tasks.models import TaskAsset
+        token = self.token_for('tech1')
+        with patch('people.push.send_push') as send_push, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f'/api/my-tasks/{self.task.pk}/report/?preview=1', json.dumps({
+                    'findings': '', 'action_taken': '', 'resolved': True, 'labour_hours': '1.50',
+                    'customer_name': 'Ali', 'parts': [], 'send_copy_to': 'ali@example.com',
+                    'machines': [{'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': '', 'action': ''}],
+                }), content_type='application/json', **self.auth(token),
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn('PREVIEW', body['html'])
+        self.assertTrue(any('pick a finding' in problem for problem in body['problems']))
+        self.assertIn('Pick the work performed.', body['problems'])
+        # Nothing kept, sent or notified.
+        self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
+        self.assertFalse(TaskAsset.objects.filter(task=self.task).exists())
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+        send_push.assert_not_called()
+        from django.core import mail
+        self.assertEqual(mail.outbox, [])
+
+    def test_typed_text_in_the_wrong_language_is_flagged(self):
+        self.country.report_language = 'ar'
+        self.country.save(update_fields=['report_language'])
+        response = self.client.post(
+            f'/api/my-tasks/{self.task.pk}/report/?preview=1', json.dumps({
+                'findings': 'Belt was worn', 'action_taken': '', 'work_lines': ['bolts'], 'resolved': True,
+                'labour_hours': '1', 'customer_name': 'Ali', 'parts': [],
+            }), content_type='application/json', **self.auth(self.token_for('tech1')),
+        )
+        problems = response.json()['problems']
+        self.assertTrue(any('Belt was worn' in problem for problem in problems), problems)
+
+
+class MySkillsApiTests(ApiTestCase):
+    # The app's My skills: the same figures and rules as the website.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import ConductArea, Skill
+        self.skill = Skill.objects.create(name='Treadmill repair', name_ar='إصلاح جهاز الجري')
+        self.area = ConductArea.objects.create(name='Punctuality', name_ar='الالتزام بالمواعيد')
+
+    def test_rating_a_skill_with_evidence_then_it_waits_for_review(self):
+        token = self.token_for('tech1')
+        body = self.client.get('/api/my-skills/', **self.auth(token)).json()
+        row = next(item for item in body['basic'] if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['can_rate']), ('none', True))
+        self.assertEqual(len(body['levels']), 4)
+
+        evidence = SimpleUploadedFile('doing-it.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post('/api/my-skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '3', 'note': 'belt change', 'evidence': evidence,
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        row = next(item for item in response.json()['basic'] if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['level']), ('self', 3))
+        self.assertTrue(row['evidence_url'].startswith('http'))
+        self.assertEqual(response.json()['progress']['waiting'], 1)
+
+    def test_a_skill_needs_evidence_and_a_reviewed_one_is_locked(self):
+        from people.models import TechnicianConduct
+        token = self.token_for('tech1')
+        response = self.client.post('/api/my-skills/', {'kind': 'skill', 'id': self.skill.pk, 'level': '3'},
+                                    **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('evidence', response.json())
+
+        technician = Technician.objects.get(user__username='tech1')
+        TechnicianConduct.objects.create(
+            technician=technician, conduct_area=self.area, level=2, source=TechnicianConduct.Source.SUPERVISOR,
+            set_on=timezone.localdate(), set_by=technician,
+        )
+        response = self.client.post('/api/my-skills/', {'kind': 'conduct', 'id': self.area.pk, 'level': '4'},
+                                    **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(TechnicianConduct.objects.get(technician=technician).level, 2)
+
+
+class MyProfileApiTests(ApiTestCase):
+    # Editing my profile from the app, as on the website's My profile.
+
+    def test_phone_language_email_and_photo_change_and_the_rest_stays(self):
+        token = self.token_for('tech1')
+        technician = Technician.objects.get(user__username='tech1')
+        role, country = technician.role, technician.country_id
+        photo = SimpleUploadedFile('me.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post('/api/me/', {
+            'phone': '+971500000001', 'language': 'ar', 'email': 'tech1@example.com', 'photo': photo,
+            'role': 'manager',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        technician.refresh_from_db()
+        self.assertEqual((technician.phone, technician.language, technician.user.email),
+                         ('+971500000001', 'ar', 'tech1@example.com'))
+        self.assertTrue(response.json()['photo_url'].startswith('http'))
+        self.assertEqual((technician.role, technician.country_id), (role, country))
+
+        # Only the phone: the photo and the rest are kept.
+        self.client.post('/api/me/', {'phone': '+971500000002'}, **self.auth(token))
+        technician.refresh_from_db()
+        self.assertEqual((technician.phone, technician.language), ('+971500000002', 'ar'))
+        self.assertTrue(technician.photo)
+
+    def test_a_bad_email_is_rejected(self):
+        response = self.client.post('/api/me/', {'email': 'not-an-email'}, **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.json())
+
+
+class PersonApiTests(ApiTestCase):
+    # A person's page in the app: details, skills to confirm, availability.
+
+    def test_the_page_shows_their_work_tasks_and_reports(self):
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual(set(page['workload']), {'today', 'upcoming', 'overdue'})
+        self.assertEqual([task['id'] for task in page['tasks']], [self.task.pk])
+        self.assertEqual((page['tasks'][0]['my_role'], page['tasks'][0]['still_on_it']), ('Lead', True))
+        self.assertEqual((page['reports'], page['trips']), ([], []))
+
+    def test_a_colleague_here_on_a_trip_opens_too(self):
+        from people.models import TechnicianTrip
+        from reference.models import Country
+        egypt = Country.objects.create(name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP')
+        visitor = Technician.objects.create(
+            user=User.objects.create_user('cairo9', password='pass12345'), country=egypt, full_name='Omar Visitor',
+            language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).status_code, 404)
+        today = timezone.localdate()
+        TechnicianTrip.objects.create(technician=visitor, country=self.country, start_date=today, end_date=today,
+                                      created_at=timezone.now(), created_by=self.supervisor_user)
+        page = self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).json()
+        # To look at only: their skills, availability and account stay with their own country.
+        self.assertEqual((page['can_review_skills'], page['can_set_availability'], page['can_deactivate']), (False, False, False))
+        response = self.client.post(f'/api/people/{visitor.pk}/availability/', json.dumps({'available': False}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_supervisor_confirms_a_skill_and_sets_availability(self):
+        token = self.token_for('supervisor1')
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['can_review_skills'])
+        self.assertTrue(page['can_set_availability'])
+        self.assertTrue(any(row['id'] == self.skill.pk for row in page['skills']['basic'] + page['skills']['advanced']))
+
+        response = self.client.post(f'/api/people/{self.technician.pk}/skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '3', 'note': 'seen on site',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()['skills']['basic'] + response.json()['skills']['advanced']
+        row = next(item for item in rows if item['id'] == self.skill.pk)
+        self.assertEqual((row['status'], row['level'], row['can_rate']), ('confirmed', 3, False))
+
+        response = self.client.post(f'/api/people/{self.technician.pk}/availability/', {
+            'available': 'false', 'reason': Technician.UnavailableReason.choices[0][0],
+        }, **self.auth(token))
+        self.assertFalse(response.json()['is_available'])
+        self.client.post(f'/api/people/{self.technician.pk}/availability/', {'available': 'true'}, **self.auth(token))
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.is_available)
+
+    def test_a_technician_cannot_open_or_change_someone_else(self):
+        other = Technician.objects.get(user__username='supervisor1')
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get(f'/api/people/{other.pk}/', **self.auth(token)).status_code, 403)
+        response = self.client.post(f'/api/people/{self.technician.pk}/skills/', {
+            'kind': 'skill', 'id': self.skill.pk, 'level': '4',
+        }, **self.auth(token))
+        self.assertEqual(response.status_code, 403)
+
+
+class WebsiteInTheAppTests(ApiTestCase):
+    # The More tab: the website's menu, and its pages opened signed in.
+
+    def test_the_menu_follows_the_website_and_leaves_out_my_own_pages(self):
+        groups = self.client.get('/api/website-menu/', **self.auth(self.token_for('supervisor1'))).json()
+        urls = [page['url'] for group in groups for page in group['pages']]
+        self.assertIn('/tasks/', urls)
+        self.assertNotIn('/tasks/my-week/', urls)
+
+    def test_the_token_opens_a_website_session_and_only_this_site(self):
+        token = self.token_for('tech1')
+        response = self.client.get('/api/website-session/?next=/tasks/my-skills/', **self.auth(token))
+        self.assertRedirects(response, '/tasks/my-skills/', fetch_redirect_response=False)
+        # Signed in on the website now, with no token.
+        page = self.client.get('/tasks/my-skills/')
+        self.assertEqual(page.status_code, 200, page.get('Location'))
+        response = self.client.get('/api/website-session/?next=https://evil.example/', **self.auth(token))
+        self.assertEqual(response['Location'], '/')
+        self.assertEqual(self.client.get('/api/website-session/').status_code, 401)
+
+
+class TaskCreateApiTests(ApiTestCase):
+    # New task from the app: the website's form and rules.
+
+    def test_a_supervisor_creates_a_task(self):
+        token = self.token_for('supervisor1')
+        fields = self.client.get('/api/tasks/new/', **self.auth(token)).json()['fields']
+        self.assertIn(str(self.site.pk), [choice['value'] for choice in fields['site']['choices']])
+        self.assertEqual(fields['priority']['initial'], Task.Priority.NORMAL)
+
+        response = self.client.post('/api/tasks/new/', json.dumps({
+            'site': self.site.pk, 'brand': self.brand.pk, 'description': 'Treadmill belt slipping',
+            'priority': fields['priority']['initial'], 'source': fields['source']['initial'],
+            'billing_type': fields['billing_type']['initial'], 'reported_at': fields['reported_at']['initial'],
+            'is_warranty': False,
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        task = Task.objects.get(pk=response.json()['id'])
+        self.assertEqual((task.site, task.status, task.description), (self.site, Task.Status.NEW, 'Treadmill belt slipping'))
+        self.assertTrue(task.events.filter(event_type=TaskEvent.EventType.CREATED).exists())
+
+    def test_a_site_is_needed_and_a_technician_cannot_create(self):
+        token = self.token_for('supervisor1')
+        response = self.client.post('/api/tasks/new/', json.dumps({'description': 'x'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('site', response.json())
+        self.assertEqual(self.client.get('/api/tasks/new/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class CustomersAndMachinesApiTests(ApiTestCase):
+    # Customers and machines in the app, as on the website.
+
+    def test_a_supervisor_finds_a_customer_its_sites_machines_and_history(self):
+        token = self.token_for('supervisor1')
+        found = self.client.get('/api/customers/?q=fitness', **self.auth(token)).json()
+        self.assertEqual([row['id'] for row in found], [self.customer.pk])
+        page = self.client.get(f'/api/customers/{self.customer.pk}/', **self.auth(token)).json()
+        site = page['sites'][0]
+        self.assertEqual(site['name'], self.site.name)
+        self.assertTrue(site['directions_url'].startswith('https://www.google.com/maps/'))
+        self.assertEqual(site['machines'][0]['id'], self.asset.pk)
+        self.assertEqual(page['tasks'][0]['task_number'], self.task.task_number)
+
+        machines = self.client.get('/api/machines/?q=excite', **self.auth(token)).json()
+        self.assertEqual([row['id'] for row in machines], [self.asset.pk])
+        self.assertEqual(self.client.get(f'/api/machines/{self.asset.pk}/', **self.auth(token)).status_code, 200)
+
+    def test_a_technician_cannot_open_them(self):
+        token = self.token_for('tech1')
+        self.assertEqual(self.client.get('/api/customers/', **self.auth(token)).status_code, 403)
+        self.assertEqual(self.client.get('/api/machines/', **self.auth(token)).status_code, 403)
+
+
+class HoursApiTests(ApiTestCase):
+    def test_the_hours_page_lists_the_team_for_a_month(self):
+        body = self.client.get('/api/hours/?month=2026-01', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual(body['month'], '2026-01-01')
+        self.assertEqual(body['prev_month'], '2025-12-01')
+        self.assertIn(self.technician.pk, [row['id'] for row in body['rows']])
+        self.assertEqual(self.client.get('/api/hours/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class InternalTicketsApiTests(ApiTestCase):
+    def test_a_supervisor_sees_the_list_and_a_technician_cannot(self):
+        response = self.client.get('/api/internal-tickets/', **self.auth(self.token_for('supervisor1')))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+        self.assertEqual(self.client.get('/api/internal-tickets/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class TeamMapApiTests(ApiTestCase):
+    def test_the_last_tap_today_is_a_pin(self):
+        TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.ARRIVED, occurred_at=timezone.now(), actor=self.tech_user,
+            latitude='25.080000', longitude='55.140000', location_status=TaskEvent.LocationStatus.AT_SITE,
+        )
+        body = self.client.get('/api/team-map/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertEqual([(pin['name'], pin['task_id']) for pin in body['pins']], [(self.technician.full_name, self.task.pk)])
+        self.assertEqual(self.client.get('/api/team-map/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class AppUsesTheCountryDayTests(ApiTestCase):
+    # At 1 a.m. in Dubai it's still yesterday in UTC: the app's "today"
+    # must be the person's country's, like the website's.
+
+    def test_today_just_after_midnight_in_dubai(self):
+        from zoneinfo import ZoneInfo
+        dubai = ZoneInfo('Asia/Dubai')
+        one_am = datetime(2026, 10, 25, 1, 0, tzinfo=dubai)
+        self.task.scheduled_for = datetime(2026, 10, 25, 10, 0, tzinfo=dubai)
+        self.task.save(update_fields=['scheduled_for'])
+        token = self.token_for('tech1')
+        with patch('django.utils.timezone.now', return_value=one_am):
+            plan = self.client.get('/api/my-today/', **self.auth(token)).json()
+        self.assertEqual(plan['today'], '2026-10-25')
+        self.assertEqual(plan['today_count'], 1)
+
+
+class ManagerChoosesTheCountryTests(ApiTestCase):
+    # The app's version of the website's country switcher, managers only.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import Country
+        self.egypt = Country.objects.create(
+            name='Egypt', name_ar='مصر', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP', weekend_days='4',
+        )
+        manager_user = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(
+            user=manager_user, country=self.country, full_name='Dana Manager', language='en',
+            # Reaching every country is the Project Manager's, not a country Manager's (docs/access_rules.md).
+            role=Technician.Role.PROJECT_MANAGER, employment_type='staff',
+        )
+        self.cairo_tech = Technician.objects.create(
+            user=User.objects.create_user('cairo1', password='pass12345'), country=self.egypt,
+            full_name='Omar Cairo', language='ar', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+
+    def test_a_manager_switches_country_and_sees_its_team(self):
+        token = self.token_for('manager1')
+        me = self.client.get('/api/me/', **self.auth(token)).json()
+        self.assertIn(str(self.egypt.pk), [country['value'] for country in me['countries']])
+        home = self.client.get('/api/team-progress/', **self.auth(token)).json()
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in home['rows']])
+        egypt = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()
+        self.assertIn(self.cairo_tech.pk, [row['id'] for row in egypt['rows']])
+        self.assertEqual(
+            self.client.get(f'/api/people/{self.cairo_tech.pk}/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk),
+                            **self.auth(token)).status_code, 200,
+        )
+
+    def test_a_country_manager_cannot_switch(self):
+        manager = User.objects.create_user('uae_manager', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Uae Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        token = self.token_for('uae_manager')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).json()['countries'], [])
+        rows = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()['rows']
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in rows])
+
+    def test_a_supervisor_cannot_switch(self):
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get('/api/me/', **self.auth(token)).json()['countries'], [])
+        rows = self.client.get('/api/team-progress/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()['rows']
+        self.assertNotIn(self.cairo_tech.pk, [row['id'] for row in rows])
+
+
+class WebsitePagesFollowTheAppCountryTests(ManagerChoosesTheCountryTests):
+    def test_a_website_page_opened_in_the_app_shows_the_chosen_country(self):
+        from people.permissions import ACTIVE_COUNTRY_SESSION_KEY
+        token = self.token_for('manager1')
+        self.client.get('/api/website-session/?next=/tasks/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
+        self.assertEqual(self.client.session[ACTIVE_COUNTRY_SESSION_KEY], self.egypt.pk)
+        self.client.get('/api/website-session/?next=/tasks/', **self.auth(token))
+        self.assertNotIn(ACTIVE_COUNTRY_SESSION_KEY, self.client.session)
+
+
+class DashboardApiTests(ManagerChoosesTheCountryTests):
+    # The manager's home screen in the app.
+
+    def test_a_manager_sees_what_needs_them_and_the_open_tasks(self):
+        self.task.priority = Task.Priority.EMERGENCY
+        self.task.save(update_fields=['priority'])
+        body = self.client.get('/api/dashboard/', **self.auth(self.token_for('manager1'))).json()
+        self.assertEqual(body['stats']['emergency_count'], 1)
+        self.assertEqual(body['tasks'][0]['task_number'], self.task.task_number)
+        self.assertIn('Emergencies', [item['label'] for item in body['actions']])
+
+    def test_a_technician_has_no_dashboard(self):
+        self.assertEqual(self.client.get('/api/dashboard/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+
+class ManagerTaskActionsApiTests(ManagerChoosesTheCountryTests):
+    # Cancel, close, flag and correct a tap's time from the app.
+
+    def test_a_manager_corrects_a_tap_cancels_and_a_supervisor_cannot(self):
+        token = self.token_for('manager1')
+        started = TaskEvent.objects.create(
+            task=self.task, event_type=TaskEvent.EventType.STARTED,
+            occurred_at=timezone.now() - timedelta(hours=1), actor=self.tech_user,
+        )
+        page = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['manage']['can_cancel'])
+        self.assertIn(started.pk, page['manage']['correctable_event_ids'])
+
+        when = timezone.localtime(timezone.now() - timedelta(minutes=50)).strftime('%Y-%m-%dT%H:%M')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({
+            'action': 'correct_time', 'event_id': started.pk, 'corrected_at': when, 'reason': 'Tapped late',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        started.refresh_from_db()
+        self.assertEqual(started.correction_reason, 'Tapped late')
+
+        supervisor = self.token_for('supervisor1')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({'action': 'cancel', 'note': 'x'}),
+                                    content_type='application/json', **self.auth(supervisor))
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.post(f'/api/tasks/{self.task.pk}/manage/', json.dumps({
+            'action': 'cancel', 'note': 'Customer called it off',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.json()['status'], Task.Status.CANCELLED)
+
+
+class StaffAccountEmergencyApiTests(ManagerChoosesTheCountryTests):
+    # A lost phone or a locked-out technician, handled from the app.
+
+    def test_a_manager_signs_out_phones_and_sets_a_temporary_password(self):
+        from rest_framework.authtoken.models import Token
+        tech_token = self.token_for('tech1')
+        token = self.token_for('manager1')
+        rows = self.client.get('/api/staff-accounts/?q=tech', **self.auth(token)).json()
+        row = next(item for item in rows if item['id'] == self.technician.pk)
+        self.assertTrue(row['can_manage'])
+
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'sign_out_phones'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Token.objects.filter(key=tech_token).exists())
+
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'temporary_password'}),
+                                    content_type='application/json', **self.auth(token))
+        password = response.json()['password']
+        self.assertTrue(password)
+        self.technician.refresh_from_db()
+        self.assertTrue(self.technician.must_change_password)
+        self.assertTrue(self.technician.user.check_password(password))
+
+    def test_a_supervisor_cannot(self):
+        token = self.token_for('supervisor1')
+        self.assertEqual(self.client.get('/api/staff-accounts/', **self.auth(token)).status_code, 403)
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'unlock'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 403)
+
+
+class InstallationChecklistApiTests(ApiTestCase):
+    # The installers' checklist in the app: each machine, and its photo.
+
+    def setUp(self):
+        super().setUp()
+        from reference.models import TaskType
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.task_type = TaskType.objects.create(code='install', name='New installation', name_ar='تركيب', category='installation')
+        self.task.brand = self.brand
+        self.task.save(update_fields=['status', 'task_type', 'brand'])
+        from tasks.models import TaskProduct
+        self.line = TaskProduct.objects.create(task=self.task, product_code='EXCITE-RUN')
+
+    def test_the_app_checks_off_a_machine_with_its_photo(self):
+        from tasks.models import TaskProduct
+        token = self.token_for('tech1')
+        screen = self.client.get(f'/api/my-tasks/{self.task.pk}/report/', **self.auth(token)).json()
+        self.assertEqual([row['product_code'] for row in screen['checklist']], ['EXCITE-RUN'])
+        self.assertIn('done', [choice['value'] for choice in screen['checklist_statuses']])
+
+        photo = SimpleUploadedFile('run.jpg', b'jpeg bytes', content_type='image/jpeg')
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/lines/{self.line.pk}/photo/', {'photo': photo},
+                                    **self.auth(token))
+        self.assertTrue(response.json()['photo_url'].startswith('http'))
+
+        body = {
+            'findings': '', 'action_taken': '', 'work_lines': ['bolts'], 'resolved': True, 'customer_name': 'Ali',
+            'parts': [], 'signature': SIGNATURE_DATA_URL,
+            'checklist': [
+                {'id': self.line.pk, 'product_code': 'EXCITE-RUN', 'status': 'damaged', 'serial_number': 'TG-5'},
+                {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': ''},
+            ],
+        }
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('checklist', response.json())  # the added one is "installed" without a serial
+
+        body['checklist'][1]['serial_number'] = 'TG-6'
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.line.refresh_from_db()
+        self.assertEqual(self.line.status, 'damaged')  # its photo said what was wrong
+        self.assertTrue(TaskProduct.objects.get(product_code='EXCITE-TOP').added_on_site)
+
+    def test_a_supervisor_makes_the_follow_up_from_the_app(self):
+        from reports.models import WorkReport
+        self.line.status = 'later'
+        self.line.save(update_fields=['status'])
+        WorkReport.objects.create(task=self.task, findings='', action_taken='', resolved=True, labour_hours=1,
+                                  customer_name='Ali', submitted_at=timezone.now())
+        token = self.token_for('supervisor1')
+        page = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()
+        self.assertEqual((page['equipment']['still_to_install'], page['equipment']['can_follow_up']), (1, True))
+        response = self.client.post(f'/api/tasks/{self.task.pk}/follow-up/', json.dumps({}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Task.objects.get(pk=response.json()['id']).previous_task, self.task)
+
+
+class NextStepApiTests(ManagerChoosesTheCountryTests):
+    # "Send to installation" from the app: loaded in Cairo, installed in Dubai.
+
+    def test_a_manager_carries_loaded_machines_to_another_country(self):
+        from customers.models import Customer, Site
+        from reference.models import TaskType
+        from tasks.models import TaskProduct
+        ours = Customer.objects.create(country=self.egypt, name='Profit Sports Solutions', segment='other', is_internal=True)
+        warehouse = Site.objects.create(customer=ours, name='Cairo warehouse', address='Cairo')
+        loading = Task.objects.create(
+            task_number='EG-0001', site=warehouse, priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.COMPLETED,
+            task_type=TaskType.objects.create(code='load', name='Loading', name_ar='تحميل', category='loading'),
+        )
+        TaskType.objects.create(code='inst', name='Installation', name_ar='تركيب', category='installation')
+        line = TaskProduct.objects.create(task=loading, product_code='EXCITE-RUN', serial_number='TG-1', status='done')
+        token = self.token_for('manager1')
+        page = self.client.get(f'/api/tasks/{loading.pk}/', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token)).json()
+        steps = page['equipment']['next_step']['steps']
+        install = next(step for step in steps if step['value'] == 'installation')
+        self.assertIn(str(self.site.pk), [site['value'] for site in install['sites']])  # the Dubai site
+
+        response = self.client.post(f'/api/tasks/{loading.pk}/next-step/', json.dumps({
+            'step': 'installation', 'site': self.site.pk, 'lines': [line.pk],
+        }), content_type='application/json', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        installation = Task.objects.get(pk=response.json()['id'])
+        self.assertEqual((installation.site, installation.previous_task), (self.site, loading))
+        self.assertEqual(installation.products.get().source_line, line)
+
+
+class PlanLinesApiTests(InstallationChecklistApiTests):
+    def test_a_supervisor_plans_the_machines_from_the_app(self):
+        token = self.token_for('supervisor1')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/lines/', json.dumps({'lines': [
+            {'product_code': 'BENCH-01', 'quantity': 3, 'frame': '', 'arm': 'Red'},
+        ]}), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        lines = response.json()['lines']
+        # The machine already on the task stays; the three planned are added.
+        self.assertEqual([(line['product_code'], line['quantity'], line['arm'], line['frame']) for line in lines],
+                         [('EXCITE-RUN', 1, 'Black', 'Black')] + [('BENCH-01', 1, 'Red', 'Black')] * 3)
+        self.assertEqual(self.client.get(f'/api/tasks/{self.task.pk}/lines/', **self.auth(self.token_for('tech1'))).status_code, 403)
+
+    def test_the_app_never_removes_or_duplicates_a_machine_on_the_task(self):
+        token = self.token_for('supervisor1')
+        url = f'/api/tasks/{self.task.pk}/lines/'
+        before = list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number'))
+        lines = self.client.get(url, **self.auth(token)).json()['lines']
+        self.assertTrue(all('line_id' in line for line in lines))
+        # Everything left out (the old app's Remove): all still there.
+        self.client.post(url, json.dumps({'lines': []}), content_type='application/json', **self.auth(token))
+        self.assertEqual(list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number')), before)
+        # The same list sent back without ids (an app from before line ids): no duplicates.
+        for line in lines:
+            line.pop('line_id')
+        self.client.post(url, json.dumps({'lines': lines}), content_type='application/json', **self.auth(token))
+        self.assertEqual(list(self.task.products.order_by('pk').values_list('pk', 'product_code', 'serial_number')), before)
+
+
+class AppUsersTests(ManagerChoosesTheCountryTests):
+    # The admin adds a user from the app; a manager deactivates someone,
+    # handing their open tasks to a colleague.
+
+    def test_the_admin_adds_a_user_with_their_country_and_login(self):
+        admin = Technician.objects.create(
+            user=User.objects.create_user('admin1', password='pass12345'), country=self.country,
+            full_name='Amina Admin', language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        token = self.token_for('admin1')
+        fields = self.client.get('/api/people/new/', **self.auth(token)).json()['fields']
+        self.assertIn(str(self.egypt.pk), [choice['value'] for choice in fields['country']['choices']])
+        response = self.client.post('/api/people/new/', json.dumps({
+            'role': 'supervisor', 'full_name': 'Ahmed Egypt', 'country': self.egypt.pk, 'email': 'ahmed@example.com',
+            'language': 'ar', 'employment_type': 'staff',
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(response.json()['has_login'])
+        self.assertEqual(Technician.objects.get(full_name='Ahmed Egypt').country, self.egypt)
+        self.assertEqual(self.client.get('/api/people/new/', **self.auth(self.token_for('manager1'))).status_code, 403)
+        self.assertIsNotNone(admin)
+
+    def test_a_manager_deactivates_and_hands_over(self):
+        colleague = Technician.objects.create(
+            user=User.objects.create_user('tech2', password='pass12345'), country=self.country,
+            full_name='Rami Colleague', language='en', role=Technician.Role.TECHNICIAN, employment_type='staff',
+        )
+        token = self.token_for('manager1')
+        page = self.client.get(f'/api/people/{self.technician.pk}/', **self.auth(token)).json()
+        self.assertTrue(page['can_deactivate'])
+        self.assertEqual(page['open_tasks'], [self.task.task_number])
+        response = self.client.post(f'/api/people/{self.technician.pk}/deactivate/', json.dumps({
+            'reason': 'Resigned', 'move_to': colleague.pk,
+        }), content_type='application/json', **self.auth(token))
+        self.assertEqual(response.json(), {'moved': 1, 'still_to_reassign': 0})
+        self.assertEqual(self.task.assignments.get(is_active=True).technician, colleague)
+
+
+class MyTasksNewestFirstTests(ApiTestCase):
+    def test_the_task_received_last_comes_first(self):
+        later = Task.objects.create(
+            task_number='AE-0778', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            status=Task.Status.ASSIGNED, scheduled_for=timezone.now() + timedelta(days=30),
+        )
+        TaskAssignment.objects.create(task=later, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now() + timedelta(minutes=5))
+        ids = [t['id'] for t in self.client.get('/api/my-tasks/', **self.auth(self.token_for('tech1'))).json()]
+        self.assertEqual(ids[:2], [later.pk, self.task.pk])
+
+
+class TaskMessagesApiTests(ApiTestCase):
+    """The task's team messages in the app, for its technician and for the team view."""
+
+    def test_the_lead_and_the_supervisor_talk_on_the_task(self):
+        tech, supervisor = self.token_for('tech1'), self.token_for('supervisor1')
+        url = f'/api/tasks/{self.task.pk}/messages/'
+        response = self.client.post(url, json.dumps({'message': 'The part arrived.'}),
+                                    content_type='application/json', **self.auth(supervisor))
+        self.assertEqual(response.status_code, 201)
+        thread = self.client.get(url, **self.auth(tech)).json()
+        self.assertEqual([(m['message'], m['mine']) for m in thread], [('The part arrived.', False)])
+        self.assertEqual(self.client.post(url, json.dumps({'message': ''}), content_type='application/json',
+                                          **self.auth(tech)).status_code, 400)
+
+    def test_someone_not_on_the_task_without_the_team_view_cannot_read_it(self):
+        outsider = User.objects.create_user('outsider', password='pass12345')
+        Technician.objects.create(user=outsider, country=self.country, full_name='Out Sider', language='en',
+                                  role=Technician.Role.TECHNICIAN, employment_type='staff')
+        response = self.client.get(f'/api/tasks/{self.task.pk}/messages/', **self.auth(self.token_for('outsider')))
+        self.assertEqual(response.status_code, 403)
+
+
+class TaskActionApiTests(TeamTaskApiTests):
+    """The website task page's actions from the app: same rules, same permissions."""
+
+    def act(self, token, **body):
+        return self._post(token, 'action', body)
+
+    def test_the_supervisor_tells_the_customer_the_visit_time_and_a_delay(self):
+        from django.core import mail
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        self.site.contact_email = 'gym@example.test'
+        self.site.save(update_fields=['contact_email'])
+        token = self.token_for('supervisor1')
+        actions = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']
+        self.assertTrue(actions['notify_schedule'] and actions['notify_delay'])
+        mail.outbox.clear()
+        self.assertEqual(self.act(token, action='notify_schedule').status_code, 200)
+        self.assertTrue(any('gym@example.test' in m.to for m in mail.outbox))
+        self.assertEqual(self.act(token, action='notify_delay', reason='').status_code, 400)  # needs a reason
+        self.assertEqual(self.act(token, action='notify_delay', reason='Traffic on the highway').status_code, 200)
+        self.assertTrue(TaskEvent.objects.filter(task=self.task, event_type=TaskEvent.EventType.DELAY_NOTICE).exists())
+
+    def test_manager_and_admin_actions_stay_theirs(self):
+        supervisor = self.token_for('supervisor1')
+        self.assertEqual(self.act(supervisor, action='send_feedback_request').status_code, 403)
+        self.assertEqual(self.act(supervisor, action='reopen').status_code, 403)
+        self.assertEqual(self.act(self.token_for('manager1'), action='reopen').status_code, 403)  # admins only
+
+    def test_a_manager_books_a_new_visit_for_a_task_stopped_on_site(self):
+        manager = self.token_for('manager1')
+        when = timezone.localtime(timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self.act(manager, action='rebook', scheduled_for=when).status_code, 400)  # not stopped
+        self.task.status = Task.Status.BLOCKED
+        self.task.save(update_fields=['status'])
+        self.assertTrue(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(manager)).json()['actions']['rebook'])
+        self.assertEqual(self.act(manager, action='rebook', scheduled_for=when, note='Part arrived').status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, Task.Status.ASSIGNED)
+
+
+class TaskEditApiTests(TeamTaskApiTests):
+    """The website's Edit task and documents, from the app."""
+
+    def test_saving_one_field_keeps_every_other_as_it_was(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.description = 'Treadmill stops'
+        self.task.save(update_fields=['responsible_supervisor', 'description'])
+        token = self.token_for('supervisor1')
+        fields = {f['name']: f for f in self.client.get(f'/api/tasks/{self.task.pk}/edit/', **self.auth(token)).json()['fields']}
+        self.assertEqual(fields['description']['value'], 'Treadmill stops')
+        before = {name: getattr(self.task, name) for name in ('priority', 'billing_type', 'is_warranty', 'task_type_id')}
+        response = self.client.post(f'/api/tasks/{self.task.pk}/edit/', json.dumps({'description': 'Belt slips'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.description, 'Belt slips')
+        self.assertEqual({name: getattr(self.task, name) for name in before}, before)
+
+    def test_a_technician_adds_no_office_documents(self):
+        upload = SimpleUploadedFile('note.pdf', b'%PDF-1.4 test', content_type='application/pdf')
+        response = self.client.post(f'/api/tasks/{self.task.pk}/documents/', {'file': upload, 'purpose': 'other'},
+                                    **self.auth(self.token_for('tech1')))
+        self.assertEqual(response.status_code, 403)
+
+
+class VisitTimeRuleTests(TeamTaskApiTests):
+    """The website's rule in the app: a time a manager fixed is moved by asking, not by the supervisor."""
+
+    def test_a_fixed_time_is_asked_for_not_changed(self):
+        self.task.responsible_supervisor = self.supervisor
+        self.task.schedule_time_locked = True
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'schedule_time_locked', 'scheduled_for'])
+        token = self.token_for('supervisor1')
+        actions = self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']
+        self.assertFalse(actions['schedule'])
+        self.assertTrue(actions['request_schedule_change'])
+        when = timezone.localtime(timezone.now() + timedelta(days=2)).strftime('%Y-%m-%dT%H:%M')
+        self.assertEqual(self._post(token, 'assign', {'action': 'schedule', 'scheduled_for': when}).status_code, 400)
+        self.assertTrue(self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(self.token_for('manager1'))).json()['actions']['schedule'])
+
+
+class LineBrandTests(TeamTaskApiTests):
+    """Each machine line has its own brand; none given: the task's."""
+
+    def test_a_line_takes_the_task_brand_unless_given_its_own(self):
+        from reference.models import Brand
+        from tasks.views import save_planned_lines
+        from tasks.forms import TaskProductForm
+        panatta, technogym = Brand.objects.create(name='Panatta'), Brand.objects.create(name='Technogym')
+        self.task.brand = panatta
+        self.task.save(update_fields=['brand'])
+        rows = []
+        for data in ({'product_code': 'BENCH-01', 'quantity': 1}, {'product_code': 'RUN-700', 'quantity': 1, 'brand': technogym.pk}):
+            form = TaskProductForm(data)
+            self.assertTrue(form.is_valid(), form.errors)
+            rows.append(form.cleaned_data)
+        save_planned_lines(self.task, rows)
+        self.assertEqual(dict(self.task.products.values_list('product_code', 'brand__name')),
+                         {'BENCH-01': 'Panatta', 'RUN-700': 'Technogym'})
+
+
+class TellTheCustomerTheTimeTests(TeamTaskApiTests):
+    """The customer is told a time once, again only after it moves — never while a change awaits a manager."""
+
+    def test_offered_only_when_needed(self):
+        from tasks.models import ScheduleChangeRequest
+        self.task.responsible_supervisor = self.supervisor
+        self.task.scheduled_for = timezone.now() + timedelta(days=1)
+        self.task.save(update_fields=['responsible_supervisor', 'scheduled_for'])
+        self.site.contact_email = 'gym@example.test'
+        self.site.save(update_fields=['contact_email'])
+        token = self.token_for('supervisor1')
+        offered = lambda: self.client.get(f'/api/tasks/{self.task.pk}/', **self.auth(token)).json()['actions']['notify_schedule']
+        self.assertTrue(offered())
+        self.assertEqual(self._post(token, 'action', {'action': 'notify_schedule'}).status_code, 200)
+        self.assertFalse(offered())  # the customer has this time
+        TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED, occurred_at=timezone.now(),
+                                 actor=self.supervisor_user)
+        self.assertTrue(offered())  # the time moved
+        ScheduleChangeRequest.objects.create(
+            task=self.task, requested_by=self.supervisor, requested_scheduled_for=timezone.now() + timedelta(days=3),
+            created_at=timezone.now(),
+        )
+        self.assertFalse(offered())
+        self.assertEqual(self._post(token, 'action', {'action': 'notify_schedule'}).status_code, 400)
+
+
+class UnreadMessagesOnListsTests(TaskMessagesApiTests):
+    def test_the_list_counts_new_messages_until_read(self):
+        tech, supervisor = self.token_for('tech1'), self.token_for('supervisor1')
+        self.task.responsible_supervisor = self.supervisor_user.technician
+        self.task.save(update_fields=['responsible_supervisor'])
+        url = f'/api/tasks/{self.task.pk}/messages/'
+        self.client.post(url, json.dumps({'message': 'Bring the belt.'}), content_type='application/json', **self.auth(supervisor))
+        mine = {t['id']: t for t in self.client.get('/api/my-tasks/', **self.auth(tech)).json()}
+        self.assertEqual(mine[self.task.pk]['unread_messages'], 1)
+        self.client.get(url, **self.auth(tech))  # reading the thread
+        mine = {t['id']: t for t in self.client.get('/api/my-tasks/', **self.auth(tech)).json()}
+        self.assertEqual(mine[self.task.pk]['unread_messages'], 0)
+
+
+class BellApiTests(TaskMessagesApiTests):
+    """The app's bell: the website bell's items for the same person, worded and openable."""
+
+    def test_a_team_message_is_in_the_technicians_bell(self):
+        self.client.post(f'/api/tasks/{self.task.pk}/messages/', json.dumps({'message': 'Call the gym first.'}),
+                         content_type='application/json', **self.auth(self.token_for('supervisor1')))
+        bell = self.client.get('/api/bell/', **self.auth(self.token_for('tech1'))).json()
+        self.assertEqual(bell['count'], 1)
+        item = bell['items'][0]
+        self.assertEqual((item['kind'], item['opens']), ('task_message', {'screen': 'task', 'id': self.task.pk}))
+        sender = self.supervisor_user.technician.full_name
+        self.assertEqual(item['text'], f'New message from {sender}')  # who wrote it
+
+
+class TeamListPagesAndFiltersTests(TeamTaskApiTests):
+    """The app's All in the country: the website task list's filters, 30 at a time."""
+
+    def test_pages_of_thirty_and_older_apps_get_the_list(self):
+        for n in range(35):
+            Task.objects.create(
+                task_number=f'AE-{8000 + n}', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            )
+        token = self.token_for('supervisor1')
+        first = self.client.get('/api/tasks/?page=1', **self.auth(token)).json()
+        self.assertEqual((first['count'], len(first['results']), first['has_more']), (36, 30, True))
+        second = self.client.get('/api/tasks/?page=2', **self.auth(token)).json()
+        self.assertEqual((len(second['results']), second['has_more']), (6, False))
+        self.assertIsInstance(self.client.get('/api/tasks/', **self.auth(token)).json(), list)
+        no_lead = self.client.get('/api/tasks/?page=1&lead=none', **self.auth(token)).json()
+        self.assertEqual(no_lead['count'], 35)  # the website's "no technician" filter
+
+    def test_search_finds_a_task_by_its_technician(self):
+        token = self.token_for('supervisor1')
+        found = self.client.get('/api/tasks/?page=1&q=Tarek', **self.auth(token)).json()
+        self.assertEqual([t['id'] for t in found['results']], [self.task.pk])
+
+    def test_the_filter_choices(self):
+        choices = self.client.get('/api/tasks/filters/', **self.auth(self.token_for('supervisor1'))).json()
+        self.assertIn('blocked', [s['value'] for s in choices['statuses']])
+        self.assertIn('Tarek Tech', [t['label'] for t in choices['technicians']])

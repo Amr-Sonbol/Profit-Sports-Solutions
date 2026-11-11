@@ -14,17 +14,17 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.urls import include, path
+from django.urls import include, path, re_path
+
+from spots.media import serve_media
 
 from . import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('accounts/login/', auth_views.LoginView.as_view(), name='login'),
+    path('accounts/login/', views.StaffLoginView.as_view(), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('accounts/password-reset/', auth_views.PasswordResetView.as_view(), name='password_reset'),
     path('accounts/password-reset/done/', auth_views.PasswordResetDoneView.as_view(), name='password_reset_done'),
@@ -34,6 +34,7 @@ urlpatterns = [
     ),
     path('accounts/reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
     path('i18n/setlang/', views.set_language, name='set_language'),
+    path('bell/', views.bell, name='bell'),
     path('tasks/', include('tasks.urls')),
     path('reports/', include('reports.urls')),
     path('customers/', include('customers.urls')),
@@ -41,5 +42,5 @@ urlpatterns = [
     path('', views.home, name='home'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Uploaded files: through the app, with a check on each one (spots.media) — live as in development.
+urlpatterns.insert(0, re_path(r'^media/(?P<path>.+)$', serve_media))

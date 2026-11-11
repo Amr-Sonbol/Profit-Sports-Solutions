@@ -19,19 +19,34 @@ class SeedRolePermissionsTests(TestCase):
         # view_technicians and decide_escalated_tickets are the permissions
         # that have since moved away from this default — each checked
         # separately below.
-        expected_allowed_roles = {'supervisor', 'manager', 'admin'}
+        # Since people 0057 the Operations Manager and the Technical Support
+        # Manager hold every permission an admin does; a Country Support
+        # Manager also manage_customers.
+        expected_allowed_roles = {'supervisor', 'manager', 'admin', 'operations_manager', 'support_manager', 'project_manager'}
         other_permissions = set(RolePermission.Permission) - {
             RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
             RolePermission.Permission.VIEW_TECHNICIANS, RolePermission.Permission.DECIDE_ESCALATED_TICKETS,
             RolePermission.Permission.MANAGE_PARTS, RolePermission.Permission.OPEN_TICKETS,
             RolePermission.Permission.TICKETS_ALL_COUNTRIES, RolePermission.Permission.CUSTOMER_ACCOUNTS,
+            RolePermission.Permission.VIEW_STOCK,
         }
         for permission in other_permissions:
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
             )
-            self.assertEqual(allowed_roles, expected_allowed_roles, permission)
+            expected = expected_allowed_roles | (
+                {'country_support'} if permission == RolePermission.Permission.MANAGE_CUSTOMERS else set()
+            )
+            self.assertEqual(allowed_roles, expected, permission)
+
+    def test_view_stock_is_whoever_runs_or_plans_the_stock(self):
+        allowed_roles = set(
+            RolePermission.objects.filter(
+                permission=RolePermission.Permission.VIEW_STOCK, allowed=True,
+            ).values_list('role', flat=True),
+        )
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
 
     def test_view_tasks_also_includes_the_warehouse_manager(self):
         # The warehouse manager needs to search tasks by PAK reference and
@@ -41,7 +56,9 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TASKS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'admin'})
+        # And (0057) the Technical Support Manager, and a Country Support Manager following its requests on.
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'project_manager',
+                                         'support_manager', 'country_support', 'admin'})
 
     def test_open_tickets_is_support_and_operations_managers_and_admin(self):
         allowed_roles = set(
@@ -76,15 +93,17 @@ class SeedRolePermissionsTests(TestCase):
         )
         self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
 
-    def test_view_dashboard_is_available_to_every_role(self):
-        # The dashboard is now everyone's landing page after signing in
-        # (spots.views.home) — every role needs to be able to see it.
+    def test_view_dashboard_is_for_managers_and_above(self):
+        # Technicians and supervisors have My week and My progress instead
+        # (migration 0050_dashboard_for_managers_only).
         allowed_roles = set(
             RolePermission.objects.filter(
                 permission=RolePermission.Permission.VIEW_DASHBOARD, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {r for r, _ in Technician.Role.choices})
+        self.assertEqual(
+            allowed_roles, {r for r, _ in Technician.Role.choices} - {Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR},
+        )
 
     def test_view_machines_is_every_office_role_but_technician(self):
         allowed_roles = set(
@@ -93,7 +112,7 @@ class SeedRolePermissionsTests(TestCase):
             ).values_list('role', flat=True),
         )
         self.assertEqual(
-            allowed_roles, {'supervisor', 'manager', 'support_manager', 'country_support', 'operations_manager', 'admin'},
+            allowed_roles, {'supervisor', 'manager', 'support_manager', 'country_support', 'operations_manager', 'admin', 'project_manager'},
         )
 
     def test_view_technicians_also_includes_the_operations_manager(self):
@@ -102,7 +121,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TECHNICIANS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
 
     def test_decide_escalated_tickets_is_the_upper_chain_and_admin(self):
         allowed_roles = set(
@@ -120,7 +139,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.MANAGE_PARTS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
 
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(
@@ -143,7 +162,7 @@ class ActiveCountryContextTests(TestCase):
         )
         for username, role in [
             ('tech1', Technician.Role.TECHNICIAN), ('supervisor1', Technician.Role.SUPERVISOR),
-            ('manager1', Technician.Role.MANAGER), ('support1', Technician.Role.SUPPORT_MANAGER),
+            ('manager1', Technician.Role.MANAGER), ('support1', Technician.Role.COUNTRY_SUPPORT),
             ('admin1', Technician.Role.ADMIN),
         ]:
             user = User.objects.create_user(username, password='pass12345')
@@ -152,16 +171,17 @@ class ActiveCountryContextTests(TestCase):
                 language='en', role=role, employment_type='staff',
             )
 
-    def test_manager_and_admin_can_switch_countries(self):
-        for username in ('manager1', 'admin1'):
-            self.client.login(username=username, password='pass12345')
-            response = self.client.get('/tasks/dashboard/')
-            self.assertIn('switchable_countries', response.context, username)
-            self.assertGreater(len(response.context['switchable_countries']), 0, username)
-            self.client.logout()
+    def test_every_country_roles_switch_but_a_manager_has_one_country(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.get('/tasks/dashboard/')
+        self.assertGreater(len(response.context['switchable_countries']), 0)
+        self.client.logout()
+        # A Manager is one per country (docs/access_rules.md).
+        self.client.login(username='manager1', password='pass12345')
+        self.assertNotIn('switchable_countries', self.client.get('/tasks/dashboard/').context)
 
     def test_everyone_else_gets_no_switcher(self):
-        for username in ('tech1', 'supervisor1', 'support1'):
+        for username in ('support1',):
             self.client.login(username=username, password='pass12345')
             response = self.client.get('/tasks/dashboard/')
             self.assertNotIn('switchable_countries', response.context, username)

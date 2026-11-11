@@ -4,20 +4,23 @@ from django.contrib.auth import get_user_model, password_validation
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import lazy
+from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
 from people.models import (
     ALLOWED_SKILL_EVIDENCE_EXTENSIONS, MAX_PHOTO_UPLOAD_BYTES, MAX_SKILL_EVIDENCE_UPLOAD_BYTES,
-    SKILL_LEVEL_CHOICES, RolePermission, Technician, TechnicianTrip,
+    SKILL_LEVEL_CHOICES, NotificationSettings, RolePermission, Technician, TechnicianTrip,
 )
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
+from reports.phrases import Action, Finding
 
 from .models import (
-    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, MAX_TASK_DOCUMENT_BYTES, MAX_TICKET_ATTACHMENT_BYTES,
+    ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, STEP_DONE_LABELS, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
     TaskAsset,
-    TaskAttachment, TaskEvent, TicketEscalation, TicketMachine,
+    TaskAttachment, TaskEvent, TaskProduct, TicketEscalation, TicketMachine,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -60,8 +63,15 @@ class TaskCreateForm(forms.ModelForm):
 
     PLAIN_FIELD_NAMES = [
         'required_skill', 'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
-        'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
+        'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor', 'lead',
     ]
+
+    # Who does it, chosen right away — the same people the assign screen
+    # offers (a visitor on a trip is added there afterwards).
+    lead = forms.ModelChoiceField(
+        queryset=Technician.objects.none(), required=False, label=_('Lead'),
+        help_text=_('who does it — anyone in the country; can be left for the assign screen'),
+    )
 
     class Meta:
         model = Task
@@ -76,9 +86,15 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, country, ticket=None, is_admin=False, **kwargs):
+    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_admin = is_admin
+        if can_assign:
+            self.fields['lead'].queryset = Technician.objects.filter(
+                is_active=True, is_available=True, country=country,
+            ).order_by('full_name')
+        else:
+            del self.fields['lead']
         self.fields['site'].queryset = Site.objects.filter(
             customer__is_active=True, customer__country=country,
         ).select_related('customer')
@@ -121,6 +137,13 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['priority'].initial = Task.Priority.NORMAL
         self.fields['source'].initial = Task.Source.PHONE
         self.fields['billing_type'].initial = Task.BillingType.CHARGEABLE
+        # The branches under warranty now: picking one switches billing to
+        # warranty on the page (task_create.html), still changeable.
+        self.warranty_site_ids = [
+            site.pk for site in Site.objects.filter(
+                customer__is_active=True, customer__country=country, warranty_until__gte=timezone.localdate(),
+            ).only('pk', 'warranty_start', 'warranty_until') if site.under_warranty
+        ]
         self.fields['reported_at'].initial = timezone.localtime().strftime(DATETIME_INPUT_FORMAT)
 
         # Coming from a customer ticket — hint the free-text fields with
@@ -149,6 +172,10 @@ class TaskCreateForm(forms.ModelForm):
                 self.fields['site'].initial = ticket.site_id
                 if not is_admin:
                     self.fields['site'].disabled = True
+                # A branch under warranty: everything is free — billed as warranty.
+                if ticket.site and ticket.site.under_warranty:
+                    self.fields['billing_type'].initial = Task.BillingType.WARRANTY
+                    self.fields['is_warranty'].initial = True
             else:
                 # No registered site to go on (an anonymous public
                 # submission) — best-effort match by name, same
@@ -177,7 +204,7 @@ class TaskCreateForm(forms.ModelForm):
 
     def plain_fields(self):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
-        return [self[name] for name in self.PLAIN_FIELD_NAMES]
+        return [self[name] for name in self.PLAIN_FIELD_NAMES if name in self.fields]
 
     def clean(self):
         cleaned = super().clean()
@@ -523,8 +550,22 @@ class DeactivateTechnicianForm(forms.Form):
     """Permanent, unlike MarkUnavailableForm above — resigned, terminated,
     etc. Free text rather than fixed choices: the reasons here vary too
     much to usefully bucket, and this is a one-off note, not reported on.
+    `move_to`: who takes over their open tasks, in the same step, so none
+    is left with someone who can't sign in (`technician` is the one
+    leaving; the choice is offered only when they have open tasks).
     """
     reason = forms.CharField(label=_('Reason'), widget=forms.Textarea(attrs={'rows': 2}))
+    move_to = forms.ModelChoiceField(
+        queryset=Technician.objects.none(), required=False, label=_('Move all their open tasks to'),
+        help_text=_('They take over as lead; anything they only helped on is simply taken off them.'),
+    )
+
+    def __init__(self, *args, technician=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if technician is not None:
+            self.fields['move_to'].queryset = Technician.objects.filter(
+                is_active=True, country=technician.country,
+            ).exclude(pk=technician.pk).order_by('full_name')
 
 
 # One plain line for AUTH_PASSWORD_VALIDATORS, instead of Django's own
@@ -584,11 +625,31 @@ class TechnicianFirstLoginForm(forms.Form):
         return password2
 
 
+# The four sentences every level is judged by, for a skill or a conduct
+# area alike (docs/database_design_v2.md, "How a level gets set"): the
+# full sentence on My skills, the short form in the level choices.
+SKILL_LEVEL_RUBRIC = {
+    1: _('Has never done this repair alone, or has not been observed yet. Helper only.'),
+    2: _('Has done it under supervision and it went fine. Leads simple jobs, calls for help on faults.'),
+    3: _('Has led this work alone, repeatedly, with no callbacks.'),
+    4: _('Others call on them when they are stuck. Can train others.'),
+}
+SKILL_LEVEL_SHORT = {
+    1: _('Helper only'),
+    2: _('Under supervision'),
+    3: _('Alone, no callbacks'),
+    4: _('Can train others'),
+}
+LABELLED_LEVEL_CHOICES = [('', '---------')] + [
+    (level, format_lazy('{} — {}', level, SKILL_LEVEL_SHORT[level])) for level, _label in SKILL_LEVEL_CHOICES
+]
+
+
 class SelfRateLevelForm(forms.Form):
     """A technician's own first guess at a conduct-area level — for a
     skill, see SelfRateSkillForm below, which also requires evidence.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
 
 
 class SelfRateSkillForm(SelfRateLevelForm):
@@ -616,7 +677,7 @@ class ReviewLevelForm(forms.Form):
     """A supervisor's confirmed level — always overwrites whatever was
     there, self-rated or previously supervisor-set.
     """
-    level = forms.ChoiceField(choices=[('', '---------')] + SKILL_LEVEL_CHOICES, label=_('Level'))
+    level = forms.ChoiceField(choices=LABELLED_LEVEL_CHOICES, label=_('Level'))
     note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
 
@@ -751,29 +812,60 @@ class CountryCreateForm(forms.ModelForm):
 
     class Meta:
         model = Country
-        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days']
+        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language']
 
     def clean_weekend_days(self):
         return ','.join(sorted(self.cleaned_data['weekend_days']))
 
 
 class TechnicianCreateForm(forms.ModelForm):
-    """Country comes from the supervisor creating it, set in the view —
-    never a field here, same scoping every other per-country screen uses.
-    No `user` field: same as a customer, the login is a separate step
-    from the Edit screen afterward, not part of creation itself.
+    """Adding anyone on the staff, in one step: role, name, the country
+    they work in (chosen here, not whichever one the admin happens to be
+    viewing), and their email — which becomes their login, with a setup
+    link to choose their own password (tasks.views.create_staff_user). No
+    email: the person is added without a login, and the admin is told.
     """
+
+    email = forms.EmailField(
+        required=False, label=_('Email'),
+        help_text=_('Their login: they get a link to choose their own password. Leave empty only if they have none yet.'),
+    )
 
     class Meta:
         model = Technician
         # Role first: this one screen adds every kind of staff account.
         fields = [
-            'role', 'full_name', 'phone', 'language', 'employment_type',
+            'role', 'full_name', 'country', 'phone', 'language', 'employment_type',
             'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
             'hired_on': forms.DateInput(attrs={'type': 'date'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['country'].queryset = Country.objects.filter(is_active=True).order_by('name')
+        # A new person's language follows their country unless chosen: Arabic in Egypt and
+        # Saudi Arabia, English elsewhere (country.report_language — the app's too).
+        self.fields['language'].required = False
+        self.fields['language'].choices = [('', _('As the country'))] + list(Technician.Language.choices)
+        self.fields['language'].initial = ''
+        # The email goes right after the name and country.
+        order = ['role', 'full_name', 'country', 'email']
+        self.order_fields(order + [name for name in self.fields if name not in order])
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get('language') and cleaned.get('country'):
+            cleaned['language'] = cleaned['country'].report_language
+            self.instance.language = cleaned['language']
+        return cleaned
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if email and get_user_model().objects.filter(username__iexact=email).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
 
 
 class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
@@ -892,6 +984,25 @@ class CloseTaskForm(forms.Form):
     )
 
 
+class RebookVisitForm(forms.Form):
+    """Manager-only — a task stopped on site (blocked) gets a new visit:
+    the same task, a new day and time, back to its team."""
+    scheduled_for = forms.DateTimeField(
+        label=_('New visit'), input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+    )
+    note = forms.CharField(
+        label=_('Note (optional)'), required=False, widget=forms.Textarea(attrs={'rows': 2}),
+        help_text=_('For the team, for example: the part has arrived, or the customer confirmed the gym will be open.'),
+    )
+
+    def clean_scheduled_for(self):
+        value = self.cleaned_data['scheduled_for']
+        if value < timezone.now():
+            raise forms.ValidationError(_('Choose a time from now on.'))
+        return value
+
+
 class CancelTaskForm(forms.Form):
     """Manager-only — calls a task off before any report is filed. Unlike
     closing, the customer's ticket conversation stays open."""
@@ -913,6 +1024,14 @@ class NegligenceFlagForm(forms.Form):
     )
 
 
+def require_reason_when_not_worked_on(form, cleaned):
+    """A machine on the task not worked on says why (its note): not on site,
+    the customer declined, no time for it."""
+    from tasks.models import TaskAsset
+    if cleaned.get('outcome') == TaskAsset.Outcome.NOT_WORKED_ON and not (cleaned.get('note') or '').strip():
+        form.add_error('note', _("Please say why it wasn't worked on (not on site, the customer declined, no time…)."))
+
+
 class ExistingAssetOutcomeForm(forms.Form):
     """A machine already at this site that this visit actually covered.
 
@@ -925,6 +1044,16 @@ class ExistingAssetOutcomeForm(forms.Form):
     )
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
+    )
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
     )
 
     def __init__(self, *args, site=None, **kwargs):
@@ -940,6 +1069,7 @@ class ExistingAssetOutcomeForm(forms.Form):
             raise forms.ValidationError(
                 _('Select the machine and an outcome, or leave this row blank.'),
             )
+        require_reason_when_not_worked_on(self, cleaned)
         return cleaned
 
 
@@ -953,44 +1083,185 @@ class NewAssetForm(forms.Form):
         required=False, max_length=150, label=_('Model'), help_text=_('free text as shown on the plate'),
     )
     serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    code = forms.CharField(required=False, max_length=100, label=_('Code'), help_text=_('optional — e.g. BENCH-01'))
+    # The serial is how a machine is tracked from then on: it can only be
+    # left out on purpose (a missing or worn plate), and that's flagged.
+    no_serial = forms.BooleanField(required=False, label=_('No readable serial plate'))
     outcome = forms.ChoiceField(
         choices=[('', '---------')] + TaskAsset.Outcome.choices, required=False, label=_('Outcome'),
     )
+    finding_code = forms.ChoiceField(choices=[('', '---------')] + Finding.choices, required=False, label=_('Finding'))
+    note = forms.CharField(
+        required=False, max_length=255, label=_('Other finding'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other finding, if none fits')}),
+    )
+    action_code = forms.ChoiceField(choices=[('', '---------')] + Action.choices, required=False, label=_('Action taken'))
+    action = forms.CharField(
+        required=False, max_length=255, label=_('Other action'),
+        widget=forms.TextInput(attrs={'placeholder': _('Other action, if none fits')}),
+    )
+    # The customer's ticket machine this row registers, when it came from
+    # the ticket (it wasn't in their machine list).
+    ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     def clean(self):
         cleaned = super().clean()
         if not any(cleaned.get(f) for f in ('brand', 'model_name', 'serial_no', 'outcome')):
             return cleaned
-        if not cleaned.get('brand') or not cleaned.get('model_name') or not cleaned.get('outcome'):
-            raise forms.ValidationError(
-                _('Enter at least a brand, model, and outcome for each new machine, or leave the row blank.'),
+        # Says which machine, and what's missing on it — "the brand" is easy to type without picking it.
+        missing = [label for field, label in (
+            ('brand', _('choose its brand from the list')), ('model_name', _('enter its model')),
+            ('outcome', _('choose an outcome')),
+        ) if not cleaned.get(field)]
+        if missing:
+            serial = (cleaned.get('serial_no') or '').strip()
+            machine = cleaned.get('model_name') or _('A new machine')
+            raise forms.ValidationError('%s%s: %s.' % (machine, f' ({serial})' if serial else '', ', '.join(str(m) for m in missing)))
+        cleaned['serial_no'] = (cleaned.get('serial_no') or '').strip()
+        if not cleaned['serial_no'] and not cleaned.get('no_serial'):
+            self.add_error('serial_no', _(
+                'Type the serial number from the machine\'s plate, or tick “No readable serial plate”.',
+            ))
+        require_reason_when_not_worked_on(self, cleaned)
+        return cleaned
+
+
+class TaskProductCheckForm(forms.Form):
+    """One line on a step's checklist (receiving, loading, installation):
+    what really happened to it, its serial, its colours, what went in
+    instead, a note and a photo. `id` is the planned line; empty for one
+    added on site. Guided, because mistakes here travel: an installed
+    machine needs its serial (loading may leave it); a damaged one or a
+    wrong item needs a note or a photo saying what. Receiving counts by
+    code instead — no serial; how many arrived, and what happened to the
+    rest; a spare part has no colours.
+    """
+
+    COLORS = ('frame', 'arm', 'padding', 'trim')
+    # What the person on site can choose — "not checked yet" isn't an answer.
+    STATUSES = [choice for choice in TaskProduct.Status.choices if choice[0] != TaskProduct.Status.PENDING]
+
+    id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    product_code = forms.CharField(max_length=100, label=_('Product code'))
+    status = forms.ChoiceField(choices=[('', _('Choose…'))] + STATUSES, label=_('What happened'))
+    serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'), initial=DEFAULT_COLOR)
+    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'), initial=DEFAULT_COLOR)
+    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'), initial=DEFAULT_COLOR)
+    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
+    replacement = forms.CharField(
+        required=False, max_length=150, label=_('Installed instead'),
+        help_text=_('if a different item went in'),
+    )
+    note = forms.CharField(required=False, label=_('Note'), widget=forms.Textarea(attrs={'rows': 2}))
+    photo = forms.FileField(
+        required=False, label=_('Photo'), widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+    )
+
+    # Receiving, when fewer arrived than listed: what happened to the rest.
+    REST_STATUSES = [
+        (TaskProduct.Status.MISSING, TaskProduct.Status.MISSING.label),
+        (TaskProduct.Status.DAMAGED, TaskProduct.Status.DAMAGED.label),
+    ]
+
+    def __init__(self, *args, step='installation', **kwargs):
+        super().__init__(*args, **kwargs)
+        self.step = step
+        # A photo already on the line counts (it's kept unless replaced).
+        self.has_photo = bool(self.initial.get('photo_url'))
+        done = STEP_DONE_LABELS.get(step, STEP_DONE_LABELS['installation'])
+        self.fields['status'].choices = [('', _('Choose…'))] + [
+            (value, done if value == TaskProduct.Status.DONE else label) for value, label in self.STATUSES
+        ]
+        if step != 'installation':
+            self.fields['replacement'].label = _('Instead')
+        if step == 'receiving':
+            # Counted against the container's list by code — no serials here.
+            del self.fields['serial_number']
+            self.fields['received'] = forms.IntegerField(
+                required=False, min_value=0, max_value=99999, label=_('How many arrived'),
+                initial=self.initial.get('quantity'),
+                help_text=_('if not all of them — then say what happened to the rest'),
             )
+            self.fields['rest_status'] = forms.ChoiceField(
+                choices=self.REST_STATUSES, required=False, label=_('The rest'),
+            )
+            if not self.initial.get('id'):
+                # Something that came but wasn't on the list: a machine or a spare part, and how many.
+                self.fields['kind'] = forms.ChoiceField(choices=TaskProduct.Kind.choices, label=_('Kind'))
+                self.fields['quantity'] = forms.IntegerField(
+                    required=False, min_value=1, max_value=99999, label=_('Quantity'),
+                )
+                del self.fields['received']
+                del self.fields['rest_status']
+        if self.initial.get('kind') == TaskProduct.Kind.PART:
+            for color in self.COLORS:
+                del self.fields[color]
+        self.order_fields(['id', 'product_code', 'kind', 'quantity', 'status', 'received', 'rest_status'])
+
+    def clean(self):
+        cleaned = super().clean()
+        for color in self.COLORS:
+            if color in self.fields:
+                cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
+        cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
+        status = cleaned.get('status')
+        # Only an installed machine must have its serial; loading may leave it for the installers.
+        if self.step == 'installation' and status == TaskProduct.Status.DONE and not cleaned['serial_number']:
+            self.add_error('serial_number', _('This machine needs its serial number — type it from the sticker on the machine.'))
+        if 'quantity' in self.fields and not cleaned.get('quantity'):
+            cleaned['quantity'] = 1
+        # Receiving: the count against the list. Fewer splits the line (save_checklist), more just raises it.
+        planned = self.initial.get('quantity') or cleaned.get('quantity') or 1
+        received = cleaned.get('received')
+        if status != TaskProduct.Status.DONE or received == planned:
+            cleaned['received'] = received = None
+        short = received is not None and received < planned
+        if short and cleaned.get('rest_status') == TaskProduct.Status.DAMAGED and not (
+            (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
+        ):
+            self.add_error('note', _('Say what is wrong with the damaged ones, or add a photo.'))
+        if status in (TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM) and not (
+            (cleaned.get('note') or '').strip() or cleaned.get('photo') or self.has_photo
+        ):
+            self.add_error('note', _('Say what is wrong, or add a photo.'))
+        photo = cleaned.get('photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            self.add_error('photo', _('The photo is too large. The maximum size is 25 MB.'))
         return cleaned
 
 
 class TaskProductForm(forms.Form):
-    """One machine's line on an installation/loading task — product code
-    mandatory, everything else optional. serial_number/quantity are the
-    plain delivery-note fields; replacement/frame/arm/padding/trim/
-    comment/note are the per-unit checklist a supervisor fills in for an
-    actual machine (custom color per component, and what it got swapped
-    for if the ordered one wasn't available) — left blank for a simple
-    parts line that's just a code and a quantity.
+    """Planning a line on an equipment task (the Edit screen): product code,
+    serial if already known, quantity, and the machine's four colours —
+    black unless it's a custom one. What really happened to each machine is
+    checked off on site (TaskProductCheckForm); there the serial of an
+    installed machine is required. On a receiving task a line can be a
+    spare part instead (`kind`): a catalogue code and a quantity.
     """
 
+    COLORS = ('frame', 'arm', 'padding', 'trim')
+
+    # A spare part only counts on a receiving task (save_planned_lines).
+    kind = forms.ChoiceField(
+        choices=TaskProduct.Kind.choices, required=False, initial=TaskProduct.Kind.MACHINE, label=_('Kind'),
+    )
     product_code = forms.CharField(required=False, max_length=100, label=_('Product code'))
+    # Blank: the task's brand (save_planned_lines).
+    brand = forms.ModelChoiceField(
+        queryset=Brand.objects.filter(is_active=True), required=False, label=_('Brand'),
+    )
     serial_number = forms.CharField(required=False, max_length=100, label=_('Serial number'))
     quantity = forms.IntegerField(required=False, min_value=1, max_value=99999, label=_('Quantity'))
-    replacement = forms.CharField(
-        required=False, max_length=150, label=_('Replacement'),
-        help_text=_('the item this replaced, if the ordered item was unavailable'),
-    )
-    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'))
-    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'))
-    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'))
-    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'))
-    comment = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Comment'))
-    note = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label=_('Note'))
+    frame = forms.CharField(required=False, max_length=100, label=_('Frame color'), initial=DEFAULT_COLOR)
+    arm = forms.CharField(required=False, max_length=100, label=_('Arm color'), initial=DEFAULT_COLOR)
+    padding = forms.CharField(required=False, max_length=100, label=_('Padding color'), initial=DEFAULT_COLOR)
+    trim = forms.CharField(required=False, max_length=100, label=_('Trim color'), initial=DEFAULT_COLOR)
+    # A spare part ordered for one repair: that task's number, so the part is held for it.
+    for_task = forms.CharField(required=False, max_length=30, label=_('For task'))
+    # The line this row is (tasks.views.save_planned_lines): updated in place, never deleted. Empty: a new line.
+    line_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
 
     def clean(self):
         cleaned = super().clean()
@@ -999,16 +1270,34 @@ class TaskProductForm(forms.Form):
         # machine never demands re-filling the row just to clear it.
         if cleaned.get('DELETE'):
             return cleaned
-        row_fields = (
-            'product_code', 'serial_number', 'quantity', 'replacement',
-            'frame', 'arm', 'padding', 'trim', 'comment', 'note',
-        )
-        if not any(cleaned.get(f) for f in row_fields):
+        # The colours start filled in (black), so they alone don't make a row.
+        if not any(cleaned.get(f) for f in ('product_code', 'serial_number', 'quantity')):
             return cleaned
         if not cleaned.get('product_code'):
             raise forms.ValidationError(_('Enter a product code, or leave this row blank.'))
         if not cleaned.get('quantity'):
             cleaned['quantity'] = 1
+        for color in self.COLORS:
+            cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
+        cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
+        cleaned['kind'] = cleaned.get('kind') or TaskProduct.Kind.MACHINE
+        if cleaned['kind'] == TaskProduct.Kind.PART:
+            # A part has a code from the catalogue (once there is one), never a serial or colours.
+            cleaned['serial_number'] = ''
+            for color in self.COLORS:
+                cleaned[color] = DEFAULT_COLOR
+            catalogue = Part.objects.filter(is_active=True)
+            part = catalogue.filter(code__iexact=cleaned['product_code'].strip()).first()
+            if part:
+                cleaned['product_code'] = part.code
+            elif catalogue.exists():
+                self.add_error('product_code', _('“%(code)s” is not in the parts list.') % {'code': cleaned['product_code']})
+        number = (cleaned.get('for_task') or '').strip()
+        cleaned['for_task'] = None
+        if number and cleaned['kind'] == TaskProduct.Kind.PART:
+            cleaned['for_task'] = Task.objects.filter(task_number__iexact=number).first()
+            if cleaned['for_task'] is None:
+                self.add_error('for_task', _('There is no task %(number)s.') % {'number': number})
         return cleaned
 
 
@@ -1039,14 +1328,51 @@ class MultipleFileField(forms.FileField):
         return not self.disabled and bool(data)
 
 
+def _filled_in_later(message, values):
+    """A lazily translated text with its %(...)s values, filled in when shown (in the
+    reader's language) — `_('...') % {...}` in a field definition runs once, at startup,
+    and freezes it in English."""
+    return lazy(lambda: str(message) % values, str)()
+
+
+FILES_LIMIT = {'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)}
+
+
+def message_files_field(label):
+    """The files sent with a message — any number up to the limit, each a
+    photo, video or PDF of at most 25 MB."""
+    return MultipleFileField(
+        required=False, label=label,
+        help_text=_filled_in_later(_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each'), FILES_LIMIT),
+        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    )
+
+
+class MessageFilesMixin:
+    """Checks a message's `attachments`: how many, and each one's size."""
+
+    def clean_attachments(self):
+        files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
+        if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
+            raise forms.ValidationError(
+                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+            )
+        for upload in files:
+            if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
+                raise forms.ValidationError(
+                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
+                )
+        return files
+
+
 class TicketAttachmentsForm(forms.Form):
     """The photos/video box shared by both ways a ticket is opened."""
 
     attachments = MultipleFileField(
         required=False, label=_('Photos and/or short video'),
-        help_text=_('showing the issue and the serial number; up to %(count)d files, %(size)d MB each') % {
-            'count': MAX_TICKET_ATTACHMENT_COUNT, 'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024),
-        },
+        help_text=_filled_in_later(
+            _('showing the issue and the serial number; up to %(count)d files, %(size)d MB each'), FILES_LIMIT,
+        ),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
@@ -1070,26 +1396,81 @@ class SiteNameChoiceField(forms.ModelChoiceField):
         return site.name
 
 
-class CustomerPortalTicketForm(forms.ModelForm):
-    """A logged-in customer reporting an issue at one of their own
+class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
+    """A logged-in customer sending a request about one of their own
     sites. The company name, site, and address are never typed here at
     all; a portal login already knows who they are and where their sites
-    are (set directly in the view). The machines and their photos come
-    from TicketMachineFormSet alongside it.
+    are (set directly in the view). Two questions decide the rest — what
+    it's about and what they need: machines with a problem or spare parts
+    come from TicketMachineFormSet alongside it; everything else is a
+    message (`message`, saved as the ticket's description) with its files,
+    and Flooring, Accessories, Lockers and Something else name the area,
+    items, lockers or matter in `subject`.
     """
+
+    message = forms.CharField(label=_('Your message'), required=False, widget=forms.Textarea(attrs={'rows': 5}))
 
     class Meta:
         model = CustomerTicket
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes']
+        fields = [
+            'about', 'need', 'subject', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address', 'notes',
+        ]
         widgets = {
+            'about': forms.RadioSelect,
+            'need': forms.RadioSelect,
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
-        labels = {'notes': _('Anything else we should know')}
+        labels = {
+            'about': _('What is it about?'), 'need': _('What do you need?'), 'subject': _('What is it about?'),
+            'notes': _('Anything else we should know'),
+        }
+
+    # The "about"s asked a short "what" right under the choice, kept as `subject`.
+    SUBJECT_ABOUTS = {
+        CustomerTicket.About.FLOORING: _('Please say which area of the floor.'),
+        CustomerTicket.About.ACCESSORIES: _('Please say which items.'),
+        CustomerTicket.About.LOCKERS: _('Please say which lockers.'),
+        CustomerTicket.About.OTHER: _('Please say in a few words what it is about.'),
+    }
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        self.fields['attachments'] = message_files_field(_('Files'))
+        # Chosen by the customer every time: nothing is assumed.
+        about_choices = [c for c in CustomerTicket.About.choices if c[0] != CustomerTicket.About.NEW_BRANCH]
+        for name, choices in (('about', about_choices), ('need', CustomerTicket.Need.choices)):
+            self.fields[name].choices = choices
+            self.fields[name].initial = None
+        sites = list(customer.sites.all()[:2])
+        if len(sites) == 1:
+            # Only one site: already chosen (still shown, so "where" is clear).
+            self.fields['site'].initial = sites[0].pk
+
+    @staticmethod
+    def machine_cards_for(about, need):
+        """Machines with a problem or spare parts: told through machine cards."""
+        return about == CustomerTicket.About.MACHINES and need in (
+            CustomerTicket.Need.REPAIR, CustomerTicket.Need.PARTS,
+        )
+
+    @property
+    def uses_machines(self):
+        return self.machine_cards_for(self.cleaned_data.get('about'), self.cleaned_data.get('need'))
+
+    def clean(self):
+        cleaned = super().clean()
+        about, need = cleaned.get('about'), cleaned.get('need')
+        if about and need and not self.machine_cards_for(about, need):
+            if not cleaned.get('message', '').strip():
+                self.add_error('message', _('Please tell us what you need.'))
+        if about in self.SUBJECT_ABOUTS:
+            if not cleaned.get('subject', '').strip():
+                self.add_error('subject', self.SUBJECT_ABOUTS[about])
+        else:
+            cleaned['subject'] = ''
+        return cleaned
 
 
 class TicketMachineForm(forms.Form):
@@ -1098,31 +1479,63 @@ class TicketMachineForm(forms.Form):
     serial of one that isn't in their list, plus what's wrong and photos.
     """
 
-    asset = forms.ChoiceField(required=False, label=_('Machine'))
-    model_name = forms.CharField(required=False, max_length=150, label=_('Model, if not in the list'))
-    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number, if not in the list'))
-    # The silver serial-number sticker on the machine. No `capture`: phones
+    # Which machine: one of theirs from the dropdown, or its last option,
+    # NEW_MACHINE ("My machine isn't listed"), for the model and serial of
+    # one we don't have yet. `which` is "new" only for a customer with no
+    # machines at all (no dropdown); otherwise the dropdown says it.
+    NEW_MACHINE = 'new'
+    which = forms.ChoiceField(
+        choices=[('list', 'list'), ('new', 'new')], widget=forms.HiddenInput, required=False,
+    )
+    asset = forms.ChoiceField(required=False, label=_('Which machine?'))
+    model_name = forms.CharField(required=False, max_length=150, label=_('Model'))
+    serial_no = forms.CharField(
+        required=False, max_length=100, label=_('Serial number'),
+        help_text=_("As shown on the machine's sticker."),
+    )
+    code = forms.CharField(
+        required=False, max_length=100, label=_('Product code (optional)'),
+        help_text=_('The product code shown on the sticker, if available.'),
+    )
+    # The serial-number sticker on the machine. No `capture`: phones
     # then offer both "take photo" and "choose from library".
+    # The number itself is required (a machine is tracked by it); the photo
+    # helps the technician check it.
     serial_photo = forms.FileField(
-        required=False, label=_('Or a photo of the serial number sticker'),
-        help_text=_('the silver sticker on the machine: take a photo or upload one'),
+        required=False, label=_('Photo of the sticker (optional)'),
+        help_text=_('A clear photo helps our team confirm the details. Take a photo or upload one.'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
         validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
     problem = forms.ChoiceField(
         choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
     )
-    description = forms.CharField(required=False, label=_('Description'), widget=forms.Textarea(attrs={'rows': 2}))
-    out_of_service = forms.BooleanField(required=False, label=_('The machine cannot be used'))
+    # Guided, so the team can prepare the right parts: the four things to say.
+    description = forms.CharField(
+        required=False, label=_('Describe the problem'),
+        help_text=_('Please say: what happens, since when, any error code on the screen, and how often.'),
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': _('Example: The treadmill stops after about 5 minutes and shows error E-07. '
+                             'It started 3 days ago and happens every time.'),
+        }),
+    )
     files = MultipleFileField(
         required=False, label=_('Photos or a short video'),
-        help_text=_('showing the issue and the serial number'),
+        # What helps the team most, so they arrive knowing the job (tasks.customer_report).
+        help_text=_('What helps us most: a photo of the problem, a photo of the serial plate, and if it makes a '
+                    'noise, a short video (up to 30 seconds). Up to 25 MB each.'),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
         validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
-    def __init__(self, *args, customer, **kwargs):
+    def __init__(self, *args, customer, for_parts=False, **kwargs):
         super().__init__(*args, **kwargs)
+        # A spare-parts request: the same machine, but which parts instead of a problem.
+        self.for_parts = for_parts
+        self.fields['problem'].choices = [
+            choice for choice in self.fields['problem'].choices if choice[0] != TicketMachine.Problem.PARTS
+        ]
         assets = Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).select_related(
             'site', 'brand',
         ).order_by('site__name', 'brand__name', 'model_name')
@@ -1133,10 +1546,20 @@ class TicketMachineForm(forms.Form):
             if asset.serial_no:
                 label += f' ({asset.serial_no})'
             groups.setdefault(asset.site.name, []).append((str(asset.pk), label))
-        self.fields['asset'].choices = [('', _('Not in the list'))] + list(groups.items())
+        self.fields['asset'].choices = [('', _('Choose…'))] + list(groups.items()) + [
+            (self.NEW_MACHINE, _("My machine isn't listed")),
+        ]
+        # No machines registered yet: every machine is a new one.
+        self.has_machines = bool(self.assets)
+        self.fields['which'].initial = 'list' if self.has_machines else 'new'
+
+    def has_changed(self):
+        # The question alone (its default answer) doesn't make a card filled in.
+        return any(name != 'which' for name in self.changed_data)
 
     def clean_asset(self):
         value = self.cleaned_data['asset']
+        self.new_machine = value == self.NEW_MACHINE
         return self.assets.get(value) if value else None
 
     def clean_files(self):
@@ -1152,19 +1575,36 @@ class TicketMachineForm(forms.Form):
         cleaned = super().clean()
         if not self.has_changed():
             return cleaned
-        if not cleaned.get('asset'):
+        if not (cleaned.get('description') or '').strip():
+            self.add_error('description', _('Please say which parts you need for this machine.') if self.for_parts else _(
+                'Please describe the problem: what happens, since when, any error code, and how often.',
+            ))
+        which = 'new' if getattr(self, 'new_machine', False) else cleaned.get('which')
+        if which not in ('list', 'new'):
+            # Not answered (an older page): whatever was filled in says which.
+            typed = cleaned.get('model_name') or (cleaned.get('serial_no') or '').strip()
+            which = 'list' if cleaned.get('asset') else 'new' if typed else ('list' if self.has_machines else 'new')
+        if which == 'list':
+            # Only the picked machine counts — anything typed for a new one is dropped.
+            cleaned['model_name'], cleaned['serial_no'], cleaned['serial_photo'] = '', '', None
+            if not cleaned.get('asset'):
+                self.add_error('asset', _('Please choose the machine from your list.'))
+        else:
+            cleaned['asset'] = None
             if not cleaned.get('model_name'):
-                self.add_error('asset', _('Please choose the machine, or enter its model if it is not in the list.'))
-            if not cleaned.get('serial_no') and not cleaned.get('serial_photo'):
+                self.add_error('model_name', _('Please enter the model of the machine.'))
+            if not (cleaned.get('serial_no') or '').strip():
                 self.add_error(
-                    'serial_no', _('Please enter the serial number, or add a photo of the serial number sticker.'),
+                    'serial_no', _("Please enter the serial number shown on the machine's sticker."),
                 )
         photo = cleaned.get('serial_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
             self.add_error('serial_photo', _('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
                 'name': photo.name,
             })
-        if not cleaned.get('problem'):
+        if self.for_parts:
+            cleaned['problem'] = TicketMachine.Problem.PARTS
+        elif not cleaned.get('problem'):
             self.add_error('problem', _('Please select the problem.'))
         return cleaned
 
@@ -1230,8 +1670,9 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
+        # A customer's ticket: never our own warehouses.
         self.fields['site'].queryset = (
-            Site.objects.filter(customer__country=country, customer__is_active=True)
+            Site.objects.filter(customer__country=country, customer__is_active=True, customer__is_internal=False)
             .select_related('customer').order_by('customer__name', 'name')
         )
         for name in ('contact_name', 'contact_phone'):
@@ -1242,32 +1683,28 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
 
 class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
-    """A stock request, vendor follow-up or other internal matter — no
-    customer, nothing ever sent to one. Goes to whoever it's assigned to,
-    who follows it up with internal notes until it's closed.
+    """An internal task: work one staff member hands another — no customer,
+    nothing ever sent to one. Goes to whoever it's for, who follows it up
+    with notes until it's closed. The website's form and the app's.
     """
 
     assigned_to = forms.ModelChoiceField(
         queryset=Technician.objects.none(), label=_('For'),
         help_text=_('The person responsible for handling it. They will be notified, and it will appear in their '
-                    'internal tickets.'),
+                    'internal tasks.'),
     )
 
     class Meta:
         model = CustomerTicket
-        fields = ['subject', 'vendor_name', 'description', 'assigned_to']
+        fields = ['subject', 'description', 'assigned_to']
         labels = {'description': _('Details')}
         help_texts = {'description': ''}
         widgets = {'description': forms.Textarea(attrs={'rows': 5})}
 
-    def __init__(self, *args, kind, country, **kwargs):
+    def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['subject'].required = True
         self.fields['subject'].help_text = ''
-        if kind == CustomerTicket.Kind.VENDOR:
-            self.fields['vendor_name'].required = True
-        else:
-            del self.fields['vendor_name']
         self.fields['assigned_to'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
@@ -1276,8 +1713,23 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
         )
 
 
-class InternalTicketNoteForm(forms.Form):
-    message = forms.CharField(label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3}))
+class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
+    message = forms.CharField(
+        label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write a note…')}),
+    )
+    attachments = message_files_field(_('Files'))
+
+
+class InternalTicketFileForm(forms.Form):
+    """One file the app adds to an internal ticket or to a note on it — the
+    same kinds and size as the website's boxes (the app sends one at a time)."""
+    file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
+
+    def clean_file(self):
+        upload = self.cleaned_data['file']
+        if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name})
+        return upload
 
 
 class ReassignInternalTicketForm(forms.Form):
@@ -1302,46 +1754,33 @@ class CloseTicketForm(forms.Form):
     that just never needed a task, not an invalid one.
     """
     close_reason = forms.CharField(
-        label=_('Reason'), widget=forms.Textarea(attrs={'rows': 3}),
-        help_text=_('How the matter was resolved without a task, for example advice given or resolved by phone.'),
+        label=_('Answer to the customer'), widget=forms.Textarea(attrs={'rows': 3}),
+        help_text=_(
+            'How the request was resolved, for example advice given, parts sent or resolved by phone. The customer '
+            'sees this on their request and receives it by email.'
+        ),
     )
 
 
-class TicketReplyForm(forms.Form):
+class TicketReplyForm(MessageFilesMixin, forms.Form):
     """One message — same shape for staff replying and a customer
     replying back, on either the staff review screen or the customer's
     own portal. Which side sent it is recorded by the view, not here.
     """
-    message = forms.CharField(label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3}))
-    attachment = forms.FileField(
-        required=False, label=_('Photo, video, or PDF'),
-        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    message = forms.CharField(
+        label=_('Reply'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write your message…')}),
     )
-
-    def clean_attachment(self):
-        attachment = self.cleaned_data['attachment']
-        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
-        return attachment
+    attachments = message_files_field(_('Photos, videos or PDFs'))
 
 
-class TicketInternalNoteForm(forms.Form):
+class TicketInternalNoteForm(MessageFilesMixin, forms.Form):
     """A manager-tier-only progress note — never seen by the customer or
     by a supervisor/technician, unlike TicketReplyForm.
     """
-    message = forms.CharField(label=_('Note'), widget=forms.Textarea(attrs={'rows': 3}))
-    attachment = forms.FileField(
-        required=False, label=_('Attachment'),
-        help_text=_('up to %(size)d MB') % {'size': MAX_TICKET_ATTACHMENT_BYTES // (1024 * 1024)},
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+    message = forms.CharField(
+        label=_('Note'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write a note for the team…')}),
     )
-
-    def clean_attachment(self):
-        attachment = self.cleaned_data['attachment']
-        if attachment and attachment.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
-        return attachment
+    attachments = message_files_field(_('Files'))
 
 
 class TaskMessageForm(forms.Form):
@@ -1382,6 +1821,12 @@ class TicketEditForm(forms.ModelForm):
             'description': forms.Textarea(attrs={'rows': 5}),
             'notes': forms.Textarea(attrs={'rows': 2}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only machines have serial numbers: flooring, lockers, accessories
+        # and the rest have none, and correcting their details must still save.
+        self.fields['serial_numbers'].required = False
 
 
 class AssignTicketForm(forms.Form):
@@ -1509,7 +1954,12 @@ class TechnicianTripForm(forms.ModelForm):
 class PartForm(forms.ModelForm):
     class Meta:
         model = Part
-        fields = ['code', 'description']
+        fields = ['code', 'description', 'colour', 'photo']
+        widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_code(self):
         code = self.cleaned_data['code'].strip().upper()
@@ -1517,9 +1967,100 @@ class PartForm(forms.ModelForm):
             raise forms.ValidationError(_('This code is already in the list.'))
         return code
 
+    def clean_photo(self):
+        photo = self.cleaned_data.get('photo')
+        if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+        return photo
+
 
 class PartImportForm(forms.Form):
     file = forms.FileField(
-        label=_('CSV file'), help_text=_('Two columns: code and description. A header row is permitted.'),
-        validators=[FileExtensionValidator(allowed_extensions=['csv'])],
+        label=_('CSV or Excel file'),
+        help_text=_('A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse '
+                    'stock sheet — Code, Description, the colour, and each part\'s picture placed in its code cell. '
+                    'New codes are added; existing ones get what the sheet has; nothing is deleted.'),
+        validators=[FileExtensionValidator(allowed_extensions=['csv', 'xlsx'])],
     )
+    warehouse = forms.ModelChoiceField(
+        queryset=Site.objects.none(), required=False, label=_('Warehouse for the quantities'),
+        help_text=_("If the sheet has a quantity column: the warehouse it was counted in. Each quantity is "
+                    "recorded as a count there — the opening stock. Leave empty to load the parts only."),
+    )
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['warehouse'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
+
+
+class StockCountForm(forms.Form):
+    """A hand count on the Stock screen: what's on the shelf for one code at
+    a warehouse (tasks.stock.record_count stores the difference)."""
+
+    kind = forms.ChoiceField(choices=TaskProduct.Kind.choices, label=_('Kind'))
+    site = forms.ModelChoiceField(queryset=Site.objects.none(), label=_('Warehouse'))
+    product_code = forms.CharField(max_length=100, label=_('Code'))
+    counted = forms.IntegerField(min_value=0, max_value=99999, label=_('On the shelf'))
+    note = forms.CharField(max_length=500, label=_('Why'), help_text=_('e.g. opening stock, monthly count'))
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['site'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
+
+
+class NotificationSettingsForm(forms.ModelForm):
+    """The admin's Notifications page: one switch per automatic message,
+    and which roles get the new-ticket and new-task emails.
+    """
+
+    new_ticket_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+    new_task_roles = forms.MultipleChoiceField(
+        choices=Technician.Role.choices, required=False, widget=forms.CheckboxSelectMultiple,
+        label=_('Who receives it'),
+    )
+
+    class Meta:
+        model = NotificationSettings
+        fields = [
+            'ticket_received_email', 'reply_to_customer_email', 'auto_notify_on_reschedule',
+            'new_ticket_email', 'new_ticket_roles', 'new_task_email', 'new_task_roles',
+            'reply_to_staff_email', 'escalation_emails', 'shipment_to_supervisor_email',
+            'push_assigned', 'push_removed', 'push_cancelled',
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        for switch, roles in (('new_ticket_email', 'new_ticket_roles'), ('new_task_email', 'new_task_roles')):
+            if cleaned.get(switch) and not cleaned.get(roles):
+                self.add_error(roles, _('Choose at least one role, or turn this email off.'))
+        return cleaned
+
+
+class CustomerPhotosForm(MessageFilesMixin, forms.Form):
+    """Photos or videos the customer sent another way (WhatsApp, email),
+    added by staff to their request — to one machine, or not tied to one —
+    so they reach the task like the ones uploaded on the portal."""
+
+    machine = forms.ChoiceField(label=_('For which machine'), required=False)
+    attachments = message_files_field(_('Photos, videos or PDFs'))
+
+    def __init__(self, *args, ticket, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ticket = ticket
+        self.fields['machine'].choices = [('', _('Not one machine in particular'))] + [
+            (str(machine.pk), f'{machine.machine_name} ({machine.serial})' if machine.serial else machine.machine_name)
+            for machine in ticket.machines.order_by('position', 'pk')
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get('attachments'):
+            self.add_error('attachments', _('Please choose at least one file.'))
+        return cleaned
