@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { FromRequest, RequestFile } from '@/types';
+import { t } from '@/i18n';
 
 // What the customer reported (tasks.customer_report): where and who, then each
 // machine with its serial, problem, their words, photos and videos; files not
@@ -18,7 +19,7 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
       <ThemedText type="smallBold">{"From the customer's request"} · {request.ticket_number}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {request.machines.length} machine(s) · {request.photo_count} photo(s)
-        {request.video_count ? ` · ${request.video_count} video(s)` : ''}
+        {request.video_count ? ` · ${t('{count} video(s)', { count: request.video_count })}` : ''}
       </ThemedText>
       {/* Where and who: its own card, apart from the machines. */}
       {request.site_address || request.contact_name || request.contact_phone ? (

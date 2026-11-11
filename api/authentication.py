@@ -1,4 +1,4 @@
-from django.utils import timezone
+from django.utils import timezone, translation
 from rest_framework.authentication import TokenAuthentication
 
 from reference.models import Country
@@ -14,7 +14,8 @@ class CountryTimezoneTokenAuthentication(TokenAuthentication):
     country timezone, so "today", a week or a month in the app is theirs,
     not UTC's — and for a manager, the country they chose in the app. (The middleware runs before DRF reads the token, so it
     can't do this itself; it resets the timezone after every request.)
-    The app's own wording stays English, so the language is left alone.
+    And the app's language — their country's (Technician.app_language) — so
+    what the server says (status names, messages) is in the app's language.
     """
 
     def authenticate(self, request):
@@ -30,4 +31,6 @@ class CountryTimezoneTokenAuthentication(TokenAuthentication):
                     country = Country.objects.filter(pk=chosen).first() or country
                     request.api_active_country = country
                 timezone.activate(country.timezone)
+                translation.activate(technician.app_language)
+                request.LANGUAGE_CODE = technician.app_language
         return result

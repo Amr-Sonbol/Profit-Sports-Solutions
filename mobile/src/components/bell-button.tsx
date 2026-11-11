@@ -7,6 +7,7 @@ import { fetchBell } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { t } from '@/i18n';
 
 /** The bell at the top of a tab: how many new items, a tap opens them (the website bell's). */
 export function BellButton() {
@@ -29,7 +30,7 @@ export function BellButton() {
   return (
     <TouchableOpacity
       onPress={() => router.push('/bell')} style={styles.button} hitSlop={8}
-      accessibilityRole="button" accessibilityLabel={count ? `Notifications, ${count} new` : 'Notifications'}
+      accessibilityRole="button" accessibilityLabel={count ? t('Notifications, {count} new', { count }) : 'Notifications'}
     >
       <Ionicons name={count ? 'notifications' : 'notifications-outline'} size={24} color={theme.text} />
       {count ? (

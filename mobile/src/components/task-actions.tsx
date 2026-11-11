@@ -1,6 +1,7 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Alert, Platform, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { taskAction } from '@/api/endpoints';
@@ -10,10 +11,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TeamTaskDetail } from '@/types';
+import { alert, locale } from '@/i18n';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const localTime = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-const shown = (at: string | Date) => new Date(at).toLocaleString([], {
+const shown = (at: string | Date) => new Date(at).toLocaleString(locale(), {
   weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
 });
 
@@ -68,7 +70,7 @@ export function TaskActionsPanel({ task, onChanged }: { task: TeamTaskDetail; on
     try {
       onChanged(await taskAction(task.id, body));
       setForm(null);
-      Alert.alert('Done', done);
+      alert('Done', done);
     } catch (err) {
       const body = err instanceof ApiRequestError ? (err.body as Record<string, unknown> | null) : null;
       const first = body && typeof body === 'object' ? Object.values(body).flat()[0] : null;
@@ -182,7 +184,7 @@ export function TaskActionsPanel({ task, onChanged }: { task: TeamTaskDetail; on
           <ThemedText type="smallBold">{TITLES[form.kind]}</ThemedText>
           {needsTime ? (
             <Button
-              label={when ? (form.kind === 'day_time' ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : shown(when)) : 'Pick the time'}
+              label={when ? (form.kind === 'day_time' ? when.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : shown(when)) : 'Pick the time'}
               onPress={() => pickWhen(form.kind === 'day_time' ? 'time' : 'datetime')}
             />
           ) : null}

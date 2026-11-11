@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { CustomerPage } from '@/types';
+import { locale, t } from '@/i18n';
 
 /**
  * A customer — the website's customer page: their contacts, each site
@@ -62,7 +63,7 @@ export default function CustomerScreen() {
           ) : null}
 
           <ThemedView style={styles.row}>
-            {customer.contact_phone ? button('call-outline', `Call ${customer.contact_name || customer.contact_phone}`,
+            {customer.contact_phone ? button('call-outline', t('Call {name}', { name: customer.contact_name || customer.contact_phone }),
               () => Linking.openURL(`tel:${customer.contact_phone}`)) : null}
             {customer.contact_email ? button('mail-outline', 'Email',
               () => Linking.openURL(`mailto:${customer.contact_email}`)) : null}
@@ -84,7 +85,7 @@ export default function CustomerScreen() {
               ) : null}
               <ThemedView style={styles.row}>
                 {button('navigate-outline', 'Directions', () => Linking.openURL(site.directions_url))}
-                {site.contact_phone ? button('call-outline', `Call ${site.contact_name || site.contact_phone}`,
+                {site.contact_phone ? button('call-outline', t('Call {name}', { name: site.contact_name || site.contact_phone }),
                   () => Linking.openURL(`tel:${site.contact_phone}`)) : null}
               </ThemedView>
               {site.machines.length ? (
@@ -114,7 +115,7 @@ export default function CustomerScreen() {
             >
               <ThemedText type="smallBold">{task.task_number} · {task.status_display}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {new Date(task.reported_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                {new Date(task.reported_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })}
                 {' · '}{task.site_name}{task.task_type_name ? ` · ${task.task_type_name}` : ''}
               </ThemedText>
             </TouchableOpacity>

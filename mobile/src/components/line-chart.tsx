@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { locale } from '@/i18n';
 
 // The website's chart colour for "completed" (static/css/base.css).
 export const CHART_COLOR = '#eb6834';
@@ -86,7 +87,7 @@ export function Sparkline({ values, width = 84, height = 26 }: { values: number[
 /** "Mar", or "March 2026" in full. */
 export function monthLabel(start: string, full = false) {
   const date = new Date(`${start}T00:00:00`);
-  return date.toLocaleDateString(undefined, full ? { month: 'long', year: 'numeric' } : { month: 'short' });
+  return date.toLocaleDateString(locale(), full ? { month: 'long', year: 'numeric' } : { month: 'short' });
 }
 
 const styles = StyleSheet.create({

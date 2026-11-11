@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
-import { FlatList, Modal, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { FlatList, Modal, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';

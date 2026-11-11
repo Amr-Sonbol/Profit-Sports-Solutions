@@ -13,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TeamTodayRow } from '@/types';
+import { locale, t } from '@/i18n';
 
 /** Each state's words and colour (tasks.views.team_today). */
 const STATES: Record<TeamTodayRow['state'], [string, string]> = {
@@ -27,7 +28,7 @@ const STATES: Record<TeamTodayRow['state'], [string, string]> = {
 };
 
 function clock(at: string) {
-  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -88,7 +89,7 @@ export function TeamTodayList() {
         <OfflineNotice offline={offline} />
         <ThemedText type="small" themeColor="textSecondary">
           {(['working', 'on_site', 'on_the_way', 'blocked', 'free', 'abroad', 'off'] as const)
-            .filter((state) => counts[state]).map((state) => `${counts[state]} ${STATES[state][0].toLowerCase()}`).join(' · ')
+            .filter((state) => counts[state]).map((state) => `${counts[state]} ${t(STATES[state][0]).toLowerCase()}`).join(' · ')
             || 'No one in your team here.'}
         </ThemedText>
         </>
@@ -105,8 +106,8 @@ export function TeamTodayList() {
               <ThemedView style={styles.grow}>
                 <ThemedText type="smallBold">{item.name}</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {item.role}{item.visiting_from ? ` · visiting from ${item.visiting_from}` : ''}
-                  {item.today_total ? ` · today ${item.today_done} of ${item.today_total} done` : ''}
+                  {item.role}{item.visiting_from ? ` · ${t('visiting from {country}', { country: item.visiting_from })}` : ''}
+                  {item.today_total ? ` · ${t('today {done} of {total} done', { done: item.today_done, total: item.today_total })}` : ''}
                 </ThemedText>
               </ThemedView>
               <ThemedView style={[styles.badge, { backgroundColor: colour }]}>
@@ -119,13 +120,13 @@ export function TeamTodayList() {
             ) : null}
             {item.abroad ? (
               <ThemedText type="small" themeColor="textSecondary">
-                In {item.abroad.country} until {new Date(item.abroad.until).toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                In {item.abroad.country} until {new Date(item.abroad.until).toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}
               </ThemedText>
             ) : null}
             {item.task ? (
               <TouchableOpacity onPress={() => router.push(`/team-task/${item.task!.id}`)}>
                 <ThemedText type="small" themeColor="primary">
-                  {item.task.task_number} · {item.task.customer} — {item.task.site}{item.since ? ` · since ${clock(item.since)}` : ''} ›
+                  {item.task.task_number} · {item.task.customer} — {item.task.site}{item.since ? ` · ${t('since {time}', { time: clock(item.since) })}` : ''} ›
                 </ThemedText>
               </TouchableOpacity>
             ) : null}

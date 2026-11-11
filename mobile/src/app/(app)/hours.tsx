@@ -12,6 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { HoursPage } from '@/types';
+import { t } from '@/i18n';
 
 /**
  * More → Hours: the website's Hours page — for a month, each person you
@@ -79,8 +80,8 @@ export default function HoursScreen() {
                   </ThemedView>
                   <ThemedText type="small" themeColor="textSecondary">
                     {row.reports_count} {row.reports_count === 1 ? 'report' : 'reports'}
-                    {row.estimated ? ` · est. ${row.estimated} h` : ''}
-                    {row.helped_on ? ` · helped on ${row.helped_on}` : ''}
+                    {row.estimated ? ` · ${t('est. {hours} h', { hours: row.estimated })}` : ''}
+                    {row.helped_on ? ` · ${t('helped on {count}', { count: row.helped_on })}` : ''}
                   </ThemedText>
                   {row.overrun_count ? (
                     <ThemedText type="small" themeColor="danger">{row.overrun_count} well over the estimate</ThemedText>

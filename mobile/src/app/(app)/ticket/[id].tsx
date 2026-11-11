@@ -1,10 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useMemo, useState } from 'react';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  ActivityIndicator, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, TextInput,
-  TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { decideTicket, fetchTicket, sendTicketMessage } from '@/api/endpoints';
@@ -19,6 +17,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ago } from '@/task-time';
 import type { TicketDetail } from '@/types';
+import { t } from '@/i18n';
 
 type Choice = 'visit' | 'ship' | 'answer';
 const CHOICES: [Choice, string][] = [['visit', 'Send a technician'], ['ship', 'Ship a part'], ['answer', 'Answer without a visit']];
@@ -160,7 +159,7 @@ export default function TicketScreen() {
   if (!ticket) {
     return (
       <ThemedView style={styles.center}>
-        <Stack.Screen options={{ title: 'Request' }} />
+        <Stack.Screen options={{ title: t('Request') }} />
         {error ? <ThemedText themeColor="danger">{error}</ThemedText> : <ActivityIndicator />}
       </ThemedView>
     );

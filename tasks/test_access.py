@@ -192,3 +192,15 @@ class AccessRulesTests(TaskTestCase):
         self.assertNotIn('negligence', history('supervisor1', f'/api/tasks/{self.task.pk}/'))
         self.person('mgr1', Technician.Role.MANAGER)
         self.assertIn('negligence', history('mgr1', f'/api/tasks/{self.task.pk}/'))
+
+    def test_the_app_speaks_the_countrys_language(self):
+        from rest_framework.authtoken.models import Token
+        self.egypt.report_language = 'ar'
+        self.egypt.save()
+        self.person('cairo_sup', Technician.Role.SUPERVISOR, country=self.egypt)
+        Technician.objects.filter(user__username='cairo_sup').update(language='en')  # their own setting doesn't matter
+        token, _ = Token.objects.get_or_create(user=User.objects.get(username='cairo_sup'))
+        me = self.client.get('/api/me/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
+        self.assertEqual((me['app_language'], me['role_display']), ('ar', 'مشرف'))
+        uae = Technician.objects.get(user__username='supervisor1')
+        self.assertEqual(uae.app_language, 'en')

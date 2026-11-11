@@ -1,8 +1,7 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -13,6 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Choice, PlannedLine } from '@/types';
+import { alert } from '@/i18n';
 
 const COLORS = [['frame', 'Frame'], ['arm', 'Arm'], ['padding', 'Padding'], ['trim', 'Trim']] as const;
 
@@ -78,7 +78,7 @@ export default function PlanLinesScreen() {
       const saved = await saveTaskLines(Number(id), filled);
       if (saved.warning) {
         // A loading planned beyond the warehouse's stock: saved, but say so.
-        Alert.alert('Check the warehouse', saved.warning, [{ text: 'OK', onPress: () => router.back() }]);
+        alert('Check the warehouse', saved.warning, [{ text: 'OK', onPress: () => router.back() }]);
         return;
       }
       router.back();

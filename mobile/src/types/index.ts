@@ -21,6 +21,8 @@ export interface Me {
   permissions?: string[];
   /** Still on a temporary password: only the "choose your password" screen shows. */
   must_change_password?: boolean;
+  /** The app's language: their country's (Arabic in Egypt and Saudi Arabia). Older servers: absent. */
+  app_language?: 'en' | 'ar';
   /** Does visits (technician, supervisor): has the Progress tab. Older servers: absent. */
   field_staff?: boolean;
 }

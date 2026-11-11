@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, Linking, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { ApiRequestError } from '@/api/client';
 import { sendTaskAction } from '@/api/endpoints';
@@ -10,13 +10,14 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { ScheduleItem, TodayPlan } from '@/types';
+import { alert, locale, t } from '@/i18n';
 
 // The lead's next tap — the same buttons as the task screen.
 
 const ROLE_LABELS: Record<string, string> = { lead: 'Lead', helper: 'Helper', responsible: 'Responsible' };
 
 function time(value: string) {
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(value).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 /** "09:00–11:00", "09:00", or "Any time" for a task with only a day. */
@@ -47,7 +48,7 @@ export function TodayPlanView({ plan, onChanged }: { plan: TodayPlan; onChanged:
       await sendTaskAction(job.id, action);
       onChanged();
     } catch (err) {
-      Alert.alert('Not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
+      alert('Not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
     } finally {
       setIsBusy(false);
     }
@@ -71,7 +72,7 @@ export function TodayPlanView({ plan, onChanged }: { plan: TodayPlan; onChanged:
     <ThemedView style={styles.wrap}>
       <ThemedText type="smallBold">
         Today · {plan.today_count} {plan.today_count === 1 ? 'task' : 'tasks'}
-        {plan.overdue.length ? ` · ${plan.overdue.length} overdue` : ''}
+        {plan.overdue.length ? ` · ${t('{count} overdue', { count: plan.overdue.length })}` : ''}
       </ThemedText>
 
       {plan.overdue.length ? (

@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { MachinePage } from '@/types';
+import { locale, t } from '@/i18n';
 
 /** One machine's history — every visit that recorded it, with what was found and done. */
 export default function MachineScreen() {
@@ -33,7 +34,7 @@ export default function MachineScreen() {
     );
   }
 
-  const day = (value: string) => new Date(value).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  const day = (value: string) => new Date(value).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <ThemedView style={styles.container}>
@@ -44,7 +45,7 @@ export default function MachineScreen() {
           </TouchableOpacity>
           <ThemedText type="title">{machine.name}</ThemedText>
           <ThemedText themeColor="textSecondary">
-            {machine.serial ? `Serial ${machine.serial} · ` : ''}{machine.status}
+            {machine.serial ? `${t('Serial {serial}', { serial: machine.serial })} · ` : ''}{machine.status}
           </ThemedText>
           <TouchableOpacity
             onPress={() => router.push({ pathname: '/customer/[id]', params: { id: String(machine.customer_id) } })}

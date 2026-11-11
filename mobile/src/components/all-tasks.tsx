@@ -1,9 +1,8 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator, FlatList, Platform, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { fetchTaskFilterChoices, fetchTeamTasksPage } from '@/api/endpoints';
 import { ChoicePicker } from '@/components/choice-picker';
@@ -13,10 +12,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaskListItem } from '@/types';
+import { locale, t } from '@/i18n';
 
 type Option = { value: string; label: string };
 const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const shortDay = (d: Date) => d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+const shortDay = (d: Date) => d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
 const inDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
 
 // After the website's status tabs: the field's own quick looks.
@@ -128,8 +128,8 @@ export function AllTasks() {
   const statusTabs: Option[] = [{ value: 'open', label: 'Open' }, { value: 'all', label: 'All' }, ...(choices?.statuses ?? [])];
   const activeMore = Object.entries(more).filter(([, value]) => value.trim());
   const label = (key: string, value: string) => {
-    if (key === 'technician') return `Technician: ${choices?.technicians.find((t) => t.value === value)?.label ?? value}`;
-    if (key === 'shipping_company') return `Courier: ${choices?.shipping_companies.find((c) => c.value === value)?.label ?? value}`;
+    if (key === 'technician') return `${t('Technician:')} ${choices?.technicians.find((t) => t.value === value)?.label ?? value}`;
+    if (key === 'shipping_company') return `${t('Courier:')} ${choices?.shipping_companies.find((c) => c.value === value)?.label ?? value}`;
     return `${TEXT_FILTERS.find(([k]) => k === key)?.[1] ?? key}: ${value}`;
   };
 
@@ -163,8 +163,8 @@ export function AllTasks() {
           </ScrollView>
           {extra === 'dates' ? (
             <ThemedView style={styles.row}>
-              {chip(`From: ${shortDay(range.from)}`, false, () => setPickingDate('from'), 'from')}
-              {chip(`To: ${shortDay(range.to)}`, false, () => setPickingDate('to'), 'to')}
+              {chip(`${t('From:')} ${shortDay(range.from)}`, false, () => setPickingDate('from'), 'from')}
+              {chip(`${t('To:')} ${shortDay(range.to)}`, false, () => setPickingDate('to'), 'to')}
             </ThemedView>
           ) : null}
           {pickingDate ? (
@@ -223,7 +223,7 @@ export function AllTasks() {
               {activeMore.map(([key, value]) => (
                 <TouchableOpacity
                   key={key} onPress={() => setMore((all) => ({ ...all, [key]: '' }))}
-                  style={[styles.chip, { borderColor: theme.primary }]} accessibilityLabel={`Remove ${label(key, value)}`}
+                  style={[styles.chip, { borderColor: theme.primary }]} accessibilityLabel={t('Remove {what}', { what: label(key, value) })}
                 >
                   <ThemedText type="small" themeColor="primary">{label(key, value)}  ✕</ThemedText>
                 </TouchableOpacity>

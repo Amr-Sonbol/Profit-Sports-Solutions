@@ -15,6 +15,7 @@ import { confirmAction } from '@/confirm';
 import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { pendingReports } from '@/offline';
+import { t } from '@/i18n';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -36,7 +37,7 @@ export default function ProfileScreen() {
     const ok = await confirmAction(
       'Sign out?',
       unsent
-        ? `${unsent} report(s) on this phone haven't been sent yet (no connection). Signing out deletes them. Connect and send them first.`
+        ? t("{count} report(s) on this phone haven't been sent yet (no connection). Signing out deletes them. Connect and send them first.", { count: unsent })
         : 'Your saved copies are removed from this phone, so the next person to sign in here sees nothing of yours.',
       'Sign out',
     );

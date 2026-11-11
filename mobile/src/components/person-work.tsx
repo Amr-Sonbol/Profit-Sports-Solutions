@@ -8,9 +8,10 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Person } from '@/types';
+import { locale, t } from '@/i18n';
 
 function day(at: string | null) {
-  return at ? new Date(at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) : 'No date yet';
+  return at ? new Date(at).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }) : 'No date yet';
 }
 
 function stars(rating: number) {
@@ -45,7 +46,7 @@ export function PersonWork({ person }: { person: Person }) {
         {figure(person.workload.overdue, 'Overdue', person.workload.overdue > 0)}
         {figure(person.visits_this_month ?? 0, 'Visits this month')}
         {person.rating_average !== null && person.rating_average !== undefined
-          ? figure(`${person.rating_average} ★`, `Satisfaction (${person.rating_count})`) : null}
+          ? figure(`${person.rating_average} ★`, t('Satisfaction ({count})', { count: person.rating_count ?? 0 })) : null}
       </ThemedView>
 
       {person.trips?.length ? (

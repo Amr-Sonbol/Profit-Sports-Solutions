@@ -7,6 +7,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ago } from '@/task-time';
 import type { TaskListItem } from '@/types';
+import { locale, t } from '@/i18n';
 
 // Done: the lead is who did it.
 const DONE = ['pending_supervisor_review', 'completed', 'closed'];
@@ -24,7 +25,7 @@ export function TaskCard({ item, onPress }: { item: TaskListItem; onPress: () =>
       {item.unread_messages ? (
         <ThemedView style={[styles.unread, { backgroundColor: theme.primary }]}>
           <ThemedText type="small" style={{ color: theme.onPrimary }}>
-            {item.unread_messages === 1 ? '1 new message' : `${item.unread_messages} new messages`}
+            {item.unread_messages === 1 ? '1 new message' : t('{count} new messages', { count: item.unread_messages })}
           </ThemedText>
         </ThemedView>
       ) : null}
@@ -36,7 +37,7 @@ export function TaskCard({ item, onPress }: { item: TaskListItem; onPress: () =>
       <ThemedView style={styles.row}>
         <ThemedText themeColor="textSecondary" type="small">
           {item.scheduled_for
-            ? `Visit: ${new Date(item.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+            ? `${t('Visit:')} ${new Date(item.scheduled_for).toLocaleString(locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
             : 'No date yet'}
         </ThemedText>
         <ThemedText themeColor={item.priority === 'high' ? 'danger' : 'textSecondary'} type="small">

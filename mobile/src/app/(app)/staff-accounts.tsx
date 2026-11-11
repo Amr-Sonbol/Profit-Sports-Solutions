@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -12,6 +12,7 @@ import { Spacing } from '@/constants/theme';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTheme } from '@/hooks/use-theme';
 import type { StaffAccount } from '@/types';
+import { alert, t } from '@/i18n';
 
 /**
  * More → Staff accounts (manager tier): the urgent fixes, from the phone —
@@ -47,21 +48,21 @@ export default function StaffAccountsScreen() {
     try {
       const result = await staffAccountAction(person.id, action);
       if (result.password) {
-        Alert.alert(
-          `Temporary password for ${person.name}`,
+        alert(
+          t('Temporary password for {name}', { name: person.name }),
           `${result.password}\n\nRead it out to them now — it isn't shown again. They choose their own at their next sign-in, and they've been signed out of the app on every phone.`,
         );
       } else {
-        Alert.alert('Done', result.message);
+        alert('Done', result.message);
       }
       load();
     } catch (err) {
-      Alert.alert('Not done', err instanceof ApiRequestError ? err.message : 'Please try again.');
+      alert('Not done', err instanceof ApiRequestError ? err.message : 'Please try again.');
     }
   };
 
   const confirm = (person: StaffAccount, action: string, question: string) => {
-    Alert.alert(person.name, question, [
+    alert(person.name, question, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes', style: action === 'disable' ? 'destructive' : 'default', onPress: () => act(person, action) },
     ]);

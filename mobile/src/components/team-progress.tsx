@@ -14,6 +14,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TeamProgressRow } from '@/types';
 import { hm } from '@/hours';
+import { t } from '@/i18n';
 
 /**
  * The website's Team progress, on the phone: the field team this person
@@ -99,7 +100,7 @@ export function TeamProgressList() {
             <ThemedText type="smallBold">{item.completed}</ThemedText> completed
             {item.change > 0 ? ` ▲ ${item.change}` : item.change < 0 ? ` ▼ ${-item.change}` : ''}
             {' · '}{hm(item.hours)} h
-            {' · '}{item.is_certified ? 'Certified' : `${item.required - item.certified} of ${item.required} skills to confirm`}
+            {' · '}{item.is_certified ? 'Certified' : t('{left} of {total} skills to confirm', { left: item.required - item.certified, total: item.required })}
           </ThemedText>
           <ThemedText type="small" themeColor="primary">Open ›</ThemedText>
         </TouchableOpacity>

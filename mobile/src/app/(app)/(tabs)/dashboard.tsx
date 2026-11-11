@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Dashboard } from '@/types';
+import { locale } from '@/i18n';
 
 /** Website lists the app has its own screen for. */
 const NATIVE: Record<string, string> = {
@@ -71,10 +72,10 @@ export default function DashboardScreen() {
 
   const when = (task: Dashboard['tasks'][number]) => {
     if (task.scheduled_for) {
-      return new Date(task.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return new Date(task.scheduled_for).toLocaleString(locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     }
     if (task.scheduled_date) {
-      return new Date(`${task.scheduled_date}T00:00:00`).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+      return new Date(`${task.scheduled_date}T00:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
     }
     return 'Not scheduled';
   };

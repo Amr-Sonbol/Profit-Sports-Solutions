@@ -6,6 +6,7 @@ import { type ColorValue } from 'react-native';
 
 import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
+import { t } from '@/i18n';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -74,26 +75,26 @@ export default function AppTabsLayout() {
     >
       <Tabs.Screen
         name="dashboard"
-        options={{ title: 'Dashboard', tabBarIcon: tabIcon('speedometer'), href: showDashboard ? undefined : null }}
+        options={{ title: t('Dashboard'), tabBarIcon: tabIcon('speedometer'), href: showDashboard ? undefined : null }}
       />
-      <Tabs.Screen name="tasks" options={{ title: 'Tasks', tabBarIcon: tabIcon('list') }} />
-      <Tabs.Screen name="index" options={{ title: 'Schedule', tabBarIcon: tabIcon('calendar') }} />
+      <Tabs.Screen name="tasks" options={{ title: t('Tasks'), tabBarIcon: tabIcon('list') }} />
+      <Tabs.Screen name="index" options={{ title: t('Schedule'), tabBarIcon: tabIcon('calendar') }} />
       <Tabs.Screen
         name="progress"
-        options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up'), href: showProgress ? undefined : null }}
+        options={{ title: t('Progress'), tabBarIcon: tabIcon('trending-up'), href: showProgress ? undefined : null }}
       />
       <Tabs.Screen
-        name="team" options={{ title: 'Team', tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}
+        name="team" options={{ title: t('Team'), tabBarIcon: tabIcon('people'), href: showTeam ? undefined : null }}
       />
       <Tabs.Screen
         name="tickets"
-        options={{ title: 'Tickets', tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
+        options={{ title: t('Tickets'), tabBarIcon: tabIcon('ticket'), href: showTickets ? undefined : null }}
       />
       <Tabs.Screen
-        name="more" options={{ title: 'More', tabBarIcon: tabIcon('grid'), href: showMore ? undefined : null }}
+        name="more" options={{ title: t('More'), tabBarIcon: tabIcon('grid'), href: showMore ? undefined : null }}
       />
       {/* Always the last tab (far right; far left in Arabic). */}
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: tabIcon('person-circle') }} />
+      <Tabs.Screen name="profile" options={{ title: t('Profile'), tabBarIcon: tabIcon('person-circle') }} />
     </Tabs>
   );
 }

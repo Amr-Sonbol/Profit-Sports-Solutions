@@ -13,6 +13,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { MyProgress } from '@/types';
 import { hm } from '@/hours';
+import { t } from '@/i18n';
 
 /** YYYY-MM of `first` (YYYY-MM-DD) moved by `step` months. */
 function shiftMonth(first: string, step: number) {
@@ -84,8 +85,8 @@ export default function ProgressScreen() {
             <ThemedText type="smallBold">Tasks completed per month</ThemedText>
             <ThemedText>
               <ThemedText type="subtitle">{trend.this_month}</ThemedText> this month
-              {trend.change === null ? '' : trend.change > 0 ? `  ▲ ${trend.change} more than last month`
-                : trend.change < 0 ? `  ▼ ${-trend.change} fewer than last month` : '  — the same as last month'}
+              {trend.change === null ? '' : trend.change > 0 ? `  ${t('▲ {count} more than last month', { count: trend.change })}`
+                : trend.change < 0 ? `  ${t('▼ {count} fewer than last month', { count: -trend.change })}` : '  — the same as last month'}
             </ThemedText>
             <LineChart months={trend.months} top={trend.top} />
             <ThemedText type="small" themeColor="textSecondary">
@@ -115,7 +116,7 @@ export default function ProgressScreen() {
           </ThemedView>
 
           <ThemedView style={styles.tiles}>
-            {tile(progress.rank ? `#${progress.rank} of ${progress.leaderboard_size}` : '—', 'Ranking in your country')}
+            {tile(progress.rank ? t('#{rank} of {total}', { rank: progress.rank, total: progress.leaderboard_size }) : '—', 'Ranking in your country')}
             {tile(
               certification.is_certified ? 'Certified' : `${certification.certified}/${certification.required}`,
               'Skills confirmed',

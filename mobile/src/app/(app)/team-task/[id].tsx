@@ -3,7 +3,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Linking, Platform, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -26,6 +27,7 @@ import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
 import { when } from '@/task-time';
 import { ChoicePicker } from '@/components/choice-picker';
 import { useSession } from '@/context/auth';
+import { alert, locale, t } from '@/i18n';
 
 // Mirrors TaskAssignment.EndReason (tasks/models.py).
 const END_REASONS: [string, string][] = [
@@ -76,14 +78,14 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
       setError('Choose where the next step is.');
       return;
     }
-    if (!(await confirmAction('Send these machines on?', `A new task is made for the next step, with ${chosen.length} machines.`))) {
+    if (!(await confirmAction('Send these machines on?', t('A new task is made for the next step, with {count} machines.', { count: chosen.length })))) {
       return;
     }
     setIsBusy(true);
     setError('');
     try {
       const created = await createNextStep(taskId, step, site, chosen);
-      Alert.alert('Sent on', `${created.task_number}, with ${chosen.length} machines.`);
+      alert('Sent on', t('{number}, with {count} machines.', { number: created.task_number, count: chosen.length }));
       onCreated(created.id);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Not created. Please try again.');
@@ -196,7 +198,7 @@ export default function TeamTaskScreen() {
     try {
       setTask(await action());
       setPicking(null);
-      Alert.alert('Done', success);
+      alert('Done', success);
     } catch (err) {
       setError(err instanceof ApiRequestError ? errorText(err) : 'The request could not be completed. Please try again.');
     } finally {
@@ -290,7 +292,7 @@ export default function TeamTaskScreen() {
       return;
     }
     const file = picked.assets[0];
-    if (!(await confirmAction(`Add this ${label.toLowerCase()}?`, file.name))) {
+    if (!(await confirmAction(t('Add this {what}?', { what: t(label).toLowerCase() }), file.name))) {
       return;
     }
     setIsBusy(true);
@@ -299,7 +301,7 @@ export default function TeamTaskScreen() {
       setTask(await uploadFileTo<TeamTaskDetail>(
         `/api/tasks/${id}/documents/`, file.uri, file.mimeType ?? 'application/pdf', 'file', { purpose },
       ));
-      Alert.alert('Done', 'Document added.');
+      alert('Done', 'Document added.');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'The document could not be added. Please try again.');
     } finally {
@@ -457,7 +459,7 @@ export default function TeamTaskScreen() {
             <ThemedText type="smallBold">Team</ThemedText>
             <ThemedText>
               Visit: {task.scheduled_for
-                ? new Date(task.scheduled_for).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                ? new Date(task.scheduled_for).toLocaleString(locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                 : 'no day set yet'}
             </ThemedText>
             <ThemedText>Lead: {task.lead ? task.lead.technician_name : 'not assigned yet'}</ThemedText>
@@ -500,7 +502,7 @@ export default function TeamTaskScreen() {
                 >
                   <ThemedText type="small" themeColor="primary">
                     {manageTime
-                      ? manageTime.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      ? manageTime.toLocaleString(locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
                       : 'Pick the day and time'}
                   </ThemedText>
                 </TouchableOpacity>
@@ -529,15 +531,15 @@ export default function TeamTaskScreen() {
                 >
                   <ThemedText style={!candidate.is_available ? styles.unavailable : undefined}>
                     {candidate.full_name}
-                    {candidate.skill_level != null ? ` — level ${candidate.skill_level}` : ''}
-                    {candidate.visiting_from ? ` (visiting from ${candidate.visiting_from})` : ''}
+                    {candidate.skill_level != null ? ` — ${t('level {level}', { level: candidate.skill_level ?? '' })}` : ''}
+                    {candidate.visiting_from ? ` (${t('visiting from {country}', { country: candidate.visiting_from ?? '' })})` : ''}
                   </ThemedText>
                   <ThemedText themeColor="textSecondary" type="small">
                     {!candidate.is_available
                       ? 'Unavailable'
                       : candidate.next_task_number
                         ? `Next: ${candidate.next_task_number}${candidate.next_task_at
-                          ? ` on ${new Date(candidate.next_task_at).toLocaleString()}` : ''}`
+                          ? ` ${t('on {date}', { date: new Date(candidate.next_task_at).toLocaleString(locale()) })}` : ''}`
                         : 'No bookings'}
                   </ThemedText>
                 </TouchableOpacity>
@@ -572,7 +574,7 @@ export default function TeamTaskScreen() {
               <ThemedText type="smallBold">Work report</ThemedText>
               <TouchableOpacity
                 onPress={() => router.push({
-                  pathname: '/website', params: { path: `/tasks/${task.id}/report.pdf`, title: `${task.task_number} report` },
+                  pathname: '/website', params: { path: `/tasks/${task.id}/report.pdf`, title: t('{number} report', { number: task.task_number }) },
                 })}
               >
                 <ThemedText type="small" themeColor="primary">View the customer&apos;s report ›</ThemedText>
@@ -712,7 +714,7 @@ export default function TeamTaskScreen() {
                   onPress={() => setPickingTime(Platform.OS === 'ios' ? 'datetime' : 'date')}
                 >
                   <ThemedText type="small" themeColor="primary">
-                    {manageTime ? manageTime.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pick the right time'}
+                    {manageTime ? manageTime.toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pick the right time'}
                   </ThemedText>
                 </TouchableOpacity>
               ) : null}
@@ -762,7 +764,7 @@ export default function TeamTaskScreen() {
               {task.events.map((event) => (
                 <ThemedView key={event.id} style={styles.eventRow}>
                   <ThemedText themeColor="textSecondary" type="small" style={styles.eventText}>
-                    {new Date(event.corrected_at ?? event.occurred_at).toLocaleString([], {
+                    {new Date(event.corrected_at ?? event.occurred_at).toLocaleString(locale(), {
                       day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                     })}{event.corrected_at ? ' (corrected)' : ''} · {event.event_type_display} — {event.actor_name}
                   </ThemedText>

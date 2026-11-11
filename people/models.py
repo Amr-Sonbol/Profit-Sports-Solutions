@@ -163,6 +163,13 @@ class Technician(models.Model):
         )
 
     @property
+    def app_language(self):
+        """The phone app's language: their country's (Arabic in Egypt and Saudi
+        Arabia, English elsewhere — the same as its visit reports), not a choice
+        of their own. The website keeps their own `language`."""
+        return self.country.report_language if self.country_id else 'en'
+
+    @property
     def is_field_staff(self):
         """Who does the visits — technicians and supervisors: they have their
         own progress and skills (website menu, the app's Progress tab)."""

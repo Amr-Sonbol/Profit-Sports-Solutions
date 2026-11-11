@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { uploadLinePhoto } from '@/api/endpoints';
@@ -10,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { ChecklistRow, Choice } from '@/types';
+import { alert } from '@/i18n';
 
 const COLORS = [['frame', 'Frame'], ['arm', 'Arm'], ['padding', 'Padding'], ['trim', 'Trim']] as const;
 
@@ -48,12 +50,12 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
   const addPhoto = async (index: number) => {
     const row = rows[index];
     if (!row.id) {
-      Alert.alert('Photo', 'Send the report once first; then the new machine can get its photo.');
+      alert('Photo', 'Send the report once first; then the new machine can get its photo.');
       return;
     }
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Camera access is needed.');
+      alert('Permission required', 'Camera access is needed.');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 });
@@ -68,7 +70,7 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
       });
       update(index, { photo_url });
     } catch (err) {
-      Alert.alert('Photo not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
+      alert('Photo not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
     } finally {
       setUploading(null);
     }

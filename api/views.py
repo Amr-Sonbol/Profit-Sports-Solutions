@@ -135,6 +135,8 @@ def _me_payload(user, request=None):
         # Still on a temporary password: the app shows only its "choose
         # your password" screen until this is false.
         'must_change_password': technician.must_change_password,
+        # The app's language: their country's (Arabic in Egypt and Saudi Arabia), right to left for Arabic.
+        'app_language': technician.app_language,
         # Does visits (technician, supervisor): has the Progress tab, as the website's My progress.
         'field_staff': technician.is_field_staff,
         # What this role may do (RolePermission), so the app shows only
@@ -764,7 +766,7 @@ class WebsiteMenuView(APIView):
         allowed = set(
             RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
         )
-        with translation.override(technician.language):
+        with translation.override(technician.app_language):
             groups = nav_groups(nav_pages(technician, allowed), '')
             return Response([
                 {
@@ -2573,7 +2575,7 @@ class TestPushView(APIView):
             return Response({'detail': _(
                 'This phone is not set up for notifications yet. Allow notifications for the app, then try again.',
             )}, status=status.HTTP_409_CONFLICT)
-        with translation.override(technician.language or 'en'):
+        with translation.override(technician.app_language):
             send_push([technician], _('Test notification'), _('Notifications work on this phone.'), {'type': 'test'})
         return Response({'phones': phones})
 

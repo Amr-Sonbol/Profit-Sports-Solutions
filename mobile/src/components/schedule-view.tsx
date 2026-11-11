@@ -10,6 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { MySchedule, ScheduleDay, ScheduleItem } from '@/types';
+import { locale } from '@/i18n';
 
 export type ScheduleMode = 'week' | 'month' | 'year';
 
@@ -18,11 +19,11 @@ const ROLE_LABELS: Record<string, string> = { lead: 'Lead', helper: 'Helper', re
 const PRIORITY_COLORS: Record<string, string> = { emergency: '#C0392B', high: '#B5760A' };
 
 function day(date: string, options: Intl.DateTimeFormatOptions) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString([], options);
+  return new Date(`${date}T00:00:00`).toLocaleDateString(locale(), options);
 }
 
 function time(value: string) {
-  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(value).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 }
 
 /** "09:00–11:00", "09:00", "Any time" (a day only) or "" (no day). */

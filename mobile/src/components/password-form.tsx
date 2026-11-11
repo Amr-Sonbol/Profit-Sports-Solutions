@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { setMyPassword } from '@/api/endpoints';

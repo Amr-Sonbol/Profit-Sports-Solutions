@@ -2,10 +2,8 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TextInput,
-  TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -16,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { confirmAction } from '@/confirm';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { alert, t } from '@/i18n';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const toLocal = (d: Date, withTime: boolean) => (
@@ -79,7 +78,7 @@ export default function TaskEditScreen() {
     setErrors({});
     try {
       const result = await saveTaskEdit(Number(id), changed);
-      Alert.alert('Saved', [result.message, ...result.warnings].join('\n\n'));
+      alert('Saved', [result.message, ...result.warnings].join('\n\n'));
       router.back();
     } catch (err) {
       setErrors(errorsFrom(err));
@@ -94,14 +93,14 @@ export default function TaskEditScreen() {
       return;
     }
     const file = picked.assets[0];
-    if (!(await confirmAction(`Upload ${field.label}?`, file.name))) {
+    if (!(await confirmAction(t('Upload {what}?', { what: field.label }), file.name))) {
       return;
     }
     setIsBusy(true);
     setErrors({});
     try {
       await uploadFileTo(`/api/tasks/${id}/edit/`, file.uri, file.mimeType ?? 'application/pdf', field.name, {});
-      Alert.alert('Uploaded', `${field.label}: ${file.name}`);
+      alert('Uploaded', `${field.label}: ${file.name}`);
       await load();
     } catch (err) {
       setErrors(errorsFrom(err));

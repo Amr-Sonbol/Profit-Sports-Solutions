@@ -1,4 +1,5 @@
-import { Alert } from 'react-native';
+import { alert } from '@/i18n';
+
 
 /**
  * "Are you sure?" before a step that changes a task — a mistaken tap on
@@ -7,7 +8,7 @@ import { Alert } from 'react-native';
  */
 export function confirmAction(title: string, message: string, confirmLabel = 'Confirm'): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert(
+    alert(
       title,
       message,
       [

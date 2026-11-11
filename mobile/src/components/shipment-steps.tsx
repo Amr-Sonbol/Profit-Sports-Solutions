@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Linking, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { Linking, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { taskAction } from '@/api/endpoints';
@@ -10,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TeamTaskDetail } from '@/types';
+import { alert } from '@/i18n';
 
 /**
  * A part shipment on the team view, as on the office's task page: where it
@@ -44,7 +46,7 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
     setError('');
     try {
       const result = await taskAction(task.id, body as Record<string, string | number>);
-      Alert.alert('Done', done);
+      alert('Done', done);
       return result;
     } catch (err) {
       const errBody = err instanceof ApiRequestError ? (err.body as Record<string, unknown> | null) : null;

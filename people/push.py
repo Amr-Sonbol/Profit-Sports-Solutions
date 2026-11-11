@@ -54,10 +54,10 @@ def send_push(technicians, title, body, data=None):
 
 
 def push_in_their_language(technician, title_fn, body_fn, data=None):
-    """Sends to one technician, worded in their own app language."""
+    """Sends to one technician, worded in the app's language (their country's)."""
     if technician is None:
         return
-    with translation.override(technician.language or 'en'):
+    with translation.override(technician.app_language):
         send_push([technician], title_fn(), body_fn(), data)
 
 

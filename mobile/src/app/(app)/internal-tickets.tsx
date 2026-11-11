@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { InternalTicket } from '@/types';
+import { locale } from '@/i18n';
 
 const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']] as const;
 
@@ -95,7 +96,7 @@ export default function InternalTicketsScreen() {
               <ThemedText type="small" numberOfLines={2}>{item.description}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {item.status_display}{item.assigned_to ? ` · ${item.assigned_to}` : ''} ·{' '}
-                {new Date(item.submitted_at).toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                {new Date(item.submitted_at).toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}
               </ThemedText>
             </TouchableOpacity>
           )}

@@ -1,8 +1,7 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -13,6 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { FormFieldSpec } from '@/types';
+import { alert, t } from '@/i18n';
 
 /**
  * More → Add a user (the admin only) — the website's one-step Add user:
@@ -69,8 +69,8 @@ export default function AddUserScreen() {
     setErrors({});
     try {
       const created = await createPerson(values);
-      Alert.alert(
-        `${created.name} added`,
+      alert(
+        t('{name} added', { name: created.name }),
         created.has_login
           ? 'They get an email with a link to choose their own password.'
           : 'No email yet, so they cannot sign in. Add their email on their page when you have it.',

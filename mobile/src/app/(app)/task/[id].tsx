@@ -2,9 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useState, type ComponentProps } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -20,6 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { withOfflineCopy } from '@/offline';
 import type { TaskDetail } from '@/types';
 import { when } from '@/task-time';
+import { alert, locale, t } from '@/i18n';
 
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -101,7 +101,7 @@ export default function TaskDetailScreen() {
   const handleAddPhoto = async (purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Access to the photo library is required to attach a photo.');
+      alert('Permission required', 'Access to the photo library is required to attach a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -122,7 +122,7 @@ export default function TaskDetailScreen() {
     } catch (err) {
       // The phone's own reason too (no connection, a file it couldn't read…), so it can be fixed.
       console.warn('Photo upload failed (file-system upload)', err);
-      setError(err instanceof ApiRequestError ? err.message : `Upload failed. Please try again. (${String(err)})`);
+      setError(err instanceof ApiRequestError ? err.message : t('Upload failed. Please try again. ({error})', { error: String(err) }));
     } finally {
       setIsBusy(false);
     }
@@ -370,7 +370,7 @@ export default function TaskDetailScreen() {
               <ThemedText type="smallBold">History</ThemedText>
               {task.events.map((event) => (
                 <ThemedText key={event.id} themeColor="textSecondary" type="small">
-                  {new Date(event.occurred_at).toLocaleString([], {
+                  {new Date(event.occurred_at).toLocaleString(locale(), {
                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                   })} · {event.event_type_display} — {event.actor_name}
                 </ThemedText>

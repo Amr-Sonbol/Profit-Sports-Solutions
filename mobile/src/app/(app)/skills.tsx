@@ -2,9 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -14,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { MySkills, SkillRow } from '@/types';
+import { alert, t } from '@/i18n';
 
 type Evidence = { uri: string; name: string; type: string };
 
@@ -161,7 +161,7 @@ function SkillCard({ row, levels, isOpen, onToggle, onSaved }: {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', fromCamera ? 'Camera access is needed.' : 'Photo library access is needed.');
+      alert('Permission required', fromCamera ? 'Camera access is needed.' : 'Photo library access is needed.');
       return;
     }
     const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images', 'videos'], quality: 0.8 };
@@ -201,13 +201,13 @@ function SkillCard({ row, levels, isOpen, onToggle, onSaved }: {
   const status = {
     none: { text: 'Not rated yet', color: theme.textSecondary },
     self: { text: 'Waiting for supervisor review', color: theme.textSecondary },
-    confirmed: { text: `Confirmed by ${row.confirmed_by}`, color: theme.primary },
+    confirmed: { text: t('Confirmed by {name}', { name: row.confirmed_by }), color: theme.primary },
   }[row.status];
 
   return (
     <ThemedView style={[styles.card, { borderColor: theme.backgroundSelected }]}>
       <ThemedText type="smallBold">{row.name}</ThemedText>
-      <ThemedText type="small">{row.level ? `Level ${row.level} — ${row.level_label}` : '—'}</ThemedText>
+      <ThemedText type="small">{row.level ? t('Level {level} — {label}', { level: row.level ?? '', label: row.level_label }) : '—'}</ThemedText>
       <ThemedText type="small" style={{ color: status.color }}>{status.text}</ThemedText>
       {row.status === 'confirmed' && row.note ? (
         <ThemedText type="small" themeColor="textSecondary">{row.note}</ThemedText>

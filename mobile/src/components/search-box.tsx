@@ -1,4 +1,5 @@
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';

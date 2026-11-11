@@ -3,9 +3,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
 import { WebView } from 'react-native-webview';
@@ -27,6 +26,7 @@ import { fieldErrorsFrom, type FieldErrors } from '@/report-errors';
 import type {
   Brand, CataloguePart, ChecklistRow, Choice, ReportHelper, ReportMachine, SiteMachine, TaskDetail, WorkReport,
 } from '@/types';
+import { alert, t } from '@/i18n';
 
 // The photos a machine's card takes, each saved as that machine's.
 const MACHINE_PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; label: string }[] = [
@@ -225,7 +225,7 @@ export default function ReportScreen() {
           part_code: part.part_code, description: part.description, quantity: String(part.quantity),
         })));
         if (pending.error) {
-          setErrors({ form: `This report could not be sent: ${pending.error} Please correct it and submit again.` });
+          setErrors({ form: t('This report could not be sent: {error} Please correct it and submit again.', { error: pending.error ?? '' }) });
         }
       } else if (report) {
         setFindings(report.findings);
@@ -301,7 +301,7 @@ export default function ReportScreen() {
     }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission required', 'Access to the photo library is required to attach a photo.');
+      alert('Permission required', 'Access to the photo library is required to attach a photo.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
@@ -320,7 +320,7 @@ export default function ReportScreen() {
         )));
       }
     } catch (err) {
-      Alert.alert('Upload failed', err instanceof ApiRequestError ? err.message : `Please try again. (${String(err)})`);
+      alert('Upload failed', err instanceof ApiRequestError ? err.message : t('Please try again. ({error})', { error: String(err) }));
     } finally {
       setPhotoUploading('');
     }
@@ -407,12 +407,12 @@ export default function ReportScreen() {
     try {
       const result = await submitMyReport(Number(id), input);
       removePendingReport(Number(id));
-      Alert.alert('Report saved', result.message);
+      alert('Report saved', result.message);
       router.back();
     } catch (err) {
       if (isNetworkError(err) && task) {
         savePendingReport(Number(id), task.task_number, input);
-        Alert.alert(
+        alert(
           'Saved on this device',
           'No connection available. The report will be sent automatically when you are back online.',
         );
@@ -898,7 +898,7 @@ export default function ReportScreen() {
             />
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">
-                Time on site: {labourHours ? `${labourHours} hours` : '—'}
+                Time on site: {labourHours ? t('{hours} hours', { hours: labourHours }) : '—'}
               </ThemedText>
               <ThemedText themeColor="textSecondary" type="small">
                 {timeIsFinal
@@ -1001,9 +1001,9 @@ export default function ReportScreen() {
               </ThemedText>
               <ThemedText themeColor="textSecondary" type="small">
                 {newSignature
-                  ? `Signed by ${customerName || 'the customer'} ✓`
+                  ? t('Signed by {name} ✓', { name: customerName || t('the customer') })
                   : signatureOnFile
-                    ? `Signed by ${customerName || 'the customer'} — sign again only if you wish to replace it.`
+                    ? t('Signed by {name} — sign again only if you wish to replace it.', { name: customerName || t('the customer') })
                     : 'The customer reviews the work and the time on site, and signs on their own screen.'}
               </ThemedText>
               <TouchableOpacity

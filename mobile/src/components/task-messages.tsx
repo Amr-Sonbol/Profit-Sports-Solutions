@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchTaskMessages, postTaskMessage, type TaskMessage } from '@/api/endpoints';
@@ -9,6 +10,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { locale } from '@/i18n';
 
 /**
  * The task's team messages, as on the website's task pages: everyone on the
@@ -79,7 +81,7 @@ export function TaskMessages({ taskId }: { taskId: number }) {
         >
           <ThemedText type="small" themeColor="textSecondary">
             {message.mine ? 'You' : message.sent_by}{message.role && !message.mine ? ` · ${message.role}` : ''} ·{' '}
-            {new Date(message.sent_at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            {new Date(message.sent_at).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
           </ThemedText>
           <ThemedText>{message.message}</ThemedText>
         </ThemedView>

@@ -2,9 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -18,6 +17,7 @@ import { useTheme } from '@/hooks/use-theme';
 import type { MySkills, Person, SkillRow } from '@/types';
 import { ChoicePicker } from '@/components/choice-picker';
 import { PersonWork } from '@/components/person-work';
+import { alert, t } from '@/i18n';
 
 /**
  * Someone on the viewer's team (Team → a name): photo and contacts,
@@ -171,7 +171,7 @@ export default function PersonScreen() {
           <ThemedView style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">Availability</ThemedText>
             <ThemedText>
-              {person.is_available ? 'Available for work' : `Unavailable — ${person.unavailable_reason}`}
+              {person.is_available ? 'Available for work' : t('Unavailable — {reason}', { reason: person.unavailable_reason })}
             </ThemedText>
             {person.can_set_availability ? (
               person.is_available ? (
@@ -216,7 +216,7 @@ export default function PersonScreen() {
             <ThemedText type="small">Led and completed: {record.completed} · Helped on: {record.helped}</ThemedText>
             <ThemedText type="small">
               On time: {record.on_time_percent !== null ? `${record.on_time_percent}%` : 'not enough tasks yet'}
-              {record.acceptance_minutes !== null ? ` · Accepts in about ${record.acceptance_minutes} min` : ''}
+              {record.acceptance_minutes !== null ? ` · ${t('Accepts in about {minutes} min', { minutes: record.acceptance_minutes })}` : ''}
             </ThemedText>
           </ThemedView>
 
@@ -269,16 +269,16 @@ export default function PersonScreen() {
                         setError('Give a reason.');
                         return;
                       }
-                      Alert.alert(`Deactivate ${person.name}?`, 'They will not be able to sign in.', [
+                      alert(t('Deactivate {name}?', { name: person.name }), 'They will not be able to sign in.', [
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Deactivate', style: 'destructive', onPress: async () => {
                             setIsBusy(true);
                             try {
                               const result = await deactivatePerson(person.id, reason, moveTo);
-                              Alert.alert('Deactivated', result.still_to_reassign
-                                ? `${result.still_to_reassign} open task(s) still need someone — open each one to reassign.`
-                                : result.moved ? `${result.moved} open task(s) moved.` : 'Done.');
+                              alert('Deactivated', result.still_to_reassign
+                                ? t('{count} open task(s) still need someone — open each one to reassign.', { count: result.still_to_reassign })
+                                : result.moved ? t('{count} open task(s) moved.', { count: result.moved }) : 'Done.');
                               router.back();
                             } catch (err) {
                               setError(err instanceof ApiRequestError ? err.message : 'Not done. Please try again.');
@@ -336,9 +336,9 @@ function ReviewCard({ row, levels, personId, canReview, isOpen, onToggle, onSave
       style={[styles.skillCard, { borderColor: waiting ? theme.primary : theme.backgroundSelected }]}
     >
       <ThemedText type="smallBold">{row.name}</ThemedText>
-      <ThemedText type="small">{row.level ? `Level ${row.level} — ${row.level_label}` : 'Not rated yet'}</ThemedText>
+      <ThemedText type="small">{row.level ? t('Level {level} — {label}', { level: row.level ?? '', label: row.level_label }) : 'Not rated yet'}</ThemedText>
       <ThemedText type="small" themeColor={waiting ? 'primary' : 'textSecondary'}>
-        {row.status === 'confirmed' ? `Confirmed by ${row.confirmed_by}` : waiting ? 'Self-rated — waiting for review' : ''}
+        {row.status === 'confirmed' ? t('Confirmed by {name}', { name: row.confirmed_by }) : waiting ? 'Self-rated — waiting for review' : ''}
       </ThemedText>
       {row.note ? <ThemedText type="small" themeColor="textSecondary">“{row.note}”</ThemedText> : null}
       {row.evidence_url ? (

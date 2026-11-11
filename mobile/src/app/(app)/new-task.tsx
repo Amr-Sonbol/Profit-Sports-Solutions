@@ -1,10 +1,8 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, TextInput,
-  TouchableOpacity,
-} from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity } from 'react-native';
+import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
@@ -15,6 +13,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { FormFieldSpec } from '@/types';
+import { alert, t } from '@/i18n';
 
 /** "2026-10-25T09:30" (the server's local format) <-> a Date, and back. */
 function toLocalValue(date: Date) {
@@ -72,7 +71,7 @@ export default function NewTaskScreen() {
 
   const picker = (name: string, optional = false, placeholder?: string) => (
     <ChoicePicker
-      label={`${fields[name].label}${fields[name].required ? '' : ' (optional)'}`}
+      label={`${fields[name].label}${fields[name].required ? '' : ` ${t('(optional)')}`}`}
       choices={fields[name].choices ?? []} value={values[name] ?? ''} onChange={set(name)}
       optional={optional} error={errors[name]} placeholder={placeholder}
     />
@@ -102,7 +101,7 @@ export default function NewTaskScreen() {
 
   const when = (name: string, hint?: string) => (
     <ThemedView style={styles.field}>
-      <ThemedText type="smallBold">{fields[name].label}{fields[name].required ? '' : ' (optional)'}</ThemedText>
+      <ThemedText type="smallBold">{fields[name].label}{fields[name].required ? '' : ` ${t('(optional)')}`}</ThemedText>
       <ThemedView style={styles.chips}>
         <TouchableOpacity
           style={[styles.dateButton, { borderColor: errors[name] ? theme.danger : theme.backgroundSelected }]}
@@ -149,7 +148,7 @@ export default function NewTaskScreen() {
       const result = await createTask({ ...values, is_warranty: warranty });
       const open = () => router.replace(`/team-task/${result.id}`);
       if (result.warning) {
-        Alert.alert(`Task ${result.task_number} created`, result.warning, [{ text: 'OK', onPress: open }]);
+        alert(t('Task {number} created', { number: result.task_number }), result.warning, [{ text: 'OK', onPress: open }]);
       } else {
         open();
       }

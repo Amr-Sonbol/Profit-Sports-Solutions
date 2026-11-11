@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ago } from '@/task-time';
+import { t } from '@/i18n';
 
 /** The red ones first catch the eye: decisions someone else is stuck on. */
 const URGENT = ['blocked', 'escalation', 'schedule_change', 'late_report'];
@@ -56,7 +57,7 @@ export function WaitingForMe({ items }: { items: WaitingItem[] }) {
       })}
       {items.length > SHOWN ? (
         <TouchableOpacity onPress={() => setAll(!all)}>
-          <ThemedText type="small" themeColor="primary">{all ? 'Show fewer' : `Show all ${items.length}`}</ThemedText>
+          <ThemedText type="small" themeColor="primary">{all ? 'Show fewer' : t('Show all {count}', { count: items.length })}</ThemedText>
         </TouchableOpacity>
       ) : null}
     </ThemedView>
