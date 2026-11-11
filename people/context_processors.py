@@ -255,8 +255,6 @@ def nav_pages(technician, allowed):
         add('tasks:team_map', _('Team map'), 'map-pin', 'team')
     if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
         add('customers:customer_list', _('Customers'), 'building', 'customers')
-    if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:
-        add('customers:customer_accounts', _('Customer accounts'), 'user-check', 'customers')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
         add('tasks:part_list', _('Parts'), 'package', 'customers')
     if RolePermission.Permission.VIEW_STOCK in allowed:

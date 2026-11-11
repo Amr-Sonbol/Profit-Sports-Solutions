@@ -7,14 +7,13 @@ app_name = 'customers'
 
 urlpatterns = [
     path('', views.customer_list, name='customer_list'),
-    path('all/', views.all_customers, name='all_customers'),
     path('new/', views.customer_create, name='customer_create'),
     path('import/', views.customer_import, name='customer_import'),
     path('import/template/', views.customer_import_template, name='customer_import_template'),
     path('<int:pk>/', views.customer_detail, name='customer_detail'),
     path('<int:pk>/edit/', views.customer_edit, name='customer_edit'),
     path('sites/<int:pk>/edit/', views.site_edit, name='site_edit'),
-    path('accounts/', views.customer_accounts, name='customer_accounts'),
+    path('portal-login/', views.portal_login_action, name='portal_login_action'),
     path('portal/login/', views.portal_login, name='portal_login'),
     path('portal/password-help/', views.portal_password_help, name='portal_password_help'),
     path('portal/account/<str:token>/', views.portal_account_link, name='portal_account_link'),

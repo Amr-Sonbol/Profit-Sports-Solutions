@@ -119,7 +119,7 @@ class CustomersStayInTheirOwnDataTests(SecurityTestCase):
 
 class StaffPagesAreClosedToOthersTests(SecurityTestCase):
     STAFF_PAGES = ('/tasks/', '/tasks/tickets/', '/customers/', '/tasks/technicians/', '/tasks/reports/monthly/',
-                   '/customers/accounts/', '/admin/')
+                   '/customers/portal-login/', '/admin/')
 
     def test_a_customer_cannot_open_staff_pages(self):
         a = self.login('gyma')
@@ -305,7 +305,7 @@ class CopyWelcomeLinkTests(SecurityTestCase):
         Site.objects.create(customer=self.new, name='New Gym Main', address='Dubai')
 
     def copy(self, client):
-        return client.post('/customers/accounts/', {'action': 'copy_welcome_link', 'customer': self.new.pk})
+        return client.post('/customers/portal-login/', {'action': 'copy_welcome_link', 'customer': self.new.pk})
 
     def test_an_admin_gets_the_link_and_it_opens_the_account_set_up(self):
         page = self.copy(self.login('admin1'))
@@ -330,7 +330,7 @@ class CopyWelcomeLinkTests(SecurityTestCase):
         self.assertIsNone(Customer.objects.get(pk=self.new.pk).user)
 
     def test_a_temporary_password_in_one_click_for_a_customer_with_no_login_yet(self):
-        page = self.login('admin1').post('/customers/accounts/', {'action': 'temporary_password', 'customer': self.new.pk})
+        page = self.login('admin1').post('/customers/portal-login/', {'action': 'temporary_password', 'customer': self.new.pk})
         self.assertEqual(page.status_code, 200)
         password = page.context['password']
         self.new.refresh_from_db()
@@ -340,7 +340,7 @@ class CopyWelcomeLinkTests(SecurityTestCase):
     def test_no_login_is_made_for_a_customer_without_an_email(self):
         self.new.contact_email = ''
         self.new.save(update_fields=['contact_email'])
-        self.login('admin1').post('/customers/accounts/', {'action': 'temporary_password', 'customer': self.new.pk})
+        self.login('admin1').post('/customers/portal-login/', {'action': 'temporary_password', 'customer': self.new.pk})
         self.new.refresh_from_db()
         self.assertIsNone(self.new.user)
 

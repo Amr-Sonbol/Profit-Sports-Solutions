@@ -7,7 +7,7 @@
 {# The welcome email's own link, to send another way (WhatsApp, text) when the email doesn't arrive. #}
 <div class="page__header">
     <div>
-        <a href="{% url 'customers:customer_accounts' %}{% if return_query %}?{{ return_query }}{% endif %}" class="back-link">{% translate "Customer accounts" %}</a>
+        <a href="{% url 'customers:customer_detail' customer.pk %}#portal" class="back-link">{{ customer.name }}</a>
         <h1>{% translate "Welcome link" %}</h1>
     </div>
 </div>

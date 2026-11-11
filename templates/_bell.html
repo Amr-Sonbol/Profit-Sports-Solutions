@@ -64,7 +64,7 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
                         {% elif notification.kind == 'customer_locked' %}
-                        <a href="{% url 'customers:customer_accounts' %}?status=locked" class="notif-alarm">
+                        <a href="{% url 'customers:customer_detail' notification.customer.pk %}#portal" class="notif-alarm">
                             {% translate "Customer account locked" %}
                             — {{ notification.customer.name }}
                         </a>

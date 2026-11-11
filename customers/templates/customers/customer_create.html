@@ -8,8 +8,6 @@
     <div>
         {% if next_page == 'ticket' %}
         <a href="{% url 'tasks:ticket_open' %}" class="back-link">{% translate "Back to the ticket" %}</a>
-        {% elif next_page == 'accounts' %}
-        <a href="{% url 'customers:customer_accounts' %}" class="back-link">{% translate "Customer accounts" %}</a>
         {% else %}
         <a href="{% url 'customers:customer_list' %}" class="back-link">{% translate "Back to customers" %}</a>
         {% endif %}

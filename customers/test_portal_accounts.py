@@ -49,7 +49,7 @@ class PortalAccountTests(TestCase):
         return self.client_class(HTTP_HOST=PORTAL)
 
     def accounts(self, action, **extra):
-        return self.staff.post('/customers/accounts/', {'action': action, 'customer': self.customer.pk, **extra})
+        return self.staff.post('/customers/portal-login/', {'action': action, 'customer': self.customer.pk, **extra})
 
     def can_sign_in(self, password, username='ali@newgym.example'):
         response = self.visitor().post('/customers/portal/login/', {'username': username, 'password': password})

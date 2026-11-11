@@ -214,6 +214,59 @@
     {% endif %}
 </div>
 
+{% if portal_status %}
+{# Their portal login and everything done to it (customers.views.portal_login_action); each action is in the Audit log. #}
+{% with account=customer.user status=portal_status %}
+<div class="section" id="portal">
+    <h2>{% translate "Portal login" %}</h2>
+    <dl class="detail-grid">
+        <div><dt>{% translate "Status" %}</dt><dd>{% include "customers/_account_status.html" %}</dd></div>
+        <div><dt>{% translate "Login email" %}</dt><dd>{{ account.email|default:customer.contact_email|default:"—" }}</dd></div>
+        <div><dt>{% translate "Invited" %}</dt><dd>{{ customer.invited_at|date:"SHORT_DATE_FORMAT"|default:"—" }}</dd></div>
+        <div><dt>{% translate "Last sign-in" %}</dt><dd>{{ account.last_login|date:"SHORT_DATETIME_FORMAT"|default:"—" }}</dd></div>
+    </dl>
+    <div class="account-panel__actions">
+        {% if status in inviteable %}
+        {% include "customers/_account_action.html" with action="invite" label=_("Send welcome email") %}
+        {# When the email doesn't arrive: the same link, to send by WhatsApp or text. #}
+        {% include "customers/_account_action.html" with action="copy_welcome_link" label=_("Copy welcome link") %}
+        {% endif %}
+        {% if not account and status in inviteable %}
+        {# No login yet (and an email to make it with): one click creates it with a password to read out over the phone. #}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% endif %}
+        {% if status == 'active' or status == 'locked' %}
+        {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
+        {% endif %}
+        {% if status == 'locked' %}
+        {% include "customers/_account_action.html" with action="unlock" label=_("Unlock now") %}
+        {% endif %}
+        {% if account %}
+        {% if account.is_active %}
+        {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% include "customers/_account_action.html" with action="disable" label=_("Disable portal access") %}
+        {% else %}
+        {% include "customers/_account_action.html" with action="enable" label=_("Enable portal access") %}
+        {% endif %}
+        <form method="post" action="{% url 'customers:portal_login_action' %}" class="row-actions__inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_email">
+            <input type="hidden" name="customer" value="{{ customer.pk }}">
+            <input type="email" name="email" required placeholder="{% translate 'New login email' %}" aria-label="{% translate 'New login email' %}">
+            <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
+        </form>
+        {% endif %}
+        {% if status == 'no_email' %}
+        <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Add a contact email" %}</a>
+        {% endif %}
+    </div>
+    {% if status in inviteable %}
+    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %}</p>
+    {% endif %}
+</div>
+{% endwith %}
+{% endif %}
+
 {% if can_add_site %}
 <div class="section" id="add-site">
     <h2>{% translate "Add a site" %}</h2>

@@ -155,11 +155,11 @@ class CustomerCreateTests(CustomerTestCase):
         self._new(name='Maple Fitness', contact_email='hello@maple.example', country=canada.pk)
         self.assertNotIn('dir="rtl"', mail.outbox[1].alternatives[0][0])
 
-    def test_from_customer_accounts_goes_back_there(self):
+    def test_the_customers_list_offers_it_to_whoever_can(self):
         self.client.login(username='admin1', password='pass12345')
-        self.assertContains(self.client.get('/customers/accounts/'), '/customers/new/?next=accounts')
-        response = self._new(url='/customers/new/?next=accounts')
-        self.assertRedirects(response, '/customers/accounts/', fetch_redirect_response=False)
+        self.assertContains(self.client.get('/customers/'), '/customers/new/')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertNotContains(self.client.get('/customers/'), '/customers/new/')
 
 
 class CustomerImportTests(CustomerTestCase):
@@ -447,10 +447,13 @@ class AllCustomersTests(CustomerTestCase):
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
 
-    def test_supervisor_gets_403(self):
+    def test_supervisor_stays_in_the_active_country(self):
+        Customer.objects.create(
+            country=Country.objects.create(name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP'),
+            name='Cairo Gym', segment='gym',
+        )
         self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.get('/customers/all/')
-        self.assertEqual(response.status_code, 403)
+        self.assertNotContains(self.client.get('/customers/?country=all'), 'Cairo Gym')
 
     def test_every_country_roles_see_customers_from_every_country(self):
         other_country = Country.objects.create(
@@ -461,9 +464,9 @@ class AllCustomersTests(CustomerTestCase):
         # Every country is the Project Manager's (and Operations, Technical Support, Admin) — a Manager has
         # one country and is refused (docs/access_rules.md).
         self.client.login(username='manager1', password='pass12345')
-        self.assertIn(self.client.get('/customers/all/').status_code, (403, 404))
+        self.assertNotContains(self.client.get('/customers/?country=all'), 'Cairo Gym')
         Technician.objects.filter(user__username='manager1').update(role=Technician.Role.PROJECT_MANAGER)
-        response = self.client.get('/customers/all/')
+        response = self.client.get('/customers/?country=all')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Fitness First')
         self.assertContains(response, 'Cairo Gym')
@@ -1495,15 +1498,16 @@ class SiteMapLocationTests(CustomerTestCase):
 
 
 class CustomerAccountsTests(CustomerTestCase):
-    """The Customer accounts screen: Admin, the Technical Support Manager
-    and the Operations Manager invite customers, see every account's
-    status, and fix whatever's wrong."""
+    """Portal logins, on the Customers list and each customer's Portal login
+    section: Admin, the Technical Support Manager and the Operations Manager
+    invite customers, see every login's status, and fix whatever's wrong."""
 
     def setUp(self):
         super().setUp()
         self.customer.contact_email = 'contact@fitnessfirst.example'
         self.customer.save(update_fields=['contact_email'])
-        self.url = '/customers/accounts/'
+        self.url = '/customers/portal-login/'  # the actions
+        self.list_url = '/customers/'
 
     def _staff(self, username, role):
         Technician.objects.create(
@@ -1513,23 +1517,39 @@ class CustomerAccountsTests(CustomerTestCase):
         self.client.login(username=username, password='pass12345')
 
     def _statuses(self):
-        return {row['customer'].name: row['status'] for row in self.client.get(self.url).context['page_obj']}
+        return {row['customer'].name: row.get('portal') for row in self.client.get(self.list_url).context['page_obj']}
 
-    def test_admin_tech_support_and_operations_managers_get_in(self):
+    def test_admin_tech_support_and_operations_managers_manage_logins(self):
         self.client.login(username='admin1', password='pass12345')
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertTrue(self.client.get(self.list_url).context['manages_logins'])
+        self.assertContains(self.client.get(f'/customers/{self.customer.pk}/'), 'id="portal"')
         self._staff('support1', Technician.Role.SUPPORT_MANAGER)
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertTrue(self.client.get(self.list_url).context['manages_logins'])
         self._staff('ops1', Technician.Role.OPERATIONS_MANAGER)
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertTrue(self.client.get(self.list_url).context['manages_logins'])
 
-    def test_other_roles_get_403(self):
+    def test_other_roles_see_customers_but_not_logins(self):
         for username, role in [('manager1', Technician.Role.MANAGER), ('csm1', Technician.Role.COUNTRY_SUPPORT)]:
             with self.subTest(role=role):
                 self._staff(username, role)
-                self.assertEqual(self.client.get(self.url).status_code, 403)
+                response = self.client.post(self.url, {'action': 'invite', 'customer': self.customer.pk})
+                self.assertEqual(response.status_code, 403)
         self.client.login(username='supervisor1', password='pass12345')
-        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertFalse(self.client.get(self.list_url).context['manages_logins'])
+        self.assertNotContains(self.client.get(f'/customers/{self.customer.pk}/'), 'id="portal"')
+        response = self.client.post(self.url, {'action': 'invite', 'customer': self.customer.pk})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_an_action_goes_back_to_the_customer_and_bulk_to_the_list(self):
+        self.client.login(username='admin1', password='pass12345')
+        response = self.client.post(self.url, {'action': 'invite', 'customer': self.customer.pk})
+        self.assertRedirects(response, f'/customers/{self.customer.pk}/#portal', fetch_redirect_response=False)
+        response = self.client.post(self.url, {
+            'action': 'invite_selected', 'customers': [self.customer.pk], 'from': 'list',
+            'return_query': 'portal=invited',
+        })
+        self.assertRedirects(response, '/customers/?portal=invited', fetch_redirect_response=False)
 
     def test_statuses(self):
         Customer.objects.create(country=self.country, name='No Email Gym', segment='gym')
@@ -1654,14 +1674,12 @@ class CustomerAccountUnlockTests(CustomerTestCase):
 
         staff = self.client_class()
         staff.force_login(self.admin_user)
-        response = staff.get('/customers/accounts/')
-        self.assertEqual(
-            {row['customer'].name: row['status'] for row in response.context['page_obj']}['Fitness First'], 'locked',
-        )
+        response = staff.get('/customers/?portal=locked')
+        self.assertEqual([row['customer'].name for row in response.context['page_obj']], ['Fitness First'])
         kinds = [item['kind'] for item in response.context['unseen_notifications']]
         self.assertIn('customer_locked', kinds)
 
-        staff.post('/customers/accounts/', {'action': 'unlock', 'customer': self.customer.pk})
+        staff.post('/customers/portal-login/', {'action': 'unlock', 'customer': self.customer.pk})
         self.assertNotIn('fitnessfirst', locked_usernames())
         response = self.client.post('/customers/portal/login/', {'username': 'fitnessfirst', 'password': 'pass12345'})
         self.assertEqual(response.status_code, 302)

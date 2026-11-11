@@ -2341,7 +2341,7 @@ class BellView(APIView):
                 opens = {'screen': 'internal-task', 'id': ticket.pk}
             elif kind == 'customer_locked':
                 text, alarm, about = _('Customer account locked'), True, item['customer'].name
-                opens = {'screen': 'website', 'path': reverse('customers:customer_accounts') + '?status=locked'}
+                opens = {'screen': 'website', 'path': reverse('customers:customer_detail', args=[item['customer'].pk]) + '#portal'}
             elif kind == 'app_errors':
                 text = ngettext(
                     '%(count)s new error in the phone app', '%(count)s new errors in the phone app', item['count'],

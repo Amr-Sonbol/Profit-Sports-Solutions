@@ -21,7 +21,7 @@ from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
 from people.permissions import (
-    get_active_country, require_admin, require_all_countries, require_manager, require_permission, scoped_or_404,
+    get_active_country, require_admin, require_manager, require_permission, scoped_or_404,
 )
 from reference.models import Country
 from tasks.forms import ChangePasswordForm, CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
@@ -81,47 +81,72 @@ def _generate_temporary_password():
     return get_random_string(12, allowed_chars=TEMPORARY_PASSWORD_ALPHABET)
 
 
+def _manages_logins(technician):
+    """Whoever manages customers' portal logins (customer_accounts — Admin, the
+    Operations and the Technical Support Manager by default): they also create
+    customers and add branches."""
+    return RolePermission.objects.filter(
+        role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
+    ).exists()
+
+
 @login_required
 def customer_list(request):
-    """Every customer in the viewer's active country — gyms, hotels, clubs,
-    whatever "other" turns out to mean — with a way to add a new one.
+    """The one list of customers: the active country's, or — for whoever
+    reaches every country — any one country or all of them (?country=all).
+    Deactivated ones on their own tab. Whoever manages portal logins also
+    sees each one's login (status, last sign-in), filters by it (?portal=)
+    and sends welcome emails to several at once.
     """
     technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    manages_logins = _manages_logins(technician)
 
     show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
-    customers = Customer.objects.filter(
-        is_active=not show_inactive, country=get_active_country(request),
-    ).prefetch_related('sites')
+    country_id = request.GET.get('country', '')
+    customers = Customer.objects.filter(is_active=not show_inactive)
+    if technician.reaches_all_countries and country_id == 'all':
+        pass
+    elif technician.reaches_all_countries and country_id.isdigit():
+        customers = customers.filter(country_id=country_id)
+    else:
+        country_id = ''
+        customers = customers.filter(country=get_active_country(request))
     if search:
-        customers = customers.filter(name__icontains=search)
+        customers = customers.filter(
+            Q(name__icontains=search) | Q(contact_email__icontains=search) | Q(user__username__icontains=search),
+        )
+    customers = customers.select_related('country', 'user').prefetch_related('sites').order_by('name')
 
+    rows = [{'customer': customer} for customer in customers]
+    portal = ''
+    status_counts = []
+    if manages_logins:
+        locked, now = locked_usernames(), timezone.now()
+        counts = {value: 0 for value in AccountStatus.values}
+        for row in rows:
+            # Our own account (the warehouses) never gets a portal login.
+            if not row['customer'].is_internal:
+                row['portal'] = account_status(row['customer'], locked, now)
+                counts[row['portal']] += 1
+        status_counts = [(value, label, counts[value]) for value, label in AccountStatus.choices]
+        portal = request.GET.get('portal', '')
+        if portal in AccountStatus.values:
+            rows = [row for row in rows if row.get('portal') == portal]
+        else:
+            portal = ''
+
+    # 50 to a page: every country's runs to thousands as the company grows.
+    page_obj = Paginator(rows, 50).get_page(request.GET.get('page'))
+    query = request.GET.copy()
+    query.pop('page', None)
     return render(request, 'customers/customer_list.html', {
-        'customers': customers, 'search': search, 'show_inactive': show_inactive,
-        'can_create': RolePermission.objects.filter(
-            role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
-        ).exists(),
-    })
-
-
-@login_required
-def all_customers(request):
-    """Every customer in every country — a manager's combined roster, same
-    fixed floor as all_technicians. Reaching one from here opens
-    the same customer_detail/edit screens, which allow manager-tier
-    cross-country access for exactly this reason.
-    """
-    require_all_countries(request)
-
-    search = request.GET.get('q', '').strip()
-    customers = Customer.objects.filter(is_active=True).select_related('country').prefetch_related('sites')
-    if search:
-        customers = customers.filter(name__icontains=search)
-
-    # 50 to a page: the whole roster runs to thousands as the company grows.
-    page_obj = Paginator(customers.order_by('name'), 50).get_page(request.GET.get('page'))
-    return render(request, 'customers/all_customers.html', {
-        'customers': page_obj, 'page_obj': page_obj, 'search': search,
+        'page_obj': page_obj, 'search': search, 'show_inactive': show_inactive,
+        'country_id': country_id, 'manages_logins': manages_logins, 'can_create': manages_logins,
+        'all_countries': technician.reaches_all_countries,
+        'countries': Country.objects.filter(is_active=True).order_by('name') if technician.reaches_all_countries else [],
+        'portal': portal, 'status_counts': status_counts, 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
+        'page_query': query.urlencode(), 'return_query': request.GET.urlencode(),
     })
 
 
@@ -136,8 +161,7 @@ def customer_create(request):
 
     ?next=ticket — from "New ticket", for a caller who isn't a customer yet:
     the country is the ticket's (the active one), and saving goes back to
-    the ticket with the new branch chosen. ?next=accounts — from Customer
-    accounts, back there.
+    the ticket with the new branch chosen.
     """
     require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
     next_page = request.GET.get('next', '')
@@ -157,8 +181,6 @@ def customer_create(request):
             messages.success(request, _('Customer added.'))
         if next_page == 'ticket':
             return redirect(f"{reverse('tasks:ticket_open')}?site={site.pk}")
-        if next_page == 'accounts':
-            return redirect('customers:customer_accounts')
         return redirect('customers:customer_detail', pk=customer.pk)
 
     return render(request, 'customers/customer_create.html', {'form': form, 'next_page': next_page, 'country': country})
@@ -166,17 +188,15 @@ def customer_create(request):
 
 @login_required
 def customer_detail(request, pk):
-    """The customer's sites, and — for whoever creates customers
-    (customer_create) — a way to add another one. A manager or admin
-    reaches any customer regardless of active country (the point of
-    all_customers); everyone else stays scoped to it, as before.
+    """The customer's sites, and — for whoever manages portal logins — a way
+    to add another one and their Portal login section (portal_login_action).
+    Whoever reaches every country opens any customer, whatever the active
+    one (the Customers list's All countries); everyone else stays scoped to it.
     """
     requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
     is_admin = requesting_technician.role == Technician.Role.ADMIN
-    # Adding a branch: whoever creates customers (customer_create).
-    can_add_site = RolePermission.objects.filter(
-        role=requesting_technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
-    ).exists()
+    # Adding a branch, and the Portal login section: whoever manages portal logins.
+    can_add_site = _manages_logins(requesting_technician)
     customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
     # Commercial terms: managers and admins only; every change to the Audit log.
@@ -222,6 +242,10 @@ def customer_detail(request, pk):
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
         'can_add_site': can_add_site,
+        # The portal login and what can be done to it (portal_login_action); never our own warehouses.
+        'portal_status': account_status(customer, locked_usernames())
+        if can_add_site and not customer.is_internal else None,
+        'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
         'can_see_terms': can_see_terms, 'terms_form': terms_form, 'from_request': from_request,
         'today': timezone.localdate(),
         **_customer_overview(request, customer),
@@ -1181,10 +1205,13 @@ def portal_ticket_new(request):
 
 
 
-def _account_redirect(request):
-    """Back to the Customer accounts screen with the same filters."""
+def _account_redirect(request, customer=None):
+    """Back where the action came from: the customer's page (its Portal
+    login section), or the Customers list with the same filters."""
+    if customer is not None and request.POST.get('from') != 'list':
+        return redirect(f"{reverse('customers:customer_detail', args=[customer.pk])}#portal")
     query = request.POST.get('return_query', '')
-    url = reverse('customers:customer_accounts')
+    url = reverse('customers:customer_list')
     return redirect(f'{url}?{query}' if query else url)
 
 
@@ -1192,138 +1219,105 @@ INVITEABLE = (AccountStatus.NOT_INVITED, AccountStatus.INVITED, AccountStatus.EX
 
 
 @login_required
-def customer_accounts(request):
-    """Every customer's portal account in one place, for whoever manages
-    them (customer_accounts — Admin, the Technical Support Manager and the
-    Operations Manager by default): who has an account, who's been invited
-    and hasn't finished setting up, who's locked out or disabled — and the
-    actions to fix each case. Every country; a country filter narrows it.
-    Each action is recorded in the Audit log.
+def portal_login_action(request):
+    """What's done to a customer's portal login (POST `action`, `customer`),
+    from its Portal login section on the customer's page — or welcome emails
+    to several at once (`invite_selected`, `customers`) from the Customers
+    list. For whoever manages portal logins (customer_accounts); each action
+    is recorded in the Audit log.
     """
     require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
+    if request.method != 'POST':
+        return redirect('customers:customer_list')
     locked = locked_usernames()
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        if action == 'invite_selected':
-            sent, skipped = 0, 0
-            selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True, is_internal=False)
-            for customer in selected.select_related('user'):
-                if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
-                    log_account_action(request, customer, 'Portal welcome email sent')
-                    sent += 1
-                else:
-                    skipped += 1
-            messages.success(request, _('Welcome emails sent: %(sent)s. Skipped: %(skipped)s.') % {
-                'sent': sent, 'skipped': skipped,
-            })
-            return _account_redirect(request)
-
-        customer = get_object_or_404(
-            Customer.objects.select_related('user'), pk=request.POST.get('customer'), is_active=True,
-        )
-        user = customer.user
-        status = account_status(customer, locked)
-        if action == 'invite' and status in INVITEABLE:
-            if send_welcome(request, customer):
+    action = request.POST.get('action')
+    if action == 'invite_selected':
+        sent, skipped = 0, 0
+        selected = Customer.objects.filter(pk__in=request.POST.getlist('customers'), is_active=True, is_internal=False)
+        for customer in selected.select_related('user'):
+            if account_status(customer, locked) in INVITEABLE and send_welcome(request, customer):
                 log_account_action(request, customer, 'Portal welcome email sent')
-                messages.success(request, _('Welcome email sent to %(email)s.') % {'email': customer.user.email})
+                sent += 1
             else:
-                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                    'email': customer.contact_email,
-                })
-        elif action == 'copy_welcome_link' and status in INVITEABLE:
-            # The welcome email's own link, shown to copy and send another way.
-            link = welcome_link(request, customer)
-            if link is None:
-                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                    'email': customer.contact_email,
-                })
-                return _account_redirect(request)
-            log_account_action(request, customer, 'Portal welcome link copied')
-            return render(request, 'customers/customer_account_link.html', {
-                'customer': customer, 'link': link, 'days': LINK_VALID_DAYS,
-                'portal_address': settings.PORTAL_HOST or request.get_host(),
-                'return_query': request.POST.get('return_query', ''),
-            })
-        elif action == 'password_link' and status in (AccountStatus.ACTIVE, AccountStatus.LOCKED):
-            send_password_link(request, customer)
-            log_account_action(request, customer, 'Portal password link sent')
-            messages.success(request, _('A password link has been sent to %(email)s.') % {'email': user.email})
-        elif action == 'unlock' and user is not None:
-            axes_reset(username=user.username)
-            log_account_action(request, customer, 'Portal account unlocked')
-            messages.success(request, _('%(name)s has been unlocked.') % {'name': customer.name})
-        elif action in ('disable', 'enable') and user is not None:
-            user.is_active = action == 'enable'
-            user.save(update_fields=['is_active'])
-            log_account_action(
-                request, customer, 'Portal access enabled' if user.is_active else 'Portal access disabled',
-            )
-            messages.success(request, _('Portal access enabled.') if user.is_active else _('Portal access disabled.'))
-        elif action == 'change_email' and user is not None:
-            form = ChangeLoginEmailForm(request.POST, user=user)
-            if form.is_valid():
-                old_email = user.email
-                user.username = user.email = form.cleaned_data['email']
-                user.save(update_fields=['username', 'email'])
-                log_account_action(request, customer, f'Portal login email changed from {old_email} to {user.email}')
-                messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
-            else:
-                messages.error(request, form.errors['email'][0])
-        elif action == 'temporary_password' and (user.is_active if user else status in INVITEABLE):
-            # Shown once, right here, for reading out over the phone — never
-            # emailed, never stored anywhere readable. A customer with no login
-            # yet gets one on the spot (as the welcome email would create it).
-            if user is None:
-                if welcome_link(request, customer) is None:
-                    messages.error(request, _('The email address %(email)s already belongs to another account.') % {
-                        'email': customer.contact_email,
-                    })
-                    return _account_redirect(request)
-                user = customer.user
-            password = _generate_temporary_password()
-            user.set_password(password)
-            user.save(update_fields=['password'])
-            customer.must_change_password = True
-            customer.save(update_fields=['must_change_password'])
-            log_account_action(request, customer, 'Portal temporary password set')
-            return render(request, 'customers/customer_account_password.html', {
-                'customer': customer, 'password': password, 'return_query': request.POST.get('return_query', ''),
-            })
+                skipped += 1
+        messages.success(request, _('Welcome emails sent: %(sent)s. Skipped: %(skipped)s.') % {
+            'sent': sent, 'skipped': skipped,
+        })
         return _account_redirect(request)
 
-    # Our own account (the warehouses) never gets a portal login.
-    customers = Customer.objects.filter(is_active=True, is_internal=False).select_related('user', 'country').order_by('name')
-    country_id = request.GET.get('country', '')
-    if country_id:
-        customers = customers.filter(country_id=country_id)
-    search = request.GET.get('q', '').strip()
-    if search:
-        customers = customers.filter(
-            Q(name__icontains=search) | Q(contact_email__icontains=search) | Q(user__username__icontains=search),
+    customer = get_object_or_404(
+        Customer.objects.select_related('user'), pk=request.POST.get('customer'), is_active=True,
+    )
+    user = customer.user
+    status = account_status(customer, locked)
+    if action == 'invite' and status in INVITEABLE:
+        if send_welcome(request, customer):
+            log_account_action(request, customer, 'Portal welcome email sent')
+            messages.success(request, _('Welcome email sent to %(email)s.') % {'email': customer.user.email})
+        else:
+            messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                'email': customer.contact_email,
+            })
+    elif action == 'copy_welcome_link' and status in INVITEABLE:
+        # The welcome email's own link, shown to copy and send another way.
+        link = welcome_link(request, customer)
+        if link is None:
+            messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                'email': customer.contact_email,
+            })
+            return _account_redirect(request, customer)
+        log_account_action(request, customer, 'Portal welcome link copied')
+        return render(request, 'customers/customer_account_link.html', {
+            'customer': customer, 'link': link, 'days': LINK_VALID_DAYS,
+            'portal_address': settings.PORTAL_HOST or request.get_host(),
+            'return_query': request.POST.get('return_query', ''),
+        })
+    elif action == 'password_link' and status in (AccountStatus.ACTIVE, AccountStatus.LOCKED):
+        send_password_link(request, customer)
+        log_account_action(request, customer, 'Portal password link sent')
+        messages.success(request, _('A password link has been sent to %(email)s.') % {'email': user.email})
+    elif action == 'unlock' and user is not None:
+        axes_reset(username=user.username)
+        log_account_action(request, customer, 'Portal account unlocked')
+        messages.success(request, _('%(name)s has been unlocked.') % {'name': customer.name})
+    elif action in ('disable', 'enable') and user is not None:
+        user.is_active = action == 'enable'
+        user.save(update_fields=['is_active'])
+        log_account_action(
+            request, customer, 'Portal access enabled' if user.is_active else 'Portal access disabled',
         )
-    now = timezone.now()
-    rows = [{'customer': c, 'status': account_status(c, locked, now)} for c in customers]
-    counts = {value: 0 for value in AccountStatus.values}
-    for row in rows:
-        counts[row['status']] += 1
-    status = request.GET.get('status', '')
-    if status in AccountStatus.values:
-        rows = [row for row in rows if row['status'] == status]
-
-    managed = next((row for row in rows if str(row['customer'].pk) == request.GET.get('manage')), None)
-    query = request.GET.copy()
-    query.pop('manage', None)
-    return render(request, 'customers/customer_accounts.html', {
-        'managed': managed, 'list_query': query.urlencode(),
-        'page_obj': Paginator(rows, 50).get_page(request.GET.get('page')),
-        'status_counts': [(value, label, counts[value]) for value, label in AccountStatus.choices],
-        'active_count': counts[AccountStatus.ACTIVE], 'total': len(customers),
-        'status': status, 'search': search, 'country_id': country_id,
-        'countries': Country.objects.filter(is_active=True).order_by('name'),
-        'return_query': request.GET.urlencode(), 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
-    })
+        messages.success(request, _('Portal access enabled.') if user.is_active else _('Portal access disabled.'))
+    elif action == 'change_email' and user is not None:
+        form = ChangeLoginEmailForm(request.POST, user=user)
+        if form.is_valid():
+            old_email = user.email
+            user.username = user.email = form.cleaned_data['email']
+            user.save(update_fields=['username', 'email'])
+            log_account_action(request, customer, f'Portal login email changed from {old_email} to {user.email}')
+            messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
+        else:
+            messages.error(request, form.errors['email'][0])
+    elif action == 'temporary_password' and (user.is_active if user else status in INVITEABLE):
+        # Shown once, right here, for reading out over the phone — never
+        # emailed, never stored anywhere readable. A customer with no login
+        # yet gets one on the spot (as the welcome email would create it).
+        if user is None:
+            if welcome_link(request, customer) is None:
+                messages.error(request, _('The email address %(email)s already belongs to another account.') % {
+                    'email': customer.contact_email,
+                })
+                return _account_redirect(request, customer)
+            user = customer.user
+        password = _generate_temporary_password()
+        user.set_password(password)
+        user.save(update_fields=['password'])
+        customer.must_change_password = True
+        customer.save(update_fields=['must_change_password'])
+        log_account_action(request, customer, 'Portal temporary password set')
+        return render(request, 'customers/customer_account_password.html', {
+            'customer': customer, 'password': password, 'return_query': request.POST.get('return_query', ''),
+        })
+    return _account_redirect(request, customer)
 
 
 def portal_email_confirm(request, token):

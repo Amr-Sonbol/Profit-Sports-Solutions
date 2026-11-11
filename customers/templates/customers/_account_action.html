@@ -1,7 +1,6 @@
-{% load i18n %}<form method="post">
+{% load i18n %}<form method="post" action="{% url 'customers:portal_login_action' %}">
     {% csrf_token %}
     <input type="hidden" name="action" value="{{ action }}">
     <input type="hidden" name="customer" value="{{ customer.pk }}">
-    <input type="hidden" name="return_query" value="{{ return_query }}">
     <button type="submit" class="button button--secondary">{{ label }}</button>
 </form>

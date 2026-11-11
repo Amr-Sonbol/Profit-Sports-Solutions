@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 09:37+0000\n"
+"POT-Creation-Date: 2026-11-11 09:50+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,10 +13,6 @@ msgstr ""
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
 msgstr "#%(rank)s من %(leaderboard_size)s"
-
-#, python-format
-msgid "%(active)s of %(total)s customers have an active portal account."
-msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في البوابة."
 
 #, python-format
 msgid "%(added)s parts added, %(updated)s updated, %(photos)s photos."
@@ -810,9 +806,6 @@ msgstr "الكل"
 msgid "All %(brand)s equipment"
 msgstr "جميع معدات %(brand)s"
 
-msgid "All active customers across all countries, for search and management. This view is not affected by the country selector above."
-msgstr "جميع العملاء النشطين في جميع الدول، لأغراض البحث والإدارة. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
-
 msgid "All active technicians across all countries, for tracking, inspection and audit. This view is not affected by the country selector above."
 msgstr "جميع الفنيين النشطين في جميع الدول، لأغراض المتابعة والفحص والتدقيق. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
 
@@ -830,9 +823,6 @@ msgstr "كل الدول"
 
 msgid "All countries — schedule"
 msgstr "كل الدول — الجدول الزمني"
-
-msgid "All customers"
-msgstr "كل العملاء"
 
 msgid "All machines cleaned."
 msgstr "تم تنظيف جميع الأجهزة."
@@ -1639,9 +1629,6 @@ msgstr "توقيع العميل"
 
 msgid "Customer account locked"
 msgstr "حساب عميل مقفل"
-
-msgid "Customer accounts"
-msgstr "حسابات العملاء"
 
 msgid "Customer added."
 msgstr "تمت إضافة العميل."
@@ -3132,10 +3119,6 @@ msgstr "صيانة"
 msgid "Manage"
 msgstr "إدارة"
 
-#, python-format
-msgid "Manage account — %(name)s"
-msgstr "إدارة الحساب — %(name)s"
-
 msgid "Manage assignment"
 msgstr "إدارة التعيين"
 
@@ -3236,6 +3219,9 @@ msgstr "العملاء الأكثر نشاطًا"
 
 msgid "Move all their open tasks to"
 msgstr "نقل جميع مهامه المفتوحة إلى"
+
+msgid "My active country"
+msgstr "دولتي الحالية"
 
 msgid "My machine isn't listed"
 msgstr "جهازي غير موجود في القائمة"
@@ -3434,9 +3420,6 @@ msgstr "لا يلزم أي إجراء"
 msgid "No active %(role)s is available to receive escalations. Please add one from Technicians."
 msgstr "لا يتوفر %(role)s نشط لاستلام التصعيدات. يرجى إضافته من قسم الفنيين."
 
-msgid "No active customers."
-msgstr "لا يوجد عملاء نشطون."
-
 msgid "No active technicians are available in this country."
 msgstr "لا يتوفر فنيون نشطون في هذه الدولة."
 
@@ -3472,9 +3455,6 @@ msgstr "لا توجد طلبات مغلقة بعد."
 
 msgid "No conduct areas have been set up."
 msgstr "لم يتم إعداد أي مجالات سلوك."
-
-msgid "No customers match the selected filters."
-msgstr "لا يوجد عملاء مطابقون لعوامل التصفية المحددة."
 
 msgid "No customers match your search."
 msgstr "لا يوجد عملاء مطابقون لبحثك."
@@ -3896,8 +3876,8 @@ msgstr "يراها فريق هذه المهمة فقط. لا تظهر للعمي
 msgid "Open"
 msgstr "مفتوحة"
 
-msgid "Open customer record"
-msgstr "فتح سجل العميل"
+msgid "Open a customer to manage their portal login."
+msgstr "افتح العميل لإدارة دخوله إلى البوابة."
 
 msgid "Open requests"
 msgstr "الطلبات المفتوحة"
@@ -5040,9 +5020,6 @@ msgstr "الفئة"
 
 msgid "Select a country"
 msgstr "اختر الدولة"
-
-msgid "Select a customer's name to manage their account."
-msgstr "اختر اسم العميل لإدارة حسابه."
 
 msgid "Select a segment"
 msgstr "اختر القطاع"
@@ -6475,9 +6452,6 @@ msgstr "عرض أو تعديل التقرير"
 
 msgid "View schedule"
 msgstr "عرض الجدول"
-
-msgid "View sites"
-msgstr "عرض الفروع"
 
 msgid "View task list, task detail, and week view"
 msgstr "عرض قائمة المهام وتفاصيلها وعرض الأسبوع"
@@ -8425,6 +8399,10 @@ msgstr "← العودة إلى العملاء النشطين"
 msgid "← Back to active technicians"
 msgstr "← العودة إلى الفنيين النشطين"
 
+#, python-format
+#~ msgid "%(active)s of %(total)s customers have an active portal account."
+#~ msgstr "لدى %(active)s من أصل %(total)s عميل حساب نشط في البوابة."
+
 #~ msgid "A problem with a machine"
 #~ msgstr "مشكلة في جهاز"
 
@@ -8443,8 +8421,14 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Advice given (solved by phone or instructions)"
 #~ msgstr "تم تقديم النصيحة (حُلّت بالهاتف أو بالتعليمات)"
 
+#~ msgid "All active customers across all countries, for search and management. This view is not affected by the country selector above."
+#~ msgstr "جميع العملاء النشطين في جميع الدول، لأغراض البحث والإدارة. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
 #~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 #~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
+
+#~ msgid "All customers"
+#~ msgstr "كل العملاء"
 
 #~ msgid "All shipping companies"
 #~ msgstr "كل شركات الشحن"
@@ -8543,6 +8527,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Current tasks"
 #~ msgstr "المهام الحالية"
 
+#~ msgid "Customer accounts"
+#~ msgstr "حسابات العملاء"
+
 #~ msgid "Dismiss"
 #~ msgstr "رفض"
 
@@ -8583,14 +8570,21 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Is this machine in your list?"
 #~ msgstr "هل هذا الجهاز موجود في قائمتك؟"
 
+#, python-format
+#~ msgid "Manage account — %(name)s"
+#~ msgstr "إدارة الحساب — %(name)s"
+
 #~ msgid "More colors"
 #~ msgstr "المزيد من الألوان"
 
-#~ msgid "My account"
-#~ msgstr "حسابي"
-
 #~ msgid "Navy"
 #~ msgstr "كحلي"
+
+#~ msgid "No active customers."
+#~ msgstr "لا يوجد عملاء نشطون."
+
+#~ msgid "No customers match the selected filters."
+#~ msgstr "لا يوجد عملاء مطابقون لعوامل التصفية المحددة."
 
 #~ msgid "No records to display."
 #~ msgstr "لا توجد سجلات لعرضها."
@@ -8600,6 +8594,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Notify again"
 #~ msgstr "إشعار مرة أخرى"
+
+#~ msgid "Open customer record"
+#~ msgstr "فتح سجل العميل"
 
 #~ msgid "Opens the customer's page with the branch form filled in from this request. Set its warranty start there; saving brings you back here, to create its task or close the request."
 #~ msgstr "يفتح صفحة العميل ونموذج الفرع معبّأ من هذا الطلب. حدّد بداية الضمان هناك؛ الحفظ يعيدك إلى هنا لإنشاء مهمته أو إغلاق الطلب."
@@ -8715,6 +8712,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Vendor follow-up"
 #~ msgstr "متابعة مع مورّد"
+
+#~ msgid "View sites"
+#~ msgstr "عرض الفروع"
 
 #~ msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
 #~ msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."

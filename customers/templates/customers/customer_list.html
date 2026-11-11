@@ -7,9 +7,6 @@
 <div class="page__header">
     <h1>{% translate "Customers" %}</h1>
     <div class="button-row">
-        {% if user.technician.reaches_all_countries %}
-        <a href="{% url 'customers:all_customers' %}" class="button button--secondary">{% translate "All customers" %}</a>
-        {% endif %}
         {% if user.technician.role == 'admin' %}
         <a href="{% url 'customers:customer_import' %}" class="button button--secondary">{% translate "Import customers" %}</a>
         {% endif %}
@@ -20,61 +17,101 @@
 </div>
 
 <form method="get" class="filters">
+    {% if show_inactive %}<input type="hidden" name="status" value="inactive">{% endif %}
+    {% if portal %}<input type="hidden" name="portal" value="{{ portal }}">{% endif %}
     <div class="filters__search">
-        <input type="text" name="q" value="{{ search }}" placeholder="{% translate 'Search by name' %}">
+        <input type="text" name="q" value="{{ search }}" placeholder="{% if manages_logins %}{% translate 'Search by name or email' %}{% else %}{% translate 'Search by name' %}{% endif %}">
     </div>
-    {% if show_inactive %}
-    <input type="hidden" name="status" value="active">
-    <button type="submit" class="button button--secondary">{% translate "Search" %}</button>
-    {% else %}
-    <button type="submit" class="button">{% translate "Search" %}</button>
+    {% if all_countries %}
+    <select name="country" aria-label="{% translate 'Country' %}">
+        <option value="">{% translate "My active country" %}</option>
+        <option value="all" {% if country_id == 'all' %}selected{% endif %}>{% translate "All countries" %}</option>
+        {% for country in countries %}
+        <option value="{{ country.pk }}" {% if country_id == country.pk|stringformat:"s" %}selected{% endif %}>{{ country.display_name }}</option>
+        {% endfor %}
+    </select>
     {% endif %}
+    <button type="submit" class="button">{% translate "Search" %}</button>
 </form>
 
+{% if manages_logins and not show_inactive %}
+{# The portal login of each: filter by its status. #}
+<nav class="tabs" aria-label="{% translate 'Portal login' %}">
+    <a href="?{% if search %}q={{ search|urlencode }}&{% endif %}{% if country_id %}country={{ country_id }}{% endif %}" class="{% if not portal %}is-active{% endif %}">{% translate "All" %}</a>
+    {% for value, label, count in status_counts %}
+    <a href="?portal={{ value }}{% if search %}&q={{ search|urlencode }}{% endif %}{% if country_id %}&country={{ country_id }}{% endif %}" class="{% if portal == value %}is-active{% endif %}">{{ label }} ({{ count }})</a>
+    {% endfor %}
+</nav>
+{% endif %}
+
 {% if show_inactive %}
-<a href="?{% if search %}q={{ search }}{% endif %}">{% translate "← Back to active customers" %}</a>
+<a href="?{% if search %}q={{ search|urlencode }}{% endif %}{% if country_id %}&country={{ country_id }}{% endif %}">{% translate "← Back to active customers" %}</a>
 {% else %}
-<a href="?status=inactive{% if search %}&q={{ search }}{% endif %}">{% translate "Show deactivated customers" %}</a>
+<a href="?status=inactive{% if search %}&q={{ search|urlencode }}{% endif %}{% if country_id %}&country={{ country_id }}{% endif %}">{% translate "Show deactivated customers" %}</a>
+{% endif %}
+
+{% if manages_logins and not show_inactive %}
+<form method="post" action="{% url 'customers:portal_login_action' %}" id="bulk-invite">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="invite_selected">
+    <input type="hidden" name="from" value="list">
+    <input type="hidden" name="return_query" value="{{ return_query }}">
+</form>
 {% endif %}
 
 <div class="section">
-    {% if customers %}
+    {% if manages_logins and not show_inactive %}
+    <div class="button-row">
+        <button type="submit" form="bulk-invite" class="button button--secondary">{% translate "Send welcome email to selected" %}</button>
+    </div>
+    {% endif %}
+    {% if page_obj %}
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
+                    {% if manages_logins and not show_inactive %}<th></th>{% endif %}
                     <th>{% translate "Name" %}</th>
+                    {% if country_id %}<th>{% translate "Country" %}</th>{% endif %}
                     <th>{% translate "Segment" %}</th>
                     <th>{% translate "Sites" %}</th>
-                    <th>{% translate "Active" %}</th>
+                    {% if manages_logins %}
+                    <th>{% translate "Portal login" %}</th>
+                    <th>{% translate "Last sign-in" %}</th>
+                    {% endif %}
                     <th></th>
                 </tr>
             </thead>
             <tbody>
-                {% for customer in customers %}
+                {% for row in page_obj %}
+                {% with customer=row.customer %}
                 <tr>
-                    <td>{{ customer.name }}{% if customer.is_internal %} <span class="badge badge--neutral">{% translate "Our warehouses" %}</span>{% endif %}</td>
+                    {% if manages_logins and not show_inactive %}
+                    <td>{% if row.portal in inviteable %}<input type="checkbox" name="customers" value="{{ customer.pk }}" form="bulk-invite" aria-label="{{ customer.name }}">{% endif %}</td>
+                    {% endif %}
+                    <td><a href="{% url 'customers:customer_detail' customer.pk %}">{{ customer.name }}</a>{% if customer.is_internal %} <span class="badge badge--neutral">{% translate "Our warehouses" %}</span>{% endif %}</td>
+                    {% if country_id %}<td>{{ customer.country.display_name }}</td>{% endif %}
                     <td>{{ customer.get_segment_display }}</td>
                     <td>{{ customer.sites.all|length }}</td>
+                    {% if manages_logins %}
+                    <td>{% if row.portal %}{% include "customers/_account_status.html" with status=row.portal %}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{{ customer.user.last_login|date:"SHORT_DATE_FORMAT"|default:"—" }}</td>
+                    {% endif %}
                     <td>
-                        {% if customer.is_active %}
-                        <span class="badge badge--good">{% translate "Active" %}</span>
-                        {% else %}
-                        <span class="badge badge--muted">{% translate "Inactive" %}</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <a href="{% url 'customers:customer_detail' customer.pk %}">{% translate "View sites" %}</a>
                         {% if user.technician.is_manager_tier %}
                         <a href="{% url 'customers:customer_edit' customer.pk %}">{% translate "Manage" %}</a>
                         {% endif %}
                     </td>
                 </tr>
+                {% endwith %}
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    {% elif search %}
+    {% if manages_logins and not show_inactive %}
+    <p class="field__help">{% blocktranslate with days=link_days %}The welcome email is sent in English, and also in Arabic for customers in Arab countries. Its secure activation link is valid for {{ days }} days.{% endblocktranslate %} {% translate "Open a customer to manage their portal login." %}</p>
+    {% endif %}
+    {% elif search or portal %}
     <p class="empty-state">{% translate "No customers match your search." %}</p>
     {% elif show_inactive %}
     <p class="empty-state">{% translate "No deactivated customers in your country." %}</p>
@@ -82,4 +119,16 @@
     <p class="empty-state">{% translate "There are no customers in your country." %}</p>
     {% endif %}
 </div>
+
+{% if page_obj.has_other_pages %}
+<div class="pagination">
+    {% if page_obj.has_previous %}
+        <a href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
+    {% endif %}
+    <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
+    {% if page_obj.has_next %}
+        <a href="?{% if page_query %}{{ page_query }}&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}
