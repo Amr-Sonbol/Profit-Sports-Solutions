@@ -597,6 +597,19 @@ class ChangePasswordForm(auth_forms.PasswordChangeForm):
         self.fields['old_password'].label = _('Current password')
 
 
+class LimitedPasswordResetForm(auth_forms.PasswordResetForm):
+    """The staff "Forgot your password?" (Django's own), sending at most one
+    link per address in a while (spots.throttle) — it's open to anyone, so
+    it mustn't become a way to flood someone's inbox. The page answers the
+    same either way."""
+
+    def get_users(self, email):
+        from spots.throttle import link_email_allowed
+
+        users = list(super().get_users(email))
+        return users if users and link_email_allowed(email) else []
+
+
 class NewPasswordForm(auth_forms.SetPasswordForm):
     """Set a password without the current one: a manager's reset, or a
     customer's emailed link."""

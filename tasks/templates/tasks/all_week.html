@@ -105,7 +105,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.csp_nonce }}">
 // "▸ N technicians": show or hide that country's technician rows.
 document.querySelectorAll('[data-country-toggle]').forEach(function (button) {
     button.addEventListener('click', function () {

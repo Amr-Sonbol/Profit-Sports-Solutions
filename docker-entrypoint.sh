@@ -7,6 +7,8 @@ until python manage.py check --database default >/dev/null 2>&1; do
 done
 
 python manage.py migrate --noinput
+# The database cache's table (settings.CACHES); does nothing once it exists.
+python manage.py createcachetable
 
 # Dev serves STATICFILES_DIRS on the fly (DEBUG=True) and bind-mounts the
 # repo, where a collected staticfiles/ folder would just be clutter —

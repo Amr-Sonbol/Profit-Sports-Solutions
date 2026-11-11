@@ -1667,6 +1667,16 @@ class PortalPasswordHelpTests(CustomerTestCase):
         self.client.post('/customers/portal/password-help/', {'email': 'admin1'})
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_one_link_per_address_in_a_while(self):
+        # Open to anyone: asking again and again mustn't flood their inbox (spots.throttle).
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user(
+            'contact@fitnessfirst.example', email='contact@fitnessfirst.example', password='pass12345',
+        ))
+        for _ in range(3):
+            page = self.client.post('/customers/portal/password-help/', {'email': 'Contact@FitnessFirst.example'})
+            self.assertTrue(page.context['sent'])  # the same answer every time
+        self.assertEqual(len(mail.outbox), 1)
+
 
 @override_settings(AXES_ENABLED=True)
 class CustomerAccountUnlockTests(CustomerTestCase):

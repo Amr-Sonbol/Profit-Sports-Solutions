@@ -103,3 +103,49 @@ class ViewAsCustomerMiddleware:
                 request.viewing_as = customer
                 request.viewing_as_user = person
         return self.get_response(request)
+
+
+class ContentSecurityPolicyMiddleware:
+    """Tells the browser where a page may load things from, so a script that
+    found its way into a page (a name, a message) can't run. Scripts only
+    from this site, unpkg (the team map's Leaflet) and the page's own inline
+    ones carrying this request's nonce (`request.csp_nonce` —
+    <script nonce="{{ request.csp_nonce }}">); no inline event attributes
+    (static/js/page-actions.js has those). Styles from this site, Google
+    Fonts and unpkg — inline style attributes allowed (a portal's own color).
+    Images also from the map tiles, and blob:/data: for photos picked to
+    upload. Never framed; forms post only here.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        import secrets
+
+        request.csp_nonce = secrets.token_urlsafe(16)
+        response = self.get_response(request)
+        if 'text/html' in response.get('Content-Type', '') and 'Content-Security-Policy' not in response:
+            response['Content-Security-Policy'] = '; '.join([
+                "default-src 'self'",
+                f"script-src 'self' 'nonce-{request.csp_nonce}' https://unpkg.com",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
+                "font-src 'self' https://fonts.gstatic.com",
+                "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org",
+                "media-src 'self' blob:",
+                "connect-src 'self'",
+                "object-src 'none'",
+                "base-uri 'self'",
+                f"form-action 'self'{_own_addresses()}",
+                "frame-ancestors 'none'",
+            ])
+        return response
+
+
+def _own_addresses():
+    """The portal's and the staff site's own addresses, when they're apart
+    (settings.PORTAL_HOST / STAFF_HOST): a form on one may end on the other."""
+    from django.conf import settings
+
+    hosts = [host for host in (settings.PORTAL_HOST, settings.STAFF_HOST) if host]
+    return ''.join(f' https://{host} http://{host}' if settings.DEBUG else f' https://{host}' for host in hosts)

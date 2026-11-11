@@ -128,3 +128,31 @@ class StaffKeepMeSignedInTests(TestCase):
 
     def test_the_box_is_ticked_to_begin_with(self):
         self.assertContains(Client().get('/accounts/login/'), 'name="remember" value="1" checked')
+
+
+class BrowserProtectionTests(TestCase):
+    """The Content-Security-Policy (spots.middleware) on every page, and the
+    staff "Forgot your password?" limited like the portal's (spots.throttle)."""
+
+    def test_every_page_says_where_scripts_may_come_from(self):
+        response = self.client.get('/accounts/login/')
+        policy = response['Content-Security-Policy']
+        nonce = response.wsgi_request.csp_nonce
+        self.assertIn(f"script-src 'self' 'nonce-{nonce}' https://unpkg.com", policy)
+        self.assertIn("frame-ancestors 'none'", policy)
+        # The page's own inline script carries it; nothing uses inline event attributes.
+        self.assertContains(response, f'<script nonce="{nonce}">')
+        self.assertNotContains(response, 'onclick=')
+        self.assertNotContains(response, 'onchange=')
+
+    def test_a_new_nonce_every_request(self):
+        first = self.client.get('/accounts/login/').wsgi_request.csp_nonce
+        self.assertNotEqual(first, self.client.get('/accounts/login/').wsgi_request.csp_nonce)
+
+    def test_staff_password_reset_sends_one_link_in_a_while(self):
+        from django.core import mail
+
+        get_user_model().objects.create_user('sara', email='sara@example.com', password='pass12345')
+        for _ in range(3):
+            self.client.post('/accounts/password-reset/', {'email': 'sara@example.com'})
+        self.assertEqual(len(mail.outbox), 1)

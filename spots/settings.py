@@ -97,6 +97,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Where a page may load scripts, styles and images from (spots.middleware).
+    'spots.middleware.ContentSecurityPolicyMiddleware',
     # Serves STATIC_ROOT directly — no nginx in front on Render, so Django
     # itself has to hand out static files efficiently in production. Safe
     # in dev too: STATIC_ROOT is never populated there (collectstatic only
@@ -204,7 +206,24 @@ DATABASES = {
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
         'OPTIONS': {'connect_timeout': 5},
+        # Keep each connection for a minute instead of opening a new one per
+        # request (each costs a round trip to a hosted database); checked
+        # before reuse, so one the database dropped is replaced, not used.
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        'CONN_HEALTH_CHECKS': True,
     }
+}
+
+
+# The cache lives in the database (python manage.py createcachetable, run at
+# start-up): every server process shares it and it survives a restart. Used
+# for limits like one "Forgot your password?" email per address in a while
+# (spots.throttle).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'spots_cache',
+    },
 }
 
 

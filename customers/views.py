@@ -43,6 +43,8 @@ from .forms import (
     PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm,
     SiteCreateForm, SiteEditForm,
 )
+from spots.throttle import link_email_allowed
+
 from .models import Asset, Customer, PortalUser, Site, portal_customer
 from . import notify
 from .progress import (
@@ -1404,7 +1406,8 @@ def portal_password_help(request):
         person = PortalUser.objects.filter(
             customer__is_active=True, user__is_active=True, user__username__iexact=form.cleaned_data['email'],
         ).select_related('user', 'customer__country').first()
-        if person is not None:
+        # One link per address in a while (spots.throttle) — the page says the same either way.
+        if person is not None and link_email_allowed(person.user.email):
             if person.must_change_password:
                 send_welcome(request, person)
             else:

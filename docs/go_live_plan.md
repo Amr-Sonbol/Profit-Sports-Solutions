@@ -45,6 +45,16 @@ undone for it. Likewise a customer admin role who manages their own people.
   portal's own address (`PORTAL_HOST`) and the staff one (`STAFF_HOST`).
 - **Live settings:** secret key, debug off, real mail credentials, the app
   sign-in token's expiry.
+- **Already built in (2026-11-11), nothing to do but keep:**
+  - a Content-Security-Policy on every page (`spots.middleware`): scripts
+    only from the site, unpkg and the page's own (with a per-request nonce);
+    a new outside source (a font, a map, a widget) has to be added there;
+  - "Forgot your password?" (portal and staff) sends at most one link per
+    address every 15 minutes (`spots.throttle`), so it can't flood an inbox
+    or use up the mail account's daily allowance;
+  - database connections are reused for a minute (`DB_CONN_MAX_AGE`); the
+    cache lives in the database, its table made at start-up
+    (`createcachetable` in `docker-entrypoint.sh`).
 - **Backups** of the database, and a check that one can be restored.
 - **A daily scheduled job**, so warnings that today only show in the bell
   (a report waiting over 2 working days) also reach people's phones.

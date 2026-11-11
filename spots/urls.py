@@ -19,6 +19,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
 
 from spots.media import serve_media
+from tasks.forms import LimitedPasswordResetForm
 
 from . import views
 
@@ -26,7 +27,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/login/', views.StaffLoginView.as_view(), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
-    path('accounts/password-reset/', auth_views.PasswordResetView.as_view(), name='password_reset'),
+    path('accounts/password-reset/', auth_views.PasswordResetView.as_view(form_class=LimitedPasswordResetForm),
+         name='password_reset'),
     path('accounts/password-reset/done/', auth_views.PasswordResetDoneView.as_view(), name='password_reset_done'),
     path(
         'accounts/reset/<uidb64>/<token>/', views.PasswordResetConfirmView.as_view(),

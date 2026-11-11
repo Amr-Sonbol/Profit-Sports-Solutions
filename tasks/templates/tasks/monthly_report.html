@@ -146,7 +146,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.csp_nonce }}">
 document.querySelectorAll('[data-print]').forEach(function (button) {
     button.addEventListener('click', function () { window.print(); });
 });

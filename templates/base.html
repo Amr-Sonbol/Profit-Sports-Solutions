@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@800&family=Cairo:wght@800&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v={{ css_version }}">
     {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
-    <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
+    <script nonce="{{ request.csp_nonce }}">try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
 {# A customer sees the portal's look (theme-portal in base.css) in their own color (Customer.brand_color, validated as #RRGGBB). #}
 <body{% if portal_customer %} class="theme-portal" style="--brand: {{ portal_customer.brand_color }}; --brand-text: {{ portal_customer.brand_text_color }}"{% endif %}>
@@ -91,7 +91,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.path }}">
                     <label for="country-switch">{% translate "Viewing" %}</label>
-                    <select id="country-switch" name="country" onchange="this.form.submit()">
+                    <select id="country-switch" name="country" data-auto-submit>
                         {% for country in switchable_countries %}
                         <option value="{{ country.pk }}" {% if active_country.pk == country.pk %}selected{% endif %}>{{ country.display_name }}</option>
                         {% endfor %}
@@ -142,7 +142,7 @@
         {# Not where there's nowhere to go back to (spots.context_processors.page_back). #}
         {% if show_page_back %}
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
-        <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
+        <a href="{% url 'home' %}" class="back-link page-back" data-history-back>{% translate "Back" %}</a>
         {% endif %}
         {# An email that couldn't be sent, once, to whoever sent it (spots.email_failures). #}
         {% for failure in failed_emails %}
@@ -156,6 +156,7 @@
         {% block content %}{% endblock %}
     </main>
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
+<script src="{% static 'js/page-actions.js' %}?v={{ css_version }}" defer></script>
 {% if user.technician or portal_customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>
 <script src="{% static 'js/bell.js' %}?v={{ css_version }}" defer></script>{% endif %}
 {# Photos made smaller on the phone before they upload; too-big files refused before a long upload. #}
