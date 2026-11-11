@@ -23,7 +23,7 @@ from people.models import RolePermission, Technician
 from people.permissions import (
     get_active_country, require_admin, require_manager, require_permission, scoped_or_404,
 )
-from reference.models import Country
+from reference.models import Country, TaskType
 from tasks.forms import ChangePasswordForm, CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
 from tasks.models import CustomerTicket, CustomerTicketAttachment, Task, TicketMachine, TicketNotification
 from tasks.views import (
@@ -739,7 +739,10 @@ def _portal_visits(customer):
     hours or prices) and whether it's waiting for their rating."""
     from reports.pdf import changed_after_signing
 
-    visits = list(Task.objects.filter(site__customer=customer).select_related('site', 'task_type', 'report', 'feedback'))
+    # A part shipment is a parcel, not a visit: it shows on its request instead.
+    visits = list(Task.objects.filter(site__customer=customer).exclude(
+        task_type__category=TaskType.Category.PART_SHIPMENT,
+    ).select_related('site', 'task_type', 'report', 'feedback'))
     for visit in visits:
         report = getattr(visit, 'report', None)
         feedback = getattr(visit, 'feedback', None)

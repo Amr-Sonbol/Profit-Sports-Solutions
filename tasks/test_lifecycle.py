@@ -699,6 +699,35 @@ class PartShipmentAppTests(PartShipmentTests):
         self.assertTrue(any('AX-77' in m.body for m in mail.outbox))
 
 
+class PartShipmentForTheCustomerTests(PartShipmentTests):
+    """The customer follows their parcel on their request, never as a visit."""
+
+    def test_being_prepared_then_shipped_with_a_tracking_link(self):
+        status = f'/tasks/tickets/status/{self.ticket.token}/'
+        page = self.portal.get(status)
+        self.assertEqual([(s['task'], str(s['progress'][0])) for s in page.context['shipments']], [(self.task, 'Being prepared')])
+        self.assertEqual(page.context['visits'], [])  # a parcel, not a visit
+        self.assertNotIn(self.task.pk, [v.pk for v in self.portal.get('/customers/portal/visits/').context['visits']])
+
+        self.ready(self.client_for('warehouse1'))
+        self.client_for('tech1').post(f'/tasks/my/{self.task.pk}/', {
+            'action': 'shipment_shipped', 'shipping_company': 'aramex', 'shipping_tracking_number': 'AX 77',
+        })
+        page = self.portal.get(status)
+        shipment = page.context['shipments'][0]
+        self.assertEqual((str(shipment['progress'][0]), shipment['company'], shipment['tracking']), ('Shipped', 'Aramex', 'AX 77'))
+        self.assertEqual(shipment['url'], 'https://www.aramex.com/track/results?ShipmentNumber=AX%2077')
+        self.assertContains(page, shipment['url'], count=3)  # its row, "Track your parcel" and the machines table
+
+    def test_a_local_courier_has_no_tracking_page(self):
+        self.ready(self.client_for('warehouse1'))
+        self.client_for('tech1').post(f'/tasks/my/{self.task.pk}/', {
+            'action': 'shipment_shipped', 'shipping_company': 'local_courier', 'shipping_tracking_number': 'LC-5',
+        })
+        shipment = self.portal.get(f'/tasks/tickets/status/{self.ticket.token}/').context['shipments'][0]
+        self.assertEqual((shipment['tracking'], shipment['url']), ('LC-5', ''))
+
+
 class PartShippedBellTests(PartShipmentTests):
     def test_the_customer_bell_says_the_part_is_on_its_way(self):
         self.ready(self.client_for('warehouse1'))

@@ -3333,8 +3333,9 @@ def ticket_status(request, token):
         'progress': ticket_progress(ticket),
         'steps': progress_steps(ticket_progress(ticket)) if ticket.heads_for_a_visit else None,
         'booked': ticket.task_id and is_booked(visit_progress(ticket.task)),
-        # The visit(s) it became — one, or one per group of machines — each with its report once in.
-        'visits': _ticket_visits(ticket),
+        # The visit(s) it became — one, or one per group of machines — each with its report once in;
+        # and the parts shipped for it, each with its courier's tracking link (never a "visit").
+        **_ticket_visits(ticket),
         'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         # Only what the customer may see is used from these: the dates and
         # customer_message — never reason, decision or decision_note.
@@ -3344,19 +3345,26 @@ def ticket_status(request, token):
 
 
 def _ticket_visits(ticket):
-    """The visits a customer's ticket became (its task, and those its
-    machines were split into), for the ticket page: progress, day, report."""
+    """What a customer's ticket became (its task, and those its machines
+    were split into), for the ticket page: {'visits': each with progress,
+    day and report; 'shipments': each part shipment as the customer sees it
+    (tasks.shipments.for_customer)}."""
+    from tasks import shipments
+
     tasks = {machine.task_id: machine.task for machine in ticket.machines.select_related('task__task_type', 'task__report')
              if machine.task_id}
     if ticket.task_id:
         tasks.setdefault(ticket.task_id, ticket.task)
-    visits = []
+    visits, parcels = [], []
     for task in sorted(tasks.values(), key=lambda task: task.reported_at):
+        if shipments.is_part_shipment(task):
+            parcels.append(shipments.for_customer(task))
+            continue
         visits.append({
             'task': task, 'progress': visit_progress(task), 'day': visit_day(task),
             'booked': is_booked(visit_progress(task)), 'has_report': getattr(task, 'report', None) is not None,
         })
-    return visits
+    return {'visits': visits, 'shipments': parcels}
 
 
 @login_required

@@ -13,6 +13,8 @@ none of a visit's steps (on the way, arrived, report, signature, review):
 The parts come off the country's stock once ready (tasks.stock.part_stock).
 A part that needs fitting gets a visit afterwards: "Book a fitting visit".
 """
+from urllib.parse import quote
+
 from django.db import transaction
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -26,6 +28,39 @@ PREPARING, READY, SHIPPED, CANCELLED = 'preparing', 'ready', 'shipped', 'cancell
 STAGE_LABELS = {
     PREPARING: _('Preparing'), READY: _('Ready to ship'), SHIPPED: _('Shipped'), CANCELLED: _('Cancelled'),
 }
+
+
+# Each courier's own tracking page, the number filled in (ShippingCompany). A
+# local courier or "other" has none: the number is shown on its own.
+TRACKING_PAGES = {
+    'dhl': 'https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id={}',
+    'fedex': 'https://www.fedex.com/fedextrack/?trknbr={}',
+    'ups': 'https://www.ups.com/track?tracknum={}',
+    'aramex': 'https://www.aramex.com/track/results?ShipmentNumber={}',
+    'tnt': 'https://www.tnt.com/express/en_gb/site/shipping-tools/tracking.html?searchType=con&cons={}',
+}
+
+
+def tracking_url(task):
+    """Where the customer follows this parcel on the courier's site; '' when there's no such page."""
+    page = TRACKING_PAGES.get(task.shipping_company)
+    number = (task.shipping_tracking_number or '').strip()
+    return page.format(quote(number)) if page and number else ''
+
+
+def for_customer(task):
+    """A part shipment as the customer sees it (their request page): being
+    prepared, shipped or cancelled, and once shipped the courier and its
+    tracking number, linked to the courier's own page when it has one."""
+    current = stage(task)
+    label = {
+        SHIPPED: (_('Shipped'), 'badge--good'), CANCELLED: (_('Cancelled'), 'badge--muted'),
+    }.get(current, (_('Being prepared'), 'badge--neutral'))
+    return {
+        'task': task, 'progress': label, 'shipped': current == SHIPPED,
+        'company': task.get_shipping_company_display() if task.shipping_company else '',
+        'tracking': task.shipping_tracking_number, 'url': tracking_url(task),
+    }
 
 
 def is_part_shipment(task):

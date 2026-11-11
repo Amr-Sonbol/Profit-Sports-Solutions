@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 09:50+0000\n"
+"POT-Creation-Date: 2026-11-11 11:25+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1120,6 +1120,9 @@ msgstr "قيد الترتيب"
 
 msgid "Being arranged — we'll confirm the date with you soon"
 msgstr "قيد الترتيب — سنؤكد معك الموعد قريبًا"
+
+msgid "Being prepared"
+msgstr "قيد التجهيز"
 
 msgid "Belt aligned and tensioned"
 msgstr "تم ضبط محاذاة السير وشدّه"
@@ -6290,9 +6293,15 @@ msgstr "محاولات تسجيل دخول كثيرة جداً"
 msgid "Total"
 msgstr "الإجمالي"
 
+msgid "Track your parcel"
+msgstr "تتبع شحنتك"
+
 #, python-format
 msgid "Track your shipment here: %(url)s"
 msgstr "تتبع شحنتكم من هنا: %(url)s"
+
+msgid "Tracking number"
+msgstr "رقم التتبع"
 
 #, python-format
 msgid "Tracking number: %(tracking)s"
@@ -6933,6 +6942,9 @@ msgstr "زيارتك القادمة"
 
 msgid "Your part is on its way"
 msgstr "القطعة في الطريق إليك"
+
+msgid "Your parts"
+msgstr "قطع الغيار الخاصة بك"
 
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحبًا بك."
