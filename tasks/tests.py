@@ -4996,6 +4996,49 @@ class TechnicianCreateTests(TaskTestCase):
         payload.update(overrides)
         return payload
 
+    def test_a_new_staff_member_from_invitation_to_their_first_day(self):
+        # The whole journey, as with a customer: the Admin adds them; they get an
+        # email with a one-time link (no password sent); they choose a password;
+        # they're in, on the website and the app, seeing only what their role
+        # allows; the link then stops working; it's all in the Audit log.
+        import re
+
+        from django.contrib.admin.models import LogEntry
+        from django.core import mail
+
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(self.url, self._payload(
+            full_name='Nour Supervisor', role=Technician.Role.SUPERVISOR, country=self.country.pk,
+            email='nour@example.com',
+        ))
+        nour = Technician.objects.get(full_name='Nour Supervisor')
+        self.assertTrue(LogEntry.objects.filter(change_message__contains='setup link emailed to nour@example.com').exists())
+
+        invitation = mail.outbox[-1]
+        self.assertEqual(invitation.to, ['nour@example.com'])
+        self.assertNotIn('password:', invitation.body.lower())  # a link, never a password
+        link = re.search(r'http://testserver(/tasks/setup/[^/\s]+/)', invitation.body).group(1)
+
+        newcomer = self.client_class()
+        response = newcomer.post(link, {'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'})
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+        nour.refresh_from_db()
+        self.assertFalse(nour.must_change_password)
+        # Signed in on the website: their own pages, not an Admin's.
+        self.assertEqual(newcomer.get('/').status_code, 200)
+        self.assertEqual(newcomer.get('/tasks/technicians/new/').status_code, 403)
+
+        # The link worked once.
+        self.assertEqual(self.client_class().get(link).status_code, 400)
+
+        # The same email and password in the phone app.
+        app = self.client_class()
+        response = app.post('/api/login/', {'username': 'nour@example.com', 'password': 'br4nd-New-Pass!'})
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['token']
+        me = app.get('/api/me/', HTTP_AUTHORIZATION=f'Token {token}').json()
+        self.assertEqual(me['role'], Technician.Role.SUPERVISOR)
+
     def test_one_step_with_their_country_and_login(self):
         # The country is chosen, not whichever one the admin is viewing; the
         # email becomes their login, with a setup link — no password sent.
