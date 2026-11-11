@@ -17,19 +17,26 @@ widely.
 - **One customer account, several people.** The customer stays one account —
   all its branches, requests, visits, reports and machines together, as
   today. Each person at the customer has their own email and password.
-- **Every person sees all branches by default**, so head office sees every
-  branch's problems in one place. Our staff can optionally limit a person (a
-  branch manager) to chosen branches; nothing is limited unless chosen.
-- **Each request shows who sent it** ("Sent by Omar"). Emails about a request
-  go to the person who sent it and to everyone who sees all branches.
+- **Everyone sees the whole customer**, every branch, exactly as today's
+  single login does — so head office sees every branch's problems in one
+  place. (Each branch's contact already gets the emails about its own
+  visits and shipments, without a login.)
+- **Each request shows who sent it** ("Sent by Omar"), and its confirmation
+  goes to whoever sent it.
 - **Our staff add and remove people**, on the customer's Portal login section
-  (the same invitation email as today). No customer-side admin role: the
-  customer asks us. That role can come later if a large chain wants to manage
-  its own people.
-- **Underneath:** a small table of a customer's people (login, name,
-  branches — empty = all) replaces the single `customer.user`. The existing
-  login moves over as the first person, with all branches, so nothing changes
-  for current customers. Every portal page filters by that person's branches.
+  (the same invitation email as today). Removing one person leaves the others
+  untouched. No customer-side admin role: the customer asks us.
+- **Underneath:** a small table of a customer's people (their login and name)
+  replaces the single `customer.user`. The existing login moves over as the
+  first person, so nothing changes for current customers. The portal's pages
+  stay as they are — they already show the whole customer.
+
+**Decided against, for now (2026-11-11):** limiting a person to chosen
+branches. It would need a branch filter on every portal page (requests,
+visits, reports, machines, the bell, the home counts, the new-request form),
+where one forgotten filter shows a branch manager another branch's data — for
+a need nobody has raised. Add it only if a chain asks; nothing above has to be
+undone for it. Likewise a customer admin role who manages their own people.
 
 ## 2. Hosting and running
 
