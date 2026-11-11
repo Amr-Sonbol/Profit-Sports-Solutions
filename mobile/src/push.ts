@@ -85,8 +85,8 @@ export function routeForNotification(data: Record<string, unknown>, role: string
       return role === 'technician' ? `/task/${taskId}` : `/team-task/${taskId}`;
     case 'ticket':  // that request's own screen; older notifications: the list
       return data.ticket_id ? `/ticket/${data.ticket_id}` : '/tickets';
-    case 'internal_ticket':  // its page (the website's, inside the app)
-      return `/website?path=${encodeURIComponent(`/tasks/tickets/internal/${data.ticket_id}/`)}&title=Internal%20task`;
+    case 'internal_ticket':  // its own screen
+      return `/internal-task/${data.ticket_id}`;
     case 'task_cancelled':  // the office still opens it; the field team's job is gone from their list
       return role === 'technician' ? '/tasks' : `/team-task/${taskId}`;
     case 'task_removed':  // no longer theirs: their own list

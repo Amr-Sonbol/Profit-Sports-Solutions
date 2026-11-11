@@ -24,6 +24,7 @@ urlpatterns = [
     path('tickets/', views.ticket_list, name='ticket_list'),
     path('tickets/open/', views.ticket_open, name='ticket_open'),
     path('tickets/internal/', views.internal_tickets, name='internal_tickets'),
+    path('tickets/internal/new/', views.internal_ticket_new, name='internal_ticket_new'),
     path('tickets/internal/<int:pk>/', views.internal_ticket, name='internal_ticket'),
     path('tickets/<int:pk>/', views.ticket_review, name='ticket_review'),
     path('technicians/', views.technician_list, name='technician_list'),

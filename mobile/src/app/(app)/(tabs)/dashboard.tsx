@@ -20,7 +20,7 @@ import { locale } from '@/i18n';
 /** Website lists the app has its own screen for. */
 const NATIVE: Record<string, string> = {
   '/tasks/tickets/': '/tickets',
-  '/tasks/tickets/internal/': '/internal-tickets',
+  '/tasks/tickets/internal/': '/tasks?scope=internal',
 };
 
 /**

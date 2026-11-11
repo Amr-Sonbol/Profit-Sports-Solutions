@@ -7,7 +7,7 @@
 <div class="page__header">
     <h1>{% translate "Internal tasks" %}</h1>
     {% if can_open %}
-    <a href="{% url 'tasks:ticket_open' %}?kind=stock" class="button">{% translate "New internal task" %}</a>
+    <a href="{% url 'tasks:internal_ticket_new' %}" class="button">{% translate "New internal task" %}</a>
     {% endif %}
 </div>
 
@@ -22,7 +22,6 @@
         <thead>
             <tr>
                 <th>{% translate "Number" %}</th>
-                <th>{% translate "Type" %}</th>
                 <th>{% translate "Subject" %}</th>
                 <th>{% translate "For" %}</th>
                 <th>{% translate "Opened by" %}</th>
@@ -34,8 +33,7 @@
             {% for ticket in tickets %}
             <tr>
                 <td><a href="{% url 'tasks:internal_ticket' ticket.pk %}">{{ ticket.ticket_number }}</a></td>
-                <td>{{ ticket.get_kind_display }}</td>
-                <td>{{ ticket.subject }}{% if ticket.vendor_name %} <span class="muted">— {{ ticket.vendor_name }}</span>{% endif %}</td>
+                <td>{{ ticket.subject }}</td>
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
@@ -46,7 +44,7 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="7" class="empty-state">{% translate "No internal tasks found." %}</td></tr>
+            <tr><td colspan="6" class="empty-state">{% translate "No internal tasks found." %}</td></tr>
             {% endfor %}
         </tbody>
     </table>

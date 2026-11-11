@@ -7969,7 +7969,7 @@ class TappedHoursTests(TaskTestCase):
 
 class StaffOpenedTicketTests(TaskTestCase):
     """Technical support and operations managers opening tickets: for a
-    customer who phoned, or internal ones (stock, vendor, other)."""
+    customer who phoned, or an internal task."""
 
     def setUp(self):
         super().setUp()
@@ -7986,7 +7986,7 @@ class StaffOpenedTicketTests(TaskTestCase):
         )
 
     def _customer_ticket(self, **extra):
-        return self.client.post('/tasks/tickets/open/?kind=customer', {
+        return self.client.post('/tasks/tickets/open/', {
             'site': self.site.pk, 'source': 'phone', 'description': 'Treadmill belt slipping', **extra,
         })
 
@@ -8016,20 +8016,33 @@ class StaffOpenedTicketTests(TaskTestCase):
         self.assertRedirects(response, f'/tasks/tickets/{ticket.pk}/', fetch_redirect_response=False)
         self.assertEqual(ticket.opened_by, self.ops.user)
 
+    @override_settings(PORTAL_HOST='')  # the portal on this same address, not its own
+    def test_the_customer_sees_it_in_their_portal_and_gets_the_email(self):
+        portal_user = get_user_model().objects.create_user('fitnessportal', password='pass12345')
+        self.customer.user = portal_user
+        self.customer.save(update_fields=['user'])
+        self.client.login(username='support1', password='pass12345')
+        self._customer_ticket(contact_email='ali@example.com')
+        ticket = CustomerTicket.objects.get()
+        self.assertTrue(any('ali@example.com' in message.to for message in mail.outbox))
+
+        self.client.logout()
+        self.client.login(username='fitnessportal', password='pass12345')
+        self.assertContains(self.client.get('/customers/portal/requests/'), ticket.ticket_number)
+        # Their request page, where they follow it and reply.
+        self.assertEqual(self.client.get(f'/tasks/tickets/status/{ticket.token}/').status_code, 200)
+
     def test_supervisor_cannot_open_a_customer_ticket(self):
-        # A supervisor creates internal tasks here, but a customer's ticket
-        # stays with open_tickets: asked for one, they get the internal form
-        # and nothing is created.
+        # A customer's ticket stays with open_tickets; a supervisor has the
+        # New internal task page instead. Nothing is created.
         self.client.login(username='supervisor1', password='pass12345')
-        response = self._customer_ticket()
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn('customer', [value for value, label in response.context['kinds']])
+        self.assertEqual(self._customer_ticket().status_code, 403)
         self.assertFalse(CustomerTicket.objects.exists())
 
     def _stock_request(self):
         self.client.login(username='support1', password='pass12345')
         with patch('tasks.views.push_in_their_language') as push:
-            self.client.post('/tasks/tickets/open/?kind=stock', {
+            self.client.post('/tasks/tickets/internal/new/', {
                 'subject': 'Need 10 running belts', 'description': 'For the Marina jobs',
                 'assigned_to': self.warehouse.pk,
             })
@@ -8038,7 +8051,7 @@ class StaffOpenedTicketTests(TaskTestCase):
 
     def test_internal_ticket_goes_to_whoever_it_is_for(self):
         ticket = self._stock_request()
-        self.assertEqual(ticket.kind, 'stock')
+        self.assertEqual(ticket.kind, 'internal')
         self.assertEqual(ticket.assigned_to, self.warehouse)
 
         self.client.login(username='warehouse1', password='pass12345')
@@ -8080,17 +8093,14 @@ class StaffOpenedTicketTests(TaskTestCase):
 
     def test_warehouse_manager_opens_internal_but_not_customer_tickets(self):
         self.client.login(username='warehouse1', password='pass12345')
-        response = self.client.get('/tasks/tickets/open/?kind=customer')
-        self.assertEqual(response.status_code, 200)
-        self.assertNotEqual(response.context['kind'], 'customer')
-        self.assertNotIn('customer', [value for value, label in response.context['kinds']])
+        self.assertEqual(self.client.get('/tasks/tickets/open/').status_code, 403)
 
         with patch('tasks.views.push_in_their_language'):
-            self.client.post('/tasks/tickets/open/?kind=stock', {
+            self.client.post('/tasks/tickets/internal/new/', {
                 'subject': 'Belts for Marina', 'description': 'Ten of them', 'assigned_to': self.support.pk,
             })
         ticket = CustomerTicket.objects.get()
-        self.assertEqual(ticket.kind, 'stock')
+        self.assertEqual(ticket.kind, 'internal')
         self.assertEqual(ticket.opened_by, self.warehouse.user)
 
     def test_any_manager_converts_an_internal_ticket_into_a_task(self):
@@ -8120,13 +8130,6 @@ class StaffOpenedTicketTests(TaskTestCase):
         ticket = self._stock_request()
         self.client.login(username='supervisor1', password='pass12345')
         self.assertEqual(self.client.get(f'/tasks/new/?ticket={ticket.pk}').status_code, 404)
-
-    def test_vendor_follow_up_needs_the_vendor(self):
-        self.client.login(username='support1', password='pass12345')
-        response = self.client.post('/tasks/tickets/open/?kind=vendor', {
-            'subject': 'Chase the treadmill motor', 'description': 'Late', 'assigned_to': self.support.pk,
-        })
-        self.assertIn('vendor_name', response.context['form'].errors)
 
 
 class TodayTestsMixin:
@@ -9098,27 +9101,28 @@ class CorporateReportTests(TicketMachineFindingsTests):
 
 class SupervisorCreatesInternalTasksTests(TaskTestCase):
     # Everything inside the company is a task: a supervisor creates an
-    # internal one (stock request, vendor follow-up, other) — but a
+    # internal task — but a
     # customer's ticket stays with whoever has open_tickets.
 
     def test_a_supervisor_creates_an_internal_task_but_not_a_customer_ticket(self):
         from tasks.models import CustomerTicket
         self.client.login(username='supervisor1', password='pass12345')
-        page = self.client.get('/tasks/tickets/open/?kind=stock')
+        page = self.client.get('/tasks/tickets/internal/new/')
         self.assertEqual(page.status_code, 200)
-        self.assertNotIn('customer', [value for value, label in page.context['kinds']])
+        self.assertEqual(self.client.get('/tasks/tickets/open/').status_code, 403)
         supervisor = Technician.objects.get(user__username='supervisor1')
-        response = self.client.post('/tasks/tickets/open/?kind=stock', {
+        response = self.client.post('/tasks/tickets/internal/new/', {
             'subject': 'Treadmill belts', 'description': 'We need 5 belts for Excite Run 700.',
             'assigned_to': supervisor.pk,
         })
         ticket = CustomerTicket.objects.get(subject='Treadmill belts')
-        self.assertEqual(ticket.kind, CustomerTicket.Kind.STOCK)
+        self.assertEqual(ticket.kind, CustomerTicket.Kind.INTERNAL)
+        self.assertRegex(ticket.ticket_number, r'-I0001$')  # a series of its own
         self.assertRedirects(response, f'/tasks/tickets/internal/{ticket.pk}/', fetch_redirect_response=False)
 
     def test_a_technician_still_cannot(self):
         self.client.login(username='tech1', password='pass12345')
-        self.assertEqual(self.client.get('/tasks/tickets/open/?kind=stock').status_code, 403)
+        self.assertEqual(self.client.get('/tasks/tickets/internal/new/').status_code, 403)
 
 
 class SerialNumberRuleTests(CorporateReportTests):

@@ -10,7 +10,6 @@
         <h1><span class="task-number">{{ ticket.ticket_number }}</span></h1>
     </div>
     <div class="badge-row">
-        <span class="badge badge--muted">{{ ticket.get_kind_display }}</span>
         {% if is_open %}<span class="badge badge--neutral">{% translate "Open" %}</span>
         {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Scheduled as a task" %}</span>
         {% else %}<span class="badge badge--good">{% translate "Closed" %}</span>{% endif %}
@@ -20,9 +19,6 @@
 <div class="section">
     <h2>{{ ticket.subject }}</h2>
     <dl class="detail-grid">
-        {% if ticket.vendor_name %}
-        <div><dt>{% translate "Vendor" %}</dt><dd>{{ ticket.vendor_name }}</dd></div>
-        {% endif %}
         <div><dt>{% translate "For" %}</dt><dd>{{ ticket.assigned_to.full_name|default:"—" }}</dd></div>
         <div><dt>{% translate "Opened by" %}</dt><dd>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</dd></div>
         <div><dt>{% translate "Opened" %}</dt><dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd></div>

@@ -248,8 +248,12 @@ def _save_new_task(task):
     raise IntegrityError('Could not generate a unique task number')
 
 
-def _next_ticket_number(country):
-    return _next_number(CustomerTicket.objects, 'ticket_number', f'{country.task_prefix or country.iso_code}-T')
+def _next_ticket_number(ticket):
+    """AE-T0001 for a customer's request, AE-I0001 for an internal task —
+    a series each, so the number alone says which it is."""
+    letter = 'I' if ticket.kind == CustomerTicket.Kind.INTERNAL else 'T'
+    country = ticket.country
+    return _next_number(CustomerTicket.objects, 'ticket_number', f'{country.task_prefix or country.iso_code}-{letter}')
 
 
 def ticket_machines_text(machines):
@@ -303,7 +307,7 @@ def save_new_ticket(ticket):
     calls this directly rather than duplicating the retry logic.
     """
     for _attempt in range(TASK_NUMBER_CREATE_ATTEMPTS):
-        ticket.ticket_number = _next_ticket_number(ticket.country)
+        ticket.ticket_number = _next_ticket_number(ticket)
         try:
             with transaction.atomic():
                 ticket.save()
@@ -1567,7 +1571,7 @@ def waiting_for(technician, country):
             items.append({
                 'kind': 'internal', 'title': _('Internal task for you'), 'at': ticket.submitted_at,
                 'text': f'{ticket.ticket_number} · {ticket.subject or ticket.get_kind_display()}', 'detail': '',
-                'opens': {'screen': 'website', 'path': reverse('tasks:internal_ticket', args=[ticket.pk])},
+                'opens': {'screen': 'internal-task', 'id': ticket.pk},
             })
     items.sort(key=lambda item: item['at'] or timezone.now())
     return items
@@ -2815,7 +2819,7 @@ def task_create(request):
             customer_tickets = customer_tickets.none()
         elif not all_countries:
             customer_tickets = customer_tickets.filter(country=country)
-        internal = open_tickets.filter(kind__in=INTERNAL_TICKET_KINDS, country=country)
+        internal = open_tickets.filter(kind=CustomerTicket.Kind.INTERNAL, country=country)
         if not requesting_technician.is_any_manager:
             internal = internal.none()
         ticket = get_object_or_404(customer_tickets | internal, pk=ticket_id)
@@ -7676,87 +7680,161 @@ def _report_form(request, task, technician, back_url):
     return render(request, 'tasks/my_report_form.html', context)
 
 
-INTERNAL_TICKET_KINDS = [CustomerTicket.Kind.STOCK, CustomerTicket.Kind.VENDOR, CustomerTicket.Kind.OTHER]
-
-
 def _has_permission(technician, permission):
     return RolePermission.objects.filter(role=technician.role, permission=permission, allowed=True).exists()
 
 
 @login_required
 def ticket_open(request):
-    """Staff opening a ticket (open_tickets): for a customer who phoned,
-    messaged or emailed — then it's a normal customer ticket, reviewed the
-    usual way and visible in their portal — or an internal one (stock
-    request, vendor follow-up, other) for whoever it's assigned to. Which
-    kind comes from ?kind=, so each form is plain HTML, no script.
+    """Staff opening a ticket for a customer who phoned, messaged or emailed
+    (open_tickets) — a normal customer ticket, reviewed the usual way and
+    visible in their portal. An internal task has its own page
+    (internal_ticket_new).
     """
     technician = require_technician(request)
-    # open_tickets covers every kind (customer tickets too); anyone else
-    # above a technician — a supervisor included — creates internal tasks.
-    kinds = CustomerTicket.Kind.choices
     if not _has_permission(technician, RolePermission.Permission.OPEN_TICKETS):
-        if technician.role == Technician.Role.TECHNICIAN:
-            raise PermissionDenied
-        kinds = [(value, label) for value, label in kinds if value != CustomerTicket.Kind.CUSTOMER]
+        raise PermissionDenied
     country = get_active_country(request)
-    kind = request.GET.get('kind', kinds[0][0])
-    if kind not in [value for value, label in kinds]:
-        kind = kinds[0][0]
-    is_customer = kind == CustomerTicket.Kind.CUSTOMER
-
-    def make_form(*args):
-        if is_customer:
-            return StaffTicketForm(*args, country=country)
-        return InternalTicketForm(*args, kind=kind, country=country)
-
-    form = make_form(request.POST, request.FILES) if request.method == 'POST' else make_form()
+    form = StaffTicketForm(request.POST, request.FILES, country=country) if request.method == 'POST'         else StaffTicketForm(country=country)
     if request.method == 'POST' and form.is_valid():
         now = timezone.now()
         ticket = form.save(commit=False)
-        ticket.kind = kind
+        ticket.kind = CustomerTicket.Kind.CUSTOMER
         ticket.country = country
         ticket.opened_by = request.user
         ticket.submitted_at = now
-        if is_customer:
-            site = form.cleaned_data['site']
-            ticket.customer = site.customer
-            ticket.site = site
-            ticket.company_name = site.customer.name
-            ticket.customer_code = site.customer.code
-            ticket.site_description = site.name
-            ticket.site_address = site.address
-            ticket.contact_name = ticket.contact_name or site.effective_contact_name
-            ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
-            ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
-        else:
-            ticket.assigned_at = now
+        site = form.cleaned_data['site']
+        ticket.customer = site.customer
+        ticket.site = site
+        ticket.company_name = site.customer.name
+        ticket.customer_code = site.customer.code
+        ticket.site_description = site.name
+        ticket.site_address = site.address
+        ticket.contact_name = ticket.contact_name or site.effective_contact_name
+        ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
+        ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
         with transaction.atomic():
             save_new_ticket(ticket)
             for uploaded_file in form.cleaned_data['attachments']:
                 CustomerTicketAttachment.objects.create(ticket=ticket, file=uploaded_file, uploaded_at=now)
-            if is_customer:
-                TicketNotification.objects.create(
-                    ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=now,
-                )
-        if is_customer:
-            send_ticket_confirmation_to_customer(request, ticket)
-            send_new_ticket_email_to_staff(request, ticket)
-        elif ticket.assigned_to != technician:
-            _push_internal_ticket(ticket.assigned_to, ticket, _('New internal task assigned to you'))
-        if is_customer:
-            messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
-        else:
-            messages.success(request, _('Internal task %(number)s created.') % {'number': ticket.ticket_number})
-        if not is_customer:
-            return redirect('tasks:internal_ticket', pk=ticket.pk)
+            TicketNotification.objects.create(
+                ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=now,
+            )
+        send_ticket_confirmation_to_customer(request, ticket)
+        send_new_ticket_email_to_staff(request, ticket)
+        messages.success(request, _('Ticket %(number)s opened.') % {'number': ticket.ticket_number})
         if _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
             return redirect('tasks:ticket_review', pk=ticket.pk)
         return redirect('home')
 
-    return render(request, 'tasks/staff_ticket_new.html', {
-        'form': form, 'kind': kind, 'kinds': kinds,
-    })
+    return render(request, 'tasks/staff_ticket_new.html', {'form': form, 'kind': CustomerTicket.Kind.CUSTOMER})
+
+
+@login_required
+def internal_ticket_new(request):
+    """A new internal task — anyone above a technician (the app's own form
+    too: api NewInternalTicketView)."""
+    technician = require_technician(request)
+    if technician.role == Technician.Role.TECHNICIAN:
+        raise PermissionDenied
+    country = get_active_country(request)
+    form = InternalTicketForm(request.POST, request.FILES, country=country) if request.method == 'POST'         else InternalTicketForm(country=country)
+    if request.method == 'POST' and form.is_valid():
+        ticket = form.save(commit=False)
+        ticket.kind = CustomerTicket.Kind.INTERNAL
+        ticket.country = country
+        open_internal_ticket(technician, request.user, ticket, form.cleaned_data['attachments'])
+        messages.success(request, _('Internal task %(number)s created.') % {'number': ticket.ticket_number})
+        return redirect('tasks:internal_ticket', pk=ticket.pk)
+    return render(request, 'tasks/staff_ticket_new.html', {'form': form, 'kind': CustomerTicket.Kind.INTERNAL})
+
+
+def open_internal_ticket(technician, user, ticket, files=()):
+    """Saves a new internal ticket (an unsaved InternalTicketForm instance:
+    kind, country and the form's fields set) with its files, and tells the
+    person it's for. The website's form and the app's alike."""
+    now = timezone.now()
+    ticket.opened_by = user
+    ticket.submitted_at = now
+    ticket.assigned_at = now
+    with transaction.atomic():
+        save_new_ticket(ticket)
+        for upload in files:
+            CustomerTicketAttachment.objects.create(ticket=ticket, file=upload, uploaded_at=now)
+    if ticket.assigned_to != technician:
+        _push_internal_ticket(ticket.assigned_to, ticket, _('New internal task assigned to you'))
+    return ticket
+
+
+def _other_on_internal_ticket(technician, ticket):
+    """Whoever didn't act hears about it: the assignee, or the opener when
+    the assignee is the one acting. None when that's the person acting."""
+    opener = getattr(ticket.opened_by, 'technician', None)
+    other = opener if technician == ticket.assigned_to else ticket.assigned_to
+    return other if other and other != technician else None
+
+
+def add_internal_ticket_note(technician, user, ticket, message, files=()):
+    note = TicketInternalNote.objects.create(ticket=ticket, author=user, message=message, created_at=timezone.now())
+    for upload in files:
+        TicketInternalNoteFile.objects.create(note=note, file=upload)
+    other = _other_on_internal_ticket(technician, ticket)
+    if other:
+        _push_internal_ticket(other, ticket, _('New note on an internal task'))
+    return note
+
+
+def reassign_internal_ticket(technician, user, ticket, assignee):
+    ticket.assigned_to = assignee
+    ticket.assigned_at = timezone.now()
+    ticket.save(update_fields=['assigned_to', 'assigned_at'])
+    TicketInternalNote.objects.create(
+        ticket=ticket, author=user, created_at=timezone.now(),
+        message=_('Reassigned to %(name)s.') % {'name': assignee.full_name},
+    )
+    if assignee != technician:
+        _push_internal_ticket(assignee, ticket, _('New internal task assigned to you'))
+
+
+def close_internal_ticket(technician, user, ticket, result):
+    ticket.status = CustomerTicket.Status.CLOSED
+    ticket.close_reason = result
+    ticket.reviewed_by = user
+    ticket.reviewed_at = timezone.now()
+    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+    other = _other_on_internal_ticket(technician, ticket)
+    if other:
+        _push_internal_ticket(other, ticket, _('Internal task closed'))
+
+
+def internal_ticket_for_app(request, technician, ticket):
+    """An internal ticket as the app's screen shows it — the website page's
+    content: what it's about, who it's for, its files and notes, the result
+    or the field task it became, and who it can be handed to. Signed links."""
+    from tasks.customer_report import _item
+
+    def files_of(files):
+        return media_for_app(request, [_item(file) for file in files if file])
+
+    is_open = ticket.status == CustomerTicket.Status.NEW
+    people = ReassignInternalTicketForm(country=ticket.country).fields['assigned_to'].queryset if is_open else []
+    return {
+        'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'status': ticket.status,
+        'status_display': ticket.get_status_display(), 'is_open': is_open,
+        'subject': ticket.subject, 'description': ticket.description,
+        'assigned_to': {'id': ticket.assigned_to_id, 'name': ticket.assigned_to.full_name} if ticket.assigned_to_id else None,
+        'opened_by': _staff_name(ticket.opened_by), 'submitted_at': ticket.submitted_at,
+        'files': files_of([attachment.file for attachment in ticket.attachments.order_by('uploaded_at')]),
+        'notes': [{
+            'id': note.pk, 'name': _staff_name(note.author), 'mine': note.author_id == request.user.pk,
+            'message': note.message, 'created_at': note.created_at, 'files': files_of(note.all_files),
+        } for note in ticket.internal_notes.select_related('author__technician').prefetch_related('files').order_by('created_at')],
+        'close_reason': ticket.close_reason if not is_open else '',
+        'task': {'id': ticket.task_id, 'task_number': ticket.task.task_number} if ticket.task_id else None,
+        'can_convert': is_open and technician.is_any_manager,
+        'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'} for person in people],
+        'website_path': reverse('tasks:internal_ticket', args=[ticket.pk]),
+    }
 
 
 def _push_internal_ticket(technician, ticket, title):
@@ -7773,7 +7851,7 @@ def _visible_internal_tickets(technician, country):
     or ticket reviewer (manage_tickets), otherwise the ones assigned to
     them or that they opened.
     """
-    tickets = CustomerTicket.objects.filter(kind__in=INTERNAL_TICKET_KINDS, country=country)
+    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL, country=country)
     if technician.is_any_manager or _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
         return tickets
     return tickets.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
@@ -7781,8 +7859,7 @@ def _visible_internal_tickets(technician, country):
 
 @login_required
 def internal_tickets(request):
-    """Stock requests, vendor follow-ups and other internal tickets —
-    open ones first, newest first."""
+    """Internal tasks — open ones first, newest first."""
     technician = require_technician(request)
     if technician.role == Technician.Role.TECHNICIAN:
         raise PermissionDenied
@@ -7821,47 +7898,25 @@ def internal_ticket(request, pk):
 
     if request.method == 'POST' and is_open:
         action = request.POST.get('action')
-        opener = getattr(ticket.opened_by, 'technician', None)
-        # Whoever didn't write it hears about it: the assignee, or the
-        # opener when the assignee is the one acting.
-        other = opener if technician == ticket.assigned_to else ticket.assigned_to
         if action == 'add_note':
             note_form = InternalTicketNoteForm(request.POST, request.FILES)
             if note_form.is_valid():
-                note = TicketInternalNote.objects.create(
-                    ticket=ticket, author=request.user, message=note_form.cleaned_data['message'],
-                    created_at=timezone.now(),
+                add_internal_ticket_note(
+                    technician, request.user, ticket, note_form.cleaned_data['message'],
+                    note_form.cleaned_data['attachments'],
                 )
-                for upload in note_form.cleaned_data['attachments']:
-                    TicketInternalNoteFile.objects.create(note=note, file=upload)
-                if other and other != technician:
-                    _push_internal_ticket(other, ticket, _('New note on an internal task'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'reassign':
             reassign_form = ReassignInternalTicketForm(request.POST, country=country)
             if reassign_form.is_valid():
-                ticket.assigned_to = reassign_form.cleaned_data['assigned_to']
-                ticket.assigned_at = timezone.now()
-                ticket.save(update_fields=['assigned_to', 'assigned_at'])
-                TicketInternalNote.objects.create(
-                    ticket=ticket, author=request.user, created_at=timezone.now(),
-                    message=_('Reassigned to %(name)s.') % {'name': ticket.assigned_to.full_name},
-                )
-                if ticket.assigned_to != technician:
-                    _push_internal_ticket(ticket.assigned_to, ticket, _('New internal task assigned to you'))
+                reassign_internal_ticket(technician, request.user, ticket, reassign_form.cleaned_data['assigned_to'])
                 messages.success(request, _('Reassigned successfully.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'close':
             close_form = CloseTicketForm(request.POST)
             if close_form.is_valid():
-                ticket.status = CustomerTicket.Status.CLOSED
-                ticket.close_reason = close_form.cleaned_data['close_reason']
-                ticket.reviewed_by = request.user
-                ticket.reviewed_at = timezone.now()
-                ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
-                if other and other != technician:
-                    _push_internal_ticket(other, ticket, _('Internal task closed'))
-                messages.success(request, _('Ticket closed.'))
+                close_internal_ticket(technician, request.user, ticket, close_form.cleaned_data['close_reason'])
+                messages.success(request, _('Internal task closed'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
 
     return render(request, 'tasks/internal_ticket.html', {

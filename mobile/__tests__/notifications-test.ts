@@ -19,7 +19,7 @@ describe('tapping a notification', () => {
     expect(routeForNotification({ type: 'ticket', ticket_id: 3 }, 'support_manager')).toBe('/ticket/3');
     expect(routeForNotification({ type: 'ticket' }, 'support_manager')).toBe('/tickets');
     expect(routeForNotification({ type: 'internal_ticket', ticket_id: 4 }, 'manager'))
-      .toBe('/website?path=%2Ftasks%2Ftickets%2Finternal%2F4%2F&title=Internal%20task');
+      .toBe('/internal-task/4');
   });
 
   it('sends the field team to their list when a task is no longer theirs', () => {

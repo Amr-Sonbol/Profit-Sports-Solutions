@@ -77,17 +77,18 @@ the owner, November 2026.
 
 ## Internal tasks (office work)
 
-Kinds: **Part request** (anyone, technicians included — part codes and
-quantities from the parts list, or words; "for task UAE-0015"), **Stock
-request**, **Vendor follow-up**, **Other** (office roles).
+One kind, the same name on the website and in the app: **Internal task** —
+work one staff member hands another (office roles, not technicians). Buying
+stock and chasing vendors is purchasing's work, outside the app; parts a field
+task needs go through that task (a part shipment).
 
 - Status: **Open → Waiting** (vendor, delivery, answer) **→ Closed** with a
   result; or turned into a field task. An optional **due date**: overdue shows
   red.
 - **Owner:** the person it's for. They and whoever opened it act on it.
 - **Seeing:** the person it's for and the opener; the country Manager and
-  Warehouse Manager (part and stock requests) in their country; Project,
-  Operations, Technical Support Manager and Admin everywhere.
+  Warehouse Manager in their country; Project, Operations, Technical Support
+  Manager and Admin everywhere.
 - **Every action tells the people involved** (phone + bell until opened):
   created or reassigned → the person it's for; new note → the person it's
   for, the opener and anyone who wrote a note; waiting, overdue, closed → the

@@ -267,10 +267,11 @@ def nav_pages(technician, allowed):
         add('tasks:ticket_list', _('Tickets'), 'ticket', 'tasks')
     if RolePermission.Permission.OPEN_TICKETS in allowed:
         add('tasks:ticket_open', _('New ticket'), 'ticket-plus', 'tasks')
-    # Anyone in the office can be handed — and create — a stock request or
-    # vendor follow-up: an internal task (CustomerTicket of an internal kind).
+    # Anyone in the office can be handed — and create — an internal task
+    # (a CustomerTicket of kind internal).
     if technician.role != technician.Role.TECHNICIAN:
         add('tasks:internal_tickets', _('Internal tasks'), 'inbox', 'tasks')
+        add('tasks:internal_ticket_new', _('New internal task'), 'ticket-plus', 'tasks')
     if technician.reaches_all_countries:
         add('tasks:all_week', _('All countries — schedule'), 'calendar-range', 'tasks')
         add('tasks:all_technicians', _('All technicians'), 'id-card', 'team')

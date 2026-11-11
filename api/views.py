@@ -42,6 +42,7 @@ from tasks.forms import (
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
     CancelTaskForm, CloseTaskForm, DeactivateTechnicianForm, TechnicianCreateForm,
     CorrectEventTimeForm, NegligenceFlagForm, RebookVisitForm, TaskMessageForm,
+    CloseTicketForm, InternalTicketFileForm, InternalTicketForm, ReassignInternalTicketForm,
     RemoveAssignmentForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm, TaskAttachmentUploadForm, TechnicianFirstLoginForm,
 )
 from tasks.location import record_tap
@@ -73,6 +74,8 @@ from tasks.views import (
     undoable_tap, SEARCH_RESULT_LIMIT,
     add_ticket_note, decide_request_next, send_staff_reply, ticket_access, ticket_for_app, team_today,
     waiting_for, can_give_final_approval, require_final_approver, technician_overview,
+    add_internal_ticket_note, close_internal_ticket, internal_ticket_for_app, open_internal_ticket,
+    reassign_internal_ticket,
 )
 
 from spots.media import signed_media_url
@@ -603,18 +606,35 @@ class HoursView(APIView):
         })
 
 
+def _internal_staff(request):
+    """Anyone above a technician — the website's internal tickets rule."""
+    technician = request.user.technician
+    if technician.role == Technician.Role.TECHNICIAN:
+        raise PermissionDenied
+    return technician
+
+
+def _internal_ticket_for(request, pk):
+    """An internal ticket this person may see (tasks.views._visible_internal_tickets), or 404."""
+    technician = _internal_staff(request)
+    return technician, get_object_or_404(
+        _visible_internal_tickets(technician, get_active_country(request) or technician.country).select_related(
+            'assigned_to', 'opened_by__technician', 'task', 'country',
+        ),
+        pk=pk,
+    )
+
+
 class InternalTicketsView(APIView):
-    """The app's Internal tickets — the website's list (anyone above a
-    technician): stock requests, vendor follow-ups and other internal
-    tickets, open ones by default (?status=open|closed|all), newest first.
-    Each opens its website page in the app to reply, hand on or close."""
+    """The app's Tasks → Internal — the website's list of internal tasks
+    (anyone above a technician), open ones by default
+    (?status=open|closed|all), newest first, with ?q= searching number,
+    subject and details."""
 
     permission_classes = [IsTechnician]
 
     def get(self, request):
-        technician = request.user.technician
-        if technician.role == Technician.Role.TECHNICIAN:
-            raise PermissionDenied
+        technician = _internal_staff(request)
         tickets = _visible_internal_tickets(technician, get_active_country(request) or technician.country).select_related(
             'assigned_to',
         ).order_by('-submitted_at')
@@ -623,15 +643,119 @@ class InternalTicketsView(APIView):
             tickets = tickets.filter(status=CustomerTicket.Status.NEW)
         elif status_filter == 'closed':
             tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
+        text = request.query_params.get('q', '').strip()
+        if text:
+            tickets = tickets.filter(
+                Q(ticket_number__icontains=text) | Q(subject__icontains=text) | Q(description__icontains=text),
+            )
         return Response([
             {
-                'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'kind': ticket.get_kind_display(),
+                'id': ticket.pk, 'ticket_number': ticket.ticket_number,
                 'subject': ticket.subject, 'description': ticket.description,
                 'status_display': ticket.get_status_display(), 'submitted_at': ticket.submitted_at,
                 'assigned_to': ticket.assigned_to.full_name if ticket.assigned_to_id else '',
             }
             for ticket in tickets[:200]
         ])
+
+
+class NewInternalTicketView(APIView):
+    """A new internal task from the app: GET who it can be for, POST it
+    (subject, description, assigned_to) — the website's form and rules
+    (tasks.views.ticket_open, open_internal_ticket). Its files follow one at
+    a time (InternalTicketFileView)."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        technician = _internal_staff(request)
+        country = get_active_country(request) or technician.country
+        people = ReassignInternalTicketForm(country=country).fields['assigned_to'].queryset
+        return Response({
+            'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'}
+                       for person in people],
+            'me': technician.pk,
+        })
+
+    def post(self, request):
+        technician = _internal_staff(request)
+        country = get_active_country(request) or technician.country
+        form = InternalTicketForm(request.data, country=country)
+        if not form.is_valid():
+            return Response(_form_errors(form), status=400)
+        ticket = form.save(commit=False)
+        ticket.kind = CustomerTicket.Kind.INTERNAL
+        ticket.country = country
+        open_internal_ticket(technician, request.user, ticket)
+        return Response(internal_ticket_for_app(request, technician, ticket), status=201)
+
+
+class InternalTicketView(APIView):
+    """One internal task, as on the website's page: GET it; POST an action
+    while it's open — {action: 'note', message} (files follow, one at a time,
+    to InternalTicketFileView with the note's id), {action: 'reassign',
+    assigned_to}, {action: 'close', result}. Anyone who can see it can act
+    on it, as on the website. Answers with the task as it is now."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request, pk):
+        technician, ticket = _internal_ticket_for(request, pk)
+        return Response(internal_ticket_for_app(request, technician, ticket))
+
+    def post(self, request, pk):
+        technician, ticket = _internal_ticket_for(request, pk)
+        if ticket.status != CustomerTicket.Status.NEW:
+            return Response({'detail': str(_('This internal task is closed.'))}, status=400)
+        action = request.data.get('action')
+        note = None
+        if action == 'note':
+            message = str(request.data.get('message', '')).strip()
+            if not message:
+                return Response({'detail': str(_('Please write a message.'))}, status=400)
+            note = add_internal_ticket_note(technician, request.user, ticket, message)
+        elif action == 'reassign':
+            form = ReassignInternalTicketForm(request.data, country=ticket.country)
+            if not form.is_valid():
+                return Response({'detail': str(_('Please choose who it is for.'))}, status=400)
+            reassign_internal_ticket(technician, request.user, ticket, form.cleaned_data['assigned_to'])
+        elif action == 'close':
+            form = CloseTicketForm({'close_reason': request.data.get('result', '')})
+            if not form.is_valid():
+                return Response({'detail': str(_('Please write the result.'))}, status=400)
+            close_internal_ticket(technician, request.user, ticket, form.cleaned_data['close_reason'])
+        else:
+            return Response({'detail': 'Unknown action.'}, status=400)
+        data = internal_ticket_for_app(request, technician, ticket)
+        data['note_id'] = note.pk if note else None
+        return Response(data)
+
+
+class InternalTicketFileView(APIView):
+    """One file for an internal task (multipart `file`): with `note`, on that
+    note of mine; without, on the task itself — only its opener, as the files
+    sent when it was opened. While the task is open."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        from tasks.models import CustomerTicketAttachment, TicketInternalNoteFile
+
+        technician, ticket = _internal_ticket_for(request, pk)
+        if ticket.status != CustomerTicket.Status.NEW:
+            return Response({'detail': str(_('This internal task is closed.'))}, status=400)
+        form = InternalTicketFileForm(request.data, request.FILES)
+        if not form.is_valid():
+            return Response({'detail': ' '.join(str(error) for error in form.errors.get('file', []))}, status=400)
+        upload = form.cleaned_data['file']
+        if request.data.get('note'):
+            note = get_object_or_404(ticket.internal_notes, pk=request.data['note'], author=request.user)
+            TicketInternalNoteFile.objects.create(note=note, file=upload)
+        elif ticket.opened_by_id == request.user.pk:
+            CustomerTicketAttachment.objects.create(ticket=ticket, file=upload, uploaded_at=timezone.now())
+        else:
+            raise PermissionDenied
+        return Response(internal_ticket_for_app(request, technician, ticket), status=201)
 
 
 class TeamMapView(APIView):
@@ -2214,7 +2338,7 @@ class BellView(APIView):
                 text, alarm = _('Escalated to you — decision required'), True
             elif kind == 'internal_ticket':
                 text, about = _('Internal task assigned to you'), f'{ticket.subject} ({ticket.ticket_number})'
-                opens = {'screen': 'website', 'path': reverse('tasks:internal_ticket', args=[ticket.pk])}
+                opens = {'screen': 'internal-task', 'id': ticket.pk}
             elif kind == 'customer_locked':
                 text, alarm, about = _('Customer account locked'), True, item['customer'].name
                 opens = {'screen': 'website', 'path': reverse('customers:customer_accounts') + '?status=locked'}

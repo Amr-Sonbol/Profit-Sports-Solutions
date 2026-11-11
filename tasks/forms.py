@@ -1683,9 +1683,9 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
 
 class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
-    """A stock request, vendor follow-up or other internal matter — no
-    customer, nothing ever sent to one. Goes to whoever it's assigned to,
-    who follows it up with internal notes until it's closed.
+    """An internal task: work one staff member hands another — no customer,
+    nothing ever sent to one. Goes to whoever it's for, who follows it up
+    with notes until it's closed. The website's form and the app's.
     """
 
     assigned_to = forms.ModelChoiceField(
@@ -1696,19 +1696,15 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     class Meta:
         model = CustomerTicket
-        fields = ['subject', 'vendor_name', 'description', 'assigned_to']
+        fields = ['subject', 'description', 'assigned_to']
         labels = {'description': _('Details')}
         help_texts = {'description': ''}
         widgets = {'description': forms.Textarea(attrs={'rows': 5})}
 
-    def __init__(self, *args, kind, country, **kwargs):
+    def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['subject'].required = True
         self.fields['subject'].help_text = ''
-        if kind == CustomerTicket.Kind.VENDOR:
-            self.fields['vendor_name'].required = True
-        else:
-            del self.fields['vendor_name']
         self.fields['assigned_to'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
@@ -1722,6 +1718,18 @@ class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
         label=_('Add a note'), widget=forms.Textarea(attrs={'rows': 3, 'placeholder': _('Write a note…')}),
     )
     attachments = message_files_field(_('Files'))
+
+
+class InternalTicketFileForm(forms.Form):
+    """One file the app adds to an internal ticket or to a note on it — the
+    same kinds and size as the website's boxes (the app sends one at a time)."""
+    file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
+
+    def clean_file(self):
+        upload = self.cleaned_data['file']
+        if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
+            raise forms.ValidationError(_('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name})
+        return upload
 
 
 class ReassignInternalTicketForm(forms.Form):

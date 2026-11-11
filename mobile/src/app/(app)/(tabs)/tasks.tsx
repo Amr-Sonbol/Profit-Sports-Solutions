@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchMyTasks, fetchMyToday, fetchWaiting, type WaitingItem } from '@/api/endpoints';
 import { AllTasks } from '@/components/all-tasks';
 import { BellButton } from '@/components/bell-button';
+import { InternalTasks } from '@/components/internal-tasks';
 import { TaskCard } from '@/components/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -22,7 +23,9 @@ import type { PlanItem, TaskListItem } from '@/types';
  * or no technician yet), then every open task of mine, newest received first.
  * The supervisor's home tab. Whoever sees the country's tasks (a supervisor:
  * he's responsible for them) can switch to All in the country — the website
- * task list's search and filters (components/all-tasks).
+ * task list's search and filters (components/all-tasks). Anyone above a
+ * technician also has Internal: stock requests, vendor follow-ups and other
+ * work inside the company (components/internal-tasks).
  */
 export default function TasksScreen() {
   const router = useRouter();
@@ -30,14 +33,19 @@ export default function TasksScreen() {
   const { me } = useSession();
   const canSeeAll = me?.permissions?.includes('view_tasks') ?? false;
   const canCreate = me?.permissions?.includes('create_tasks') ?? false;
-  // ?scope=all (the dashboard's "All open tasks"): open on All in the country, even when already open.
+  const hasInternal = !!me?.role && me.role !== 'technician';
+  const scopes: Scope[] = [
+    'mine', ...(canSeeAll ? ['all' as const] : []), ...(hasInternal ? ['internal' as const] : []),
+  ];
+  // ?scope=all (the dashboard's "All open tasks") or ?scope=internal: open there, even when already open.
   const params = useLocalSearchParams<{ scope?: string }>();
-  const [scope, setScope] = useState<'mine' | 'all'>(params.scope === 'all' ? 'all' : 'mine');
+  const asked = (value?: string): Scope => (value === 'all' || value === 'internal' ? value : 'mine');
+  const [scope, setScope] = useState<Scope>(asked(params.scope));
   const [seenScope, setSeenScope] = useState(params.scope);
   if (params.scope !== seenScope) {
     setSeenScope(params.scope);
-    if (params.scope === 'all') {
-      setScope('all');
+    if (params.scope === 'all' || params.scope === 'internal') {
+      setScope(params.scope);
     }
   }
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
@@ -91,22 +99,22 @@ export default function TasksScreen() {
           </ThemedText>
         ) : null}
         {error ? <ThemedText themeColor="danger" style={styles.notice}>{error}</ThemedText> : null}
-        {canSeeAll ? (
+        {scopes.length > 1 ? (
           <ThemedView style={styles.scopes}>
-            {(['mine', 'all'] as const).map((option) => (
+            {scopes.map((option) => (
               <TouchableOpacity
                 key={option} onPress={() => setScope(option)}
                 style={[styles.scope, { borderColor: theme.backgroundSelected },
                   scope === option && { backgroundColor: theme.primary, borderColor: theme.primary }]}
               >
                 <ThemedText type="small" style={scope === option ? { color: theme.onPrimary } : undefined}>
-                  {option === 'mine' ? 'Mine' : 'All in the country'}
+                  {SCOPE_LABELS[option]}
                 </ThemedText>
               </TouchableOpacity>
             ))}
           </ThemedView>
         ) : null}
-        {scope === 'all' ? <AllTasks /> : (
+        {scope === 'all' && canSeeAll ? <AllTasks /> : scope === 'internal' && hasInternal ? <InternalTasks /> : (
           <FlatList
             data={tasks ?? []}
             keyExtractor={(item) => String(item.id)}
@@ -134,6 +142,9 @@ export default function TasksScreen() {
     </ThemedView>
   );
 }
+
+type Scope = 'mine' | 'all' | 'internal';
+const SCOPE_LABELS: Record<Scope, string> = { mine: 'Mine', all: 'All in the country', internal: 'Internal' };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

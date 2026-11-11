@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-11 02:03+0000\n"
+"POT-Creation-Date: 2026-11-11 08:58+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2851,6 +2851,9 @@ msgstr "الملاحظات الداخلية"
 msgid "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the task is closed."
 msgstr "داخلي فقط؛ لا يُرسل أي شيء إلى العميل. يتم إشعار المكلَّف، ويتابع الطرفان بالملاحظات حتى إغلاق المهمة."
 
+msgid "Internal task"
+msgstr "مهمة داخلية"
+
 #, python-format
 msgid "Internal task %(number)s created."
 msgstr "تم إنشاء المهمة الداخلية %(number)s."
@@ -3960,9 +3963,6 @@ msgstr "ملاحظة أخرى"
 msgid "Other finding, if none fits"
 msgstr "ملاحظة أخرى، إن لم يناسب أي منها"
 
-msgid "Other internal"
-msgstr "داخلية أخرى"
-
 msgid "Other recommendation"
 msgstr "توصية أخرى"
 
@@ -4234,6 +4234,9 @@ msgstr "يرجى اختيار الفني الذي سيشحنه."
 msgid "Please choose what happens next."
 msgstr "يرجى اختيار الخطوة التالية."
 
+msgid "Please choose who it is for."
+msgstr "يرجى اختيار الشخص المسؤول عنها."
+
 msgid "Please choose why."
 msgstr "يرجى اختيار السبب."
 
@@ -4322,6 +4325,9 @@ msgstr "يرجى زيارة الصفحة التالية لاختيار كلمة 
 
 msgid "Please write a message."
 msgstr "يرجى كتابة رسالة."
+
+msgid "Please write the result."
+msgstr "يرجى كتابة النتيجة."
 
 msgid "Please write your answer to the customer."
 msgstr "يرجى كتابة ردك على العميل."
@@ -5416,9 +5422,6 @@ msgstr "الحالة"
 msgid "Stock"
 msgstr "المخزون"
 
-msgid "Stock request"
-msgstr "طلب مخزون"
-
 msgid "Stop the work on site? The office is told it could not go ahead, with your reason."
 msgstr "إيقاف العمل في الموقع؟ يُبلَّغ المكتب بأنه تعذّر إكماله مع ذكر السبب."
 
@@ -6020,6 +6023,9 @@ msgstr "تقرير هذا العميل باللغة الإنجليزية. است
 msgid "This file could not be read. Save it again as .xlsx or .csv and retry."
 msgstr "تعذّرت قراءة هذا الملف. احفظه مجددًا بصيغة ‎.xlsx أو ‎.csv ثم أعد المحاولة."
 
+msgid "This internal task is closed."
+msgstr "هذه المهمة الداخلية مغلقة."
+
 msgid "This is already your sign-in email."
 msgstr "هذا هو بريد تسجيل الدخول الحالي لديك."
 
@@ -6199,9 +6205,6 @@ msgstr "تم إرسال الطلب %(number)s."
 msgid "Ticket assigned."
 msgstr "تم إسناد التذكرة."
 
-msgid "Ticket closed."
-msgstr "تم إغلاق الطلب."
-
 msgid "Ticket details updated."
 msgstr "تم تحديث تفاصيل الطلب."
 
@@ -6320,9 +6323,6 @@ msgstr "النوع"
 msgid "Type a name"
 msgstr "اكتب اسمًا"
 
-msgid "Type of ticket"
-msgstr "نوع التذكرة"
-
 msgid "Type the serial number from the machine's plate, or tick “No readable serial plate”."
 msgstr "اكتب الرقم التسلسلي من لوحة الجهاز، أو حدّد «لا توجد لوحة رقم تسلسلي مقروءة»."
 
@@ -6407,12 +6407,6 @@ msgstr "صالح لمدة %(days)s أيام ويعمل مرة واحدة، وي�
 
 msgid "Vehicle"
 msgstr "مركبة"
-
-msgid "Vendor"
-msgstr "المورّد"
-
-msgid "Vendor follow-up"
-msgstr "متابعة مع مورّد"
 
 msgid "Video"
 msgstr "فيديو"
@@ -7059,8 +7053,8 @@ msgstr "يتيح للعميل الاطلاع على حالة هذه التذكر
 msgid "an amount must never be stored without its currency"
 msgstr "لا يجوز تخزين أي مبلغ دون عملته"
 
-msgid "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) or the items (Accessories)"
-msgstr "موضوع التذكرة الداخلية؛ وفي طلب العميل: موضوعه («أخرى») أو المنطقة («الأرضيات») أو القطع («الإكسسوارات»)"
+msgid "an internal task's subject; on a customer's request, what it's about (Other), the area (Flooring) or the items (Accessories)"
+msgstr "موضوع المهمة الداخلية؛ وفي طلب العميل: موضوعه («أخرى») أو المنطقة («الأرضيات») أو القطع («الإكسسوارات»)"
 
 msgid "any time, as PDF."
 msgstr "في أي وقت، بصيغة PDF."
@@ -8295,9 +8289,6 @@ msgstr "يُستخدم بدلاً من الوقت أدناه عند الجدول
 msgid "user"
 msgstr "المستخدم"
 
-msgid "vendor"
-msgstr "المورّد"
-
 msgid "visit"
 msgstr "الزيارة"
 
@@ -8585,8 +8576,14 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Orange"
 #~ msgstr "برتقالي"
 
+#~ msgid "Other internal"
+#~ msgstr "داخلية أخرى"
+
 #~ msgid "Pink"
 #~ msgstr "وردي"
+
+#~ msgid "Please choose what kind of task it is."
+#~ msgstr "يرجى اختيار نوع المهمة."
 
 #~ msgid "Preview"
 #~ msgstr "معاينة"
@@ -8614,6 +8611,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Signed version"
 #~ msgstr "النسخة الموقّعة"
+
+#~ msgid "Stock request"
+#~ msgstr "طلب مخزون"
 
 #~ msgid "Submit"
 #~ msgstr "إرسال"
@@ -8649,6 +8649,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "This ticket has been resolved. Please contact us if you require further assistance."
 #~ msgstr "تم حل هذه التذكرة. يرجى التواصل معنا إذا احتجتم إلى مزيد من المساعدة."
 
+#~ msgid "Ticket closed."
+#~ msgstr "تم إغلاق الطلب."
+
 #~ msgid "Ticket status"
 #~ msgstr "حالة الطلب"
 
@@ -8664,8 +8667,17 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Two columns: code and description. A header row is permitted."
 #~ msgstr "عمودان: الرمز والوصف. يُسمح بصف للعناوين."
 
+#~ msgid "Type of ticket"
+#~ msgstr "نوع التذكرة"
+
 #~ msgid "Untick on a shared computer: you're signed out when the browser closes."
 #~ msgstr "ألغِ التحديد على جهاز مشترك: يتم تسجيل خروجك عند إغلاق المتصفح."
+
+#~ msgid "Vendor"
+#~ msgstr "المورّد"
+
+#~ msgid "Vendor follow-up"
+#~ msgstr "متابعة مع مورّد"
 
 #~ msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
 #~ msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
@@ -8728,3 +8740,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 #, python-format
 #~ msgid "up to %(size)d MB"
 #~ msgstr "حتى %(size)d ميجابايت"
+
+#~ msgid "vendor"
+#~ msgstr "المورّد"

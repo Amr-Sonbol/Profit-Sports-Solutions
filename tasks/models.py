@@ -309,9 +309,7 @@ class CustomerTicket(models.Model):
 
     class Kind(models.TextChoices):
         CUSTOMER = 'customer', _('Customer')
-        STOCK = 'stock', _('Stock request')
-        VENDOR = 'vendor', _('Vendor follow-up')
-        OTHER = 'other', _('Other internal')
+        INTERNAL = 'internal', _('Internal task')
 
     # A customer's request, asked as two questions on the portal: what it's
     # about, and what they need. Machines with a problem or spare parts are
@@ -343,9 +341,8 @@ class CustomerTicket(models.Model):
         EMAIL = 'email', _('Email')
 
     # Customer tickets come from the portal or from staff on the customer's
-    # behalf; internal ones (stock, vendor, other) are staff-only — no
-    # customer, nothing ever sent to one — and go to whoever they're
-    # assigned to (docs: customer_ticket).
+    # behalf; internal tasks are staff-only — no customer, nothing ever sent
+    # to one — and go to whoever they're assigned to (docs: customer_ticket).
     kind = models.CharField(_('type'), max_length=10, choices=Kind.choices, default=Kind.CUSTOMER)
     about = models.CharField(_('about'), max_length=20, choices=About.choices, default=About.MACHINES)
     need = models.CharField(_('need'), max_length=20, choices=Need.choices, default=Need.REPAIR)
@@ -358,11 +355,10 @@ class CustomerTicket(models.Model):
     subject = models.CharField(
         _('subject'), max_length=200, blank=True,
         help_text=_(
-            "an internal ticket's subject; on a customer's request, what it's about (Other), the area (Flooring) "
+            "an internal task's subject; on a customer's request, what it's about (Other), the area (Flooring) "
             "or the items (Accessories)"
         ),
     )
-    vendor_name = models.CharField(_('vendor'), max_length=150, blank=True)
 
     ticket_number = models.CharField(
         _('ticket number'), max_length=30, unique=True,

@@ -692,12 +692,35 @@ export interface HoursPage {
 export interface InternalTicket {
   id: number;
   ticket_number: string;
-  kind: string;
   subject: string;
   description: string;
   status_display: string;
   submitted_at: string;
   assigned_to: string;
+}
+
+/** One internal task, as its screen shows it (tasks.views.internal_ticket_for_app). */
+export interface InternalTicketDetail {
+  id: number;
+  ticket_number: string;
+  status: string;
+  status_display: string;
+  is_open: boolean;
+  subject: string;
+  description: string;
+  assigned_to: { id: number; name: string } | null;
+  opened_by: string;
+  submitted_at: string;
+  files: RequestFile[];
+  notes: { id: number; name: string; mine: boolean; message: string; created_at: string; files: RequestFile[] }[];
+  close_reason: string;
+  task: { id: number; task_number: string } | null;
+  can_convert: boolean;
+  /** Who it can be handed to (open ones only). */
+  people: { value: number; label: string }[];
+  website_path: string;
+  /** After adding a note: its id, for the files that go with it. */
+  note_id?: number | null;
 }
 
 /** The team map (api/views.py TeamMapView). */

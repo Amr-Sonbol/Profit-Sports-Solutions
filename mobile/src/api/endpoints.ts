@@ -10,6 +10,7 @@ import type {
   Dashboard,
   TeamMap,
   InternalTicket,
+  InternalTicketDetail,
   HoursPage,
   CustomerPage, CustomerRow, MachinePage, MachineRow,
   FormFieldSpec,
@@ -434,9 +435,34 @@ export function fetchHours(month = '') {
   return apiRequest<HoursPage>(`/api/hours/${month ? `?month=${month}` : ''}`);
 }
 
-/** Internal tickets: 'open' (default), 'closed' or 'all'. */
-export function fetchInternalTickets(status = 'open') {
-  return apiRequest<InternalTicket[]>(`/api/internal-tickets/?status=${status}`);
+/** Internal tasks: 'open' (default), 'closed' or 'all'; `q` searches number, subject and details. */
+export function fetchInternalTickets(status = 'open', q = '') {
+  return apiRequest<InternalTicket[]>(`/api/internal-tickets/?status=${status}${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+}
+
+export function fetchInternalTicket(id: number) {
+  return apiRequest<InternalTicketDetail>(`/api/internal-tickets/${id}/`);
+}
+
+/** Who a new internal task can be for (`me`: my own id). */
+export function fetchNewInternalTicketForm() {
+  return apiRequest<{ people: { value: number; label: string }[]; me: number }>('/api/internal-tickets/new/');
+}
+
+export function createInternalTicket(input: { subject: string; description: string; assigned_to: number | '' }) {
+  return apiRequest<InternalTicketDetail>('/api/internal-tickets/new/', { method: 'POST', body: input });
+}
+
+/** A note ({action: 'note', message}), handing it on ({action: 'reassign', assigned_to}) or closing it ({action: 'close', result}). */
+export function actOnInternalTicket(id: number, input: Record<string, string | number>) {
+  return apiRequest<InternalTicketDetail>(`/api/internal-tickets/${id}/`, { method: 'POST', body: input });
+}
+
+/** One file: on my note `noteId`, or (no note) on a task I opened. */
+export function uploadInternalTicketFile(id: number, fileUri: string, mimeType: string, noteId?: number | null) {
+  return uploadFileTo<InternalTicketDetail>(
+    `/api/internal-tickets/${id}/files/`, fileUri, mimeType, 'file', noteId ? { note: String(noteId) } : {},
+  );
 }
 
 /** Where each technician last tapped today, and what needs a follow-up. */

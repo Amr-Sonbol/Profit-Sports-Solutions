@@ -6,16 +6,12 @@
 {% block content %}
 <div class="page__header">
     <div>
-        <a href="{% url 'home' %}" class="back-link">{% translate "Back" %}</a>
+        {% if kind == 'customer' %}<a href="{% url 'home' %}" class="back-link">{% translate "Back" %}</a>
+        {% else %}<a href="{% url 'tasks:internal_tickets' %}" class="back-link">{% translate "Internal tasks" %}</a>{% endif %}
         <h1>{% if kind == 'customer' %}{% translate "New ticket" %}{% else %}{% translate "New internal task" %}{% endif %}</h1>
     </div>
 </div>
 
-<nav class="tabs" aria-label="{% translate 'Type of ticket' %}">
-    {% for value, label in kinds %}
-    <a href="?kind={{ value }}" class="{% if kind == value %}is-active{% endif %}">{{ label }}</a>
-    {% endfor %}
-</nav>
 
 <div class="section">
     {% if kind == 'customer' %}
@@ -23,7 +19,7 @@
     {% else %}
     <p class="field__help">{% translate "Internal only; nothing is sent to the customer. The assignee is notified, and both parties follow up with notes until the task is closed." %}</p>
     {% endif %}
-    <form method="post" action="?kind={{ kind }}" enctype="multipart/form-data" novalidate>
+    <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
             <p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>
