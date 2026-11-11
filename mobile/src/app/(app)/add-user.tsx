@@ -102,7 +102,11 @@ export default function AddUserScreen() {
             {picker('country')}
             {text('email', { keyboardType: 'email-address', hint: 'Their login: they get a link to choose their own password.' })}
             {text('phone', { keyboardType: 'phone-pad' })}
-            {picker('language')}
+            {/* Left empty, it follows the country: Arabic in Egypt and Saudi Arabia. */}
+            <ChoicePicker
+              label={fields.language.label} choices={fields.language.choices ?? []} value={values.language ?? ''}
+              onChange={set('language')} error={errors.language} placeholder="As the country"
+            />
             {picker('employment_type')}
             {errors.form ? <ThemedText themeColor="danger">{errors.form}</ThemedText> : null}
             <TouchableOpacity style={[styles.saveButton, { backgroundColor: theme.primary }]} onPress={save} disabled={isBusy}>

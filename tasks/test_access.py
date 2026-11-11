@@ -204,3 +204,13 @@ class AccessRulesTests(TaskTestCase):
         self.assertEqual((me['app_language'], me['role_display']), ('ar', 'مشرف'))
         uae = Technician.objects.get(user__username='supervisor1')
         self.assertEqual(uae.app_language, 'en')
+
+    def test_new_staff_speak_their_countrys_language_unless_chosen(self):
+        from tasks.forms import TechnicianCreateForm
+        self.egypt.report_language = 'ar'
+        self.egypt.save()
+        base = {'role': Technician.Role.TECHNICIAN, 'full_name': 'Nour', 'employment_type': 'staff', 'phone': '1'}
+        for country, chosen, expected in ((self.egypt, '', 'ar'), (self.country, '', 'en'), (self.egypt, 'en', 'en')):
+            form = TechnicianCreateForm({**base, 'country': country.pk, 'language': chosen})
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertEqual(form.save().language, expected)

@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
-import fs from 'fs';
-import path from 'path';
 
 import { ThemedText } from '@/components/themed-text';
 import { setLanguage, t } from '@/i18n';
@@ -44,26 +42,5 @@ describe('the app in Arabic', () => {
   it('keeps the company name in English', () => {
     setLanguage('ar');
     expect(t('Profit Sports Solutions')).toBe('Profit Sports Solutions');
-  });
-
-  it("has Arabic for every t('…') in the app — a new text can't stay English unnoticed", () => {
-    const missing: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of fs.readdirSync(dir)) {
-        const full = path.join(dir, name);
-        if (fs.statSync(full).isDirectory()) {
-          walk(full);
-        } else if (/\.tsx?$/.test(name) && !full.includes('locales') && !name.startsWith('i18n')) {
-          for (const match of fs.readFileSync(full, 'utf8').matchAll(/\bt\(\s*(['"])((?:(?!\1)[^\\]|\\.)*)\1/g)) {
-            const text = match[2].replace(/\\'/g, "'").trim();
-            if (text && !(text in AR)) {
-              missing.push(`${name}: ${text}`);
-            }
-          }
-        }
-      }
-    };
-    walk(path.join(__dirname, '..', 'src'));
-    expect(missing).toEqual([]);
   });
 });

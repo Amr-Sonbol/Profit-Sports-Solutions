@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-10 16:17+0000\n"
+"POT-Creation-Date: 2026-11-11 02:03+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -953,6 +953,9 @@ msgstr "كما هو موضح على الجهاز."
 
 msgid "As soon as they send a ticket from the portal."
 msgstr "فور إرسال العميل بلاغًا من البوابة."
+
+msgid "As the country"
+msgstr "حسب البلد"
 
 msgid "As you asked, we have closed this request. If you need us again, please send a new request at any time."
 msgstr "بناءً على طلبك، أغلقنا هذا الطلب. إذا احتجت إلينا مجدداً، يمكنك إرسال طلب جديد في أي وقت."

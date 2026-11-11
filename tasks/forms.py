@@ -845,9 +845,21 @@ class TechnicianCreateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['country'].queryset = Country.objects.filter(is_active=True).order_by('name')
+        # A new person's language follows their country unless chosen: Arabic in Egypt and
+        # Saudi Arabia, English elsewhere (country.report_language — the app's too).
+        self.fields['language'].required = False
+        self.fields['language'].choices = [('', _('As the country'))] + list(Technician.Language.choices)
+        self.fields['language'].initial = ''
         # The email goes right after the name and country.
         order = ['role', 'full_name', 'country', 'email']
         self.order_fields(order + [name for name in self.fields if name not in order])
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get('language') and cleaned.get('country'):
+            cleaned['language'] = cleaned['country'].report_language
+            self.instance.language = cleaned['language']
+        return cleaned
 
     def clean_email(self):
         email = (self.cleaned_data.get('email') or '').strip()

@@ -69,6 +69,7 @@ export const AR: Record<string, string> = {
   "Are you sure?": "هل أنت متأكد؟",
   "Arm": "الذراع",
   "Arrived at the site?": "وصلت إلى الموقع؟",
+  "As the country": "حسب البلد",
   "Ask for feedback again": "طلب التقييم مرة أخرى",
   "Ask the customer for feedback": "اطلب تقييم العميل",
   "Ask the customer for feedback?": "طلب تقييم العميل؟",
