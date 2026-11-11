@@ -46,6 +46,10 @@ PORTAL_HOST = config('PORTAL_HOST', default='')
 # their reply) point here, not to the portal they were on (spots.hosts.staff_url).
 # Empty: the address the request came in on, as before.
 STAFF_HOST = config('STAFF_HOST', default='')
+# Tests run on one address whatever .env says; those about the separate
+# addresses set them themselves (override_settings).
+if 'test' in sys.argv:
+    PORTAL_HOST = STAFF_HOST = ''
 if PORTAL_HOST and PORTAL_HOST.split(':')[0] not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(PORTAL_HOST.split(':')[0])
 
