@@ -1148,7 +1148,7 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     return deliver()
 
 
-def send_visit_report_copy(report, email_address):
+def send_visit_report_copy(report, email_address, rating_link=None):
     """Email the customer the visit report PDF (reports.pdf), and record
     where and when on the report. The PDF is in the report's language
     (reports.pdf.report_language — Arabic in Saudi Arabia and Egypt); its
@@ -1170,9 +1170,12 @@ def send_visit_report_copy(report, email_address):
     sent = emails.send(
         country=customer.country, recipient=email_address,
         contact=task.site.contact_name or customer.contact_name or customer.name,
-        title=emails.REPORT_TITLE, paragraphs=[emails.REPORT_BODY, emails.REPORT_NEXT],
+        title=emails.REPORT_TITLE,
+        # The rating asked in the same email ("Rate our visit"), not a separate one.
+        paragraphs=[emails.REPORT_BODY, emails.REPORT_NEXT, emails.REPORT_RATE if rating_link else None],
         values={'site': task.site.name, 'date': lambda: emails.date_text(report.submitted_at, customer.country)},
-        task=task, attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
+        task=task, link=rating_link, button=emails.FEEDBACK_BUTTON if rating_link else None,
+        attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
     )
     if sent:
         report.copy_sent_to = email_address
@@ -1199,6 +1202,57 @@ def _send_schedule_notification(task):
         },
         task=task,
     )
+
+
+# From this hour (the country's own time) the day before a visit, its reminder goes out.
+REMINDER_FROM_HOUR = 9
+# Only for a visit the customer was told of at least this long before it.
+REMINDER_NOTICE = timedelta(days=7)
+
+
+def send_visit_reminders(now=None):
+    """The day before a visit, from 9 AM in its country: a reminder to the
+    branch contact — once, and only when they were told its time at least a
+    week before (told a new time, reminded again). Never our own warehouses.
+    Run every hour (manage.py send_visit_reminders: the scheduled job,
+    docs/go_live_plan.md). How many went."""
+    from tasks import customer_emails as emails
+
+    now = now or timezone.now()
+    sent = 0
+    tasks = Task.objects.filter(
+        status__in=[Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED],
+        scheduled_for__gt=now, scheduled_for__lte=now + timedelta(days=2),
+        schedule_notified_at__isnull=False, site__customer__is_internal=False,
+    ).select_related('site__customer__country')
+    for task in tasks:
+        country = task.site.customer.country
+        local_now = emails.local(now, country)
+        if local_now.hour < REMINDER_FROM_HOUR:
+            continue
+        if emails.local(task.scheduled_for, country).date() != local_now.date() + timedelta(days=1):
+            continue
+        if task.scheduled_for - task.schedule_notified_at < REMINDER_NOTICE:
+            continue
+        if task.reminder_sent_at and task.reminder_sent_at >= task.schedule_notified_at:
+            continue
+        if not task.site.effective_contact_email:
+            continue
+        task.reminder_sent_at = now
+        task.save(update_fields=['reminder_sent_at'])
+        emails.send(
+            country=country, recipient=task.site.effective_contact_email,
+            contact=task.site.effective_contact_name or task.site.customer.name,
+            title=emails.REMINDER_TITLE, paragraphs=[emails.REMINDER_BODY, emails.REMINDER_NEXT],
+            values={
+                'site': task.site.name,
+                'date': lambda: emails.date_text(task.scheduled_for, country),
+                'time': lambda: emails.time_text(task.scheduled_for, country),
+            },
+            task=task, background=False,
+        )
+        sent += 1
+    return sent
 
 
 def tell_customer_on_the_way(task, user):
@@ -2193,18 +2247,28 @@ def rebook_visit(task, user, scheduled_for, note):
         task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
 
 
+def ask_for_rating(task, user):
+    """The visit's rating, asked now: created, or asked again; None once they've rated it."""
+    feedback = getattr(task, 'feedback', None)
+    if feedback is not None and feedback.submitted_at:
+        return None
+    if feedback is None:
+        return CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), requested_by=user)
+    feedback.requested_at = timezone.now()
+    feedback.requested_by = user
+    feedback.save(update_fields=['requested_at', 'requested_by'])
+    return feedback
+
+
 def send_feedback_request(request, task):
+    """Asking again for the rating (the visit report's email already asked)."""
     if task.status != Task.Status.CLOSED:
         return _('Please close the task (submit its report) before requesting feedback.')
     if not task.site.effective_contact_email:
         return _('Please add a contact email address for this site before requesting feedback.')
-    feedback = getattr(task, 'feedback', None)
+    feedback = ask_for_rating(task, request.user)
     if feedback is None:
-        feedback = CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), requested_by=request.user)
-    else:
-        feedback.requested_at = timezone.now()
-        feedback.requested_by = request.user
-        feedback.save(update_fields=['requested_at', 'requested_by'])
+        return _('The customer has already rated this visit.')
     _send_feedback_email(request, feedback)
     return None
 
@@ -7374,7 +7438,12 @@ def save_work_report(request, task, technician, report_form, part_rows):
         # Only once the report is safely saved, so a rollback never sends a
         # copy of something that isn't there.
         # Drawing the PDF and sending it both happen in the background.
-        transaction.on_commit(lambda: _in_background(lambda: send_visit_report_copy(saved_report, copy_to)))
+        def send_copy():
+            # The rating asked in the same email: its link made here, where the request is.
+            feedback = ask_for_rating(task, request.user)
+            rating_link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token])) if feedback else None
+            _in_background(lambda: send_visit_report_copy(saved_report, copy_to, rating_link))
+        transaction.on_commit(send_copy)
     if saved_report.first_submission:
         register_installed_machines(task)
         notify_customer.report_ready(task)

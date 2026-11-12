@@ -459,6 +459,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | ships_direct | bool | a part shipment sent from the factory straight to the customer (*Sent direct from the factory*: the PAK number, courier and tracking — shipped; nothing picked, no stock of ours moves). The only way where the country has no warehouse |
+| reminder_sent_at | timestamptz | nullable — when the day-before reminder went (`manage.py send_visit_reminders`, hourly): once per time the customer was told (`schedule_notified_at`), and only when told at least a week before the visit |
 | on_the_way_notified_at | timestamptz | nullable — when the customer was told the technician is on the way (the lead's "On the way" tap): once a visit day, so a second tap or an undo doesn't send it again |
 | parts_prepared_at | timestamptz | nullable — the warehouse (or the manager tier) got the repair's parts ready for the visit, once all of them are in (`task_part_needed`; the *Parts to prepare* list, website and app) |
 | parts_prepared_by_id | FK → user | nullable — who did |

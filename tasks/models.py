@@ -233,6 +233,8 @@ class Task(models.Model):
     on_the_way_notified_at = models.DateTimeField(_('customer told: on the way'), null=True, blank=True)
     # A part shipment sent from the factory straight to the customer: no stock of ours moves.
     ships_direct = models.BooleanField(_('sent direct from the factory'), default=False)
+    # The day-before reminder (tasks.views.send_visit_reminders): once per time the customer was told.
+    reminder_sent_at = models.DateTimeField(_('customer reminded'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),

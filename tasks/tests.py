@@ -6244,6 +6244,16 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(report.copy_sent_to, 'ali@example.com')
         self.assertIsNotNone(report.copy_sent_at)
 
+    def test_the_report_email_asks_for_the_rating(self):
+        self.client.login(username='tech1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        (email,) = mail.outbox
+        feedback = CustomerFeedback.objects.get(task=self.task)
+        self.assertIn(f'/reports/feedback/{feedback.token}/', email.body)
+        self.assertIn('Rate our visit', email.alternatives[0][0])
+        self.assertIn('How was our visit?', email.body)
+
     def _send_copy_capturing_language(self):
         with patch('reports.pdf.render_visit_report_pdf', return_value=b'%PDF-test') as render:
             self.client.login(username='tech1', password='pass12345')
@@ -10215,6 +10225,20 @@ class PartsNeededTests(TaskTestCase):
         self.assertEqual(self.add(product_code='X-1').status_code, 403)
         self.assertFalse(self.task.parts_needed.exists())
 
+    def test_the_customer_is_told_once_when_parts_are_ordered(self):
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        self.add(product_code='BELT-01', description='Belt')  # from stock: nothing to tell
+        self.assertEqual(mail.outbox, [])
+        self.add(product_code='CONSOLE-9', description='Console board', source='ordered', expected_on='2026-11-20')
+        (email,) = mail.outbox
+        self.assertEqual(email.to, ['ali@example.com'])
+        self.assertIn('Parts ordered', email.subject)
+        self.assertIn('20 November 2026', email.body)
+        self.assertIn('arrange the visit', email.body)
+        self.add(product_code='MOTOR-2', description='Motor', source='ordered')  # a second one: not again
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class PartsArrivalTests(PartsNeededTests):
     """The last ordered part in: "All parts are in", once, to the people on
@@ -10292,3 +10316,47 @@ class PartsArrivalTests(PartsNeededTests):
         self.client.post(self.url, {'action': 'part_arrived', 'line': self.task.parts_needed.get().pk})
         self.assertEqual(to_prepare(self.country), [])
         self.assertFalse(self.client.get(self.url).context['can_prepare_parts'])
+
+
+class VisitReminderTests(TaskTestCase):
+    """The day before a visit, from 9 AM in its country: one reminder, only
+    for a visit the customer was told of at least a week before
+    (tasks.views.send_visit_reminders, run hourly)."""
+
+    def setUp(self):
+        super().setUp()
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        dubai = ZoneInfo('Asia/Dubai')
+        self.now = datetime(2026, 11, 12, 10, 0, tzinfo=dubai)
+        self.task = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=self.now - timedelta(days=5),
+            created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            scheduled_for=datetime(2026, 11, 13, 14, 30, tzinfo=dubai),
+            schedule_notified_at=self.now - timedelta(days=7),
+        )
+
+    def remind(self, now=None):
+        from tasks.views import send_visit_reminders
+        return send_visit_reminders(now or self.now)
+
+    def test_reminded_once_the_day_before(self):
+        self.assertEqual(self.remind(), 1)
+        (email,) = mail.outbox
+        self.assertIn('Reminder: your visit tomorrow', email.subject)
+        self.assertIn('2:30 PM', email.body)
+        self.assertEqual(self.remind(self.now + timedelta(hours=1)), 0)
+
+    def test_not_before_nine_in_the_morning(self):
+        self.assertEqual(self.remind(self.now.replace(hour=8)), 0)
+
+    def test_not_for_a_visit_planned_less_than_a_week_before(self):
+        self.task.schedule_notified_at = self.now - timedelta(days=5)  # 6 days before it
+        self.task.save(update_fields=['schedule_notified_at'])
+        self.assertEqual(self.remind(), 0)
+
+    def test_not_for_a_visit_they_were_never_told_of(self):
+        self.task.schedule_notified_at = None
+        self.task.save(update_fields=['schedule_notified_at'])
+        self.assertEqual(self.remind(), 0)

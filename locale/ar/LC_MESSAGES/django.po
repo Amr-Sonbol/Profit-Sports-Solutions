@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 16:25+0000\n"
+"POT-Creation-Date: 2026-11-12 20:39+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -632,6 +632,10 @@ msgstr ""
 #, python-format
 msgid "A password link has been sent to %(email)s."
 msgstr "تم إرسال رابط كلمة المرور إلى %(email)s."
+
+#, python-format
+msgid "A reminder that our technician will visit %(site)s tomorrow, %(date)s, at %(time)s."
+msgstr "نذكّركم بأن فنينا سيزور %(site)s غدًا، %(date)s، الساعة %(time)s."
 
 msgid "A serial plate photo goes with its machine. Choose which one."
 msgstr "صورة لوحة الرقم التسلسلي تخص جهازها. اختر أي جهاز."
@@ -2762,6 +2766,9 @@ msgstr "كيف تم حل الطلب، مثل نصيحة قُدمت أو قطع �
 msgid "How was our visit?"
 msgstr "كيف كانت زيارتنا؟"
 
+msgid "How was our visit? We would greatly appreciate a moment of your time to tell us."
+msgstr "كيف كانت زيارتنا؟ نقدّر كثيرًا أن تمنحونا لحظة من وقتكم لتخبرونا."
+
 msgid "How was this visit?"
 msgstr "كيف كانت هذه الزيارة؟"
 
@@ -2797,6 +2804,9 @@ msgstr "إذا كان هذا البريد الإلكتروني مطابقاً ل
 
 msgid "If this time is inconvenient, please let us know and we will arrange another."
 msgstr "إذا لم يكن هذا الموعد مناسبًا، يرجى إبلاغنا وسنرتب موعدًا آخر."
+
+msgid "If this time is no longer convenient, please let us know as soon as possible."
+msgstr "إذا لم يعد هذا الموعد مناسبًا، يرجى إبلاغنا في أقرب وقت ممكن."
 
 msgid "If you did not request this, please disregard this email."
 msgstr "إذا لم تطلب ذلك، يرجى تجاهل هذه الرسالة."
@@ -4246,6 +4256,9 @@ msgstr "قطع الغيار لم تعد متوفرة (انتهاء عمر الط
 msgid "Parts on the way"
 msgstr "القطع في الطريق"
 
+msgid "Parts ordered for your repair"
+msgstr "تم طلب قطع الغيار لإصلاحكم"
+
 msgid "Parts ready to ship"
 msgstr "القطع جاهزة للشحن"
 
@@ -4780,6 +4793,9 @@ msgstr "مرفوض"
 
 msgid "Reliability"
 msgstr "الموثوقية"
+
+msgid "Reminder: your visit tomorrow"
+msgstr "تذكير: موعد زيارتكم غدًا"
 
 msgid "Remove"
 msgstr "إزالة"
@@ -5998,6 +6014,9 @@ msgstr "قائمة الحاوية: كل كود وكميته — الأجهزة �
 msgid "The count matches — nothing to change."
 msgstr "الجرد مطابق — لا شيء يتغيّر."
 
+msgid "The customer has already rated this visit."
+msgstr "لقد قيّم العميل هذه الزيارة بالفعل."
+
 msgid "The customer has been notified automatically."
 msgstr "تم إشعار العميل تلقائياً."
 
@@ -6571,6 +6590,10 @@ msgstr "تم تحديد الوقت."
 msgid "Time to be confirmed"
 msgstr "الوقت سيُحدَّد لاحقًا"
 
+#, python-format
+msgid "To complete the repair at %(site)s, we have ordered the parts it needs."
+msgstr "لإتمام الإصلاح في %(site)s، قمنا بطلب قطع الغيار اللازمة."
+
 msgid "To customers"
 msgstr "إلى العملاء"
 
@@ -6944,6 +6967,10 @@ msgid "We don't do visits in %(country)s: ship the parts instead."
 msgstr "لا نجري زيارات في %(country)s: اشحن القطع بدلاً من ذلك."
 
 #, python-format
+msgid "We expect them by %(date)s."
+msgstr "نتوقع وصولها بحلول %(date)s."
+
+#, python-format
 msgid "We have sent a confirmation link to %(email)s. Your email changes once you open it."
 msgstr "أرسلنا رابط تأكيد إلى %(email)s. يتغير بريدك بمجرد فتحه."
 
@@ -6972,6 +6999,12 @@ msgstr "نستخدم هذه البيانات للتواصل معك بشأن هذ
 #, python-format
 msgid "We visited %(site)s on %(date)s, and would greatly appreciate a moment of your time to tell us how it went."
 msgstr "زرنا %(site)s بتاريخ %(date)s، ونقدّر كثيرًا أن تمنحونا لحظة من وقتكم لتخبرونا كيف كانت الزيارة."
+
+msgid "We will arrange the visit as soon as they arrive."
+msgstr "سنرتب موعد الزيارة فور وصولها."
+
+msgid "We will ship them to you as soon as they arrive."
+msgstr "سنشحنها إليكم فور وصولها."
 
 msgid "Wednesday"
 msgstr "الأربعاء"
@@ -7687,6 +7720,9 @@ msgstr "إشعار العميل"
 
 msgid "customer notifications"
 msgstr "إشعارات العميل"
+
+msgid "customer reminded"
+msgstr "تم تذكير العميل"
 
 msgid "customer ticket"
 msgstr "تذكرة العميل"

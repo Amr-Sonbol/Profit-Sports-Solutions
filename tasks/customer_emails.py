@@ -66,6 +66,11 @@ def time_text(moment, country):
     return formats.time_format(local(moment, country), 'g:i A')
 
 
+def day_text(day):
+    """A date with no time of day (an expected arrival)."""
+    return formats.date_format(day, 'l j F Y')
+
+
 def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=None, task=None,
          request=None, link=None, button=None, attachment=None, background=True):
     """One customer email. `title` (lazy) heads the subject; `paragraphs` are
@@ -157,6 +162,17 @@ SHIPPED_TRACK_LINK = _('Track your shipment: %(tracking_url)s')
 REPORT_TITLE = _('Visit report')
 REPORT_BODY = _('Please find attached the report of our visit to %(site)s on %(date)s.')
 REPORT_NEXT = _('If you have any questions about the work carried out, please let us know.')
+REPORT_RATE = _('How was our visit? We would greatly appreciate a moment of your time to tell us.')
+
+PARTS_ORDERED_TITLE = _('Parts ordered for your repair')
+PARTS_ORDERED_BODY = _('To complete the repair at %(site)s, we have ordered the parts it needs.')
+PARTS_ORDERED_BY = _('We expect them by %(date)s.')
+PARTS_ORDERED_VISIT = _('We will arrange the visit as soon as they arrive.')
+PARTS_ORDERED_SHIP = _('We will ship them to you as soon as they arrive.')
+
+REMINDER_TITLE = _('Reminder: your visit tomorrow')
+REMINDER_BODY = _('A reminder that our technician will visit %(site)s tomorrow, %(date)s, at %(time)s.')
+REMINDER_NEXT = _('If this time is no longer convenient, please let us know as soon as possible.')
 
 FEEDBACK_TITLE = _('How was our visit?')
 FEEDBACK_BODY = _(

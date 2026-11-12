@@ -66,7 +66,30 @@ def add_part(task, user, cleaned):
         source=cleaned['source'], expected_on=cleaned.get('expected_on') if ordered else None, created_by=user,
     )
     changed(task)
+    if ordered:
+        tell_customer_parts_ordered(task, line)
     return line
+
+
+def tell_customer_parts_ordered(task, line):
+    """The first part ordered for a customer's repair: they're told, once
+    (later ones not), with the expected date when known — and that the visit
+    follows (or, a part shipment, the parcel). Never our own warehouses."""
+    from . import customer_emails as emails
+
+    customer = task.site.customer
+    if customer.is_internal or task.parts_needed.filter(source=TaskPartNeeded.Source.ORDERED).exclude(pk=line.pk).exists():
+        return
+    emails.send(
+        country=customer.country, recipient=task.site.effective_contact_email,
+        contact=task.site.effective_contact_name or customer.name, title=emails.PARTS_ORDERED_TITLE,
+        paragraphs=[
+            emails.PARTS_ORDERED_BODY, emails.PARTS_ORDERED_BY if line.expected_on else None,
+            emails.PARTS_ORDERED_SHIP if is_shipment(task) else emails.PARTS_ORDERED_VISIT,
+        ],
+        values={'site': task.site.name, 'date': lambda: emails.day_text(line.expected_on) if line.expected_on else ''},
+        task=task,
+    )
 
 
 def all_in(task):
