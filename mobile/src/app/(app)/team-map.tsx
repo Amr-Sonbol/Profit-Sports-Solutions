@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import { fetchTeamMap } from '@/api/endpoints';
+import { TeamMapView } from '@/components/team-map-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -13,11 +14,11 @@ import { useTheme } from '@/hooks/use-theme';
 import type { TeamMap } from '@/types';
 
 /**
- * More → Team map: what needs a follow-up today (late arrivals, taps away
- * from the site, jobs past their estimate) and where each technician last
- * tapped — "Show on map" opens it in Maps; "All on one map" is the
- * website's map. Built only from the location at each tap; nobody is
- * tracked in between.
+ * More → Team map: everyone's last tap today on one map (components/team-map-view),
+ * then what needs a follow-up today (late arrivals, taps away from the site,
+ * jobs past their estimate) and each technician's last tap — "Show on map"
+ * opens it in the phone's Maps. Built only from the location at each tap;
+ * nobody is tracked in between.
  */
 export default function TeamMapScreen() {
   const router = useRouter();
@@ -54,16 +55,20 @@ export default function TeamMapScreen() {
             <ThemedText themeColor="primary">← Back</ThemedText>
           </TouchableOpacity>
           <ThemedText type="title">Team map</ThemedText>
-          <TouchableOpacity
-            style={[styles.button, { borderColor: theme.primary }]}
-            onPress={() => router.push({ pathname: '/website', params: { path: '/tasks/technicians/map/', title: 'Team map' } })}
-          >
-            <Ionicons name="map-outline" size={16} color={theme.primary} />
-            <ThemedText type="small" themeColor="primary">All on one map</ThemedText>
-          </TouchableOpacity>
           {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
           {!map ? <ActivityIndicator /> : (
             <>
+              {/* Everyone at once; tap a pin, then its name, for the task. */}
+              {map.pins.length ? (
+                <>
+                  <TeamMapView pins={map.pins} onOpenTask={(taskId) => router.push(`/team-task/${taskId}`)} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Tap a pin to see who it is; tap its name for the task. Red: away from the site.
+                  </ThemedText>
+                </>
+              ) : (
+                <ThemedText themeColor="textSecondary">Nobody has tapped yet today.</ThemedText>
+              )}
               <ThemedText type="subtitle">Needs attention</ThemedText>
               {map.attention.length ? map.attention.map((item, index) => (
                 <TouchableOpacity

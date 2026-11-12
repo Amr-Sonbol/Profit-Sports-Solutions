@@ -73,6 +73,15 @@ undone for it. Likewise a customer admin role who manages their own people.
   with no day, a report waiting — and later the daily summary by email.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.
+- **Google Maps key for Android** (the app's Team map, `react-native-maps`,
+  added 2026-11-12). Expo Go needs none, and iPhones use Apple Maps with no
+  key; the Android store build shows a blank map without it. In Google
+  Cloud (an account with a card on file; this team stays inside the free
+  allowance): enable "Maps SDK for Android", create a key restricted to the
+  app's package and its Play signing SHA-1 (from Play Console, after the
+  first upload), then add it to the app's config as the `react-native-maps`
+  plugin's `androidGoogleMapsApiKey` — from an environment variable through
+  `app.config.js`, never written into `app.json` — and build again.
 - **A staging copy** of the site (its own address, its own database with test
   data): every release goes there first and is tried before the live site.
 - **Smaller releases:** `app-today` holds 135 commits not yet in `master`.
