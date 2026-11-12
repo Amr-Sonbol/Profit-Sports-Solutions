@@ -25,6 +25,7 @@ const NATIVE: Record<string, string> = {
   '/tasks/machines/': '/machines',
   '/tasks/technicians/hours/': '/hours',
   '/tasks/technicians/accounts/': '/staff-accounts',
+  '/tasks/parts-to-prepare/': '/parts-to-prepare',
 };
 
 /** The website menu's icon names, as the nearest Ionicons. */

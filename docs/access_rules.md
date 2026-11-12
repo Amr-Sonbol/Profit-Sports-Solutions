@@ -21,7 +21,7 @@ whose pages one opens, area…) into switches as well.
 |---|---|
 | Technician | their own tasks |
 | Supervisor | their country |
-| Warehouse Manager | their country, stock-related work only |
+| Warehouse Manager | their country, stock-related work only — and repairs that need parts, to prepare them (*Parts to prepare*) |
 | Country Support Manager | their country |
 | Manager | their country only (one Manager per country) |
 | Project Manager | every country — like a Manager, no customer requests (no Tickets) |

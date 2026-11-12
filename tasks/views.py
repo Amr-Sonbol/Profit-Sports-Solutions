@@ -43,6 +43,10 @@ from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
 from customers.forms import SignInEmailChangeForm
+from tasks.parts_needed import part_rows as parts_needed_rows
+from tasks.parts_needed import all_in as parts_all_in
+from tasks.parts_needed import can_prepare as can_prepare_parts
+from tasks.parts_needed import report_parts as parts_needed_report_parts
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
 from customers.progress import is_booked, progress_steps, ticket_progress, visit_day, visit_progress
@@ -66,7 +70,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    CustomerPhotosForm, CustomRoleForm, RegisterMachineForm,
+    CustomerPhotosForm, CustomRoleForm, PartNeededForm, RegisterMachineForm,
     AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
@@ -2487,6 +2491,35 @@ def task_detail(request, pk):
         })
         return redirect('tasks:task_detail', pk=next_task.pk)
 
+    # The parts this repair needs (tasks.parts_needed): its owner, or someone stepping in.
+    part_form = PartNeededForm()
+    if request.method == 'POST' and request.POST.get('action') == 'parts_prepared':
+        from tasks import parts_needed
+        if not parts_needed.can_prepare(requesting_technician) or not parts_needed.all_in(task):
+            raise PermissionDenied
+        parts_needed.mark_prepared(task, request.user)
+        messages.success(request, _('Parts marked as prepared.'))
+        return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#parts-needed")
+    if request.method == 'POST' and request.POST.get('action') in ('add_part_needed', 'part_arrived', 'remove_part_needed'):
+        from tasks import parts_needed
+        _require_task_owner(request, task)
+        action = request.POST['action']
+        if action == 'add_part_needed':
+            part_form = PartNeededForm(request.POST)
+            if part_form.is_valid():
+                parts_needed.add_part(task, request.user, part_form.cleaned_data)
+                messages.success(request, _('Part added.'))
+                return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#parts-needed")
+        else:
+            line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
+            if action == 'part_arrived':
+                parts_needed.mark_arrived(line)
+                messages.success(request, _('Marked as arrived.'))
+            else:
+                line.delete()
+                messages.success(request, _('Part removed.'))
+            return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#parts-needed")
+
     if request.method == 'POST' and request.POST.get('action') == 'create_follow_up':
         require_permission(request, RolePermission.Permission.CREATE_TASKS)
         if not still_to_install(task):
@@ -2544,6 +2577,16 @@ def task_detail(request, pk):
         'products': task.products.select_related('brand', 'for_task'),
         # An installation's machines not installed yet, and the chain around it.
         'still_to_install': still_to_install(task),
+        # The parts it needs, each from stock, ordered or arrived; changed by its owner (or stepping in).
+        'parts_needed': parts_needed_rows(task),
+        # The warehouse marks them prepared once they're all in.
+        'can_prepare_parts': can_prepare_parts(requesting_technician) and parts_all_in(task),
+        # Scheduled while an ordered part isn't in yet: said at the top of the page.
+        'scheduled_before_parts': bool(task.scheduled_for or task.scheduled_date) and any(
+            row['state'] == 'waiting' for row in parts_needed_rows(task)
+        ) and task.status not in (Task.Status.CLOSED, Task.Status.CANCELLED),
+        'part_form': part_form,
+        'can_change_parts': can_change_task(requesting_technician, task),
         'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
         'next_tasks': task.next_tasks.all(),
         # Receiving / loading: machines ready to carry on, and where they can go.
@@ -6763,7 +6806,26 @@ def stock(request):
         'warehouses': [(site, machine_stock(site)) for site in warehouses],
         'parts': part_rows(country) if country else [],
     }
+    # Repairs whose parts are all in, for the warehouse to prepare (tasks.parts_needed.to_prepare).
+    from tasks.parts_needed import to_prepare
+    context['to_prepare'] = to_prepare(country)
     return render(request, 'tasks/stock.html', context)
+
+
+@login_required
+def parts_to_prepare(request):
+    """The warehouse manager's list (and the manager tier's): the repairs whose
+    parts are all in and not prepared yet, the soonest visit first
+    (tasks.parts_needed.to_prepare); "Prepared" is on each task's page."""
+    from tasks.parts_needed import can_prepare, part_rows, to_prepare
+
+    technician = require_technician(request)
+    if not can_prepare(technician):
+        raise PermissionDenied
+    tasks = to_prepare(get_active_country(request))
+    return render(request, 'tasks/parts_to_prepare.html', {
+        'rows': [{'task': task, 'parts': part_rows(task)} for task in tasks],
+    })
 
 
 @login_required
@@ -7271,6 +7333,8 @@ def my_task_detail(request, pk):
         'attachments': task.attachments.select_related('uploaded_by', 'asset__brand').exclude(
             media_type=TaskAttachment.MediaType.PHOTO),
         'visit_photos': visit_photo_cards(task, task.attachments.select_related('asset__brand', 'uploaded_by__technician'), editable=True),
+        # The spare parts for this visit, and whether the warehouse prepared them.
+        'parts_needed': parts_needed_rows(task),
         # Negligence flags are a manager-only reliability signal — never
         # shown to the technician being flagged.
         'events': task.events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE).order_by('occurred_at'),
@@ -8106,7 +8170,7 @@ def _report_form(request, task, technician, back_url):
             'unit_cost': part.unit_cost, 'currency_code': part.currency_code,
         }
         for part in parts
-    ]
+    ] if report else parts_needed_report_parts(task)
 
     helpers = _active_helpers(task)
     time_on_site = task.time_on_site()

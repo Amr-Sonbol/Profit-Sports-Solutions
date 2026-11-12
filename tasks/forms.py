@@ -23,7 +23,7 @@ from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, STEP_DONE_LABELS, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
     TaskAsset,
-    TaskAttachment, TaskEvent, TaskProduct, TicketEscalation, TicketMachine,
+    TaskAttachment, TaskEvent, TaskPartNeeded, TaskProduct, TicketEscalation, TicketMachine,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -783,6 +783,23 @@ class TaskAttachmentUploadForm(forms.Form):
                 and file_kind(file) != 'image':
             self.add_error('file', _('The serial plate and after need a photo. A video can only show the fault (before).'))
         return cleaned
+
+
+class PartNeededForm(forms.Form):
+    """A spare part a repair needs (tasks.parts_needed.add_part): code, description, quantity;
+    from our stock, or ordered (and when it should arrive, if known)."""
+
+    product_code = forms.CharField(max_length=100, label=_('Code'))
+    description = forms.CharField(
+        max_length=200, required=False, label=_('Description'),
+        help_text=_('Left empty: the catalogue\'s, for a code it knows.'),
+    )
+    quantity = forms.IntegerField(min_value=1, max_value=999, initial=1, label=_('Quantity'))
+    source = forms.ChoiceField(choices=TaskPartNeeded.Source.choices, initial=TaskPartNeeded.Source.STOCK, label=_('From'))
+    expected_on = forms.DateField(
+        required=False, label=_('Expected on'), widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text=_('Ordered: when it should arrive, if known.'),
+    )
 
 
 class RegisterMachineForm(forms.Form):

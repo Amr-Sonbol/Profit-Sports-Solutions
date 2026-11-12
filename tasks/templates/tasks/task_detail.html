@@ -27,6 +27,8 @@
 
 {% if shipment %}{% include "tasks/_shipment_panel.html" %}{% endif %}
 
+{% if scheduled_before_parts %}<p class="flash flash--warning">{% translate "This visit is scheduled, but some ordered parts haven't arrived yet. Check they'll be in before the visit, or move it." %} <a href="#parts-needed">{% translate "Parts needed" %}</a></p>{% endif %}
+
 {% include "tasks/_branch_card.html" with with_terms=True %}
 
 <div class="section">
@@ -363,6 +365,73 @@
     {% else %}
     <p class="field__help">{% translate "Please add a contact email address for this site before requesting feedback." %}</p>
     {% endif %}
+    {% endif %}
+</div>
+{% endif %}
+
+{# The spare parts this repair needs (tasks.parts_needed): from our stock, or ordered until they arrive. #}
+{% if parts_needed or can_change_parts %}
+<div class="section" id="parts-needed">
+    <h2>{% translate "Parts needed" %}</h2>
+    {% if parts_needed %}
+    <div class="table-wrap">
+        <table class="compact-table">
+            <thead><tr><th>{% translate "Code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th><th>{% translate "Status" %}</th><th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
+            <tbody>
+                {% for row in parts_needed %}{% with line=row.line %}
+                <tr>
+                    <td dir="ltr">{{ line.product_code }}</td>
+                    <td>{{ line.description|default:"—" }}</td>
+                    <td>{{ line.quantity }}</td>
+                    <td>
+                        {% if row.state == 'stock' %}<span class="badge badge--good">{% translate "From our stock" %}</span>
+                        {% elif row.state == 'arrived' %}<span class="badge badge--good">{% translate "Arrived" %}</span>
+                        {% else %}<span class="badge badge--warning">{% translate "Ordered" %}</span>{% if line.expected_on %} <span class="muted">{% blocktranslate with date=line.expected_on|date:"j M" %}expected {{ date }}{% endblocktranslate %}</span>{% endif %}{% endif %}
+                    </td>
+                    <td class="row-actions__inline">
+                        {% if can_change_parts %}
+                        {% if row.state == 'waiting' %}
+                        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="part_arrived"><input type="hidden" name="line" value="{{ line.pk }}"><button type="submit" class="button button--secondary">{% translate "Arrived" %}</button></form>
+                        {% endif %}
+                        <form method="post" data-confirm="{% translate 'Remove this part?' %}">{% csrf_token %}<input type="hidden" name="action" value="remove_part_needed"><input type="hidden" name="line" value="{{ line.pk }}">
+                            {% blocktranslate asvar remove_label with code=line.product_code %}Remove {{ code }}{% endblocktranslate %}
+                            <button type="submit" class="machine-card__remove portal-person__remove" title="{{ remove_label }}">{% include "_icon.html" with name="x" %}<span class="visually-hidden">{{ remove_label }}</span></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endwith %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% if parts_needed %}
+    <p class="muted">
+        {% if task.parts_prepared_at %}{% blocktranslate with name=task.parts_prepared_by.technician.full_name|default:task.parts_prepared_by.get_username time=task.parts_prepared_at|date:"SHORT_DATETIME_FORMAT" %}Prepared by {{ name }}, {{ time }}.{% endblocktranslate %}
+        {% else %}{% translate "Not prepared by the warehouse yet." %}{% endif %}
+        {% if task.delivery_note %}<a href="{{ task.delivery_note.url }}" target="_blank" rel="noopener">{% translate "Delivery note" %}</a>{% endif %}
+    </p>
+    {% if can_prepare_parts and not task.parts_prepared_at %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="parts_prepared"><button type="submit" class="button">{% translate "Mark the parts prepared" %}</button></form>
+    {% endif %}
+    {% endif %}
+    {% if can_change_parts %}
+    <details class="disclosure"{% if part_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "+ Add a part" %}</summary>
+        <form method="post" class="disclosure__body form-grid" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_part_needed">
+            {% for field in part_form %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="field field--submit"><button type="submit" class="button">{% translate "Add part" %}</button></div>
+        </form>
+    </details>
     {% endif %}
 </div>
 {% endif %}

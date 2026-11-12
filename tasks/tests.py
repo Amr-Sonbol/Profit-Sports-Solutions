@@ -10139,3 +10139,77 @@ class StaffAccountSettingsTests(TaskTestCase):
         self.assertEqual((self.tech_user.email, self.tech_user.username),
                          ('tech.renamed@example.com', 'tech.renamed@example.com'))
         self.assertEqual(mail.outbox[-1].to, ['tech1@example.com'])
+
+
+class PartsNeededTests(TaskTestCase):
+    """The spare parts a repair needs, before the visit (tasks.parts_needed):
+    from our stock — held for it — or ordered, the customer reading
+    "Waiting for parts" until they arrive."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = Technician.objects.get(user=self.supervisor_user)
+        self.task = Task.objects.create(
+            task_number='AE-0901', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            responsible_supervisor=self.owner,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def add(self, **data):
+        return self.client.post(self.url, {'action': 'add_part_needed', 'quantity': 1, 'source': 'stock', **data})
+
+    def test_a_part_from_stock_is_held_for_the_repair(self):
+        from reference.models import Part
+        from tasks.stock import parts_held
+        Part.objects.create(code='BELT-01', description='Running belt')
+        self.add(product_code='BELT-01', quantity=2)
+        line = self.task.parts_needed.get()
+        self.assertEqual((line.description, line.quantity), ('Running belt', 2))  # the catalogue's description
+        self.assertEqual(parts_held(self.country)['BELT-01'], [(self.task, 2)])
+
+    def test_an_ordered_part_keeps_the_customer_waiting_until_it_arrives(self):
+        from customers.progress import BEING_ARRANGED, progress_steps, visit_progress
+        self.add(product_code='CONSOLE-9', description='Console board', source='ordered', expected_on='2026-11-20')
+        progress = visit_progress(self.task)
+        self.assertIn('20 November', str(progress[0]))
+        self.assertEqual([state for _label, state in progress_steps(progress)][0], 'current')
+        # Scheduled meanwhile: the task page warns.
+        self.task.scheduled_date = timezone.localdate()
+        self.task.save(update_fields=['scheduled_date'])
+        self.assertTrue(self.client.get(self.url).context['scheduled_before_parts'])
+        self.task.scheduled_date = None
+        self.task.save(update_fields=['scheduled_date'])
+        line = self.task.parts_needed.get()
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        self.assertEqual(visit_progress(self.task), BEING_ARRANGED)
+
+    def test_the_warehouse_prepares_them_and_the_report_starts_with_them(self):
+        self.add(product_code='BELT-01', description='Belt', quantity=2)
+        warehouse = User.objects.create_user('wh1', password='pass12345')
+        Technician.objects.create(user=warehouse, country=self.country, full_name='Wael Warehouse', language='en',
+                                  role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff')
+        self.client.login(username='wh1', password='pass12345')
+        page = self.client.get('/tasks/parts-to-prepare/')
+        self.assertEqual([row['task'] for row in page.context['rows']], [self.task])
+        self.client.post(self.url, {'action': 'parts_prepared'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.parts_prepared_by, warehouse)
+        self.assertEqual(self.client.get('/tasks/parts-to-prepare/').context['rows'], [])
+        # A technician can't mark them, nor open the list.
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/parts-to-prepare/').status_code, 403)
+        # The lead sees them, and the report's "Parts used" starts with them.
+        TaskAssignment.objects.create(task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        self.assertContains(self.client.get(f'/tasks/my/{self.task.pk}/'), 'BELT-01')
+        report = self.client.get(f'/tasks/my/{self.task.pk}/report/')
+        self.assertEqual(report.context['part_formset'].initial[0]['part_code'], 'BELT-01')
+
+    def test_only_its_owner_changes_them(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.add(product_code='X-1').status_code, 403)
+        self.assertFalse(self.task.parts_needed.exists())

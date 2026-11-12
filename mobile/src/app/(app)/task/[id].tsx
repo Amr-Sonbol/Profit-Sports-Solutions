@@ -188,6 +188,27 @@ export default function TaskDetailScreen() {
             </ThemedText>
           ) : null}
 
+          {/* The spare parts for this visit, and whether the warehouse prepared them. */}
+          {task.parts_needed?.length ? (
+            <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="smallBold">Parts for this visit</ThemedText>
+              {task.parts_needed.map((part, index) => (
+                <ThemedText key={`${part.code}-${index}`} type="small">
+                  {part.quantity} × {part.code}{part.description ? ` — ${part.description}` : ''}
+                  {part.state === 'waiting' ? ` · ${t('still on order')}` : ''}
+                </ThemedText>
+              ))}
+              <ThemedText type="small" themeColor={task.parts_prepared ? 'success' : 'textSecondary'}>
+                {task.parts_prepared ? 'Prepared by the warehouse — collect them before you go.' : 'Not prepared by the warehouse yet.'}
+              </ThemedText>
+              {task.delivery_note_url ? (
+                <TouchableOpacity onPress={() => Linking.openURL(task.delivery_note_url!)}>
+                  <ThemedText type="small" themeColor="primary">Delivery note ›</ThemedText>
+                </TouchableOpacity>
+              ) : null}
+            </ThemedView>
+          ) : null}
+
           <ThemedView style={[styles.section, { backgroundColor: theme.backgroundElement }]}>
             <Row label="Status" value={task.status_display} />
             <Row label="Priority" value={task.priority_display} />

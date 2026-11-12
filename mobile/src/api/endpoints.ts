@@ -60,6 +60,33 @@ export function registerTaskMachine(id: number, machine: {
   });
 }
 
+/** One part a repair needs (tasks.parts_needed). */
+export type PartNeededRow = {
+  id: number; code: string; description: string; quantity: number;
+  state: 'stock' | 'waiting' | 'arrived'; expected_on: string | null;
+};
+
+/** Add a part needed, or (with `line`) mark one arrived / remove one — the task's owner. */
+export function changeTaskParts(id: number, body: Record<string, string | number>) {
+  return apiRequest<{ parts_needed: PartNeededRow[]; can_change_parts: boolean; can_prepare_parts: boolean }>(
+    `/api/tasks/${id}/parts-needed/`, { method: 'POST', body },
+  );
+}
+
+/** The warehouse (or a manager): the repair's parts are prepared. */
+export function markPartsPrepared(id: number) {
+  return apiRequest<{ parts_prepared: boolean }>(`/api/tasks/${id}/parts-prepared/`, { method: 'POST', body: {} });
+}
+
+/** The repairs whose parts are all in, to prepare — the soonest visit first. */
+export type PartsToPrepare = {
+  task_id: number; task_number: string; customer: string; site: string; scheduled_for: string | null;
+  parts: { code: string; description: string; quantity: number }[];
+};
+export function fetchPartsToPrepare() {
+  return apiRequest<PartsToPrepare[]>('/api/parts-to-prepare/');
+}
+
 /** A lost or handed-on phone: every other phone is signed out; the fresh token keeps this one in. */
 export function signOutOtherPhones(pushToken: string | null) {
   return apiRequest<{ token: string }>('/api/me/sign-out-others/', {
@@ -185,6 +212,8 @@ export function saveTaskEdit(id: number, values: Record<string, string | boolean
 export function fetchMyReport(id: number) {
   return apiRequest<{
     report: WorkReport | null;
+    /** Before the first filing: the parts the task needed (code, description, quantity). */
+    parts_suggested?: { part_code: string; description: string; quantity: number }[];
     helpers?: ReportHelper[];
     send_copy_to?: string;
     // The visit's time from the taps as "1:32", and whether the report was sent (then fixed).

@@ -1,6 +1,7 @@
 """What a customer sees of their tickets' and visits' progress — in their
-words, not the team's: Received → Being arranged → Visit scheduled → On the
-way → On site → Done.
+words, not the team's: Received → Visit scheduled → On the way → On site →
+Done. No "Being arranged": it read as already arranged; until there's a
+date the request is simply received, and we're preparing it.
 The portal home, a ticket's page and its visits all use these, so the
 same thing never reads differently on two screens. Each is (label,
 badge class).
@@ -14,10 +15,12 @@ from tasks.models import CustomerTicket, Task, TaskEvent
 DONE_STATUSES = (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED)
 
 RECEIVED = (_('Received'), 'badge--neutral')
-BEING_ARRANGED = (_("Being arranged — we'll confirm the date with you soon"), 'badge--neutral')
+# Accepted, no date yet (often waiting for parts): still "Received", saying what we're doing.
+BEING_ARRANGED = (_("Received — we're preparing your visit and will confirm the date with you"), 'badge--neutral')
 VISIT_BOOKED = (_('Visit scheduled'), 'badge--booked')
 # A booked day that passed with the work not done: we owe them a new date.
 RESCHEDULING = (_("Rescheduling — we'll contact you with a new date"), 'badge--warning')
+WAITING_FOR_PARTS = (_("Waiting for parts — we'll schedule your visit as soon as they arrive"), 'badge--neutral')
 ON_THE_WAY = (_('Technician on the way'), 'badge--status-in_progress')
 ON_SITE = (_('Technician on site'), 'badge--status-in_progress')
 DONE = (_('Done'), 'badge--good')
@@ -61,6 +64,14 @@ def visit_progress(task):
         return (label, VISIT_BOOKED[1])
     if day:
         return RESCHEDULING
+    # No date yet: ordered parts not in yet say so (and when they should be).
+    from tasks.parts_needed import waiting_for_parts
+    waiting, expected = waiting_for_parts(task)
+    if waiting:
+        if expected:
+            return (_('Waiting for parts — expected around %(date)s') % {'date': date_format(expected, 'j F')},
+                    WAITING_FOR_PARTS[1])
+        return WAITING_FOR_PARTS
     return BEING_ARRANGED
 
 
@@ -99,18 +110,23 @@ def is_upcoming(task):
 
 # The progress bar's steps, and where each progress word sits on it. Closed
 # and cancelled aren't on the way to a visit, so they have no bar.
-STEPS = (_('Received'), _('Being arranged'), _('Visit scheduled'), _('On the way'), _('On site'), _('Done'))
+STEPS = (_('Received'), _('Visit scheduled'), _('On the way'), _('On site'), _('Done'))
 # Pairs, not a dict: the lazy labels' hashes change with the language.
 STEP_OF = (
-    (RECEIVED, 0), (BEING_ARRANGED, 1), (RESCHEDULING, 1), (VISIT_BOOKED, 2), (ON_THE_WAY, 3), (ON_SITE, 4),
-    (DONE, 5), (RESOLVED, 5),
+    (RECEIVED, 0), (BEING_ARRANGED, 0), (WAITING_FOR_PARTS, 0), (RESCHEDULING, 0), (VISIT_BOOKED, 1), (ON_THE_WAY, 2), (ON_SITE, 3),
+    (DONE, 4), (RESOLVED, 4),
 )
 
 
 def progress_steps(progress):
     """The bar for a progress word: [(label, state)] with state 'done',
     'current' or 'todo' — or None when it isn't on the way to a visit."""
-    current = 2 if is_booked(progress) else next((index for step, index in STEP_OF if step is progress), None)
+    if is_booked(progress):
+        current = 1
+    elif progress[1] == WAITING_FOR_PARTS[1] and progress not in (CLOSED, CANCELLED):
+        current = 0  # received, being prepared or waiting for parts (its words may carry a date)
+    else:
+        current = next((index for step, index in STEP_OF if step is progress), None)
     if current is None:
         return None
     return [

@@ -374,7 +374,7 @@ class TaskTurnsTests(LifecycleTestCase):
         self.assertEqual(task.status, Task.Status.CANCELLED)
         open_requests = self.portal.get('/customers/portal/requests/').context['tickets']
         self.assertIn(ticket.pk, [t.pk for t in open_requests])
-        self.assertEqual(str(next(t for t in open_requests if t.pk == ticket.pk).progress[0]).split(' —')[0], 'Being arranged')
+        self.assertEqual(str(next(t for t in open_requests if t.pk == ticket.pk).progress[0]).split(' —')[0], 'Received')  # back to being prepared
 
     def test_a_signed_out_customer_from_the_rating_email_is_asked_to_sign_in(self):
         response = self.client_class(HTTP_HOST='portal.example.test').get('/reports/feedback/some-token/')

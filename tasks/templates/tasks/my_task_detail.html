@@ -19,6 +19,20 @@
 
 {% include "tasks/_branch_card.html" %}
 
+{# The spare parts for this visit (tasks.parts_needed), and whether the warehouse prepared them. #}
+{% if parts_needed %}
+<div class="section">
+    <h2>{% translate "Parts for this visit" %}</h2>
+    <ul class="plain-list">
+        {% for row in parts_needed %}
+        <li>{{ row.line.quantity }} × <span dir="ltr">{{ row.line.product_code }}</span>{% if row.line.description %} — {{ row.line.description }}{% endif %}{% if row.state == 'waiting' %} <span class="badge badge--warning">{% translate "still on order" %}</span>{% endif %}</li>
+        {% endfor %}
+    </ul>
+    <p class="muted">{% if task.parts_prepared_at %}{% translate "Prepared by the warehouse — collect them before you go." %}{% else %}{% translate "Not prepared by the warehouse yet." %}{% endif %}
+    {% if task.delivery_note %}<a href="{{ task.delivery_note.url }}" target="_blank" rel="noopener">{% translate "Delivery note" %}</a>{% endif %}</p>
+</div>
+{% endif %}
+
 {% if from_request %}{% include "tasks/_from_request.html" %}{% endif %}
 
 <div class="section">

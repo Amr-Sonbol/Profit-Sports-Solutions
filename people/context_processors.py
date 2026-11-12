@@ -274,6 +274,9 @@ def nav_pages(technician, allowed):
         add('tasks:part_list', _('Parts'), 'package', 'customers')
     if RolePermission.Permission.VIEW_STOCK in allowed:
         add('tasks:stock', _('Stock'), 'archive', 'customers')
+    # The repairs' parts to get ready (tasks.parts_needed.can_prepare).
+    if technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER:
+        add('tasks:parts_to_prepare', _('Parts to prepare'), 'package', 'customers')
     if RolePermission.Permission.VIEW_MACHINES in allowed:
         add('tasks:machine_list', _('Machines'), 'dumbbell', 'customers')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:

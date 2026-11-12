@@ -14,7 +14,7 @@ from django.db.models import Q
 from reports.models import PartUsed
 from reference.models import Part, TaskType
 
-from .models import StockAdjustment, Task, TaskProduct
+from .models import StockAdjustment, Task, TaskPartNeeded, TaskProduct
 
 # A task that's still going holds the parts ordered for it; one that's
 # closed or cancelled lets what it didn't use go free.
@@ -75,7 +75,8 @@ def part_stock(country):
 
 def parts_held(country):
     """{code: [(task, quantity)]}: parts received for a repair that's still
-    going, less what its report already used."""
+    going, and parts taken from stock for one (TaskPartNeeded, from our stock),
+    less what its report already used."""
     received = defaultdict(int)
     lines = TaskProduct.objects.filter(
         kind=TaskProduct.Kind.PART, status=TaskProduct.Status.DONE, for_task__isnull=False,
@@ -85,6 +86,11 @@ def parts_held(country):
     for line in lines.select_related('for_task'):
         tasks[line.for_task_id] = line.for_task
         received[(stock_key(line.product_code), line.for_task_id)] += line.quantity
+    for line in TaskPartNeeded.objects.filter(
+        source=TaskPartNeeded.Source.STOCK, task__site__customer__country=country,
+    ).exclude(task__status__in=FINISHED_STATUSES).select_related('task'):
+        tasks[line.task_id] = line.task
+        received[(stock_key(line.product_code), line.task_id)] += line.quantity
     used = defaultdict(int)
     for task_id, code, quantity in PartUsed.objects.filter(report__task__in=tasks).values_list(
         'report__task', 'part_code', 'quantity',

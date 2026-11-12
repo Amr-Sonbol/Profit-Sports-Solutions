@@ -130,6 +130,11 @@ export interface TaskDetail {
   machines?: { name: string; serial: string; problem: string; description: string }[];
   /** The task's machines as photo cards. Older servers: absent. */
   machine_cards?: MachineCardData[];
+  /** The spare parts for the visit: from our stock, ordered and waiting, or arrived. Older servers: absent. */
+  parts_needed?: import('@/api/endpoints').PartNeededRow[];
+  /** The warehouse got them ready for the visit. */
+  parts_prepared?: boolean;
+  delivery_note_url?: string;
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null
@@ -411,6 +416,9 @@ export interface TaskActions {
 export interface TeamTaskDetail extends TaskDetail {
   /** Older servers: absent. */
   actions?: TaskActions;
+  /** Parts needed: its owner changes them; the warehouse marks them prepared once all are in. */
+  can_change_parts?: boolean;
+  can_prepare_parts?: boolean;
   lead: Assignment | null;
   helpers: Assignment[];
   report: WorkReport | null;

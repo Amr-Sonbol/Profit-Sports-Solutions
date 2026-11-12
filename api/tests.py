@@ -2457,3 +2457,41 @@ class OnTheWayNoticeTests(ApiTestCase):
         self.act('accept')
         self.act('en_route')
         self.assertEqual(self.notices(), [])
+
+
+class PartsNeededApiTests(ApiTestCase):
+    """The repair's parts from the app, as on the website: its owner adds and
+    changes them; the warehouse sees the ones all in, and marks them prepared;
+    the technician sees them, and the report starts with them."""
+
+    def setUp(self):
+        super().setUp()
+        from people.models import Technician
+        self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.task.save(update_fields=['responsible_supervisor'])
+        self.url = f'/api/tasks/{self.task.pk}/parts-needed/'
+
+    def test_the_owner_adds_and_the_warehouse_prepares(self):
+        from people.models import Technician
+        owner = self.token_for('supervisor1')
+        added = self.client.post(self.url, {'product_code': 'BELT-01', 'description': 'Belt', 'quantity': 2, 'source': 'ordered'},
+                                 **self.auth(owner))
+        self.assertEqual(added.status_code, 200, added.content)
+        (line,) = added.json()['parts_needed']
+        self.assertEqual((line['state'], added.json()['can_prepare_parts']), ('waiting', False))
+        # A technician can't change them.
+        self.assertEqual(self.client.post(self.url, {'line': line['id'], 'action': 'arrived'},
+                                          **self.auth(self.token_for('tech1'))).status_code, 403)
+        self.client.post(self.url, {'line': line['id'], 'action': 'arrived'}, **self.auth(owner))
+        warehouse = User.objects.create_user('wh1', password='pass12345')
+        Technician.objects.create(user=warehouse, country=self.country, full_name='Wael Warehouse', language='en',
+                                  role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff')
+        token = self.token_for('wh1')
+        (row,) = self.client.get('/api/parts-to-prepare/', **self.auth(token)).json()
+        self.assertEqual(row['task_id'], self.task.pk)
+        self.assertEqual(self.client.post(f'/api/tasks/{self.task.pk}/parts-prepared/', **self.auth(token)).status_code, 200)
+        self.assertEqual(self.client.get('/api/parts-to-prepare/', **self.auth(token)).json(), [])
+        self.assertEqual(self.client.get('/api/parts-to-prepare/', **self.auth(self.token_for('tech1'))).status_code, 403)
+        # The technician sees them, prepared; the report starts with them.
+        detail = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(self.token_for('tech1'))).json()
+        self.assertEqual(([part['code'] for part in detail['parts_needed']], detail['parts_prepared']), (['BELT-01'], True))

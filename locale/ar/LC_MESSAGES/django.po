@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 10:41+0000\n"
+"POT-Creation-Date: 2026-11-12 12:01+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -480,6 +480,9 @@ msgstr "%(where)s: «%(text)s» ليس باللغة %(language)s، بينما ا
 
 msgid "+ Add a machine at this branch"
 msgstr "+ أضف جهازاً في هذا الفرع"
+
+msgid "+ Add a part"
+msgstr "+ أضف قطعة"
 
 msgid "+ Add a person"
 msgstr "+ إضافة شخص"
@@ -1199,12 +1202,6 @@ msgstr "قبل"
 
 msgid "Being added"
 msgstr "قيد الإضافة"
-
-msgid "Being arranged"
-msgstr "قيد الترتيب"
-
-msgid "Being arranged — we'll confirm the date with you soon"
-msgstr "قيد الترتيب — سنؤكد معك الموعد قريبًا"
 
 msgid "Being prepared"
 msgstr "قيد التجهيز"
@@ -2660,6 +2657,9 @@ msgstr "ممتاز"
 msgid "Existing bookings, so you can select a time without conflicts. Open a staff member's week for a full day-by-day overview of their workload."
 msgstr "الحجوزات القائمة، لتتمكن من اختيار وقت دون تعارض. افتح أسبوع أي موظف للاطلاع على نظرة شاملة على عبء عمله يوماً بيوم."
 
+msgid "Expected on"
+msgstr "التاريخ المتوقع"
+
 msgid "Expecting a delay?"
 msgstr "هل تتوقع تأخيراً؟"
 
@@ -2807,8 +2807,14 @@ msgstr "مستقل"
 msgid "Friday"
 msgstr "الجمعة"
 
+msgid "From"
+msgstr "المصدر"
+
 msgid "From customer"
 msgstr "من العميل"
+
+msgid "From our stock"
+msgstr "من مخزوننا"
 
 #, python-format
 msgid "From request %(number)s: saving links the new branch to it."
@@ -3193,6 +3199,9 @@ msgstr "اترك حقول التواصل فارغة لاستخدام بيانا�
 msgid "Left empty, it is set to two years after the start."
 msgstr "إذا تُرك فارغًا، يُحدَّد بعد سنتين من البداية."
 
+msgid "Left empty: the catalogue's, for a code it knows."
+msgstr "إذا تُرك فارغاً: وصف الكتالوج، للرمز المعروف."
+
 msgid "Left the company"
 msgstr "غادر الشركة"
 
@@ -3383,8 +3392,14 @@ msgstr "تحديد كمشحون؟ يُرسل للعميل بريد بأن الق
 msgid "Mark available"
 msgstr "وضع علامة متاح"
 
+msgid "Mark the parts prepared"
+msgstr "تسجيل القطع كمجهّزة"
+
 msgid "Mark unavailable"
 msgstr "وضع علامة غير متاح"
+
+msgid "Marked as arrived."
+msgstr "تم تسجيل الوصول."
 
 msgid "Marked as available."
 msgstr "تم التعيين كمتاح."
@@ -3909,6 +3924,9 @@ msgstr "لا يوجد فنيون مطابقون لبحثك."
 msgid "No tickets match the selected filters."
 msgstr "لا توجد تذاكر مطابقة لعوامل التصفية المحددة."
 
+msgid "No visit date yet"
+msgstr "لا يوجد موعد زيارة بعد"
+
 msgid "No visit is scheduled at the moment. We will let you know as soon as one is."
 msgstr "لا توجد زيارة مجدولة حالياً. سنخبركم فور تحديد موعد."
 
@@ -3972,6 +3990,9 @@ msgstr "ليست لجهاز محدد"
 
 msgid "Not picked yet"
 msgstr "لم تُختر بعد"
+
+msgid "Not prepared by the warehouse yet."
+msgstr "لم يجهّزها المستودع بعد."
 
 msgid "Not rated"
 msgstr "غير مقيّم"
@@ -4062,6 +4083,9 @@ msgstr "لم يُعثر على أي نقص."
 
 msgid "Nothing recorded this month."
 msgstr "لم يُسجل شيء هذا الشهر."
+
+msgid "Nothing to prepare right now."
+msgstr "لا شيء للتجهيز الآن."
 
 #, python-format
 msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
@@ -4235,6 +4259,12 @@ msgstr "أو راجع بياناته وعدّلها أولًا"
 msgid "Or type your brand's color code"
 msgstr "أو اكتب رمز لون علامتك التجارية"
 
+msgid "Ordered"
+msgstr "تم طلبها"
+
+msgid "Ordered: when it should arrive, if known."
+msgstr "المطلوبة: موعد وصولها إن كان معروفاً."
+
 msgid "Other"
 msgstr "أخرى"
 
@@ -4355,6 +4385,9 @@ msgstr "تم فحص الجزء وضبطه"
 msgid "Part ordered, to be fitted on a follow-up visit"
 msgstr "تم طلب القطعة، وستُركَّب في زيارة لاحقة"
 
+msgid "Part removed."
+msgstr "تمت إزالة القطعة."
+
 msgid "Part shipment"
 msgstr "شحن قطعة"
 
@@ -4370,6 +4403,15 @@ msgstr "قطع الغيار"
 msgid "Parts Used"
 msgstr "القطع المستخدمة"
 
+msgid "Parts for this visit"
+msgstr "قطع الغيار لهذه الزيارة"
+
+msgid "Parts marked as prepared."
+msgstr "تم تسجيل القطع كمجهّزة."
+
+msgid "Parts needed"
+msgstr "القطع المطلوبة"
+
 msgid "Parts no longer available (end of life)"
 msgstr "قطع الغيار لم تعد متوفرة (انتهاء عمر الطراز)"
 
@@ -4381,6 +4423,9 @@ msgstr "القطع جاهزة للشحن"
 
 msgid "Parts shipped"
 msgstr "شحن القطع"
+
+msgid "Parts to prepare"
+msgstr "قطع للتجهيز"
 
 msgid "Parts used"
 msgstr "القطع المستخدمة"
@@ -4679,6 +4724,13 @@ msgstr "تجهيز الطرد"
 msgid "Prepared by"
 msgstr "أعده"
 
+#, python-format
+msgid "Prepared by %(name)s, %(time)s."
+msgstr "جهّزها %(name)s، %(time)s."
+
+msgid "Prepared by the warehouse — collect them before you go."
+msgstr "جهّزها المستودع — استلمها قبل أن تذهب."
+
 msgid "Prepared on"
 msgstr "تاريخ الإعداد"
 
@@ -4858,6 +4910,9 @@ msgstr "تم الاستلام"
 msgid "Received Equipment"
 msgstr "المعدات المُستلَمة"
 
+msgid "Received — we're preparing your visit and will confirm the date with you"
+msgstr "تم الاستلام — نجهّز لزيارتكم وسنؤكد معكم الموعد"
+
 msgid "Receives it to plan: the day and the technician."
 msgstr "يستلمها ليخطط لها: اليوم والفني."
 
@@ -4899,6 +4954,10 @@ msgid "Remove"
 msgstr "إزالة"
 
 #, python-format
+msgid "Remove %(code)s"
+msgstr "إزالة %(code)s"
+
+#, python-format
 msgid "Remove %(name)s"
 msgstr "إزالة %(name)s"
 
@@ -4911,6 +4970,9 @@ msgstr "إزالته"
 
 msgid "Remove this machine"
 msgstr "إزالة هذا الجهاز"
+
+msgid "Remove this part?"
+msgstr "إزالة هذه القطعة؟"
 
 msgid "Removed from a task"
 msgstr "أُزيل من مهمة"
@@ -4938,6 +5000,9 @@ msgstr "أُعيد فتحه"
 
 msgid "Repaired"
 msgstr "تم الإصلاح"
+
+msgid "Repairs whose parts are all in — the soonest visit first. Open one to mark its parts prepared."
+msgstr "إصلاحات وصلت كل قطعها — الأقرب موعداً أولاً. افتح إحداها لتسجيل قطعها كمجهّزة."
 
 msgid "Replace lead"
 msgstr "استبدال الفني الرئيسي"
@@ -6567,6 +6632,9 @@ msgstr "هذا الطلب غير مغلق."
 msgid "This type of task requires the customer's signature."
 msgstr "يتطلب هذا النوع من المهام توقيع العميل."
 
+msgid "This visit is scheduled, but some ordered parts haven't arrived yet. Check they'll be in before the visit, or move it."
+msgstr "هذه الزيارة مجدولة، لكن بعض القطع المطلوبة لم تصل بعد. تأكد من وصولها قبل الزيارة، أو غيّر موعدها."
+
 msgid "This week"
 msgstr "هذا الأسبوع"
 
@@ -6959,6 +7027,13 @@ msgstr "بانتظار القرار"
 
 msgid "Waiting for confirmation"
 msgstr "بانتظار التأكيد"
+
+#, python-format
+msgid "Waiting for parts — expected around %(date)s"
+msgstr "بانتظار قطع الغيار — الوصول المتوقع حوالي %(date)s"
+
+msgid "Waiting for parts — we'll schedule your visit as soon as they arrive"
+msgstr "بانتظار قطع الغيار — سنحدد موعد زيارتكم فور وصولها"
 
 msgid "Waiting for supervisor review"
 msgstr "بانتظار مراجعة المشرف"
@@ -7485,6 +7560,9 @@ msgstr "نشط"
 msgid "actor"
 msgstr "الفاعل"
 
+msgid "added at"
+msgstr "أُضيفت في"
+
 msgid "added by"
 msgstr "أضافها"
 
@@ -7535,6 +7613,9 @@ msgstr "المدة التقريبية للعمل؛ تظهر كوقت انتها�
 
 msgid "arm color"
 msgstr "لون الذراع"
+
+msgid "arrived"
+msgstr "وصلت"
 
 msgid "asset"
 msgstr "جهاز"
@@ -7870,6 +7951,13 @@ msgstr "الدليل"
 msgid "exactly what the customer signed (reports.pdf.report_content), kept to detect later changes"
 msgstr "ما وقّعه العميل بالضبط، ويُحفظ لاكتشاف أي تعديلات لاحقة"
 
+#, python-format
+msgid "expected %(date)s"
+msgstr "متوقعة %(date)s"
+
+msgid "expected on"
+msgstr "التاريخ المتوقع"
+
 msgid "factory offer"
 msgstr "عرض المصنع"
 
@@ -7911,6 +7999,9 @@ msgstr "لون الإطار"
 
 msgid "free text as shown on the plate"
 msgstr "نص حر كما يظهر على اللوحة"
+
+msgid "from"
+msgstr "المصدر"
 
 msgid "from booking to the signed report."
 msgstr "من الحجز حتى التقرير الموقّع."
@@ -8100,6 +8191,12 @@ msgstr "اختياري، يظهر للعميل مع قرار \"تم تقديم �
 msgid "optional; displayed on the customer's ticket page"
 msgstr "اختياري؛ يظهر في صفحة تذكرة العميل"
 
+msgid "ordered: marked arrived by hand (delivered direct, say)"
+msgstr "المطلوبة: سُجّل وصولها يدوياً (توصيل مباشر مثلاً)"
+
+msgid "ordered: when it should arrive, if known"
+msgstr "المطلوبة: موعد وصولها إن كان معروفاً"
+
 msgid "other recommendation"
 msgstr "توصية أخرى"
 
@@ -8124,11 +8221,23 @@ msgstr "قطعة"
 msgid "part code"
 msgstr "رمز القطعة"
 
+msgid "part needed"
+msgstr "قطعة مطلوبة"
+
 msgid "part used"
 msgstr "القطعة المستخدمة"
 
 msgid "parts"
 msgstr "قطع"
+
+msgid "parts needed"
+msgstr "القطع المطلوبة"
+
+msgid "parts prepared at"
+msgstr "وقت تجهيز القطع"
+
+msgid "parts prepared by"
+msgstr "جهّز القطع"
 
 msgid "parts used"
 msgstr "القطع المستخدمة"
@@ -8486,6 +8595,9 @@ msgstr "الحالة"
 
 msgid "sticker photo"
 msgstr "صورة الملصق"
+
+msgid "still on order"
+msgstr "ما زالت قيد الطلب"
 
 msgid "stock count"
 msgstr "جرد المخزون"
@@ -8982,6 +9094,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Back to your tickets"
 #~ msgstr "العودة إلى طلباتك"
+
+#~ msgid "Being arranged"
+#~ msgstr "قيد الترتيب"
 
 #~ msgid "Black"
 #~ msgstr "أسود"

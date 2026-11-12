@@ -456,6 +456,8 @@ This status is shown to the technician themselves (My progress) and to superviso
 | previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
 | on_the_way_notified_at | timestamptz | nullable — when the customer was told the technician is on the way (the lead's "On the way" tap): once a visit day, so a second tap or an undo doesn't send it again |
+| parts_prepared_at | timestamptz | nullable — the warehouse (or the manager tier) got the repair's parts ready for the visit, once all of them are in (`task_part_needed`; the *Parts to prepare* list, website and app) |
+| parts_prepared_by_id | FK → user | nullable — who did |
 | schedule_notified_by_id | FK → user | nullable |
 
 **Quotation, factory offer, and delivery note stay manager-tier only; the invoice can be opened up per task.** Sometimes a supervisor is the one on site collecting cash from the customer and needs to show or check the invoice — `invoice_visible_to_supervisor` is a plain checkbox on the task's Edit screen (manager-only, like the document fields themselves) that adds the invoice, and only the invoice, to what a supervisor sees in that task's own Documents section. It defaults off and is a per-task decision, not a role permission — turning it on for one job doesn't change what a supervisor sees on any other task.
@@ -844,6 +846,25 @@ Per warehouse and code only — colours aren't separate stock, and there are no 
 **Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
 
 > received (`done` part lines on receiving tasks at the country's warehouse) − used (`part_used` on that country's reports) − shipped (`done` part lines on that country's part shipments that aren't cancelled) + counts
+
+### task_part_needed
+
+The spare parts a repair needs, known **before** the visit (the task page's *Parts needed*, its owner or someone stepping in): code, description, quantity — the same three a report's *Parts used* has. The request becomes a task once the team decides on a visit, without a date; the parts are recorded on it while they're found or ordered (`tasks.parts_needed`).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | `CASCADE` |
+| product_code | varchar | typed; a code not in the catalogue is fine |
+| description | varchar | blank: the catalogue's, for a code it knows |
+| quantity | int | |
+| source | varchar | `stock` (from our stock: **held for the task at once**, `tasks.stock.parts_held`) or `ordered` |
+| expected_on | date | nullable — ordered: when it should arrive, if known |
+| arrived_at | timestamptz | nullable — ordered: marked arrived by hand (delivered direct). Otherwise it counts as arrived once a receiving task brings that code in for this task (`task_product.for_task`) |
+| created_by_id | FK → user | |
+| created_at | timestamptz | |
+
+**While an ordered part hasn't arrived, the customer reads "Waiting for parts"** (with the expected date when known) instead of "Received" (`customers.progress`), until there's a visit date. A visit scheduled before its ordered parts are in shows a warning on the task page.
 
 **Parts ordered for one repair are held for it.** A part line received for a particular task (`for_task`, the repair with the PAK number) counts in the warehouse but shows as **held for that task**, not free, until that task's report uses it; whatever the task leaves unused once it's closed or cancelled becomes free stock.
 

@@ -224,6 +224,11 @@ export default function ReportScreen() {
         if (pending.error) {
           setErrors({ form: t('This report could not be sent: {error} Please correct it and submit again.', { error: pending.error ?? '' }) });
         }
+      } else if (!report && reportResult.data.parts_suggested?.length) {
+        // Not filed yet: "Parts used" starts with the parts the task needed — correct it to what was fitted.
+        setParts(reportResult.data.parts_suggested.map((part) => ({
+          part_code: part.part_code, description: part.description, quantity: String(part.quantity),
+        })));
       } else if (report) {
         setFindings(report.findings);
         setActionTaken(report.action_taken);

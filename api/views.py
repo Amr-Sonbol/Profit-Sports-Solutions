@@ -38,6 +38,7 @@ from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
+from tasks.parts_needed import part_rows, report_parts
 from tasks.forms import (
     AddHelperForm, RegisterMachineForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
@@ -57,7 +58,7 @@ from tasks.views import (
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
-    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead, can_change_task,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
@@ -1702,6 +1703,8 @@ class MyTaskReportView(APIView):
             # final once the report has been sent.
             'time_on_site': hours_text(task.time_on_site()) or None,  # "1:32"
             'time_is_final': bool(report and report.submitted_at),
+            # Before the first filing: the parts the task needed, to correct to what was fitted.
+            'parts_suggested': [] if report else report_parts(task),
             # Each helper's hours box: empty = same as the report's.
             'helpers': [
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
@@ -1987,6 +1990,7 @@ def _team_task_response(request, task):
         'shipment': shipment_for_app(task, technician),
     }
     data = TeamTaskDetailSerializer(task, context=context).data
+    data.update(_parts_payload(request, task))
     # What a manager can do here, as on the website's task page (TaskManageView).
     is_manager = technician.is_manager_tier
     # Its machines (an equipment task), the chain around it, and the follow-up offer.
@@ -2190,6 +2194,90 @@ class MyTaskConfirmPhotoView(APIView):
         data = TaskAttachmentSerializer(attachments, many=True, context={'request': request}).data
         # One photo asked for (an app from before): that one, as it expects.
         return Response(data[0] if request.data.get('name') else data, status=status.HTTP_201_CREATED)
+
+
+def _parts_payload(request, task):
+    """The team task page's Parts needed: who may change them, and whether they can be marked prepared."""
+    from tasks.parts_needed import all_in, can_prepare
+    technician = request.user.technician
+    return {
+        'can_change_parts': can_change_task(technician, task),
+        'can_prepare_parts': can_prepare(technician) and all_in(task) and task.parts_prepared_at is None,
+    }
+
+
+class TaskPartsNeededView(APIView):
+    """The team task page's Parts needed (tasks.parts_needed), its owner or someone
+    stepping in: POST adds one (PartNeededForm: product_code, description, quantity,
+    source stock|ordered, expected_on); POST with `line` and `action` arrived|remove
+    marks an ordered one arrived, or removes one. Returns the task's parts."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        from tasks import parts_needed
+        from tasks.forms import PartNeededForm
+
+        task = _get_team_task(request, pk)
+        _require_task_owner(request, task)
+        if request.data.get('line'):
+            line = get_object_or_404(task.parts_needed, pk=request.data['line'])
+            if request.data.get('action') == 'arrived':
+                parts_needed.mark_arrived(line)
+            elif request.data.get('action') == 'remove':
+                line.delete()
+            else:
+                return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            form = PartNeededForm(request.data)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            parts_needed.add_part(task, request.user, form.cleaned_data)
+        return Response({
+            'parts_needed': TaskDetailSerializer(task, context={'request': request}).data['parts_needed'],
+            **_parts_payload(request, task),
+        })
+
+
+class TaskPartsPreparedView(APIView):
+    """The warehouse (or the manager tier) marks a repair's parts prepared, once they're all in."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        from tasks.parts_needed import all_in, can_prepare, mark_prepared
+
+        task = _get_team_task(request, pk)
+        if not can_prepare(request.user.technician) or not all_in(task):
+            raise PermissionDenied
+        mark_prepared(task, request.user)
+        return Response({'parts_prepared': True})
+
+
+class PartsToPrepareView(APIView):
+    """The repairs whose parts are all in and not prepared yet, in the active
+    country, the soonest visit first (tasks.parts_needed.to_prepare) — the
+    warehouse manager's list."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        from tasks.parts_needed import can_prepare, part_rows, to_prepare
+
+        technician = request.user.technician
+        if not can_prepare(technician):
+            raise PermissionDenied
+        return Response([
+            {
+                'task_id': task.pk, 'task_number': task.task_number, 'customer': task.site.customer.name,
+                'site': task.site.name, 'scheduled_for': task.scheduled_for,
+                'parts': [
+                    {'code': row['line'].product_code, 'description': row['line'].description, 'quantity': row['line'].quantity}
+                    for row in part_rows(task)
+                ],
+            }
+            for task in to_prepare(get_active_country(request) or technician.country)
+        ])
 
 
 class TaskFollowUpView(APIView):

@@ -83,9 +83,11 @@ STOCK_TASK_CATEGORIES = ('part_shipment', 'receiving', 'loading', 'installation'
 
 def tasks_for_role(technician, tasks):
     """A task list as this role sees it: a Warehouse Manager, only stock-related
-    tasks; everyone else, as their country (or every country) allows."""
+    tasks — and repairs that need parts, to prepare them (tasks.parts_needed);
+    everyone else, as their country (or every country) allows."""
     if technician.role == technician.Role.WAREHOUSE_MANAGER:
-        return tasks.filter(task_type__category__in=STOCK_TASK_CATEGORIES)
+        from django.db.models import Q
+        return tasks.filter(Q(task_type__category__in=STOCK_TASK_CATEGORIES) | Q(parts_needed__isnull=False)).distinct()
     return tasks
 
 

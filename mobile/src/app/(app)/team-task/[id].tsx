@@ -14,6 +14,7 @@ import {
 import { CustomerRequest } from '@/components/customer-request';
 import { ShipmentSteps } from '@/components/shipment-steps';
 import { BranchCard } from '@/components/branch-card';
+import { PartsNeededPanel } from '@/components/parts-needed-panel';
 import { VisitPhotos } from '@/components/visit-photos';
 import { TaskActionsPanel } from '@/components/task-actions';
 import { TaskMessages } from '@/components/task-messages';
@@ -406,6 +407,14 @@ export default function TeamTaskScreen() {
             ) : null}
             {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
+
+          {/* The spare parts this repair needs (as on the website): its owner adds them; the warehouse prepares them. */}
+          {task.parts_needed?.length || task.can_change_parts ? (
+            <PartsNeededPanel
+              taskId={task.id} parts={task.parts_needed ?? []} prepared={Boolean(task.parts_prepared)}
+              canChange={Boolean(task.can_change_parts)} canPrepare={Boolean(task.can_prepare_parts)} onChanged={load}
+            />
+          ) : null}
 
           {task.from_request ? (
             // What the customer reported; once there's a report, each machine is on its card above Approve.

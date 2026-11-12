@@ -111,12 +111,17 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     machines = serializers.SerializerMethodField()
     # The task's machines as photo cards (tasks.views.task_machine_cards): every screen shows these.
     machine_cards = serializers.SerializerMethodField()
+    # The spare parts for the visit (tasks.parts_needed), and whether the warehouse prepared them.
+    parts_needed = serializers.SerializerMethodField()
+    parts_prepared = serializers.SerializerMethodField()
+    delivery_note_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             'id', 'task_number', 'site_name', 'site_address', 'customer_name', 'currency_code',
             'site_contact_name', 'site_contact_phone', 'directions_url', 'machines', 'machine_cards', 'scheduled_date',
+            'parts_needed', 'parts_prepared', 'delivery_note_url',
             'status', 'status_display', 'priority', 'priority_display',
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
@@ -156,6 +161,25 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             }
             for machine in obj.ticket_machines.all()
         ]
+
+    def get_parts_needed(self, obj):
+        from tasks.parts_needed import part_rows
+
+        return [
+            {'id': row['line'].pk, 'code': row['line'].product_code, 'description': row['line'].description,
+             'quantity': row['line'].quantity, 'state': row['state'],
+             'expected_on': row['line'].expected_on.isoformat() if row['line'].expected_on else None}
+            for row in part_rows(obj)
+        ]
+
+    def get_parts_prepared(self, obj):
+        return obj.parts_prepared_at is not None
+
+    def get_delivery_note_url(self, obj):
+        request = self.context.get('request')
+        if not obj.delivery_note:
+            return ''
+        return signed_media_url(request, obj.delivery_note.url) if request else obj.delivery_note.url
 
     def get_machine_cards(self, obj):
         from tasks.views import task_machine_cards

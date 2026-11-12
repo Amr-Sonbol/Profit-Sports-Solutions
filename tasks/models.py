@@ -215,6 +215,12 @@ class Task(models.Model):
         help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
+    # The warehouse got the repair's parts ready for the visit (tasks.parts_needed.mark_prepared).
+    parts_prepared_at = models.DateTimeField(_('parts prepared at'), null=True, blank=True)
+    parts_prepared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name=_('parts prepared by'),
+    )
     # The step before this one in an equipment chain — receiving from the
     # factory, loading at the warehouse, installing on site, a follow-up
     # for what wasn't installed — whose machine lines this one carried on.
@@ -1346,6 +1352,40 @@ class TaskProduct(models.Model):
             category = self.task.task_type.category if self.task.task_type_id else ''
             return STEP_DONE_LABELS.get(category, STEP_DONE_LABELS['installation'])
         return self.get_status_display()
+
+
+class TaskPartNeeded(models.Model):
+    """A spare part a repair needs, known before the visit (docs: task_part_needed):
+    code, description, quantity — from our stock (held for the task at once,
+    tasks.stock.parts_held) or ordered (then it arrives: received for this task,
+    or marked arrived — delivered direct). While an ordered one hasn't, the
+    customer reads "Waiting for parts" (customers.progress)."""
+
+    class Source(models.TextChoices):
+        STOCK = 'stock', _('From our stock')
+        ORDERED = 'ordered', _('Ordered')
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='parts_needed', verbose_name=_('task'))
+    product_code = models.CharField(_('code'), max_length=100)
+    description = models.CharField(_('description'), max_length=200, blank=True)
+    quantity = models.PositiveIntegerField(_('quantity'), default=1)
+    source = models.CharField(_('from'), max_length=10, choices=Source.choices, default=Source.STOCK)
+    expected_on = models.DateField(_('expected on'), null=True, blank=True, help_text=_('ordered: when it should arrive, if known'))
+    arrived_at = models.DateTimeField(
+        _('arrived'), null=True, blank=True, help_text=_('ordered: marked arrived by hand (delivered direct, say)'),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name=_('added by'),
+    )
+    created_at = models.DateTimeField(_('added at'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('part needed')
+        verbose_name_plural = _('parts needed')
+        ordering = ['task', 'pk']
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.product_code} × {self.quantity}'
 
 
 class StockAdjustment(models.Model):

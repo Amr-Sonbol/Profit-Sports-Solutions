@@ -650,7 +650,7 @@ class PortalVisitReportTests(CustomerTestCase):
 
 class PortalProgressTests(CustomerTestCase):
     # The portal home in the customer's words: the next visit up front,
-    # progress as Received → Being arranged → Visit booked → Done.
+    # progress as Received → Visit scheduled → On the way → On site → Done.
 
     def setUp(self):
         super().setUp()
@@ -1020,11 +1020,15 @@ class PortalBellTests(CustomerTestCase):
     def test_the_progress_bar_follows_the_words(self):
         from .progress import CLOSED, DONE, RECEIVED, VISIT_BOOKED, progress_steps
         from .progress import ON_SITE, ON_THE_WAY
-        self.assertEqual([state for _label, state in progress_steps(RECEIVED)], ['current'] + ['todo'] * 5)
-        self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'done', 'current', 'todo', 'todo', 'todo'])
-        self.assertEqual([state for _label, state in progress_steps(ON_THE_WAY)], ['done'] * 3 + ['current', 'todo', 'todo'])
-        self.assertEqual([state for _label, state in progress_steps(ON_SITE)], ['done'] * 4 + ['current', 'todo'])
-        self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 6)
+        from .progress import BEING_ARRANGED
+        self.assertEqual([str(label) for label, _state in progress_steps(RECEIVED)],
+                         ['Received', 'Visit scheduled', 'On the way', 'On site', 'Done'])
+        self.assertEqual([state for _label, state in progress_steps(RECEIVED)], ['current'] + ['todo'] * 4)
+        self.assertEqual(progress_steps(BEING_ARRANGED), progress_steps(RECEIVED))  # no date yet: still received
+        self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'current', 'todo', 'todo', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(ON_THE_WAY)], ['done', 'done', 'current', 'todo', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(ON_SITE)], ['done'] * 3 + ['current', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 5)
         self.assertIsNone(progress_steps(CLOSED))
 
 

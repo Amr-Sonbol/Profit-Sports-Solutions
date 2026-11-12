@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Parts to prepare" %} — Profit Sports Solutions{% endblock %}
+
+{% block content %}
+<div class="page__header">
+    <h1>{% translate "Parts to prepare" %}</h1>
+</div>
+<p class="muted">{% translate "Repairs whose parts are all in — the soonest visit first. Open one to mark its parts prepared." %}</p>
+
+{% if rows %}
+<div class="table-wrap">
+    <table class="compact-table">
+        <thead><tr><th>{% translate "Task" %}</th><th>{% translate "Visit" %}</th><th>{% translate "Parts" %}</th></tr></thead>
+        <tbody>
+            {% for row in rows %}{% with task=row.task %}
+            <tr>
+                <td><a href="{% url 'tasks:task_detail' task.pk %}#parts-needed" class="task-number" dir="ltr">{{ task.task_number }}</a><span class="compact-table__sub">{{ task.site.customer.name }} — {{ task.site.name }}</span></td>
+                <td>{% if task.scheduled_for %}{{ task.scheduled_for|date:"D j M, H:i" }}{% else %}<span class="muted">{% translate "No visit date yet" %}</span>{% endif %}</td>
+                <td>{% for part in row.parts %}<div>{{ part.line.quantity }} × <span dir="ltr">{{ part.line.product_code }}</span>{% if part.line.description %} — {{ part.line.description }}{% endif %}</div>{% endfor %}</td>
+            </tr>
+            {% endwith %}{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">{% translate "Nothing to prepare right now." %}</p>
+{% endif %}
+{% endblock %}
