@@ -8,7 +8,7 @@ until they open the task) and a phone notification. One place, so an action
 added later is told too. Connected in tasks.apps.TasksConfig.ready.
 """
 from django.db import transaction
-from django.utils import timezone
+from django.utils import formats, timezone
 from django.utils.translation import gettext as _
 
 from people.push import push_in_their_language
@@ -38,12 +38,18 @@ def describe(event):
         if is_shipment(task):
             return _('All parts are in — prepare and ship')
         if task.scheduled_for or task.scheduled_date:
-            day = timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
-            return _('All parts are in for the visit on %(date)s') % {'date': f'{day:%d %b}'}
+            day = _in_country(task, task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
+            return _('All parts are in for the visit on %(date)s') % {'date': formats.date_format(day, 'j M')}
         return _('All parts are in — schedule the visit')
     if event.event_type == 'rescheduled' and task.scheduled_for:
-        return f'{label} · {timezone.localtime(task.scheduled_for):%a %d %b, %H:%M}'
+        return f"{label} · {formats.date_format(_in_country(task, task.scheduled_for), 'D j M, H:i')}"
     return label
+
+
+def _in_country(task, moment):
+    """A moment in the task's country's own time (the reader may be anywhere)."""
+    from zoneinfo import ZoneInfo
+    return timezone.localtime(moment, ZoneInfo(task.site.customer.country.timezone))
 
 
 def tell(event):

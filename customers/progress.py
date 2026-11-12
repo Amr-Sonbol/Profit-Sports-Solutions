@@ -77,7 +77,10 @@ def visit_progress(task):
 
 def today_tap(task):
     """The lead's latest "On the way" or "Arrived" today (an undone one is gone), or None."""
-    start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    from zoneinfo import ZoneInfo
+    # Their country's own day, not the server's (UTC).
+    country_tz = ZoneInfo(task.site.customer.country.timezone)
+    start = timezone.localtime(timezone.now(), country_tz).replace(hour=0, minute=0, second=0, microsecond=0)
     return task.events.filter(
         event_type__in=[TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED], occurred_at__gte=start,
     ).order_by('-occurred_at').values_list('event_type', flat=True).first()

@@ -2228,6 +2228,8 @@ class TaskPartsNeededView(APIView):
         if request.data.get('action') == 'edit':
             if not request.user.technician.is_manager_tier:
                 raise PermissionDenied  # correcting a part: managers only
+            if not request.data.get('line'):
+                return Response({'detail': 'Which part?'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             _require_task_owner(request, task)
         if request.data.get('line'):
@@ -2240,7 +2242,7 @@ class TaskPartsNeededView(APIView):
                 form = PartNeededForm(request.data)
                 if not form.is_valid():
                     return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-                parts_needed.edit_part(line, form.cleaned_data)
+                parts_needed.edit_part(line, form.cleaned_data, request.user)
             else:
                 return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
         else:
@@ -2694,6 +2696,8 @@ class TaskActionView(APIView):
             if not is_part_shipment(task):
                 raise Http404
             stage = shipments.stage(task)
+            if action in ('shipment_ready', 'shipment_shipped') and not shipments.from_our_stock(task):
+                raise PermissionDenied  # no stock of ours here: only "Sent direct from the factory"
             if action == 'shipment_ready':
                 if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
                     raise PermissionDenied

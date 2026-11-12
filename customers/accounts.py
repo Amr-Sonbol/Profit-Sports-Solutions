@@ -141,25 +141,26 @@ def _send_link_email(request, person, subject_msgid, body_msgid, button_msgid):
 def _send_account_email(person, recipient, subject_msgid, body_msgid, button_msgid, values, link=None):
     """One account email to a person, in their customer's languages; `link`,
     when given, shows as a button in the HTML version."""
-    from tasks.customer_emails import CLOSING, TEMPLATE
+    from tasks.customer_emails import CLOSING, FOOTER, TEMPLATE
     from tasks.views import _send_notification_email
 
     customer = person.customer
     values = {'contact': person.user.first_name or customer.contact_name or customer.name, **values}
     versions = _in_languages(email_languages(customer), lambda: {
         'subject': str(subject_msgid), 'body': f'{str(body_msgid) % values}\n\n{CLOSING}',
-        'button': str(button_msgid or ''),
+        'button': str(button_msgid or ''), 'footer': str(FOOTER),
     })
     subject = ' | '.join(version['subject'] for _code, version in versions)
     text = '\n\n— — —\n\n'.join(version['body'] for _code, version in versions)
     sections = [{
-        'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': version['button'],
+        'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': version['button'], 'footer': version['footer'],
         # The HTML version shows the link's own paragraph as a button.
         'paragraphs': version['body'].strip().split('\n\n'),
     } for code, version in versions]
     _send_notification_email(
         subject, text, TEMPLATE,
-        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1]}, [recipient],
+        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1],
+         'footer_lines': [version['footer'] for _code, version in versions]}, [recipient],
     )
 
 

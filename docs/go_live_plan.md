@@ -123,6 +123,23 @@ undone for it. Likewise a customer admin role who manages their own people.
   be deleted, and who at the company handles it — and where photos and
   backups are kept (which country).
 
+## 2c. Opening stock (a cut-over stocktake)
+
+What's on the warehouse floor today was never received in the app, so it goes in
+once, as **opening stock**, on the day the app takes over (added 2026-11-13):
+
+1. **Choose the day** (go-live day) and **freeze** warehouse movements that day.
+2. **Count** each warehouse's machines by code, and each country's spare parts.
+3. **Load the counts:** spare parts by uploading the warehouse's Excel sheet with
+   its quantities on the Parts page ("Opening stock — <file>"); machines on the
+   Warehouse stock page (*Record a count*; an upload for many codes at once is
+   planned).
+4. From then on every movement goes through the app: receivings bring stock in,
+   loadings and reports take it out, counts correct it.
+
+Machines already at customers aren't stock: they go on each customer's machine
+list (the customer import, or the customer's page).
+
 ## 3. Accounts to create on the live server
 
 Real names and emails are still needed from the owner; accounts get a setup

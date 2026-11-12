@@ -62,7 +62,7 @@
 </tr>
 <tr>
 <td class="email-footer" style="background-color:#f5f6f7;padding:16px 32px;border-top:1px solid #e3e6ea;color:#8a94a3;font-size:12px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
-{% if customer_email %}To reply, please use your request in our customer portal, so our whole team can see it.{% else %}This is an automated message from Profit Sports Solutions. Please do not reply to this email.{% endif %}
+{% if customer_email %}{% for section in sections %}<p lang="{{ section.lang }}" dir="{{ section.dir }}" style="margin:0 0 4px;">{{ section.footer }}</p>{% endfor %}{% else %}This is an automated message from Profit Sports Solutions. Please do not reply to this email.{% endif %}
 </td>
 </tr>
 </table>

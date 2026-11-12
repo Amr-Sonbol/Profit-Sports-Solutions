@@ -1063,8 +1063,7 @@ CUSTOMER_SIGNATURE_TEXT = (
     'Phone: %(phone)s\n'
     'Email: %(email)s\n'
     'https://profitsports.solutions/\n'
-    '11th floor, office#1108, Grosvenor Business Tower, Barsha Heights – Dubai, UAE\n\n'
-    'To reply, please use your request in our customer portal, so our whole team can see it.'
+    '11th floor, office#1108, Grosvenor Business Tower, Barsha Heights – Dubai, UAE'
 )
 
 
@@ -1101,7 +1100,9 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
         'service_email': settings.CUSTOMER_SERVICE_EMAIL, 'service_phone': settings.CUSTOMER_SERVICE_PHONE,
     })
     if to_customer:
-        text_body = f'{text_body.rstrip()}\n\n--\n{CUSTOMER_SIGNATURE_TEXT % {"phone": settings.CUSTOMER_SERVICE_PHONE, "email": settings.CUSTOMER_SERVICE_EMAIL}}'
+        signature = CUSTOMER_SIGNATURE_TEXT % {'phone': settings.CUSTOMER_SERVICE_PHONE, 'email': settings.CUSTOMER_SERVICE_EMAIL}
+        footer = '\n'.join(context.get('footer_lines') or [])
+        text_body = f'{text_body.rstrip()}\n\n--\n{signature}\n\n{footer}'.rstrip()
     email = EmailMultiAlternatives(
         subject=subject, body=text_body, from_email=settings.CUSTOMER_FROM_EMAIL if to_customer else None,
         to=recipient_list, reply_to=[settings.CUSTOMER_SERVICE_EMAIL] if to_customer else None, headers=headers,
@@ -1235,6 +1236,9 @@ def send_visit_reminders(now=None):
         if task.scheduled_for - task.schedule_notified_at < REMINDER_NOTICE:
             continue
         if task.reminder_sent_at and task.reminder_sent_at >= task.schedule_notified_at:
+            continue
+        # Moved since they were told, or a change of time waiting for a manager: not a time they know.
+        if not customer_has_current_time(task) or schedule_change_pending(task):
             continue
         if not task.site.effective_contact_email:
             continue
@@ -2534,7 +2538,7 @@ def task_detail(request, pk):
         line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
         edit_form = PartNeededForm(request.POST, prefix=f'part{line.pk}')
         if edit_form.is_valid():
-            parts_needed.edit_part(line, edit_form.cleaned_data)
+            parts_needed.edit_part(line, edit_form.cleaned_data, request.user)
             messages.success(request, _('Part changed.'))
         else:
             messages.error(request, ' '.join(error for errors in edit_form.errors.values() for error in errors))
@@ -7153,6 +7157,8 @@ def _shipment_post(request, task, technician, back):
         ship_and_tell_customer(task, request.user, company, request.POST.get('shipping_tracking_number', ''))
         messages.success(request, _('Shipped direct from the factory. The customer has been told.'))
         return redirect(back)
+    if action in ('shipment_ready', 'shipment_shipped') and not shipments.from_our_stock(task):
+        raise PermissionDenied  # no stock of ours here: only "Sent direct from the factory"
     if action == 'shipment_ready':
         if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
             raise PermissionDenied
@@ -7426,10 +7432,16 @@ def save_work_report(request, task, technician, report_form, part_rows):
         # copy of something that isn't there.
         # Drawing the PDF and sending it both happen in the background.
         def send_copy():
-            # The rating asked in the same email: its link made here, where the request is.
+            # The rating asked in the same email: its link made here, where the request is —
+            # and withdrawn when the email doesn't go, so it never counts as asked.
+            asked_before = CustomerFeedback.objects.filter(task=task).exists()
             feedback = ask_for_rating(task, request.user)
             rating_link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token])) if feedback else None
-            _in_background(lambda: send_visit_report_copy(saved_report, copy_to, rating_link))
+
+            def send():
+                if not send_visit_report_copy(saved_report, copy_to, rating_link) and feedback and not asked_before:
+                    feedback.delete()
+            _in_background(send)
         transaction.on_commit(send_copy)
     if saved_report.first_submission:
         register_installed_machines(task)

@@ -1832,3 +1832,25 @@ class CustomerViewAndEditTests(CustomerTestCase):
         page = self.client.get(f'/customers/{self.customer.pk}/')
         self.assertContains(page, f'/customers/{self.customer.pk}/edit/')
         self.assertEqual(self.client.get(f'/customers/{self.customer.pk}/edit/').status_code, 200)
+
+
+class TodayInTheCustomersCountryTests(CustomerTestCase):
+    """The portal's "On the way" counts the customer's own day, not the server's (UTC)."""
+
+    def test_a_tap_after_midnight_in_dubai_is_today(self):
+        from datetime import datetime
+        from unittest.mock import patch
+        from zoneinfo import ZoneInfo
+        from customers.progress import today_tap
+        from tasks.models import Task, TaskEvent
+        user = User.objects.create_user('lead9', password='x')
+        task = Task.objects.create(
+            task_number='AE-0990', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=datetime(2026, 11, 10, tzinfo=ZoneInfo('UTC')),
+            created_by=user,
+        )
+        # 02:30 in Dubai on the 13th is 22:30 UTC on the 12th.
+        tapped = datetime(2026, 11, 13, 2, 30, tzinfo=ZoneInfo('Asia/Dubai'))
+        TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.EN_ROUTE, occurred_at=tapped, actor=user)
+        with patch('django.utils.timezone.now', return_value=tapped):
+            self.assertEqual(today_tap(task), TaskEvent.EventType.EN_ROUTE)

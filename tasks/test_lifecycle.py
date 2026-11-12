@@ -662,6 +662,17 @@ class PartShipmentTests(LifecycleTestCase):
         self.assertEqual(self.task.status, Task.Status.ASSIGNED)
 
 
+class NoWarehouseShipmentTests(PartShipmentTests):
+    """Where the country holds no stock (the USA): only "Sent direct from the
+    factory" — refused on the server, whatever a page or an older app sends."""
+
+    def test_nothing_is_prepared_from_a_stock_that_isnt_there(self):
+        self.country.has_warehouse = False
+        self.country.save(update_fields=['has_warehouse'])
+        self.assertEqual(self.ready(self.client_for('warehouse1')).status_code, 403)
+        self.assertFalse(self.task.products.filter(kind='part').exists())
+
+
 class PartShipmentFormTests(LifecycleTestCase):
     def test_the_type_is_set_and_fixed_from_the_decision(self):
         from tasks.shipments import part_shipment_type

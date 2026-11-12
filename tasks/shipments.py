@@ -105,6 +105,12 @@ def send_to(task):
     }
 
 
+def from_our_stock(task):
+    """Whether its parts can come from our stock: not where the country holds none
+    (the USA) — there it's only ever sent direct from the factory."""
+    return task.site.customer.country.has_warehouse
+
+
 def can_prepare(technician, task):
     """The country's warehouse manager, or the manager tier."""
     return technician.is_manager_tier or (

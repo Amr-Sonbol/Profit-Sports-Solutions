@@ -24,6 +24,7 @@ GREETING = _('Dear %(contact)s,')
 CLOSING = _('Kind regards,')
 FOLLOW_UP = _('You can follow your request here:')
 VIEW_REQUEST = _('View your request')
+FOOTER = _('To reply, please use your request in our customer portal, so our team can see it.')
 REQUEST_REFERENCE = _('Request %(number)s')
 VISIT_REFERENCE = _('Visit %(number)s')
 SUBJECT = _('%(title)s — %(reference)s')
@@ -107,6 +108,7 @@ def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=
             body.append(str(CLOSING))
             sections.append({
                 'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': str(button or ''),
+                'footer': str(FOOTER),
                 'subject': str(SUBJECT) % {'title': str(title), 'reference': reference},
                 'paragraphs': [text for text in body if text],
             })
@@ -115,7 +117,8 @@ def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=
     return _send_notification_email(
         subject, text, TEMPLATE,
         # The inbox's preview: what happened, in the first language.
-        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1]},
+        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1],
+         'footer_lines': [section['footer'] for section in sections]},
         [recipient], attachment=attachment, background=background,
         # One request's emails grouped, where the mail program groups by headers.
         headers={'References': f'<request-{number}@profitsports.solutions>'},

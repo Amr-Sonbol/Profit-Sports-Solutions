@@ -112,12 +112,13 @@ def changed(task):
         task.save(update_fields=['parts_prepared_at', 'parts_prepared_by'])
 
 
-def check_all_in(task, user):
+def check_all_in(task, user, was_ordered=False):
     """The last ordered part it needed is in: "All parts are in", once —
     again only if a part changed after it was told. The event tells the
     people on the task and the country's warehouse manager (tasks.updates)."""
     ordered = task.parts_needed.filter(source=TaskPartNeeded.Source.ORDERED)
-    if not ordered.exists() or not all_in(task):
+    # was_ordered: the last ordered part just became one from stock (edit_part).
+    if not (ordered.exists() or was_ordered) or not all_in(task):
         return None
     latest_change = max(line.updated_at for line in task.parts_needed.all())
     if task.events.filter(event_type=TaskEvent.EventType.PARTS_ARRIVED, occurred_at__gte=latest_change).exists():
@@ -133,10 +134,22 @@ def check_received(receiving_task, user):
         check_all_in(task, user)
 
 
-def edit_part(line, cleaned):
-    """A manager corrects a part (PartNeededForm): it counts as changed."""
+def edit_part(line, cleaned, user):
+    """A manager corrects a part (PartNeededForm): it counts as changed, and
+    what follows is as for a new part — another code without a description
+    takes the catalogue's; newly ordered, the customer is told (the first
+    ordered one); no longer waiting, "All parts are in" when that was the last."""
+    task = line.task
+    was_ordered = line.source == TaskPartNeeded.Source.ORDERED
+    old_code = line.product_code
     line.product_code = cleaned['product_code'].strip()
-    line.description = (cleaned.get('description') or '').strip() or line.description
+    description = (cleaned.get('description') or '').strip()
+    if not description and line.product_code.lower() == old_code.lower():
+        description = line.description
+    elif not description:
+        part = Part.objects.filter(code__iexact=line.product_code).first()
+        description = part.description if part else ''
+    line.description = description
     line.quantity = cleaned['quantity']
     line.source = cleaned['source']
     ordered = line.source == TaskPartNeeded.Source.ORDERED
@@ -144,7 +157,10 @@ def edit_part(line, cleaned):
     if not ordered:
         line.arrived_at = None
     line.save()
-    changed(line.task)
+    changed(task)
+    if ordered and not was_ordered:
+        tell_customer_parts_ordered(task, line)
+    check_all_in(task, user, was_ordered=was_ordered)
 
 
 def mark_prepared(task, user):

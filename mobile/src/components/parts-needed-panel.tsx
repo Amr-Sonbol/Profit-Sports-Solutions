@@ -13,6 +13,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { alert, locale, t } from '@/i18n';
 
 /** "2026-11-20" for the server, from a picked day. */
+/** A server day ('2026-11-20') as that same day on this phone — new Date() would read it as UTC midnight,
+ * the day before anywhere west of UTC (the USA). */
+function parseDay(day: string) {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year, month - 1, date);
+}
+
 function isoDay(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -108,7 +115,7 @@ export function PartsNeededPanel({ taskId, parts, prepared, canChange, canEdit =
             <ThemedText type="small" themeColor={part.state === 'waiting' ? 'danger' : 'textSecondary'}>
               {part.state === 'stock' ? t('From our stock') : part.state === 'arrived' ? t('Arrived')
                 : part.expected_on
-                  ? t('Ordered — expected {date}', { date: new Date(part.expected_on).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) })
+                  ? t('Ordered — expected {date}', { date: parseDay(part.expected_on).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) })
                   : t('Ordered')}
             </ThemedText>
           </ThemedView>
@@ -120,7 +127,7 @@ export function PartsNeededPanel({ taskId, parts, prepared, canChange, canEdit =
                 setDescription(part.description);
                 setQuantity(String(part.quantity));
                 setSource(part.state === 'stock' ? 'stock' : 'ordered');
-                setExpected(part.expected_on ? new Date(part.expected_on) : null);
+                setExpected(part.expected_on ? parseDay(part.expected_on) : null);
                 setAdding(true);
               }}
               disabled={isBusy}

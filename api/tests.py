@@ -2491,6 +2491,8 @@ class OnTheWayNoticeTests(ApiTestCase):
         html = notice.alternatives[0][0]
         self.assertIn('dir="rtl"', html)
         self.assertIn('mso-hide:all', html)  # the preview line
+        self.assertIn('للرد، يرجى استخدام طلبكم', html)  # the footer, in Arabic too
+        self.assertIn('للرد، يرجى استخدام طلبكم', notice.body)
         # The signature stays left to right inside an Arabic email.
         self.assertIn('dir="ltr" width="600"', html)
 
@@ -2528,6 +2530,16 @@ class PartsNeededApiTests(ApiTestCase):
         self.task.responsible_supervisor = Technician.objects.get(user__username='supervisor1')
         self.task.save(update_fields=['responsible_supervisor'])
         self.url = f'/api/tasks/{self.task.pk}/parts-needed/'
+
+    def test_an_edit_without_a_part_adds_nothing(self):
+        from people.models import Technician
+        Technician.objects.create(user=User.objects.create_user('manager7', password='pass12345'), country=self.country,
+                                  full_name='Mona Manager', language='en', role=Technician.Role.MANAGER,
+                                  employment_type='staff')
+        response = self.client.post(self.url, {'action': 'edit', 'product_code': 'X-1', 'quantity': 1, 'source': 'ordered'},
+                                    **self.auth(self.token_for('manager7')))
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.task.parts_needed.exists())
 
     def test_the_owner_adds_and_the_warehouse_prepares(self):
         from people.models import Technician

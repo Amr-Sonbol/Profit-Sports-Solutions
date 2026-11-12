@@ -6250,6 +6250,13 @@ class MyReportFormTests(TaskTestCase):
         self.assertIn('Rate our visit', email.alternatives[0][0])
         self.assertIn('How was our visit?', email.body)
 
+    def test_no_rating_counts_as_asked_when_the_email_fails(self):
+        self.client.login(username='tech1', password='pass12345')
+        with patch('tasks.views._send_notification_email', return_value=False):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
+
     def _send_copy_capturing_language(self):
         with patch('reports.pdf.render_visit_report_pdf', return_value=b'%PDF-test') as render:
             self.client.login(username='tech1', password='pass12345')
@@ -10300,6 +10307,52 @@ class PartsArrivalTests(PartsNeededTests):
         check_received(receiving, self.supervisor_user)
         self.assertEqual(len(self.arrivals()), 1)
 
+    def _as_manager(self):
+        manager = User.objects.create_user('manager6', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager6', password='pass12345')
+
+    def _correct(self, line, **fields):
+        data = {'action': 'edit_part_needed', 'line': line.pk, f'part{line.pk}-quantity': 1}
+        data.update({f'part{line.pk}-{name}': value for name, value in fields.items()})
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(self.url, data)
+
+    def test_the_last_ordered_part_corrected_to_stock_is_all_in(self):
+        self.add(product_code='CONSOLE-9', source='ordered')
+        line = self.task.parts_needed.get()
+        self._as_manager()
+        self._correct(line, product_code='CONSOLE-9', source='stock')
+        self.assertEqual(len(self.arrivals()), 1)
+
+    def test_a_part_corrected_to_ordered_tells_the_customer(self):
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        self.add(product_code='BELT-01', description='Belt')
+        self._as_manager()
+        self._correct(self.task.parts_needed.get(), product_code='BELT-01', source='ordered')
+        self.assertIn('Parts ordered', mail.outbox[-1].subject)
+
+    def test_another_code_takes_the_catalogues_description(self):
+        from reference.models import Part
+        Part.objects.create(code='MOTOR-2', description='Drive motor')
+        self.add(product_code='BELT-01', description='Belt')
+        line = self.task.parts_needed.get()
+        self._as_manager()
+        self._correct(line, product_code='MOTOR-2', source='stock')
+        line.refresh_from_db()
+        self.assertEqual(line.description, 'Drive motor')
+
+    def test_dates_in_the_bell_follow_the_readers_language(self):
+        from tasks.updates import describe
+        self.task.scheduled_date = date(2026, 11, 20)
+        self.task.save(update_fields=['scheduled_date'])
+        event = TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.PARTS_ARRIVED,
+                                         occurred_at=timezone.now(), actor=self.supervisor_user)
+        with translation.override('ar'):
+            self.assertNotIn('Nov', describe(event))
+
     def test_correcting_a_part_is_a_managers_and_it_counts_as_new(self):
         from tasks.parts_needed import mark_prepared
         self.add(product_code='BELT-01', source='ordered')
@@ -10370,6 +10423,12 @@ class VisitReminderTests(TaskTestCase):
     def test_not_for_a_visit_planned_less_than_a_week_before(self):
         self.task.schedule_notified_at = self.now - timedelta(days=5)  # 6 days before it
         self.task.save(update_fields=['schedule_notified_at'])
+        self.assertEqual(self.remind(), 0)
+
+    def test_not_for_a_time_they_were_not_told(self):
+        # Moved after they were told, without telling them again.
+        TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED,
+                                 occurred_at=self.now - timedelta(days=1), actor=self.supervisor_user)
         self.assertEqual(self.remind(), 0)
 
     def test_not_for_a_visit_they_were_never_told_of(self):
