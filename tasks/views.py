@@ -1200,6 +1200,45 @@ def _send_schedule_notification(task):
     )
 
 
+def tell_customer_on_the_way(task, user):
+    """The technician tapped "On the way": the customer hears it — their
+    portal bell, and an email to the branch contact (unless they switched it
+    off in the portal) with who is coming and the expected time. Once a visit
+    day: a second tap or an undo doesn't send it again. Never our own
+    warehouses. Best-effort, in English like the visit confirmation; a failed
+    email never stops the tap."""
+    customer = task.site.customer
+    if customer.is_internal:
+        return
+    country_tz = ZoneInfo(customer.country.timezone)
+    today = timezone.localtime(timezone.now(), country_tz).date()
+    if task.on_the_way_notified_at and timezone.localtime(task.on_the_way_notified_at, country_tz).date() == today:
+        return
+    task.on_the_way_notified_at = timezone.now()
+    task.save(update_fields=['on_the_way_notified_at'])
+    notify_customer.on_the_way(task)
+    email = task.site.effective_contact_email
+    if not customer.notify_on_the_way or not email:
+        return
+    technician = getattr(user, 'technician', None)
+    context = {
+        'contact': task.site.effective_contact_name or customer.name, 'site': task.site.name,
+        'technician': technician.full_name if technician else _('Our technician'), 'number': task.task_number,
+        'time': timezone.localtime(task.scheduled_for, country_tz).strftime('%I:%M %p').lstrip('0')
+        if task.scheduled_for and timezone.localtime(task.scheduled_for, country_tz).date() == today else '',
+    }
+    with translation.override('en'):
+        subject = _('Our technician is on the way — %(number)s') % context
+        when = _(' Expected around %(time)s.') % context if context['time'] else ''
+        message = _(
+            'Dear %(contact)s,\n\n'
+            '%(technician)s from Profit Sports Solutions is on the way to %(site)s.%(when)s\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n',
+        ) % {**context, 'when': when}
+    _send_notification_email(subject, message, 'tasks/email/on_the_way.html', context, [email])
+
+
 def _send_delay_notice(task, reason):
     """A different message from _send_schedule_notification: that one
     confirms a plan, this one apologizes for one slipping — traffic, a
@@ -7131,6 +7170,8 @@ def my_task_detail(request, pk):
                 if new_status:
                     task.status = new_status
                     task.save(update_fields=['status'])
+            if event_type == TaskEvent.EventType.EN_ROUTE:
+                tell_customer_on_the_way(task, request.user)
             messages.success(request, _('Updated.'))
             if request.POST.get('next') == 'today':  # tapped on My schedule's Today card
                 return redirect('tasks:my_week')

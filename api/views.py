@@ -50,7 +50,7 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
-    report_copy_default, send_staff_email_change_link, confirm_customer_files, register_task_machine, replace_serial_plate,
+    report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
     report_machine_photo_gaps,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
@@ -809,7 +809,28 @@ class TeamMapView(APIView):
             'attention': [{'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']}
                           for item in data['attention']],
             'without_taps': [person.full_name for person in data['technicians'] if person.last_tap is None],
+            'area': _country_area(get_active_country(request) or technician.country),
         })
+
+
+def _country_area(country):
+    """Where the map opens before anyone has tapped: the middle of the
+    country's branches that have a map location — the median, so one
+    mistyped location (another continent) can't pull it away — spanning the
+    middle half of them. None with no located branch."""
+    from statistics import median
+
+    from customers.models import Site
+
+    points = list(Site.objects.filter(customer__country=country, latitude__isnull=False, longitude__isnull=False)
+                  .values_list('latitude', 'longitude'))
+    if not points:
+        return None
+    latitudes, longitudes = sorted(float(lat) for lat, _ in points), sorted(float(lng) for _, lng in points)
+    quarter = len(points) // 4
+    middle = slice(quarter, len(points) - quarter)
+    spread = max(latitudes[middle][-1] - latitudes[middle][0], longitudes[middle][-1] - longitudes[middle][0])
+    return {'latitude': median(latitudes), 'longitude': median(longitudes), 'delta': min(max(spread * 1.5, 0.3), 5)}
 
 
 class DashboardView(APIView):
@@ -1485,6 +1506,8 @@ class MyTaskActionView(APIView):
             if new_status:
                 task.status = new_status
                 task.save(update_fields=['status'])
+            if event_type == TaskEvent.EventType.EN_ROUTE:
+                tell_customer_on_the_way(task, request.user)
             return Response({'status': task.status})
 
         is_paused = task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)

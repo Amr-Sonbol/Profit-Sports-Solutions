@@ -3,6 +3,7 @@ from unittest.mock import patch
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
@@ -1754,6 +1755,15 @@ class TeamMapApiTests(ApiTestCase):
         self.assertEqual([(pin['name'], pin['task_id']) for pin in body['pins']], [(self.technician.full_name, self.task.pk)])
         self.assertEqual(self.client.get('/api/team-map/', **self.auth(self.token_for('tech1'))).status_code, 403)
 
+    def test_before_any_tap_the_map_opens_on_the_countrys_branches(self):
+        from customers.models import Site
+        for lat, lng in (('25.0800', '55.1400'), ('25.2000', '55.2700'), ('25.1000', '55.2000'), ('45.4100', '11.8700')):
+            Site.objects.create(customer=self.customer, name=f'Branch {lat}', address='-', latitude=lat, longitude=lng)
+        area = self.client.get('/api/team-map/', **self.auth(self.token_for('supervisor1'))).json()['area']
+        # The middle of them: a mistyped location on another continent doesn't pull it away.
+        self.assertTrue(25 < area['latitude'] < 25.3 and 55 < area['longitude'] < 55.3, area)
+        self.assertGreaterEqual(area['delta'], 0.3)
+
 
 class AppUsesTheCountryDayTests(ApiTestCase):
     # At 1 a.m. in Dubai it's still yesterday in UTC: the app's "today"
@@ -2393,3 +2403,57 @@ class CustomerPhotosOnTheMachineCardTests(ApiTestCase):
         self.assertEqual(sorted(photo['purpose'] for photo in card['photos']), ['before', 'before', 'serial_plate'])
         # The customer's plate, replaced, is no longer in the slot: it shows once, below ("Also sent").
         self.assertEqual([item['slot'] for item in card['customer_files']], ['serial_plate'])
+
+
+class OnTheWayNoticeTests(ApiTestCase):
+    """The technician sets off: the customer is told — an email to the branch
+    contact and their portal bell — once a visit day (tasks.views.tell_customer_on_the_way);
+    their portal shows "On the way", then "On site"."""
+
+    def setUp(self):
+        super().setUp()
+        from customers.models import PortalUser
+        self.customer.contact_email = 'ali@fitnessfirst.example'
+        self.customer.save(update_fields=['contact_email'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('ali@fitnessfirst.example'))
+        self.token = self.token_for('tech1')
+
+    def act(self, action):
+        return self.client.post(f'/api/my-tasks/{self.task.pk}/action/', json.dumps({'action': action}),
+                                content_type='application/json', **self.auth(self.token))
+
+    def notices(self):
+        return [m for m in mail.outbox if 'on the way' in m.subject]
+
+    def test_the_customer_hears_once_and_sees_the_progress(self):
+        from customers.models import CustomerNotification
+        from customers.progress import ON_SITE, ON_THE_WAY, visit_progress
+        self.act('accept')
+        self.act('en_route')
+        (notice,) = self.notices()
+        self.assertEqual(notice.to, ['ali@fitnessfirst.example'])
+        self.assertIn('Tarek Tech', notice.body)
+        self.assertTrue(CustomerNotification.objects.filter(task=self.task, kind='on_the_way').exists())
+        self.assertEqual(visit_progress(self.task), ON_THE_WAY)
+        # Undone and tapped again: not a second email.
+        self.act('undo')
+        self.act('en_route')
+        self.assertEqual(len(self.notices()), 1)
+        self.act('arrive')
+        self.assertEqual(visit_progress(self.task), ON_SITE)
+
+    def test_the_customer_can_switch_the_email_off(self):
+        from customers.models import CustomerNotification
+        self.customer.notify_on_the_way = False
+        self.customer.save(update_fields=['notify_on_the_way'])
+        self.act('accept')
+        self.act('en_route')
+        self.assertEqual(self.notices(), [])
+        self.assertTrue(CustomerNotification.objects.filter(task=self.task, kind='on_the_way').exists())  # the bell still
+
+    def test_never_for_our_own_warehouses(self):
+        self.customer.is_internal = True
+        self.customer.save(update_fields=['is_internal'])
+        self.act('accept')
+        self.act('en_route')
+        self.assertEqual(self.notices(), [])

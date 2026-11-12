@@ -912,6 +912,8 @@ export const AR: Record<string, string> = {
   "No photos were added to this visit.": "لم تُضف صور لهذه الزيارة.",
   "No photo before": "لا توجد صورة قبل",
   "Sent by": "أرسله",
+  "Map": "الخريطة",
+  "Nobody has tapped yet today. Each technician shows here at their first tap.": "لم يسجّل أحد أي نقرة اليوم بعد. يظهر كل فني هنا عند أول نقرة له.",
   "{count} technicians": "{count} فنيين",
   "Tap a pin to see who it is; tap its name for the task. Red: away from the site.": "اضغط على العلامة لمعرفة صاحبها، ثم على الاسم لفتح المهمة. الأحمر: بعيد عن الموقع.",
   "Nobody has tapped yet today.": "لم يسجّل أحد أي نقرة اليوم بعد.",

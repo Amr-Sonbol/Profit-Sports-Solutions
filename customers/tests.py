@@ -1019,9 +1019,12 @@ class PortalBellTests(CustomerTestCase):
 
     def test_the_progress_bar_follows_the_words(self):
         from .progress import CLOSED, DONE, RECEIVED, VISIT_BOOKED, progress_steps
-        self.assertEqual([state for _label, state in progress_steps(RECEIVED)], ['current', 'todo', 'todo', 'todo'])
-        self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'done', 'current', 'todo'])
-        self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 4)
+        from .progress import ON_SITE, ON_THE_WAY
+        self.assertEqual([state for _label, state in progress_steps(RECEIVED)], ['current'] + ['todo'] * 5)
+        self.assertEqual([state for _label, state in progress_steps(VISIT_BOOKED)], ['done', 'done', 'current', 'todo', 'todo', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(ON_THE_WAY)], ['done'] * 3 + ['current', 'todo', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(ON_SITE)], ['done'] * 4 + ['current', 'todo'])
+        self.assertEqual([state for _label, state in progress_steps(DONE)], ['done'] * 6)
         self.assertIsNone(progress_steps(CLOSED))
 
 

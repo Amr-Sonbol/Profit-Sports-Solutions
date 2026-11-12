@@ -102,9 +102,11 @@ def portal_bell(customer):
         elif note.task_id:
             if note.kind == CustomerNotification.Kind.REPORT_READY:
                 text, anchor = _('Your visit report is ready — please rate the visit'), '#rate'
+            elif note.kind == CustomerNotification.Kind.ON_THE_WAY:
+                text, anchor = _('Our technician is on the way'), ''
             else:
                 day = visit_day(note.task)
-                text = _('Visit booked for %(date)s') % {'date': date_format(day, 'j F')} if day else _('Visit booked')
+                text = _('Visit scheduled for %(date)s') % {'date': date_format(day, 'j F')} if day else _('Visit scheduled')
                 anchor = ''
             items.append({
                 'text': text, 'about': note.task.site.name,

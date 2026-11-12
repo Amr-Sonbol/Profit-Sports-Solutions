@@ -1,0 +1,7 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ contact }},</p>
+<p style="margin:0 0 16px;"><strong>{{ technician }}</strong> from Profit Sports Solutions is on the way to <strong>{{ site }}</strong>.{% if time %} Expected around <strong>{{ time }}</strong>.{% endif %}</p>
+<p style="margin:0 0 16px;">Visit reference: {{ number }}</p>
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}

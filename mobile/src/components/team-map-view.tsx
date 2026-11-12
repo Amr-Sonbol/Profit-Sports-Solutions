@@ -44,7 +44,12 @@ function fitAll(map: MapView | null, places: Spot[]) {
  * with anyone away from their site is red. Only where they tapped — nobody
  * is tracked in between.
  */
-export function TeamMapView({ pins, onOpenTask }: { pins: Pin[]; onOpenTask: (taskId: number) => void }) {
+export function TeamMapView({ pins, area, onOpenTask }: {
+  pins: Pin[];
+  /** Where it opens with no pin yet (the country's branches). */
+  area?: TeamMap['area'];
+  onOpenTask: (taskId: number) => void;
+}) {
   const theme = useTheme();
   const map = useRef<MapView>(null);
   const ready = useRef(false);
@@ -68,7 +73,9 @@ export function TeamMapView({ pins, onOpenTask }: { pins: Pin[]; onOpenTask: (ta
           ready.current = true;
           fitAll(map.current, places);
         }}
-        initialRegion={{ latitude: first.latitude, longitude: first.longitude, latitudeDelta: 0.2, longitudeDelta: 0.2 }}
+        initialRegion={first
+          ? { latitude: first.latitude, longitude: first.longitude, latitudeDelta: 0.2, longitudeDelta: 0.2 }
+          : { latitude: area!.latitude, longitude: area!.longitude, latitudeDelta: area!.delta, longitudeDelta: area!.delta }}
       >
         {places.map((place) => {
           const single = place.pins.length === 1 ? place.pins[0] : null;

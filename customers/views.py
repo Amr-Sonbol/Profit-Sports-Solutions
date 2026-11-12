@@ -927,6 +927,7 @@ def portal_settings(request):
         'details_groups': [
             (_('Contact'), ('contact_name', 'contact_phone', 'contact_email')),
             (_('Addresses'), ('billing_address', 'shipping_address')),
+            (_('Notifications'), ('notify_on_the_way',)),
         ],
     })
 

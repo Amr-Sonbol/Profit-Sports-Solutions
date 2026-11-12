@@ -444,16 +444,18 @@ class CustomerSettingsForm(forms.ModelForm):
 
     class Meta:
         model = Customer
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address']
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address',
+                  'notify_on_the_way']
         labels = {
             'contact_name': _('Contact name'), 'contact_phone': _('Contact phone number'),
             'contact_email': _('Contact email'), 'billing_address': _('Invoice address'),
-            'shipping_address': _('Delivery address'),
+            'shipping_address': _('Delivery address'), 'notify_on_the_way': _('Email us when your technician is on the way'),
         }
         help_texts = {
             'contact_email': _('Where we send updates about your requests.'),
             'billing_address': _('The address invoices should be issued to.'),
             'shipping_address': _('Where spare and replacement parts should be delivered.'),
+            'notify_on_the_way': _('Sent to each branch contact when our technician sets off for a visit.'),
         }
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),

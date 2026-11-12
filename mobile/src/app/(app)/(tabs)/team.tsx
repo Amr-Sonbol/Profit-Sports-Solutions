@@ -3,6 +3,7 @@ import { StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CountryChooser } from '@/components/country-chooser';
+import { TeamMapPanel } from '@/components/team-map-panel';
 import { TeamProgressList } from '@/components/team-progress';
 import { TeamTodayList } from '@/components/team-today';
 import { ThemedText } from '@/components/themed-text';
@@ -11,13 +12,14 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
- * The people: Today — who's where right now (components/team-today) — and
- * Progress — how each one is doing this month, their skills to confirm. A tap
- * on someone opens their page. The country's tasks are on the Tasks tab.
+ * The people: Today — who's where right now (components/team-today) —,
+ * Progress — how each one is doing this month, their skills to confirm — and
+ * Map — everyone's last tap today on one map (components/team-map-panel). A
+ * tap on someone opens their page. The country's tasks are on the Tasks tab.
  */
 export default function TeamScreen() {
   const theme = useTheme();
-  const [view, setView] = useState<'today' | 'progress'>('today');
+  const [view, setView] = useState<'today' | 'progress' | 'map'>('today');
   // Bumped when a manager switches country, so the lists reload.
   const [countryVersion, setCountryVersion] = useState(0);
   return (
@@ -26,19 +28,20 @@ export default function TeamScreen() {
         <ThemedText type="title" style={styles.heading}>Team</ThemedText>
         <CountryChooser onChange={() => setCountryVersion((version) => version + 1)} />
         <ThemedView style={styles.switcher}>
-          {(['today', 'progress'] as const).map((option) => (
+          {(['today', 'progress', 'map'] as const).map((option) => (
             <TouchableOpacity
               key={option} onPress={() => setView(option)}
               style={[styles.switch, { borderColor: theme.backgroundSelected },
                 view === option && { backgroundColor: theme.primary, borderColor: theme.primary }]}
             >
               <ThemedText type="small" style={view === option ? { color: theme.onPrimary } : undefined}>
-                {option === 'today' ? 'Today' : 'Progress'}
+                {option === 'today' ? 'Today' : option === 'progress' ? 'Progress' : 'Map'}
               </ThemedText>
             </TouchableOpacity>
           ))}
         </ThemedView>
-        {view === 'today' ? <TeamTodayList key={countryVersion} /> : <TeamProgressList key={countryVersion} />}
+        {view === 'today' ? <TeamTodayList key={countryVersion} />
+          : view === 'progress' ? <TeamProgressList key={countryVersion} /> : <TeamMapPanel key={countryVersion} />}
       </SafeAreaView>
     </ThemedView>
   );

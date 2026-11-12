@@ -761,6 +761,8 @@ export interface TeamMap {
   pins: { name: string; detail: string; place: string; lat: number; lng: number; away: boolean; task_id: number }[];
   attention: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   without_taps: string[];
+  /** Where the map opens before anyone has tapped: the middle of the country's branches. Older servers: absent. */
+  area?: { latitude: number; longitude: number; delta: number } | null;
 }
 
 /** The manager's Dashboard (api/views.py DashboardView). */

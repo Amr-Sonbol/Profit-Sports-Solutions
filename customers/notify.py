@@ -30,6 +30,11 @@ def visit_booked(task):
         _notify(task.site.customer, CustomerNotification.Kind.VISIT_BOOKED, task=task)
 
 
+def on_the_way(task):
+    """The technician set off for their visit (tasks.views.tell_customer_on_the_way)."""
+    _notify(task.site.customer, CustomerNotification.Kind.ON_THE_WAY, task=task)
+
+
 def staff_replied(ticket):
     """Our team answered one of their requests."""
     _notify(ticket.customer, CustomerNotification.Kind.REPLY, ticket=ticket)

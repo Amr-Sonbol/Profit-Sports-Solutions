@@ -28,6 +28,12 @@ class Customer(models.Model):
         help_text=_("this company's account or reference code, if any"),
     )
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
+    # An email to the branch contact when the technician sets off (tasks.views.tell_customer_on_the_way);
+    # the customer switches it off in the portal's Settings → Company.
+    notify_on_the_way = models.BooleanField(
+        _('email when the technician is on the way'), default=True,
+        help_text=_('an email to the branch contact when our technician sets off for a visit'),
+    )
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
         help_text=_("the portal's language for anyone at this customer who hasn't chosen their own"),
@@ -406,7 +412,8 @@ class CustomerNotification(models.Model):
     class Kind(models.TextChoices):
         REPORT_READY = 'report_ready', _('Visit report ready')
         REPLY = 'reply', _('Reply to a request')
-        VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
+        VISIT_BOOKED = 'visit_booked', _('Visit scheduled or moved')
+        ON_THE_WAY = 'on_the_way', _('Technician on the way')
         REQUEST_CLOSED = 'request_closed', _('Request resolved')
         PART_SHIPPED = 'part_shipped', _('Part shipped')
 

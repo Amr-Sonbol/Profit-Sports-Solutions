@@ -1,5 +1,6 @@
 """What a customer sees of their tickets' and visits' progress — in their
-words, not the team's: Received → Being arranged → Visit booked → Done.
+words, not the team's: Received → Being arranged → Visit scheduled → On the
+way → On site → Done.
 The portal home, a ticket's page and its visits all use these, so the
 same thing never reads differently on two screens. Each is (label,
 badge class).
@@ -8,7 +9,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.translation import gettext_lazy as _
 
-from tasks.models import CustomerTicket, Task
+from tasks.models import CustomerTicket, Task, TaskEvent
 
 DONE_STATUSES = (Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED)
 
@@ -17,6 +18,7 @@ BEING_ARRANGED = (_("Being arranged — we'll confirm the date with you soon"), 
 VISIT_BOOKED = (_('Visit scheduled'), 'badge--booked')
 # A booked day that passed with the work not done: we owe them a new date.
 RESCHEDULING = (_("Rescheduling — we'll contact you with a new date"), 'badge--warning')
+ON_THE_WAY = (_('Technician on the way'), 'badge--status-in_progress')
 ON_SITE = (_('Technician on site'), 'badge--status-in_progress')
 DONE = (_('Done'), 'badge--good')
 RESOLVED = (_('Resolved'), 'badge--good')
@@ -39,6 +41,12 @@ def visit_progress(task):
         return DONE
     if task.status == Task.Status.IN_PROGRESS:
         return ON_SITE
+    # Today's taps: set off, or arrived (before the work starts).
+    tapped = today_tap(task)
+    if tapped == TaskEvent.EventType.ARRIVED:
+        return ON_SITE
+    if tapped == TaskEvent.EventType.EN_ROUTE:
+        return ON_THE_WAY
     day = visit_day(task)
     if day and day >= timezone.localdate():
         # The day itself, in the customer's language, and the time when there is one
@@ -54,6 +62,14 @@ def visit_progress(task):
     if day:
         return RESCHEDULING
     return BEING_ARRANGED
+
+
+def today_tap(task):
+    """The lead's latest "On the way" or "Arrived" today (an undone one is gone), or None."""
+    start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    return task.events.filter(
+        event_type__in=[TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED], occurred_at__gte=start,
+    ).order_by('-occurred_at').values_list('event_type', flat=True).first()
 
 
 def is_booked(progress):
@@ -83,9 +99,12 @@ def is_upcoming(task):
 
 # The progress bar's steps, and where each progress word sits on it. Closed
 # and cancelled aren't on the way to a visit, so they have no bar.
-STEPS = (_('Received'), _('Being arranged'), _('Visit scheduled'), _('Done'))
+STEPS = (_('Received'), _('Being arranged'), _('Visit scheduled'), _('On the way'), _('On site'), _('Done'))
 # Pairs, not a dict: the lazy labels' hashes change with the language.
-STEP_OF = ((RECEIVED, 0), (BEING_ARRANGED, 1), (RESCHEDULING, 1), (VISIT_BOOKED, 2), (ON_SITE, 2), (DONE, 3), (RESOLVED, 3))
+STEP_OF = (
+    (RECEIVED, 0), (BEING_ARRANGED, 1), (RESCHEDULING, 1), (VISIT_BOOKED, 2), (ON_THE_WAY, 3), (ON_SITE, 4),
+    (DONE, 5), (RESOLVED, 5),
+)
 
 
 def progress_steps(progress):

@@ -148,6 +148,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | name | varchar | |
 | code | varchar | optional — this company's own account/reference code, if it has one |
 | segment | varchar | gym, hotel, club, other |
+| notify_on_the_way | bool | default true — an email to the branch contact when our technician sets off for a visit (`tasks.views.tell_customer_on_the_way`); the customer switches it off in the portal (Settings → Company). The portal bell is told either way |
 | contact_name | varchar | optional — the single-branch case, or a chain sharing one contact |
 | contact_phone | varchar | |
 | contact_email | varchar | |
@@ -454,6 +455,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | delivery_note_uploaded_at | timestamptz | nullable |
 | previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
+| on_the_way_notified_at | timestamptz | nullable — when the customer was told the technician is on the way (the lead's "On the way" tap): once a visit day, so a second tap or an undo doesn't send it again |
 | schedule_notified_by_id | FK → user | nullable |
 
 **Quotation, factory offer, and delivery note stay manager-tier only; the invoice can be opened up per task.** Sometimes a supervisor is the one on site collecting cash from the customer and needs to show or check the invoice — `invoice_visible_to_supervisor` is a plain checkbox on the task's Edit screen (manager-only, like the document fields themselves) that adds the invoice, and only the invoice, to what a supervisor sees in that task's own Documents section. It defaults off and is a per-task decision, not a role permission — turning it on for one job doesn't change what a supervisor sees on any other task.
@@ -677,7 +679,7 @@ One item in a customer's portal bell, written where each thing happens (`custome
 |---|---|---|
 | id | PK | |
 | customer_id | FK → customer | |
-| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`), `part_shipped` (a part shipment for one of their requests was handed to the courier; on the request, so opening it clears it) |
+| kind | varchar | `report_ready` (a visit's report is in — download and rate it), `reply` (our team answered a request), `visit_booked` (a visit got a day, or a new one: "Visit scheduled for …"), `on_the_way` (the technician set off for it), `request_closed` (we resolved a request, with or without a visit — our answer is its `close_reason`), `part_shipped` (a part shipment for one of their requests was handed to the courier; on the request, so opening it clears it) |
 | task_id | FK → task | nullable — the visit it's about |
 | ticket_id | FK → customer_ticket | nullable — the request it's about |
 | created_at | timestamptz | |

@@ -222,6 +222,9 @@ class Task(models.Model):
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='next_tasks',
         verbose_name=_('previous step'),
     )
+    # When the customer was told the technician is on the way: once a visit day
+    # (tasks.views.tell_customer_on_the_way), not again on a second tap or an undo.
+    on_the_way_notified_at = models.DateTimeField(_('customer told: on the way'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),

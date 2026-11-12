@@ -3,12 +3,16 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 03:26+0000\n"
+"POT-Creation-Date: 2026-11-12 10:41+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
+
+#, python-format
+msgid " Expected around %(time)s."
+msgstr " الوصول المتوقع حوالي %(time)s."
 
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
@@ -1915,6 +1919,22 @@ msgstr "السيد/السيدة %(contact)s المحترم/المحترمة،"
 msgid ""
 "Dear %(contact)s,\n"
 "\n"
+"%(technician)s from Profit Sports Solutions is on the way to %(site)s.%(when)s\n"
+"\n"
+"Best regards,\n"
+"Profit Sports Solutions\n"
+msgstr ""
+"عزيزي %(contact)s،\n"
+"\n"
+"%(technician)s من Profit Sports Solutions في الطريق إلى %(site)s.%(when)s\n"
+"\n"
+"مع أطيب التحيات،\n"
+"Profit Sports Solutions\n"
+
+#, python-format
+msgid ""
+"Dear %(contact)s,\n"
+"\n"
 "%(what)s\n"
 "\n"
 "If you did not make this change, please contact your manager immediately.\n"
@@ -2467,6 +2487,9 @@ msgstr "إرسال رقم التتبع إلى العميل بالبريد؟"
 
 msgid "Email the customer the visit time?"
 msgstr "إرسال موعد الزيارة إلى العميل بالبريد؟"
+
+msgid "Email us when your technician is on the way"
+msgstr "أرسلوا لنا بريداً عندما يكون الفني في الطريق"
 
 msgid "Emergencies"
 msgstr "الحالات الطارئة"
@@ -3886,8 +3909,8 @@ msgstr "لا يوجد فنيون مطابقون لبحثك."
 msgid "No tickets match the selected filters."
 msgstr "لا توجد تذاكر مطابقة لعوامل التصفية المحددة."
 
-msgid "No visit is booked at the moment. We will let you know as soon as one is."
-msgstr "لا توجد زيارة محجوزة حاليًا. سنخبرك فور حجز زيارة."
+msgid "No visit is scheduled at the moment. We will let you know as soon as one is."
+msgstr "لا توجد زيارة مجدولة حالياً. سنخبركم فور تحديد موعد."
 
 msgid "No visit reports yet."
 msgstr "لا توجد تقارير زيارات بعد."
@@ -4078,8 +4101,14 @@ msgstr "من إجمالي عرض السعر. فارغ: لا خصم متفق عل
 msgid "On"
 msgstr "مُفعّلة"
 
+msgid "On site"
+msgstr "في الموقع"
+
 msgid "On the shelf"
 msgstr "على الرف"
+
+msgid "On the way"
+msgstr "في الطريق"
 
 msgid "On track to achieve full certification within 90 days."
 msgstr "في المسار الصحيح لتحقيق الاعتماد الكامل خلال 90 يوماً."
@@ -4251,6 +4280,16 @@ msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(wh
 
 msgid "Our recommendations"
 msgstr "توصياتنا"
+
+msgid "Our technician"
+msgstr "فنينا"
+
+msgid "Our technician is on the way"
+msgstr "فنينا في الطريق إليكم"
+
+#, python-format
+msgid "Our technician is on the way — %(number)s"
+msgstr "فنينا في الطريق إليكم — %(number)s"
 
 msgid "Our warehouses"
 msgstr "مستودعاتنا"
@@ -5470,6 +5509,9 @@ msgstr "أرسلها العميل لاحقًا"
 msgid "Sent to %(email)s on %(date)s"
 msgstr "أُرسلت إلى %(email)s بتاريخ %(date)s"
 
+msgid "Sent to each branch contact when our technician sets off for a visit."
+msgstr "يُرسل إلى مسؤول كل فرع عندما ينطلق فنينا إلى الزيارة."
+
 msgid "Serial No."
 msgstr "الرقم التسلسلي"
 
@@ -5922,6 +5964,9 @@ msgstr "ساعات الفنيين"
 
 msgid "Technician on site"
 msgstr "الفني في الموقع"
+
+msgid "Technician on the way"
+msgstr "الفني في الطريق"
 
 msgid "Technician reactivated."
 msgstr "تمت إعادة تفعيل الفني."
@@ -6850,16 +6895,6 @@ msgstr "تقرير الزيارة"
 msgid "Visit being scheduled"
 msgstr "جارٍ تحديد موعد الزيارة"
 
-msgid "Visit booked"
-msgstr "تم حجز الزيارة"
-
-#, python-format
-msgid "Visit booked for %(date)s"
-msgstr "تم حجز الزيارة في %(date)s"
-
-msgid "Visit booked or moved"
-msgstr "حجز زيارة أو تغيير موعدها"
-
 msgid "Visit confirmed"
 msgstr "تأكيد الزيارة"
 
@@ -6893,6 +6928,9 @@ msgstr "الزيارة مجدولة في %(date)s"
 #, python-format
 msgid "Visit scheduled on %(date)s at %(time)s"
 msgstr "الزيارة مجدولة في %(date)s الساعة %(time)s"
+
+msgid "Visit scheduled or moved"
+msgstr "جدولة زيارة أو تغيير موعدها"
 
 msgid "Visit time change to approve"
 msgstr "تغيير موعد زيارة بانتظار موافقتك"
@@ -7474,6 +7512,9 @@ msgstr "يتيح للعميل الاطلاع على حالة هذه التذكر
 msgid "an amount must never be stored without its currency"
 msgstr "لا يجوز تخزين أي مبلغ دون عملته"
 
+msgid "an email to the branch contact when our technician sets off for a visit"
+msgstr "بريد إلى مسؤول الفرع عندما ينطلق فنينا إلى الزيارة"
+
 msgid "an internal task's subject; on a customer's request, what it's about (Other), the area (Flooring) or the items (Accessories)"
 msgstr "موضوع المهمة الداخلية؛ وفي طلب العميل: موضوعه («أخرى») أو المنطقة («الأرضيات») أو القطع («الإكسسوارات»)"
 
@@ -7690,6 +7731,9 @@ msgstr "تذكرة العميل"
 msgid "customer tickets"
 msgstr "تذاكر العملاء"
 
+msgid "customer told: on the way"
+msgstr "أُبلغ العميل: في الطريق"
+
 msgid "customer's file"
 msgstr "ملف العميل"
 
@@ -7773,6 +7817,9 @@ msgstr "إرسال بريد للعميل عند استلام بلاغه"
 
 msgid "email the task's supervisor when parts are shipped"
 msgstr "إرسال بريد لمشرف المهمة عند شحن القطع"
+
+msgid "email when the technician is on the way"
+msgstr "بريد عندما يكون الفني في الطريق"
 
 msgid "employment type"
 msgstr "نوع التوظيف"
@@ -9253,6 +9300,16 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Visible to managers and administrators only; never shown to the customer or in the ticket conversation."
 #~ msgstr "مرئية للمديرين ومسؤولي النظام فقط؛ ولا تظهر للعميل ولا في محادثة التذكرة."
+
+#~ msgid "Visit booked"
+#~ msgstr "تم حجز الزيارة"
+
+#, python-format
+#~ msgid "Visit booked for %(date)s"
+#~ msgstr "تم حجز الزيارة في %(date)s"
+
+#~ msgid "Visit booked or moved"
+#~ msgstr "حجز زيارة أو تغيير موعدها"
 
 #~ msgid "Waiting for review"
 #~ msgstr "بانتظار المراجعة"

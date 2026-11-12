@@ -1,4 +1,4 @@
-{% comment %}A request's way to its visit: Received → Being arranged → Visit booked → Done (customers.progress.progress_steps).{% endcomment %}
+{% comment %}A request's way to its visit: Received → Being arranged → Visit scheduled → On the way → On site → Done (customers.progress.progress_steps).{% endcomment %}
 {% if steps %}
 <ol class="progress-steps" aria-label="{{ label }}">
     {% for step, state in steps %}
