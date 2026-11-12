@@ -51,7 +51,9 @@ def form_data(form, **overrides):
 
 
 def links_in(message):
-    return re.findall(r'https?://[^\s"<>]+', message.body)
+    """The links into our app (the Customer Service signature's company website aside)."""
+    return [link for link in re.findall(r'https?://[^\s"<>]+', message.body)
+            if not link.startswith('https://profitsports.solutions')]
 
 
 @override_settings(

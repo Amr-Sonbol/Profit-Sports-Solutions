@@ -1055,6 +1055,23 @@ def _in_background(work):
 MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
+# The emails a customer receives (the rest go to our staff): signed by Customer Service,
+# their replies to the team's mailbox (CUSTOMER_SERVICE_EMAIL).
+CUSTOMER_EMAIL_TEMPLATES = {
+    'tasks/email/ticket_confirmation.html', 'tasks/email/reply_to_customer.html', 'tasks/email/request_closed.html',
+    'tasks/email/schedule_notification.html', 'tasks/email/on_the_way.html', 'tasks/email/delay_notice.html',
+    'tasks/email/shipping_notice.html', 'tasks/email/visit_report.html', 'tasks/email/feedback_request.html',
+}
+CUSTOMER_SIGNATURE_TEXT = (
+    'Profit Sports Solutions | Customer Service\n'
+    'Phone: %(phone)s\n'
+    'Email: %(email)s\n'
+    'https://profitsports.solutions/\n'
+    '11th floor, office#1108, Grosvenor Business Tower, Barsha Heights – Dubai, UAE\n\n'
+    'To reply, please use your request in our customer portal, so our whole team can see it.'
+)
+
+
 def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None,
                              background=True):
     """Every outbound notification email in this app goes through here
@@ -1081,9 +1098,17 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
     no route at all to a local dev server. Embedding the actual bytes in
     the message is the only way it reliably shows up everywhere.
     """
-    html_body = render_to_string(template_name, {**context, 'logo_url': 'cid:logo'})
+    # To a customer: signed by Customer Service, its replies to the team's mailbox.
+    to_customer = template_name in CUSTOMER_EMAIL_TEMPLATES
+    html_body = render_to_string(template_name, {
+        **context, 'logo_url': 'cid:logo', 'customer_email': to_customer,
+        'service_email': settings.CUSTOMER_SERVICE_EMAIL, 'service_phone': settings.CUSTOMER_SERVICE_PHONE,
+    })
+    if to_customer:
+        text_body = f'{text_body.rstrip()}\n\n--\n{CUSTOMER_SIGNATURE_TEXT % {"phone": settings.CUSTOMER_SERVICE_PHONE, "email": settings.CUSTOMER_SERVICE_EMAIL}}'
     email = EmailMultiAlternatives(
-        subject=subject, body=text_body, from_email=None, to=recipient_list,
+        subject=subject, body=text_body, from_email=settings.CUSTOMER_FROM_EMAIL if to_customer else None,
+        to=recipient_list, reply_to=[settings.CUSTOMER_SERVICE_EMAIL] if to_customer else None,
     )
     email.attach_alternative(html_body, 'text/html')
     email.mixed_subtype = 'related'

@@ -73,6 +73,18 @@ undone for it. Likewise a customer admin role who manages their own people.
   with no day, a report waiting — and later the daily summary by email.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.
+- **Customer emails from your own domain** (added 2026-11-12). Every email to a
+  customer is signed by Customer Service and its replies go to
+  `service@profitsports.solutions` (`CUSTOMER_SERVICE_EMAIL`). On the live server,
+  send through a proper email provider for `profitsports.solutions` (Zoho Mail's
+  SMTP, or Postmark / Amazon SES), set `CUSTOMER_FROM_EMAIL` to
+  `Profit Sports Solutions <service@profitsports.solutions>`, and add the domain's
+  SPF, DKIM and DMARC records — otherwise customer emails land in spam. (In
+  development they go through a Gmail account, which sends as itself.)
+- **Customer replies by email land in their request** (later, once the provider
+  above is in place): an inbound address per request, so a customer who presses
+  "Reply" adds to the request's conversation instead of the team copying it
+  from the mailbox. Until then the team's mailbox is the safety net.
 - **Google Maps key for Android** (the app's Team map, `react-native-maps`,
   added 2026-11-12). Expo Go needs none, and iPhones use Apple Maps with no
   key; the Android store build shows a blank map without it. In Google

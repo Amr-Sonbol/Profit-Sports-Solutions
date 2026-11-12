@@ -2442,6 +2442,28 @@ class OnTheWayNoticeTests(ApiTestCase):
         self.act('arrive')
         self.assertEqual(visit_progress(self.task), ON_SITE)
 
+    def test_signed_by_customer_service_with_replies_to_its_mailbox(self):
+        from django.conf import settings
+        self.act('accept')
+        self.act('en_route')
+        (notice,) = self.notices()
+        self.assertEqual(notice.reply_to, [settings.CUSTOMER_SERVICE_EMAIL])
+        self.assertIn('Profit Sports Solutions | Customer Service', notice.body)
+        self.assertIn(settings.CUSTOMER_SERVICE_PHONE, notice.body)
+        html = notice.alternatives[0][0]
+        # The signature's picture is loaded from the website, as in the team's own emails: nothing that looks like an attachment.
+        self.assertIn('https://profitsports.solutions/wp-content/uploads/2026/06/email-signature-design.png', html)
+        self.assertIn('use your request in our customer portal', html)
+        self.assertNotIn('email_signature.png', [part.get_filename() for part in notice.attachments if hasattr(part, 'get_filename')])
+        # A staff email is not.
+        from tasks.views import send_password_changed_email
+        self.tech_user.email = 'tarek@example.com'
+        self.tech_user.save(update_fields=['email'])
+        send_password_changed_email(self.tech_user)
+        staff = mail.outbox[-1]
+        self.assertEqual(staff.reply_to, [])
+        self.assertNotIn('Customer Service', staff.body)
+
     def test_the_customer_can_switch_the_email_off(self):
         from customers.models import CustomerNotification
         self.customer.notify_on_the_way = False

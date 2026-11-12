@@ -319,6 +319,14 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@profitsportssolutions.com')
 
+# Customer Service: every email to a customer is signed by the team (tasks/email/_signature.html),
+# its replies go to the team's mailbox, and on the live server it's sent from it
+# (CUSTOMER_FROM_EMAIL: "Profit Sports Solutions <service@profitsports.solutions>", once the domain
+# sends through its own provider — docs/go_live_plan.md); here, from DEFAULT_FROM_EMAIL.
+CUSTOMER_SERVICE_EMAIL = config('CUSTOMER_SERVICE_EMAIL', default='service@profitsports.solutions')
+CUSTOMER_SERVICE_PHONE = config('CUSTOMER_SERVICE_PHONE', default='+971 58 698 1212')
+CUSTOMER_FROM_EMAIL = config('CUSTOMER_FROM_EMAIL', default='') or None
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
