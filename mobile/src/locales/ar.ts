@@ -913,6 +913,8 @@ export const AR: Record<string, string> = {
   "No photo before": "لا توجد صورة قبل",
   "Sent by": "أرسله",
   "Map": "الخريطة",
+  "Save changes": "حفظ التغييرات",
+  "Edit": "تعديل",
   "Add part": "إضافة القطعة",
   "All in — waiting for the warehouse to prepare them.": "وصلت كلها — بانتظار أن يجهّزها المستودع.",
   "Arrived": "وصلت",

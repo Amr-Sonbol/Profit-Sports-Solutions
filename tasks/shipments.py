@@ -56,6 +56,14 @@ def for_customer(task):
     label = {
         SHIPPED: (_('Shipped'), 'badge--good'), CANCELLED: (_('Cancelled'), 'badge--muted'),
     }.get(current, (_('Being prepared'), 'badge--neutral'))
+    if current not in (SHIPPED, CANCELLED):
+        # Parts ordered for it, not in yet: say so, and when they should be (tasks.parts_needed).
+        from tasks.parts_needed import waiting_for_parts
+        from django.utils.formats import date_format
+        waiting, expected = waiting_for_parts(task)
+        if waiting:
+            label = (_('Waiting for parts — expected around %(date)s') % {'date': date_format(expected, 'j F')}
+                     if expected else _('Waiting for parts'), 'badge--neutral')
     return {
         'task': task, 'progress': label, 'shipped': current == SHIPPED,
         'company': task.get_shipping_company_display() if task.shipping_company else '',

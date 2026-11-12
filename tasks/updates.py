@@ -33,6 +33,14 @@ def describe(event):
     """What happened, in the reader's language: "Rescheduled · Thu 12 Nov, 09:00"."""
     label = str(event.get_event_type_display())
     task = event.task
+    if event.event_type == 'parts_arrived':
+        from tasks.parts_needed import is_shipment
+        if is_shipment(task):
+            return _('All parts are in — prepare and ship')
+        if task.scheduled_for or task.scheduled_date:
+            day = timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
+            return _('All parts are in for the visit on %(date)s') % {'date': f'{day:%d %b}'}
+        return _('All parts are in — schedule the visit')
     if event.event_type == 'rescheduled' and task.scheduled_for:
         return f'{label} · {timezone.localtime(task.scheduled_for):%a %d %b, %H:%M}'
     return label
@@ -45,7 +53,15 @@ def tell(event):
         return
     task = event.task
     actor = getattr(event.actor, 'technician', None) if event.actor_id else None
-    recipients = [person for person in people_on(task) if person != actor]
+    people = people_on(task)
+    if event.event_type == 'parts_arrived':
+        # The warehouse prepares them next (or ships them): its manager in the task's country.
+        from people.models import Technician
+        people |= set(Technician.objects.filter(
+            role=Technician.Role.WAREHOUSE_MANAGER, country_id=task.site.customer.country_id, is_active=True,
+        ))
+    # "All parts are in" is a signal to act (schedule, prepare, ship): everyone it concerns, the one who saw it in too.
+    recipients = [person for person in people if person != actor or event.event_type == 'parts_arrived']
     if not recipients:
         return
     TaskEventRecipient.objects.bulk_create([TaskEventRecipient(event=event, technician=person) for person in recipients])

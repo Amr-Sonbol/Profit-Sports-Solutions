@@ -389,6 +389,18 @@
                         {% else %}<span class="badge badge--warning">{% translate "Ordered" %}</span>{% if line.expected_on %} <span class="muted">{% blocktranslate with date=line.expected_on|date:"j M" %}expected {{ date }}{% endblocktranslate %}</span>{% endif %}{% endif %}
                     </td>
                     <td class="row-actions__inline">
+                        {# Correcting a part: managers only. #}
+                        {% if can_edit_parts %}{% for line_pk, form in part_edit_forms.items %}{% if line_pk == line.pk %}
+                        <details class="disclosure">
+                            <summary class="button button--secondary">{% translate "Edit" %}</summary>
+                            <form method="post" class="disclosure__body form-grid" novalidate>
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="edit_part_needed"><input type="hidden" name="line" value="{{ line.pk }}">
+                                {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}
+                                <div class="field field--submit"><button type="submit" class="button">{% translate "Save" %}</button></div>
+                            </form>
+                        </details>
+                        {% endif %}{% endfor %}{% endif %}
                         {% if can_change_parts %}
                         {% if row.state == 'waiting' %}
                         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="part_arrived"><input type="hidden" name="line" value="{{ line.pk }}"><button type="submit" class="button button--secondary">{% translate "Arrived" %}</button></form>

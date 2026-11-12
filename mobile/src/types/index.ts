@@ -418,6 +418,8 @@ export interface TeamTaskDetail extends TaskDetail {
   actions?: TaskActions;
   /** Parts needed: its owner changes them; the warehouse marks them prepared once all are in. */
   can_change_parts?: boolean;
+  /** Correcting a part: managers only. */
+  can_edit_parts?: boolean;
   can_prepare_parts?: boolean;
   lead: Assignment | null;
   helpers: Assignment[];

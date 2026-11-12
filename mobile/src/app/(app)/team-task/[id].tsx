@@ -412,7 +412,8 @@ export default function TeamTaskScreen() {
           {task.parts_needed?.length || task.can_change_parts ? (
             <PartsNeededPanel
               taskId={task.id} parts={task.parts_needed ?? []} prepared={Boolean(task.parts_prepared)}
-              canChange={Boolean(task.can_change_parts)} canPrepare={Boolean(task.can_prepare_parts)} onChanged={load}
+              canChange={Boolean(task.can_change_parts)} canEdit={Boolean(task.can_edit_parts)}
+              canPrepare={Boolean(task.can_prepare_parts)} onChanged={load}
             />
           ) : null}
 

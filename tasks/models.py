@@ -1023,6 +1023,8 @@ class TaskEvent(models.Model):
         NEGLIGENCE = 'negligence', _('Negligence reported')
         # A part shipment's two steps (tasks.shipments).
         PARTS_READY = 'parts_ready', _('Parts ready to ship')
+        # The last ordered part a task needed arrived (tasks.parts_needed.check_all_in).
+        PARTS_ARRIVED = 'parts_arrived', _('All parts are in')
         SHIPPED = 'shipped', _('Shipped')
         # Someone changed it instead of its owner, while away (docs/access_rules.md).
         STEPPED_IN = 'stepped_in', _('Changed instead of the owner')
@@ -1378,6 +1380,8 @@ class TaskPartNeeded(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name=_('added by'),
     )
     created_at = models.DateTimeField(_('added at'), auto_now_add=True)
+    # Changed since "All parts are in" was told: told again once it's in (check_all_in).
+    updated_at = models.DateTimeField(_('changed at'), auto_now=True)
 
     class Meta:
         verbose_name = _('part needed')

@@ -2197,12 +2197,15 @@ class MyTaskConfirmPhotoView(APIView):
 
 
 def _parts_payload(request, task):
-    """The team task page's Parts needed: who may change them, and whether they can be marked prepared."""
-    from tasks.parts_needed import all_in, can_prepare
+    """The team task page's Parts needed: who may change them (editing one: managers only),
+    and whether they can be marked prepared (not a part shipment: it has its own step)."""
+    from tasks.parts_needed import all_in, can_prepare, is_shipment
     technician = request.user.technician
     return {
         'can_change_parts': can_change_task(technician, task),
-        'can_prepare_parts': can_prepare(technician) and all_in(task) and task.parts_prepared_at is None,
+        'can_edit_parts': technician.is_manager_tier,
+        'can_prepare_parts': can_prepare(technician) and all_in(task) and task.parts_prepared_at is None
+        and not is_shipment(task),
     }
 
 
@@ -2219,13 +2222,22 @@ class TaskPartsNeededView(APIView):
         from tasks.forms import PartNeededForm
 
         task = _get_team_task(request, pk)
-        _require_task_owner(request, task)
+        if request.data.get('action') == 'edit':
+            if not request.user.technician.is_manager_tier:
+                raise PermissionDenied  # correcting a part: managers only
+        else:
+            _require_task_owner(request, task)
         if request.data.get('line'):
             line = get_object_or_404(task.parts_needed, pk=request.data['line'])
             if request.data.get('action') == 'arrived':
-                parts_needed.mark_arrived(line)
+                parts_needed.mark_arrived(line, request.user)
             elif request.data.get('action') == 'remove':
                 line.delete()
+            elif request.data.get('action') == 'edit':
+                form = PartNeededForm(request.data)
+                if not form.is_valid():
+                    return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+                parts_needed.edit_part(line, form.cleaned_data)
             else:
                 return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
         else:

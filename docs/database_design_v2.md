@@ -863,6 +863,11 @@ The spare parts a repair needs, known **before** the visit (the task page's *Par
 | arrived_at | timestamptz | nullable — ordered: marked arrived by hand (delivered direct). Otherwise it counts as arrived once a receiving task brings that code in for this task (`task_product.for_task`) |
 | created_by_id | FK → user | |
 | created_at | timestamptz | |
+| updated_at | timestamptz | changed since "All parts are in" was told → told again once it's in |
+
+**Who changes them:** the task's owner (or someone stepping in) adds a part, marks an ordered one arrived, or removes one; **correcting one (code, description, quantity, stock or ordered, expected date) is a manager's**. A part added or corrected clears "Prepared" — the warehouse prepares it again.
+
+**"All parts are in"** (`task_event` `parts_arrived`, `tasks.parts_needed.check_all_in`): once the last ordered part arrives — received for the task, or marked arrived — the people on the task and the country's warehouse manager are told (bell and phone): *schedule the visit*, *… for the visit on 20 Nov* (already scheduled), or for a part shipment *prepare and ship*. Once; again only after a part changed. The customer gets no email for it: their next one is the visit scheduled, or the parts shipped. **A part shipment** keeps its own preparing step (it isn't on *Parts to prepare*); its "Your parts" reads *Waiting for parts* while they're on order.
 
 **While an ordered part hasn't arrived, the customer reads "Waiting for parts"** (with the expected date when known) instead of "Received" (`customers.progress`), until there's a visit date. A visit scheduled before its ordered parts are in shows a warning on the task page.
 

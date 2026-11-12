@@ -46,6 +46,7 @@ from customers.forms import SignInEmailChangeForm
 from tasks.parts_needed import part_rows as parts_needed_rows
 from tasks.parts_needed import all_in as parts_all_in
 from tasks.parts_needed import can_prepare as can_prepare_parts
+from tasks.parts_needed import is_shipment as parts_is_shipment
 from tasks.parts_needed import report_parts as parts_needed_report_parts
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
@@ -2500,6 +2501,18 @@ def task_detail(request, pk):
         parts_needed.mark_prepared(task, request.user)
         messages.success(request, _('Parts marked as prepared.'))
         return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#parts-needed")
+    if request.method == 'POST' and request.POST.get('action') == 'edit_part_needed':
+        from tasks import parts_needed
+        if not requesting_technician.is_manager_tier:
+            raise PermissionDenied  # correcting a part: managers only
+        line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
+        edit_form = PartNeededForm(request.POST, prefix=f'part{line.pk}')
+        if edit_form.is_valid():
+            parts_needed.edit_part(line, edit_form.cleaned_data)
+            messages.success(request, _('Part changed.'))
+        else:
+            messages.error(request, ' '.join(error for errors in edit_form.errors.values() for error in errors))
+        return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#parts-needed")
     if request.method == 'POST' and request.POST.get('action') in ('add_part_needed', 'part_arrived', 'remove_part_needed'):
         from tasks import parts_needed
         _require_task_owner(request, task)
@@ -2513,7 +2526,7 @@ def task_detail(request, pk):
         else:
             line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
             if action == 'part_arrived':
-                parts_needed.mark_arrived(line)
+                parts_needed.mark_arrived(line, request.user)
                 messages.success(request, _('Marked as arrived.'))
             else:
                 line.delete()
@@ -2580,7 +2593,15 @@ def task_detail(request, pk):
         # The parts it needs, each from stock, ordered or arrived; changed by its owner (or stepping in).
         'parts_needed': parts_needed_rows(task),
         # The warehouse marks them prepared once they're all in.
-        'can_prepare_parts': can_prepare_parts(requesting_technician) and parts_all_in(task),
+        'can_prepare_parts': can_prepare_parts(requesting_technician) and parts_all_in(task) and not parts_is_shipment(task),
+        'can_edit_parts': requesting_technician.is_manager_tier,
+        # Each part's own edit form, filled in (managers only).
+        'part_edit_forms': {
+            row['line'].pk: PartNeededForm(prefix=f"part{row['line'].pk}", initial={
+                'product_code': row['line'].product_code, 'description': row['line'].description,
+                'quantity': row['line'].quantity, 'source': row['line'].source, 'expected_on': row['line'].expected_on,
+            }) for row in parts_needed_rows(task)
+        } if requesting_technician.is_manager_tier else {},
         # Scheduled while an ordered part isn't in yet: said at the top of the page.
         'scheduled_before_parts': bool(task.scheduled_for or task.scheduled_date) and any(
             row['state'] == 'waiting' for row in parts_needed_rows(task)
@@ -7697,6 +7718,14 @@ def checklist_formset_rows(formset):
 
 
 def save_checklist(task, rows):
+    _save_checklist(task, rows)
+    if task.task_type_id and task.task_type.category == TaskType.Category.RECEIVING:
+        from tasks.parts_needed import check_received
+        user = task.created_by
+        transaction.on_commit(lambda: check_received(task, user))
+
+
+def _save_checklist(task, rows):
     """What really happened to each machine (TaskProductCheckForm rows,
     with any new photo as `photo`): planned lines updated by `id`, machines
     added on site created (and any added earlier but now left out removed)

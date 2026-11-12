@@ -24,16 +24,20 @@ function isoDay(date: Date) {
  * arrived, or removes one; the warehouse (or a manager) marks them prepared
  * once they're all in.
  */
-export function PartsNeededPanel({ taskId, parts, prepared, canChange, canPrepare, onChanged }: {
+export function PartsNeededPanel({ taskId, parts, prepared, canChange, canEdit = false, canPrepare, onChanged }: {
   taskId: number;
   parts: PartNeededRow[];
   prepared: boolean;
   canChange: boolean;
+  /** Correcting a part: managers only. */
+  canEdit?: boolean;
   canPrepare: boolean;
   onChanged: () => void;
 }) {
   const theme = useTheme();
   const [adding, setAdding] = useState(false);
+  // The part being corrected (a manager), or null when adding.
+  const [editing, setEditing] = useState<number | null>(null);
   const [code, setCode] = useState('');
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('1');
@@ -60,9 +64,11 @@ export function PartsNeededPanel({ taskId, parts, prepared, canChange, canPrepar
     setErrors({});
     try {
       await changeTaskParts(taskId, {
+        ...(editing ? { line: editing, action: 'edit' } : {}),
         product_code: code.trim(), description: description.trim(), quantity: quantity.trim() || '1', source,
         expected_on: source === 'ordered' && expected ? isoDay(expected) : '',
       });
+      setEditing(null);
       setCode('');
       setDescription('');
       setQuantity('1');
@@ -106,6 +112,22 @@ export function PartsNeededPanel({ taskId, parts, prepared, canChange, canPrepar
                   : t('Ordered')}
             </ThemedText>
           </ThemedView>
+          {canEdit ? (
+            <TouchableOpacity
+              onPress={() => {
+                setEditing(part.id);
+                setCode(part.code);
+                setDescription(part.description);
+                setQuantity(String(part.quantity));
+                setSource(part.state === 'stock' ? 'stock' : 'ordered');
+                setExpected(part.expected_on ? new Date(part.expected_on) : null);
+                setAdding(true);
+              }}
+              disabled={isBusy}
+            >
+              <ThemedText type="small" themeColor="primary">Edit</ThemedText>
+            </TouchableOpacity>
+          ) : null}
           {canChange && part.state === 'waiting' ? (
             <TouchableOpacity onPress={() => run(() => changeTaskParts(taskId, { line: part.id, action: 'arrived' }))} disabled={isBusy}>
               <ThemedText type="small" themeColor="primary">Arrived</ThemedText>
@@ -173,9 +195,12 @@ export function PartsNeededPanel({ taskId, parts, prepared, canChange, canPrepar
           {isBusy ? <ActivityIndicator /> : (
             <ThemedView style={styles.chips}>
               <TouchableOpacity style={[styles.button, { backgroundColor: theme.primary }]} onPress={add} disabled={!code.trim()}>
-                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Add part</ThemedText>
+                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>{editing ? 'Save changes' : 'Add part'}</ThemedText>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { borderColor: theme.backgroundSelected, borderWidth: 1 }]} onPress={() => setAdding(false)}>
+              <TouchableOpacity style={[styles.button, { borderColor: theme.backgroundSelected, borderWidth: 1 }]} onPress={() => {
+                setAdding(false);
+                setEditing(null);
+              }}>
                 <ThemedText type="small">Cancel</ThemedText>
               </TouchableOpacity>
             </ThemedView>

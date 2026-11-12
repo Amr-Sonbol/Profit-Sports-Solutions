@@ -10213,3 +10213,81 @@ class PartsNeededTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.add(product_code='X-1').status_code, 403)
         self.assertFalse(self.task.parts_needed.exists())
+
+
+class PartsArrivalTests(PartsNeededTests):
+    """The last ordered part in: "All parts are in", once, to the people on
+    the task and the country's warehouse manager; correcting a part is a
+    manager's; a part shipment keeps its own preparing step."""
+
+    def setUp(self):
+        super().setUp()
+        self.warehouse = Technician.objects.create(
+            user=User.objects.create_user('wh2', password='pass12345'), country=self.country, full_name='Wael Warehouse',
+            language='en', role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff',
+        )
+
+    def arrivals(self):
+        return list(self.task.events.filter(event_type=TaskEvent.EventType.PARTS_ARRIVED))
+
+    def test_told_once_to_the_owner_and_the_warehouse(self):
+        from tasks.models import TaskEventRecipient
+        from tasks.updates import describe
+        self.add(product_code='CONSOLE-9', source='ordered')
+        self.add(product_code='BELT-01', source='ordered')
+        first, second = self.task.parts_needed.all()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {'action': 'part_arrived', 'line': first.pk})
+        self.assertEqual(self.arrivals(), [])  # one still on order
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {'action': 'part_arrived', 'line': second.pk})
+        (event,) = self.arrivals()
+        self.assertEqual(describe(event), 'All parts are in — schedule the visit')
+        told = set(TaskEventRecipient.objects.filter(event=event).values_list('technician', flat=True))
+        self.assertTrue({self.owner.pk, self.warehouse.pk} <= told)
+
+    def test_received_at_the_warehouse_counts(self):
+        from reference.models import TaskType
+        from tasks.parts_needed import check_received
+        self.add(product_code='CONSOLE-9', source='ordered')
+        receiving = Task.objects.create(
+            task_number='AE-0902', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            task_type=TaskType.objects.create(code='recv9', name='Receiving', name_ar='استلام', category='receiving'),
+        )
+        TaskProduct.objects.create(task=receiving, kind='part', product_code='CONSOLE-9', status='done', for_task=self.task)
+        check_received(receiving, self.supervisor_user)
+        self.assertEqual(len(self.arrivals()), 1)
+
+    def test_correcting_a_part_is_a_managers_and_it_counts_as_new(self):
+        from tasks.parts_needed import mark_prepared
+        self.add(product_code='BELT-01', source='ordered')
+        line = self.task.parts_needed.get()
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        mark_prepared(self.task, self.supervisor_user)
+        edit = {'action': 'edit_part_needed', 'line': line.pk, f'part{line.pk}-product_code': 'BELT-02',
+                f'part{line.pk}-quantity': 3, f'part{line.pk}-source': 'ordered'}
+        self.assertEqual(self.client.post(self.url, edit).status_code, 403)  # the owner (a supervisor) can't
+        manager = User.objects.create_user('manager5', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager5', password='pass12345')
+        self.client.post(self.url, edit)
+        line.refresh_from_db()
+        self.task.refresh_from_db()
+        self.assertEqual((line.product_code, line.quantity, self.task.parts_prepared_at), ('BELT-02', 3, None))
+        # It arrives again: told again.
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        self.assertEqual(len(self.arrivals()), 2)
+
+    def test_a_part_shipment_keeps_its_own_preparing_step(self):
+        from reference.models import TaskType
+        from tasks.parts_needed import to_prepare
+        from tasks.shipments import for_customer
+        self.task.task_type = TaskType.objects.create(code='ship9', name='Spare Part Shipment', name_ar='شحن', category='part_shipment')
+        self.task.save(update_fields=['task_type'])
+        self.add(product_code='BELT-01', source='ordered', expected_on='2026-11-20')
+        self.assertIn('20 November', str(for_customer(self.task)['progress'][0]))
+        self.client.post(self.url, {'action': 'part_arrived', 'line': self.task.parts_needed.get().pk})
+        self.assertEqual(to_prepare(self.country), [])
+        self.assertFalse(self.client.get(self.url).context['can_prepare_parts'])
