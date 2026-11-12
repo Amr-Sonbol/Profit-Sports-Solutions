@@ -50,6 +50,8 @@ Not a later phase. Retrofitting right-to-left means touching every screen.
 | currency_code | char(3) | |
 | weekend_days | varchar | comma-separated weekday numbers, Monday = 0 — `4,5` is Friday–Saturday (the default), `5,6` Saturday–Sunday |
 | report_language | varchar(2) | default `en` — the language of every customer's visit report in this country, whatever the customer picked: `ar` in Saudi Arabia and Egypt, `en` everywhere else. Also the **phone app's language** for the staff based here (`Technician.app_language`): the app, its notifications and what the server tells it — right to left for Arabic, no switch. The website keeps each person's own `language` |
+| has_warehouse | bool | default true — we hold stock here. Without (the USA), a part shipment is **sent direct from the factory** to the customer (`task.ships_direct`): its only way |
+| does_visits | bool | default true — our technicians visit customers here. Without (the USA), a request's "What happens next?" offers no visit (refused on the server too): its parts are shipped |
 | is_active | bool | |
 
 **`weekend_days` drives the "not scheduled within 24 working hours" alarm.** Weekends differ across the region (UAE is Saturday–Sunday; Saudi Arabia and Egypt are Friday only; Kuwait, Qatar, Bahrain and Oman are Friday–Saturday), so the 24-hour clock skips the task's own country's weekend days, counted in that country's `timezone`. Public holidays aren't modelled.
@@ -148,6 +150,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | name | varchar | |
 | code | varchar | optional — this company's own account/reference code, if it has one |
 | segment | varchar | gym, hotel, club, other |
+| own_maintenance_team | bool | default false — they fix their own machines: "Ship a part" is the suggested answer to their requests (still changeable) |
 | notify_on_the_way | bool | default true — an email to the branch contact when our technician sets off for a visit (`tasks.views.tell_customer_on_the_way`); the customer switches it off in the portal (Settings → Company). The portal bell is told either way |
 | contact_name | varchar | optional — the single-branch case, or a chain sharing one contact |
 | contact_phone | varchar | |
@@ -455,6 +458,7 @@ This status is shown to the technician themselves (My progress) and to superviso
 | delivery_note_uploaded_at | timestamptz | nullable |
 | previous_task_id | FK → task | nullable — the step before in an equipment chain (receiving → loading → installation → follow-up), whose machine lines this one carried on |
 | schedule_notified_at | timestamptz | nullable — set manually, or automatically when `notification_settings.auto_notify_on_reschedule` is on |
+| ships_direct | bool | a part shipment sent from the factory straight to the customer (*Sent direct from the factory*: the PAK number, courier and tracking — shipped; nothing picked, no stock of ours moves). The only way where the country has no warehouse |
 | on_the_way_notified_at | timestamptz | nullable — when the customer was told the technician is on the way (the lead's "On the way" tap): once a visit day, so a second tap or an undo doesn't send it again |
 | parts_prepared_at | timestamptz | nullable — the warehouse (or the manager tier) got the repair's parts ready for the visit, once all of them are in (`task_part_needed`; the *Parts to prepare* list, website and app) |
 | parts_prepared_by_id | FK → user | nullable — who did |

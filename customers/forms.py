@@ -167,6 +167,7 @@ class CustomerEditForm(forms.ModelForm):
         fields = [
             'name', 'code', 'segment', 'language',
             'contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address',
+            'own_maintenance_team',
         ]
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),

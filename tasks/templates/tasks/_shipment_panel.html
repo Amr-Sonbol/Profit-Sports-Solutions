@@ -45,7 +45,34 @@
         {% endif %}
     </dl>
 
-    {% if shipment.can_prepare %}
+    {# From the factory straight to the customer (no stock of ours); the only way where the country holds none. #}
+    {% if shipment.can_ship_direct %}
+    <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Mark as shipped direct from the factory? The customer is emailed that the part is on its way.' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="shipment_direct">
+        <h3>{% translate "Sent direct from the factory" %}</h3>
+        <p class="field__help">{% translate "The factory ships it straight to the customer: nothing leaves our stock." %}</p>
+        <div class="field">
+            <label for="direct-pak">{% translate "PAK number" %}</label>
+            <input type="text" id="direct-pak" name="pak_reference_number" dir="ltr" value="{{ task.pak_reference_number }}">
+        </div>
+        <div class="field">
+            <label for="direct-company">{% translate "Shipping company" %}</label>
+            <select id="direct-company" name="shipping_company" required>
+                <option value="">—</option>
+                {% for value, label in shipment.companies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="direct-tracking">{% translate "Shipping tracking number" %}</label>
+            <input type="text" id="direct-tracking" name="shipping_tracking_number" dir="ltr">
+        </div>
+        <div class="form-actions"><button type="submit" class="button{% if not shipment.direct_only %} button--secondary{% endif %}">{% translate "Shipped direct" %}</button></div>
+    </form>
+    {% endif %}
+    {% if shipment.ships_direct %}<p class="muted">{% translate "Sent direct from the factory." %}</p>{% endif %}
+
+    {% if shipment.can_prepare and not shipment.direct_only %}
     {# The warehouse manager: the parts picked (they leave stock), the PAK number, who ships it. Again while not shipped, to correct. #}
     <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Ready to ship? The parts leave the stock and the technician is told.' %}">
         {% csrf_token %}
@@ -83,7 +110,7 @@
     </form>
     {% endif %}
 
-    {% if shipment.can_ship %}
+    {% if shipment.can_ship and not shipment.direct_only %}
     {# Whoever hands it to the courier: the courier, and its tracking number when it has one. #}
     <form method="post" class="shipment-form" novalidate data-confirm="{% translate 'Mark as shipped? The customer is emailed that the part is on its way.' %}">
         {% csrf_token %}

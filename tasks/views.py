@@ -3680,6 +3680,8 @@ def decide_request_next(request, technician, ticket, choice, machine_ids, superv
     selected = list(undecided.filter(pk__in=[str(v) for v in machine_ids if str(v).isdigit()]))
     if undecided.exists() and not selected:
         return _('Please select at least one machine that has not been decided yet.'), '', None
+    if choice == 'visit' and not ticket.country.does_visits:
+        return _('We don\'t do visits in %(country)s: ship the parts instead.') % {'country': ticket.country.display_name}, '', None
     if choice in ('visit', 'ship'):
         if not ticket.site_id:
             return _('This request has no branch yet: use More options to choose one.'), '', None
@@ -7029,6 +7031,9 @@ def ticket_for_app(request, technician, access):
         'close_reason': ticket.close_reason or '',
         'can_manage': can_manage, 'can_reply': can_manage and _ticket_is_open(ticket),
         'next': next_step,
+        # The country's way of working (no visits in the USA) and the suggested answer.
+        'does_visits': ticket.country.does_visits,
+        'suggest_ship': not ticket.country.does_visits or bool(ticket.customer_id and ticket.customer.own_maintenance_team),
         'website_path': reverse('tasks:ticket_review', args=[ticket.pk]),
     }
 
@@ -7097,9 +7102,14 @@ def shipment_for_app(task, technician):
         'pak_reference_number': task.pak_reference_number,
         'shipping_company': task.get_shipping_company_display() if task.shipping_company else '',
         'shipping_tracking_number': task.shipping_tracking_number,
-        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
+        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY
+        and task.site.customer.country.has_warehouse,
         'companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
         'send_to': shipments.send_to(task),
+        # From the factory straight to the customer; the only way where the country holds no stock.
+        'can_ship_direct': shipments.can_ship_direct(technician, task) and stage in (shipments.PREPARING, shipments.READY),
+        'direct_only': not task.site.customer.country.has_warehouse,
+        'ships_direct': task.ships_direct,
         # The warehouse manager's step, and the fitting visit after it (the office's panel).
         'can_prepare': shipments.can_prepare(technician, task) and stage in (shipments.PREPARING, shipments.READY),
         'shippers': [{'id': person.pk, 'name': person.full_name} for person in shipments.technicians_for(task)]
@@ -7123,6 +7133,10 @@ def _shipment_context(task, technician):
         'can_prepare': can_prepare and stage in (shipments.PREPARING, shipments.READY),
         'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
         'can_book_fitting': can_prepare and stage == shipments.SHIPPED,
+        # From the factory straight to the customer; the only way where the country holds no stock.
+        'can_ship_direct': shipments.can_ship_direct(technician, task) and stage in (shipments.PREPARING, shipments.READY),
+        'direct_only': not task.site.customer.country.has_warehouse,
+        'ships_direct': task.ships_direct,
         'send_to': shipments.send_to(task),
         'technicians': shipments.technicians_for(task) if can_prepare else (),
         'companies': ShippingCompany.choices, 'blank_rows': range(3),
@@ -7165,10 +7179,22 @@ def _shipment_post(request, task, technician, back):
 
     action = request.POST.get('action')
     if request.method != 'POST' or not is_part_shipment(task) or action not in (
-        'shipment_ready', 'shipment_shipped', 'book_fitting',
+        'shipment_ready', 'shipment_shipped', 'shipment_direct', 'book_fitting',
     ):
         return None
     stage = shipments.stage(task)
+    if action == 'shipment_direct':
+        # From the factory straight to the customer: the PAK number, the courier and tracking — shipped.
+        if not shipments.can_ship_direct(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
+            raise PermissionDenied
+        company = request.POST.get('shipping_company', '')
+        if company not in ShippingCompany.values:
+            messages.error(request, _('Please choose the shipping company.'))
+            return redirect(back)
+        shipments.mark_shipped_direct(task, request.POST.get('pak_reference_number', '').strip()[:100])
+        ship_and_tell_customer(task, request.user, company, request.POST.get('shipping_tracking_number', ''))
+        messages.success(request, _('Shipped direct from the factory. The customer has been told.'))
+        return redirect(back)
     if action == 'shipment_ready':
         if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
             raise PermissionDenied

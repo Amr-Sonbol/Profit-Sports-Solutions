@@ -917,7 +917,10 @@ class CountryCreateForm(forms.ModelForm):
 
     class Meta:
         model = Country
-        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language']
+        fields = [
+            'name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language',
+            'has_warehouse', 'does_visits',
+        ]
 
     def clean_weekend_days(self):
         return ','.join(sorted(self.cleaned_data['weekend_days']))

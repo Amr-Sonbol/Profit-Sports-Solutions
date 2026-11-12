@@ -30,6 +30,15 @@ class Country(models.Model):
         _('visit report language'), max_length=2, choices=settings.LANGUAGES, default='en',
         help_text=_("the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"),
     )
+    # How the work is done here (the USA: neither — parts go from the factory straight to the customer).
+    has_warehouse = models.BooleanField(
+        _('has a warehouse'), default=True,
+        help_text=_('we hold stock here; without one, a part shipment is sent direct from the factory'),
+    )
+    does_visits = models.BooleanField(
+        _('does visits'), default=True,
+        help_text=_('our technicians visit customers here; without, a request is answered by shipping parts'),
+    )
     is_active = models.BooleanField(_('active'), default=True)
 
     class Meta:

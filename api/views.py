@@ -2673,6 +2673,18 @@ class TaskActionView(APIView):
             if technician.role != Technician.Role.ADMIN:
                 raise PermissionDenied
             error = reopen_task(task, request.user)
+        elif action == 'shipment_direct':
+            # From the factory straight to the customer (tasks.shipments.mark_shipped_direct).
+            from tasks import shipments
+            if not is_part_shipment(task):
+                raise Http404
+            if not shipments.can_ship_direct(technician, task) or shipments.stage(task) not in (shipments.PREPARING, shipments.READY):
+                raise PermissionDenied
+            if data.get('shipping_company', '') not in ShippingCompany.values:
+                error = _('Please choose the shipping company.')
+            else:
+                shipments.mark_shipped_direct(task, str(data.get('pak_reference_number', '')).strip()[:100])
+                ship_and_tell_customer(task, request.user, data['shipping_company'], data.get('shipping_tracking_number', ''))
         elif action in ('shipment_ready', 'shipment_shipped', 'book_fitting'):
             # A part shipment's steps, as on the office's panel (tasks.shipments).
             from tasks import shipments

@@ -153,6 +153,22 @@ def mark_ready(task, user, parts, pak_reference, technician):
     push_assigned(technician, task, is_lead=True)
 
 
+def can_ship_direct(technician, task):
+    """Sending it from the factory straight to the customer: the warehouse,
+    or the task's owner (or someone stepping in) — the USA has no warehouse."""
+    from tasks.views import can_change_task
+    return can_prepare(technician, task) or can_change_task(technician, task)
+
+
+def mark_shipped_direct(task, pak_reference):
+    """Sent from the factory straight to the customer: nothing of ours picked
+    (no stock moves), the factory's PAK number kept."""
+    task.products.filter(kind=TaskProduct.Kind.PART).delete()
+    task.ships_direct = True
+    task.pak_reference_number = pak_reference
+    task.save(update_fields=['ships_direct', 'pak_reference_number'])
+
+
 def mark_shipped(task, user, company, tracking_number):
     """Ready -> shipped: the courier, and the tracking number when there is
     one. Closes the task (which settles the customer's request)."""

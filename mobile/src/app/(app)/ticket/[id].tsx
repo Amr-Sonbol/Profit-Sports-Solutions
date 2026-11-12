@@ -66,6 +66,8 @@ export default function TicketScreen() {
       const data = copy.data;
       setOffline(copy.offline);
       setTicket(data);
+      // Shipping first where that's the way (no visits here, or their own maintenance team).
+      if (data.suggest_ship) setChoice('ship');
       // Every machine still waiting is chosen to start with, as on the website.
       setSelected(data.machines.filter((machine) => !machine.decision).map((machine) => machine.id));
       setError('');
@@ -287,7 +289,7 @@ export default function TicketScreen() {
               </>
             ) : null}
             <ThemedView style={styles.choices}>
-              {CHOICES.map(([value, label]) => (
+              {CHOICES.filter(([value]) => value !== 'visit' || ticket.does_visits !== false).map(([value, label]) => (
                 <TouchableOpacity
                   key={value} onPress={() => setChoice(value)}
                   style={[styles.choice, { borderColor: theme.backgroundSelected }, choice === value && { backgroundColor: theme.primary, borderColor: theme.primary }]}

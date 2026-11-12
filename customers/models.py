@@ -30,6 +30,11 @@ class Customer(models.Model):
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
     # An email to the branch contact when the technician sets off (tasks.views.tell_customer_on_the_way);
     # the customer switches it off in the portal's Settings → Company.
+    # They fix their own machines: shipping the parts is the suggested answer to their requests.
+    own_maintenance_team = models.BooleanField(
+        _('has its own maintenance team'), default=False,
+        help_text=_('"Ship a part" is suggested for their requests (still changeable)'),
+    )
     notify_on_the_way = models.BooleanField(
         _('email when the technician is on the way'), default=True,
         help_text=_('an email to the branch contact when our technician sets off for a visit'),

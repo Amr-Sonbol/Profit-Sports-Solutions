@@ -357,6 +357,9 @@ export interface TicketDetail {
   close_reason: string;
   can_manage: boolean;
   can_reply: boolean;
+  /** The country does visits (not the USA); shipping suggested (no visits, or the customer's own team). Older servers: absent. */
+  does_visits?: boolean;
+  suggest_ship?: boolean;
   /** "What happens next?" — only while new and for whoever handles requests. */
   next: {
     supervisors: { value: number; label: string }[];
@@ -876,6 +879,10 @@ export interface Shipment {
   shippers?: { id: number; name: string }[];
   shipper?: string;
   can_book_fitting?: boolean;
+  /** From the factory straight to the customer (no stock of ours); the only way where the country holds none. */
+  can_ship_direct?: boolean;
+  direct_only?: boolean;
+  ships_direct?: boolean;
 }
 
 // One photo, video or file the customer sent (tasks.customer_report). `key`

@@ -938,6 +938,40 @@ class WhatHappensNextTests(LifecycleTestCase):
         self.assertTrue(is_part_shipment(self.ticket.task))
         self.assertEqual(set(self.ticket.machines.values_list('decision', flat=True)), {'ship_part'})
 
+    def test_where_we_do_no_visits_the_parts_are_shipped_direct_from_the_factory(self):
+        from django.core import mail
+        from tasks.models import TaskProduct
+        country = self.ticket.country
+        country.has_warehouse = country.does_visits = False
+        country.save(update_fields=['has_warehouse', 'does_visits'])
+        page = self.staff.get(self.url)
+        self.assertNotContains(page, 'value="visit"')  # no "Send a technician" here
+        self.next(choice='visit')
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.task)  # refused
+        self.next(choice='ship')
+        self.ticket.refresh_from_db()
+        task = self.ticket.task
+        detail = self.staff.get(f'/tasks/{task.pk}/')
+        self.assertTrue(detail.context['shipment']['direct_only'])
+        mail.outbox.clear()
+        self.staff.post(f'/tasks/{task.pk}/', {
+            'action': 'shipment_direct', 'pak_reference_number': 'PAK-77', 'shipping_company': 'dhl',
+            'shipping_tracking_number': '1234567890',
+        })
+        task.refresh_from_db()
+        self.assertEqual((task.ships_direct, task.pak_reference_number, task.status), (True, 'PAK-77', 'closed'))
+        self.assertFalse(task.products.filter(kind=TaskProduct.Kind.PART).exists())  # nothing left our stock
+        self.assertTrue(any('1234567890' in message.body for message in mail.outbox))  # the customer is told
+
+    def test_a_customer_with_its_own_team_is_suggested_shipping(self):
+        customer = self.ticket.customer
+        customer.own_maintenance_team = True
+        customer.save(update_fields=['own_maintenance_team'])
+        page = self.staff.get(self.url).content.decode()
+        self.assertIn('value="ship" checked', page)
+        self.assertNotIn('value="visit" checked', page)
+
     def test_split_one_machine_now_the_other_later(self):
         self.machines = self.machines[:1]
         self.next(choice='visit')

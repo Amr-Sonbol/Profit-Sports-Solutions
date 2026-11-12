@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 12:26+0000\n"
+"POT-Creation-Date: 2026-11-12 14:36+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -13,6 +13,9 @@ msgstr ""
 #, python-format
 msgid " Expected around %(time)s."
 msgstr " الوصول المتوقع حوالي %(time)s."
+
+msgid "\"Ship a part\" is suggested for their requests (still changeable)"
+msgstr "يُقترح «شحن قطعة» لطلباتهم (ويمكن تغييره)"
 
 #, python-format
 msgid "#%(rank)s of %(leaderboard_size)s"
@@ -3399,6 +3402,9 @@ msgstr "الخريطة"
 msgid "Map location"
 msgstr "الموقع على الخريطة"
 
+msgid "Mark as shipped direct from the factory? The customer is emailed that the part is on its way."
+msgstr "تسجيل الشحن مباشرة من المصنع؟ سيُبلَّغ العميل بالبريد أن القطعة في الطريق."
+
 msgid "Mark as shipped? The customer is emailed that the part is on its way."
 msgstr "تحديد كمشحون؟ يُرسل للعميل بريد بأن القطعة في الطريق."
 
@@ -4357,6 +4363,9 @@ msgstr "متأخرة"
 
 msgid "Overloaded"
 msgstr "محمّل بالعمل أكثر من اللازم"
+
+msgid "PAK number"
+msgstr "رقم PAK"
 
 msgid "PAK reference"
 msgstr "الرقم المرجعي PAK"
@@ -5583,6 +5592,12 @@ msgstr "تُرسل عبر شركة الشحن، دون زيارة"
 msgid "Sent by hand, with a button"
 msgstr "تُرسل يدويًا بزر"
 
+msgid "Sent direct from the factory"
+msgstr "أُرسلت مباشرة من المصنع"
+
+msgid "Sent direct from the factory."
+msgstr "أُرسلت مباشرة من المصنع."
+
 msgid "Sent later by the customer"
 msgstr "أرسلها العميل لاحقًا"
 
@@ -5697,6 +5712,12 @@ msgstr "شحن قطعة"
 
 msgid "Shipped"
 msgstr "تم الشحن"
+
+msgid "Shipped direct"
+msgstr "شُحنت مباشرة"
+
+msgid "Shipped direct from the factory. The customer has been told."
+msgstr "شُحنت مباشرة من المصنع. تم إبلاغ العميل."
 
 msgid "Shipped. The customer has been told."
 msgstr "تم الشحن. تم إبلاغ العميل."
@@ -6234,6 +6255,9 @@ msgstr "البريد الإلكتروني أو كلمة المرور غير صح
 
 msgid "The email server refused it or could not be reached. Check the email settings, then send it again."
 msgstr "رفضه خادم البريد أو تعذّر الوصول إليه. تحقّق من إعدادات البريد ثم أرسله مرة أخرى."
+
+msgid "The factory ships it straight to the customer: nothing leaves our stock."
+msgstr "يشحنها المصنع مباشرة إلى العميل: لا يخرج شيء من مخزوننا."
 
 msgid "The feedback request has been sent."
 msgstr "تم إرسال طلب التقييم."
@@ -7093,6 +7117,10 @@ msgid "We are arranging a visit for this request and will contact you to agree a
 msgstr "نقوم بترتيب زيارة لهذا الطلب وسنتواصل معك للاتفاق على موعد."
 
 #, python-format
+msgid "We don't do visits in %(country)s: ship the parts instead."
+msgstr "لا نجري زيارات في %(country)s: اشحن القطع بدلاً من ذلك."
+
+#, python-format
 msgid "We have sent a confirmation link to %(email)s. Your email changes once you open it."
 msgstr "أرسلنا رابط تأكيد إلى %(email)s. يتغير بريدك بمجرد فتحه."
 
@@ -7885,6 +7913,9 @@ msgstr "المسافة من الموقع (م)"
 msgid "documents are restricted to managers by default; enable this for a specific task when a supervisor collects payment on site and requires access to the invoice"
 msgstr "المستندات مقصورة على المديرين افتراضياً؛ فعّل هذا الخيار لمهمة محددة عندما يتولى المشرف تحصيل الدفعة في الموقع ويحتاج إلى الاطلاع على الفاتورة"
 
+msgid "does visits"
+msgstr "تُجرى زيارات"
+
 msgid "e.g. Heavy traffic on Sheikh Zayed Road; expected arrival approximately 45 minutes late."
 msgstr "مثال: ازدحام مروري على شارع الشيخ زايد؛ يُتوقع الوصول متأخراً بنحو 45 دقيقة."
 
@@ -8042,6 +8073,12 @@ msgstr "عنوان النادي الرياضي"
 
 msgid "gym name"
 msgstr "اسم النادي الرياضي"
+
+msgid "has a warehouse"
+msgstr "يوجد مستودع"
+
+msgid "has its own maintenance team"
+msgstr "لديه فريق صيانة خاص"
 
 msgid "has transport"
 msgstr "لديه وسيلة نقل"
@@ -8224,6 +8261,9 @@ msgstr "توصية أخرى"
 
 msgid "other work, one per line"
 msgstr "أعمال أخرى، كل منها في سطر"
+
+msgid "our technicians visit customers here; without, a request is answered by shipping parts"
+msgstr "يزور فنيونا العملاء هنا؛ وبدونها يُجاب على الطلب بشحن القطع"
 
 msgid "outcome"
 msgstr "النتيجة"
@@ -8495,6 +8535,9 @@ msgstr "وقت الإرسال"
 
 msgid "sent by"
 msgstr "أرسله"
+
+msgid "sent direct from the factory"
+msgstr "أُرسلت مباشرة من المصنع"
 
 msgid "serial number"
 msgstr "الرقم التسلسلي"
@@ -8949,6 +8992,9 @@ msgstr "قيمة warranty_start «%(value)s» ليست تاريخًا. يُرج�
 
 msgid "warranty_start (optional) is the branch's installation date, e.g. 2026-03-15 or 15/03/2026: the warranty runs two years from it, and everything at that branch is free meanwhile. Re-uploading with dates added fills them in for branches that have none yet."
 msgstr "العمود warranty_start (اختياري) هو تاريخ تركيب الفرع، مثل 2026-03-15 أو 15/03/2026: يسري الضمان سنتين منه، وكل شيء في ذلك الفرع مجاني خلال تلك المدة. وإعادة رفع الملف مع التواريخ تملؤها للفروع التي لا تاريخ لها بعد."
+
+msgid "we hold stock here; without one, a part shipment is sent direct from the factory"
+msgstr "لدينا مخزون هنا؛ وبدونه تُرسل شحنة القطع مباشرة من المصنع"
 
 msgid "weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"
