@@ -866,16 +866,38 @@ class PortalSettingsTests(CustomerTestCase):
         PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('ali@fitnessfirst.ae', email='ali@fitnessfirst.ae', password='pass12345'))
         self.client.login(username='ali@fitnessfirst.ae', password='pass12345')
 
-    def test_details_and_language_are_saved(self):
+    def test_company_details_are_saved_and_in_the_audit_log(self):
+        from django.contrib.admin.models import LogEntry
+
         response = self.client.post('/customers/portal/settings/', {
             'action': 'details', 'contact_name': 'Sara', 'contact_phone': '0509999999',
             'contact_email': 'sara@fitnessfirst.ae', 'billing_address': 'Dubai Marina', 'shipping_address': 'Al Quoz',
-            'language': 'ar',
         })
         self.assertRedirects(response, '/customers/portal/settings/', fetch_redirect_response=False)
         self.customer.refresh_from_db()
-        self.assertEqual((self.customer.contact_name, self.customer.contact_email, self.customer.language),
-                         ('Sara', 'sara@fitnessfirst.ae', 'ar'))
+        self.assertEqual((self.customer.contact_name, self.customer.contact_email), ('Sara', 'sara@fitnessfirst.ae'))
+        entry = LogEntry.objects.latest('pk')
+        self.assertEqual(entry.object_id, str(self.customer.pk))
+        self.assertIn('Contact name', entry.change_message)
+        self.assertIn('Contact email', entry.change_message)
+
+    def test_my_name_and_language_are_mine_alone(self):
+        colleague = User.objects.create_user('omar@fitnessfirst.ae', email='omar@fitnessfirst.ae', password='pass12345')
+        PortalUser.objects.create(customer=self.customer, user=colleague, language='')
+        response = self.client.post('/customers/portal/settings/', {'action': 'account', 'name': 'Ali Hassan', 'language': 'ar'})
+        self.assertRedirects(response, '/customers/portal/settings/', fetch_redirect_response=False)
+        me = PortalUser.objects.get(user__username='ali@fitnessfirst.ae')
+        self.assertEqual((me.user.first_name, me.language), ('Ali Hassan', 'ar'))
+        self.assertEqual(self.client.get('/customers/portal/settings/').wsgi_request.LANGUAGE_CODE, 'ar')
+        # The company's, and so the colleague's, is unchanged.
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.language, 'en')
+        self.client.login(username='omar@fitnessfirst.ae', password='pass12345')
+        page = self.client.get('/customers/portal/settings/')
+        self.assertEqual(page.wsgi_request.LANGUAGE_CODE, 'en')
+        # Everyone with access is listed, read-only.
+        self.assertContains(page, 'Ali Hassan')
+        self.assertContains(page, 'omar@fitnessfirst.ae')
 
     def test_the_password_needs_the_current_one_and_says_it_changed(self):
         new = {'action': 'password', 'new_password1': 'Gym-Belt-2026!', 'new_password2': 'Gym-Belt-2026!'}
@@ -1084,6 +1106,13 @@ class PortalTicketNewTests(CustomerTestCase):
             # A described problem is required; tests about other things get one.
             if machine and 'description' not in machine:
                 machine = {**machine, 'description': 'Stops after 5 minutes, error E-07, since Monday.'}
+            if machine and overrides.get('need', 'repair') == 'repair':
+                # A repair needs the serial plate and the fault (TicketMachineForm), as from a real customer.
+                machine = {
+                    'serial_photo': SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg'),
+                    'files': [SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')],
+                    **machine,
+                }
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return payload
@@ -1314,8 +1343,10 @@ class PortalTicketMachinesTests(PortalTicketNewTests):
             {'model_name': 'Bike', 'serial_no': 'B-1', 'problem': 'display', 'files': [photo]},
         ]))
         ticket = CustomerTicket.objects.get()
-        self.assertEqual(ticket.machines.get(model_name='Bike').attachments.count(), 1)
-        self.assertEqual(ticket.machines.get(model_name='Treadmill').attachments.count(), 0)
+        # Each machine's own (the treadmill's is its required fault photo).
+        bike, treadmill = ticket.machines.get(model_name='Bike'), ticket.machines.get(model_name='Treadmill')
+        self.assertEqual([a.file.name.rsplit('/', 1)[-1] for a in bike.attachments.all()], ['belt.jpg'])
+        self.assertEqual([a.file.name.rsplit('/', 1)[-1] for a in treadmill.attachments.all()], ['fault.jpg'])
 
     def test_the_office_and_the_customer_see_the_machines_table(self):
         self.client.login(username='fitnessfirst', password='pass12345')

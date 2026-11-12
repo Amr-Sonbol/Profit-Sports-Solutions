@@ -40,9 +40,9 @@ def set_language(request):
     if technician is not None:
         technician.language = language
         technician.save(update_fields=['language'])
-    elif customer is not None:
-        customer.language = language
-        customer.save(update_fields=['language'])
+    elif customer is not None:  # their own, not everyone's at their company
+        request.user.portal_user.language = language
+        request.user.portal_user.save(update_fields=['language'])
     else:
         translation.activate(language)
         response.set_cookie(

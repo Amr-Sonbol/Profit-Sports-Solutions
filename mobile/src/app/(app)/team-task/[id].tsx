@@ -13,6 +13,8 @@ import {
 } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
 import { ShipmentSteps } from '@/components/shipment-steps';
+import { BranchCard } from '@/components/branch-card';
+import { VisitPhotos } from '@/components/visit-photos';
 import { TaskActionsPanel } from '@/components/task-actions';
 import { TaskMessages } from '@/components/task-messages';
 import { confirmAction } from '@/confirm';
@@ -68,10 +70,14 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   const theme = useTheme();
   const [step, setStep] = useState(nextStep.steps[0]?.value ?? '');
   const [site, setSite] = useState('');
+  const [supervisor, setSupervisor] = useState('');
   const [chosen, setChosen] = useState<number[]>(nextStep.lines.map((line) => line.id));
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const sites = nextStep.steps.find((option) => option.value === step)?.sites ?? [];
+  // Who supervises it there: only people in the chosen site's country.
+  const siteCountry = sites.find((option) => option.value === site)?.country;
+  const supervisors = (nextStep.supervisors ?? []).filter((person) => person.country === siteCountry);
 
   const create = async () => {
     if (!site) {
@@ -84,7 +90,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     setIsBusy(true);
     setError('');
     try {
-      const created = await createNextStep(taskId, step, site, chosen);
+      const created = await createNextStep(taskId, step, site, chosen, supervisor);
       alert('Sent on', t('{number}, with {count} machines.', { number: created.task_number, count: chosen.length }));
       onCreated(created.id);
     } catch (err) {
@@ -114,7 +120,24 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
           );
         })}
       </ThemedView>
-      <ChoicePicker label="Where" choices={sites} value={site} onChange={setSite} placeholder="Country — customer — site" />
+      <ChoicePicker
+        label="Where" choices={sites} value={site} placeholder="Country — customer — site"
+        onChange={(value) => {
+          setSite(value);
+          setSupervisor('');
+        }}
+      />
+      {site && nextStep.supervisors ? (
+        <>
+          <ChoicePicker
+            label="Supervisor there" choices={supervisors} value={supervisor} onChange={setSupervisor} optional
+            placeholder="Same as this task (same country only)"
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Going to another country? Choose who supervises it there.
+          </ThemedText>
+        </>
+      ) : null}
       <ThemedText type="small" themeColor="textSecondary">The machines to carry, with their serials and colours:</ThemedText>
       {nextStep.lines.map((line) => {
         const on = chosen.includes(line.id);
@@ -322,6 +345,9 @@ export default function TeamTaskScreen() {
   }
 
   const canApprove = task.can_supervisor_approve || task.can_manager_approve;
+  // Photos show as pictures by the report (VisitPhotos) once there is one; the files list has the rest.
+  const files = task.report || canApprove
+    ? task.attachments.filter((item) => item.media_type !== 'photo') : task.attachments;
 
   return (
     <ThemedView style={styles.container}>
@@ -333,33 +359,13 @@ export default function TeamTaskScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <OfflineNotice offline={offline} />
           <ThemedText type="title" style={styles.taskNumber}>{task.task_number}</ThemedText>
-          <ThemedText type="subtitle" style={styles.customer}>{task.customer_name}</ThemedText>
-          <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          {/* The branch first, set apart: who and where (components/branch-card). */}
+          <BranchCard task={task} />
           <ThemedView style={styles.quickRow}>
             <Ionicons name="time-outline" size={18} color={theme.text} />
             <ThemedText type="smallBold">{when(task)}</ThemedText>
           </ThemedView>
           <ThemedView style={styles.quickRow}>
-            {task.directions_url ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(task.directions_url!)}
-              >
-                <Ionicons name="navigate-outline" size={16} color={theme.primary} />
-                <ThemedText type="small" themeColor="primary">Directions</ThemedText>
-              </TouchableOpacity>
-            ) : null}
-            {task.site_contact_phone ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
-              >
-                <Ionicons name="call-outline" size={16} color={theme.primary} />
-                <ThemedText type="small" themeColor="primary" numberOfLines={1}>
-                  Call {task.site_contact_name || task.site_contact_phone}
-                </ThemedText>
-              </TouchableOpacity>
-            ) : null}
             {me?.permissions?.includes('create_tasks') ? (
               <TouchableOpacity
                 style={[styles.quickButton, { borderColor: theme.primary }]}
@@ -402,8 +408,11 @@ export default function TeamTaskScreen() {
           </ThemedView>
 
           {task.from_request ? (
-            // What the customer reported, machine by machine, with their photos.
-            <CustomerRequest request={task.from_request} directionsUrl={task.directions_url} />
+            // What the customer reported; once there's a report, each machine is on its card above Approve.
+            <CustomerRequest
+              request={task.from_request}
+              hideMachines={Boolean(task.report || canApprove) && (task.machine_cards ?? []).length > 0}
+            />
           ) : task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
@@ -428,10 +437,10 @@ export default function TeamTaskScreen() {
             </ThemedView>
           ) : null}
 
-          {task.attachments.length > 0 || canAddDocuments ? (
+          {files.length > 0 || canAddDocuments ? (
             <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
-              {task.attachments.map((attachment) => (
+              <ThemedText type="smallBold">{t('Files ({count})', { count: files.length })}</ThemedText>
+              {files.map((attachment) => (
                 <TouchableOpacity
                   key={attachment.id} style={styles.attachment} onPress={() => Linking.openURL(attachment.url)}
                 >
@@ -600,6 +609,16 @@ export default function TeamTaskScreen() {
                   ))}
                 </>
               ) : null}
+            </ThemedView>
+          ) : null}
+
+          {/* The photos, for whoever checks the work: before beside after, right above Approve. */}
+          {task.report || canApprove ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Photos</ThemedText>
+              <VisitPhotos
+                cards={task.machine_cards ?? []} attachments={task.attachments} reported={task.from_request?.machines}
+              />
             </ThemedView>
           ) : null}
 

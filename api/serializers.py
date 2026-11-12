@@ -1,4 +1,3 @@
-from urllib.parse import quote
 
 from rest_framework import serializers
 
@@ -49,6 +48,7 @@ class TaskEventSerializer(serializers.ModelSerializer):
 
 
 class TaskAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
     media_type_display = serializers.CharField(source='get_media_type_display')
     purpose_display = serializers.CharField(source='get_purpose_display')
     # The app loads files without the website's sign-in: a signed link (spots.media).
@@ -58,11 +58,19 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TaskAttachment
-        fields = ['id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at', 'asset', 'asset_name']
+        fields = [
+            'id', 'url', 'media_type', 'media_type_display', 'purpose', 'purpose_display', 'uploaded_at', 'asset', 'asset_name',
+            # A customer's photo the technician confirmed ("From the customer · confirmed by …").
+            'source', 'uploaded_by_name',
+        ]
 
     def get_url(self, obj):
         request = self.context.get('request')
         return signed_media_url(request, obj.url) if request else obj.url
+
+    def get_uploaded_by_name(self, obj):
+        technician = getattr(obj.uploaded_by, 'technician', None)
+        return technician.full_name if technician else obj.uploaded_by.get_username()
 
     def get_asset_name(self, obj):
         if not obj.asset_id:
@@ -72,9 +80,8 @@ class TaskAttachmentSerializer(serializers.ModelSerializer):
 
 
 def directions_url(site):
-    """Google Maps to the site: its pin if it has one, else its name and address."""
-    place = f'{site.latitude},{site.longitude}' if site.latitude is not None else f'{site.name}, {site.address}'
-    return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
+    """Google Maps to the site (Site.directions_url)."""
+    return site.directions_url
 
 
 class TaskDetailSerializer(serializers.ModelSerializer):
@@ -102,12 +109,14 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     site_contact_phone = serializers.CharField(source='site.effective_contact_phone', default='')
     directions_url = serializers.SerializerMethodField()
     machines = serializers.SerializerMethodField()
+    # The task's machines as photo cards (tasks.views.task_machine_cards): every screen shows these.
+    machine_cards = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = [
             'id', 'task_number', 'site_name', 'site_address', 'customer_name', 'currency_code',
-            'site_contact_name', 'site_contact_phone', 'directions_url', 'machines', 'scheduled_date',
+            'site_contact_name', 'site_contact_phone', 'directions_url', 'machines', 'machine_cards', 'scheduled_date',
             'status', 'status_display', 'priority', 'priority_display',
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
@@ -146,6 +155,28 @@ class TaskDetailSerializer(serializers.ModelSerializer):
                 'problem': machine.get_problem_display(), 'description': machine.description,
             }
             for machine in obj.ticket_machines.all()
+        ]
+
+    def get_machine_cards(self, obj):
+        from tasks.views import task_machine_cards
+
+        return [
+            {
+                'asset_id': card['asset'].pk if card['asset'] else None, 'registered': card['registered'],
+                # The customer's report for it (from_request.machines with this id).
+                'ticket_machine_id': card['ticket_machine'].pk if card['ticket_machine'] else None,
+                'name': card['name'], 'serial_no': card['serial_no'],
+                'photos': TaskAttachmentSerializer(card['photos'], many=True, context=self.context).data,
+                # The customer's photos it can still use ("Use this"), each in its slot.
+                'customer_files': [
+                    {'name': item['file'].name, 'kind': item['kind'], 'slot': item['slot'],
+                     'added_by_staff': item['added_by_staff'],
+                     'url': signed_media_url(self.context['request'], item['file'].url) if 'request' in self.context
+                     else item['file'].url}
+                    for item in card['customer_files']
+                ],
+            }
+            for card in task_machine_cards(obj)
         ]
 
     def get_is_lead(self, obj):

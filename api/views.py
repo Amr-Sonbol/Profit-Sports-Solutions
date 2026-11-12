@@ -26,6 +26,7 @@ from customers import notify as notify_customer
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill, TechnicianTrip
 from customers.accounts import locked_usernames, log_account_action
+from customers.forms import SignInEmailChangeForm
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
@@ -38,7 +39,7 @@ from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    AddHelperForm, RegisterMachineForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
     CancelTaskForm, CloseTaskForm, DeactivateTechnicianForm, TechnicianCreateForm,
     CorrectEventTimeForm, NegligenceFlagForm, RebookVisitForm, TaskMessageForm,
@@ -49,7 +50,8 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
-    report_copy_default,
+    report_copy_default, send_staff_email_change_link, confirm_customer_files, register_task_machine, replace_serial_plate,
+    report_machine_photo_gaps,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
@@ -67,7 +69,7 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, loading_shortfall, next_step_sites, save_planned_lines, warehouse_stock_for_planning,
+    lines_to_carry, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
     PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
@@ -158,22 +160,54 @@ class MeView(APIView):
 
     def post(self, request):
         """Edit my profile, as on the website's My profile (MyProfileForm):
-        photo, language, phone and email — multipart; anything left out
-        stays as it is. Role, country and employment stay office-side.
+        photo, language and phone — multipart; anything left out stays as it
+        is. A new email needs `password` (the current one) and changes only
+        once the link sent there is opened, as on the website; `notice` says
+        so. Role, country and employment stay office-side.
         """
         technician = getattr(request.user, 'technician', None)
         if technician is None:
             raise PermissionDenied
         data = {
-            'language': technician.language, 'phone': technician.phone, 'email': request.user.email,
-            **{field: request.data[field] for field in ('language', 'phone', 'email') if field in request.data},
+            'language': technician.language, 'phone': technician.phone,
+            **{field: request.data[field] for field in ('language', 'phone') if field in request.data},
         }
         form = MyProfileForm(data, request.FILES, instance=technician)
-        if not form.is_valid():
-            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+        new_email = (request.data.get('email') or '').strip()
+        email_form = None
+        if new_email and new_email.lower() != request.user.email.lower():
+            email_form = SignInEmailChangeForm(
+                {'email': new_email, 'password': request.data.get('password', '')}, user=request.user,
+            )
+        errors = {**form.errors, **(email_form.errors if email_form is not None else {})}
+        if not form.is_valid() or (email_form is not None and not email_form.is_valid()):
+            return Response({field: [str(e) for e in errs] for field, errs in errors.items()},
                             status=status.HTTP_400_BAD_REQUEST)
         form.save()
-        return Response(_me_payload(request.user, request))
+        payload = _me_payload(request.user, request)
+        if email_form is not None:
+            send_staff_email_change_link(request, request.user, new_email)
+            payload['notice'] = _(
+                'We have sent a confirmation link to %(email)s. Your email changes once you open it.'
+            ) % {'email': new_email}
+        return Response(payload)
+
+
+class SignOutOtherPhonesView(APIView):
+    """Profile → "Sign out of my other phones", for a lost or handed-on one:
+    the app's sign-in stops working everywhere, a fresh one is returned so
+    this phone stays signed in, and only this phone keeps its notifications
+    (`push_token`, if it has one)."""
+
+    def post(self, request):
+        technician = getattr(request.user, 'technician', None)
+        if technician is None:
+            raise PermissionDenied
+        Token.objects.filter(user=request.user).delete()
+        PushDevice.objects.filter(technician=technician).exclude(token=request.data.get('push_token') or '').delete()
+        token = Token.objects.create(user=request.user)
+        log_account_action(request, technician, 'Signed themselves out of the mobile app on their other phones')
+        return Response({'token': token.key})
 
 
 class MyPasswordView(APIView):
@@ -1394,6 +1428,7 @@ class MyTaskDetailView(APIView):
         next_action = _next_technician_action(task) if is_lead else None
         is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
         context = {
+            'request': request,  # signed links to the photos (spots.media)
             'next_action': next_action,
             'is_lead': is_lead,
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
@@ -1485,17 +1520,16 @@ class MyTaskAttachmentView(APIView):
 
     def post(self, request, pk):
         assignment = _get_my_assignment(request, pk)
-        form = TaskAttachmentUploadForm(request.data, request.FILES)
+        # `asset`: the machine it shows (its card on the report) — only one at this task's branch;
+        # none: the branch as a whole, which has no serial plate.
+        form = TaskAttachmentUploadForm(request.data, request.FILES, site=assignment.task.site)
         if not form.is_valid():
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-        # `asset`: the machine it shows (its card on the report) — only one at this task's branch.
-        asset = None
-        if request.data.get('asset'):
-            asset = Asset.objects.filter(pk=request.data['asset'], site=assignment.task.site).first()
-            if asset is None:
-                return Response({'asset': ['That machine is not at this branch.']}, status=status.HTTP_400_BAD_REQUEST)
+        if form.cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE:
+            replace_serial_plate(assignment.task, form.cleaned_data['asset'])
         attachment = _save_attachment(
-            request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'], asset=asset,
+            request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'],
+            asset=form.cleaned_data['asset'],
         )
         return Response(TaskAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -1770,6 +1804,15 @@ class MyTaskReportView(APIView):
             )
             return Response({'html': html, 'problems': [str(problem) for problem in problems]})
 
+        if machine_forms is not None:
+            gaps = report_machine_photo_gaps(
+                task,
+                [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+            )
+            if gaps:
+                return Response({'photos': [str(gap) for gap in gaps]}, status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
             if checklist_forms is not None:
                 save_checklist(task, [form.cleaned_data for form in checklist_forms])
@@ -1900,6 +1943,7 @@ def _team_task_response(request, task):
     technician = request.user.technician
     owns = _owns_task(request, task)
     context = {
+        'request': request,  # signed links to the photos (spots.media)
         'requires_signature': bool(task.task_type and task.task_type.requires_signature),
         'can_assign': (
             owns and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
@@ -1952,11 +1996,19 @@ def _team_task_response(request, task):
                 {
                     'value': step, 'label': str(TaskType.Category(step).label),
                     'sites': [
-                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}'}
+                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}',
+                         'country': site.customer.country_id}
                         for site in next_step_sites(technician, step)
                     ],
                 }
                 for step in NEXT_STEPS.get(equipment_step(task), ())
+            ],
+            # Who supervises it there: empty keeps this task's own, within its country;
+            # another country needs someone from there (tasks.views.next_step_supervisor).
+            'supervisors': [
+                {'value': str(person.pk), 'label': f'{person.country.display_name} — {person.full_name}',
+                 'country': person.country_id}
+                for person in next_step_supervisors(technician)
             ],
             # The button's words.
             'title': str(_('Send to installation')),
@@ -2071,8 +2123,50 @@ class TaskNextStepView(APIView):
         if task_type is None or not chosen:
             return Response({'detail': str(_('Choose at least one machine to carry to the next step.'))},
                             status=status.HTTP_400_BAD_REQUEST)
-        next_task = create_next_step(request._request, task, task_type, site, chosen)
+        supervisor, error = next_step_supervisor(viewer, task, site, request.data.get('supervisor'))
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        next_task = create_next_step(request._request, task, task_type, site, chosen, supervisor)
         return Response({'id': next_task.pk, 'task_number': next_task.task_number}, status=status.HTTP_201_CREATED)
+
+
+class MyTaskMachineView(APIView):
+    """Register a machine during the visit (RegisterMachineForm: brand, model,
+    serial_no or no_serial, code, ticket_machine), so its photos can be taken
+    now — tasks.views.register_task_machine. Returns its card."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        form = RegisterMachineForm(request.data)
+        if not form.is_valid():
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+        asset = register_task_machine(assignment.task, form.cleaned_data)
+        return Response({'asset_id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no},
+                        status=status.HTTP_201_CREATED)
+
+
+class MyTaskConfirmPhotoView(APIView):
+    """The technician's "Use this" / "Use these": the customer's photos of a
+    machine (`asset`) for one `slot` — serial_plate, or before (all of them) —
+    tasks.views.confirm_customer_files. (`name`: one photo, from apps before.)
+    Returns the attachments."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        attachments = confirm_customer_files(
+            request, assignment.task, int(request.data.get('asset') or 0),
+            slot=request.data.get('slot'), name=request.data.get('name') or None,
+        )
+        if not attachments:
+            return Response({'detail': str(_('That photo is no longer offered for this machine.'))},
+                            status=status.HTTP_400_BAD_REQUEST)
+        data = TaskAttachmentSerializer(attachments, many=True, context={'request': request}).data
+        # One photo asked for (an app from before): that one, as it expects.
+        return Response(data[0] if request.data.get('name') else data, status=status.HTTP_201_CREATED)
 
 
 class TaskFollowUpView(APIView):

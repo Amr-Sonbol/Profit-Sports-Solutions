@@ -96,7 +96,7 @@
                 <div class="form-grid">
                     {% for field in machine %}{% if field.name != 'which' %}
                     <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
-                        {% if field.name == 'asset' %}{% if not machine.has_machines %}hidden{% endif %}{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' or field.name == 'serial_photo' %}data-show-for="new"{% elif field.name == 'problem' %}data-show-need="repair"{% elif field.name == 'description' %}data-parts-placeholder="{% translate 'Example: Two replacement running belts and one safety key for this treadmill.' %}"{% endif %}>
+                        {% if field.name == 'asset' %}{% if not machine.has_machines %}hidden{% endif %}{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' %}data-show-for="new"{% elif field.name == 'serial_photo' %}data-show-need="repair"{% elif field.name == 'problem' %}data-show-need="repair"{% elif field.name == 'description' %}data-parts-placeholder="{% translate 'Example: Two replacement running belts and one safety key for this treadmill.' %}"{% endif %}>
                         {% if field.name == 'description' %}
                         <label for="{{ field.id_for_label }}" data-show-need="repair">{{ field.label }}</label>
                         <label for="{{ field.id_for_label }}" data-show-need="parts">{% translate "Which parts do you need?" %}</label>

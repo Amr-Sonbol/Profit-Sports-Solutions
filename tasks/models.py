@@ -1160,7 +1160,7 @@ class TaskAttachment(models.Model):
         DOCUMENT = 'document', _('Document')
 
     class Purpose(models.TextChoices):
-        FAULT = 'fault', _('Fault')
+        # "Before" shows the fault too: one kind, not two (tasks 0088 moved the old "fault" ones).
         SERIAL_PLATE = 'serial_plate', _('Serial plate')
         BEFORE = 'before', _('Before')
         AFTER = 'after', _('After')
@@ -1191,6 +1191,12 @@ class TaskAttachment(models.Model):
     asset = models.ForeignKey(
         'customers.Asset', on_delete=models.SET_NULL, null=True, blank=True, related_name='task_photos',
         verbose_name=_('machine'),
+    )
+    # The customer's own photo or video (its stored file) that the technician confirmed for this
+    # slot — linked, not copied; blank: one the technician took.
+    customer_file = models.CharField(
+        _("customer's file"), max_length=255, blank=True,
+        help_text=_("the customer's photo or video the technician confirmed for this machine's serial plate or before"),
     )
 
     class Meta:

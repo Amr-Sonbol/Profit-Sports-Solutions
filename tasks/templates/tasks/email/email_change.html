@@ -1,0 +1,8 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ contact }},</p>
+<p style="margin:0 0 16px;">A request was made to use this address for your Profit Sports Solutions account. To confirm it, please use the secure button below. The link is valid for {{ days }} days and can be used once.</p>
+{% include "tasks/email/_button.html" with url=link label="Confirm my new email" %}
+<p style="margin:0 0 16px;">If you did not ask for this, you can ignore this email: nothing changes.</p>
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}

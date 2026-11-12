@@ -34,14 +34,37 @@ export function fetchMe() {
 }
 
 /** Edit my profile: phone, email, language and a new photo (any left out stay). */
-export function updateMe(changes: { phone?: string; email?: string; language?: string },
+/** A new email also needs `password`; it changes once the link sent there is opened (`notice` says so). */
+export function updateMe(changes: { phone?: string; email?: string; password?: string; language?: string },
   photo?: { uri: string; name: string; type: string }) {
   const form = new FormData();
   Object.entries(changes).forEach(([field, value]) => form.append(field, value ?? ''));
   if (photo) {
     form.append('photo', photo as unknown as Blob);
   }
-  return apiRequest<Me>('/api/me/', { method: 'POST', body: form, isFormData: true });
+  return apiRequest<Me & { notice?: string }>('/api/me/', { method: 'POST', body: form, isFormData: true });
+}
+
+/** "Use this" / "Use these": the customer's photos of a machine for one slot (serial plate or before) —
+ * tasks.views.confirm_customer_files. */
+export function confirmTaskPhotos(id: number, asset: number, slot: 'serial_plate' | 'before') {
+  return apiRequest<TaskAttachment[]>(`/api/my-tasks/${id}/confirm-photo/`, { method: 'POST', body: { asset, slot } });
+}
+
+/** A machine registered during the visit, so its photos can be taken now (tasks.views.register_task_machine). */
+export function registerTaskMachine(id: number, machine: {
+  brand: number; model_name: string; serial_no: string; no_serial: boolean; code: string; ticket_machine?: number | null;
+}) {
+  return apiRequest<{ asset_id: number; name: string; serial_no: string }>(`/api/my-tasks/${id}/machines/`, {
+    method: 'POST', body: machine,
+  });
+}
+
+/** A lost or handed-on phone: every other phone is signed out; the fresh token keeps this one in. */
+export function signOutOtherPhones(pushToken: string | null) {
+  return apiRequest<{ token: string }>('/api/me/sign-out-others/', {
+    method: 'POST', body: { push_token: pushToken ?? '' },
+  });
 }
 
 /** Signs out every other phone; the fresh token returned keeps this one in. */
@@ -509,9 +532,9 @@ export function createFollowUp(id: number) {
 }
 
 /** The chain's next step (loading / installation) at a site, for the machines chosen. */
-export function createNextStep(id: number, step: string, site: string, lines: number[]) {
+export function createNextStep(id: number, step: string, site: string, lines: number[], supervisor = '') {
   return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/next-step/`, {
-    method: 'POST', body: { step, site, lines },
+    method: 'POST', body: { step, site, lines, supervisor },
   });
 }
 

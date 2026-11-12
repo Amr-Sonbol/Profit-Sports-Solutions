@@ -1,0 +1,23 @@
+{% load i18n %}
+{# The branch: the first card on a task's pages, set apart from the machine cards (as in the app, components/branch-card). `with_terms`: the staff page adds the warranty, and the commercial terms for managers. #}
+{% with site=task.site %}
+<section class="branch-card">
+    <div class="branch-card__title">
+        {% include "_icon.html" with name="building" %}
+        <div>
+            <strong>{{ site.customer.name }}</strong>
+            <span>{{ site.name }}</span>
+        </div>
+    </div>
+    {% if site.address %}<p class="muted branch-card__line">{{ site.address }}</p>{% endif %}
+    {% if site.effective_contact_name or site.effective_contact_phone %}
+    <p class="branch-card__line">{{ site.effective_contact_name }}{% if site.effective_contact_phone %} · <span dir="ltr">{{ site.effective_contact_phone }}</span>{% endif %}</p>
+    {% endif %}
+    {% if with_terms %}<p class="terms-row branch-card__line">{% include "_warranty_label.html" %}{% if user.technician.is_manager_tier %} {% include "_terms_labels.html" %}{% endif %}</p>{% endif %}
+    {% if site.access_notes %}<p class="field__help branch-card__line">{% translate "Access notes" %}: {{ site.access_notes }}</p>{% endif %}
+    <div class="button-row">
+        <a href="{{ site.directions_url }}" class="button button--secondary" target="_blank" rel="noopener">{% translate "Directions" %}</a>
+        {% if site.effective_contact_phone %}<a href="tel:{{ site.effective_contact_phone }}" class="button button--secondary">{% blocktranslate with name=site.effective_contact_name|default:site.effective_contact_phone %}Call {{ name }}{% endblocktranslate %}</a>{% endif %}
+    </div>
+</section>
+{% endwith %}

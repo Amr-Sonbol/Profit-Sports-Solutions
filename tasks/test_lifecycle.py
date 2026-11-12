@@ -17,6 +17,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from customers.models import Customer, PortalUser, Site
+from django.core.files.uploadedfile import SimpleUploadedFile
 from spots.test_files import REAL_JPEG, REAL_MP4
 from people.models import Technician
 from reference.models import Country
@@ -96,6 +97,13 @@ class LifecycleTestCase(TestCase):
             machines = [{'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
                          'description': 'Stops after 5 minutes, error E-07, since Monday.'}]
         for index, machine in enumerate(machines or []):
+            if need == 'repair':
+                # A repair needs the serial plate and the fault (TicketMachineForm), as from a real customer.
+                machine = {
+                    'serial_photo': SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg'),
+                    'files': [SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')],
+                    **machine,
+                }
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return self.portal.post('/customers/portal/tickets/new/', payload)
@@ -148,6 +156,15 @@ class EveryKindOfRequestTests(LifecycleTestCase):
         ticket = self.newest_request()
         self.assertEqual(ticket.about, CustomerTicket.About.NEW_BRANCH)
         self.assertContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
+
+    def test_a_repair_request_needs_the_serial_plate_and_the_fault(self):
+        for missing in ({'serial_photo': ''}, {'files': []}):
+            response = self.send_request(machines=[{
+                'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
+                'description': 'Stops.', **missing,
+            }])
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(CustomerTicket.objects.exists())
 
     def test_a_machine_request_without_a_serial_is_refused(self):
         response = self.send_request(machines=[{'which': 'new', 'model_name': 'Excite Run 700', 'problem': 'not_working',
@@ -852,7 +869,8 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             self.assertEqual((got['ticket_number'], got['contact_phone']), (ticket.ticket_number, '0501112222'))
             self.assertEqual(got['conversation'], [])  # kept for older apps, always empty: never support's messages
             self.assertEqual(got['machines'][0]['serial'], 'TG-1')
-            self.assertEqual([(item['kind'], item['name']) for item in got['machines'][0]['items']], [('image', 'belt.jpg')])
+            self.assertEqual([(item['kind'], item['name']) for item in got['machines'][0]['items']],
+                             [('image', 'plate.jpg'), ('image', 'belt.jpg')])  # the plate (required) first
             self.assertTrue(got['machines'][0]['items'][0]['url'].endswith(tuple('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_:')))
             self.assertNotIn('SECRET', json.dumps(got))
 
@@ -990,16 +1008,17 @@ class CustomerReportTests(LifecycleTestCase):
         page = self.staff.get(self.url).content.decode()
         self.assertIn('2 machines', page)
         self.assertIn('<video src=', page)
-        excite, bike = page.index('Excite Run 700'), page.index('No photos sent for this machine.')
+        excite, bike = page.index('Excite Run 700'), page.index('<h3>Bike</h3>')
         self.assertLess(excite, page.index('dead.jpg'))
-        self.assertLess(page.index('dead.jpg'), bike)  # the photo under the first machine, the second has none
+        self.assertLess(page.index('dead.jpg'), bike)  # each machine's photos under it
+        self.assertLess(bike, page.index('fault.jpg'))
 
     def test_staff_add_whatsapp_photos_under_a_machine_and_the_technician_sees_them(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         bike = self.ticket.machines.get(serial_no='BK-2')
         self.staff.post(self.url, {'action': 'add_customer_photos', 'machine': bike.pk,
                                    'attachments': [SimpleUploadedFile('whatsapp.jpg', REAL_JPEG, content_type='image/jpeg')]})
-        attachment = bike.attachments.get()
+        attachment = bike.attachments.get(added_by__isnull=False)  # beside the customer's own fault photo
         self.assertEqual(attachment.added_by, self.admin.user)
         # Photos sent later in the conversation reach the technician too (never support's messages).
         self.portal.post(f'/tasks/tickets/status/{self.ticket.token}/', {
@@ -1015,7 +1034,8 @@ class CustomerReportTests(LifecycleTestCase):
 
     def test_the_request_list_counts_photos(self):
         page = self.staff.get('/tasks/tickets/')
-        self.assertContains(page, '2 photos or videos')
+        # Each machine's serial plate and fault (both required), and the first one's video.
+        self.assertContains(page, '5 photos or videos')
 
 
 class ReportMachinesTests(LifecycleTestCase):
@@ -1094,15 +1114,15 @@ class ReportMachinesTests(LifecycleTestCase):
         api.force_authenticate(self.tech.user)
         jpeg = lambda: SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         url = f'/api/my-tasks/{self.task.pk}/attachments/'
-        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': self.asset.pk}, format='multipart')
+        response = api.post(url, {'file': jpeg(), 'purpose': 'before', 'asset': self.asset.pk}, format='multipart')
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()['asset'], self.asset.pk)
         self.assertEqual(TaskAttachment.objects.get().asset, self.asset)
         # Only a machine at this task's branch.
-        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': elsewhere.pk}, format='multipart')
+        response = api.post(url, {'file': jpeg(), 'purpose': 'before', 'asset': elsewhere.pk}, format='multipart')
         self.assertEqual(response.status_code, 400)
         # The report shows it under its machine's card.
         from tasks.views import save_task_machines
         save_task_machines(self.task, [{'asset': self.asset, 'outcome': 'repaired', 'note': ''}], [])
         report = api.get(f'/api/my-tasks/{self.task.pk}/report/').json()
-        self.assertEqual([p['purpose'] for p in report['machines'][0]['photos']], ['fault'])
+        self.assertEqual([p['purpose'] for p in report['machines'][0]['photos']], ['before'])

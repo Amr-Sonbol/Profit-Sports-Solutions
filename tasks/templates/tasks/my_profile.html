@@ -105,6 +105,28 @@
     </form>
 </div>
 
+{# A new address and the current password; it switches once they open the link sent there (tasks.views.staff_email_confirm). #}
+<div class="section">
+    <h2>{% translate "Sign-in email" %}</h2>
+    <p class="muted">{% blocktranslate with email=user.email|default:"—" username=user.get_username %}Your email is <strong dir="ltr">{{ email }}</strong>; you sign in with <strong dir="ltr">{{ username }}</strong>.{% endblocktranslate %}</p>
+    <details class="disclosure"{% if email_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "Change email" %}</summary>
+        <form method="post" class="disclosure__body" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_email">
+            <p class="field__help">{% translate "Enter the new address and your password: we send a confirmation link there, and the change happens once you open it." %}</p>
+            {% for field in email_form %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="button">{% translate "Send confirmation link" %}</button>
+        </form>
+    </details>
+</div>
+
 <div class="section">
     <h2>{% translate "Password" %}</h2>
     <details class="disclosure"{% if password_form.errors %} open{% endif %}>
@@ -116,5 +138,20 @@
             <button type="submit" class="button">{% translate "Save new password" %}</button>
         </form>
     </details>
+</div>
+
+{# A lost or handed-on phone: the app signs out on every phone; this browser stays signed in. #}
+<div class="section">
+    <h2>{% translate "Your phones" %}</h2>
+    {% if phones_signed_in %}
+    <p class="muted">{% translate "Lost a phone, or gave one to someone else? Sign out of the app on all your phones; you sign in again on yours." %}</p>
+    <form method="post" data-confirm="{% translate 'Sign out of the app on all your phones?' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="sign_out_phones">
+        <button type="submit" class="button button--secondary">{% translate "Sign out of the app on all my phones" %}</button>
+    </form>
+    {% else %}
+    <p class="muted">{% translate "You are not signed in to the app on any phone." %}</p>
+    {% endif %}
 </div>
 {% endblock %}

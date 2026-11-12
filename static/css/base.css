@@ -2607,9 +2607,37 @@ tbody tr:hover {
     margin-block-end: 1rem;
 }
 
-.settings .section h2 {
-    margin-block-end: 0.25rem;
+.settings .section h3 {
+    margin-block: 0 0.25rem;
     font-size: 1.15rem;
+}
+
+/* The page's two parts: My account, then Company. */
+.settings__part {
+    margin-block: 2rem 0.25rem;
+    font-size: 1.4rem;
+}
+
+.settings__part:first-of-type {
+    margin-block-start: 0.5rem;
+}
+
+.settings__part + .settings__intro {
+    margin-block-end: 1rem;
+}
+
+/* People with access: a name, their email under it. */
+.settings__people {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.settings__people li {
+    display: flex;
+    flex-direction: column;
 }
 
 .settings__intro {
@@ -5454,4 +5482,109 @@ details.review-more:not(.section) {
     .team-signin__card {
         padding: 2rem;
     }
+}
+
+/* A visit's photos (tasks/_visit_photos.html): a card per machine — serial
+   plate, before, after side by side — then the branch's, set apart. */
+.visit-photos {
+    display: grid;
+    gap: 1rem;
+    margin-block-end: 1rem;
+}
+
+.visit-photos__card {
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+}
+
+.visit-photos__title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    margin-block: 0 0.5rem;
+    font-size: 1rem;
+}
+
+.visit-photos__title .icon {
+    inline-size: 18px;
+    block-size: 18px;
+}
+
+.visit-photos__row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    gap: 0.75rem;
+}
+
+.visit-photos__column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.visit-photos__img {
+    inline-size: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+/* The branch: first on a task's pages, set apart from the machine cards
+   (tasks/_branch_card.html). */
+.branch-card {
+    display: grid;
+    gap: 0.5rem;
+    margin-block-end: 1rem;
+    padding: 1rem;
+    border: 2px solid var(--color-accent);
+    border-radius: 8px;
+    background: var(--color-neutral-bg);
+}
+
+.branch-card__title {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.branch-card__title div {
+    display: flex;
+    flex-direction: column;
+}
+
+.branch-card__line {
+    margin: 0;
+}
+
+.visit-photos__add .button {
+    inline-size: 100%;
+    text-align: center;
+}
+
+/* A machine card's part of the customer's request: problem, words, their media. */
+.visit-photos__reported {
+    display: grid;
+    gap: 0.4rem;
+    margin-block-end: 0.75rem;
+    padding-block-end: 0.75rem;
+    border-block-end: 1px solid var(--color-border);
+    justify-items: start;
+}
+
+/* A video in a photo slot: its tile, played on a tap. */
+.visit-photos__video {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-neutral-bg);
+    font-size: 1.5rem;
+}
+
+.visit-photos__also {
+    display: grid;
+    gap: 0.35rem;
+    margin-block-start: 0.75rem;
 }

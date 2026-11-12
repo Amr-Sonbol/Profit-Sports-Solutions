@@ -14,6 +14,7 @@ urlpatterns = [
     path('my-progress/', views.my_progress, name='my_progress'),
     path('my-skills/', views.my_skills, name='my_skills'),
     path('my-profile/', views.my_profile, name='my_profile'),
+    path('my-profile/email/<str:token>/', views.staff_email_confirm, name='staff_email_confirm'),
     path('first-login/', views.first_login, name='first_login'),
     path('my/<int:pk>/', views.my_task_detail, name='my_task_detail'),
     path('my/<int:pk>/report/', views.my_report_form, name='my_report_form'),

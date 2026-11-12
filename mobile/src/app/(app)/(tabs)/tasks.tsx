@@ -15,12 +15,24 @@ import { WaitingForMe } from '@/components/waiting-for-me';
 import { useSession } from '@/context/auth';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { t } from '@/i18n';
 import { withOfflineCopy } from '@/offline';
 import type { PlanItem, TaskListItem } from '@/types';
 
+/** Done, report sent: waiting for the manager's final approval — nothing left for me to do. */
+const WAITING_APPROVAL = 'completed';
+
+/** To do: the ones with a time first, soonest first; then those with none, newest received first (the server's order). */
+function toDoOrder(tasks: TaskListItem[]): TaskListItem[] {
+  const timed = tasks.filter((task) => task.scheduled_for)
+    .sort((a, b) => Date.parse(a.scheduled_for!) - Date.parse(b.scheduled_for!));
+  return [...timed, ...tasks.filter((task) => !task.scheduled_for)];
+}
+
 /**
  * My tasks, apart from the schedule: a supervisor's "To plan" first (no day
- * or no technician yet), then every open task of mine, newest received first.
+ * or no technician yet), then what I still have to do — timed ones soonest
+ * first — and last, smaller, the ones I've done that wait for approval.
  * The supervisor's home tab. Whoever sees the country's tasks (a supervisor:
  * he's responsible for them) can switch to All in the country — the website
  * task list's search and filters (components/all-tasks). Anyone above a
@@ -49,6 +61,8 @@ export default function TasksScreen() {
     }
   }
   const [tasks, setTasks] = useState<TaskListItem[] | null>(null);
+  const toDo = toDoOrder((tasks ?? []).filter((task) => task.status !== WAITING_APPROVAL));
+  const waitingApproval = (tasks ?? []).filter((task) => task.status === WAITING_APPROVAL);
   const [toPlan, setToPlan] = useState<PlanItem[]>([]);
   const [waiting, setWaiting] = useState<WaitingItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -116,7 +130,7 @@ export default function TasksScreen() {
         ) : null}
         {scope === 'all' && canSeeAll ? <AllTasks /> : scope === 'internal' && hasInternal ? <InternalTasks /> : (
           <FlatList
-            data={tasks ?? []}
+            data={toDo}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={async () => {
@@ -128,11 +142,22 @@ export default function TasksScreen() {
               <>
                 <WaitingForMe items={waiting} />
                 <ToPlan items={toPlan} />
-                <ThemedText type="smallBold">All my open tasks · newest first</ThemedText>
+                <ThemedText type="smallBold">{t('To do ({count})', { count: toDo.length })}</ThemedText>
               </>
             )}
             ListEmptyComponent={tasks !== null ? (
-              <ThemedText themeColor="textSecondary">You have no open tasks assigned.</ThemedText>
+              <ThemedText themeColor="textSecondary">Nothing to do right now.</ThemedText>
+            ) : undefined}
+            // Done, waiting for the manager's approval: last, and apart from what's still to do.
+            ListFooterComponent={waitingApproval.length ? (
+              <ThemedView style={styles.doneGroup}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {t('Done, waiting for approval ({count})', { count: waitingApproval.length })}
+                </ThemedText>
+                {waitingApproval.map((item) => (
+                  <TaskCard key={item.id} item={item} onPress={() => router.push(`/task/${item.id}`)} />
+                ))}
+              </ThemedView>
             ) : undefined}
             // My own screen (my steps, my report); "Plan this task" there opens the full one.
             renderItem={({ item }) => <TaskCard item={item} onPress={() => router.push(`/task/${item.id}`)} />}
@@ -155,6 +180,7 @@ const styles = StyleSheet.create({
   newTask: { borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
   notice: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
+  doneGroup: { gap: Spacing.two, marginTop: Spacing.three, backgroundColor: 'transparent' },
   scopes: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
   scope: { flex: 1, borderWidth: 1, borderRadius: 999, paddingVertical: Spacing.two, alignItems: 'center' },
 });

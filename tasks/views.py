@@ -42,6 +42,7 @@ from django.utils.translation import gettext_lazy, ngettext
 from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
+from customers.forms import SignInEmailChangeForm
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
 from customers.progress import is_booked, progress_steps, ticket_progress, visit_day, visit_progress
@@ -65,7 +66,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    CustomerPhotosForm, CustomRoleForm,
+    CustomerPhotosForm, CustomRoleForm, RegisterMachineForm,
     AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
@@ -958,6 +959,60 @@ def _attachment_media_type(uploaded_file):
     if content_type.startswith('video/'):
         return TaskAttachment.MediaType.VIDEO
     return TaskAttachment.MediaType.DOCUMENT
+
+
+PHOTO_COLUMNS = [
+    (TaskAttachment.Purpose.SERIAL_PLATE, gettext_lazy('Serial plate'), gettext_lazy('No serial plate photo')),
+    (TaskAttachment.Purpose.BEFORE, gettext_lazy('Before'), gettext_lazy('No photo before')),
+    (TaskAttachment.Purpose.AFTER, gettext_lazy('After'), gettext_lazy('No photo after')),
+]
+
+
+def visit_photo_cards(task, attachments, editable=False):
+    """The task's machine cards (task_machine_cards) as the website shows them,
+    like the app: what the customer reported for it, then serial plate,
+    before, after side by side — each column its photos, or that one is missing. Photos not of one machine (taken before
+    every photo belonged to one) under "Other photos", so none is lost."""
+    photos = [item for item in attachments if item.media_type in (TaskAttachment.MediaType.PHOTO, TaskAttachment.MediaType.VIDEO)]
+    machine_cards = task_machine_cards(task)
+    found = request_for_task(task, with_conversation=False)
+    reported = {card['machine'].pk: card for card in found['report']['machines']} if found else {}
+    cards = [
+        {
+            'asset': card['asset'], 'registered': card['registered'], 'title': card['name'], 'serial_no': card['serial_no'],
+            # What the customer reported: problem, their words, their photos (tasks/_customer_report.html's card).
+            'reported': reported.get(card['ticket_machine'].pk) if card['ticket_machine'] else None,
+            # The customer's photos it can still use, by slot (confirm_customer_files): in an
+            # empty slot for the technician; anything else once, under "Also sent by the customer".
+            'customer_files': card['customer_files'],
+            'also_sent': [
+                item for item in card['customer_files']
+                if not editable or not card['registered'] or any(photo.purpose == item['slot'] for photo in card['photos'])
+            ],
+            # Not saved yet (a machine the customer reported that isn't on their list): save it here.
+            'register_form': RegisterMachineForm(auto_id=False, initial={
+                'model_name': card['name'], 'serial_no': card['serial_no'],
+                'ticket_machine': card['ticket_machine'].pk if card['ticket_machine'] else None,
+            }) if editable and not card['registered'] else None,
+            'columns': [
+                {'purpose': purpose, 'label': label, 'missing': missing,
+                 'photos': [photo for photo in card['photos'] if photo.purpose == purpose],
+                 # The customer's for this slot, while it's empty: "Use this".
+                 'offered': [] if not editable or any(photo.purpose == purpose for photo in card['photos']) else [
+                     item for item in card['customer_files'] if item['slot'] == purpose
+                 ]}
+                for purpose, label, missing in PHOTO_COLUMNS
+            ],
+        }
+        for card in machine_cards
+    ]
+    on_cards = {photo.pk for card in machine_cards for photo in card['photos']}
+    others = [photo for photo in photos if photo.pk not in on_cards and photo.media_type == TaskAttachment.MediaType.PHOTO]
+    return {
+        'cards': cards, 'others': others, 'count': len(photos),
+        # A machine the technician adds at the branch (register_task_machine).
+        'new_machine_form': RegisterMachineForm(auto_id='new-machine-%s') if editable else None,
+    }
 
 
 def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachment.Source.TECHNICIAN, asset=None):
@@ -2367,7 +2422,11 @@ def task_detail(request, pk):
         if task_type is None or not chosen:
             messages.error(request, _('Choose at least one machine to carry to the next step.'))
             return redirect('tasks:task_detail', pk=task.pk)
-        next_task = create_next_step(request, task, task_type, site, chosen)
+        supervisor, error = next_step_supervisor(viewer, task, site, request.POST.get('supervisor'))
+        if error:
+            messages.error(request, error)
+            return redirect('tasks:task_detail', pk=task.pk)
+        next_task = create_next_step(request, task, task_type, site, chosen, supervisor)
         messages.success(request, _('Next step %(number)s created with %(count)s machines.') % {
             'number': next_task.task_number, 'count': len(chosen),
         })
@@ -2420,7 +2479,10 @@ def task_detail(request, pk):
         'departed_on_task': task.status in NEEDS_REASSIGNING_STATUSES and task.assignments.filter(
             is_active=True, technician__is_active=False,
         ).exists(),
-        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
+        # Photos as machine and branch cards (visit_photo_cards); the list keeps the other files.
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand').exclude(
+            media_type=TaskAttachment.MediaType.PHOTO),
+        'visit_photos': visit_photo_cards(task, task.attachments.select_related('asset__brand', 'uploaded_by__technician')),
         # The customer's request, all of it (request_for_task).
         'from_request': request_for_task(task),
         'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
@@ -2437,6 +2499,10 @@ def task_detail(request, pk):
             (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
             for step in NEXT_STEPS.get(equipment_step(task), ())
         ],
+        # Who supervises it there, by country (next_step_supervisor).
+        'next_step_supervisors': (
+            next_step_supervisors(requesting_technician) if requesting_technician.is_manager_tier else []
+        ),
         'report': getattr(task, 'report', None),
         'report_changed_after_signing': _report_changed_after_signing(task),
         'feedback': getattr(task, 'feedback', None),
@@ -4919,6 +4985,103 @@ def my_skills(request):
     return render(request, 'tasks/my_skills.html', context)
 
 
+STAFF_EMAIL_CHANGE_SALT = 'tasks.staff-email-change'
+STAFF_EMAIL_CHANGE_VALID_DAYS = 2
+
+
+def change_login_email(request, technician, new_email, user=None):
+    """Every change to a staff login's email — by a manager (Staff accounts,
+    Edit person) or by the person themselves, once they open the link sent
+    to the new address. A login that signs in with its email follows it;
+    one with its own sign-in name keeps that. The old address is told, in
+    case it wasn't them, and it's in the Audit log (by `user` when they
+    acted through the link, signed out)."""
+    login = technician.user
+    old_email = login.email
+    if old_email.lower() == new_email.lower():
+        return
+    login.email = new_email
+    fields = ['email']
+    if old_email and login.username.lower() == old_email.lower():
+        login.username = new_email
+        fields.append('username')
+    login.save(update_fields=fields)
+    log_account_action(request, technician, f'Staff email changed from {old_email or "(none)"} to {new_email}', user=user)
+    if old_email and old_email.lower() != new_email.lower():
+        send_staff_email_changed_notice(technician, old_email)
+
+
+def send_staff_email_change_link(request, user, new_email):
+    """The confirmation link, to the new address: nothing changes until it's
+    opened (staff_email_confirm). In English, like every staff account email."""
+    token = signing.dumps({'u': user.pk, 'm': user.email, 'e': new_email}, salt=STAFF_EMAIL_CHANGE_SALT)
+    link = request.build_absolute_uri(reverse('tasks:staff_email_confirm', args=[token]))
+    contact = user.technician.full_name
+    context = {'contact': contact, 'link': link, 'days': STAFF_EMAIL_CHANGE_VALID_DAYS, 'new_email': new_email}
+    with translation.override('en'):
+        subject = _('Confirm your new Profit Sports Solutions sign-in email')
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'A request was made to use this address for your Profit Sports Solutions account. To confirm it, please '
+            'open the link below; it is valid for %(days)s days and can be used once.\n\n'
+            '%(link)s\n\n'
+            'If you did not ask for this, you can ignore this email: nothing changes.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n'
+        ) % context
+    _send_notification_email(subject, message, 'tasks/email/email_change.html', context, [new_email])
+
+
+def staff_email_change_for_token(token):
+    """(the login, its new email) for a confirmation link, or (None, None)
+    if it's tampered with, older than STAFF_EMAIL_CHANGE_VALID_DAYS, already
+    used (the email is no longer the one it was made for), the login is
+    disabled, or the new email has since been taken."""
+    try:
+        data = signing.loads(token, salt=STAFF_EMAIL_CHANGE_SALT, max_age=timedelta(days=STAFF_EMAIL_CHANGE_VALID_DAYS))
+    except signing.BadSignature:
+        return None, None
+    User = get_user_model()
+    user = User.objects.filter(pk=data.get('u'), is_active=True, technician__isnull=False).first()
+    new_email = data.get('e', '')
+    if user is None or user.email != data.get('m'):
+        return None, None
+    if User.objects.filter(Q(username__iexact=new_email) | Q(email__iexact=new_email)).exclude(pk=user.pk).exists():
+        return None, None
+    return user, new_email
+
+
+def send_staff_email_changed_notice(technician, old_email):
+    """Tell the old address its sign-in email was changed, in case it wasn't them."""
+    login = technician.user
+    context = {'contact': technician.full_name, 'new_email': login.email, 'username': login.get_username()}
+    with translation.override('en'):
+        subject = _('Your Profit Sports Solutions sign-in email was changed')
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'The email address for your Profit Sports Solutions account was changed to %(new_email)s. You now sign '
+            'in with: %(username)s.\n\n'
+            'If you did not make this change, please contact your manager immediately.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n'
+        ) % context
+    _send_notification_email(subject, message, 'tasks/email/email_changed.html', context, [old_email])
+
+
+def staff_email_confirm(request, token):
+    """Where the link sent to a staff member's new email lands: it switches
+    their login to it (change_login_email). Works once, signed in or not."""
+    user, new_email = staff_email_change_for_token(token)
+    if user is None:
+        messages.error(request, _('This confirmation link has expired or was already used. Please request a new one.'))
+    else:
+        change_login_email(request, user.technician, new_email, user=user)
+        messages.success(request, _('Your email is now %(email)s.') % {'email': new_email})
+    if request.user.is_authenticated and hasattr(request.user, 'technician'):
+        return redirect('tasks:my_profile')
+    return redirect('login')
+
+
 def sign_out_of_mobile_app(user):
     """When a manager steps in (a temporary password, "Sign out of every
     phone", a login turned off): the app's sign-in token stops working and
@@ -4972,8 +5135,27 @@ def my_profile(request):
     those sections.
     """
     technician = require_technician(request)
+    email_form = SignInEmailChangeForm(user=request.user)
+    action = request.POST.get('action') if request.method == 'POST' else None
 
-    if request.method == 'POST' and request.POST.get('action') == 'change_password':
+    if action == 'change_email':
+        profile_form = MyProfileForm(instance=technician)
+        password_form = ChangePasswordForm(request.user)
+        email_form = SignInEmailChangeForm(request.POST, user=request.user)
+        if email_form.is_valid():
+            new_email = email_form.cleaned_data['email']
+            send_staff_email_change_link(request, request.user, new_email)
+            messages.success(request, _(
+                'We have sent a confirmation link to %(email)s. Your email changes once you open it.'
+            ) % {'email': new_email})
+            return redirect('tasks:my_profile')
+    elif action == 'sign_out_phones':
+        # A lost or handed-on phone: the app signs out everywhere; this browser stays.
+        sign_out_of_mobile_app(request.user)
+        log_account_action(request, technician, 'Signed themselves out of the mobile app on every phone')
+        messages.success(request, _('You have been signed out of the app on all your phones.'))
+        return redirect('tasks:my_profile')
+    elif action == 'change_password':
         profile_form = MyProfileForm(instance=technician)
         password_form = ChangePasswordForm(request.user, request.POST)
         if password_form.is_valid():
@@ -5000,6 +5182,8 @@ def my_profile(request):
         'technician': technician,
         'profile_form': profile_form,
         'password_form': password_form,
+        'email_form': email_form,
+        'phones_signed_in': Token.objects.filter(user=request.user).exists(),
         'is_field_staff': technician.is_field_staff,
     }
     if not technician.is_manager_tier:
@@ -5913,6 +6097,12 @@ def technician_edit(request, pk):
                                      'administrator role to someone else first.'))
         if form.is_valid():
             form.save()
+            if 'email' in form.changed_data and form.cleaned_data['email']:
+                change_login_email(request, technician, form.cleaned_data['email'])
+            elif 'email' in form.changed_data:  # removed: the login keeps its sign-in name
+                technician.user.email = ''
+                technician.user.save(update_fields=['email'])
+                log_account_action(request, technician, 'Staff email removed')
             messages.success(request, _('Technician updated.'))
             return redirect('tasks:technician_list')
 
@@ -6718,6 +6908,7 @@ def request_for_app(request, task):
     items_by_machine = [items(card['items']) for card in report['machines']]
     return {
         'machines': [{
+            'ticket_machine_id': card['machine'].pk,
             'name': card['machine'].machine_name, 'serial': card['machine'].serial,
             'problem': card['machine'].get_problem_display(), 'urgent': card['machine'].problem == TicketMachine.Problem.NOT_WORKING,
             'description': card['machine'].description, 'items': items(card['items']),
@@ -6902,7 +7093,7 @@ def my_task_detail(request, pk):
         ).update(seen_at=timezone.now())
         read_task_updates(task, technician)
 
-    upload_form = TaskAttachmentUploadForm()
+    upload_form = TaskAttachmentUploadForm(site=task.site)
     block_form = BlockTaskForm()
     pause_form = PauseTaskForm()
     message_form = TaskMessageForm()
@@ -6965,12 +7156,37 @@ def my_task_detail(request, pk):
                                           'time.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
+        elif action == 'confirm_customer_file':
+            if confirm_customer_files(request, task, int(request.POST.get('asset') or 0), slot=request.POST.get('slot')):
+                messages.success(request, _('Photo confirmed.'))
+            else:
+                messages.error(request, _('That photo is no longer offered for this machine.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
+        elif action == 'register_machine':
+            register_form = RegisterMachineForm(request.POST)
+            if register_form.is_valid():
+                register_task_machine(task, register_form.cleaned_data)
+                messages.success(request, _('Machine saved. Now add its serial plate, before and after.'))
+                return redirect('tasks:my_task_detail', pk=task.pk)
+            messages.error(request, ' '.join(error for errors in register_form.errors.values() for error in errors))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
         elif action == 'upload':
-            upload_form = TaskAttachmentUploadForm(request.POST, request.FILES)
-            if upload_form.is_valid():
-                _save_attachment(
-                    request, task, upload_form.cleaned_data['file'], upload_form.cleaned_data['purpose'],
-                )
+            # Before and after: several at once, each checked on its own; the serial plate: one.
+            files = request.FILES.getlist('file')[:5] or [None]
+            forms_ = [
+                TaskAttachmentUploadForm(request.POST, {'file': file} if file else {}, site=task.site) for file in files
+            ]
+            upload_form = next((form for form in forms_ if not form.is_valid()), forms_[0])
+            if all(form.is_valid() for form in forms_):
+                for form in forms_[:1] if forms_[0].cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE else forms_:
+                    if form.cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE:
+                        replace_serial_plate(task, form.cleaned_data['asset'])
+                    _save_attachment(
+                        request, task, form.cleaned_data['file'], form.cleaned_data['purpose'],
+                        asset=form.cleaned_data['asset'],
+                    )
                 messages.success(request, _('Photo added.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
@@ -6994,7 +7210,10 @@ def my_task_detail(request, pk):
         'undoable_tap': undoable,
         'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
         'report': getattr(task, 'report', None),
-        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
+        # Photos as machine and branch cards (visit_photo_cards); the list keeps the other files.
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand').exclude(
+            media_type=TaskAttachment.MediaType.PHOTO),
+        'visit_photos': visit_photo_cards(task, task.attachments.select_related('asset__brand', 'uploaded_by__technician'), editable=True),
         # Negligence flags are a manager-only reliability signal — never
         # shown to the technician being flagged.
         'events': task.events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE).order_by('occurred_at'),
@@ -7224,16 +7443,42 @@ def next_step_sites(viewer, step):
     return sites.order_by('customer__country__name', 'customer__name', 'name')
 
 
-def create_next_step(request, task, task_type, site, lines):
+def next_step_supervisors(viewer):
+    """Who can own a next step: anyone who can own a task (an active
+    supervisor or manager, never a technician — TaskForm's pool), in the
+    countries this viewer reaches."""
+    people = Technician.objects.filter(is_active=True).exclude(role=Technician.Role.TECHNICIAN)
+    if not viewer.reaches_all_countries:
+        people = people.filter(country=viewer.country)
+    return people.select_related('country').order_by('country__name', 'full_name')
+
+
+def next_step_supervisor(viewer, task, site, value):
+    """(the next step's responsible supervisor, an error message or ''): the
+    one chosen — someone in the site's country — or, left as it is, this
+    task's own when it stays in the same country. Going to another country
+    with no choice is an error: every task has an owner from the start
+    (docs/access_rules.md), and this task's supervisor doesn't work there."""
+    country = site.customer.country
+    if value:
+        supervisor = next_step_supervisors(viewer).filter(pk=value, country=country).first()
+        if supervisor is None:
+            return None, _('Choose a supervisor in %(country)s.') % {'country': country.display_name}
+        return supervisor, ''
+    if country.pk == task.site.customer.country_id and task.responsible_supervisor_id:
+        return task.responsible_supervisor, ''
+    return None, _('Choose who supervises it in %(country)s.') % {'country': country.display_name}
+
+
+def create_next_step(request, task, task_type, site, lines, supervisor):
     """The chain's next step (loading, or an installation) at `site` — any
     country — for exactly these machines: each carried over with its serial
-    and colours (source_line), to check off again there. Returns it."""
+    and colours (source_line), to check off again there; owned by
+    `supervisor` (next_step_supervisor). Returns it."""
     next_task = Task(
         site=site, task_type=task_type, brand=task.brand, priority=task.priority, source=Task.Source.INTERNAL,
         billing_type=task.billing_type, is_warranty=task.is_warranty, reported_at=timezone.now(),
-        created_by=request.user, status=Task.Status.NEW, previous_task=task,
-        # The supervisor carries over only within a country.
-        responsible_supervisor=task.responsible_supervisor if site.customer.country_id == task.site.customer.country_id else None,
+        created_by=request.user, status=Task.Status.NEW, previous_task=task, responsible_supervisor=supervisor,
         description=_('Next step after %(number)s: %(count)s machines.') % {
             'number': task.task_number, 'count': sum(line.quantity for line in lines),
         },
@@ -7442,6 +7687,7 @@ def report_problems(report, language):
                 'machine': name,
             })
         typed += [(name, item.note), (name, item.action)]
+    problems += machine_photo_gaps(report.task, [item.asset for item in machines])
     # An installation's checklist says what was done; a repair visit picks it.
     if not report.work_lines and not report.action_taken.strip() and not has_checklist(report.task):
         problems.append(_('Pick the work performed.'))
@@ -7565,6 +7811,142 @@ def task_report_correct(request, pk):
     return _report_form(request, task, manager, reverse('tasks:task_detail', args=[task.pk]))
 
 
+def task_machine_cards(task):
+    """The task's machines as cards, the same on every screen — the task,
+    the report screen, and approving (app and website): the report's own
+    machines, or before the first filing those the customer reported. Each
+    with its photos (serial plate, before, after); one the customer reported
+    that isn't registered yet has no photos until it is (`registered`)."""
+    existing, new = report_machine_initial(task)
+    assets = {asset.pk: asset for asset in Asset.objects.filter(pk__in=[row['asset'] for row in existing]).select_related('brand')}
+    # What the customer reported for each machine: its request machine, by the machine or itself.
+    reported = list(task.ticket_machines.all())
+    by_asset = {machine.asset_id: machine for machine in reported if machine.asset_id}
+    by_pk = {machine.pk: machine for machine in reported}
+    photos = {}
+    for photo in task.attachments.filter(
+        media_type__in=[TaskAttachment.MediaType.PHOTO, TaskAttachment.MediaType.VIDEO], asset__isnull=False,
+    ).order_by('pk'):
+        photos.setdefault(photo.asset_id, []).append(photo)
+    used = set(task.attachments.exclude(customer_file='').values_list('customer_file', flat=True))
+    cards = [
+        {
+            'asset': assets[row['asset']], 'registered': True,
+            'name': ' '.join(part for part in (
+                assets[row['asset']].brand.name if assets[row['asset']].brand_id else '', assets[row['asset']].model_name,
+            ) if part),
+            'serial_no': assets[row['asset']].serial_no, 'photos': photos.get(row['asset'], []),
+            'ticket_machine': by_asset.get(row['asset']),
+            'customer_files': customer_files(by_asset.get(row['asset']), used),
+        }
+        for row in existing if row['asset'] in assets
+    ]
+    cards += [
+        {'asset': None, 'registered': False, 'name': row['model_name'], 'serial_no': row['serial_no'], 'photos': [],
+         'ticket_machine': by_pk.get(row['ticket_machine']), 'customer_files': customer_files(by_pk.get(row['ticket_machine']), used)}
+        for row in new
+    ]
+    return cards
+
+
+def customer_files(ticket_machine, used=frozenset()):
+    """The customer's photos and videos of one machine that the technician can
+    still confirm (confirm_customer_files): its serial-plate photo for the Serial
+    slot, its other photos and videos for Before. Each once: one already
+    confirmed isn't offered again."""
+    from .customer_report import file_kind
+
+    if ticket_machine is None:
+        return []
+    files = []
+    if ticket_machine.serial_photo and ticket_machine.serial_photo.name not in used:
+        files.append({'file': ticket_machine.serial_photo, 'kind': file_kind(ticket_machine.serial_photo),
+                      'slot': TaskAttachment.Purpose.SERIAL_PLATE, 'added_by_staff': False})
+    for attachment in sorted(ticket_machine.attachments.all(), key=lambda item: item.uploaded_at):
+        if attachment.file.name not in used and file_kind(attachment.file) in ('image', 'video'):
+            files.append({'file': attachment.file, 'kind': file_kind(attachment.file), 'slot': TaskAttachment.Purpose.BEFORE,
+                          'added_by_staff': attachment.added_by_id is not None})
+    return files
+
+
+def replace_serial_plate(task, asset):
+    """A machine has one serial-plate photo: a new one (taken or confirmed) replaces it."""
+    task.attachments.filter(asset=asset, purpose=TaskAttachment.Purpose.SERIAL_PLATE).delete()
+
+
+def confirm_customer_files(request, task, asset_id, slot=None, name=None):
+    """The technician's "Use this" / "Use these": the customer's photos (or
+    videos) of this machine for one slot — its serial plate, or all its fault
+    photos as Before — linked, not copied, and recorded as the customer's,
+    confirmed by whoever did it. `name`: just that one (apps from before).
+    Returns the new attachments; none when the card offers nothing like that."""
+    card = next((card for card in task_machine_cards(task) if card['asset'] and card['asset'].pk == asset_id), None)
+    offered = [
+        item for item in (card or {}).get('customer_files', [])
+        if (name and item['file'].name == name) or (not name and item['slot'] == slot)
+    ]
+    if not offered:
+        return []
+    if offered[0]['slot'] == TaskAttachment.Purpose.SERIAL_PLATE:
+        offered = offered[:1]
+        replace_serial_plate(task, card['asset'])
+    return [
+        TaskAttachment.objects.create(
+            task=task, storage_kind=TaskAttachment.StorageKind.FILE, url=request.build_absolute_uri(item['file'].url),
+            media_type=TaskAttachment.MediaType.VIDEO if item['kind'] == 'video' else TaskAttachment.MediaType.PHOTO,
+            purpose=item['slot'], source=TaskAttachment.Source.CUSTOMER, uploaded_by=request.user,
+            uploaded_at=timezone.now(), asset=card['asset'], customer_file=item['file'].name,
+        )
+        for item in offered
+    ]
+
+
+def register_task_machine(task, cleaned):
+    """A machine registered at the branch during the visit (RegisterMachineForm),
+    so its photos can be taken before the report: pending until the report
+    records it. A serial already on file at this branch is that machine.
+    One the customer reported that wasn't on their list now points at it."""
+    serial = (cleaned.get('serial_no') or '').strip()
+    asset = serial and Asset.objects.filter(site=task.site, serial_no__iexact=serial).first()
+    if not asset:
+        asset = Asset.objects.create(
+            site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'].strip(), serial_no=serial,
+            code=(cleaned.get('code') or '').strip(), status=Asset.Status.PENDING, registered_on_task=task,
+        )
+    elif not asset.registered_on_task_id and not task.task_assets.filter(asset=asset).exists():
+        asset.registered_on_task = task
+        asset.save(update_fields=['registered_on_task'])
+    if cleaned.get('ticket_machine'):
+        task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=asset)
+    return asset
+
+
+def machine_photo_gaps(task, assets, unregistered=()):
+    """What stops a report being sent: every machine needs its serial plate,
+    before (the fault) and after — confirmed from the customer's or the
+    technician's own. `unregistered`: names of machines not saved yet, so
+    with no photos possible."""
+    have = set(task.attachments.filter(asset__in=assets).values_list('asset_id', 'purpose'))
+    gaps = []
+    for asset in assets:
+        missing = [str(label) for purpose, label, _missing in PHOTO_COLUMNS if (asset.pk, purpose) not in have]
+        if missing:
+            name = ' '.join(part for part in (asset.brand.name if asset.brand_id else '', asset.model_name, asset.serial_no) if part)
+            gaps.append(_('%(machine)s — still needed: %(photos)s.') % {'machine': name, 'photos': ', '.join(missing)})
+    for name in unregistered:
+        gaps.append(_('%(machine)s — save the machine first, then add its serial plate, before and after.') % {'machine': name})
+    return gaps
+
+
+def report_machine_photo_gaps(task, existing_rows, new_rows):
+    """machine_photo_gaps for the machines a report is about to record."""
+    return machine_photo_gaps(
+        task,
+        [row['asset'] for row in existing_rows if row.get('asset') and row.get('outcome')],
+        [row.get('model_name') or '' for row in new_rows if row.get('brand') and row.get('model_name') and row.get('outcome')],
+    )
+
+
 def report_machine_initial(task):
     """The report's machine rows, as (existing, new) initial data: what the
     report already records, or before the first filing the machines the
@@ -7573,17 +7955,22 @@ def report_machine_initial(task):
     and the app (api.views.MyTaskReportView).
     """
     task_assets = list(task.task_assets.all())
+    # Machines the technician registered during this visit (register_task_machine), not yet on the report.
+    registered = list(task.registered_assets.order_by('pk').values_list('pk', flat=True))
     if task_assets:
+        recorded = {ta.asset_id for ta in task_assets}
         return [
             {
                 'asset': ta.asset_id, 'outcome': ta.outcome, 'note': ta.note,
                 'finding_code': ta.finding_code, 'action_code': ta.action_code, 'action': ta.action,
             }
             for ta in task_assets
-        ], []
+        ] + [{'asset': pk} for pk in registered if pk not in recorded], []
     ticket_machines = list(task.ticket_machines.all())
+    reported = {machine.asset_id for machine in ticket_machines if machine.asset_id}
     return (
-        [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
+        [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id]
+        + [{'asset': pk} for pk in registered if pk not in reported],
         [
             {
                 'model_name': machine.model_name, 'serial_no': machine.serial_no, 'code': machine.code,
@@ -7699,15 +8086,19 @@ def _report_form(request, task, technician, back_url):
                     drawn_signature='' if request.POST.get('signature_waived') else request.POST.get('signature_drawn', ''),
                 )
                 return HttpResponse(html)
-            with transaction.atomic():
-                if checklist_rows is not None:
-                    save_checklist(task, checklist_rows)
-                saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
+            gaps = report_machine_photo_gaps(task, existing_formset.cleaned_data, new_formset.cleaned_data)
+            for gap in gaps:
+                report_form.add_error(None, gap)
+            if not gaps:
+                with transaction.atomic():
+                    if checklist_rows is not None:
+                        save_checklist(task, checklist_rows)
+                    saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 
-                save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
+                    save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
 
-            messages.success(request, report_saved_message(saved_report.first_submission, task))
-            return redirect(back_url)
+                messages.success(request, report_saved_message(saved_report.first_submission, task))
+                return redirect(back_url)
     else:
         report_form = WorkReportForm(
             instance=report, require_signature=_requires_signature(task), helpers=helpers,

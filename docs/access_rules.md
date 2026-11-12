@@ -46,6 +46,10 @@ whose pages one opens, area…) into switches as well.
 - Every task has **one owner**: the person who created it, or the supervisor it
   was given to ("Supervisor" when it's created). Stored as the task's
   responsible supervisor.
+- A machine **sent on to the next step** (loading → installation) keeps its
+  supervisor within the same country. Going to **another country**, the manager
+  must choose **"Supervisor there"**, someone in that country, so the new task
+  is never left without an owner.
 - **Only the owner changes it**: its details, the visit time, the lead and
   helpers, the actions on it.
 - The owner can **hand it over** to someone else (Edit task → Supervisor), for

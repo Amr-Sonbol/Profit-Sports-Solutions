@@ -153,7 +153,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | contact_email | varchar | |
 | billing_address | text | optional — where invoices are addressed; the customer completes it at first sign-in |
 | shipping_address | text | optional — where replacement parts should be delivered, if different from the site itself (a warehouse or head office); the customer completes it at first sign-in |
-| language | varchar(2) | ar, en — default en; drives the portal's language/direction once logged in |
+| language | varchar(2) | ar, en — default en; the portal's language for anyone at this customer who hasn't chosen their own (`portal_user.language`). Set by our staff |
 | brand_color | varchar(7) | `#RRGGBB`, default `#c8c8c8` (grey) — the customer's own color for their portal's buttons and highlights, chosen in portal Settings; text on it is black or white, whichever reads better (`Customer.brand_text_color`) |
 | quotation_discount | decimal(5,2) | nullable — % off quotations; managers and admins only (like the two below); empty: none agreed |
 | shipping_cost | decimal(10,2) | nullable — the agreed cost per shipment, in the country's `currency_code` |
@@ -175,6 +175,7 @@ Each person at a customer who signs in to the portal, with their own email and p
 | user_id | FK → user | unique — their login: username and email are their email, their name is `user.first_name` (so it stays on what they sent after they're removed) |
 | must_change_password | bool | set when they're added or invited (or staff set a temporary password) — cleared once they set their own password (and confirm the company's details, prefilled) |
 | invited_at | timestamptz | nullable — when their welcome email was last sent; its link is valid for 7 days, after which they show as "Invitation expired" |
+| language | varchar(2) | blank — ar, en: the portal's language for this person (Settings → My account, or the header's EN/AR); empty: the customer's. Never anyone else's at their company |
 
 `customers.models.portal_customer(user)` is how a page finds the customer from whoever's signed in.
 
@@ -235,6 +236,7 @@ One physical machine. **Created by the technician at the first service visit, no
 | installed_on | date | nullable |
 | status | varchar | active, faulty, retired, or pending — added by the customer, waiting for confirmation |
 | sticker_photo | file | nullable — the customer's photo of the sticker, when they added it |
+| registered_on_task_id | FK → task | nullable, `SET_NULL` — a machine the technician added during that visit, registered then (status `pending`) so its serial plate, before and after can be taken before the report (`tasks.views.register_task_machine`); the report makes it `active` |
 
 **Why the technician creates it.** Nobody else sees the machine. The delivery note is a PDF with model codes and quantities, not serials, so there is nothing to import. The serial is only on the plate.
 
@@ -771,7 +773,7 @@ One machine a ticket is about. A customer reports each machine as its own card i
 | model_name | varchar | blank — typed when the machine isn't in their list |
 | serial_no | varchar | blank — the serial for an unlisted machine (a listed one has its own) |
 | code | varchar | blank — its product code, if the customer knows it (an unlisted machine); carried into the technician's new-machine row |
-| serial_photo | file | blank — a photo of the machine's serial-number sticker (images only, 25 MB); an unlisted machine needs this or `serial_no` |
+| serial_photo | file | a photo of the machine's serial-number sticker (images only, 25 MB) — **required for a repair** (any machine, listed or not), with at least one photo or video of the fault (`TicketMachineForm`); the technician then confirms these instead of taking them again |
 | problem | varchar | not_working, noise, display, cables, other — or `parts`, set by itself on a spare-parts request's machines (never offered as a problem); `description` then says which parts |
 | description | text | blank |
 | position | smallint | order the customer added them |
@@ -910,11 +912,14 @@ Photos, videos and links. The supervisor attaches the customer's evidence at cre
 | storage_kind | varchar | `file` or `link` |
 | url | varchar | |
 | media_type | varchar | photo, video, document |
-| purpose | varchar | fault, serial_plate, before, after (technician's own fault evidence — `TaskAttachmentUploadForm`), or delivery_note, written_report, other (a supervisor/manager/admin document — `StaffAttachmentUploadForm`) |
+| purpose | varchar | serial_plate, before, after (a machine's photos — `TaskAttachmentUploadForm`; "before" shows the fault and may be a video, the other two are photos; tasks 0087 moved the old "fault" ones to before), or delivery_note, written_report, other (a supervisor/manager/admin document — `StaffAttachmentUploadForm`) |
 | source | varchar | customer, supervisor, technician |
 | uploaded_by_id | FK → user | |
 | uploaded_at | timestamptz | |
-| asset_id | FK → asset, nullable | the machine it shows — taken from that machine's card on the visit report (app), only a machine at the task's site; null: the visit as a whole. `SET_NULL`. Shown with the machine's name wherever the task's photos are listed |
+| asset_id | FK → asset, nullable | the machine it shows — taken on that machine's card (the task, the report), only a machine at the task's site; required for a serial plate. `SET_NULL` |
+| customer_file | varchar | blank — the customer's own photo or video (its stored file) the technician confirmed for this slot ("Use this": `tasks.views.confirm_customer_file`), linked, not copied; `source` customer, `uploaded_by` who confirmed it |
+
+**Each machine's three photos, the same on every screen.** A task's machines are cards (`tasks.views.task_machine_cards`): the task (technician), the report screen, and approving (supervisor, management) — app and website. Each has serial plate, before, after; where the customer sent a plate photo or fault photos, the technician confirms one ("Use this") or takes their own, and After is always the technician's. **A report can't be sent until every machine has all three** (`machine_photo_gaps`); approving shows any missing in red. Each photo shows once. The customer's PDF report is unchanged.
 
 Compress photos on upload and never autoplay video. Technicians are on mobile data.
 

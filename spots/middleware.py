@@ -24,8 +24,10 @@ class TechnicianLocaleMiddleware:
         customer = portal_customer(request.user)
         person = technician or customer
         if person is not None:
-            translation.activate(person.language)
-            request.LANGUAGE_CODE = person.language
+            # A portal person's own language, or their company's.
+            language = technician.language if technician is not None else request.user.portal_user.portal_language
+            translation.activate(language)
+            request.LANGUAGE_CODE = language
             country = get_active_country(request) if technician is not None else customer.country
             timezone.activate(country.timezone)
 

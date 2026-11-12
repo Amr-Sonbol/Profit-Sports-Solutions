@@ -359,10 +359,12 @@ class ChangeLoginEmailForm(forms.Form):
         return email
 
 
-class PortalEmailChangeForm(forms.Form):
-    """A customer changing their own sign-in email: the new address and
-    their current password. Nothing changes until they open the link sent
-    to the new address (accounts.send_email_change_link)."""
+class SignInEmailChangeForm(forms.Form):
+    """Someone changing their own sign-in email — a customer in the portal,
+    staff on My profile or in the app: the new address and their current
+    password. Nothing changes until they open the link sent to the new
+    address (customers.accounts.send_email_change_link,
+    tasks.views.send_staff_email_change_link)."""
 
     email = forms.EmailField(label=_('New sign-in email'))
     password = forms.CharField(label=_('Your current password'), strip=False, widget=forms.PasswordInput)
@@ -412,25 +414,46 @@ class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
 
 
+class MyAccountForm(forms.Form):
+    """The portal's Settings → My account: this person's own name and the
+    language the portal shows in for them (the header's EN/AR switch sets
+    the same) — never anyone else's at their company."""
+
+    name = forms.CharField(label=_('Your name'), max_length=150)
+    language = forms.ChoiceField(
+        label=_('Language'), help_text=_('The language this portal shows in for you.'),
+        choices=Customer._meta.get_field('language').choices,
+    )
+
+    def __init__(self, *args, person, **kwargs):
+        self.person = person
+        kwargs.setdefault('initial', {'name': person.user.first_name, 'language': person.portal_language})
+        super().__init__(*args, **kwargs)
+
+    def save(self):
+        self.person.user.first_name = self.cleaned_data['name'].strip()
+        self.person.user.save(update_fields=['first_name'])
+        self.person.language = self.cleaned_data['language']
+        self.person.save(update_fields=['language'])
+
+
 class CustomerSettingsForm(forms.ModelForm):
-    """The portal's Settings: the customer's own contact details and
-    addresses, and the language the portal shows in (the header's EN/AR
-    switch sets the same field). Their login email is changed by staff
-    (Customer accounts), not here."""
+    """The portal's Settings → Company: the customer's contact details and
+    addresses, shared by everyone at the company (each change is in the
+    Audit log). Sign-in emails are each person's own (My account)."""
 
     class Meta:
         model = Customer
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address', 'language']
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address']
         labels = {
             'contact_name': _('Contact name'), 'contact_phone': _('Contact phone number'),
             'contact_email': _('Contact email'), 'billing_address': _('Invoice address'),
-            'shipping_address': _('Delivery address'), 'language': _('Language'),
+            'shipping_address': _('Delivery address'),
         }
         help_texts = {
             'contact_email': _('Where we send updates about your requests.'),
             'billing_address': _('The address invoices should be issued to.'),
             'shipping_address': _('Where spare and replacement parts should be delivered.'),
-            'language': _('The language this portal shows in.'),
         }
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),

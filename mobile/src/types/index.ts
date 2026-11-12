@@ -72,7 +72,34 @@ export interface TaskAttachment {
   uploaded_at: string;
   /** The machine it shows (taken from its card on the report); blank: the visit as a whole. */
   asset?: number | null;
+  /** 'customer': a customer's photo the technician confirmed. Older servers: absent. */
+  source?: string;
+  uploaded_by_name?: string;
   asset_name?: string;
+}
+
+/** A customer's photo or video of a machine the technician can still confirm for its slot ("Use this"). */
+export interface CustomerFile {
+  name: string;
+  kind: string;
+  slot: 'serial_plate' | 'before';
+  url: string;
+  /** Added for the customer by our team (from WhatsApp...). */
+  added_by_staff?: boolean;
+}
+
+/** One machine of the task as a photo card, the same on every screen (tasks.views.task_machine_cards). */
+export interface MachineCardData {
+  asset_id: number | null;
+  /** A machine the customer reported that isn't registered yet: no photos until it is. */
+  registered: boolean;
+  /** What the customer reported for it: from_request.machines with this id. */
+  ticket_machine_id?: number | null;
+  name: string;
+  serial_no: string;
+  photos: TaskAttachment[];
+  /** The customer's photos it can still use, each for its slot. Older servers: absent. */
+  customer_files?: CustomerFile[];
 }
 
 export interface TaskDetail {
@@ -101,6 +128,8 @@ export interface TaskDetail {
   directions_url?: string;
   // The machines the customer reported for this task (portal ticket).
   machines?: { name: string; serial: string; problem: string; description: string }[];
+  /** The task's machines as photo cards. Older servers: absent. */
+  machine_cards?: MachineCardData[];
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null
@@ -407,7 +436,9 @@ export interface TeamTaskDetail extends TaskDetail {
       /** The button's words: "Send to installation". */
       title: string;
       lines: { id: number; label: string }[];
-      steps: { value: string; label: string; sites: Choice[] }[];
+      steps: { value: string; label: string; sites: (Choice & { country?: number })[] }[];
+      /** Who can supervise it there; empty keeps this task's own (same country only). Older servers: absent. */
+      supervisors?: (Choice & { country: number })[];
     } | null;
   } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
@@ -847,6 +878,8 @@ export interface RequestFile {
 }
 
 export interface ReportedMachine {
+  /** Its request machine: the task's machine card with the same id shows it. Older servers: absent. */
+  ticket_machine_id?: number;
   name: string;
   serial: string;
   problem: string;

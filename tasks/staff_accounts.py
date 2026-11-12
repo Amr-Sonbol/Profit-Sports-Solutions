@@ -26,7 +26,8 @@ from reference.models import Country
 
 from .forms import TechnicianFirstLoginForm
 from .views import (
-    STAFF_LINK_VALID_DAYS, _generate_temporary_password, send_password_changed_email, send_staff_setup_link,
+    STAFF_LINK_VALID_DAYS, _generate_temporary_password, change_login_email, send_password_changed_email,
+    send_staff_setup_link,
     sign_out_of_mobile_app, staff_user_for_link_token,
 )
 
@@ -182,16 +183,7 @@ def staff_accounts(request):
         elif action == 'change_email':
             form = ChangeLoginEmailForm(request.POST, user=user)
             if form.is_valid():
-                old_email = user.email
-                user.email = form.cleaned_data['email']
-                fields = ['email']
-                # Logins created in the app sign in with their email; keep
-                # those two together. A login with its own sign-in name keeps it.
-                if old_email and user.username.lower() == old_email.lower():
-                    user.username = user.email
-                    fields.append('username')
-                user.save(update_fields=fields)
-                log_account_action(request, target, f'Staff email changed from {old_email or "(none)"} to {user.email}')
+                change_login_email(request, target, form.cleaned_data['email'])
                 messages.success(request, _('The email address has been changed to %(email)s.') % {'email': user.email})
             else:
                 messages.error(request, form.errors['email'][0])

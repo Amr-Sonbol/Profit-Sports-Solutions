@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
+from customers.models import Asset
 from people.models import RolePermission, Technician
 from reports.models import WorkReport
 from tasks.models import CustomerTicket, Task, TaskAssignment, TaskAttachment, TaskEvent, TicketMachine
@@ -14,6 +15,16 @@ from spots.test_files import REAL_JPEG
 
 User = get_user_model()
 
+
+
+def give_machine_photos(task, asset, user):
+    """A machine's serial plate, before and after on this task — what a report needs before it's sent."""
+    from tasks.models import TaskAttachment
+    for purpose in ('serial_plate', 'before', 'after'):
+        TaskAttachment.objects.create(
+            task=task, storage_kind='file', url=f'http://testserver/media/{purpose}.jpg', media_type='photo',
+            purpose=purpose, source='technician', uploaded_by=user, uploaded_at=timezone.now(), asset=asset,
+        )
 
 class ApiTestCase(TaskTestCase):
     """TaskTestCase's fixtures, plus a task assigned to tech1 as lead —
@@ -214,13 +225,14 @@ class MyTaskAttachmentTests(ApiTestCase):
             **self.auth(token),
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(TaskAttachment.objects.filter(task=self.task).count(), 1)
+        # "fault" — from an older app, or queued offline — is a Before photo now.
+        self.assertEqual(list(TaskAttachment.objects.filter(task=self.task).values_list('purpose', flat=True)), ['before'])
 
     def test_disallowed_extension_is_rejected(self):
         token = self.token_for('tech1')
         bad = SimpleUploadedFile('malware.exe', b'x', content_type='application/octet-stream')
         response = self.client.post(
-            f'/api/my-tasks/{self.task.pk}/attachments/', {'file': bad, 'purpose': 'fault'},
+            f'/api/my-tasks/{self.task.pk}/attachments/', {'file': bad, 'purpose': 'before'},
             **self.auth(token),
         )
         self.assertEqual(response.status_code, 400)
@@ -292,12 +304,35 @@ class MyTaskReportTests(ApiTestCase):
         self.assertEqual(screen['machines'][1]['ticket_machine_id'], unlisted.pk)
         self.assertIn({'value': 'repaired', 'label': 'Repaired'}, screen['outcomes'])
 
+        # Not sent without every machine's serial plate, before and after — the unlisted one saved first.
         response = self._file(token, machines=[
             {'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': 'Belt tightened.'},
             {'brand_id': self.brand.pk, 'model_name': 'Old bike', 'serial_no': 'OB-9', 'outcome': 'replaced',
              'note': 'Console replaced.', 'ticket_machine_id': unlisted.pk},
         ])
+        self.assertEqual(response.status_code, 400)
+        gaps = response.json()['photos']
+        self.assertEqual(len(gaps), 2)
+        self.assertIn('Serial plate, Before, After', gaps[0])
+        self.assertIn('Old bike', gaps[1])
+        # Saved now (pending until the report records it), so its photos can be taken.
+        saved = self.client.post(f'/api/my-tasks/{self.task.pk}/machines/', {
+            'brand': self.brand.pk, 'model_name': 'Old bike', 'serial_no': 'OB-9', 'ticket_machine': unlisted.pk,
+        }, **self.auth(token))
+        self.assertEqual(saved.status_code, 201, saved.content)
+        bike = Asset.objects.get(pk=saved.json()['asset_id'])
+        self.assertEqual((bike.status, bike.registered_on_task), (Asset.Status.PENDING, self.task))
+        unlisted.refresh_from_db()
+        self.assertEqual(unlisted.asset, bike)
+        for asset in (self.asset, bike):
+            give_machine_photos(self.task, asset, self.tech_user)
+        response = self._file(token, machines=[
+            {'asset_id': self.asset.pk, 'outcome': 'repaired', 'note': 'Belt tightened.'},
+            {'asset_id': bike.pk, 'outcome': 'replaced', 'note': 'Console replaced.'},
+        ])
         self.assertEqual(response.status_code, 201)
+        bike.refresh_from_db()
+        self.assertEqual(bike.status, Asset.Status.ACTIVE)  # one of ours once the report records it
         self.assertEqual(
             sorted(self.task.task_assets.values_list('note', flat=True)), ['Belt tightened.', 'Console replaced.'],
         )
@@ -654,7 +689,7 @@ class ApiSecurityTests(ApiTestCase):
 
     def test_attachment_upload_requires_a_token(self):
         photo = SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
-        response = self.client.post(f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'fault'})
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'before'})
         self.assertEqual(response.status_code, 401)
 
     def test_deactivated_users_token_is_rejected(self):
@@ -692,7 +727,7 @@ class ApiSecurityTests(ApiTestCase):
         token = self.token_for('helper1')
         photo = SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post(
-            f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'fault'}, **self.auth(token),
+            f'/api/my-tasks/{self.task.pk}/attachments/', {'file': photo, 'purpose': 'before'}, **self.auth(token),
         )
         # Allowed at the model level (any active assignee), same as the web
         # form — only *acting on status* (action/) is lead-only.
@@ -1525,19 +1560,19 @@ class MySkillsApiTests(ApiTestCase):
 class MyProfileApiTests(ApiTestCase):
     # Editing my profile from the app, as on the website's My profile.
 
-    def test_phone_language_email_and_photo_change_and_the_rest_stays(self):
+    def test_phone_language_and_photo_change_and_the_rest_stays(self):
         token = self.token_for('tech1')
         technician = Technician.objects.get(user__username='tech1')
         role, country = technician.role, technician.country_id
         photo = SimpleUploadedFile('me.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/api/me/', {
-            'phone': '+971500000001', 'language': 'ar', 'email': 'tech1@example.com', 'photo': photo,
-            'role': 'manager',
+            'phone': '+971500000001', 'language': 'ar', 'photo': photo, 'role': 'manager',
         }, **self.auth(token))
         self.assertEqual(response.status_code, 200)
         technician.refresh_from_db()
-        self.assertEqual((technician.phone, technician.language, technician.user.email),
-                         ('+971500000001', 'ar', 'tech1@example.com'))
+        # A new email has its own test: it needs the password and a confirmation link
+        # (tasks.tests.StaffAccountSettingsTests).
+        self.assertEqual((technician.phone, technician.language), ('+971500000001', 'ar'))
         self.assertTrue(response.json()['photo_url'].startswith('http'))
         self.assertEqual((technician.role, technician.country_id), (role, country))
 
@@ -1574,8 +1609,10 @@ class PersonApiTests(ApiTestCase):
         token = self.token_for('supervisor1')
         self.assertEqual(self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).status_code, 404)
         today = timezone.localdate()
-        TechnicianTrip.objects.create(technician=visitor, country=self.country, start_date=today, end_date=today,
-                                      created_at=timezone.now(), created_by=self.supervisor_user)
+        # Either side of today, so it holds whatever the hour (the trip is in the country's own date).
+        TechnicianTrip.objects.create(technician=visitor, country=self.country, start_date=today - timedelta(days=1),
+                                      end_date=today + timedelta(days=1), created_at=timezone.now(),
+                                      created_by=self.supervisor_user)
         page = self.client.get(f'/api/people/{visitor.pk}/', **self.auth(token)).json()
         # To look at only: their skills, availability and account stay with their own country.
         self.assertEqual((page['can_review_skills'], page['can_set_availability'], page['can_deactivate']), (False, False, False))
@@ -1956,12 +1993,20 @@ class NextStepApiTests(ManagerChoosesTheCountryTests):
         steps = page['equipment']['next_step']['steps']
         install = next(step for step in steps if step['value'] == 'installation')
         self.assertIn(str(self.site.pk), [site['value'] for site in install['sites']])  # the Dubai site
+        dubai_supervisor = Technician.objects.get(user__username='supervisor1')
+        self.assertIn(str(dubai_supervisor.pk), [person['value'] for person in page['equipment']['next_step']['supervisors']])
 
+        send = {'step': 'installation', 'site': self.site.pk, 'lines': [line.pk]}
+        # Another country, and nobody chosen to supervise it there: refused.
+        response = self.client.post(f'/api/tasks/{loading.pk}/next-step/', json.dumps(send),
+                                    content_type='application/json', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
+        self.assertEqual(response.status_code, 400)
         response = self.client.post(f'/api/tasks/{loading.pk}/next-step/', json.dumps({
-            'step': 'installation', 'site': self.site.pk, 'lines': [line.pk],
+            **send, 'supervisor': dubai_supervisor.pk,
         }), content_type='application/json', HTTP_X_ACTIVE_COUNTRY=str(self.egypt.pk), **self.auth(token))
         self.assertEqual(response.status_code, 201, response.content)
         installation = Task.objects.get(pk=response.json()['id'])
+        self.assertEqual(installation.responsible_supervisor, dubai_supervisor)
         self.assertEqual((installation.site, installation.previous_task), (self.site, loading))
         self.assertEqual(installation.products.get().source_line, line)
 
@@ -2252,3 +2297,88 @@ class TeamListPagesAndFiltersTests(TeamTaskApiTests):
         choices = self.client.get('/api/tasks/filters/', **self.auth(self.token_for('supervisor1'))).json()
         self.assertIn('blocked', [s['value'] for s in choices['statuses']])
         self.assertIn('Tarek Tech', [t['label'] for t in choices['technicians']])
+
+
+class CustomerPhotosOnTheMachineCardTests(ApiTestCase):
+    """The customer's serial plate and fault photo, on the machine's card: the
+    technician confirms them ("Use this") instead of taking them again; After
+    is always theirs (tasks.views.confirm_customer_files)."""
+
+    def setUp(self):
+        import tempfile
+
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        super().setUp()
+        from tasks.models import CustomerTicketAttachment
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0901', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='-', submitted_at=timezone.now(), task=self.task, status=CustomerTicket.Status.CONVERTED,
+        )
+        machine = TicketMachine.objects.create(
+            ticket=ticket, asset=self.asset, problem='noise', decision='visit', task=self.task,
+            serial_photo=SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg'),
+        )
+        CustomerTicketAttachment.objects.create(
+            ticket=ticket, machine=machine, uploaded_at=timezone.now(),
+            file=SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg'),
+        )
+        self.token = self.token_for('tech1')
+
+    def card(self):
+        (card,) = self.client.get(f'/api/my-tasks/{self.task.pk}/', **self.auth(self.token)).json()['machine_cards']
+        return card
+
+    def test_the_technician_confirms_the_customers_photos_once_each(self):
+        offered = {item['slot']: item['name'] for item in self.card()['customer_files']}
+        self.assertEqual(set(offered), {'serial_plate', 'before'})
+        response = self.client.post(f'/api/my-tasks/{self.task.pk}/confirm-photo/', {
+            'asset': self.asset.pk, 'name': offered['serial_plate'],
+        }, **self.auth(self.token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual((response.json()['source'], response.json()['purpose']), ('customer', 'serial_plate'))
+        self.assertEqual(response.json()['uploaded_by_name'], 'Tarek Tech')
+        # Once: it's in its slot now, and no longer offered.
+        card = self.card()
+        self.assertEqual([photo['purpose'] for photo in card['photos']], ['serial_plate'])
+        self.assertEqual([item['slot'] for item in card['customer_files']], ['before'])
+        again = self.client.post(f'/api/my-tasks/{self.task.pk}/confirm-photo/', {
+            'asset': self.asset.pk, 'name': offered['serial_plate'],
+        }, **self.auth(self.token))
+        self.assertEqual(again.status_code, 400)
+
+    def test_the_serial_plate_and_after_are_photos_and_before_can_be_a_video(self):
+        from spots.test_files import REAL_MP4
+        url = f'/api/my-tasks/{self.task.pk}/attachments/'
+        for purpose, status in (('after', 400), ('serial_plate', 400), ('before', 201)):
+            video = SimpleUploadedFile('clip.mp4', REAL_MP4, content_type='video/mp4')
+            response = self.client.post(url, {'file': video, 'purpose': purpose, 'asset': self.asset.pk}, **self.auth(self.token))
+            self.assertEqual(response.status_code, status, (purpose, response.content))
+
+    def test_use_these_confirms_every_fault_photo_and_a_new_plate_replaces_the_old(self):
+        from tasks.models import CustomerTicketAttachment
+        machine = TicketMachine.objects.get(ticket__ticket_number='AE-T0901')
+        CustomerTicketAttachment.objects.create(
+            ticket=machine.ticket, machine=machine, uploaded_at=timezone.now(),
+            file=SimpleUploadedFile('noise.jpg', REAL_JPEG, content_type='image/jpeg'),
+        )
+        url = f'/api/my-tasks/{self.task.pk}/confirm-photo/'
+        # One decision for the slot: both fault photos at once.
+        response = self.client.post(url, {'asset': self.asset.pk, 'slot': 'before'}, **self.auth(self.token))
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual([item['purpose'] for item in response.json()], ['before', 'before'])
+        # The serial plate: one photo — the technician's own replaces the customer's.
+        self.client.post(url, {'asset': self.asset.pk, 'slot': 'serial_plate'}, **self.auth(self.token))
+        own = SimpleUploadedFile('mine.jpg', REAL_JPEG, content_type='image/jpeg')
+        self.client.post(f'/api/my-tasks/{self.task.pk}/attachments/', {
+            'file': own, 'purpose': 'serial_plate', 'asset': self.asset.pk,
+        }, **self.auth(self.token))
+        plates = TaskAttachment.objects.filter(task=self.task, purpose='serial_plate')
+        self.assertEqual([(plate.source, plate.customer_file) for plate in plates], [('technician', '')])
+        card = self.card()
+        self.assertEqual(sorted(photo['purpose'] for photo in card['photos']), ['before', 'before', 'serial_plate'])
+        # The customer's plate, replaced, is no longer in the slot: it shows once, below ("Also sent").
+        self.assertEqual([item['slot'] for item in card['customer_files']], ['serial_plate'])

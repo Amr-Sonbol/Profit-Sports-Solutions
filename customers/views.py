@@ -14,7 +14,7 @@ from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
+from django.utils import timezone, translation
 from django.utils.crypto import get_random_string
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
@@ -39,8 +39,8 @@ from .accounts import (
 from .forms import (
     AddPortalUserForm, ChangeLoginEmailForm, CustomerEditForm, NewCustomerForm, CustomerFirstLoginForm,
     CustomerTermsForm, PortalBranchRequestForm, SiteTermsForm,
-    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, DeactivateCustomerForm, PortalColorForm,
-    PortalEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm,
+    CustomerImportForm, CustomerMachineForm, CustomerSettingsForm, MyAccountForm, DeactivateCustomerForm, PortalColorForm,
+    SignInEmailChangeForm, PortalLoginForm, PortalPasswordHelpForm,
     SiteCreateForm, SiteEditForm,
 )
 from spots.throttle import link_email_allowed
@@ -854,28 +854,42 @@ def portal_visit_report_pdf(request, pk):
 
 @login_required(login_url='customers:portal_login')
 def portal_settings(request):
-    """The customer's own settings: contact details, addresses and language
-    (CustomerSettingsForm), their portal color (PortalColorForm, its own
-    section and button), and their password — the current one first,
-    and an email saying it changed, the same as staff get. Their login
-    email stays with the office (Customer accounts)."""
+    """Settings, in two parts. My account — this person's own: name and
+    language (MyAccountForm), sign-in email (changed once they open a link
+    sent to the new address) and password (the current one first, and an
+    email saying it changed). Company — shared by everyone at it: contact
+    details and addresses (CustomerSettingsForm; each change in the Audit
+    log), branches, the portal color, and who has access (read-only: our
+    staff add and remove people)."""
     customer, setup = _portal_customer(request)
     if setup:
         return setup
+    person = request.user.portal_user
+    account_form = MyAccountForm(person=person)
     details_form = CustomerSettingsForm(instance=customer)
     color_form = PortalColorForm(instance=customer)
-    email_form = PortalEmailChangeForm(user=request.user)
+    email_form = SignInEmailChangeForm(user=request.user)
     password_form = ChangePasswordForm(user=request.user)
     # Django focuses the current-password box, which would scroll past the details.
     password_form.fields['old_password'].widget.attrs.pop('autofocus', None)
-    if request.method == 'POST' and request.POST.get('action') == 'details':
+    if request.method == 'POST' and request.POST.get('action') == 'account':
+        account_form = MyAccountForm(request.POST, person=person)
+        if account_form.is_valid():
+            account_form.save()
+            messages.success(request, _('Your details have been saved.'))
+            return redirect('customers:portal_settings')
+    elif request.method == 'POST' and request.POST.get('action') == 'details':
         details_form = CustomerSettingsForm(request.POST, instance=customer)
         if details_form.is_valid():
             details_form.save()
-            messages.success(request, _('Your details have been saved.'))
+            if details_form.changed_data:
+                with translation.override('en'):  # the Audit log is in English
+                    changed = ', '.join(str(CustomerSettingsForm.Meta.labels[name]) for name in details_form.changed_data)
+                log_account_action(request, customer, f'Company details changed in the portal: {changed}')
+            messages.success(request, _('Company details saved.'))
             return redirect('customers:portal_settings')
     elif request.method == 'POST' and request.POST.get('action') == 'email':
-        email_form = PortalEmailChangeForm(request.POST, user=request.user)
+        email_form = SignInEmailChangeForm(request.POST, user=request.user)
         if email_form.is_valid():
             new_email = email_form.cleaned_data['email']
             send_email_change_link(request, request.user.portal_user, new_email)
@@ -898,18 +912,19 @@ def portal_settings(request):
             messages.success(request, _('Password changed.'))
             return redirect('customers:portal_settings')
     return render(request, 'customers/portal_settings.html', {
-        'customer': customer, 'details_form': details_form, 'color_form': color_form,
+        'customer': customer, 'account_form': account_form, 'details_form': details_form, 'color_form': color_form,
+        # Who has access: read-only here (our staff add and remove people).
+        'people': customer.portal_users.select_related('user').order_by('user__first_name', 'user__email'),
         'email_form': email_form, 'password_form': password_form,
         # Their branches, and new ones they've asked us to add that we haven't yet.
         'branches': customer.sites.order_by('name'),
         'branch_requests': customer.tickets.filter(
             about=CustomerTicket.About.NEW_BRANCH, status=CustomerTicket.Status.NEW,
         ).order_by('-submitted_at'),
-        # "Your details" in three groups, each under its own title.
+        # The company's details in two groups, each under its own title.
         'details_groups': [
             (_('Contact'), ('contact_name', 'contact_phone', 'contact_email')),
             (_('Addresses'), ('billing_address', 'shipping_address')),
-            (_('Language'), ('language',)),
         ],
     })
 

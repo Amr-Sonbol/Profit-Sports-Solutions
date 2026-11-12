@@ -6,7 +6,8 @@ import type { ComponentProps } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { API_BASE_URL } from '@/api/client';
+import { API_BASE_URL, setToken } from '@/api/client';
+import { signOutOtherPhones } from '@/api/endpoints';
 import { NotificationCheck } from '@/components/notification-check';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -15,7 +16,8 @@ import { confirmAction } from '@/confirm';
 import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { pendingReports } from '@/offline';
-import { t } from '@/i18n';
+import { alert, t } from '@/i18n';
+import { currentPushToken } from '@/push';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -43,6 +45,23 @@ export default function ProfileScreen() {
     );
     if (ok) {
       await signOut();
+    }
+  };
+  // A lost or handed-on phone: the others are signed out, this one stays in.
+  const confirmSignOutOthers = async () => {
+    const ok = await confirmAction(
+      'Sign out of your other phones?',
+      'The app signs out on every other phone where you are signed in. This phone stays signed in.',
+      'Sign out others',
+    );
+    if (!ok) {
+      return;
+    }
+    try {
+      await setToken((await signOutOtherPhones(currentPushToken())).token);
+      alert('Done', 'You have been signed out of the app on your other phones.');
+    } catch {
+      alert('Not done', 'Please check your connection and try again.');
     }
   };
   const theme = useTheme();
@@ -112,6 +131,13 @@ export default function ProfileScreen() {
           >
             <Ionicons name="key-outline" size={18} color={theme.text} />
             <ThemedText>Change password</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, { borderColor: theme.backgroundSelected }]} onPress={confirmSignOutOthers}
+          >
+            <Ionicons name="phone-portrait-outline" size={18} color={theme.text} />
+            <ThemedText>Sign out of my other phones</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.button, { borderColor: theme.danger }]} onPress={confirmSignOut}>

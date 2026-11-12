@@ -1,0 +1,7 @@
+{% extends "tasks/email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Dear {{ contact }},</p>
+<p style="margin:0 0 16px;">The email address for your Profit Sports Solutions account was changed to <strong>{{ new_email }}</strong>. You now sign in with: <strong>{{ username }}</strong>.</p>
+<p style="margin:0 0 16px;"><strong>If you did not make this change, please contact your manager immediately.</strong></p>
+<p style="margin:24px 0 0;">Best regards,<br>Profit Sports Solutions</p>
+{% endblock %}

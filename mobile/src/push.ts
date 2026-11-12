@@ -59,6 +59,11 @@ export async function registerForPush(): Promise<void> {
   }
 }
 
+/** This phone's push token, if it registered one (kept when signing out the other phones). */
+export function currentPushToken(): string | null {
+  return registeredToken;
+}
+
 /** Before signing out, so the next person on this phone doesn't get these. */
 export async function unregisterForPush(): Promise<void> {
   if (!registeredToken) {

@@ -8,11 +8,12 @@ import { useTheme } from '@/hooks/use-theme';
 import type { FromRequest, RequestFile } from '@/types';
 import { t } from '@/i18n';
 
-// What the customer reported (tasks.customer_report): where and who, then each
+// What the customer reported (tasks.customer_report): who sent it, then each
 // machine with its serial, problem, their words, photos and videos; files not
-// tied to a machine; what they sent later. The technician's own task screen and
-// the team's (a supervisor's) show the same.
-export function CustomerRequest({ request, directionsUrl }: { request: FromRequest; directionsUrl?: string }) {
+// tied to a machine; what they sent later. The branch itself is in the branch
+// card above (components/branch-card). `hideMachines`: where each machine's card
+// (components/machine-card) shows its part of the request, they aren't listed again.
+export function CustomerRequest({ request, hideMachines = false }: { request: FromRequest; hideMachines?: boolean }) {
   const theme = useTheme();
   return (
     <ThemedView style={styles.section}>
@@ -21,18 +22,14 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
         {request.machines.length} machine(s) · {request.photo_count} photo(s)
         {request.video_count ? ` · ${t('{count} video(s)', { count: request.video_count })}` : ''}
       </ThemedText>
-      {/* Where and who: its own card, apart from the machines. */}
-      {request.site_address || request.contact_name || request.contact_phone ? (
-        <ThemedView style={[styles.card, { borderColor: theme.backgroundSelected }]}>
-          {request.site_address ? (
-            <TouchableOpacity onPress={() => directionsUrl && Linking.openURL(directionsUrl)}>
-              <ThemedText themeColor="primary">{request.site_name} — {request.site_address}</ThemedText>
-            </TouchableOpacity>
-          ) : null}
-          {request.contact_name ? <ThemedText>{request.contact_name}</ThemedText> : null}
+      {/* Who sent it; the branch and its contact are in the branch card above. */}
+      {request.contact_name || request.contact_phone ? (
+        <ThemedView style={styles.sentBy}>
+          <ThemedText type="small" themeColor="textSecondary">Sent by</ThemedText>
+          {request.contact_name ? <ThemedText type="small">{request.contact_name}</ThemedText> : null}
           {request.contact_phone ? (
             <TouchableOpacity onPress={() => Linking.openURL(`tel:${request.contact_phone}`)}>
-              <ThemedText themeColor="primary">{request.contact_phone}</ThemedText>
+              <ThemedText type="small" themeColor="primary">{request.contact_phone}</ThemedText>
             </TouchableOpacity>
           ) : null}
         </ThemedView>
@@ -43,7 +40,7 @@ export function CustomerRequest({ request, directionsUrl }: { request: FromReque
           <ThemedText>{request.message}</ThemedText>
         </>
       ) : null}
-      {request.machines.map((machine, index) => (
+      {hideMachines ? null : request.machines.map((machine, index) => (
         <ThemedView key={index} style={[styles.card, { borderColor: theme.backgroundSelected }]}>
           <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
           <ThemedText type="small" themeColor={machine.urgent ? 'danger' : undefined}>{machine.problem}</ThemedText>
@@ -97,6 +94,7 @@ const styles = StyleSheet.create({
   // One card each: the contact, and every machine with its own photos.
   card: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, gap: 2, backgroundColor: 'transparent' },
   subTitle: { marginTop: Spacing.two },
+  sentBy: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one, backgroundColor: 'transparent' },
   mediaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.one, backgroundColor: 'transparent' },
   mediaTile: { width: 96, gap: 2 },
   mediaImage: { width: 96, height: 96, borderRadius: Spacing.two },

@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useCallback, useState, type ComponentProps } from 'react';
+import { useCallback, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
@@ -7,10 +7,13 @@ import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
-import { fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
+import { confirmTaskPhotos, fetchMyTaskDetail, markShipped, sendTaskAction, uploadTaskAttachment } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
 import { TaskMessages } from '@/components/task-messages';
 import { confirmAction, confirmStep, STEP_LABELS } from '@/confirm';
+import { BranchCard } from '@/components/branch-card';
+import { MachineCard } from '@/components/machine-card';
+import type { PhotoKind } from '@/components/photo-slots';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -22,15 +25,7 @@ import { when } from '@/task-time';
 import { alert, locale, t } from '@/i18n';
 
 
-type IconName = ComponentProps<typeof Ionicons>['name'];
 
-// The four kinds of photo, each with its own icon.
-const PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; label: string; icon: IconName }[] = [
-  { purpose: 'fault', label: 'Fault', icon: 'warning-outline' },
-  { purpose: 'serial_plate', label: 'Serial plate', icon: 'barcode-outline' },
-  { purpose: 'before', label: 'Before', icon: 'camera-outline' },
-  { purpose: 'after', label: 'After', icon: 'checkmark-circle-outline' },
-];
 
 
 export default function TaskDetailScreen() {
@@ -41,6 +36,8 @@ export default function TaskDetailScreen() {
   const theme = useTheme();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  // The machine whose photo is uploading (its card shows the spinner).
+  const [uploadingFor, setUploadingFor] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   const [courier, setCourier] = useState('');
@@ -98,33 +95,51 @@ export default function TaskDetailScreen() {
     }
   };
 
-  const handleAddPhoto = async (purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
+  // A photo for one machine's card: its serial plate, before (the fault) or after.
+  const handleAddPhoto = async (assetId: number, purpose: PhotoKind['purpose']) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       alert('Permission required', 'Access to the photo library is required to attach a photo.');
       return;
     }
+    // Before (the fault) can be videos too; the serial plate is one photo (a new one replaces it);
+    // before and after: several at once.
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 0.8,
+      mediaTypes: purpose === 'before' ? ['images', 'videos'] : ['images'],
+      allowsMultipleSelection: purpose !== 'serial_plate', selectionLimit: 5, quality: 0.8,
     });
-    if (result.canceled || !result.assets[0]) {
+    if (result.canceled || !result.assets.length) {
       return;
     }
-    const asset = result.assets[0];
-    setIsBusy(true);
+    setUploadingFor(assetId);
     setError('');
     try {
-      await uploadTaskAttachment(
-        Number(id), asset.uri, asset.fileName ?? 'upload.jpg', asset.mimeType ?? 'image/jpeg', purpose,
-      );
+      for (const asset of result.assets) {
+        await uploadTaskAttachment(
+          Number(id), asset.uri, asset.fileName ?? 'upload.jpg', asset.mimeType ?? 'image/jpeg', purpose, assetId,
+        );
+      }
       await load();
     } catch (err) {
       // The phone's own reason too (no connection, a file it couldn't read…), so it can be fixed.
       console.warn('Photo upload failed (file-system upload)', err);
       setError(err instanceof ApiRequestError ? err.message : t('Upload failed. Please try again. ({error})', { error: String(err) }));
     } finally {
-      setIsBusy(false);
+      setUploadingFor(null);
+    }
+  };
+
+  // "Use this" / "Use these": the customer's photos of this machine as its Serial or Before.
+  const handleUseCustomerPhoto = async (assetId: number, slot: 'serial_plate' | 'before') => {
+    setUploadingFor(assetId);
+    setError('');
+    try {
+      await confirmTaskPhotos(Number(id), assetId, slot);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Not saved. Please try again.');
+    } finally {
+      setUploadingFor(null);
     }
   };
 
@@ -135,6 +150,9 @@ export default function TaskDetailScreen() {
       </ThemedView>
     );
   }
+
+  // Videos and other files; photos show on their machine cards.
+  const files = task.attachments.filter((item) => item.media_type !== 'photo');
 
   return (
     <ThemedView style={styles.container}>
@@ -147,10 +165,8 @@ export default function TaskDetailScreen() {
           <ThemedText type="title" style={styles.taskNumber}>
             {task.task_number}
           </ThemedText>
-          <ThemedText type="subtitle" style={styles.customer}>
-            {task.customer_name}
-          </ThemedText>
-          <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          {/* The branch first, set apart: who and where — as on the report and approving. */}
+          <BranchCard task={task} />
           {/* A supervisor (or above) plans from the task's full screen: time, team, edit, actions. */}
           {canPlan ? (
             <TouchableOpacity
@@ -164,29 +180,6 @@ export default function TaskDetailScreen() {
           <ThemedView style={styles.whenRow}>
             <Ionicons name="time-outline" size={18} color={theme.text} />
             <ThemedText type="smallBold">{when(task)}</ThemedText>
-          </ThemedView>
-          {/* Get there, and call the site. */}
-          <ThemedView style={styles.quickRow}>
-            {task.directions_url ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(task.directions_url!)}
-              >
-                <Ionicons name="navigate-outline" size={18} color={theme.primary} />
-                <ThemedText themeColor="primary">Directions</ThemedText>
-              </TouchableOpacity>
-            ) : null}
-            {task.site_contact_phone ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
-              >
-                <Ionicons name="call-outline" size={18} color={theme.primary} />
-                <ThemedText themeColor="primary" numberOfLines={1}>
-                  Call {task.site_contact_name || task.site_contact_phone}
-                </ThemedText>
-              </TouchableOpacity>
-            ) : null}
           </ThemedView>
           {isOffline ? (
             <ThemedText themeColor="danger" type="small">
@@ -203,19 +196,9 @@ export default function TaskDetailScreen() {
             {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
           </ThemedView>
 
+          {/* Its machines aren't listed here: each is on its own card below, with the photos. */}
           {task.from_request ? (
-            <CustomerRequest request={task.from_request} directionsUrl={task.directions_url} />
-          ) : task.machines && task.machines.length > 0 ? (
-            <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">Machines the customer reported</ThemedText>
-              {task.machines.map((machine, index) => (
-                <ThemedView key={index} style={[styles.machine, { borderColor: theme.backgroundSelected }]}>
-                  <ThemedText type="smallBold">{machine.name}{machine.serial ? ` · ${machine.serial}` : ''}</ThemedText>
-                  <ThemedText type="small">{machine.problem}</ThemedText>
-                  {machine.description ? <ThemedText type="small" themeColor="textSecondary">{machine.description}</ThemedText> : null}
-                </ThemedView>
-              ))}
-            </ThemedView>
+            <CustomerRequest request={task.from_request} hideMachines={(task.machine_cards ?? []).length > 0} />
           ) : task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
@@ -323,26 +306,33 @@ export default function TaskDetailScreen() {
           ) : null}
 
           <ThemedView style={styles.section}>
-            <ThemedText type="smallBold">Add a photo</ThemedText>
-            <ThemedView style={styles.photoRow}>
-              {PHOTO_KINDS.map(({ purpose, label, icon }) => (
-                <TouchableOpacity
-                  key={purpose}
-                  style={[styles.photoButton, { borderColor: theme.backgroundSelected }]}
-                  onPress={() => handleAddPhoto(purpose)}
-                  disabled={isBusy}
-                >
-                  <Ionicons name={icon} size={22} color={theme.text} />
-                  <ThemedText type="small">{label}</ThemedText>
-                </TouchableOpacity>
-              ))}
-            </ThemedView>
+            <ThemedText type="smallBold">Machines</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Each machine&apos;s photos: serial plate, before, after. They are on the report too.
+            </ThemedText>
+            {(task.machine_cards ?? []).map((card, index) => (
+              <MachineCard
+                key={card.asset_id ?? `new-${index}`} card={card}
+                reported={task.from_request?.machines.find(
+                  (machine) => machine.ticket_machine_id && machine.ticket_machine_id === card.ticket_machine_id,
+                )}
+                onAdd={card.asset_id ? (purpose) => handleAddPhoto(card.asset_id!, purpose) : undefined}
+                onUse={card.asset_id ? (slot) => handleUseCustomerPhoto(card.asset_id!, slot) : undefined}
+                isBusy={uploadingFor === card.asset_id} disabled={uploadingFor !== null}
+              />
+            ))}
+            {!(task.machine_cards ?? []).length ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                No machines on this task yet: add them in the report, then their photos here.
+              </ThemedText>
+            ) : null}
           </ThemedView>
 
-          {task.attachments.length > 0 ? (
+          {/* Videos and other files; photos are on the machine cards. */}
+          {files.length > 0 ? (
             <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">Attachments ({task.attachments.length})</ThemedText>
-              {task.attachments.map((attachment) => (
+              <ThemedText type="smallBold">{t('Files ({count})', { count: files.length })}</ThemedText>
+              {files.map((attachment) => (
                 <ThemedText key={attachment.id} themeColor="textSecondary" type="small">
                   {attachment.purpose_display} — {attachment.media_type_display}
                   {attachment.asset_name ? ` · ${attachment.asset_name}` : ''}

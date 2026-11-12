@@ -20,8 +20,9 @@ type Photo = { uri: string; name: string; type: string };
 
 /**
  * Profile > Edit profile — the website's My profile: photo (camera or
- * gallery), phone, email and language. Role, country and employment are
- * set by the office.
+ * gallery), phone, email and language. A new email asks for the current
+ * password and changes once the link sent there is opened. Role, country
+ * and employment are set by the office.
  */
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -29,6 +30,8 @@ export default function EditProfileScreen() {
   const { me, profileSaved } = useSession();
   const [phone, setPhone] = useState(me?.phone ?? '');
   const [email, setEmail] = useState(me?.email ?? '');
+  const [password, setPassword] = useState('');
+  const emailChanged = email.trim().toLowerCase() !== (me?.email ?? '').toLowerCase();
   const [language, setLanguage] = useState(me?.language ?? 'en');
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -58,7 +61,14 @@ export default function EditProfileScreen() {
     setIsBusy(true);
     setErrors({});
     try {
-      profileSaved(await updateMe({ phone: phone.trim(), email: email.trim(), language }, photo ?? undefined));
+      const { notice, ...profile } = await updateMe(
+        { phone: phone.trim(), email: email.trim(), language, ...(emailChanged ? { password } : {}) },
+        photo ?? undefined,
+      );
+      profileSaved(profile);
+      if (notice) {
+        alert('Check your email', notice);
+      }
       router.navigate('/profile');
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 400 && err.body && typeof err.body === 'object') {
@@ -117,6 +127,19 @@ export default function EditProfileScreen() {
               keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
             />
             {errors.email ? <ThemedText type="small" themeColor="danger">{errors.email}</ThemedText> : null}
+            {emailChanged ? (
+              <>
+                <ThemedText type="smallBold">Your current password</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  We send a confirmation link to the new address; your email changes once you open it.
+                </ThemedText>
+                <TextInput
+                  style={inputStyle} value={password} onChangeText={setPassword}
+                  secureTextEntry autoCapitalize="none" autoCorrect={false}
+                />
+                {errors.password ? <ThemedText type="small" themeColor="danger">{errors.password}</ThemedText> : null}
+              </>
+            ) : null}
 
             <ThemedText type="smallBold">Language</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">

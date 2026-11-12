@@ -746,13 +746,63 @@ class TaskAttachmentUploadForm(forms.Form):
     # upload.
     purpose = forms.ChoiceField(
         choices=[
-            (TaskAttachment.Purpose.FAULT, _('Fault')),
             (TaskAttachment.Purpose.SERIAL_PLATE, _('Serial plate')),
             (TaskAttachment.Purpose.BEFORE, _('Before')),
             (TaskAttachment.Purpose.AFTER, _('After')),
         ],
         label=_('What is this?'),
     )
+
+    asset = forms.ModelChoiceField(
+        queryset=Asset.objects.none(), required=False, label=_('Which machine?'), empty_label=_('The branch'),
+    )
+
+    def __init__(self, data=None, *args, site=None, **kwargs):
+        # An older app, or a photo queued offline, still sends "fault": it's a Before photo now.
+        if data is not None and data.get('purpose') == 'fault':
+            data = data.copy()
+            data['purpose'] = TaskAttachment.Purpose.BEFORE
+        super().__init__(data, *args, **kwargs)
+        # A machine at this task's branch, or the branch as a whole.
+        if site is not None:
+            self.fields['asset'].queryset = site.assets.select_related('brand').order_by('model_name')
+        self.fields['asset'].label_from_instance = lambda asset: ' '.join(
+            part for part in (asset.brand.name if asset.brand_id else '', asset.model_name, asset.serial_no) if part
+        )
+        self.order_fields(['asset', 'purpose', 'file'])
+
+    def clean(self):
+        from .customer_report import file_kind
+
+        cleaned = super().clean()
+        # The branch has no serial plate: that photo goes with its machine.
+        if cleaned.get('purpose') == TaskAttachment.Purpose.SERIAL_PLATE and not cleaned.get('asset'):
+            self.add_error('asset', _('A serial plate photo goes with its machine. Choose which one.'))
+        file = cleaned.get('file')
+        if file and cleaned.get('purpose') in (TaskAttachment.Purpose.SERIAL_PLATE, TaskAttachment.Purpose.AFTER) \
+                and file_kind(file) != 'image':
+            self.add_error('file', _('The serial plate and after need a photo. A video can only show the fault (before).'))
+        return cleaned
+
+
+class RegisterMachineForm(forms.Form):
+    """A machine the technician adds during a visit — or one the customer
+    reported that isn't on their list — registered at once, so its serial
+    plate, before and after can be taken before the report
+    (tasks.views.register_task_machine)."""
+
+    brand = forms.ModelChoiceField(queryset=Brand.objects.filter(is_active=True).order_by('name'), label=_('Brand'))
+    model_name = forms.CharField(max_length=150, label=_('Model'))
+    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    no_serial = forms.BooleanField(required=False, label=_('No readable serial plate'))
+    code = forms.CharField(required=False, max_length=100, label=_('Code'), help_text=_('optional — e.g. BENCH-01'))
+    ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not (cleaned.get('serial_no') or '').strip() and not cleaned.get('no_serial'):
+            self.add_error('serial_no', _('Type the serial number from the plate, or tick that it has none.'))
+        return cleaned
 
     def clean_file(self):
         file = self.cleaned_data['file']
@@ -996,42 +1046,28 @@ class TechnicianEditForm(CustomRoleChoiceMixin, PhotoSizeMixin, forms.ModelForm)
         self.apply_custom_role(cleaned)
         return cleaned
 
-    def save(self, commit=True):
-        technician = super().save(commit=commit)
-        if commit and technician.user_id and 'email' in self.cleaned_data:
-            technician.user.email = self.cleaned_data['email']
-            technician.user.save(update_fields=['email'])
-        return technician
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            return ''  # a login with its own sign-in name may have none
+        taken = get_user_model().objects.filter(Q(username__iexact=email) | Q(email__iexact=email))
+        if taken.exclude(pk=self.instance.user_id).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
 
 
 class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
-    """A technician editing their own photo, language, phone, and email —
-    their own contact details, never anyone else's decision to make. Role,
-    country, and employment stay office-side changes.
-
-    Email lives on the linked auth user, not Technician, so it's a plain
-    field here rather than a Meta field, kept in sync with request.user
-    manually in save().
+    """Someone editing their own photo, language and phone — their own
+    details, never anyone else's decision to make. Role, country and
+    employment stay office-side changes. Their sign-in email has its own
+    form (SignInEmailChangeForm): the current password, then a link sent
+    to the new address.
     """
-
-    email = forms.EmailField(required=False, label=_('Email'))
 
     class Meta:
         model = Technician
         fields = ['photo', 'language', 'phone']
         widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields['email'].initial = self.instance.user.email
-
-    def save(self, commit=True):
-        technician = super().save(commit=commit)
-        if commit:
-            technician.user.email = self.cleaned_data['email']
-            technician.user.save(update_fields=['email'])
-        return technician
 
 
 class BlockTaskForm(forms.Form):
@@ -1582,8 +1618,8 @@ class TicketMachineForm(forms.Form):
     # The number itself is required (a machine is tracked by it); the photo
     # helps the technician check it.
     serial_photo = forms.FileField(
-        required=False, label=_('Photo of the sticker (optional)'),
-        help_text=_('A clear photo helps our team confirm the details. Take a photo or upload one.'),
+        required=False, label=_('Photo of the serial plate'),
+        help_text=_('The sticker with the serial number. Take a photo or upload one.'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
         validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
@@ -1601,7 +1637,7 @@ class TicketMachineForm(forms.Form):
         }),
     )
     files = MultipleFileField(
-        required=False, label=_('Photos or a short video'),
+        required=False, label=_('Photos or a short video of the problem'),
         # What helps the team most, so they arrive knowing the job (tasks.customer_report).
         help_text=_('What helps us most: a photo of the problem, a photo of the serial plate, and if it makes a '
                     'noise, a short video (up to 30 seconds). Up to 25 MB each.'),
@@ -1665,8 +1701,8 @@ class TicketMachineForm(forms.Form):
             typed = cleaned.get('model_name') or (cleaned.get('serial_no') or '').strip()
             which = 'list' if cleaned.get('asset') else 'new' if typed else ('list' if self.has_machines else 'new')
         if which == 'list':
-            # Only the picked machine counts — anything typed for a new one is dropped.
-            cleaned['model_name'], cleaned['serial_no'], cleaned['serial_photo'] = '', '', None
+            # Only the picked machine counts — anything typed for a new one is dropped (not its plate photo).
+            cleaned['model_name'], cleaned['serial_no'] = '', ''
             if not cleaned.get('asset'):
                 self.add_error('asset', _('Please choose the machine from your list.'))
         else:
@@ -1684,8 +1720,15 @@ class TicketMachineForm(forms.Form):
             })
         if self.for_parts:
             cleaned['problem'] = TicketMachine.Problem.PARTS
-        elif not cleaned.get('problem'):
-            self.add_error('problem', _('Please select the problem.'))
+        else:
+            if not cleaned.get('problem'):
+                self.add_error('problem', _('Please select the problem.'))
+            # A repair: the serial plate and the fault, so the technician arrives knowing the job
+            # (and confirms these instead of taking them again: tasks.views.confirm_customer_files).
+            if not cleaned.get('serial_photo'):
+                self.add_error('serial_photo', _('Please add a photo of the serial plate (the sticker with the serial number).'))
+            if not cleaned.get('files'):
+                self.add_error('files', _('Please add a photo or a short video of the problem.'))
         return cleaned
 
 

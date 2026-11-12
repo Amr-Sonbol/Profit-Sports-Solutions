@@ -87,7 +87,7 @@ class TaskDetailTests(TaskTestCase):
         )
         TaskAttachment.objects.create(
             task=self.task, storage_kind=TaskAttachment.StorageKind.LINK, url='https://example.com/photo.jpg',
-            media_type=TaskAttachment.MediaType.PHOTO, purpose=TaskAttachment.Purpose.FAULT,
+            media_type=TaskAttachment.MediaType.PHOTO, purpose=TaskAttachment.Purpose.BEFORE,
             source=TaskAttachment.Source.TECHNICIAN, uploaded_by=self.tech_user, uploaded_at=timezone.now(),
         )
         TaskAsset.objects.create(task=self.task, asset=self.asset, outcome=TaskAsset.Outcome.REPAIRED)
@@ -4435,7 +4435,8 @@ class MyProfileTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['profile_form'].errors.get('photo'))
 
-    def test_technician_updates_own_phone_and_email(self):
+    def test_technician_updates_own_phone_but_not_the_email_here(self):
+        # The email changes only through its confirmation link (StaffAccountSettingsTests).
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post('/tasks/my-profile/', {
             'action': 'save_profile', 'language': Technician.Language.EN,
@@ -4446,7 +4447,7 @@ class MyProfileTests(TaskTestCase):
         self.technician.refresh_from_db()
         self.tech_user.refresh_from_db()
         self.assertEqual(self.technician.phone, '0501234567')
-        self.assertEqual(self.tech_user.email, 'tarek@example.com')
+        self.assertEqual(self.tech_user.email, '')
 
     def test_get_prefills_email_from_the_linked_user(self):
         self.tech_user.email = 'tarek@example.com'
@@ -4454,7 +4455,7 @@ class MyProfileTests(TaskTestCase):
 
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-profile/')
-        self.assertEqual(response.context['profile_form'].fields['email'].initial, 'tarek@example.com')
+        self.assertContains(response, 'tarek@example.com')  # shown in "Sign-in email"
 
     def test_technician_changes_own_password(self):
         Token.objects.create(user=self.tech_user)
@@ -5914,8 +5915,11 @@ class SetLanguageTests(TaskTestCase):
         response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/customers/portal/'})
         self.assertRedirects(response, '/customers/portal/', fetch_redirect_response=False)
 
+        # Their own, not their whole company's.
+        portal_user.portal_user.refresh_from_db()
+        self.assertEqual(portal_user.portal_user.language, 'ar')
         self.customer.refresh_from_db()
-        self.assertEqual(self.customer.language, 'ar')
+        self.assertEqual(self.customer.language, 'en')
 
     def test_unsafe_next_url_falls_back_to_root(self):
         response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': 'https://evil.example/'})
@@ -6084,12 +6088,14 @@ class MyTaskDetailTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         upload = SimpleUploadedFile('serial.jpg', REAL_JPEG, content_type='image/jpeg')
 
+        # A serial plate photo goes with its machine.
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE, 'asset': self.asset.pk,
         })
         self.assertEqual(response.status_code, 302)
 
         attachment = self.task.attachments.get()
+        self.assertEqual(attachment.asset, self.asset)
         self.assertEqual(attachment.media_type, TaskAttachment.MediaType.PHOTO)
         self.assertEqual(attachment.purpose, TaskAttachment.Purpose.SERIAL_PLATE)
         self.assertEqual(attachment.storage_kind, TaskAttachment.StorageKind.FILE)
@@ -6120,7 +6126,7 @@ class MyTaskDetailTests(TaskTestCase):
         )
 
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.task.attachments.count(), 0)
@@ -6133,10 +6139,42 @@ class MyTaskDetailTests(TaskTestCase):
         )
 
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.task.attachments.count(), 0)
+
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_each_machine_card_has_serial_before_after_and_the_same_cards_show_when_approving(self):
+        from tasks.models import TaskAsset
+        from tasks.views import visit_photo_cards
+        TaskAsset.objects.create(task=self.task, asset=self.asset)
+        self.client.login(username='tech1', password='pass12345')
+        photo = lambda: SimpleUploadedFile('p.jpg', REAL_JPEG, content_type='image/jpeg')
+        # A serial plate photo goes with its machine, never the branch.
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': photo(), 'purpose': TaskAttachment.Purpose.SERIAL_PLATE, 'asset': '',
+        })
+        self.assertIn('asset', response.context['upload_form'].errors)
+        self.assertEqual(self.task.attachments.count(), 0)
+        page = self.client.get(self.url)
+        self.assertContains(page, 'class="branch-card"')
+        self.assertContains(page, 'data-photo-slot-input', count=3)  # + Serial plate, + Before, + After
+        for purpose in (TaskAttachment.Purpose.SERIAL_PLATE, TaskAttachment.Purpose.BEFORE):
+            self.client.post(self.url, {'action': 'upload', 'file': photo(), 'purpose': purpose, 'asset': self.asset.pk})
+        (card,) = visit_photo_cards(self.task, self.task.attachments.all())['cards']
+        self.assertEqual([len(column['photos']) for column in card['columns']], [1, 1, 0])
+        # The app gets the same card.
+        from api.serializers import TaskDetailSerializer
+        (app_card,) = TaskDetailSerializer(self.task).data['machine_cards']
+        self.assertEqual(([photo['purpose'] for photo in app_card['photos']], app_card['asset_id']),
+                         (['serial_plate', 'before'], self.asset.pk))
+        # Approving (the staff page): the same card, read-only — the missing After said.
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertContains(page, 'No photo after')
+        self.assertNotContains(page, 'data-photo-slot')
 
 
 class MyReportFormTests(TaskTestCase):
@@ -6146,6 +6184,11 @@ class MyReportFormTests(TaskTestCase):
 
     def setUp(self):
         super().setUp()
+        # About the report's other rules: the machines' photos have their own tests
+        # (test_a_report_needs_every_machines_three_photos, api CustomerPhotosOnTheMachineCardTests).
+        self._photos = patch('tasks.views.report_machine_photo_gaps', return_value=[])
+        self._photos.start()
+        self.addCleanup(self._photos.stop)
         self.task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
@@ -6455,6 +6498,23 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(task_asset.asset, self.asset)
         self.assertEqual(task_asset.outcome, TaskAsset.Outcome.REPAIRED)
         self.assertEqual(Asset.objects.count(), 1)
+
+    def test_a_report_needs_every_machines_three_photos(self):
+        from api.tests import give_machine_photos
+        self._photos.stop()  # the real rule
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['existing-0-asset'] = str(self.asset.pk)
+        payload['existing-0-outcome'] = TaskAsset.Outcome.REPAIRED
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        (gap,) = response.context['report_form'].non_field_errors()  # in the technician's Arabic
+        self.assertIn(self.asset.model_name, gap)
+        self.assertFalse(TaskAsset.objects.filter(task=self.task).exists())
+        give_machine_photos(self.task, self.asset, self.tech_user)
+        self.assertEqual(self.client.post(self.url, payload).status_code, 302)
+        self.assertTrue(TaskAsset.objects.filter(task=self.task).exists())
+        self._photos.start()  # as the cleanup expects
 
     def test_recording_a_machine_the_customer_added_confirms_it(self):
         self.asset.status = Asset.Status.PENDING
@@ -9005,6 +9065,11 @@ class TicketMachineFindingsTests(TaskTestCase):
 
     def setUp(self):
         super().setUp()
+        # About the report's other rules: the machines' photos have their own tests
+        # (test_a_report_needs_every_machines_three_photos, api CustomerPhotosOnTheMachineCardTests).
+        self._photos = patch('tasks.views.report_machine_photo_gaps', return_value=[])
+        self._photos.start()
+        self.addCleanup(self._photos.stop)
         self.task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PORTAL, billing_type=Task.BillingType.CHARGEABLE,
@@ -9405,10 +9470,19 @@ class EquipmentChainTests(TaskTestCase):
     def test_loaded_machines_go_to_an_installation_in_another_country(self):
         self.client.login(username='manager1', password='pass12345')
         self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
-        response = self.client.post(f'/tasks/{self.loading.pk}/', {
-            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk],
-        })
+        sara = Technician.objects.get(user=self.supervisor_user)  # in the UAE
+        saudi_supervisor = Technician.objects.create(
+            user=User.objects.create_user('ksa_super', password='x'), country=self.saudi, full_name='Khalid Super',
+            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        send = {'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk]}
+        # Another country: someone there must own it — not nobody, not someone from elsewhere.
+        for supervisor in ('', saudi_supervisor.pk):
+            self.client.post(f'/tasks/{self.loading.pk}/', {**send, 'supervisor': supervisor})
+            self.assertFalse(Task.objects.filter(previous_task=self.loading).exists())
+        response = self.client.post(f'/tasks/{self.loading.pk}/', {**send, 'supervisor': sara.pk})
         installation = Task.objects.get(previous_task=self.loading)
+        self.assertEqual(installation.responsible_supervisor, sara)
         self.assertRedirects(response, f'/tasks/{installation.pk}/', fetch_redirect_response=False)
         self.assertEqual(installation.site, self.site)  # the Dubai gym
         self.assertTrue(installation.task_number.startswith('AE-'))
@@ -9945,3 +10019,110 @@ class CustomRoleTests(TaskTestCase):
         self.client.post('/tasks/roles/', {'action': 'delete_role', 'role': self.coo_role.pk})
         self.assertFalse(type(self.coo_role).objects.filter(pk=self.coo_role.pk).exists())
         self.assertFalse(RolePermission.objects.filter(role=self.coo_role.key).exists())
+
+
+class StaffAccountSettingsTests(TaskTestCase):
+    """My profile: a new email is confirmed by a link sent there, the old
+    address is told, and the sign-in name follows; signing out of the app
+    on every phone (website) or the other phones (app)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tech_user.username = self.tech_user.email = 'tech1@example.com'
+        self.tech_user.save()
+        self.client.login(username='tech1@example.com', password='pass12345')
+
+    def link_in(self, message):
+        import re
+        return re.search(r'http://testserver(/tasks/my-profile/email/[^/\s]+/)', message.body).group(1)
+
+    def test_a_new_email_changes_only_once_its_link_is_opened(self):
+        from django.contrib.admin.models import LogEntry
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'wrong',
+        })
+        self.assertIn('password', response.context['email_form'].errors)
+        self.assertEqual(len(mail.outbox), 0)
+
+        self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'pass12345',
+        })
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')  # not yet
+        self.assertEqual(mail.outbox[-1].to, ['new.tech@example.com'])
+        link = self.link_in(mail.outbox[-1])
+
+        self.client.logout()  # works signed out too
+        self.client.get(link)
+        self.tech_user.refresh_from_db()
+        self.assertEqual((self.tech_user.email, self.tech_user.username), ('new.tech@example.com', 'new.tech@example.com'))
+        self.assertEqual(mail.outbox[-1].to, ['tech1@example.com'])  # the old address is told
+        self.assertIn('new.tech@example.com', mail.outbox[-1].body)
+        self.assertIn('Staff email changed from tech1@example.com to new.tech@example.com',
+                      LogEntry.objects.latest('pk').change_message)
+        # Once only.
+        self.client.get(link)
+        self.assertTrue(self.client.login(username='new.tech@example.com', password='pass12345'))
+        self.assertEqual(User.objects.filter(email='new.tech@example.com').count(), 1)
+
+    def test_a_link_is_refused_once_the_email_is_taken(self):
+        self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'pass12345',
+        })
+        link = self.link_in(mail.outbox[-1])
+        User.objects.create_user('new.tech@example.com', email='new.tech@example.com', password='x')
+        self.client.get(link)
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')
+
+    def test_the_app_needs_the_password_for_a_new_email(self):
+        token = Token.objects.create(user=self.tech_user)
+        auth = {'HTTP_AUTHORIZATION': f'Token {token.key}'}
+        response = self.client.post('/api/me/', {'email': 'new.tech@example.com', 'phone': '0501'}, **auth)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('password', response.json())
+        self.technician.refresh_from_db()
+        self.assertNotEqual(self.technician.phone, '0501')  # nothing saved
+        response = self.client.post('/api/me/', {
+            'email': 'new.tech@example.com', 'password': 'pass12345', 'phone': '0501',
+        }, **auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('new.tech@example.com', response.json()['notice'])
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')
+        self.assertEqual(mail.outbox[-1].to, ['new.tech@example.com'])
+
+    def test_signing_out_of_the_phones(self):
+        token = Token.objects.create(user=self.tech_user)
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[this]', created_at=timezone.now())
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[lost]', created_at=timezone.now())
+        # From the app: the others go; this phone gets a fresh sign-in and keeps its notifications.
+        response = self.client.post('/api/me/sign-out-others/', {'push_token': 'ExponentPushToken[this]'},
+                                    HTTP_AUTHORIZATION=f'Token {token.key}')
+        fresh = response.json()['token']
+        self.assertNotEqual(fresh, token.key)
+        self.assertFalse(Token.objects.filter(key=token.key).exists())
+        self.assertEqual(list(PushDevice.objects.values_list('token', flat=True)), ['ExponentPushToken[this]'])
+        # From the website: every phone.
+        self.client.post('/tasks/my-profile/', {'action': 'sign_out_phones'})
+        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertFalse(PushDevice.objects.exists())
+
+    def test_a_manager_cannot_give_someone_an_email_already_in_use(self):
+        manager_user = User.objects.create_user('manager9', password='pass12345')
+        Technician.objects.create(user=manager_user, country=self.country, full_name='Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        User.objects.create_user('taken@example.com', email='taken@example.com', password='x')
+        self.client.login(username='manager9', password='pass12345')
+        page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        form = page.context['form']
+        data = {name: ('' if form[name].value() is None else form[name].value()) for name in form.fields if name != 'photo'}
+        data.update({'email': 'taken@example.com', 'has_transport': '', 'can_carry_large': ''})
+        response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', data)
+        self.assertContains(response, 'An account with this email address already exists.')
+        data['email'] = 'tech.renamed@example.com'
+        self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', data)
+        self.tech_user.refresh_from_db()
+        self.assertEqual((self.tech_user.email, self.tech_user.username),
+                         ('tech.renamed@example.com', 'tech.renamed@example.com'))
+        self.assertEqual(mail.outbox[-1].to, ['tech1@example.com'])

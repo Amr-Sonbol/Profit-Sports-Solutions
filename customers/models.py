@@ -30,7 +30,7 @@ class Customer(models.Model):
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
-        help_text=_('for the portal login, if this customer has one'),
+        help_text=_("the portal's language for anyone at this customer who hasn't chosen their own"),
     )
     # Their portal in their own gym's color (buttons, highlights); grey until they choose.
     brand_color = models.CharField(
@@ -155,6 +155,11 @@ class PortalUser(models.Model):
         _('invited at'), null=True, blank=True,
         help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
     )
+    # Their own (Settings → My account, or the header's EN/AR); empty: the company's.
+    language = models.CharField(
+        _('language'), max_length=2, choices=Technician.Language.choices, blank=True,
+        help_text=_("the language the portal shows in for this person; empty: the customer's"),
+    )
 
     class Meta:
         verbose_name = _('portal user')
@@ -167,6 +172,10 @@ class PortalUser(models.Model):
     @property
     def name(self):
         return self.user.first_name or self.user.email or self.user.username
+
+    @property
+    def portal_language(self):
+        return self.language or self.customer.language
 
 
 def portal_customer(user):
@@ -247,6 +256,14 @@ class Site(models.Model):
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
+
+    @property
+    def directions_url(self):
+        """Google Maps to the branch: its pin if it has one, else its name and address."""
+        from urllib.parse import quote
+
+        place = f'{self.latitude},{self.longitude}' if self.latitude is not None else f'{self.name}, {self.address}'
+        return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
 
     def save(self, *args, **kwargs):
         if self.warranty_start and not self.warranty_until:
@@ -357,6 +374,13 @@ class Asset(models.Model):
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.ACTIVE)
     # The customer's photo of the sticker, when they added it themselves — what the office checks it against.
     sticker_photo = models.FileField(_('sticker photo'), upload_to=_asset_sticker_path, null=True, blank=True)
+    # A machine the technician added during a visit, registered then — so its photos can be
+    # taken before the report; pending until the report records it.
+    registered_on_task = models.ForeignKey(
+        'tasks.Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='registered_assets',
+        verbose_name=_('registered on task'),
+        help_text=_('the visit where the technician added it, before its report'),
+    )
 
     class Meta:
         verbose_name = _('asset')
