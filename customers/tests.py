@@ -1614,6 +1614,28 @@ class CustomerAccountsTests(CustomerTestCase):
                                     'email': 'new@example.com'})
         user.refresh_from_db()
         self.assertEqual((user.username, user.email), ('new@example.com', 'new@example.com'))
+        # The old address is told, in case it wasn't them who asked.
+        self.assertEqual(mail.outbox[-1].to, ['old@example.com'])
+
+    def test_only_the_admin_sets_a_password_or_changes_a_login_email(self):
+        # Whoever else manages portal logins (here a Support Manager) sends links to the person's own email.
+        from people.models import RolePermission
+        user = User.objects.create_user('old@example.com', email='old@example.com', password='pass12345')
+        person = PortalUser.objects.create(customer=self.customer, user=user)
+        support = User.objects.create_user('support9', password='pass12345')
+        Technician.objects.create(user=support, country=self.country, full_name='Sara Support', language='en',
+                                  role=Technician.Role.SUPPORT_MANAGER, employment_type='staff')
+        RolePermission.objects.update_or_create(
+            role=Technician.Role.SUPPORT_MANAGER, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS,
+            defaults={'allowed': True},
+        )
+        self.client.login(username='support9', password='pass12345')
+        self.assertEqual(self.client.post(self.url, {'action': 'temporary_password', 'person': person.pk}).status_code, 403)
+        self.assertEqual(self.client.post(self.url, {'action': 'change_email', 'person': person.pk,
+                                                     'email': 'thief@example.com'}).status_code, 403)
+        user.refresh_from_db()
+        self.assertEqual(user.email, 'old@example.com')
+        self.assertTrue(user.check_password('pass12345'))
 
 
 class PortalPeopleTests(CustomerTestCase):

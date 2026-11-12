@@ -75,6 +75,12 @@ undone for it. Likewise a customer admin role who manages their own people.
   customer's day-before reminder of their visit, which nothing sends until then.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.
+- **Two-step sign-in for the Admin** (added 2026-11-12), and ideally the
+  manager tier: a code from an authenticator app after the password. Only the
+  Admin sets someone's password or changes a login email
+  (`people.permissions.can_set_password`), which makes the Admin's login the
+  one most worth stealing. (`django-otp` adds it to the website's sign-in; the
+  app's sign-in would ask for the code too.)
 - **Customer emails from your own domain** (added 2026-11-12). Every email to a
   customer is signed by Customer Service and its replies go to
   `service@profitsports.solutions` (`CUSTOMER_SERVICE_EMAIL`). On the live server,

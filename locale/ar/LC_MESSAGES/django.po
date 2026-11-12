@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 20:39+0000\n"
+"POT-Creation-Date: 2026-11-12 21:43+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -559,6 +559,9 @@ msgstr "عميل في %(country)s. عند الحفظ تعود إلى التذك�
 msgid "A customer named %(name)s already exists in this country. Add a branch to it instead."
 msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقاً. أضف فرعاً له بدلاً من ذلك."
 
+msgid "A forgotten password, a lost phone or a locked login is fixed on Staff accounts."
+msgstr "كلمة المرور المنسية أو الهاتف المفقود أو تسجيل الدخول المقفل يُعالَج من صفحة حسابات الموظفين."
+
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
 
@@ -573,10 +576,6 @@ msgstr "زيارة صيانة"
 
 msgid "A manager fixed this time: ask to move the visit instead."
 msgstr "حدّد المدير هذا الموعد: اطلب نقل الزيارة بدلاً من ذلك."
-
-#, python-format
-msgid "A manager has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
-msgstr "قام أحد المديرين بتعيين كلمة مرور مؤقتة لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s). سيُطلب منك اختيار كلمة مرورك عند تسجيل الدخول التالي، وقد تم تسجيل خروجك من تطبيق الجوال."
 
 msgid "A member of this task team has left the company."
 msgstr "غادر أحد أعضاء فريق هذه المهمة الشركة."
@@ -978,6 +977,10 @@ msgstr "تُرسل دائمًا، لحماية الحساب"
 
 msgid "An account with this email address already exists."
 msgstr "يوجد حساب مسجَّل بهذا البريد الإلكتروني مسبقاً."
+
+#, python-format
+msgid "An administrator has set a temporary password for your Profit Sports Solutions account (username: %(username)s). You will be asked to choose your own password at your next sign-in, and you have been signed out of the mobile app."
+msgstr "قام المسؤول بتعيين كلمة مرور مؤقتة لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s). سيُطلب منك اختيار كلمة مرورك الخاصة عند تسجيل الدخول التالي، وقد تم تسجيل خروجك من تطبيق الهاتف."
 
 #, python-format
 msgid "An email could not be sent: “%(subject)s” to %(recipients)s."
@@ -4009,6 +4012,9 @@ msgstr "مفتوحة"
 msgid "Open a customer to manage their portal login."
 msgstr "افتح العميل لإدارة دخوله إلى البوابة."
 
+msgid "Open in Staff accounts"
+msgstr "فتح في حسابات الموظفين"
+
 msgid "Open requests"
 msgstr "الطلبات المفتوحة"
 
@@ -5499,9 +5505,6 @@ msgstr "تحديد المستوى"
 msgid "Set new password"
 msgstr "تعيين كلمة مرور جديدة"
 
-msgid "Set temporary password"
-msgstr "تعيين كلمة مرور مؤقتة"
-
 msgid "Set the task's brand, so the installed machines are added to the customer's list."
 msgstr "حدّد العلامة التجارية للمهمة لتُضاف الأجهزة المُركَّبة إلى قائمة العميل."
 
@@ -5513,9 +5516,6 @@ msgstr "أكمل إعداد حسابك في Profit Sports Solutions"
 
 msgid "Set your password"
 msgstr "عيّن كلمة المرور"
-
-msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in and will be signed out of the mobile app."
-msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي، وسيُسجَّل خروجه من تطبيق الجوال."
 
 msgid "Setting"
 msgstr "الإعداد"
@@ -6181,9 +6181,6 @@ msgstr "القطع التي تختارها هنا تُخصم من مخزون ا�
 #, python-format
 msgid "The password for your Profit Sports Solutions account (username: %(username)s) has been changed."
 msgstr "تم تغيير كلمة المرور لحسابك في Profit Sports Solutions (اسم المستخدم: %(username)s)."
-
-msgid "The password has been reset. They will be asked to choose their own at their next sign-in."
-msgstr "تمت إعادة تعيين كلمة المرور. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
 
 msgid "The person responsible for handling it. They will be notified, and it will appear in their internal tasks."
 msgstr "الشخص المسؤول عن متابعتها. سيتم إشعاره، وستظهر ضمن مهامه الداخلية."
@@ -9455,6 +9452,12 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Send welcome email"
 #~ msgstr "إرسال رسالة الترحيب"
 
+#~ msgid "Set temporary password"
+#~ msgstr "تعيين كلمة مرور مؤقتة"
+
+#~ msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in and will be signed out of the mobile app."
+#~ msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي، وسيُسجَّل خروجه من تطبيق الجوال."
+
 #~ msgid "Sets a temporary password. They will be asked to choose their own at their next sign-in."
 #~ msgstr "يعيّن كلمة مرور مؤقتة. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
 
@@ -9491,6 +9494,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "The machine cannot be used"
 #~ msgstr "لا يمكن استخدام الجهاز"
+
+#~ msgid "The password has been reset. They will be asked to choose their own at their next sign-in."
+#~ msgstr "تمت إعادة تعيين كلمة المرور. سيُطلب منه اختيار كلمة مروره عند تسجيل الدخول التالي."
 
 #~ msgid "The photo is too large. The maximum size is 25 MB."
 #~ msgstr "الصورة كبيرة جدًا. الحد الأقصى 25 ميغابايت."

@@ -21,7 +21,7 @@ from django.utils.translation import gettext_lazy
 from customers.accounts import locked_usernames, log_account_action
 from customers.forms import ChangeLoginEmailForm
 from people.models import Technician
-from people.permissions import can_manage_account, is_last_active_admin, require_manager
+from people.permissions import can_manage_account, can_set_password, is_last_active_admin, require_manager
 from reference.models import Country
 
 from .forms import TechnicianFirstLoginForm
@@ -109,6 +109,8 @@ def urgent_account_action(request, actor, target, action):
     never emailed, never stored anywhere readable.
     """
     user = target.user
+    if action == 'temporary_password' and not can_set_password(actor):
+        raise PermissionDenied
     if action == 'temporary_password' and user.is_active:
         password = _generate_temporary_password()
         user.set_password(password)
@@ -181,6 +183,8 @@ def staff_accounts(request):
             else:
                 messages.error(request, _('No email address is recorded for this login. Please add one first.'))
         elif action == 'change_email':
+            if not can_set_password(actor):
+                raise PermissionDenied
             form = ChangeLoginEmailForm(request.POST, user=user)
             if form.is_valid():
                 change_login_email(request, target, form.cleaned_data['email'])
@@ -212,6 +216,7 @@ def staff_accounts(request):
     managed = next((row for row in rows if str(row['person'].pk) == request.GET.get('manage')), None)
     if managed is not None:
         managed['can_manage'] = can_manage_account(actor, managed['person'])
+        managed['can_set_password'] = can_set_password(actor)
     query = request.GET.copy()
     query.pop('manage', None)
     return render(request, 'tasks/staff_accounts.html', {

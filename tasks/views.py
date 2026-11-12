@@ -72,7 +72,7 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
     CustomerPhotosForm, CustomRoleForm, PartNeededForm, RegisterMachineForm,
-    AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
+    AddHelperForm, AssignTicketForm, ChangePasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
@@ -5200,7 +5200,7 @@ def send_password_changed_email(user, temporary=False):
         subject = _('Your Profit Sports Solutions password has been changed')
         if temporary:
             what = _(
-                'A manager has set a temporary password for your Profit Sports Solutions account (username: '
+                'An administrator has set a temporary password for your Profit Sports Solutions account (username: '
                 '%(username)s). You will be asked to choose your own password at your next sign-in, and you '
                 'have been signed out of the mobile app.'
             )
@@ -6128,7 +6128,9 @@ def technician_edit(request, pk):
 
     can_manage = is_manager and can_manage_account(requesting_technician, technician)
     login_form = CreateTechnicianLoginForm() if can_manage and technician.user_id is None else None
-    password_form = NewPasswordForm(user=technician.user) if can_manage and technician.user_id else None
+    # Nobody types in someone else's password: a forgotten one is fixed on Staff accounts
+    # (a setup link to their own email, or — the Admin — a generated temporary password).
+    has_login = can_manage and technician.user_id is not None
 
     if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
         deactivate_form = DeactivateTechnicianForm(request.POST, technician=technician)
@@ -6166,21 +6168,6 @@ def technician_edit(request, pk):
             messages.success(request, _('Login created. A setup link has been sent to %(email)s.') % {'email': email})
             return redirect('tasks:technician_edit', pk=technician.pk)
 
-    elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
-        password_form = NewPasswordForm(user=technician.user, data=request.POST)
-        if password_form.is_valid():
-            password_form.save()
-            # Temporary: they choose their own at their next sign-in, so
-            # the manager who typed it doesn't keep knowing it.
-            technician.must_change_password = True
-            technician.save(update_fields=['must_change_password'])
-            sign_out_of_mobile_app(technician.user)
-            send_password_changed_email(technician.user, temporary=True)
-            log_account_action(request, technician, 'Staff temporary password set; signed out of the mobile app')
-            messages.success(request, _('The password has been reset. They will be asked to choose their own '
-                                        'at their next sign-in.'))
-            return redirect('tasks:technician_edit', pk=technician.pk)
-
     elif request.method == 'POST':
         form = TechnicianEditForm(
             request.POST, request.FILES, instance=technician, is_manager=is_manager, is_admin=is_admin,
@@ -6201,7 +6188,7 @@ def technician_edit(request, pk):
 
     context = {
         'technician': technician, 'form': form, 'deactivate_form': deactivate_form,
-        'login_form': login_form, 'password_form': password_form, 'is_manager': is_manager,
+        'login_form': login_form, 'has_login': has_login, 'is_manager': is_manager,
         'trip_form': trip_form, 'trips': technician.trips.select_related('country'),
         'tasks_to_reassign': _tasks_to_reassign(technician) if not technician.is_active else [],
         # Still active: their open tasks, to move to someone in the same step as deactivating.

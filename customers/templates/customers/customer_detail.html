@@ -278,11 +278,14 @@
                                     {% include "customers/_account_action.html" with action="password_link" label=_("Send password link") %}
                                     {% endif %}
                                     {% if account.is_active %}
+                                    {% if is_admin %}
                                     {% blocktranslate asvar confirm_password with name=person.name %}Set a temporary password for {{ name }}? Their current password stops working.{% endblocktranslate %}
                                     {% include "customers/_account_action.html" with action="temporary_password" label=_("Set a temporary password") confirm=confirm_password %}
+                                    {% endif %}
                                     {% blocktranslate asvar confirm_disable with name=person.name %}Disable {{ name }}'s portal access? They can't sign in until it's enabled again.{% endblocktranslate %}
                                     {% include "customers/_account_action.html" with action="disable" label=_("Disable access") confirm=confirm_disable %}
                                     {% endif %}
+                                    {% if is_admin %}
                                     <form method="post" action="{% url 'customers:portal_login_action' %}" class="portal-people__email">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="change_email">
@@ -291,6 +294,7 @@
                                         <input type="email" id="email-{{ person.pk }}" name="email" required dir="ltr">
                                         <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             </details>
 

@@ -5349,33 +5349,29 @@ class TechnicianLoginTests(TaskTestCase):
         other_helper.refresh_from_db()
         self.assertIsNone(other_helper.user_id)
 
-    def test_manager_can_reset_an_existing_password(self):
-        # self.technician (tech1) already has a login, from TaskTestCase.
-        Token.objects.create(user=self.tech_user)
+    def test_nobody_types_in_someone_elses_password(self):
+        # Not even the Admin: a forgotten password is fixed on Staff accounts.
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
+        self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
             'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertEqual(response.status_code, 302)
         self.tech_user.refresh_from_db()
-        self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
-        # Temporary: the technician picks their own next time, and the
-        # app on their phone has to sign in again.
-        self.technician.refresh_from_db()
-        self.assertTrue(self.technician.must_change_password)
-        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertFalse(self.tech_user.check_password('br4nd-New-Pass!'))
+        page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        self.assertContains(page, f'/tasks/technicians/accounts/?manage={self.technician.pk}')
 
     def test_no_login_form_once_one_exists(self):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
         self.assertIsNone(response.context['login_form'])
-        self.assertIsNotNone(response.context['password_form'])
+        self.assertTrue(response.context['has_login'])
 
     def test_no_password_form_before_one_exists(self):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(self.url)
         self.assertIsNotNone(response.context['login_form'])
-        self.assertIsNone(response.context['password_form'])
+        self.assertFalse(response.context['has_login'])
 
 
 class SkillListTests(TaskTestCase):
@@ -8528,6 +8524,7 @@ class StaffAccountsTests(TaskTestCase):
     def test_temporary_password_is_shown_once_signs_out_phones_and_is_logged(self):
         from django.contrib.admin.models import LogEntry
         Token.objects.create(user=self.tech_user)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         response = self._act('temporary_password', self.technician)
         self.assertTemplateUsed(response, 'tasks/staff_account_password.html')
@@ -8575,7 +8572,20 @@ class StaffAccountsTests(TaskTestCase):
         self.assertEqual(self._act('temporary_password', self.admin).status_code, 403)
         self.assertEqual(self._act('change_email', self.admin, email='other@example.com').status_code, 403)
 
+    def test_a_manager_sets_no_password_and_changes_no_email(self):
+        self.tech_user.email = 'tarek@example.com'
+        self.tech_user.save(update_fields=['email'])
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._act('temporary_password', self.technician).status_code, 403)
+        self.assertEqual(self._act('change_email', self.technician, email='x@example.com').status_code, 403)
+        page = self.client.get(f'/tasks/technicians/accounts/?manage={self.technician.pk}')
+        self.assertNotContains(page, 'value="temporary_password"')
+        self.assertNotContains(page, 'value="change_email"')
+        # What they can still do: a setup link, to the person's own email.
+        self.assertContains(page, 'value="send_setup_link"')
+
     def test_change_email_keeps_a_sign_in_name_that_is_not_an_email(self):
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self._act('change_email', self.technician, email='tarek.new@example.com')
         self.tech_user.refresh_from_db()
@@ -8644,6 +8654,7 @@ class PasswordChangedEmailTests(TaskTestCase):
         self.assertIn('contact your manager', mail.outbox[0].body)
 
     def test_a_temporary_password_from_staff_accounts_emails_them(self):
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.technician.pk})
         self.assertEqual(len(mail.outbox), 1)
@@ -8718,6 +8729,7 @@ class StaffSetupLinkTests(TaskTestCase):
 
     def test_a_temporary_password_kills_any_earlier_link(self):
         link = self._link()
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.newcomer.pk})
         self.assertEqual(self._statuses()['Hani Helper'], 'temporary')
@@ -10132,10 +10144,14 @@ class StaffAccountSettingsTests(TaskTestCase):
         self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
         self.assertFalse(PushDevice.objects.exists())
 
-    def test_a_manager_cannot_give_someone_an_email_already_in_use(self):
+    def test_the_admin_cannot_give_someone_an_email_already_in_use(self):
         manager_user = User.objects.create_user('manager9', password='pass12345')
-        Technician.objects.create(user=manager_user, country=self.country, full_name='Manager', language='en',
-                                  role=Technician.Role.MANAGER, employment_type='staff')
+        manager = Technician.objects.create(user=manager_user, country=self.country, full_name='Manager', language='en',
+                                            role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager9', password='pass12345')
+        self.assertNotIn('email', self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/').context['form'].fields)
+        manager.role = Technician.Role.ADMIN  # their login email: the Admin's alone
+        manager.save(update_fields=['role'])
         User.objects.create_user('taken@example.com', email='taken@example.com', password='x')
         self.client.login(username='manager9', password='pass12345')
         page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')

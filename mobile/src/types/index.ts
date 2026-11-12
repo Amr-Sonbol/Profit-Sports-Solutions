@@ -812,6 +812,8 @@ export interface StaffAccount {
   has_login: boolean;
   is_active: boolean;
   can_manage: boolean;
+  /** A temporary password: the Admin's alone. Older servers: absent. */
+  can_set_password?: boolean;
 }
 
 /** One line on an equipment step's checklist (api/views.py MyTaskReportView). */

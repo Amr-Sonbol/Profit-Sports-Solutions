@@ -158,3 +158,19 @@ Manager and Admin (the Project Manager has no Tickets).
 A **new request** is told to the Technical Support Manager and that country's
 Country Support Manager — the roles chosen on the admin's Notifications page —
 by email, in the bell and on their phones (opening the request in the app).
+
+## Passwords and login emails
+
+Only the **Admin** sets someone else's password or changes their login email —
+staff and customers' portal logins alike (`people.permissions.can_set_password`):
+whoever did either could sign in as them. And then only a **generated temporary
+password**, read out by phone when the person has no email; they choose their own
+at their next sign-in, and they're emailed about it. Nobody types in someone
+else's password.
+
+Everyone else who manages accounts sends the person a **link to their own email**
+(a setup or password link) — the person chooses their own password, so nobody
+else ever knows it. Unlocking, signing out of every phone, and turning a login
+off or on stay with whoever manages the account (never someone above them).
+
+A changed login email is always told to the **old** address too.

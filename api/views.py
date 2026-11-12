@@ -30,7 +30,8 @@ from customers.forms import SignInEmailChangeForm
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_manager,
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_set_password, get_active_country, is_last_active_admin,
+    require_manager,
     scoped_or_404,
 )
 from people.push import push_assigned, push_removed
@@ -911,6 +912,8 @@ class StaffAccountsView(APIView):
                 'has_login': person.user_id is not None,
                 'is_active': bool(person.user_id and person.user.is_active),
                 'can_manage': person.user_id is not None and can_manage_account(actor, person),
+                # A temporary password: the Admin's alone (people.permissions.can_set_password).
+                'can_set_password': can_set_password(actor),
             })
         return Response(rows)
 

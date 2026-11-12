@@ -21,6 +21,7 @@ from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
 from people.permissions import (
+    can_set_password,
     get_active_country, require_admin, require_manager, require_permission, scoped_or_404,
 )
 from reference.models import Country, TaskType
@@ -1330,12 +1331,17 @@ def portal_login_action(request):
         )
         messages.success(request, _('Portal access enabled.') if user.is_active else _('Portal access disabled.'))
     elif action == 'change_email':
+        if not can_set_password(request.user.technician):
+            raise PermissionDenied
         form = ChangeLoginEmailForm(request.POST, user=user)
         if form.is_valid():
             old_email = user.email
             user.username = user.email = form.cleaned_data['email']
             user.save(update_fields=['username', 'email'])
             log_account_action(request, customer, f'Portal login email changed from {old_email} to {user.email}')
+            # The old address is told, in case it wasn't them who asked.
+            if old_email and old_email.lower() != user.email.lower():
+                send_email_changed_notice(person, old_email)
             messages.success(request, _('Login email changed to %(email)s.') % {'email': user.email})
         else:
             messages.error(request, form.errors['email'][0])
@@ -1348,6 +1354,8 @@ def portal_login_action(request):
         log_account_action(request, customer, f'Portal login removed: {email}')
         messages.success(request, _('%(email)s can no longer sign in.') % {'email': email})
     elif action == 'temporary_password' and user.is_active:
+        if not can_set_password(request.user.technician):
+            raise PermissionDenied
         # Shown once, right here, for reading out over the phone — never
         # emailed, never stored anywhere readable.
         password = _generate_temporary_password()

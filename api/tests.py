@@ -1904,6 +1904,12 @@ class StaffAccountEmergencyApiTests(ManagerChoosesTheCountryTests):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Token.objects.filter(key=tech_token).exists())
 
+        # A temporary password: the Admin's alone.
+        self.assertFalse(row['can_set_password'])
+        response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'temporary_password'}),
+                                    content_type='application/json', **self.auth(token))
+        self.assertEqual(response.status_code, 403)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)
         response = self.client.post(f'/api/staff-accounts/{self.technician.pk}/', json.dumps({'action': 'temporary_password'}),
                                     content_type='application/json', **self.auth(token))
         password = response.json()['password']

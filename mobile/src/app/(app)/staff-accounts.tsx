@@ -109,7 +109,9 @@ export default function StaffAccountsScreen() {
                     ['sign_out_phones', 'Sign out of every phone', 'Sign them out of the app on every phone (for a lost phone)?'],
                     ['unlock', 'Unlock', ''],
                     ...(item.is_active ? [
-                      ['temporary_password', 'Temporary password', 'Set a temporary password to read out to them? They will be signed out of the app.'],
+                      ...(item.can_set_password ? [
+                        ['temporary_password', 'Temporary password', 'Set a temporary password to read out to them? They will be signed out of the app.'],
+                      ] : []),
                       ['disable', 'Turn login off', 'Turn their login off? They cannot sign in until it is turned on again.'],
                     ] : [['enable', 'Turn login on', '']]),
                   ].map(([action, label, question]) => (

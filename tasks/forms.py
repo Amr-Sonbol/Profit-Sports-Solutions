@@ -1046,7 +1046,8 @@ class TechnicianEditForm(CustomRoleChoiceMixin, PhotoSizeMixin, forms.ModelForm)
 
     def __init__(self, *args, is_manager=True, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk and self.instance.user_id:
+        # Their login email: the Admin's alone — whoever changed it could have a password link sent there.
+        if is_admin and self.instance.pk and self.instance.user_id:
             self.fields['email'].initial = self.instance.user.email
         else:
             del self.fields['email']

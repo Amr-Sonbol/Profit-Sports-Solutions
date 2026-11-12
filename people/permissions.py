@@ -131,6 +131,14 @@ def can_manage_account(actor, target):
     return True
 
 
+def can_set_password(actor):
+    """Only an admin sets someone else's password (a temporary one, or one
+    typed in) or changes their login email: whoever did either could sign
+    in as them. Everyone else sends the person a link to their own email
+    (a setup or password link), and the person chooses their own."""
+    return actor.role == Technician.Role.ADMIN
+
+
 def is_last_active_admin(technician):
     """The one admin left who can still sign in — never turned off,
     deactivated or moved to another role, or nobody could reach Roles &
