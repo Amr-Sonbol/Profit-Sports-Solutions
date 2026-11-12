@@ -115,8 +115,9 @@ def customer_status(statuses):
 
 def email_languages(customer):
     """English for everyone; Arabic too, in the same email, for a customer
-    in an Arab country."""
-    return ('en', 'ar') if customer.country.iso_code.upper() in ARAB_COUNTRY_CODES else ('en',)
+    in an Arab country (tasks.customer_emails.languages)."""
+    from tasks.customer_emails import languages
+    return languages(customer.country)
 
 
 def _in_languages(languages, build):
@@ -140,12 +141,14 @@ def _send_link_email(request, person, subject_msgid, body_msgid, button_msgid):
 def _send_account_email(person, recipient, subject_msgid, body_msgid, button_msgid, values, link=None):
     """One account email to a person, in their customer's languages; `link`,
     when given, shows as a button in the HTML version."""
+    from tasks.customer_emails import CLOSING, TEMPLATE
     from tasks.views import _send_notification_email
 
     customer = person.customer
     values = {'contact': person.user.first_name or customer.contact_name or customer.name, **values}
     versions = _in_languages(email_languages(customer), lambda: {
-        'subject': str(subject_msgid), 'body': str(body_msgid) % values, 'button': str(button_msgid or ''),
+        'subject': str(subject_msgid), 'body': f'{str(body_msgid) % values}\n\n{CLOSING}',
+        'button': str(button_msgid or ''),
     })
     subject = ' | '.join(version['subject'] for _code, version in versions)
     text = '\n\n— — —\n\n'.join(version['body'] for _code, version in versions)
@@ -155,7 +158,8 @@ def _send_account_email(person, recipient, subject_msgid, body_msgid, button_msg
         'paragraphs': version['body'].strip().split('\n\n'),
     } for code, version in versions]
     _send_notification_email(
-        subject, text, 'customers/email/portal_link.html', {'sections': sections, 'link': link}, [recipient],
+        subject, text, TEMPLATE,
+        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1]}, [recipient],
     )
 
 
@@ -169,9 +173,7 @@ WELCOME_BODY = gettext_lazy(
     'To activate your account, please set your password and complete your company details using the secure '
     'link below. The link is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
-    'Your username: %(username)s\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'Your username: %(username)s'
 )
 WELCOME_BUTTON = gettext_lazy('Activate my account')
 RESET_SUBJECT = gettext_lazy('Set a new password for your Profit Sports Solutions portal account')
@@ -181,9 +183,7 @@ RESET_BODY = gettext_lazy(
     'below; it is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Your username: %(username)s\n\n'
-    'If you did not request this, please disregard this email.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'If you did not request this, please disregard this email.'
 )
 RESET_BUTTON = gettext_lazy('Set a new password')
 
@@ -250,9 +250,7 @@ EMAIL_CHANGE_BODY = gettext_lazy(
     'use the secure link below; it is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Until you confirm, you keep signing in with your current email. If you did not request this, please '
-    'disregard this email.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'disregard this email.'
 )
 EMAIL_CHANGE_BUTTON = gettext_lazy('Confirm my new email')
 EMAIL_CHANGED_SUBJECT = gettext_lazy('Your Profit Sports Solutions portal sign-in email was changed')
@@ -260,9 +258,7 @@ EMAIL_CHANGED_BODY = gettext_lazy(
     'Dear %(contact)s,\n\n'
     'The sign-in email for your customer portal account was changed to %(new_email)s. From now on, please sign '
     'in with that address.\n\n'
-    'If you did not make this change, please contact us straight away.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'If you did not make this change, please contact us straight away.'
 )
 
 

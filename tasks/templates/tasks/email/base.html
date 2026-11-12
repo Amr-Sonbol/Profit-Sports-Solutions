@@ -43,6 +43,8 @@
 </style>
 </head>
 <body class="email-muted" style="margin:0;padding:0;background-color:#f5f6f7;">
+{# The inbox's preview line, under the subject: what happened (never shown in the email itself). #}
+{% if preview %}<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">{{ preview|truncatechars:140 }}</div>{% endif %}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-muted" style="background-color:#f5f6f7;padding:32px 0;">
 <tr>
 <td align="center" class="email-muted">
@@ -66,7 +68,7 @@
 </table>
 {% if customer_email %}
 {# The Customer Service signature below the card, at its own designed width (600px), as in the team's own emails. #}
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" bgcolor="#ffffff" class="email-signature" style="max-width:600px;width:100%;margin-top:16px;background-color:#ffffff;border:1px solid #e3e6ea;border-radius:10px;">
+<table role="presentation" dir="ltr" width="600" cellpadding="0" cellspacing="0" bgcolor="#ffffff" class="email-signature" style="max-width:600px;width:100%;margin-top:16px;background-color:#ffffff;border:1px solid #e3e6ea;border-radius:10px;">
 <tr><td bgcolor="#ffffff" style="background-color:#ffffff;padding:8px 12px;">{% include "tasks/email/_signature.html" %}</td></tr>
 </table>
 {% endif %}

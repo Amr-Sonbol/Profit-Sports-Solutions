@@ -2763,7 +2763,7 @@ class TicketReviewTests(TaskTestCase):
 
         self.assertEqual(TicketReply.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
         # Every email carries the inline logo now — no real (downloadable)
         # attachment for a plain reply, though.
         self.assertFalse(any(isinstance(a, tuple) for a in mail.outbox[0].attachments))
@@ -2785,7 +2785,7 @@ class TicketReviewTests(TaskTestCase):
 
         self.assertEqual(TicketReply.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
         # Two attachments now: the inline logo (every email gets one) plus
         # the file itself — pick it out by filename rather than assuming a
         # position or a plain tuple, since the logo attaches as a raw
@@ -2810,7 +2810,7 @@ class TicketReviewTests(TaskTestCase):
             if thread is not threading.current_thread():
                 thread.join(timeout=10)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_a_reply_takes_several_files_up_to_the_limit(self):
@@ -6258,7 +6258,8 @@ class MyReportFormTests(TaskTestCase):
         self.customer.save(update_fields=['language'])
         language, email = self._send_copy_capturing_language()
         self.assertEqual(language, 'ar')
-        self.assertNotIn('Visit report', email.subject)
+        # The PDF in Arabic; its email, like every customer email, in English and Arabic (tasks.customer_emails).
+        self.assertIn('تقرير الزيارة', email.subject)
         html = email.alternatives[0][0]
         self.assertIn('dir="rtl"', html)
         self.assertIn('Profit Sports Solutions', html)  # the company name stays in English

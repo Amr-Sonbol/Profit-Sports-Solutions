@@ -3,16 +3,12 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 14:36+0000\n"
+"POT-Creation-Date: 2026-11-12 16:25+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5);\n"
-
-#, python-format
-msgid " Expected around %(time)s."
-msgstr " الوصول المتوقع حوالي %(time)s."
 
 msgid "\"Ship a part\" is suggested for their requests (still changeable)"
 msgstr "يُقترح «شحن قطعة» لطلباتهم (ويمكن تغييره)"
@@ -418,6 +414,10 @@ msgid "%(name)s can now sign in: a welcome email was sent to %(email)s."
 msgstr "يمكن لـ %(name)s تسجيل الدخول الآن: أُرسلت رسالة الترحيب إلى %(email)s."
 
 #, python-format
+msgid "%(name)s from our team has replied to your request %(reference)s:"
+msgstr "رد %(name)s من فريقنا على طلبكم %(reference)s:"
+
+#, python-format
 msgid "%(name)s has been signed out of the mobile app on all devices."
 msgstr "تم تسجيل خروج %(name)s من تطبيق الجوال على جميع الأجهزة."
 
@@ -476,6 +476,14 @@ msgstr "%(source)s — %(time)s"
 #, python-format
 msgid "%(start)s–%(end)s (est.)"
 msgstr "%(start)s–%(end)s (متوقع)"
+
+#, python-format
+msgid "%(technician)s is on the way to %(site)s."
+msgstr "%(technician)s في الطريق إلى %(site)s."
+
+#, python-format
+msgid "%(title)s — %(reference)s"
+msgstr "%(title)s — %(reference)s"
 
 #, python-format
 msgid "%(where)s: “%(text)s” is not in %(language)s, but the report is in %(language)s."
@@ -1228,9 +1236,6 @@ msgstr "تم ضبط محاذاة السير وشدّه"
 msgid "Belt replaced"
 msgstr "تم استبدال السير"
 
-msgid "Best regards,"
-msgstr "مع أطيب التحيات،"
-
 msgid "Billing type"
 msgstr "نوع الفوترة"
 
@@ -1340,10 +1345,6 @@ msgstr "إلغاء الرحلة"
 
 msgid "Cancelled"
 msgstr "ملغاة"
-
-#, python-format
-msgid "Carrier: %(company)s"
-msgstr "شركة الشحن: %(company)s"
 
 #, python-format
 msgid "Carrier: %(company)s — tracking number %(tracking)s"
@@ -1597,10 +1598,6 @@ msgstr "أكّدها الفني"
 msgid "Confirmed the task"
 msgstr "أكّد المهمة"
 
-#, python-format
-msgid "Confirming your upcoming Profit Sports Solutions visit — %(number)s"
-msgstr "تأكيد زيارة Profit Sports Solutions القادمة — %(number)s"
-
 msgid "Console replaced"
 msgstr "تم استبدال لوحة التحكم"
 
@@ -1701,6 +1698,10 @@ msgstr "تم حذف الدولة."
 
 msgid "Country updated."
 msgstr "تم تحديث الدولة."
+
+#, python-format
+msgid "Courier: %(courier)s"
+msgstr "شركة الشحن: %(courier)s"
 
 msgid "Create a fitting visit? A new visit task is made for this branch."
 msgstr "إنشاء زيارة تركيب؟ تُنشأ مهمة زيارة جديدة لهذا الفرع."
@@ -1926,23 +1927,7 @@ msgstr "تم إلغاء التفعيل. يرجى إعادة إسناد مهام�
 
 #, python-format
 msgid "Dear %(contact)s,"
-msgstr "السيد/السيدة %(contact)s المحترم/المحترمة،"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"%(technician)s from Profit Sports Solutions is on the way to %(site)s.%(when)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"عزيزي %(contact)s،\n"
-"\n"
-"%(technician)s من Profit Sports Solutions في الطريق إلى %(site)s.%(when)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
+msgstr "مرحبًا %(contact)s،"
 
 #, python-format
 msgid ""
@@ -1974,12 +1959,9 @@ msgid ""
 "\n"
 "Your username: %(username)s\n"
 "\n"
-"If you did not request this, please disregard this email.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
+"If you did not request this, please disregard this email."
 msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
+"مرحبًا %(contact)s،\n"
 "\n"
 "تم إصدار رابط لتعيين كلمة مرور جديدة لحسابكم في بوابة العملاء. يرجى استخدام الرابط الآمن أدناه؛ وهو صالح لمدة %(days)s أيام ويمكن استخدامه مرة واحدة.\n"
 "\n"
@@ -1987,10 +1969,7 @@ msgstr ""
 "\n"
 "اسم المستخدم: %(username)s\n"
 "\n"
-"إذا لم تطلبوا ذلك، يرجى تجاهل هذه الرسالة.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
+"إذا لم تطلبوا ذلك، يرجى تجاهل هذه الرسالة."
 
 #, python-format
 msgid ""
@@ -2024,135 +2003,15 @@ msgid ""
 "\n"
 "%(link)s\n"
 "\n"
-"Until you confirm, you keep signing in with your current email. If you did not request this, please disregard this email.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
+"Until you confirm, you keep signing in with your current email. If you did not request this, please disregard this email."
 msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
+"مرحبًا %(contact)s،\n"
 "\n"
 "وردنا طلب لاستخدام هذا العنوان لتسجيل الدخول إلى حسابكم في بوابة العملاء. لتأكيده، يُرجى استخدام الرابط الآمن أدناه؛ وهو صالح لمدة %(days)s أيام ويمكن استخدامه مرة واحدة.\n"
 "\n"
 "%(link)s\n"
 "\n"
-"إلى أن تؤكدوا، تستمرون في تسجيل الدخول ببريدكم الحالي. إذا لم تطلبوا ذلك، يرجى تجاهل هذه الرسالة.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Please be advised that our technician for %(site)s is running behind schedule today: %(reason)s\n"
-"\n"
-"We sincerely apologise for any inconvenience and will arrive as soon as possible.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"نود إحاطتكم علماً بأن الفني المكلَّف بزيارة %(site)s متأخر عن موعده اليوم: %(reason)s\n"
-"\n"
-"نعتذر عن أي إزعاج، وسيصل في أقرب وقت ممكن.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Please find attached the visit report for %(site)s, dated %(date)s.\n"
-"\n"
-"Should you have any questions about the work carried out, please do not hesitate to contact us.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"عزيزي %(contact)s،\n"
-"\n"
-"مرفق تقرير الزيارة الخاص بـ %(site)s بتاريخ %(date)s.\n"
-"\n"
-"إذا كانت لديكم أي استفسارات حول الأعمال المنفّذة، فلا تترددوا في التواصل معنا.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Regarding ticket %(number)s:\n"
-"\n"
-"%(reply_message)s\n"
-"\n"
-"You may reply or view the full conversation here:\n"
-"%(link)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"بخصوص التذكرة %(number)s:\n"
-"\n"
-"%(reply_message)s\n"
-"\n"
-"يمكنكم الرد أو الاطلاع على المحادثة كاملة من هنا:\n"
-"%(link)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Thank you for choosing Profit Sports Solutions. We completed a service visit at %(site)s on %(date)s, and would greatly appreciate a moment of your time to share your feedback.\n"
-"\n"
-"%(link)s\n"
-"\n"
-"Your feedback helps us maintain the standard of service you expect from us.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"عزيزي %(contact)s،\n"
-"\n"
-"شكرًا لاختيارك Profit Sports Solutions. لقد أتممنا زيارة صيانة في %(site)s بتاريخ %(date)s، ويسعدنا كثيرًا أن تخصص لحظة من وقتك لمشاركة رأيك.\n"
-"\n"
-"%(link)s\n"
-"\n"
-"رأيك يساعدنا على الحفاظ على مستوى الخدمة الذي تتوقعه منا.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Thank you for contacting us. We have received your request and created ticket #%(number)s.\n"
-"\n"
-"Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there is an update.\n"
-"\n"
-"Please ensure that photos or videos are attached for each issue. This will help our team understand the problem and resolve your case promptly.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"نشكركم على تواصلكم معنا. لقد استلمنا طلبكم وأنشأنا التذكرة رقم #%(number)s.\n"
-"\n"
-"يرد فريقنا خلال 24 ساعة، من الأحد إلى الجمعة. وستتلقون رسالة بريد إلكتروني فور توفر أي مستجدات.\n"
-"\n"
-"يرجى التأكد من إرفاق صور أو مقاطع فيديو لكل مشكلة، إذ يساعد ذلك فريقنا على فهم المشكلة وحل طلبكم بسرعة.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
+"إلى أن تؤكدوا، تستمرون في تسجيل الدخول ببريدكم الحالي. إذا لم تطلبوا ذلك، يرجى تجاهل هذه الرسالة."
 
 #, python-format
 msgid ""
@@ -2180,59 +2039,13 @@ msgid ""
 "\n"
 "The sign-in email for your customer portal account was changed to %(new_email)s. From now on, please sign in with that address.\n"
 "\n"
-"If you did not make this change, please contact us straight away.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
+"If you did not make this change, please contact us straight away."
 msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
+"مرحبًا %(contact)s،\n"
 "\n"
 "تم تغيير بريد تسجيل الدخول لحسابكم في بوابة العملاء إلى %(new_email)s. من الآن فصاعدًا، يُرجى تسجيل الدخول بهذا العنوان.\n"
 "\n"
-"إذا لم تقوموا بهذا التغيير، يُرجى التواصل معنا فورًا.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track it using the details below.\n"
-"\n"
-"%(tracking_lines)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"يسعدنا إبلاغكم بأنه تم إرسال شحنتكم الخاصة بـ %(entity)s. يمكنكم تتبعها باستخدام البيانات أدناه.\n"
-"\n"
-"%(tracking_lines)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n"
-"\n"
-"Should this time be inconvenient, please contact us to arrange an alternative.\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"نؤكد لكم أن الفني لدينا مجدول لزيارة %(site)s بتاريخ %(date)s في تمام الساعة %(time)s.\n"
-"\n"
-"إذا كان هذا الموعد غير مناسب، يرجى التواصل معنا لتحديد موعد بديل.\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
+"إذا لم تقوموا بهذا التغيير، يُرجى التواصل معنا فورًا."
 
 #, python-format
 msgid ""
@@ -2272,12 +2085,9 @@ msgid ""
 "\n"
 "%(link)s\n"
 "\n"
-"Your username: %(username)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
+"Your username: %(username)s"
 msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
+"مرحبًا %(contact)s،\n"
 "\n"
 "تم إنشاء حسابكم في بوابة عملاء Profit Sports Solutions. يمكنكم من خلال البوابة تقديم طلبات الخدمة ومتابعة سيرها والاطلاع على سجل الخدمة.\n"
 "\n"
@@ -2285,36 +2095,7 @@ msgstr ""
 "\n"
 "%(link)s\n"
 "\n"
-"اسم المستخدم: %(username)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
-
-#, python-format
-msgid ""
-"Dear %(contact)s,\n"
-"\n"
-"Your request %(number)s has been resolved:\n"
-"\n"
-"%(answer)s\n"
-"\n"
-"You can view it here. If you need anything further, please send us a new request from the portal.\n"
-"%(link)s\n"
-"\n"
-"Best regards,\n"
-"Profit Sports Solutions\n"
-msgstr ""
-"السيد/السيدة %(contact)s المحترم/ة،\n"
-"\n"
-"تم حل طلبكم %(number)s:\n"
-"\n"
-"%(answer)s\n"
-"\n"
-"يمكنكم الاطلاع عليه هنا. إذا احتجتم إلى أي شيء آخر، يُرجى إرسال طلب جديد من البوابة.\n"
-"%(link)s\n"
-"\n"
-"مع أطيب التحيات،\n"
-"Profit Sports Solutions\n"
+"اسم المستخدم: %(username)s"
 
 msgid "Decide tickets escalated to them"
 msgstr "اتخاذ القرار في التذاكر المصعّدة إليه"
@@ -2673,6 +2454,10 @@ msgstr "ممتاز"
 msgid "Existing bookings, so you can select a time without conflicts. Open a staff member's week for a full day-by-day overview of their workload."
 msgstr "الحجوزات القائمة، لتتمكن من اختيار وقت دون تعارض. افتح أسبوع أي موظف للاطلاع على نظرة شاملة على عبء عمله يوماً بيوم."
 
+#, python-format
+msgid "Expected around %(time)s."
+msgstr "الوصول المتوقع حوالي الساعة %(time)s."
+
 msgid "Expected on"
 msgstr "التاريخ المتوقع"
 
@@ -2974,6 +2759,9 @@ msgstr "كيف تواصل معنا العميل"
 msgid "How the request was resolved, for example advice given, parts sent or resolved by phone. The customer sees this on their request and receives it by email."
 msgstr "كيف تم حل الطلب، مثل نصيحة قُدمت أو قطع أُرسلت أو حل عبر الهاتف. يرى العميل هذا في طلبه ويتلقاه بالبريد الإلكتروني."
 
+msgid "How was our visit?"
+msgstr "كيف كانت زيارتنا؟"
+
 msgid "How was this visit?"
 msgstr "كيف كانت هذه الزيارة؟"
 
@@ -3007,11 +2795,20 @@ msgstr "إذا كان هذا البريد الإلكتروني مرتبطاً ب
 msgid "If this email address matches an account, a link to set a new password has been sent. It may take a few minutes to arrive."
 msgstr "إذا كان هذا البريد الإلكتروني مطابقاً لحساب مسجَّل، فقد تم إرسال رابط لتعيين كلمة مرور جديدة. قد يستغرق وصوله بضع دقائق."
 
+msgid "If this time is inconvenient, please let us know and we will arrange another."
+msgstr "إذا لم يكن هذا الموعد مناسبًا، يرجى إبلاغنا وسنرتب موعدًا آخر."
+
 msgid "If you did not request this, please disregard this email."
 msgstr "إذا لم تطلب ذلك، يرجى تجاهل هذه الرسالة."
 
+msgid "If you have any questions about the work carried out, please let us know."
+msgstr "إذا كانت لديكم أي أسئلة حول العمل المنجز، يرجى إبلاغنا."
+
 msgid "If you need anything further, please send us a new request."
 msgstr "إذا احتجت إلى أي شيء آخر، يُرجى إرسال طلب جديد."
+
+msgid "If you need anything further, you are welcome to send us a new request from the portal."
+msgstr "إذا احتجتم إلى أي شيء آخر، يسعدنا استلام طلب جديد منكم عبر البوابة."
 
 msgid "Import"
 msgstr "استيراد"
@@ -3165,6 +2962,9 @@ msgstr "محفوظة في المهمة %(number)s: عدّلها هناك."
 
 msgid "Kind"
 msgstr "النوع"
+
+msgid "Kind regards,"
+msgstr "مع أطيب التحيات،"
 
 msgid "Labour hours"
 msgstr "ساعات العمل"
@@ -3615,10 +3415,6 @@ msgstr "رد جديد"
 
 msgid "New reply from our team"
 msgstr "رد جديد من فريقنا"
-
-#, python-format
-msgid "New reply on your ticket %(number)s — %(site)s"
-msgstr "رد جديد على طلبك %(number)s — %(site)s"
 
 msgid "New request"
 msgstr "طلب جديد"
@@ -4106,10 +3902,6 @@ msgstr "لم يُسجل شيء هذا الشهر."
 msgid "Nothing to prepare right now."
 msgstr "لا شيء للتجهيز الآن."
 
-#, python-format
-msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
-msgstr "إشعار بتأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
-
 msgid "Notification settings"
 msgstr "إعدادات الإشعارات"
 
@@ -4330,15 +4122,26 @@ msgstr "راجع فريق الإدارة لدينا طلبكم بتاريخ %(wh
 msgid "Our recommendations"
 msgstr "توصياتنا"
 
+#, python-format
+msgid "Our team has replied to your request %(reference)s:"
+msgstr "رد فريقنا على طلبكم %(reference)s:"
+
+msgid "Our team responds within 24 hours, Sunday to Friday, and you will receive an email as soon as there is an update. If you have not done so already, please add photos or videos of each issue: they help us resolve it promptly."
+msgstr "يرد فريقنا خلال 24 ساعة، من الأحد إلى الجمعة، وستصلكم رسالة بريد إلكتروني فور وجود أي تحديث. إن لم تكونوا قد فعلتم ذلك بعد، يرجى إضافة صور أو مقاطع فيديو لكل مشكلة: فهي تساعدنا على حلها بسرعة."
+
 msgid "Our technician"
 msgstr "فنينا"
+
+#, python-format
+msgid "Our technician for %(site)s is running behind schedule today: %(reason)s"
+msgstr "فنينا المتجه إلى %(site)s متأخر عن موعده اليوم: %(reason)s"
 
 msgid "Our technician is on the way"
 msgstr "فنينا في الطريق إليكم"
 
 #, python-format
-msgid "Our technician is on the way — %(number)s"
-msgstr "فنينا في الطريق إليكم — %(number)s"
+msgid "Our technician will visit %(site)s on %(date)s at %(time)s."
+msgstr "سيزور فنينا %(site)s يوم %(date)s الساعة %(time)s."
 
 msgid "Our warehouses"
 msgstr "مستودعاتنا"
@@ -4656,8 +4459,8 @@ msgid "Please fill this in before continuing."
 msgstr "يُرجى تعبئة هذا الحقل قبل المتابعة."
 
 #, python-format
-msgid "Please find attached the visit report for <strong>%(site)s</strong>, dated <strong>%(date)s</strong> (reference %(number)s)."
-msgstr "تجدون مرفقًا تقرير الزيارة لموقع <strong>%(site)s</strong> بتاريخ <strong>%(date)s</strong> (المرجع %(number)s)."
+msgid "Please find attached the report of our visit to %(site)s on %(date)s."
+msgstr "تجدون مرفقًا تقرير زيارتنا إلى %(site)s بتاريخ %(date)s."
 
 msgid "Please mark yourself as resumed before submitting the report."
 msgstr "يرجى تسجيل استئناف العمل قبل تقديم التقرير."
@@ -4859,6 +4662,9 @@ msgstr "الترتيب في دولتك"
 
 msgid "Rate"
 msgstr "التقييم"
+
+msgid "Rate our visit"
+msgstr "قيّموا زيارتنا"
 
 msgid "Rate this visit"
 msgstr "قيّم هذه الزيارة"
@@ -5145,6 +4951,10 @@ msgstr "تقارير تنتظر أكثر من يومي عمل"
 msgid "Request"
 msgstr "الطلب"
 
+#, python-format
+msgid "Request %(number)s"
+msgstr "الطلب %(number)s"
+
 msgid "Request a new branch"
 msgstr "طلب إضافة فرع جديد"
 
@@ -5156,6 +4966,9 @@ msgstr "طلب مرة أخرى"
 
 msgid "Request feedback"
 msgstr "طلب تقييم"
+
+msgid "Request received"
+msgstr "تم استلام الطلب"
 
 msgid "Request resolved"
 msgstr "تم حل الطلب"
@@ -5744,9 +5557,6 @@ msgstr "رقم تتبع الشحن"
 msgid "Ships it"
 msgstr "يشحنه"
 
-msgid "Should you have any questions about the work carried out, please do not hesitate to contact us."
-msgstr "إذا كانت لديكم أي استفسارات بشأن الأعمال المنجزة، فلا تترددوا في التواصل معنا."
-
 msgid "Show all"
 msgstr "عرض الكل"
 
@@ -6129,6 +5939,10 @@ msgstr "شكراً لتواصلكم معنا. هذا الطلب مكرر لطل�
 msgid "Thank you for contacting us. Unfortunately the parts for this model are no longer manufactured, so a repair is not possible. Our team would be happy to advise you on a replacement."
 msgstr "شكراً لتواصلكم معنا. للأسف لم تعد قطع غيار هذا الطراز تُصنَّع، لذا لا يمكن إصلاحه. يسعد فريقنا تقديم المشورة بشأن بديل مناسب."
 
+#, python-format
+msgid "Thank you for contacting us. We have received your request %(reference)s for %(site)s."
+msgstr "شكرًا لتواصلكم معنا. لقد استلمنا طلبكم %(reference)s الخاص بـ %(site)s."
+
 msgid "Thank you for contacting us. We have shared the usage and maintenance instructions for this machine with your team. Following them should prevent the issue; if it continues, please send us a new request."
 msgstr "شكراً لتواصلكم معنا. شاركنا تعليمات الاستخدام والصيانة لهذا الجهاز مع فريقكم. اتباعها يمنع تكرار المشكلة؛ وإذا استمرت، يرجى إرسال طلب جديد."
 
@@ -6337,6 +6151,10 @@ msgstr "تمت معالجة الأمر دون التقرير والاعتماد 
 
 msgid "The part names or numbers if you know them, and how many of each."
 msgstr "أسماء القطع أو أرقامها إن كنت تعرفها، والكمية المطلوبة من كل منها."
+
+#, python-format
+msgid "The parts for %(site)s have been shipped."
+msgstr "تم شحن قطع الغيار الخاصة بـ %(site)s."
 
 msgid "The parts you pick here leave the warehouse stock."
 msgstr "القطع التي تختارها هنا تُخصم من مخزون المستودع."
@@ -6698,10 +6516,6 @@ msgid "Ticket %(number)s opened."
 msgstr "فُتحت التذكرة %(number)s."
 
 #, python-format
-msgid "Ticket %(number)s received — Profit Sports Solutions"
-msgstr "تم استلام الطلب %(number)s — Profit Sports Solutions"
-
-#, python-format
 msgid "Ticket %(number)s submitted."
 msgstr "تم إرسال الطلب %(number)s."
 
@@ -6795,8 +6609,8 @@ msgid "Track your parcel"
 msgstr "تتبع شحنتك"
 
 #, python-format
-msgid "Track your shipment here: %(url)s"
-msgstr "تتبع شحنتكم من هنا: %(url)s"
+msgid "Track your shipment: %(tracking_url)s"
+msgstr "تتبعوا شحنتكم: %(tracking_url)s"
 
 msgid "Tracking number"
 msgstr "رقم التتبع"
@@ -6988,11 +6802,18 @@ msgstr "عرض قائمة الفنيين ولوحاتهم"
 msgid "View warehouse stock"
 msgstr "عرض مخزون المستودعات"
 
+msgid "View your request"
+msgstr "عرض طلبكم"
+
 msgid "Viewing"
 msgstr "تعرض بيانات"
 
 msgid "Visit"
 msgstr "زيارة"
+
+#, python-format
+msgid "Visit %(number)s"
+msgstr "الزيارة %(number)s"
 
 msgid "Visit Details"
 msgstr "تفاصيل الزيارة"
@@ -7009,15 +6830,14 @@ msgstr "تأكيد الزيارة"
 msgid "Visit date"
 msgstr "تاريخ الزيارة"
 
+msgid "Visit report"
+msgstr "تقرير الزيارة"
+
 msgid "Visit report (PDF)"
 msgstr "تقرير الزيارة (PDF)"
 
 msgid "Visit report ready"
 msgstr "تقرير الزيارة جاهز"
-
-#, python-format
-msgid "Visit report — %(number)s — Profit Sports Solutions"
-msgstr "تقرير الزيارة — %(number)s — Profit Sports Solutions"
 
 msgid "Visit rescheduled"
 msgstr "تغيير موعد الزيارة"
@@ -7113,6 +6933,9 @@ msgstr[3] "ينتهي الضمان خلال %(days)s أيام"
 msgstr[4] "ينتهي الضمان خلال %(days)s يومًا"
 msgstr[5] "ينتهي الضمان خلال %(days)s يوم"
 
+msgid "We apologise for the inconvenience and will arrive as soon as possible."
+msgstr "نعتذر عن الإزعاج، وسنصل في أقرب وقت ممكن."
+
 msgid "We are arranging a visit for this request and will contact you to agree a date."
 msgstr "نقوم بترتيب زيارة لهذا الطلب وسنتواصل معك للاتفاق على موعد."
 
@@ -7146,8 +6969,9 @@ msgstr "نوصي بالتزام الأعضاء بالحمولة القصوى ل�
 msgid "We use these details to contact you about this request. They are filled in from your account; change them here if needed."
 msgstr "نستخدم هذه البيانات للتواصل معك بشأن هذا الطلب. وهي مأخوذة من حسابك؛ غيّرها هنا إذا لزم الأمر."
 
-msgid "We would value your feedback on your recent Profit Sports Solutions visit"
-msgstr "نقدّر رأيكم في زيارة Profit Sports Solutions الأخيرة"
+#, python-format
+msgid "We visited %(site)s on %(date)s, and would greatly appreciate a moment of your time to tell us how it went."
+msgstr "زرنا %(site)s بتاريخ %(date)s، ونقدّر كثيرًا أن تمنحونا لحظة من وقتكم لتخبرونا كيف كانت الزيارة."
 
 msgid "Wednesday"
 msgstr "الأربعاء"
@@ -7404,6 +7228,9 @@ msgstr "تتلقى هذه الرسالة لأنه تم طلب إعادة تعي�
 msgid "You can attach up to %(count)d files. Please remove some and send again."
 msgstr "يمكنك إرفاق %(count)d ملفات كحد أقصى. يرجى إزالة بعضها والإرسال مرة أخرى."
 
+msgid "You can follow your request here:"
+msgstr "يمكنكم متابعة طلبكم من هنا:"
+
 msgid "You cannot disable your own login."
 msgstr "لا يمكنك تعطيل تسجيل دخولك بنفسك."
 
@@ -7480,6 +7307,9 @@ msgstr "بريدك الآن %(email)s."
 msgid "Your feedback has already been recorded. Thank you for your time."
 msgstr "تم تسجيل تقييمكم مسبقاً. نشكركم على وقتكم."
 
+msgid "Your feedback helps us keep the standard of service you expect from us."
+msgstr "تساعدنا ملاحظاتكم على الحفاظ على مستوى الخدمة الذي تتوقعونه منا."
+
 msgid "Your gym equipment, looked after. Everything about your requests and visits in one place."
 msgstr "معدات ناديك في أيدٍ أمينة. كل ما يخص طلباتك وزياراتك في مكان واحد."
 
@@ -7507,6 +7337,9 @@ msgstr "القطعة في الطريق إليك"
 msgid "Your parts"
 msgstr "قطع الغيار الخاصة بك"
 
+msgid "Your parts have been shipped"
+msgstr "تم شحن قطع الغيار الخاصة بكم"
+
 msgid "Your password has been set. Welcome."
 msgstr "تم تعيين كلمة المرور. مرحبًا بك."
 
@@ -7529,8 +7362,8 @@ msgid "Your request"
 msgstr "طلبك"
 
 #, python-format
-msgid "Your request %(number)s has been resolved — %(site)s"
-msgstr "تم حل طلبك %(number)s — %(site)s"
+msgid "Your request %(reference)s has been resolved:"
+msgstr "تم حل طلبكم %(reference)s:"
 
 msgid "Your request has been resolved"
 msgstr "تم حل طلبك"
@@ -7544,10 +7377,6 @@ msgstr "أدواركم"
 
 msgid "Your self-rating was not saved. Please correct the form below."
 msgstr "لم يتم حفظ تقييمك الذاتي. يُرجى تصحيح النموذج أدناه."
-
-#, python-format
-msgid "Your shipment is on its way — %(reference)s"
-msgstr "شحنتك في الطريق إليك — %(reference)s"
 
 #, python-format
 msgid "Your shipment is on its way — %(task_number)s"
@@ -7569,6 +7398,9 @@ msgstr "اسم المستخدم: %(username)s. بعد ذلك، سجّل الدخ
 
 msgid "Your visit"
 msgstr "زيارتك"
+
+msgid "Your visit is running late"
+msgstr "تأخير في موعد زيارتكم"
 
 msgid "Your visit report is ready — please rate the visit"
 msgstr "تقرير زيارتك جاهز — يرجى تقييم الزيارة"
@@ -9208,6 +9040,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Company (as entered)"
 #~ msgstr "الشركة (كما أُدخلت)"
 
+#, python-format
+#~ msgid "Confirming your upcoming Profit Sports Solutions visit — %(number)s"
+#~ msgstr "تأكيد زيارة Profit Sports Solutions القادمة — %(number)s"
+
 #~ msgid "Convert to task"
 #~ msgstr "تحويل إلى مهمة"
 
@@ -9235,6 +9071,202 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Customer accounts"
 #~ msgstr "حسابات العملاء"
 
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "%(technician)s from Profit Sports Solutions is on the way to %(site)s.%(when)s\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "عزيزي %(contact)s،\n"
+#~ "\n"
+#~ "%(technician)s من Profit Sports Solutions في الطريق إلى %(site)s.%(when)s\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Please be advised that our technician for %(site)s is running behind schedule today: %(reason)s\n"
+#~ "\n"
+#~ "We sincerely apologise for any inconvenience and will arrive as soon as possible.\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "نود إحاطتكم علماً بأن الفني المكلَّف بزيارة %(site)s متأخر عن موعده اليوم: %(reason)s\n"
+#~ "\n"
+#~ "نعتذر عن أي إزعاج، وسيصل في أقرب وقت ممكن.\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Please find attached the visit report for %(site)s, dated %(date)s.\n"
+#~ "\n"
+#~ "Should you have any questions about the work carried out, please do not hesitate to contact us.\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "عزيزي %(contact)s،\n"
+#~ "\n"
+#~ "مرفق تقرير الزيارة الخاص بـ %(site)s بتاريخ %(date)s.\n"
+#~ "\n"
+#~ "إذا كانت لديكم أي استفسارات حول الأعمال المنفّذة، فلا تترددوا في التواصل معنا.\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Regarding ticket %(number)s:\n"
+#~ "\n"
+#~ "%(reply_message)s\n"
+#~ "\n"
+#~ "You may reply or view the full conversation here:\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "بخصوص التذكرة %(number)s:\n"
+#~ "\n"
+#~ "%(reply_message)s\n"
+#~ "\n"
+#~ "يمكنكم الرد أو الاطلاع على المحادثة كاملة من هنا:\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Thank you for choosing Profit Sports Solutions. We completed a service visit at %(site)s on %(date)s, and would greatly appreciate a moment of your time to share your feedback.\n"
+#~ "\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "Your feedback helps us maintain the standard of service you expect from us.\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "عزيزي %(contact)s،\n"
+#~ "\n"
+#~ "شكرًا لاختيارك Profit Sports Solutions. لقد أتممنا زيارة صيانة في %(site)s بتاريخ %(date)s، ويسعدنا كثيرًا أن تخصص لحظة من وقتك لمشاركة رأيك.\n"
+#~ "\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "رأيك يساعدنا على الحفاظ على مستوى الخدمة الذي تتوقعه منا.\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Thank you for contacting us. We have received your request and created ticket #%(number)s.\n"
+#~ "\n"
+#~ "Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there is an update.\n"
+#~ "\n"
+#~ "Please ensure that photos or videos are attached for each issue. This will help our team understand the problem and resolve your case promptly.\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "نشكركم على تواصلكم معنا. لقد استلمنا طلبكم وأنشأنا التذكرة رقم #%(number)s.\n"
+#~ "\n"
+#~ "يرد فريقنا خلال 24 ساعة، من الأحد إلى الجمعة. وستتلقون رسالة بريد إلكتروني فور توفر أي مستجدات.\n"
+#~ "\n"
+#~ "يرجى التأكد من إرفاق صور أو مقاطع فيديو لكل مشكلة، إذ يساعد ذلك فريقنا على فهم المشكلة وحل طلبكم بسرعة.\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track it using the details below.\n"
+#~ "\n"
+#~ "%(tracking_lines)s\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "يسعدنا إبلاغكم بأنه تم إرسال شحنتكم الخاصة بـ %(entity)s. يمكنكم تتبعها باستخدام البيانات أدناه.\n"
+#~ "\n"
+#~ "%(tracking_lines)s\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at %(time)s.\n"
+#~ "\n"
+#~ "Should this time be inconvenient, please contact us to arrange an alternative.\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "نؤكد لكم أن الفني لدينا مجدول لزيارة %(site)s بتاريخ %(date)s في تمام الساعة %(time)s.\n"
+#~ "\n"
+#~ "إذا كان هذا الموعد غير مناسب، يرجى التواصل معنا لتحديد موعد بديل.\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
+#, python-format
+#~ msgid ""
+#~ "Dear %(contact)s,\n"
+#~ "\n"
+#~ "Your request %(number)s has been resolved:\n"
+#~ "\n"
+#~ "%(answer)s\n"
+#~ "\n"
+#~ "You can view it here. If you need anything further, please send us a new request from the portal.\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "Best regards,\n"
+#~ "Profit Sports Solutions\n"
+#~ msgstr ""
+#~ "السيد/السيدة %(contact)s المحترم/ة،\n"
+#~ "\n"
+#~ "تم حل طلبكم %(number)s:\n"
+#~ "\n"
+#~ "%(answer)s\n"
+#~ "\n"
+#~ "يمكنكم الاطلاع عليه هنا. إذا احتجتم إلى أي شيء آخر، يُرجى إرسال طلب جديد من البوابة.\n"
+#~ "%(link)s\n"
+#~ "\n"
+#~ "مع أطيب التحيات،\n"
+#~ "Profit Sports Solutions\n"
+
 #~ msgid "Dismiss"
 #~ msgstr "رفض"
 
@@ -9259,10 +9291,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Fault"
 #~ msgstr "عطل"
-
-#, python-format
-#~ msgid "File %(number)s"
-#~ msgstr "ملف %(number)s"
 
 #~ msgid "For Advice given or Not covered: the customer sees it next to the machine on their request, e.g. how to reset it, or why it isn't covered."
 #~ msgstr "لـ«تم تقديم النصيحة» أو «غير مشمول»: يراه العميل بجانب الجهاز في طلبه، مثل طريقة إعادة تشغيله أو سبب عدم شموله."
@@ -9301,6 +9329,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Navy"
 #~ msgstr "كحلي"
 
+#, python-format
+#~ msgid "New reply on your ticket %(number)s — %(site)s"
+#~ msgstr "رد جديد على طلبك %(number)s — %(site)s"
+
 #~ msgid "No active customers."
 #~ msgstr "لا يوجد عملاء نشطون."
 
@@ -9324,6 +9356,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Not registered yet: its photos can be added once the report is sent and it's registered."
 #~ msgstr "غير مسجّل بعد: يمكن إضافة صوره بعد إرسال التقرير وتسجيله."
+
+#, python-format
+#~ msgid "Notice of a brief delay to your Profit Sports Solutions visit — %(number)s"
+#~ msgstr "إشعار بتأخير بسيط في زيارة Profit Sports Solutions — %(number)s"
 
 #~ msgid "Notify again"
 #~ msgstr "إشعار مرة أخرى"
@@ -9448,6 +9484,10 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "This ticket has been resolved. Please contact us if you require further assistance."
 #~ msgstr "تم حل هذه التذكرة. يرجى التواصل معنا إذا احتجتم إلى مزيد من المساعدة."
 
+#, python-format
+#~ msgid "Ticket %(number)s received — Profit Sports Solutions"
+#~ msgstr "تم استلام الطلب %(number)s — Profit Sports Solutions"
+
 #~ msgid "Ticket closed."
 #~ msgstr "تم إغلاق الطلب."
 
@@ -9495,8 +9535,15 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgstr "حجز زيارة أو تغيير موعدها"
 
 #, python-format
+#~ msgid "Visit report — %(number)s — Profit Sports Solutions"
+#~ msgstr "تقرير الزيارة — %(number)s — Profit Sports Solutions"
+
+#, python-format
 #~ msgid "We couldn't open “%(name)s” as a photo, video or PDF. Please choose the original file."
 #~ msgstr "تعذّر فتح «%(name)s» كصورة أو فيديو أو ملف PDF. يرجى اختيار الملف الأصلي."
+
+#~ msgid "We would value your feedback on your recent Profit Sports Solutions visit"
+#~ msgstr "نقدّر رأيكم في زيارة Profit Sports Solutions الأخيرة"
 
 #~ msgid "What to tell the customer (optional)"
 #~ msgstr "ما تريد إبلاغه للعميل (اختياري)"
@@ -9523,8 +9570,16 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Your color"
 #~ msgstr "لونك"
 
+#, python-format
+#~ msgid "Your request %(number)s has been resolved — %(site)s"
+#~ msgstr "تم حل طلبك %(number)s — %(site)s"
+
 #~ msgid "Your requests, visits and reports in one place."
 #~ msgstr "طلباتك وزياراتك وتقاريرك في مكان واحد."
+
+#, python-format
+#~ msgid "Your shipment is on its way — %(reference)s"
+#~ msgstr "شحنتك في الطريق إليك — %(reference)s"
 
 #~ msgid "Your ticket has been converted into a service task. We will contact you to schedule a visit."
 #~ msgstr "تم تحويل تذكرتكم إلى مهمة خدمة. سنتواصل معكم لتحديد موعد الزيارة."

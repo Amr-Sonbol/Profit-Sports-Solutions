@@ -1,8 +1,0 @@
-{% extends "tasks/email/base.html" %}
-{% block content %}
-<p style="margin:0 0 16px;">Dear {{ contact }},</p>
-<p style="margin:0 0 16px;">Your request {{ ticket_number }} has been resolved:</p>
-<p style="margin:0 0 16px;white-space:pre-line;">{{ answer }}</p>
-{% include "tasks/email/_button.html" with url=link label="View your request" %}
-<p style="margin:24px 0 0;">If you need anything further, please send us a new request from the portal.<br><br>Best regards,<br>Profit Sports Solutions</p>
-{% endblock %}

@@ -2464,6 +2464,36 @@ class OnTheWayNoticeTests(ApiTestCase):
         self.assertEqual(staff.reply_to, [])
         self.assertNotIn('Customer Service', staff.body)
 
+    def test_one_standard_their_request_number_in_both_languages(self):
+        """tasks.customer_emails: their request's number (not our visit's), English and Arabic
+        for a customer in an Arab country, the inbox preview, one request's emails grouped."""
+        from tasks.models import CustomerTicket
+        CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0901', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='Ali', contact_phone='0501234567',
+            description='-', submitted_at=timezone.now(), task=self.task, status=CustomerTicket.Status.CONVERTED,
+        )
+        self.act('accept')
+        self.act('en_route')
+        (notice,) = self.notices()
+        self.assertIn('Request AE-T0901', notice.subject)
+        self.assertNotIn(self.task.task_number, notice.subject)
+        self.assertIn('الطلب AE-T0901', notice.subject)
+        self.assertIn('Dear ', notice.body)
+        self.assertIn('في الطريق', notice.body)
+        self.assertEqual(notice.extra_headers['References'], '<request-AE-T0901@profitsports.solutions>')
+        html = notice.alternatives[0][0]
+        self.assertIn('dir="rtl"', html)
+        self.assertIn('mso-hide:all', html)  # the preview line
+        # The signature stays left to right inside an Arabic email.
+        self.assertIn('dir="ltr" width="600"', html)
+
+    def test_a_visit_from_no_request_keeps_its_own_number(self):
+        self.act('accept')
+        self.act('en_route')
+        (notice,) = self.notices()
+        self.assertIn(f'Visit {self.task.task_number}', notice.subject)
+
     def test_the_customer_can_switch_the_email_off(self):
         from customers.models import CustomerNotification
         self.customer.notify_on_the_way = False

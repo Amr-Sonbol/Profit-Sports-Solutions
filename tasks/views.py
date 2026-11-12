@@ -1057,11 +1057,7 @@ MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 # The emails a customer receives (the rest go to our staff): signed by Customer Service,
 # their replies to the team's mailbox (CUSTOMER_SERVICE_EMAIL).
-CUSTOMER_EMAIL_TEMPLATES = {
-    'tasks/email/ticket_confirmation.html', 'tasks/email/reply_to_customer.html', 'tasks/email/request_closed.html',
-    'tasks/email/schedule_notification.html', 'tasks/email/on_the_way.html', 'tasks/email/delay_notice.html',
-    'tasks/email/shipping_notice.html', 'tasks/email/visit_report.html', 'tasks/email/feedback_request.html',
-}
+CUSTOMER_EMAIL_TEMPLATES = {'tasks/email/customer.html'}  # tasks.customer_emails, customers.accounts
 CUSTOMER_SIGNATURE_TEXT = (
     'Profit Sports Solutions | Customer Service\n'
     'Phone: %(phone)s\n'
@@ -1073,7 +1069,7 @@ CUSTOMER_SIGNATURE_TEXT = (
 
 
 def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None,
-                             background=True):
+                             background=True, headers=None):
     """Every outbound notification email in this app goes through here
     — a plain-text body for clients that don't render HTML, and a
     matching styled HTML alternative (tasks/templates/tasks/email/)
@@ -1108,7 +1104,7 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
         text_body = f'{text_body.rstrip()}\n\n--\n{CUSTOMER_SIGNATURE_TEXT % {"phone": settings.CUSTOMER_SERVICE_PHONE, "email": settings.CUSTOMER_SERVICE_EMAIL}}'
     email = EmailMultiAlternatives(
         subject=subject, body=text_body, from_email=settings.CUSTOMER_FROM_EMAIL if to_customer else None,
-        to=recipient_list, reply_to=[settings.CUSTOMER_SERVICE_EMAIL] if to_customer else None,
+        to=recipient_list, reply_to=[settings.CUSTOMER_SERVICE_EMAIL] if to_customer else None, headers=headers,
     )
     email.attach_alternative(html_body, 'text/html')
     email.mixed_subtype = 'related'
@@ -1154,44 +1150,30 @@ def _send_notification_email(subject, text_body, template_name, context, recipie
 
 def send_visit_report_copy(report, email_address):
     """Email the customer the visit report PDF (reports.pdf), and record
-    where and when on the report. Both the PDF and its email are in the
-    report's language (reports.pdf.report_language — Arabic in Saudi
-    Arabia and Egypt), unlike other customer emails, which stay English.
-    Best-effort: a failure is logged, never raised, and the PDF stays
-    downloadable from the task page.
+    where and when on the report. The PDF is in the report's language
+    (reports.pdf.report_language — Arabic in Saudi Arabia and Egypt); its
+    email, like every customer email, in English and Arabic in an Arab
+    country (tasks.customer_emails). Best-effort: a failure is logged, never
+    raised, and the PDF stays downloadable from the task page.
     """
     from reports.pdf import render_visit_report_pdf, report_language
+    from tasks import customer_emails as emails
 
     task = report.task
     customer = task.site.customer
-    language = report_language(customer)
     try:
-        pdf = render_visit_report_pdf(report, language)
+        pdf = render_visit_report_pdf(report, report_language(customer))
     except Exception:  # noqa: BLE001 — same as a failed send: log it, don't break the report
         logger.exception('Visit report PDF failed: %s', task.task_number)
         return False
-    contact = task.site.contact_name or customer.contact_name or customer.name
-    with translation.override(language):
-        context = {
-            'contact': contact, 'site': task.site.name, 'number': task.task_number,
-            'date': formats.date_format(
-                timezone.localtime(report.submitted_at, ZoneInfo(customer.country.timezone)).date(), 'j F Y',
-            ),
-            'email_language': language,
-        }
-        subject = _('Visit report — %(number)s — Profit Sports Solutions') % context
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Please find attached the visit report for %(site)s, dated %(date)s.\n\n'
-            'Should you have any questions about the work carried out, please do not hesitate to contact us.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % context
-        # Already in the background (see save_work_report): send it from here.
-        sent = _send_notification_email(
-            subject, message, 'tasks/email/visit_report.html', context, [email_address],
-            attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
-        )
+    # Already in the background (see save_work_report): send it from here.
+    sent = emails.send(
+        country=customer.country, recipient=email_address,
+        contact=task.site.contact_name or customer.contact_name or customer.name,
+        title=emails.REPORT_TITLE, paragraphs=[emails.REPORT_BODY, emails.REPORT_NEXT],
+        values={'site': task.site.name, 'date': lambda: emails.date_text(report.submitted_at, customer.country)},
+        task=task, attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
+    )
     if sent:
         report.copy_sent_to = email_address
         report.copy_sent_at = timezone.now()
@@ -1200,33 +1182,22 @@ def send_visit_report_copy(report, email_address):
 
 
 def _send_schedule_notification(task):
-    """Best-effort, and forced to English — same reasoning as
-    reports._send_feedback_email: a failed send shouldn't block the
-    supervisor's flow, and there's nowhere to read a customer's language
-    preference from. Manual every time; nothing calls this on its own.
-    """
-    country_tz = ZoneInfo(task.site.customer.country.timezone)
-    local_time = timezone.localtime(task.scheduled_for, country_tz)
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    date = local_time.strftime('%B %d, %Y')
-    time = local_time.strftime('%I:%M %p').lstrip('0')
-    with translation.override('en'):
-        subject = _('Confirming your upcoming Profit Sports Solutions visit — %(number)s') % {
-            'number': task.task_number,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at '
-            '%(time)s.\n\n'
-            'Should this time be inconvenient, please contact us to arrange an alternative.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'date': date, 'time': time}
-    _send_notification_email(
-        subject, message, 'tasks/email/schedule_notification.html',
-        {'contact': contact, 'site': site, 'date': date, 'time': time},
-        [task.site.effective_contact_email],
+    """The visit's date and time to the branch contact (tasks.customer_emails).
+    Best-effort: a failed send never blocks the supervisor. Manual every time;
+    nothing calls this on its own."""
+    from tasks import customer_emails as emails
+
+    country = task.site.customer.country
+    emails.send(
+        country=country, recipient=task.site.effective_contact_email,
+        contact=task.site.effective_contact_name or task.site.customer.name,
+        title=emails.SCHEDULED_TITLE, paragraphs=[emails.SCHEDULED_BODY, emails.SCHEDULED_NEXT],
+        values={
+            'site': task.site.name,
+            'date': lambda: emails.date_text(task.scheduled_for, country),
+            'time': lambda: emails.time_text(task.scheduled_for, country),
+        },
+        task=task,
     )
 
 
@@ -1235,8 +1206,9 @@ def tell_customer_on_the_way(task, user):
     portal bell, and an email to the branch contact (unless they switched it
     off in the portal) with who is coming and the expected time. Once a visit
     day: a second tap or an undo doesn't send it again. Never our own
-    warehouses. Best-effort, in English like the visit confirmation; a failed
-    email never stops the tap."""
+    warehouses. Best-effort; a failed email never stops the tap."""
+    from tasks import customer_emails as emails
+
     customer = task.site.customer
     if customer.is_internal:
         return
@@ -1247,26 +1219,23 @@ def tell_customer_on_the_way(task, user):
     task.on_the_way_notified_at = timezone.now()
     task.save(update_fields=['on_the_way_notified_at'])
     notify_customer.on_the_way(task)
-    email = task.site.effective_contact_email
-    if not customer.notify_on_the_way or not email:
+    if not customer.notify_on_the_way:
         return
     technician = getattr(user, 'technician', None)
-    context = {
-        'contact': task.site.effective_contact_name or customer.name, 'site': task.site.name,
-        'technician': technician.full_name if technician else _('Our technician'), 'number': task.task_number,
-        'time': timezone.localtime(task.scheduled_for, country_tz).strftime('%I:%M %p').lstrip('0')
-        if task.scheduled_for and timezone.localtime(task.scheduled_for, country_tz).date() == today else '',
-    }
-    with translation.override('en'):
-        subject = _('Our technician is on the way — %(number)s') % context
-        when = _(' Expected around %(time)s.') % context if context['time'] else ''
-        message = _(
-            'Dear %(contact)s,\n\n'
-            '%(technician)s from Profit Sports Solutions is on the way to %(site)s.%(when)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {**context, 'when': when}
-    _send_notification_email(subject, message, 'tasks/email/on_the_way.html', context, [email])
+    # The expected time only when the visit is planned for today.
+    today_time = task.scheduled_for and timezone.localtime(task.scheduled_for, country_tz).date() == today
+    emails.send(
+        country=customer.country, recipient=task.site.effective_contact_email,
+        contact=task.site.effective_contact_name or customer.name,
+        title=emails.ON_THE_WAY_TITLE,
+        paragraphs=[emails.ON_THE_WAY_BODY, emails.ON_THE_WAY_TIME if today_time else None],
+        values={
+            'site': task.site.name,
+            'technician': technician.full_name if technician else emails.OUR_TECHNICIAN,
+            'time': lambda: emails.time_text(task.scheduled_for, customer.country) if today_time else '',
+        },
+        task=task,
+    )
 
 
 def _send_delay_notice(task, reason):
@@ -1276,24 +1245,13 @@ def _send_delay_notice(task, reason):
     needs a reason, since there's no automatic way to know the team is
     running behind.
     """
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    with translation.override('en'):
-        subject = _('Notice of a brief delay to your Profit Sports Solutions visit — %(number)s') % {
-            'number': task.task_number,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Please be advised that our technician for %(site)s is running behind schedule today: '
-            '%(reason)s\n\n'
-            'We sincerely apologise for any inconvenience and will arrive as soon as possible.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'reason': reason}
-    _send_notification_email(
-        subject, message, 'tasks/email/delay_notice.html',
-        {'contact': contact, 'site': site, 'reason': reason},
-        [task.site.effective_contact_email],
+    from tasks import customer_emails as emails
+
+    emails.send(
+        country=task.site.customer.country, recipient=task.site.effective_contact_email,
+        contact=task.site.effective_contact_name or task.site.customer.name,
+        title=emails.DELAY_TITLE, paragraphs=[emails.DELAY_BODY, emails.DELAY_NEXT],
+        values={'site': task.site.name, 'reason': reason}, task=task,
     )
 
 
@@ -1311,42 +1269,38 @@ CARRIER_TRACKING_URLS = {
 }
 
 
-def _send_shipping_notice(contact_name, entity_name, reference, company, tracking_number, contact_email):
-    """Shared by task detail and ticket review — the only two places a
-    shipping_tracking_number can live. Only the carrier and tracking
-    number go to the customer; pak_reference_number is internal and
-    never sent. `company` is the raw ShippingCompany code (or ''), not
-    its display label — needed as-is to look up a tracking URL.
+def _send_shipping_notice(country, contact_name, entity_name, company, tracking_number, contact_email,
+                          task=None, ticket=None):
+    """Shared by a part shipment (a task) and a request's own shipment (a
+    ticket). Only the courier and tracking number go to the customer;
+    pak_reference_number is internal and never sent. `company` is the raw
+    ShippingCompany code (or ''), not its display label — needed as-is to
+    look up a tracking URL.
     """
-    carrier_label = ShippingCompany(company).label if company else ''
+    from tasks import customer_emails as emails
+
     tracking_url = None
     if company and tracking_number:  # a local courier often has none
         url_template = CARRIER_TRACKING_URLS.get(company)
         if url_template:
             tracking_url = url_template.format(tracking=quote(tracking_number))
-    with translation.override('en'):
-        subject = _('Your shipment is on its way — %(reference)s') % {'reference': reference}
-        lines = [_('Tracking number: %(tracking)s') % {'tracking': tracking_number}] if tracking_number else []
-        if company:
-            lines.insert(0, _('Carrier: %(company)s') % {'company': carrier_label})
-            if tracking_url:
-                lines.append(_('Track your shipment here: %(url)s') % {'url': tracking_url})
-        tracking_lines = '\n'.join(lines)
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track '
-            'it using the details below.\n\n'
-            '%(tracking_lines)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact_name, 'entity': entity_name, 'tracking_lines': tracking_lines}
-    _send_notification_email(
-        subject, message, 'tasks/email/shipping_notice.html',
-        {
-            'contact': contact_name, 'entity': entity_name, 'carrier_label': carrier_label,
-            'tracking_number': tracking_number, 'tracking_url': tracking_url,
+
+    def tracking_lines():
+        lines = [str(emails.SHIPPED_COURIER)] if company else []
+        if tracking_number:
+            lines.append(str(emails.SHIPPED_TRACKING))
+        if tracking_url:
+            lines.append(str(emails.SHIPPED_TRACK_LINK))
+        return '\n'.join(lines)
+
+    emails.send(
+        country=country, recipient=contact_email, contact=contact_name,
+        title=emails.SHIPPED_TITLE, paragraphs=[emails.SHIPPED_BODY, tracking_lines],
+        values={
+            'site': entity_name, 'courier': lambda: ShippingCompany(company).label if company else '',
+            'tracking': tracking_number, 'tracking_url': tracking_url or '',
         },
-        [contact_email],
+        task=task, ticket=ticket,
     )
 
 
@@ -1399,36 +1353,19 @@ def _send_shipment_notice_to_supervisor(request, task):
 
 
 def _send_feedback_email(request, feedback):
-    """Best-effort — a failed send shouldn't stop the supervisor's flow or
-    leave them staring at a 500. EMAIL_BACKEND defaults to the console in
-    dev, so this always "succeeds" locally.
+    """The rating link to the branch contact (tasks.customer_emails).
+    Best-effort — a failed send shouldn't stop the supervisor's flow."""
+    from tasks import customer_emails as emails
 
-    Forced to English regardless of who sends it: there's nowhere to read a
-    customer's language preference from, and without this the email would
-    silently follow whichever language the supervisor's own UI happens to
-    be in — not the customer's.
-    """
     task = feedback.task
-    country_tz = ZoneInfo(task.site.customer.country.timezone)
-    link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token]))
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    with translation.override('en'):
-        visit_date = timezone.localtime(task.report.submitted_at, country_tz).date().strftime('%B %d, %Y')
-        subject = _('We would value your feedback on your recent Profit Sports Solutions visit')
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Thank you for choosing Profit Sports Solutions. We completed a service visit at %(site)s on '
-            '%(date)s, and would greatly appreciate a moment of your time to share your feedback.\n\n'
-            '%(link)s\n\n'
-            'Your feedback helps us maintain the standard of service you expect from us.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'date': visit_date, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/feedback_request.html',
-        {'contact': contact, 'site': site, 'date': visit_date, 'link': link},
-        [task.site.effective_contact_email],
+    country = task.site.customer.country
+    emails.send(
+        country=country, recipient=task.site.effective_contact_email,
+        contact=task.site.effective_contact_name or task.site.customer.name,
+        title=emails.FEEDBACK_TITLE, paragraphs=[emails.FEEDBACK_BODY, emails.FEEDBACK_NEXT],
+        values={'site': task.site.name, 'date': lambda: emails.date_text(task.report.submitted_at, country)},
+        task=task, link=portal_url(request, reverse('reports:feedback_form', args=[feedback.token])),
+        button=emails.FEEDBACK_BUTTON,
     )
 
 
@@ -2218,8 +2155,8 @@ def notify_shipping(task):
     if not task.site.effective_contact_email:
         return _('Please add a contact email address for this site before notifying the customer.')
     _send_shipping_notice(
-        task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
-        task.shipping_company, task.shipping_tracking_number, task.site.effective_contact_email,
+        task.site.customer.country, task.site.effective_contact_name or task.site.customer.name, task.site.name,
+        task.shipping_company, task.shipping_tracking_number, task.site.effective_contact_email, task=task,
     )
     return None
 
@@ -3141,33 +3078,19 @@ def _ticket_is_open(ticket):
 
 
 def send_ticket_confirmation_to_customer(request, ticket):
-    """The one email a customer gets right when they submit a ticket —
-    best-effort and forced to English, same reasoning as every other
-    outbound customer notification here. Public (no leading underscore):
+    """The one email a customer gets right when they submit a request —
+    best-effort (tasks.customer_emails). Public (no leading underscore):
     customers.views.portal_ticket_new, a different app, calls this
     directly, the same way it already calls save_new_ticket.
     """
+    from tasks import customer_emails as emails
+
     if not NotificationSettings.load().ticket_received_email:  # the admin's Notifications page
         return
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('Ticket %(number)s received — Profit Sports Solutions') % {'number': ticket.ticket_number}
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Thank you for contacting us. We have received your request and created ticket #%(number)s.\n\n'
-            'Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there '
-            'is an update.\n\n'
-            'Please ensure that photos or videos are attached for each issue. This will help our team '
-            'understand the problem and resolve your case promptly.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': ticket.contact_name, 'number': ticket.ticket_number}
-    _send_notification_email(
-        subject, message, 'tasks/email/ticket_confirmation.html',
-        {'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number, 'link': link},
-        [ticket.contact_email],
+    emails.send(
+        country=ticket.country, recipient=ticket.contact_email, contact=ticket.contact_name,
+        title=emails.RECEIVED_TITLE, paragraphs=[emails.RECEIVED_BODY, emails.RECEIVED_NEXT],
+        values={'site': ticket.site_description}, ticket=ticket, request=request,
     )
 
 
@@ -3233,41 +3156,22 @@ def send_staff_setup_link(request, technician):
 
 
 def _send_reply_to_customer(request, reply):
-    """Best-effort, and only when the customer gave an email — same
-    fail-silent pattern as every other customer-facing notification.
-    Any file attached to the reply (quotation, report, photo, whatever
-    staff chose to include) rides along on the email itself, not just
-    linked from the portal.
-    """
+    """Best-effort, and only when the customer gave an email. Any file
+    attached to the reply (quotation, report, photo, whatever staff chose
+    to include) rides along on the email itself, not just linked from the
+    portal. Who wrote it, by first name ("Sara from our team")."""
+    from tasks import customer_emails as emails
+
     if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
         return
     ticket = reply.ticket
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('New reply on your ticket %(number)s — %(site)s') % {
-            'number': ticket.ticket_number, 'site': ticket.site_description,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Regarding ticket %(number)s:\n\n'
-            '%(reply_message)s\n\n'
-            'You may reply or view the full conversation here:\n'
-            '%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {
-            'contact': ticket.contact_name, 'number': ticket.ticket_number,
-            'reply_message': reply.message, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/reply_to_customer.html',
-        {
-            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
-            'reply_message': reply.message, 'link': link,
-        },
-        [ticket.contact_email], attachment=reply.all_files,
+    name = reply.sent_by.first_name if reply.sent_by_id else ''
+    emails.send(
+        country=ticket.country, recipient=ticket.contact_email, contact=ticket.contact_name,
+        title=emails.REPLY_TITLE,
+        paragraphs=[emails.REPLY_BODY_NAMED if name else emails.REPLY_BODY, emails.raw('message')],
+        values={'name': name, 'message': reply.message}, ticket=ticket, request=request,
+        attachment=reply.all_files,
     )
 
 
@@ -3275,34 +3179,14 @@ def _send_request_closed(request, ticket):
     """Tell the customer their request was resolved, with our answer (the
     close reason) — best-effort, under the same Notifications switch as
     our replies, and only when they gave an email."""
+    from tasks import customer_emails as emails
+
     if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
         return
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('Your request %(number)s has been resolved — %(site)s') % {
-            'number': ticket.ticket_number, 'site': ticket.site_description,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Your request %(number)s has been resolved:\n\n'
-            '%(answer)s\n\n'
-            'You can view it here. If you need anything further, please send us a new request from the portal.\n'
-            '%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {
-            'contact': ticket.contact_name, 'number': ticket.ticket_number,
-            'answer': ticket.close_reason, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/request_closed.html',
-        {
-            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
-            'answer': ticket.close_reason, 'link': link,
-        },
-        [ticket.contact_email],
+    emails.send(
+        country=ticket.country, recipient=ticket.contact_email, contact=ticket.contact_name,
+        title=emails.RESOLVED_TITLE, paragraphs=[emails.RESOLVED_BODY, emails.raw('answer'), emails.RESOLVED_NEXT],
+        values={'answer': ticket.close_reason}, ticket=ticket, request=request,
     )
 
 
@@ -4012,9 +3896,8 @@ def ticket_review(request, pk):
                 messages.error(request, _('Please add a contact email address before notifying the customer.'))
             else:
                 _send_shipping_notice(
-                    ticket.contact_name, ticket.site_description, f'ticket #{ticket.pk}',
-                    ticket.shipping_company,
-                    ticket.shipping_tracking_number, ticket.contact_email,
+                    ticket.country, ticket.contact_name, ticket.site_description, ticket.shipping_company,
+                    ticket.shipping_tracking_number, ticket.contact_email, ticket=ticket,
                 )
                 messages.success(request, _('The customer has been notified of the tracking number.'))
             return redirect('tasks:ticket_review', pk=ticket.pk)
@@ -6934,10 +6817,9 @@ def request_for_task(task, with_conversation=True):
     a machine), and — for the office, not the technician (with_conversation)
     — the conversation with support, with its files. Never internal notes.
     None when the task didn't come from a customer's request."""
-    ticket = getattr(task, 'ticket', None) or next(
-        (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
-    )
-    if ticket is None or ticket.kind != CustomerTicket.Kind.CUSTOMER:
+    from tasks.customer_emails import request_of
+    ticket = request_of(task)
+    if ticket is None:
         return None
     attachments = ticket.attachments.order_by('uploaded_at')
     if task.ticket_machines.exists():
@@ -7108,8 +6990,8 @@ def ship_and_tell_customer(task, user, company, tracking):
         notify_customer.part_shipped(ticket)
     if task.site.effective_contact_email:
         _send_shipping_notice(
-            task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
-            company, tracking, task.site.effective_contact_email,
+            task.site.customer.country, task.site.effective_contact_name or task.site.customer.name, task.site.name,
+            company, tracking, task.site.effective_contact_email, task=task,
         )
 
 
