@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 02:53+0000\n"
+"POT-Creation-Date: 2026-11-12 03:26+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -2435,6 +2435,9 @@ msgstr "تعديل"
 msgid "Edit customer"
 msgstr "تعديل بيانات العميل"
 
+msgid "Edit customers, sites and machines"
+msgstr "تعديل العملاء والفروع والأجهزة"
+
 msgid "Edit details"
 msgstr "تعديل التفاصيل"
 
@@ -3045,6 +3048,16 @@ msgstr "مهمة داخلية"
 #, python-format
 msgid "Internal task %(number)s created."
 msgstr "تم إنشاء المهمة الداخلية %(number)s."
+
+#, python-format
+msgid "Internal task (%(count)s)"
+msgid_plural "Internal tasks (%(count)s)"
+msgstr[0] "المهام الداخلية (%(count)s)"
+msgstr[1] "المهام الداخلية (%(count)s)"
+msgstr[2] "المهام الداخلية (%(count)s)"
+msgstr[3] "المهام الداخلية (%(count)s)"
+msgstr[4] "المهام الداخلية (%(count)s)"
+msgstr[5] "المهام الداخلية (%(count)s)"
 
 msgid "Internal task assigned to you"
 msgstr "مهمة داخلية مُسندة إليك"
@@ -6780,9 +6793,6 @@ msgstr "عرض"
 msgid "View all %(count)s"
 msgstr "عرض الكل (%(count)s)"
 
-msgid "View and edit customers and sites"
-msgstr "عرض العملاء والفروع وتعديلهم"
-
 msgid "View as customer"
 msgstr "العرض بصفة العميل"
 
@@ -6791,6 +6801,9 @@ msgstr "العرض بصفة المستخدم"
 
 msgid "View board"
 msgstr "عرض اللوحة"
+
+msgid "View customers and sites"
+msgstr "عرض العملاء والفروع"
 
 msgid "View dashboard"
 msgstr "عرض لوحة التحكم"

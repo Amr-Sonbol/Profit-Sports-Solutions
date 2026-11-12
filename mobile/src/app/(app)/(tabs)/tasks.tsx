@@ -47,7 +47,8 @@ export default function TasksScreen() {
   const canCreate = me?.permissions?.includes('create_tasks') ?? false;
   const hasInternal = !!me?.role && me.role !== 'technician';
   const scopes: Scope[] = [
-    'mine', ...(canSeeAll ? ['all' as const] : []), ...(hasInternal ? ['internal' as const] : []),
+    // All in the country (field and internal tasks), then Internal, then Mine.
+    ...(canSeeAll ? ['all' as const] : []), ...(hasInternal ? ['internal' as const] : []), 'mine',
   ];
   // ?scope=all (the dashboard's "All open tasks") or ?scope=internal: open there, even when already open.
   const params = useLocalSearchParams<{ scope?: string }>();
@@ -128,7 +129,7 @@ export default function TasksScreen() {
             ))}
           </ThemedView>
         ) : null}
-        {scope === 'all' && canSeeAll ? <AllTasks /> : scope === 'internal' && hasInternal ? <InternalTasks /> : (
+        {scope === 'all' && canSeeAll ? <AllTasks withInternal={hasInternal} /> : scope === 'internal' && hasInternal ? <InternalTasks /> : (
           <FlatList
             data={toDo}
             keyExtractor={(item) => String(item.id)}

@@ -39,3 +39,10 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Lists and keys
+
+A list with two children sharing a key breaks the screen ("Encountered two children with the same key").
+
+- Key list items by a stable id from the server (`id`, a choice's `value`), never by a name or label (two technicians can share a name). A list of things with no id: `${something}-${index}`.
+- Choices for `ChoicePicker` go through `uniqueByValue`; the picker adds its own "None" for an optional field, so the server never sends a blank choice ("---------") — `api.tests.TaskEditApiTests.test_every_choice_is_listed_once_and_never_blank` checks it.

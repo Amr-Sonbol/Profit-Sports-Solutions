@@ -100,7 +100,7 @@ def customer_list(request):
     sees each one's login (status, last sign-in), filters by it (?portal=)
     and sends welcome emails to several at once.
     """
-    technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    technician = require_permission(request, RolePermission.Permission.VIEW_CUSTOMERS)
     manages_logins = _manages_logins(technician)
 
     show_inactive = request.GET.get('status') == 'inactive'
@@ -203,7 +203,7 @@ def customer_detail(request, pk):
     Whoever reaches every country opens any customer, whatever the active
     one (the Customers list's All countries); everyone else stays scoped to it.
     """
-    requesting_technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    requesting_technician = require_permission(request, RolePermission.Permission.VIEW_CUSTOMERS)
     is_admin = requesting_technician.role == Technician.Role.ADMIN
     # Adding a branch, and the Portal login section: whoever manages portal logins.
     can_add_site = _manages_logins(requesting_technician)
@@ -252,6 +252,8 @@ def customer_detail(request, pk):
     context = {
         'customer': customer, 'sites': customer.sites.all(), 'form': form, 'is_admin': is_admin,
         'can_add_site': can_add_site,
+        # Editing the customer and its branches: the edit switch (a supervisor only sees them).
+        'can_edit': requesting_technician.has_permission(RolePermission.Permission.MANAGE_CUSTOMERS),
         # Its people who sign in to the portal, and what can be done to each (portal_login_action);
         # never our own warehouses.
         'portal_section': can_add_site and not customer.is_internal,
@@ -275,7 +277,7 @@ def view_as_start(request, pk):
     password untouched, nothing sent to them; recorded in the Audit log."""
     from spots.middleware import VIEW_AS_SESSION_KEY
 
-    technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    technician = require_permission(request, RolePermission.Permission.VIEW_CUSTOMERS)
     if technician.role != Technician.Role.ADMIN or request.method != 'POST':
         raise PermissionDenied
     customer = get_object_or_404(Customer, pk=pk)

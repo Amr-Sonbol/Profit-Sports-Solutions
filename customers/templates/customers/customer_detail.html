@@ -17,7 +17,7 @@
             <button type="submit" class="button button--secondary" title="{% translate 'See their portal exactly as they do: view only, their password untouched, nothing sent to them.' %}">{% translate "View as customer" %}</button>
         </form>
         {% endif %}
-        <a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>
+        {% if can_edit %}<a href="{% url 'customers:customer_edit' customer.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
     </div>
 </div>
 
@@ -203,7 +203,7 @@
                     </td>
                     <td>{% include "_warranty_label.html" %}{% if not site.warranty_until %}<span class="muted">—</span>{% endif %}</td>
                     {% if can_see_terms %}<td>{% include "_terms_labels.html" %}</td>{% endif %}
-                    <td><a href="{% url 'customers:site_edit' site.pk %}">{% translate "Edit" %}</a></td>
+                    <td>{% if can_edit %}<a href="{% url 'customers:site_edit' site.pk %}">{% translate "Edit" %}</a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

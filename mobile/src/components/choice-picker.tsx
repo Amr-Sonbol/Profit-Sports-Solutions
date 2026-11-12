@@ -15,6 +15,12 @@ import type { Choice } from '@/types';
  * opening a searchable list (sites, brands, supervisors, ...). `optional`
  * adds a "None" at the top.
  */
+/** One entry per value: a list's keys must be unique, whatever the server sends. */
+export function uniqueByValue<T extends { value: string }>(choices: T[]): T[] {
+  const seen = new Set<string>();
+  return choices.filter((choice) => (seen.has(choice.value) ? false : (seen.add(choice.value), true)));
+}
+
 export function ChoicePicker({ label, choices, value, onChange, optional = false, error, placeholder }: {
   label: string; choices: Choice[]; value: string; onChange: (value: string) => void;
   optional?: boolean; error?: string; placeholder?: string;
@@ -24,7 +30,9 @@ export function ChoicePicker({ label, choices, value, onChange, optional = false
   const [query, setQuery] = useState('');
   const selected = choices.find((choice) => choice.value === value);
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = choices.filter((choice) => words.every((word) => choice.label.toLowerCase().includes(word)));
+  const shown = uniqueByValue(choices).filter((choice) => words.every((word) => choice.label.toLowerCase().includes(word)));
+  // "None" for an optional field — unless the choices already have an empty one.
+  const listed = optional && !shown.some((choice) => choice.value === '') ? [{ value: '', label: 'None' }, ...shown] : shown;
 
   const pick = (next: string) => {
     onChange(next);
@@ -63,7 +71,7 @@ export function ChoicePicker({ label, choices, value, onChange, optional = false
               />
             ) : null}
             <FlatList
-              data={optional ? [{ value: '', label: 'None' }, ...shown] : shown}
+              data={listed}
               keyExtractor={(choice) => choice.value || 'none'}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.list}

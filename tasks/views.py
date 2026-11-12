@@ -1873,8 +1873,24 @@ def task_list(request):
     if supervisor_id:
         quick_filters.append(_('Assigned to you'))
 
+    # "All" means all: the country's internal tasks too, at the top — for Open or All
+    # (their statuses are their own), on the first page, with no field-task filter.
+    internal = []
+    if (technician.role != Technician.Role.TECHNICIAN and status in ('open', 'all') and not all_countries
+            and not filter_params and page_obj.number == 1):
+        internal = _visible_internal_tickets(technician, active_country).select_related('assigned_to')
+        if status == 'open':
+            internal = internal.filter(status=CustomerTicket.Status.NEW)
+        text = request.GET.get('q', '').strip()
+        if text:
+            internal = internal.filter(
+                Q(ticket_number__icontains=text) | Q(subject__icontains=text) | Q(description__icontains=text),
+            )
+        internal = list(internal.order_by('-submitted_at')[:50])
+
     context = {
         'page_obj': page_obj,
+        'internal_tasks': internal,
         'quick_filters': quick_filters,
         'quick_filter_params': {
             key: filter_params[key] for key in ('priority', 'lead', 'scheduled', 'supervisor') if key in filter_params

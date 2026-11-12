@@ -95,6 +95,23 @@
     </div>
 </form>
 
+{# "All" means all: the internal tasks first, each labelled; then the field tasks. #}
+{% if internal_tasks %}
+<div class="section">
+    <h2>{% blocktranslate count count=internal_tasks|length %}Internal task ({{ count }}){% plural %}Internal tasks ({{ count }}){% endblocktranslate %}</h2>
+    <ul class="action-list">
+        {% for ticket in internal_tasks %}
+        <li class="action-row">
+            <a href="{% url 'tasks:internal_ticket' ticket.pk %}" class="task-number" dir="ltr">{{ ticket.ticket_number }}</a>
+            <span class="badge badge--neutral">{% translate "Internal" %}</span>
+            <span>{{ ticket.subject|default:ticket.description|truncatechars:80 }}</span>
+            <span class="muted">{{ ticket.get_status_display }}{% if ticket.assigned_to %} · {{ ticket.assigned_to.full_name }}{% endif %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <div class="table-wrap">
     {# Six columns, each with its detail on a second line, so the table fits the page. #}
     <table class="compact-table">

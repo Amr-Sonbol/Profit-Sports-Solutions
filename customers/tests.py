@@ -298,8 +298,8 @@ class CustomerEditTests(CustomerTestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
-    def test_supervisor_updates_customer_fields(self):
-        self.client.login(username='supervisor1', password='pass12345')
+    def test_a_manager_updates_customer_fields(self):
+        self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {
             'name': 'Fitness First Renamed', 'segment': 'gym', 'language': 'en',
             'contact_name': '', 'contact_phone': '', 'contact_email': '',
@@ -308,8 +308,8 @@ class CustomerEditTests(CustomerTestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.name, 'Fitness First Renamed')
 
-    def test_supervisor_can_set_code_and_shipping_address(self):
-        self.client.login(username='supervisor1', password='pass12345')
+    def test_a_manager_can_set_code_and_shipping_address(self):
+        self.client.login(username='manager1', password='pass12345')
         response = self.client.post(self.url, {
             'name': 'Fitness First', 'code': 'ACC-42', 'segment': 'gym', 'language': 'en',
             'contact_name': '', 'contact_phone': '', 'contact_email': '',
@@ -334,13 +334,21 @@ class CustomerEditTests(CustomerTestCase):
         response = self.client.get(f'/customers/{other_customer.pk}/edit/')
         self.assertEqual(response.status_code, 200)
 
-    def test_supervisor_cannot_reach_a_customer_in_another_country(self):
+    def test_a_supervisor_cannot_edit_customers(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_a_country_role_cannot_reach_a_customer_in_another_country(self):
         other_country = Country.objects.create(
             name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP',
         )
         other_customer = Customer.objects.create(country=other_country, name='Cairo Gym', segment='gym')
-
-        self.client.login(username='supervisor1', password='pass12345')
+        support = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(
+            user=support, country=self.country, full_name='Sami Support', language='en',
+            role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff',  # edits customers, in its own country
+        )
+        self.client.login(username='support1', password='pass12345')
         response = self.client.get(f'/customers/{other_customer.pk}/edit/')
         self.assertEqual(response.status_code, 404)
 
@@ -371,7 +379,7 @@ class CustomerDeactivateTests(CustomerTestCase):
     def test_supervisor_cannot_deactivate(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(self.url, {'action': 'deactivate', 'reason': 'Contract ended.'})
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)  # nor edit the customer at all
         self.customer.refresh_from_db()
         self.assertTrue(self.customer.is_active)
 
@@ -429,8 +437,8 @@ class SiteEditTests(CustomerTestCase):
         response = self.client.get(f'/customers/sites/{self.site.pk}/edit/')
         self.assertEqual(response.status_code, 403)
 
-    def test_supervisor_updates_a_site(self):
-        self.client.login(username='supervisor1', password='pass12345')
+    def test_an_admin_updates_a_site(self):
+        self.client.login(username='admin1', password='pass12345')
         response = self.client.post(f'/customers/sites/{self.site.pk}/edit/', {
             'name': 'Marina Branch', 'address': 'Updated address', 'contact_name': '',
             'contact_phone': '', 'contact_email': '', 'access_notes': '',
@@ -1431,7 +1439,7 @@ class SiteMapLocationTests(CustomerTestCase):
         })
 
     def test_coordinates_or_a_maps_link_set_the_location(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         for text in (
             '25.0772, 55.1306',
             'https://www.google.com/maps/place/Gym/@25.0772,55.1306,17z/data=x',
@@ -1446,7 +1454,7 @@ class SiteMapLocationTests(CustomerTestCase):
                 self.assertEqual(self.site.location_source, 'office')
 
     def test_a_link_without_coordinates_is_refused(self):
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         response = self._post('https://maps.app.goo.gl/abc123')
         self.assertEqual(response.status_code, 200)
         self.assertIn('map_location', response.context['form'].errors)
@@ -1454,7 +1462,7 @@ class SiteMapLocationTests(CustomerTestCase):
     def test_saving_unchanged_keeps_where_it_came_from(self):
         self.site.latitude, self.site.longitude, self.site.location_source = 25.0772, 55.1306, 'arrival'
         self.site.save()
-        self.client.login(username='supervisor1', password='pass12345')
+        self.client.login(username='admin1', password='pass12345')
         initial = self.client.get(f'/customers/sites/{self.site.pk}/edit/').context['form']['map_location'].initial
         self._post(initial)
         self.site.refresh_from_db()
@@ -1765,3 +1773,33 @@ class PortalMachineQuestionTests(PortalTicketMachinesTests):
         Asset.objects.filter(site__customer=self.customer).delete()
         self.client.login(username='fitnessfirst', password='pass12345')
         self.assertNotContains(self.client.get('/customers/portal/tickets/new/'), 'Is this machine in your list?')
+
+
+class CustomerViewAndEditTests(CustomerTestCase):
+    """Seeing customers apart from editing them (view_customers / manage_customers):
+    a supervisor sees them to plan the work, never edits them; a technician
+    sees neither."""
+
+    def test_a_supervisor_sees_the_customer_but_cannot_edit_it(self):
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/customers/{self.customer.pk}/')
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, f'/customers/{self.customer.pk}/edit/')
+        self.assertNotContains(page, f'/customers/sites/{self.site.pk}/edit/')
+        self.assertEqual(self.client.get(f'/customers/{self.customer.pk}/edit/').status_code, 403)
+        self.assertEqual(self.client.get(f'/customers/sites/{self.site.pk}/edit/').status_code, 403)
+        response = self.client.post(f'/customers/{self.customer.pk}/edit/', {'name': 'Hacked'})
+        self.assertEqual(response.status_code, 403)
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.name, 'Fitness First')
+
+    def test_a_technician_sees_no_customers(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/customers/').status_code, 403)
+        self.assertEqual(self.client.get(f'/customers/{self.customer.pk}/').status_code, 403)
+
+    def test_an_admin_edits(self):
+        self.client.login(username='admin1', password='pass12345')
+        page = self.client.get(f'/customers/{self.customer.pk}/')
+        self.assertContains(page, f'/customers/{self.customer.pk}/edit/')
+        self.assertEqual(self.client.get(f'/customers/{self.customer.pk}/edit/').status_code, 200)

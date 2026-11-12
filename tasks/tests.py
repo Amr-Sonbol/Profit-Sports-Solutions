@@ -9277,6 +9277,19 @@ class SupervisorCreatesInternalTasksTests(TaskTestCase):
         self.assertRegex(ticket.ticket_number, r'-I0001$')  # a series of its own
         self.assertRedirects(response, f'/tasks/tickets/internal/{ticket.pk}/', fetch_redirect_response=False)
 
+    def test_all_tasks_shows_the_internal_ones_first(self):
+        # "All" means all (task_list): the internal tasks at the top, labelled.
+        supervisor = Technician.objects.get(user__username='supervisor1')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post('/tasks/tickets/internal/new/', {
+            'subject': 'Treadmill belts', 'description': 'We need 5 belts.', 'assigned_to': supervisor.pk,
+        })
+        page = self.client.get('/tasks/')
+        self.assertEqual([ticket.subject for ticket in page.context['internal_tasks']], ['Treadmill belts'])
+        self.assertContains(page, 'Treadmill belts')
+        # Not with a filter only field tasks have.
+        self.assertEqual(self.client.get('/tasks/?lead=none').context['internal_tasks'], [])
+
     def test_a_technician_still_cannot(self):
         self.client.login(username='tech1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/tickets/internal/new/').status_code, 403)

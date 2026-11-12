@@ -268,7 +268,7 @@ def nav_pages(technician, allowed):
         add('tasks:team_progress', _('Team progress'), 'bar-chart', 'team')
         add('tasks:technician_hours', _('Hours'), 'clock', 'team')
         add('tasks:team_map', _('Team map'), 'map-pin', 'team')
-    if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
+    if RolePermission.Permission.VIEW_CUSTOMERS in allowed:
         add('customers:customer_list', _('Customers'), 'building', 'customers')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
         add('tasks:part_list', _('Parts'), 'package', 'customers')

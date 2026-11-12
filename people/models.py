@@ -326,7 +326,9 @@ class RolePermission(models.Model):
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
         MANAGE_TECHNICIANS = 'manage_technicians', _("Edit technicians' details and profile photos")
-        MANAGE_CUSTOMERS = 'manage_customers', _('View and edit customers and sites')
+        # Seeing customers (to plan the work) apart from changing them: a supervisor sees, doesn't edit.
+        VIEW_CUSTOMERS = 'view_customers', _('View customers and sites')
+        MANAGE_CUSTOMERS = 'manage_customers', _('Edit customers, sites and machines')
         VIEW_MACHINES = 'view_machines', _('View machines and their task/ticket history')
         DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
         MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')

@@ -912,6 +912,8 @@ export const AR: Record<string, string> = {
   "No photos were added to this visit.": "لم تُضف صور لهذه الزيارة.",
   "No photo before": "لا توجد صورة قبل",
   "Sent by": "أرسله",
+  "Internal tasks ({count})": "المهام الداخلية ({count})",
+  "{count} field tasks · newest first": "{count} مهمة ميدانية · الأحدث أولاً",
   "+ Take my own": "+ التقط صورتي",
   "Also sent by the customer": "أرسلها العميل أيضاً",
   "Choose the brand": "اختر العلامة التجارية",

@@ -76,8 +76,8 @@ export default function TeamMapScreen() {
               )) : <ThemedText themeColor="textSecondary">Nothing right now.</ThemedText>}
 
               <ThemedText type="subtitle">Last tap today</ThemedText>
-              {map.pins.map((pin) => (
-                <ThemedView key={pin.name} style={[styles.pin, { backgroundColor: theme.backgroundElement }]}>
+              {map.pins.map((pin, index) => (
+                <ThemedView key={`${pin.task_id}-${index}`} style={[styles.pin, { backgroundColor: theme.backgroundElement }]}>
                   <ThemedText type="smallBold">{pin.name}</ThemedText>
                   <ThemedText type="small">{pin.detail} · {pin.place}</ThemedText>
                   {pin.away ? <ThemedText type="small" themeColor="danger">Away from the site</ThemedText> : null}

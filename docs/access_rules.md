@@ -139,6 +139,17 @@ task needs go through that task (a part shipment).
   person it's for and the opener (and the field task's lead when it's for one).
 - Can be linked to a field task; that task lists its internal tasks.
 
+## Customers
+
+- **Seeing and editing are two switches.** "View customers and sites" opens
+  the customer list, a customer's page, its branches, contacts and machines.
+  "Edit customers, sites and machines" changes them: the customer's details,
+  its branches, confirming a machine the customer added.
+- **A supervisor sees customers (to plan the work) but never edits them**; a
+  technician sees neither. Everyone else who could before does both.
+- Not editing: a machine the technician finds during a visit is saved with
+  the visit's work ("Save this machine").
+
 ## Customer requests
 
 Unchanged: Technical Support Manager, Country Support Manager, Operations

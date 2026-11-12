@@ -483,13 +483,13 @@ def _task_line(task):
 
 
 class CustomersView(APIView):
-    """The app's Customers — the website's list (manage_customers): every
+    """The app's Customers — the website's list (view_customers): every
     active customer in the viewer's country, searchable by name."""
 
     permission_classes = [IsTechnician]
 
     def get(self, request):
-        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_CUSTOMERS)
         customers = Customer.objects.filter(
             is_active=True, country=get_active_country(request) or technician.country,
         ).prefetch_related('sites').order_by('name')
@@ -515,7 +515,7 @@ class CustomerView(APIView):
     permission_classes = [IsTechnician]
 
     def get(self, request, pk):
-        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_CUSTOMERS)
         customer = scoped_or_404(Customer.objects, pk, technician, get_active_country(request), 'country')
         sites = customer.sites.prefetch_related('assets__brand').order_by('name')
         tasks = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
@@ -2317,9 +2317,12 @@ def _describe_form(request, form):
         fields.append({
             'name': field.html_name, 'label': str(field.label), 'kind': kind, 'required': field.field.required,
             'value': value if kind != 'choice' else str(value or ''),
+            # No blank entry ("---------"): the app's picker offers its own "None" for an optional field,
+            # and two entries with one value break its list (duplicate keys).
             'choices': [
                 {'value': str(v), 'label': str(l)}
                 for v, l in (getattr(field.field, 'choices', None) or getattr(field.field.widget, 'choices', []))
+                if str(v) != ''
             ] if kind == 'choice' else [],
             'help': str(field.help_text or ''),
         })

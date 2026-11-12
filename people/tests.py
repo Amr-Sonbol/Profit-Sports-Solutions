@@ -35,9 +35,10 @@ class SeedRolePermissionsTests(TestCase):
             allowed_roles = set(
                 RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True),
             )
-            expected = expected_allowed_roles | (
-                {'country_support'} if permission == RolePermission.Permission.MANAGE_CUSTOMERS else set()
-            )
+            customers = (RolePermission.Permission.MANAGE_CUSTOMERS, RolePermission.Permission.VIEW_CUSTOMERS)
+            expected = expected_allowed_roles | ({'country_support'} if permission in customers else set())
+            if permission == RolePermission.Permission.MANAGE_CUSTOMERS:
+                expected -= {'supervisor'}  # people 0066: a supervisor sees customers, doesn't edit them
             self.assertEqual(allowed_roles, expected, permission)
 
     def test_view_stock_is_whoever_runs_or_plans_the_stock(self):

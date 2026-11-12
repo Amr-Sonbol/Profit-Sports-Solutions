@@ -2157,6 +2157,17 @@ class TaskActionApiTests(TeamTaskApiTests):
 class TaskEditApiTests(TeamTaskApiTests):
     """The website's Edit task and documents, from the app."""
 
+    def test_every_choice_is_listed_once_and_never_blank(self):
+        # The app's picker adds its own "None"; a blank or repeated value would give its list
+        # two entries with one key (the "two children with the same key" crash).
+        self.task.responsible_supervisor = self.supervisor
+        self.task.save(update_fields=['responsible_supervisor'])
+        token = self.token_for('supervisor1')
+        for field in self.client.get(f'/api/tasks/{self.task.pk}/edit/', **self.auth(token)).json()['fields']:
+            values = [choice['value'] for choice in field['choices']]
+            self.assertNotIn('', values, field['name'])
+            self.assertEqual(len(values), len(set(values)), field['name'])
+
     def test_saving_one_field_keeps_every_other_as_it_was(self):
         self.task.responsible_supervisor = self.supervisor
         self.task.description = 'Treadmill stops'
