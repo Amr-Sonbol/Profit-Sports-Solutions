@@ -77,6 +77,8 @@ def visit_progress(task):
 
 def today_tap(task):
     """The lead's latest "On the way" or "Arrived" today (an undone one is gone), or None."""
+    if hasattr(task, '_today_tap'):  # read for a whole list at once (with_today_taps)
+        return task._today_tap
     from zoneinfo import ZoneInfo
     # Their country's own day, not the server's (UTC).
     country_tz = ZoneInfo(task.site.customer.country.timezone)
@@ -84,6 +86,26 @@ def today_tap(task):
     return task.events.filter(
         event_type__in=[TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED], occurred_at__gte=start,
     ).order_by('-occurred_at').values_list('event_type', flat=True).first()
+
+
+def with_today_taps(tasks):
+    """today_tap for a whole list of one customer's visits in a single query
+    (not one per visit). Their country's day, as today_tap counts it."""
+    from zoneinfo import ZoneInfo
+    tasks = list(tasks)
+    if not tasks:
+        return tasks
+    country_tz = ZoneInfo(tasks[0].site.customer.country.timezone)
+    start = timezone.localtime(timezone.now(), country_tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    latest = {}
+    for task_id, event_type in TaskEvent.objects.filter(
+        task__in=tasks, event_type__in=[TaskEvent.EventType.EN_ROUTE, TaskEvent.EventType.ARRIVED],
+        occurred_at__gte=start,
+    ).order_by('occurred_at').values_list('task_id', 'event_type'):
+        latest[task_id] = event_type  # the last one wins
+    for task in tasks:
+        task._today_tap = latest.get(task.pk)
+    return tasks
 
 
 def is_booked(progress):

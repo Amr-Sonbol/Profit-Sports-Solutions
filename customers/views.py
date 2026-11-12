@@ -49,7 +49,7 @@ from spots.throttle import link_email_allowed
 from .models import Asset, Customer, PortalUser, Site, portal_customer
 from . import notify
 from .progress import (
-    DONE_STATUSES, is_booked, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress,
+    DONE_STATUSES, is_booked, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress, with_today_taps,
 )
 
 # Only the name is required: a file of just customer_name and
@@ -729,9 +729,9 @@ def _portal_visits(customer):
     from reports.pdf import changed_after_signing
 
     # A part shipment is a parcel, not a visit: it shows on its request instead.
-    visits = list(Task.objects.filter(site__customer=customer).exclude(
+    visits = with_today_taps(Task.objects.filter(site__customer=customer).exclude(
         task_type__category=TaskType.Category.PART_SHIPMENT,
-    ).select_related('site', 'task_type', 'report', 'feedback'))
+    ).select_related('site__customer__country', 'task_type', 'report', 'feedback'))
     for visit in visits:
         report = getattr(visit, 'report', None)
         feedback = getattr(visit, 'feedback', None)

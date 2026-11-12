@@ -1401,6 +1401,10 @@ class TaskFilterChoicesView(APIView):
 TEAM_LIST_PAGE_SIZE = 30
 
 
+# An older app asking for the country's tasks without pages gets at most this many (newest first).
+OLD_APP_TASK_LIMIT = 200
+
+
 class TaskListView(APIView):
     """The country's tasks — the website's task list, with the same filters
     (tasks.views.filtered_tasks: status, q, lead=none, scheduled=none,
@@ -1416,8 +1420,8 @@ class TaskListView(APIView):
         technician = request.user.technician
         tasks = filtered_tasks(params, technician, get_active_country(request))
         context = {'unread': _unread_messages(technician)}
-        if 'page' not in params:  # older apps: the whole list
-            return Response(TaskListSerializer(tasks, many=True, context=context).data)
+        if 'page' not in params:  # older apps: the list, newest first — capped, so it can't grow without end
+            return Response(TaskListSerializer(tasks[:OLD_APP_TASK_LIMIT], many=True, context=context).data)
         # A page at a time (?page=1, 2…, 30 each), with how many there are in all.
         page_number = int(params['page']) if str(params['page']).isdigit() and int(params['page']) > 0 else 1
         size = TEAM_LIST_PAGE_SIZE

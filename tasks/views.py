@@ -24,10 +24,11 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
 from django.db import IntegrityError, connection, transaction
 from django.db.models import (
-    Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum, Value,
+    Avg, BooleanField, Case, Count, Exists, ExpressionWrapper, IntegerField, Max, Min, OuterRef, Prefetch,
+    ProtectedError, Q, Subquery, Sum, Value,
     When,
 )
-from django.db.models.functions import Coalesce, Length
+from django.db.models.functions import Coalesce, Length, TruncMonth, TruncWeek
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -602,13 +603,20 @@ def _confirmed_points(technician):
 def _leaderboard(country):
     """Technicians in this country ranked by confirmed certification
     points, highest first. Visibility only — never used to change a level."""
-    technicians = Technician.objects.filter(
+    technicians = list(Technician.objects.filter(
         is_active=True, country=country, role=Technician.Role.TECHNICIAN,
-    ).order_by('full_name')
-    return sorted(
-        ((t, _confirmed_points(t)) for t in technicians),
-        key=lambda pair: pair[1], reverse=True,
-    )
+    ).order_by('full_name'))
+    # Everyone's points in two queries (the same sums as _confirmed_points, not two per person).
+    points = defaultdict(int)
+    for technician_id, total in TechnicianSkill.objects.filter(
+        technician__in=technicians, source=TechnicianSkill.Source.SUPERVISOR, skill__category=Skill.Category.OTHER,
+    ).values('technician_id').annotate(total=Sum('level')).values_list('technician_id', 'total'):
+        points[technician_id] += total or 0
+    for technician_id, total in TechnicianConduct.objects.filter(
+        technician__in=technicians, source=TechnicianConduct.Source.SUPERVISOR,
+    ).values('technician_id').annotate(total=Sum('level')).values_list('technician_id', 'total'):
+        points[technician_id] += total or 0
+    return sorted(((t, points[t.pk]) for t in technicians), key=lambda pair: pair[1], reverse=True)
 
 
 def _median_minutes(deltas):
@@ -1429,6 +1437,8 @@ def _send_feedback_email(request, feedback):
 
 # Open tasks shown on the dashboard before "See all".
 DASHBOARD_TASK_LIMIT = 10
+# The most any dashboard shows (the app's: 15) — all dashboard_overview reads.
+DASHBOARD_OVERVIEW_TASKS = 15
 # Periods in the dashboard's charts, the current one included: monthly by
 # default (what managers plan by), weekly on request.
 DASHBOARD_CHART_MONTHS = 12
@@ -1464,7 +1474,8 @@ def _period_starts(period):
 
 def _period_chart(opened, completed, period, starts=None):
     """Counts per period (see _period_starts, or the given `starts`) from
-    two lists of datetimes: what came in and what was finished. Bar
+    two lists of datetimes (or counts already made per period —
+    _counted_by_period): what came in and what was finished. Bar
     heights are percentages of a clean top value, so the template draws
     them without arithmetic. Shared by the dashboard's tickets and tasks
     charts and My progress.
@@ -1477,6 +1488,11 @@ def _period_chart(opened, completed, period, starts=None):
         return day.replace(day=1) if period == 'month' else day - timedelta(days=day.weekday())
 
     for key, moments in (('opened', opened), ('completed', completed)):
+        if isinstance(moments, dict):  # counted by the database already
+            for start, count in moments.items():
+                if start in buckets:
+                    buckets[start][key] += count
+            continue
         for moment in moments:
             bucket = buckets.get(bucket_of(moment))
             if bucket is not None:
@@ -1497,19 +1513,32 @@ def _period_chart(opened, completed, period, starts=None):
     }
 
 
+def _counted_by_period(queryset, field, period):
+    """{first day of each month (or week): how many} of `queryset` by the moment in
+    `field` — counted by the database (a dozen numbers), not row by row here."""
+    trunc = TruncMonth if period == 'month' else TruncWeek  # weeks from Monday, as _period_starts
+    return {
+        row['start'].date() if hasattr(row['start'], 'date') else row['start']: row['n']
+        for row in queryset.order_by().annotate(start=trunc(field)).values('start').annotate(n=Count('pk'))
+    }
+
+
 def _tasks_chart(country, period):
     """Tasks reported vs tasks whose first work report was submitted, per period."""
     since = _period_starts(period)[0]
-    opened = Task.objects.filter(
-        site__customer__country=country, reported_at__date__gte=since,
-    ).values_list('reported_at', flat=True)
-    completed = TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task__site__customer__country=country,
-    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
+    tasks = Task.objects.filter(site__customer__country=country)
+    opened = _counted_by_period(tasks.filter(reported_at__date__gte=since), 'reported_at', period)
+    # Each task's first report, then counted per period by the database too.
+    first_report = TaskEvent.objects.filter(
+        task=OuterRef('pk'), event_type=TaskEvent.EventType.REPORT_SUBMITTED,
+    ).order_by('occurred_at').values('occurred_at')[:1]
+    completed = _counted_by_period(
+        tasks.annotate(first=Subquery(first_report)).filter(first__date__gte=since), 'first', period,
+    )
     return _period_chart(opened, completed, period)
 
 
-def _my_trend_chart(technician):
+def _my_trend_chart(technician, firsts=None):
     """One person's tasks completed per month, as a line (My progress):
     the tasks they were on (lead or helper) by their first work report.
     It starts the month their account was created, not before (so a new
@@ -1521,10 +1550,10 @@ def _my_trend_chart(technician):
     joined = timezone.localtime(technician.user.date_joined).date().replace(day=1)
     starts = [start for start in _period_starts('month') if start >= joined] or _period_starts('month')[-1:]
     since = starts[0]
-    mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
-    completed = TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
-    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
+    if firsts is None:
+        firsts = _first_reports([technician], since)[technician.pk]
+    # (`firsts`: a roster passes what it read once for everyone — _first_reports.)
+    completed = [first for first in firsts if timezone.localtime(first).date() >= since]
     chart = _period_chart([], completed, 'month', starts=starts)
     periods = chart['periods']
     chart['line_points'] = ' '.join(
@@ -1542,8 +1571,8 @@ def _tickets_chart(country, period):
     since = _period_starts(period)[0]
     tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER, country=country)
     return _period_chart(
-        tickets.filter(submitted_at__date__gte=since).values_list('submitted_at', flat=True),
-        tickets.filter(reviewed_at__date__gte=since).values_list('reviewed_at', flat=True),
+        _counted_by_period(tickets.filter(submitted_at__date__gte=since), 'submitted_at', period),
+        _counted_by_period(tickets.filter(reviewed_at__date__gte=since), 'reviewed_at', period),
         period,
     )
 
@@ -1730,28 +1759,35 @@ def dashboard_overview(active_country, viewer=None):
     open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
     if viewer is not None:  # as this role sees tasks (a Warehouse Manager: stock work only)
         open_tasks = tasks_for_role(viewer, open_tasks)
-    tasks = list(_with_lead_prefetch(
-        open_tasks
-        .select_related('site__customer', 'task_type')
-        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
-    ))
-    _attach_lead_technician(tasks)
-
-    for task in tasks:
-        task.is_unscheduled = task.scheduled_for is None and task.scheduled_date is None
+    # Counted and put in order by the database: only the tasks shown are read (not every open one).
+    open_tasks = open_tasks.annotate(
+        has_lead=Exists(TaskAssignment.objects.filter(
+            task=OuterRef('pk'), role=TaskAssignment.Role.LEAD, is_active=True,
+        )),
+        unscheduled=ExpressionWrapper(
+            Q(scheduled_for__isnull=True, scheduled_date__isnull=True), output_field=BooleanField(),
+        ),
+        is_emergency=ExpressionWrapper(Q(priority=Task.Priority.EMERGENCY), output_field=BooleanField()),
+        priority_rank=PRIORITY_RANK,
+    )
     stats = {
         'available_count': sum(1 for t in technicians if t.is_available),
         'technician_count': len(technicians),
-        'open_task_count': len(tasks),
-        'unassigned_count': sum(1 for t in tasks if t.lead_technician is None),
-        'unscheduled_count': sum(1 for t in tasks if t.is_unscheduled),
-        'emergency_count': sum(1 for t in tasks if t.priority == Task.Priority.EMERGENCY),
+        'open_task_count': open_tasks.count(),
+        'unassigned_count': open_tasks.filter(has_lead=False).count(),
+        'unscheduled_count': open_tasks.filter(unscheduled=True).count(),
+        'emergency_count': open_tasks.filter(priority=Task.Priority.EMERGENCY).count(),
     }
-    # What needs someone first: emergencies, then no lead, then no date.
-    # sorted() is stable, so the priority/schedule order holds within each.
-    tasks.sort(key=lambda t: (
-        t.priority != Task.Priority.EMERGENCY, t.lead_technician is not None, not t.is_unscheduled,
+    # What needs someone first: emergencies, then no lead, then no date; within each,
+    # by priority, then the scheduled time, then what the customer was promised.
+    tasks = list(_with_lead_prefetch(
+        open_tasks.select_related('site__customer', 'task_type').order_by(
+            '-is_emergency', 'has_lead', '-unscheduled', 'priority_rank', 'scheduled_for', 'promised_at',
+        )[:DASHBOARD_OVERVIEW_TASKS],
     ))
+    _attach_lead_technician(tasks)
+    for task in tasks:
+        task.is_unscheduled = task.unscheduled
 
     return technicians, tasks, stats
 
@@ -4775,6 +4811,27 @@ def progress_context(request, technician):
     return context
 
 
+def _first_reports(people, since):
+    """{technician id: [when each task they were on (lead or helper) was first
+    reported]} — those first reported on or after `since` (a date), for a
+    whole roster in two queries."""
+    # .order_by(): no default sorting (by task), which would join every task for nothing.
+    theirs = TaskAssignment.objects.filter(technician__in=people).order_by()
+    on = defaultdict(list)
+    for technician_id, task_id in theirs.values_list('technician_id', 'task_id').distinct():
+        on[task_id].append(technician_id)
+    firsts = {person.pk: [] for person in people}
+    # The tasks are found by the database itself (a subquery), not sent to it as a list of thousands.
+    for task_id, first in TaskEvent.objects.filter(
+        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=theirs.values('task_id'),
+    ).order_by().values('task_id').annotate(first=Min('occurred_at')).filter(
+        first__date__gte=since,
+    ).values_list('task_id', 'first'):
+        for technician_id in on[task_id]:
+            firsts[technician_id].append(first)
+    return firsts
+
+
 def _completed_in_month(technician, month_first):
     """How many tasks someone was on (lead or helper) had their first work
     report in that month — the figure My progress's line counts."""
@@ -4894,25 +4951,35 @@ def team_progress_rows(viewer, country, month_first):
     `country`, by rank. Shared with the app (api.views.TeamProgressView)."""
     previous = _shift_month(month_first, -1)
     ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
-    hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
+    hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first, with_taps=False)}
     rows = []
     reference = _certification_reference()
     # The field team: a manager or admin sees supervisors here too.
-    for technician in _people_i_oversee(viewer).filter(
+    team = list(_people_i_oversee(viewer).filter(
         country=country, is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
-    ).select_related('user').order_by('full_name'):
-        completed = _completed_in_month(technician, month_first)
-        certification = _certification_status(technician, reference)
+    ).select_related('user').order_by('full_name'))
+    # Read once for everyone (a query or two in all, not several per person): when
+    # each task they were on was first reported — the year's line and both months.
+    firsts = _first_reports(team, min(_period_starts('month')[0], previous))
+    levels = _confirmed_levels(team)
+
+    def completed_in(technician, month):
+        start, end = _month_window(month)
+        return sum(1 for first in firsts[technician.pk] if start <= first < end)
+
+    for technician in team:
+        completed = completed_in(technician, month_first)
+        certification = _certification_status(technician, reference, levels[technician.pk])
         rows.append({
             'technician': technician,
             'rank': ranks.get(technician.pk),
             'completed': completed,
-            'change': completed - _completed_in_month(technician, previous),
+            'change': completed - completed_in(technician, previous),
             'hours': hours.get(technician.pk, 0),
             'certified': certification['non_cardio_certified'] + certification['conduct_certified'],
             'required': certification['non_cardio_total'] + certification['conduct_total'],
             'is_certified': certification['is_certified'],
-            'trend': _my_trend_chart(technician),
+            'trend': _my_trend_chart(technician, firsts[technician.pk]),
         })
     rows.sort(key=lambda row: (row['rank'] is None, row['rank'] or 0, row['technician'].full_name))
     for row in rows:
@@ -5481,12 +5548,14 @@ def _handover_hours(technicians, period_start, period_end):
     return handovers
 
 
-def _technician_hours_rows(active_country, period_start_date):
+def _technician_hours_rows(active_country, period_start_date, with_taps=True):
     """One row per active technician in the country for that month: the
     work reports they filed as lead, the ones they helped on, and their
     hours — a report's hours count for everyone on the team, except where
     the lead entered a helper's own (helper_hours), plus any hours put in
     before a handover. Shared by the Hours page and its CSV export.
+    `with_taps=False` (Team progress: the hours alone) skips reading each
+    report's taps, which only the Hours page's flags need.
     """
     period_start, period_end = _month_window(period_start_date)
     technicians = list(Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'))
@@ -5499,7 +5568,7 @@ def _technician_hours_rows(active_country, period_start_date):
         Prefetch(
             'task__assignments', queryset=TaskAssignment.objects.filter(is_active=True), to_attr='active_assignments',
         ),
-        'task__events',
+        *(['task__events'] if with_taps else []),
     ).order_by('submitted_at')
 
     leads_reports = defaultdict(list)
@@ -5534,9 +5603,10 @@ def _technician_hours_rows(active_country, period_start_date):
             ),
             'estimated': sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours),
             'helped_on': helped_on[technician.pk],
-            'overrun_count': sum(1 for report in own_reports if report.is_overrun),
-            'above_tapped_count': sum(1 for report in own_reports if report.is_above_tapped),
-            'away_count': sum(1 for report in own_reports if report.has_taps_away_from_site),
+            # The Hours page's flags, from each report's taps (not read for the hours alone).
+            'overrun_count': sum(1 for report in own_reports if report.is_overrun) if with_taps else None,
+            'above_tapped_count': sum(1 for report in own_reports if report.is_above_tapped) if with_taps else None,
+            'away_count': sum(1 for report in own_reports if report.has_taps_away_from_site) if with_taps else None,
         })
     return rows
 

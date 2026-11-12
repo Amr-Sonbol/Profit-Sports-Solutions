@@ -8,6 +8,19 @@ from .models import RolePermission, Technician
 ACTIVE_COUNTRY_SESSION_KEY = 'active_country_id'
 
 
+def allowed_permissions(request, technician):
+    """The permissions `technician`'s role has, read once per request (the page's
+    own check, its menu and its bell all ask) — never kept longer, so a change on
+    the Roles & permissions screen applies from the very next page."""
+    cached = getattr(request, '_allowed_permissions', None)
+    if cached is None or cached[0] != technician.permission_role:
+        cached = (technician.permission_role, frozenset(
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
+        ))
+        request._allowed_permissions = cached
+    return cached[1]
+
+
 def require_permission(request, permission):
     """Restrict a view to technicians whose role currently has this
     permission enabled. Configurable per role from the Roles & permissions
@@ -16,9 +29,7 @@ def require_permission(request, permission):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         raise PermissionDenied
-    if not RolePermission.objects.filter(
-        role=technician.permission_role, permission=permission, allowed=True,
-    ).exists():
+    if permission not in allowed_permissions(request, technician):
         raise PermissionDenied
     return technician
 

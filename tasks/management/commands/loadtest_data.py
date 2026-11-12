@@ -25,7 +25,7 @@ from customers.models import Asset, Customer, Site
 from reference.models import Brand, Country
 from reports.models import CustomerFeedback, WorkReport
 from people.models import Technician
-from tasks.models import CustomerTicket, Task, TaskAssignment, TaskType
+from tasks.models import CustomerTicket, Task, TaskAssignment, TaskEvent, TaskType
 
 NAME_PREFIX = 'LOADTEST'
 NUMBER_PREFIX = 'LT'
@@ -48,6 +48,8 @@ class Command(BaseCommand):
         parser.add_argument('--machines', type=int, default=10000)
         parser.add_argument('--tasks', type=int, default=20000)
         parser.add_argument('--requests', type=int, default=10000)
+        parser.add_argument('--technicians', type=int, default=60,
+                            help='field technicians the work is spread over, as in a real team (about 15 open tasks each)')
         parser.add_argument('--months', type=int, default=12, help='how far back the tasks and requests go')
         parser.add_argument('--seed', type=int, default=7, help='the same seed gives the same data')
         parser.add_argument('--delete', action='store_true', help='remove everything this command made, and stop')
@@ -58,7 +60,7 @@ class Command(BaseCommand):
         if options['delete']:
             self._delete()
             return
-        if Customer.objects.filter(name__startswith=NAME_PREFIX).exists():
+        if Task.objects.filter(task_number__startswith=NUMBER_PREFIX).exists():  # (a kept customer isn't)
             raise CommandError('Load-test data is already here. Remove it first with --delete.')
         self.random = random.Random(options['seed'])
         self.now = timezone.now()
@@ -68,8 +70,10 @@ class Command(BaseCommand):
             sites = self._sites(customers, options['sites'])
             self._machines(sites, options['machines'])
             tasks = self._tasks(sites, options['tasks'])
+            self._technicians(options['technicians'])
             self._assignments()
             self._visit_reports_and_ratings()
+            self._history()
             self._requests(sites, tasks, options['requests'])
         self.stdout.write(self.style.SUCCESS('Done. Remove it all later with: python manage.py loadtest_data --delete'))
 
@@ -160,12 +164,30 @@ class Command(BaseCommand):
         self.stdout.write(f'{count} tasks')
         return list(Task.objects.filter(task_number__startswith=NUMBER_PREFIX).only('pk', 'site_id'))
 
+    def _technicians(self, count):
+        """A field team of its own, spread over the countries like the work —
+        so each person's screens carry a real person's load, not the whole
+        country's on the few real accounts. Each has a login (no usable
+        password) for measuring their screens."""
+        countries = {c.iso_code: c for c in Country.objects.filter(iso_code__in=COUNTRY_WEIGHTS)}
+        codes = list(countries)
+        weights = [COUNTRY_WEIGHTS[code] for code in codes]
+        User = get_user_model()
+        for number in range(1, count + 1):
+            user = User.objects.create_user(f'loadtest-tech-{number:03d}')  # no usable password
+            Technician.objects.create(
+                user=user, country=countries[self.random.choices(codes, weights)[0]],
+                full_name=f'{NAME_PREFIX} Tech {number:03d}', language='en',
+                role=Technician.Role.TECHNICIAN, employment_type='staff',
+            )
+        self.stdout.write(f'{count} technicians')
+
     def _assignments(self):
         """Each task past "new" gets a lead technician from its own country
-        (where there are any), and some a helper too. Countries with no
-        technicians keep their work unassigned, as they would."""
+        (the load-test team, where there are any), and some a helper too.
+        Countries with no technicians keep their work unassigned, as they would."""
         staff = {}
-        for technician in Technician.objects.filter(is_active=True, role=Technician.Role.TECHNICIAN):
+        for technician in Technician.objects.filter(is_active=True, full_name__startswith=NAME_PREFIX):
             staff.setdefault(technician.country_id, []).append(technician)
         made = []
         for task in Task.objects.filter(task_number__startswith=NUMBER_PREFIX).exclude(
@@ -208,12 +230,52 @@ class Command(BaseCommand):
         CustomerFeedback.objects.bulk_create(ratings, batch_size=BATCH)
         self.stdout.write(f'{len(reports)} visit reports, {len(ratings)} ratings')
 
+    def _history(self):
+        """Each task's history, as a real one has it: created; given to its lead;
+        and for a finished one the lead's taps (confirmed, on the way, arrived,
+        started), completed with its report, approved when closed — so the
+        screens built on it (progress, team progress, Today) carry a real load."""
+        S, E = Task.Status, TaskEvent.EventType
+        leads = dict(TaskAssignment.objects.filter(
+            task__task_number__startswith=NUMBER_PREFIX, role=TaskAssignment.Role.LEAD,
+        ).values_list('task_id', 'technician__user_id'))
+        reports = dict(WorkReport.objects.filter(
+            task__task_number__startswith=NUMBER_PREFIX,
+        ).values_list('task_id', 'submitted_at'))
+        made = []
+        for task in Task.objects.filter(task_number__startswith=NUMBER_PREFIX).only(
+            'pk', 'status', 'reported_at', 'scheduled_for', 'created_by_id',
+        ):
+            made.append(TaskEvent(task=task, event_type=E.CREATED, occurred_at=task.reported_at,
+                                  actor_id=task.created_by_id))
+            lead = leads.get(task.pk)
+            if not lead:
+                continue
+            made.append(TaskEvent(task=task, event_type=E.ASSIGNED, occurred_at=task.reported_at + timedelta(hours=1),
+                                  actor_id=task.created_by_id))
+            reported = reports.get(task.pk)
+            if not reported:
+                continue
+            for hours_before, kind in ((5, E.ACCEPTED), (2, E.EN_ROUTE), (1.5, E.ARRIVED), (1.4, E.STARTED)):
+                made.append(TaskEvent(task=task, event_type=kind, occurred_at=reported - timedelta(hours=hours_before),
+                                      actor_id=lead))
+            made.append(TaskEvent(task=task, event_type=E.REPORT_SUBMITTED, occurred_at=reported, actor_id=lead))
+            made.append(TaskEvent(task=task, event_type=E.COMPLETED, occurred_at=reported, actor_id=lead))
+            if task.status == S.CLOSED:
+                made.append(TaskEvent(task=task, event_type=E.REPORT_APPROVED,
+                                      occurred_at=min(reported + timedelta(days=1), self.now), actor_id=task.created_by_id))
+        TaskEvent.objects.bulk_create(made, batch_size=BATCH)
+        self.stdout.write(f'{len(made)} history events')
+
     def _requests(self, sites, tasks, count):
         tasks_by_site = {}
         for task in tasks:
             tasks_by_site.setdefault(task.site_id, []).append(task)
+        # Weighted like real requests; a new branch is its own (rarer) kind of request.
+        about_weights = {'machines': 55, 'flooring': 15, 'accessories': 15, 'lockers': 8, 'other': 6, 'new_branch': 1}
         about = [v for v, _l in CustomerTicket.About.choices]
         need = [v for v, _l in CustomerTicket.Need.choices]
+        need_weights = [55, 20, 15, 10][:len(need)] + [5] * max(0, len(need) - 4)
         S = CustomerTicket.Status
         numbers = {}
         made = []
@@ -232,8 +294,8 @@ class Command(BaseCommand):
                 country=country, customer=customer, site=site, company_name=customer.name,
                 site_description=site.name, site_address=site.address,
                 contact_name=customer.contact_name, contact_phone=customer.contact_phone,
-                about=self.random.choices(about, [55, 15, 15, 8, 7])[0],
-                need=self.random.choices(need, [55, 20, 15, 10])[0],
+                about=self.random.choices(about, [about_weights.get(v, 5) for v in about])[0],
+                need=self.random.choices(need, need_weights)[0],
                 description='Load-test request.', submitted_at=submitted_at, status=status,
                 # A task belongs to one request at most: each is used once.
                 task=site_tasks.pop(self.random.randrange(len(site_tasks))) if status == S.CONVERTED else None,
@@ -248,10 +310,20 @@ class Command(BaseCommand):
         with transaction.atomic():
             requests, _ = CustomerTicket.objects.filter(ticket_number__startswith=NUMBER_PREFIX).delete()
             tasks, _ = Task.objects.filter(task_number__startswith=NUMBER_PREFIX).delete()
-            machines, _ = Asset.objects.filter(site__customer__name__startswith=NAME_PREFIX).delete()
-            sites, _ = Site.objects.filter(customer__name__startswith=NAME_PREFIX).delete()
-            customers, _ = Customer.objects.filter(name__startswith=NAME_PREFIX).delete()
+            # A branch or customer that real work was put on since (a test from the phone, say)
+            # stays, with its real tasks: never deleted from under them.
+            in_use = Site.objects.filter(customer__name__startswith=NAME_PREFIX, tasks__isnull=False).distinct()
+            kept_sites = list(in_use.values_list('pk', flat=True))
+            machines, _ = (Asset.objects.filter(site__customer__name__startswith=NAME_PREFIX)
+                           .exclude(site__in=kept_sites).delete())
+            sites, _ = Site.objects.filter(customer__name__startswith=NAME_PREFIX).exclude(pk__in=kept_sites).delete()
+            customers, _ = (Customer.objects.filter(name__startswith=NAME_PREFIX)
+                            .exclude(sites__in=kept_sites).delete())
+            if kept_sites:
+                self.stdout.write(f'Kept {len(kept_sites)} load-test branch(es) that real tasks are on.')
+            people, _ = Technician.objects.filter(full_name__startswith=NAME_PREFIX).delete()
+            get_user_model().objects.filter(username__startswith='loadtest-').delete()  # their logins, the portal one
         self.stdout.write(self.style.SUCCESS(
-            f'Removed the load-test data ({customers + sites + machines + tasks + requests} rows, '
+            f'Removed the load-test data ({customers + sites + machines + tasks + requests + people} rows, '
             'including what hung off them).'
         ))

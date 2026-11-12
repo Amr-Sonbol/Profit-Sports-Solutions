@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from reference.models import Country
 
 from .models import RolePermission, Technician
-from .permissions import get_active_country
+from .permissions import allowed_permissions, get_active_country
 
 
 def notification_bell(request):
@@ -27,18 +27,15 @@ def notification_bell(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return {}
-    can_manage_tickets = RolePermission.objects.filter(
-        role=technician.permission_role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-    ).exists()
+    allowed = allowed_permissions(request, technician)  # read once per page, shared with the menu
+    can_manage_tickets = RolePermission.Permission.MANAGE_TICKETS in allowed
     from tasks.models import TaskMessageRecipient, TaskNotification, TicketNotification
     country = get_active_country(request)
     items = []
     if can_manage_tickets:
         unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket__country')
         # The company-wide roles hear of every country's tickets, whichever country they're looking at.
-        if not RolePermission.objects.filter(
-            role=technician.permission_role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
-        ).exists():
+        if RolePermission.Permission.TICKETS_ALL_COUNTRIES not in allowed:
             unseen_tickets = unseen_tickets.filter(ticket__country=country)
         # A new ticket: only to whoever is told of it, as by its email (tasks.alarms.new_ticket_people —
         # the chosen roles, or the admins when nobody of those reaches its country);
@@ -60,7 +57,7 @@ def notification_bell(request):
     if technician.is_manager_tier:
         unseen_tasks = TaskNotification.objects.filter(
             seen_at__isnull=True, task__site__customer__country=country,
-        ).select_related('task')
+        ).select_related('task__site')  # the bell names each one's branch
         items += [
             {'kind': 'new_task', 'created_at': notification.created_at, 'task': notification.task}
             for notification in unseen_tasks
@@ -121,9 +118,7 @@ def notification_bell(request):
     ]
     # Customer logins locked out right now — live, so they clear the moment
     # someone unlocks them (or the lockout times out on its own).
-    if RolePermission.objects.filter(
-        role=technician.permission_role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
-    ).exists():
+    if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:
         from django.db.models.functions import Lower
 
         from customers.accounts import locked_usernames
@@ -162,7 +157,7 @@ def notification_bell(request):
     from tasks.updates import describe
     unseen_updates = TaskEventRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, event__task__site__customer__country=country,
-    ).select_related('event__task__site', 'event__actor__technician')
+    ).select_related('event__task__site__customer__country', 'event__actor__technician')  # its date in the task's country
     items += [
         {
             'kind': 'task_update', 'created_at': recipient.event.occurred_at, 'task': recipient.event.task,
@@ -174,7 +169,7 @@ def notification_bell(request):
     ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
-    ).select_related('message__task', 'message__sent_by__technician')
+    ).select_related('message__task__site', 'message__sent_by__technician')
     items += [
         {
             'kind': 'task_message', 'created_at': recipient.message.sent_at, 'task': recipient.message.task,
@@ -208,9 +203,7 @@ def role_permissions(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return {}
-    allowed = set(
-        RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
-    )
+    allowed = set(allowed_permissions(request, technician))
     pages = nav_pages(technician, allowed)
     # My profile is the row at the top of the sidebar, not a menu page; on
     # it, that row lights up rather than whichever page shares its /tasks/.
