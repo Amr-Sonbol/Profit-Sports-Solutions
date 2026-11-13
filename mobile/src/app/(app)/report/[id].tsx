@@ -110,6 +110,10 @@ export default function ReportScreen() {
   const [actionTaken, setActionTaken] = useState('');
   // Not chosen until the technician chooses (a saved report opens with its answer): never "Yes" by default.
   const [resolved, setResolved] = useState<boolean | null>(null);
+  // An installation's handover to the customer, and a loading's proof of dispatch.
+  const [handover, setHandover] = useState({ handover_demo: false, handover_manuals: false, handover_packaging: false });
+  const [hasDispatchPhoto, setHasDispatchPhoto] = useState(false);
+  const [dispatchUploading, setDispatchUploading] = useState(false);
   // The visit's time as "1:32", worked out by the server from the taps — shown, not typed.
   const [labourHours, setLabourHours] = useState('');
   const [timeIsFinal, setTimeIsFinal] = useState(false);
@@ -188,6 +192,7 @@ export default function ReportScreen() {
       setChecklist(reportResult.data.checklist ?? null);
       setChecklistStatuses(reportResult.data.checklist_statuses ?? []);
       setChecklistStep(reportResult.data.checklist_step || 'installation');
+      setHasDispatchPhoto(Boolean(reportResult.data.has_dispatch_photo));
       // What the report records, or the machines the customer reported.
       setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
@@ -312,6 +317,27 @@ export default function ReportScreen() {
     return result.canceled ? [] : result.assets;
   };
 
+  // A loading's proof of dispatch: a photo of the loaded truck, or of the signed delivery note.
+  const addDispatchPhoto = async () => {
+    const files = await pickPhoto('after');
+    if (!files.length) {
+      return;
+    }
+    setDispatchUploading(true);
+    try {
+      for (const file of files) {
+        await uploadTaskAttachment(
+          Number(id), file.uri, file.fileName ?? 'dispatch.jpg', file.mimeType ?? 'image/jpeg', 'delivery_note',
+        );
+      }
+      setHasDispatchPhoto(true);
+    } catch (err) {
+      alert('Upload failed', err instanceof ApiRequestError ? err.message : t('Please try again. ({error})', { error: String(err) }));
+    } finally {
+      setDispatchUploading(false);
+    }
+  };
+
   // The machine cards (the task's: the same photos as on the task screen and approving), fresh.
   const refreshCards = async () => {
     try {
@@ -418,6 +444,7 @@ export default function ReportScreen() {
       ...(checklist ? {
         checklist: checklist.map(({ photo_url: _photo, added_on_site: _added, ...row }) => row),
       } : {}),
+      ...(checklistStep === 'installation' ? handover : {}),
   });
 
   // "Review report": the report exactly as the customer will get it, and
@@ -695,6 +722,31 @@ export default function ReportScreen() {
                   taskId={Number(id)} step={checklistStep} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
                 />
                 {errors.checklist ? <ThemedText themeColor="danger" type="small">{errors.checklist}</ThemedText> : null}
+                {checklistStep === 'loading' ? (
+                  <TouchableOpacity onPress={addDispatchPhoto} disabled={dispatchUploading}>
+                    <ThemedText type="smallBold" themeColor={hasDispatchPhoto ? 'textSecondary' : 'primary'}>
+                      {hasDispatchPhoto
+                        ? 'Dispatch photo taken ✓ (add another)'
+                        : dispatchUploading ? 'Uploading…' : '+ Dispatch photo: the loaded truck, or the signed delivery note'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ) : null}
+                {errors.dispatch_photo ? <ThemedText themeColor="danger" type="small">{errors.dispatch_photo}</ThemedText> : null}
+                {checklistStep === 'installation' ? (
+                  <ThemedView>
+                    <ThemedText type="smallBold">Handover to the customer</ThemedText>
+                    {([
+                      ['handover_demo', 'Shown to the customer how to use them'],
+                      ['handover_manuals', 'Manuals left with the customer'],
+                      ['handover_packaging', 'Packaging taken away'],
+                    ] as const).map(([key, label]) => (
+                      <ThemedView key={key} style={styles.serialRow}>
+                        <Switch value={handover[key]} onValueChange={(value) => setHandover((now) => ({ ...now, [key]: value }))} />
+                        <ThemedText type="small" style={styles.serialLabel}>{label}</ThemedText>
+                      </ThemedView>
+                    ))}
+                  </ThemedView>
+                ) : null}
               </>
             ) : (
               <>

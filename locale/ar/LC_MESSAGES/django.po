@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 01:12+0000\n"
+"POT-Creation-Date: 2026-11-13 01:47+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -56,6 +56,10 @@ msgstr ""
 "\n"
 "يرجى متابعة معالجة التذكرة من هنا:\n"
 "%(link)s\n"
+
+#, python-format
+msgid "%(code)s (%(serial)s): this serial is already on file at %(site)s — check the sticker; if the machine moved, move it on the customer's page."
+msgstr "%(code)s (%(serial)s): هذا الرقم التسلسلي مسجّل مسبقًا في %(site)s — تحقّق من الملصق؛ وإذا نُقل الجهاز، انقله من صفحة العميل."
 
 #, python-format
 msgid "%(count)s fewer than last month"
@@ -715,6 +719,9 @@ msgstr "زيارة تُنشأ بخطوة واحدة"
 msgid "About"
 msgstr "الموضوع"
 
+msgid "Access for the delivery (lift, doors, parking)"
+msgstr "إمكانية الوصول للتسليم (مصعد، أبواب، موقف)"
+
 msgid "Access notes"
 msgstr "ملاحظات الدخول"
 
@@ -835,6 +842,9 @@ msgstr "إضافة مهارة"
 
 msgid "Add the branch first (button above); then you can create its task here."
 msgstr "أضف الفرع أولًا (الزر أعلاه)؛ بعدها يمكنك إنشاء مهمته من هنا."
+
+msgid "Add the dispatch photo: the loaded truck, or the signed delivery note."
+msgstr "أضف صورة الإرسال: الشاحنة المحمّلة أو إشعار التسليم الموقّع."
 
 msgid "Add the machine"
 msgstr "إضافة الجهاز"
@@ -1084,6 +1094,9 @@ msgstr "طلب هذا التغيير في الموعد؟ يقرّر المدير
 #, python-format
 msgid "Asked for %(when)s"
 msgstr "الموعد المطلوب: %(when)s"
+
+msgid "Assembled, levelled and tested — working"
+msgstr "تم التجميع والضبط والاختبار — يعمل"
 
 msgid "Assign"
 msgstr "التعيين"
@@ -1438,6 +1451,10 @@ msgstr "طابق البيانات مع صورة الملصق التي أرسله
 
 msgid "Check-ins away from the site"
 msgstr "نقرات مسجَّلة خارج الموقع"
+
+#, python-format
+msgid "Checked by %(name)s, %(when)s."
+msgstr "فحصه %(name)s، %(when)s."
 
 msgid "Choose a color."
 msgstr "اختر لونًا."
@@ -2200,6 +2217,9 @@ msgstr "معطَّل"
 msgid "Dismissed"
 msgstr "مرفوضة"
 
+msgid "Dispatch photo: the loaded truck, or the signed delivery note"
+msgstr "صورة الإرسال: الشاحنة المحمّلة أو إشعار التسليم الموقّع"
+
 msgid "Display or console fault"
 msgstr "عطل في الشاشة أو لوحة التحكم"
 
@@ -2616,6 +2636,10 @@ msgstr "هل نسيت كلمة المرور؟"
 msgid "Forwarded to the next level"
 msgstr "أُحيلت إلى المستوى الأعلى"
 
+#, python-format
+msgid "Found when the report was filed for %(number)s at %(site)s:"
+msgstr "وُجد عند تقديم تقرير %(number)s في %(site)s:"
+
 msgid "Found:"
 msgstr "ما وُجد:"
 
@@ -2696,6 +2720,12 @@ msgstr "تسليم إلى العميل للتوقيع"
 
 msgid "Handle tickets in all countries"
 msgstr "معالجة التذاكر في جميع الدول"
+
+msgid "Handover"
+msgstr "التسليم"
+
+msgid "Handover to the customer"
+msgstr "التسليم للعميل"
 
 msgid "Has done it under supervision and it went fine. Leads simple jobs, calls for help on faults."
 msgstr "نفّذه تحت الإشراف وكانت النتيجة جيدة. يتولى المهام البسيطة، ويطلب المساعدة عند الأعطال."
@@ -3092,6 +3122,9 @@ msgstr "تم التحميل"
 msgid "Loaded Equipment"
 msgstr "المعدات المُحمَّلة"
 
+msgid "Loaded truck or delivery note"
+msgstr "الشاحنة المحمّلة أو إشعار التسليم"
+
 msgid "Loaded, not installed yet"
 msgstr "محمّل، لم يُركَّب بعد"
 
@@ -3237,6 +3270,9 @@ msgstr "إدارة حسابات بوابة العملاء"
 
 msgid "Manager"
 msgstr "مدير"
+
+msgid "Manuals left"
+msgstr "تُركت الأدلة"
 
 msgid "Map"
 msgstr "الخريطة"
@@ -3833,6 +3869,9 @@ msgstr "ليس في الموقع · %(distance)s"
 msgid "Not checked yet"
 msgstr "لم يُراجع بعد"
 
+msgid "Not checked yet."
+msgstr "لم يُفحص بعد."
+
 msgid "Not covered"
 msgstr "غير مشمول"
 
@@ -4218,6 +4257,9 @@ msgstr "محمّل بالعمل أكثر من اللازم"
 msgid "PREVIEW — not sent yet."
 msgstr "معاينة — لم يُرسل بعد."
 
+msgid "Packaging taken away"
+msgstr "أُزيلت مواد التغليف"
+
 msgid "Padding color"
 msgstr "لون الحشوة"
 
@@ -4594,6 +4636,9 @@ msgstr "حسابات البوابة"
 msgid "Portal welcome and password link"
 msgstr "الترحيب في البوابة ورابط كلمة المرور"
 
+msgid "Power sockets where the machines go"
+msgstr "مقابس كهرباء حيث توضع الأجهزة"
+
 msgid "Prepare the parcel"
 msgstr "تجهيز الطرد"
 
@@ -4729,6 +4774,9 @@ msgstr "إعادة التفعيل"
 
 msgid "Reactivate customer"
 msgstr "إعادة تفعيل العميل"
+
+msgid "Ready"
+msgstr "جاهز"
 
 msgid "Ready for advanced level"
 msgstr "جاهز للمستوى المتقدم"
@@ -5224,6 +5272,9 @@ msgstr "حفظ الشروط"
 msgid "Save the report? It goes to your supervisor for review."
 msgstr "حفظ التقرير؟ يذهب إلى المشرف للمراجعة."
 
+msgid "Save the site checks"
+msgstr "حفظ فحص الموقع"
+
 msgid "Save this branch's terms"
 msgstr "حفظ شروط هذا الفرع"
 
@@ -5629,6 +5680,9 @@ msgstr "إظهار كلمات المرور"
 msgid "Show tasks"
 msgstr "عرض المهام"
 
+msgid "Shown how to use the equipment"
+msgstr "شُرح كيفية استخدام المعدات"
+
 msgid "Sick"
 msgstr "مرض"
 
@@ -5684,11 +5738,17 @@ msgstr "الموقع"
 msgid "Site added."
 msgstr "تمت إضافة الفرع."
 
+msgid "Site checks saved."
+msgstr "تم حفظ فحص الموقع."
+
 msgid "Site location not set"
 msgstr "موقع المكان غير محدد"
 
 msgid "Site name"
 msgstr "اسم الموقع"
+
+msgid "Site ready for the installation?"
+msgstr "هل الموقع جاهز للتركيب؟"
 
 msgid "Site updated."
 msgstr "تم تحديث بيانات الموقع."
@@ -5722,6 +5782,9 @@ msgstr "صنف غير مذكور في القائمة (اختياري)"
 
 msgid "Source"
 msgstr "المصدر"
+
+msgid "Space and floor ready"
+msgstr "المساحة والأرضية جاهزتان"
 
 msgid "Spare part"
 msgstr "قطعة غيار"
@@ -5821,6 +5884,9 @@ msgstr "موقوفة"
 
 msgid "TNT"
 msgstr "TNT"
+
+msgid "Taken"
+msgstr "مُلتقطة"
 
 msgid "Taken off a task"
 msgstr "الإبعاد عن مهمة"
@@ -6052,6 +6118,9 @@ msgstr "قائمة الحاوية: كل كود وكميته — الأجهزة �
 msgid "The count matches — nothing to change."
 msgstr "الجرد مطابق — لا شيء يتغيّر."
 
+msgid "The customer confirmed the date"
+msgstr "أكّد العميل الموعد"
+
 msgid "The customer has already rated this visit."
 msgstr "لقد قيّم العميل هذه الزيارة بالفعل."
 
@@ -6247,6 +6316,9 @@ msgstr "لوحة الرقم التسلسلي وصورة بعد تحتاجان إ
 msgid "The signature could not be read. Please sign again."
 msgstr "تعذّرت قراءة التوقيع. يرجى التوقيع مجدداً."
 
+msgid "The site is confirmed ready."
+msgstr "تم تأكيد جاهزية الموقع."
+
 msgid "The sticker with the serial number. Take a photo or upload one."
 msgstr "الملصق الذي عليه الرقم التسلسلي. التقط صورة أو ارفع واحدة."
 
@@ -6391,6 +6463,12 @@ msgstr "تقرير هذا العميل باللغة الإنجليزية. است
 
 msgid "This file could not be read. Save it again as .xlsx or .csv and retry."
 msgstr "تعذّرت قراءة هذا الملف. احفظه مجددًا بصيغة ‎.xlsx أو ‎.csv ثم أعد المحاولة."
+
+msgid "This installation is scheduled, but its site isn't confirmed ready yet (space, power, access, the date): check it on the task's page."
+msgstr "هذا التركيب مجدول، لكن جاهزية موقعه لم تُؤكَّد بعد (المساحة، الكهرباء، الوصول، الموعد): تحقّق منها في صفحة المهمة."
+
+msgid "This installation is scheduled, but its site isn't confirmed ready yet."
+msgstr "هذا التركيب مجدول، لكن جاهزية موقعه لم تُؤكَّد بعد."
 
 msgid "This internal task is closed."
 msgstr "هذه المهمة الداخلية مغلقة."
@@ -6562,6 +6640,9 @@ msgstr "حدّد كل جهاز عند تحميله على الشاحنة. كتا
 msgid "Tick everything you did on this visit."
 msgstr "حدّد كل ما قمت به في هذه الزيارة."
 
+msgid "Tick it once the machine is assembled, levelled and tested — working."
+msgstr "اختره بعد تجميع الجهاز وضبطه واختباره — وهو يعمل."
+
 msgid "Ticket"
 msgstr "التذكرة"
 
@@ -6631,6 +6712,10 @@ msgstr "لإتمام الإصلاح في %(site)s، قمنا بطلب قطع ا�
 
 msgid "To customers"
 msgstr "إلى العملاء"
+
+#, python-format
+msgid "To follow up: %(step)s %(number)s"
+msgstr "للمتابعة: %(step)s %(number)s"
 
 msgid "To maintain the lubrication, we recommend advising the gym's cleaning team not to remove the grease applied to the moving parts during routine cleaning."
 msgstr "للحفاظ على فعالية التشحيم، نوصي بتوجيه فريق التنظيف في النادي بعدم إزالة الشحم الموضوع على الأجزاء المتحركة أثناء التنظيف الدوري."
@@ -7510,6 +7595,9 @@ msgstr "الموضوع"
 msgid "about %(hours)s h"
 msgstr "نحو %(hours)s ساعة"
 
+msgid "access for the delivery (lift, doors, parking)"
+msgstr "إمكانية الوصول للتسليم (مصعد، أبواب، موقف)"
+
 msgid "access notes"
 msgstr "ملاحظات الدخول"
 
@@ -7579,6 +7667,9 @@ msgstr "لون الذراع"
 msgid "arrived"
 msgstr "وصلت"
 
+msgid "assembled, levelled and tested — working"
+msgstr "تم التجميع والضبط والاختبار — يعمل"
+
 msgid "asset"
 msgstr "جهاز"
 
@@ -7646,6 +7737,12 @@ msgstr "الفئة"
 
 msgid "changed at"
 msgstr "وقت التعديل"
+
+msgid "checked at"
+msgstr "تاريخ الفحص"
+
+msgid "checked by"
+msgstr "فحصه"
 
 msgid "checklist template"
 msgstr "قالب قائمة التحقق"
@@ -8093,6 +8190,9 @@ msgstr "الجهاز"
 msgid "managers and administrators only"
 msgstr "للمديرين ومسؤولي النظام فقط"
 
+msgid "manuals left with the customer"
+msgstr "تُركت الأدلة لدى العميل"
+
 msgid "media type"
 msgstr "نوع الوسائط"
 
@@ -8192,6 +8292,9 @@ msgstr "ملاحظات عامة عند الحاجة — لكل جهاز ملاح
 msgid "overrides the ISO code as the task-number prefix, e.g. KSA or UAE, reflecting common local usage. Leave blank to use the ISO code."
 msgstr "يحل محل رمز ISO كبادئة لأرقام المهام، مثل KSA أو UAE، وفقاً للاستخدام المحلي الشائع. اتركه فارغاً لاستخدام رمز ISO."
 
+msgid "packaging taken away"
+msgstr "أُزيلت مواد التغليف"
+
 msgid "padding color"
 msgstr "لون الحشوة"
 
@@ -8273,6 +8376,9 @@ msgstr "مستخدمو البوابة"
 
 msgid "position"
 msgstr "الترتيب"
+
+msgid "power sockets where the machines go"
+msgstr "مقابس كهرباء حيث توضع الأجهزة"
 
 msgid "previous step"
 msgstr "الخطوة السابقة"
@@ -8527,6 +8633,9 @@ msgstr "تُظهر المشكلة والرقم التسلسلي؛ حتى %(count
 msgid "shown on the roster, boards and task details"
 msgstr "يظهر في قائمة الفريق واللوحات وتفاصيل المهمة"
 
+msgid "shown to the customer how to use them"
+msgstr "شُرح للعميل كيفية استخدامها"
+
 msgid "signature URL"
 msgstr "رابط التوقيع"
 
@@ -8546,6 +8655,9 @@ msgstr "الموقع"
 msgid "site / location"
 msgstr "الموقع"
 
+msgid "site readiness"
+msgstr "جاهزية الموقع"
+
 msgid "site_address is required when site_name is given"
 msgstr "الحقل site_address مطلوب عند إدخال site_name"
 
@@ -8560,6 +8672,9 @@ msgstr "المهارات"
 
 msgid "source"
 msgstr "المصدر"
+
+msgid "space and floor ready"
+msgstr "المساحة والأرضية جاهزتان"
 
 msgid "stable key; never changes"
 msgstr "مفتاح ثابت؛ لا يتغير أبداً"
@@ -8720,6 +8835,9 @@ msgstr "الشروط سارية حتى"
 
 msgid "the company's own account — its sites are our warehouses"
 msgstr "حساب الشركة الخاص — مواقعه هي مستودعاتنا"
+
+msgid "the customer confirmed the date"
+msgstr "أكّد العميل الموعد"
 
 msgid "the customer's own color for their portal, as #RRGGBB"
 msgstr "لون العميل الخاص لبوابته، بصيغة #RRGGBB"

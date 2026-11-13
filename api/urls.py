@@ -59,6 +59,7 @@ urlpatterns = [
     path('bell/', views.BellView.as_view(), name='bell'),
     path('tasks/<int:pk>/edit/', views.TaskEditView.as_view(), name='task_edit'),
     path('tasks/<int:pk>/parts-needed/', views.TaskPartsNeededView.as_view(), name='task_parts_needed'),
+    path('tasks/<int:pk>/site-readiness/', views.TaskSiteReadinessView.as_view(), name='task_site_readiness'),
     path('tasks/<int:pk>/parts-prepared/', views.TaskPartsPreparedView.as_view(), name='task_parts_prepared'),
     path('parts-to-prepare/', views.PartsToPrepareView.as_view(), name='parts_to_prepare'),
     path('tasks/<int:pk>/documents/', views.TaskDocumentView.as_view(), name='task_document'),

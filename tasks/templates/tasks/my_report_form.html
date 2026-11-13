@@ -52,6 +52,14 @@
     </div>
     {# The repair report's machine forms still post (empty) — see the memory note on management forms. #}
     <div hidden>{{ existing_formset.management_form }}{{ new_formset.management_form }}</div>
+    {% if equipment_step == 'loading' %}
+    {# Proof of dispatch: the loaded truck, or the signed delivery note. #}
+    <div class="field" data-staff-only>
+        <label for="dispatch-photo">{% translate "Dispatch photo: the loaded truck, or the signed delivery note" %}</label>
+        {% for photo in dispatch_photos %}<a href="{{ photo.url }}" target="_blank" rel="noopener">{% translate "Taken" %} ✓</a> {% endfor %}
+        <input type="file" id="dispatch-photo" name="dispatch_photo" accept="image/*">
+    </div>
+    {% endif %}
     {{ checklist_formset.management_form }}
     {% if checklist_formset.non_form_errors %}<p class="flash flash--error">{{ checklist_formset.non_form_errors }}</p>{% endif %}
     <div class="checklist" data-staff-only>
@@ -208,6 +216,15 @@
     </div>
     <div class="section">
         <div class="form-grid">
+{% if equipment_step == 'installation' %}
+{# The handover to the customer, as their report shows it. #}
+<fieldset class="field" data-staff-only>
+    <legend>{% translate "Handover to the customer" %}</legend>
+    {% for field in report_form %}{% if field.name == 'handover_demo' or field.name == 'handover_manuals' or field.name == 'handover_packaging' %}
+    <label class="checkbox">{{ field }} {{ field.label }}</label>
+    {% endif %}{% endfor %}
+</fieldset>
+{% endif %}
             <div class="field {% if report_form.resolved.errors %}field--error{% endif %}">
                 <label>{{ report_form.resolved.label }}</label>
                 {{ report_form.resolved }}

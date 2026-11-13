@@ -15,6 +15,7 @@ import { CustomerRequest } from '@/components/customer-request';
 import { ShipmentSteps } from '@/components/shipment-steps';
 import { BranchCard } from '@/components/branch-card';
 import { PartsNeededPanel } from '@/components/parts-needed-panel';
+import { SiteReadinessPanel } from '@/components/site-readiness-panel';
 import { VisitPhotos } from '@/components/visit-photos';
 import { TaskActionsPanel } from '@/components/task-actions';
 import { TaskMessages } from '@/components/task-messages';
@@ -407,6 +408,11 @@ export default function TeamTaskScreen() {
             ) : null}
             {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
+
+          {/* An installation's site checked ready before the truck goes (as on the website). */}
+          {task.site_readiness ? (
+            <SiteReadinessPanel taskId={task.id} readiness={task.site_readiness} onChanged={load} />
+          ) : null}
 
           {/* The spare parts this repair needs (as on the website): its owner adds them; the warehouse prepares them. */}
           {task.parts_needed?.length || task.can_change_parts ? (

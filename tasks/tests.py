@@ -9449,10 +9449,10 @@ class InstallationChecklistTests(TaskTestCase):
 
     def test_the_checklist_is_saved_and_only_installed_machines_join_the_list(self):
         self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on',
              'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
-            {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': 'TG-9'},
+            {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': 'TG-9', 'tested_working': 'on'},
         ])
         self.run_line.refresh_from_db()
         self.bike_line.refresh_from_db()
@@ -9468,7 +9468,7 @@ class InstallationChecklistTests(TaskTestCase):
 
     def test_what_was_not_installed_gets_a_follow_up_task(self):
         self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
         ])
         self.client.login(username='supervisor1', password='pass12345')
@@ -9485,7 +9485,7 @@ class InstallationChecklistTests(TaskTestCase):
     def test_the_customer_gets_an_installation_report(self):
         from reports.pdf import render_visit_report_html
         report = self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on',
              'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'missing', 'serial_number': ''},
         ])
@@ -10546,6 +10546,8 @@ class EquipmentGoldenPathTests(TaskTestCase):
                         'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
         for index, row in enumerate(rows):
             payload.update({f'checklist-{index}-{key}': value for key, value in row.items()})
+        if task.task_type.category == 'loading':  # proof of dispatch: the loaded truck
+            payload['dispatch_photo'] = SimpleUploadedFile('truck.png', REAL_PNG, content_type='image/png')
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post(f'/tasks/my/{task.pk}/report/', payload)
         self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
@@ -10583,8 +10585,8 @@ class EquipmentGoldenPathTests(TaskTestCase):
         # 3. Loaded: one serial read from its sticker, the other packed out of reach.
         first, second = loading.products.order_by('pk')
         self.file_checklist(loading, [
-            {'id': first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
-            {'id': second.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': '',
+            {'id': first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
+            {'id': second.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': '', 'tested_working': 'on',
              'serial_unreachable': 'on'},
         ])
         self.assertEqual(self.stock(), 1)
@@ -10613,7 +10615,7 @@ class EquipmentGoldenPathTests(TaskTestCase):
         self.client.login(username='tech1', password='pass12345')
         self.assertContains(self.client.get(f'/tasks/my/{installation.pk}/report/'), 'Serial not taken at loading')
         self.file_checklist(installation, [
-            {'id': carried_first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': carried_first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
             {'id': carried_second.pk, 'product_code': 'EXCITE-RUN', 'status': 'later', 'serial_number': ''},
         ])
         self.assertTrue(Asset.objects.filter(site=self.site, serial_no='TG-1', code='EXCITE-RUN').exists())
@@ -10665,4 +10667,89 @@ class EquipmentGoldenPathTests(TaskTestCase):
         page = self.client.get('/tasks/stock/')
         self.assertContains(page, 'Loaded, not installed yet')
         self.assertContains(page, 'opening stock')
+
+    def test_what_went_wrong_is_followed_up_by_the_manager(self):
+        receiving = self.task('AE-0104', 'receiving', self.warehouse)
+        line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', quantity=4)
+        self.file_checklist(receiving, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done',
+                                         'received': '3', 'rest_status': 'damaged', 'note': 'Crushed in transit'}])
+        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL)
+        self.assertEqual(follow_up.assigned_to, self.manager)
+        self.assertIn('AE-0104', follow_up.subject)
+        self.assertIn('Crushed in transit', follow_up.description)
+        # Nothing wrong: nothing to follow up.
+        receiving_ok = self.task('AE-0105', 'receiving', self.warehouse)
+        line_ok = TaskProduct.objects.create(task=receiving_ok, product_code='EXCITE-RUN', quantity=2)
+        self.file_checklist(receiving_ok, [{'id': line_ok.pk, 'product_code': 'EXCITE-RUN', 'status': 'done'}])
+        self.assertEqual(CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL).count(), 1)
+
+    def test_one_serial_per_brand(self):
+        other_branch = Site.objects.create(customer=self.customer, name='Downtown Branch', address='Dubai')
+        Asset.objects.create(site=other_branch, brand=self.brand, model_name='Run', serial_no='TG-7')
+        installation = self.task('AE-0106', 'installation', self.site)
+        line = TaskProduct.objects.create(task=installation, product_code='EXCITE-RUN')
+        self.file_checklist(installation, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done',
+                                            'serial_number': 'tg-7', 'tested_working': 'on'}])
+        # Not a second machine: the manager is asked to check it.
+        self.assertEqual(Asset.objects.filter(serial_no__iexact='TG-7').count(), 1)
+        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL)
+        self.assertIn('Downtown Branch', follow_up.description)
+
+
+    def test_proof_of_dispatch_and_commissioning_are_required(self):
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'], 'checklist-TOTAL_FORMS': '1',
+                        'checklist-INITIAL_FORMS': '1', 'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
+        self.client.login(username='tech1', password='pass12345')
+        # A loading without its dispatch photo: not filed.
+        loading = self.task('AE-0107', 'loading', self.warehouse)
+        line = TaskProduct.objects.create(task=loading, product_code='EXCITE-RUN')
+        response = self.client.post(f'/tasks/my/{loading.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-8',
+        })
+        self.assertContains(response, 'Add the dispatch photo')
+        self.assertFalse(WorkReport.objects.filter(task=loading).exists())
+        # An installed machine not ticked "tested — working": not filed.
+        installation = self.task('AE-0108', 'installation', self.site)
+        line = TaskProduct.objects.create(task=installation, product_code='EXCITE-RUN')
+        response = self.client.post(f'/tasks/my/{installation.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-9',
+        })
+        self.assertContains(response, 'assembled, levelled and tested')
+        self.assertFalse(WorkReport.objects.filter(task=installation).exists())
+        # Ticked, with the handover: filed, and the customer's report says so.
+        self.client.post(f'/tasks/my/{installation.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-9', 'checklist-0-tested_working': 'on',
+            'handover_demo': 'on', 'handover_manuals': 'on',
+        })
+        report = WorkReport.objects.get(task=installation)
+        self.assertEqual((report.handover_demo, report.handover_manuals, report.handover_packaging), (True, True, False))
+        from reports.pdf import render_visit_report_html
+        html = render_visit_report_html(report, 'en')
+        self.assertIn('Manuals left', html)
+
+    def test_an_installation_site_is_checked_ready(self):
+        installation = self.task('AE-0109', 'installation', self.site)
+        self.client.login(username='supervisor1', password='pass12345')  # its owner
+        installation.scheduled_date = timezone.localdate()
+        installation.status = Task.Status.ASSIGNED
+        installation.save(update_fields=['scheduled_date', 'status'])
+        self.assertContains(self.client.get(f'/tasks/{installation.pk}/'), "confirmed ready yet")
+        self.client.post(f'/tasks/{installation.pk}/', {
+            'action': 'site_readiness', 'space_and_floor': 'on', 'power': 'on', 'access': 'on', 'date_confirmed': 'on',
+        })
+        installation.refresh_from_db()
+        self.assertTrue(installation.site_readiness.is_ready)
+        self.assertNotContains(self.client.get(f'/tasks/{installation.pk}/'), "confirmed ready yet")
+        # From the app: the same checks, and someone who isn't its owner or a manager can't.
+        app = self.client.get(f'/api/tasks/{installation.pk}/', HTTP_AUTHORIZATION=f'Token {self.manager_token}').json()
+        self.assertTrue(app['site_readiness']['is_ready'])
+        self.client.logout()
+        token = Token.objects.create(user=self.tech_user).key
+        refused = self.client.post(f'/api/tasks/{installation.pk}/site-readiness/', {'power': False},
+                                   HTTP_AUTHORIZATION=f'Token {token}')
+        self.assertIn(refused.status_code, (403, 404))
 

@@ -1965,6 +1965,7 @@ class InstallationChecklistApiTests(ApiTestCase):
         self.assertIn('checklist', response.json())  # the added one is "installed" without a serial
 
         body['checklist'][1]['serial_number'] = 'TG-6'
+        body['checklist'][1]['tested_working'] = True  # commissioning: assembled, levelled and tested
         response = self.client.post(f'/api/my-tasks/{self.task.pk}/report/', json.dumps(body),
                                     content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 201, response.content)

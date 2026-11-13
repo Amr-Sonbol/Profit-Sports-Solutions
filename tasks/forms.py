@@ -749,6 +749,8 @@ class TaskAttachmentUploadForm(forms.Form):
             (TaskAttachment.Purpose.SERIAL_PLATE, _('Serial plate')),
             (TaskAttachment.Purpose.BEFORE, _('Before')),
             (TaskAttachment.Purpose.AFTER, _('After')),
+            # A loading's dispatch photo: the loaded truck, or the signed delivery note.
+            (TaskAttachment.Purpose.DELIVERY_NOTE, _('Loaded truck or delivery note')),
         ],
         label=_('What is this?'),
     )
@@ -1313,6 +1315,11 @@ class TaskProductCheckForm(forms.Form):
         ]
         if step != 'installation':
             self.fields['replacement'].label = _('Instead')
+        if step == 'installation' and self.initial.get('kind') != TaskProduct.Kind.PART:
+            # Commissioning: each installed machine assembled, levelled and tested.
+            self.fields['tested_working'] = forms.BooleanField(
+                required=False, label=_('Assembled, levelled and tested — working'),
+            )
         if step == 'loading' and self.initial.get('kind') != TaskProduct.Kind.PART:
             # The middle way: the serial from the sticker, or this ticked — never left empty by accident.
             self.fields['serial_unreachable'] = forms.BooleanField(
@@ -1353,6 +1360,10 @@ class TaskProductCheckForm(forms.Form):
         # An installed machine must have its serial; a loaded one has it, or says it couldn't be reached.
         if self.step == 'installation' and status == TaskProduct.Status.DONE and not cleaned['serial_number']:
             self.add_error('serial_number', _('This machine needs its serial number — type it from the sticker on the machine.'))
+        if 'tested_working' in self.fields:
+            cleaned['tested_working'] = bool(cleaned.get('tested_working')) and status == TaskProduct.Status.DONE
+            if status == TaskProduct.Status.DONE and not cleaned['tested_working']:
+                self.add_error('tested_working', _('Tick it once the machine is assembled, levelled and tested — working.'))
         if 'serial_unreachable' in self.fields:
             cleaned['serial_unreachable'] = bool(cleaned.get('serial_unreachable')) and not cleaned['serial_number']
             if status == TaskProduct.Status.DONE and not cleaned['serial_number'] and not cleaned['serial_unreachable']:

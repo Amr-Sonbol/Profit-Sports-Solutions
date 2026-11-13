@@ -2339,6 +2339,13 @@ def task_detail(request, pk):
         ).update(seen_at=timezone.now())
         read_task_updates(task, requesting_technician)
 
+    if request.method == 'POST' and request.POST.get('action') == 'site_readiness' and is_installation(task):
+        if not can_change_task(requesting_technician, task):
+            raise PermissionDenied
+        readiness = save_site_readiness(task, request.user, request.POST)
+        messages.success(request, _('The site is confirmed ready.') if readiness.is_ready else _('Site checks saved.'))
+        return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}#site-readiness")
+
     message_form = TaskMessageForm()
     if request.method == 'POST' and request.POST.get('action') == 'add_message':
         message_form = TaskMessageForm(request.POST)
@@ -2677,6 +2684,12 @@ def task_detail(request, pk):
         ) and task.status not in (Task.Status.CLOSED, Task.Status.CANCELLED),
         'part_form': part_form,
         'can_change_parts': can_change_task(requesting_technician, task),
+        # An installation's site checked ready before the truck goes.
+        'site_readiness': getattr(task, 'site_readiness', None) if is_installation(task) else None,
+        'is_installation': is_installation(task),
+        'site_not_ready': is_installation(task) and bool(task.scheduled_for or task.scheduled_date)
+        and not site_is_ready(task) and task.status not in (Task.Status.CLOSED, Task.Status.CANCELLED,
+                                                           Task.Status.COMPLETED),
         'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
         'next_tasks': task.next_tasks.all(),
         # Receiving / loading: machines ready to carry on, and where they can go.
@@ -2768,6 +2781,11 @@ def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_da
     ):
         _send_shipment_notice_to_supervisor(request, updated_task)
         notices.append(_('The supervisor has been notified of the shipment.'))
+    if (
+        {'scheduled_for', 'scheduled_date'} & set(form.changed_data)
+        and (updated_task.scheduled_for or updated_task.scheduled_date) and not site_is_ready(updated_task)
+    ):
+        warnings.append(SITE_NOT_READY)
     weekend_warning = _weekend_warning(updated_task)
     if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
         warnings.append(weekend_warning)
@@ -7591,7 +7609,9 @@ def save_work_report(request, task, technician, report_form, part_rows):
             _in_background(send)
         transaction.on_commit(send_copy)
     if saved_report.first_submission:
-        register_installed_machines(task)
+        elsewhere = register_installed_machines(task)
+        if has_checklist(task):  # missing, damaged or wrong machines, a serial on file elsewhere: followed up
+            open_equipment_follow_up(task, request.user, elsewhere)
         notify_customer.report_ready(task)
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
@@ -7843,6 +7863,17 @@ def create_follow_up(task, user):
     return follow_up
 
 
+DISPATCH_PHOTO_MISSING = _('Add the dispatch photo: the loaded truck, or the signed delivery note.')
+
+
+def dispatch_photo_missing(task):
+    """A loading leaves with proof of dispatch — a photo of the loaded truck or
+    of the signed delivery note — before its report is filed."""
+    return equipment_step(task) == TaskType.Category.LOADING and not task.attachments.filter(
+        purpose=TaskAttachment.Purpose.DELIVERY_NOTE,
+    ).exists()
+
+
 def has_checklist(task):
     """An equipment task (receiving, loading, installation) with machine
     lines to check off."""
@@ -7858,7 +7889,7 @@ def checklist_initial(task):
             'serial_number': line.serial_number, 'frame': line.frame, 'arm': line.arm, 'padding': line.padding,
             'trim': line.trim, 'replacement': line.replacement, 'note': line.note,
             'photo_url': line.photo.url if line.photo else '', 'added_on_site': line.added_on_site,
-            'serial_unreachable': line.serial_unreachable,
+            'serial_unreachable': line.serial_unreachable, 'tested_working': line.tested_working,
             # Installation: its serial wasn't taken at loading (packed) — read it from the sticker now.
             'serial_not_taken_at_loading': bool(
                 line.source_line_id and line.source_line.serial_unreachable and not line.serial_number
@@ -7920,6 +7951,8 @@ def _save_checklist(task, rows):
         line.serial_number = cleaned['serial_number']
         if 'serial_unreachable' in cleaned:  # loading
             line.serial_unreachable = cleaned['serial_unreachable']
+        if 'tested_working' in cleaned:  # installation
+            line.tested_working = cleaned['tested_working']
         for color in TaskProductCheckForm.COLORS:
             setattr(line, color, cleaned.get(color, getattr(line, color)))
         line.replacement = cleaned.get('replacement', '')
@@ -7950,6 +7983,46 @@ def _save_checklist(task, rows):
     task.products.filter(added_on_site=True).exclude(pk__in=kept).delete()
 
 
+SITE_NOT_READY = _("This installation is scheduled, but its site isn't confirmed ready yet (space, power, access, "
+                   "the date): check it on the task's page.")
+
+
+def site_is_ready(task):
+    """An installation's site confirmed ready (SiteReadiness); True for any other task."""
+    if not is_installation(task):
+        return True
+    readiness = getattr(task, 'site_readiness', None)
+    return bool(readiness and readiness.is_ready)
+
+
+def save_site_readiness(task, user, data):
+    """The installation's site checks as ticked (`data`: each of SiteReadiness.CHECKS
+    true or false, and a note), by `user` — the website's task page and the app."""
+    from tasks.models import SiteReadiness
+
+    def ticked(value):
+        return str(value).lower() in ('true', 'on', '1')
+    return SiteReadiness.objects.update_or_create(task=task, defaults={
+        **{check: ticked(data.get(check, False)) for check in SiteReadiness.CHECKS},
+        'note': str(data.get('note') or '').strip()[:2000], 'checked_by': user, 'checked_at': timezone.now(),
+    })[0]
+
+
+def site_readiness_for_app(task, technician):
+    """An installation's site checks as the app shows them; None for any other task."""
+    if not is_installation(task):
+        return None
+    from tasks.models import SiteReadiness
+    readiness = getattr(task, 'site_readiness', None)
+    return {
+        **{check: bool(readiness and getattr(readiness, check)) for check in SiteReadiness.CHECKS},
+        'note': readiness.note if readiness else '', 'is_ready': bool(readiness and readiness.is_ready),
+        'checked_by': readiness.checked_by.get_full_name() or readiness.checked_by.get_username() if readiness else '',
+        'checked_at': readiness.checked_at if readiness else None,
+        'can_check': can_change_task(technician, task),
+    }
+
+
 def is_installation(task):
     """True for an installation task (its type's category)."""
     return equipment_step(task) == TaskType.Category.INSTALLATION
@@ -7968,21 +8041,76 @@ def equipment_step(task):
 
 def register_installed_machines(task):
     """An installation's machines join the customer's machine list at its
-    site — each product line with a serial, under the task's brand, so the
-    customer can pick it in the portal and every visit builds its history.
-    A serial already on file at the site is that machine (not a second
-    one). Called when the installation's report is first sent; needs the
-    task's brand (the review says so when it's missing).
+    site — each product line with a serial, under its brand (the line's, else
+    the task's), so the customer can pick it in the portal and every visit
+    builds its history. One serial per brand: one already on file is that
+    machine — at this site nothing to add; at another, it isn't added a second
+    time, and is returned as (line, the machine on file) for the manager to
+    check (open_equipment_follow_up). Called when the installation's report is
+    first sent.
     """
-    if not is_installation(task) or not task.brand_id:
-        return
+    if not is_installation(task):
+        return []
     today = timezone.localdate()
-    for product in task.products.filter(status=TaskProduct.Status.DONE).exclude(serial_number=''):
-        if not Asset.objects.filter(site=task.site, serial_no__iexact=product.serial_number).exists():
+    elsewhere = []
+    for product in task.products.filter(status=TaskProduct.Status.DONE).exclude(serial_number='').select_related('brand'):
+        brand = product.brand or task.brand
+        if brand is None:
+            continue  # the review says so: no brand, nothing to add
+        on_file = Asset.objects.filter(brand=brand, serial_no__iexact=product.serial_number).select_related('site').first()
+        if on_file is None:
             Asset.objects.create(
-                site=task.site, brand=task.brand, model_name=product.product_code, code=product.product_code,
+                site=task.site, brand=brand, model_name=product.product_code, code=product.product_code,
                 serial_no=product.serial_number, installed_on=today,
             )
+        elif on_file.site_id != task.site_id:
+            elsewhere.append((product, on_file))
+    return elsewhere
+
+
+# What, on an equipment step, needs following up with the factory or the carrier.
+FOLLOW_UP_STATUSES = (TaskProduct.Status.MISSING, TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM)
+
+
+def open_equipment_follow_up(task, user, elsewhere=()):
+    """A receiving's, loading's or installation's problems, followed up: the
+    machines missing, damaged or wrong (a claim to the factory or the
+    carrier), and a serial already on file at another site (`elsewhere`,
+    register_installed_machines) — one internal task, to the country's
+    Manager (else the task's own supervisor), in their language; their bell
+    and phone are told. None when nothing went wrong."""
+    problems = list(task.products.filter(status__in=FOLLOW_UP_STATUSES).order_by('pk'))
+    if not problems and not elsewhere:
+        return None
+    country = task.site.customer.country
+    manager = Technician.objects.filter(
+        role=Technician.Role.MANAGER, country=country, is_active=True, user__isnull=False,
+    ).order_by('pk').first() or task.responsible_supervisor
+    if manager is None:
+        return None
+    with translation.override(manager.language or 'en'):
+        lines = []
+        for line in problems:
+            what = f'{line.product_code}' + (f' × {line.quantity}' if line.quantity > 1 else '')
+            what += f' ({line.serial_number})' if line.serial_number else ''
+            lines.append(f'- {what}: {line.get_status_display()}' + (f' — {line.note}' if line.note else ''))
+        for line, on_file in elsewhere:
+            lines.append('- ' + _('%(code)s (%(serial)s): this serial is already on file at %(site)s — check the '
+                                  'sticker; if the machine moved, move it on the customer\'s page.') % {
+                'code': line.product_code, 'serial': line.serial_number, 'site': on_file.site.name,
+            })
+        step = TaskType.Category(equipment_step(task)).label
+        ticket = CustomerTicket(
+            kind=CustomerTicket.Kind.INTERNAL, country=country, assigned_to=manager,
+            subject=_('To follow up: %(step)s %(number)s') % {'step': step, 'number': task.task_number},
+            description='\n'.join([
+                _('Found when the report was filed for %(number)s at %(site)s:') % {
+                    'number': task.task_number, 'site': task.site.name,
+                },
+                *lines,
+            ]),
+        )
+    return open_internal_ticket(getattr(user, 'technician', None), user, ticket)
 
 
 def report_problems(report, language):
@@ -8413,6 +8541,10 @@ def _report_form(request, task, technician, back_url):
                 )
                 return HttpResponse(html)
             gaps = report_machine_photo_gaps(task, existing_formset.cleaned_data, new_formset.cleaned_data)
+            if request.FILES.get('dispatch_photo') and equipment_step(task) == TaskType.Category.LOADING:
+                _save_attachment(request, task, request.FILES['dispatch_photo'], TaskAttachment.Purpose.DELIVERY_NOTE)
+            if dispatch_photo_missing(task):
+                gaps = [*gaps, DISPATCH_PHOTO_MISSING]
             for gap in gaps:
                 report_form.add_error(None, gap)
             if not gaps:
@@ -8455,6 +8587,9 @@ def _report_form(request, task, technician, back_url):
         # An equipment step: the machines are checked off here instead.
         'checklist_formset': checklist_formset,
         'equipment_step': equipment_step(task),
+        # A loading's proof of dispatch, once taken.
+        'dispatch_photos': task.attachments.filter(purpose=TaskAttachment.Purpose.DELIVERY_NOTE)
+        if equipment_step(task) == TaskType.Category.LOADING else [],
         # "1:32": the visit's time from the taps (Task.time_on_site).
         'time_on_site': hours_text(time_on_site),
         'time_is_final': report is not None and report.submitted_at is not None,

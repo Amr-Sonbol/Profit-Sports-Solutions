@@ -85,6 +85,7 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
         {checked} of {rows.length} checked
       </ThemedText>
       {rows.map((row, index) => {
+        const needsTest = step === 'installation' && row.status === 'done' && row.kind !== 'part' && !row.tested_working;
         const needsSerial = row.status === 'done' && !row.serial_number.trim() && (
           step === 'installation' || (step === 'loading' && row.kind !== 'part' && !row.serial_unreachable)
         );
@@ -97,7 +98,7 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
         return (
           <ThemedView
             key={row.id ?? `new-${index}`}
-            style={[styles.card, { borderColor: !row.status || needsSerial || needsReason ? theme.primary : theme.backgroundSelected }]}
+            style={[styles.card, { borderColor: !row.status || needsSerial || needsReason || needsTest ? theme.primary : theme.backgroundSelected }]}
           >
             {row.id && !row.added_on_site ? (
               <ThemedText type="smallBold">
@@ -177,6 +178,12 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
               <Chip
                 label="Serial not reachable (packed)" on={!!row.serial_unreachable}
                 onPress={() => update(index, { serial_unreachable: !row.serial_unreachable })}
+              />
+            ) : null}
+            {step === 'installation' && row.status === 'done' && row.kind !== 'part' ? (
+              <Chip
+                label="Assembled, levelled and tested — working" on={!!row.tested_working}
+                onPress={() => update(index, { tested_working: !row.tested_working })}
               />
             ) : null}
             {row.serial_not_taken_at_loading ? (

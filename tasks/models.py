@@ -1005,6 +1005,35 @@ class TaskAssignment(models.Model):
         return f'{self.task.task_number} — {self.technician.full_name} ({self.role})'
 
 
+class SiteReadiness(models.Model):
+    """An installation's site checked ready before the truck goes, by the
+    task's owner or a manager (tasks.views.save_site_readiness): space and
+    floor, power, access, and the customer confirming the date. Scheduled while
+    it isn't ready: a warning, never a block."""
+
+    task = models.OneToOneField('Task', on_delete=models.CASCADE, related_name='site_readiness', verbose_name=_('task'))
+    space_and_floor = models.BooleanField(_('space and floor ready'), default=False)
+    power = models.BooleanField(_('power sockets where the machines go'), default=False)
+    access = models.BooleanField(_('access for the delivery (lift, doors, parking)'), default=False)
+    date_confirmed = models.BooleanField(_('the customer confirmed the date'), default=False)
+    note = models.TextField(_('note'), blank=True)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='site_readiness_checks',
+        verbose_name=_('checked by'),
+    )
+    checked_at = models.DateTimeField(_('checked at'))
+
+    CHECKS = ('space_and_floor', 'power', 'access', 'date_confirmed')
+
+    class Meta:
+        verbose_name = _('site readiness')
+        verbose_name_plural = _('site readiness')
+
+    @property
+    def is_ready(self):
+        return all(getattr(self, check) for check in self.CHECKS)
+
+
 class TaskEvent(models.Model):
     class EventType(models.TextChoices):
         CREATED = 'created', _('Created')
@@ -1328,6 +1357,8 @@ class TaskProduct(models.Model):
     # Loading: the sticker couldn't be reached (packed or stacked) — said, not forgotten;
     # the installation reads it (docs: task_product).
     serial_unreachable = models.BooleanField(_('serial not reachable at loading'), default=False)
+    # Installation: assembled, levelled and tested — working (commissioning), each installed machine.
+    tested_working = models.BooleanField(_('assembled, levelled and tested — working'), default=False)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
     frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)
     arm = models.CharField(_('arm color'), max_length=100, default=DEFAULT_COLOR)

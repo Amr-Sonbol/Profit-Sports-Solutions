@@ -124,6 +124,16 @@
 </table>
 {% endif %}
 
+{% if equipment_step == 'installation' %}
+{# The handover to the customer. #}
+<h2>{% translate "Handover" %}</h2>
+<ul>
+    <li>{% translate "Shown how to use the equipment" %}: {% if report.handover_demo %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</li>
+    <li>{% translate "Manuals left" %}: {% if report.handover_manuals %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</li>
+    <li>{% translate "Packaging taken away" %}: {% if report.handover_packaging %}{% translate "Yes" %}{% else %}{% translate "No" %}{% endif %}</li>
+</ul>
+{% endif %}
+
 {% if not equipment or machines or content.findings %}
 <h2>{% translate "Findings & Actions" %}</h2>
 {% if content.findings %}<p><span class="iso" dir="{{ content.findings|text_dir }}">{{ content.findings|linebreaksbr }}</span></p>{% endif %}

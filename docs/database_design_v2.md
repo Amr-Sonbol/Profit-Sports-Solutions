@@ -902,6 +902,7 @@ The **Stock** screen lists each warehouse's machines and parts by code and quant
 | brand_id | FK → brand, nullable | its own brand (one delivery can mix brands); blank: the task's (`task.brand`) — a new line takes the task's, and a line carried to a next step, a follow-up or the rest of a receiving keeps its own. Picked per line on Edit task and in the app's Plan the machines |
 | serial_number | varchar | blank on receiving; on loading typed or `serial_unreachable` ticked; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
 | serial_unreachable | bool | loading: the sticker couldn't be reached (packed) — said, not forgotten; the installation shows *Serial not taken at loading* |
+| tested_working | bool | installation: assembled, levelled and tested — working (commissioning); needed for each installed machine |
 | quantity | int | default 1; the count of that code on a receiving line, 1 per machine on a loading or an installation |
 | frame | varchar | default `Black` |
 | arm | varchar | default `Black` |
@@ -915,6 +916,29 @@ The **Stock** screen lists each warehouse's machines and parts by code and quant
 | source_line_id | FK → task_product | nullable — the same machine's line on the step before |
 | kind | varchar | `machine` (default) or `part` — a spare part, only on a receiving task; the colour columns don't apply to it |
 | for_task_id | FK → task | nullable — a part line only: the repair it was ordered for, which holds it (above) |
+
+**Best practice on each step** (`tasks.views`):
+- **A loading leaves with proof of dispatch** — a photo of the loaded truck or the signed delivery note (`task_attachment.purpose = delivery_note`) — before its report is filed (`dispatch_photo_missing`).
+- **An installed machine is commissioned:** assembled, levelled and tested — working (`tested_working`), ticked machine by machine.
+- **The handover is recorded** on the installation's report and its PDF (`work_report.handover_demo`, `_manuals`, `_packaging`).
+- **The site is checked ready before the truck goes** (`site_readiness`, below); scheduled while it isn't: a warning, never a block.
+- **What went wrong is followed up:** machines missing, damaged or wrong on any step, and a serial already on file elsewhere, open one internal task for the country's Manager (`open_equipment_follow_up`) — the claim to the factory or the carrier.
+- **One serial per brand:** an installed serial already on file for its brand is that machine — at another site it isn't added a second time; the follow-up asks the manager to check it (`register_installed_machines`).
+
+### site_readiness
+An installation's site checked ready before the truck goes, by the task's owner or a manager (website and app). One per installation task.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| task_id | FK → task | unique |
+| space_and_floor | bool | |
+| power | bool | power sockets where the machines go |
+| access | bool | for the delivery: lift, doors, parking |
+| date_confirmed | bool | the customer confirmed the date |
+| note | text | |
+| checked_by_id | FK → user | |
+| checked_at | timestamptz | |
 
 ### stock_adjustment
 A hand count of one code at a warehouse — the opening stock when this starts (what's already on the floor was never received in the app), or a recount. Whoever counts types **what's on the shelf**; the row keeps the difference from what the app worked out, so entering the same count twice changes nothing. Added by the manager tier or a warehouse manager from the Stock screen, or by a parts upload with quantities; never edited, a mistake is corrected by another count.
@@ -1087,6 +1111,7 @@ Technicians forget to press complete and remember in the car. **Only a manager o
 | recommendations | varchar[] | standard recommendations (`reports.phrases.Recommendation`) |
 | recommendation | text | blank — another recommendation, typed |
 | resolved | bool | |
+| handover_demo, handover_manuals, handover_packaging | bool | an installation's handover: shown how to use them, manuals left, packaging taken away (on its PDF) |
 | labour_hours | decimal | worked out, never typed: from the lead's first "Started" tap (app or website) to the first "Completed" (the report first sent), less "Paused"→"Resumed" — waiting for review, rejections and later corrections add nothing. To the minute, kept as hours with two decimals (1:32 → 1.53, exact to the minute when shown again as h:mm); at least a minute. A report filed offline counts until it was filed on the phone. A manager correcting a tap time recomputes it. Shown to the customer as "Time on site" and part of what they sign |
 | customer_name | varchar | who signed |
 | signature_url | varchar | |

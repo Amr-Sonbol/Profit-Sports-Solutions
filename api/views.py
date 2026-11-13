@@ -71,7 +71,8 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    BeyondStock, check_beyond_stock, lines_to_carry, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
+    BeyondStock, DISPATCH_PHOTO_MISSING, check_beyond_stock, dispatch_photo_missing, lines_to_carry,
+    is_installation, save_site_readiness, site_readiness_for_app, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
     PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
@@ -1731,6 +1732,8 @@ class MyTaskReportView(APIView):
             ],
             # Which step: receiving, loading or installation (the screen's words follow it).
             'checklist_step': equipment_step(task),
+            # A loading's dispatch photo (the loaded truck or the delivery note), once taken.
+            'has_dispatch_photo': not dispatch_photo_missing(task) if equipment_step(task) == 'loading' else None,
         })
 
     def post(self, request, pk):
@@ -1804,6 +1807,7 @@ class MyTaskReportView(APIView):
                     {key: '' if row.get(key) is None else row.get(key) for key in (
                         'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
                         'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status', 'serial_unreachable',
+                        'tested_working',
                     )},
                     initial=known.get(row.get('id'), {}), step=equipment_step(task),
                 )
@@ -1839,6 +1843,8 @@ class MyTaskReportView(APIView):
             )
             return Response({'html': html, 'problems': [str(problem) for problem in problems]})
 
+        if dispatch_photo_missing(task):  # a loading leaves with its dispatch photo
+            return Response({'dispatch_photo': [str(DISPATCH_PHOTO_MISSING)]}, status=status.HTTP_400_BAD_REQUEST)
         if machine_forms is not None:
             gaps = report_machine_photo_gaps(
                 task,
@@ -2000,6 +2006,8 @@ def _team_task_response(request, task):
     }
     data = TeamTaskDetailSerializer(task, context=context).data
     data.update(_parts_payload(request, task))
+    # An installation's site checked ready before the truck goes (None for any other task).
+    data['site_readiness'] = site_readiness_for_app(task, technician)
     # What a manager can do here, as on the website's task page (TaskManageView).
     is_manager = technician.is_manager_tier
     # Its machines (an equipment task), the chain around it, and the follow-up offer.
@@ -2226,6 +2234,23 @@ def _parts_payload(request, task):
         'can_prepare_parts': can_prepare(technician) and all_in(task) and task.parts_prepared_at is None
         and not is_shipment(task),
     }
+
+
+class TaskSiteReadinessView(APIView):
+    """An installation's site checks from the app (space_and_floor, power,
+    access, date_confirmed, note) — its owner or a manager, as on the website."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        if not is_installation(task):
+            raise Http404
+        if not can_change_task(request.user.technician, task):
+            raise PermissionDenied
+        save_site_readiness(task, request.user, request.data)
+        task.refresh_from_db()
+        return Response(site_readiness_for_app(task, request.user.technician))
 
 
 class TaskPartsNeededView(APIView):

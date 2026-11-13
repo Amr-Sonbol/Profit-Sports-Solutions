@@ -27,6 +27,7 @@
 
 {% if shipment %}{% include "tasks/_shipment_panel.html" %}{% endif %}
 
+{% if site_not_ready %}<p class="flash flash--warning">{% translate "This installation is scheduled, but its site isn't confirmed ready yet." %} <a href="#site-readiness">{% translate "Site ready for the installation?" %}</a></p>{% endif %}
 {% if scheduled_before_parts %}<p class="flash flash--warning">{% translate "This visit is scheduled, but some ordered parts haven't arrived yet. Check they'll be in before the visit, or move it." %} <a href="#parts-needed">{% translate "Parts needed" %}</a></p>{% endif %}
 
 {% include "tasks/_branch_card.html" with with_terms=True %}
@@ -366,6 +367,26 @@
     <p class="field__help">{% translate "Please add a contact email address for this site before requesting feedback." %}</p>
     {% endif %}
     {% endif %}
+</div>
+{% endif %}
+
+{# An installation's site checked ready before the truck goes (tasks.models.SiteReadiness). #}
+{% if is_installation %}
+<div class="section" id="site-readiness">
+    <h2>{% translate "Site ready for the installation?" %}</h2>
+    {% if site_readiness %}<p class="field__help">{% blocktranslate with name=site_readiness.checked_by.get_full_name|default:site_readiness.checked_by.get_username when=site_readiness.checked_at|date:"SHORT_DATETIME_FORMAT" %}Checked by {{ name }}, {{ when }}.{% endblocktranslate %}{% if site_readiness.is_ready %} <span class="badge badge--good">{% translate "Ready" %}</span>{% endif %}</p>{% endif %}
+    {% if can_change_parts %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="site_readiness">
+        <label class="checkbox"><input type="checkbox" name="space_and_floor"{% if site_readiness.space_and_floor %} checked{% endif %}> {% translate "Space and floor ready" %}</label>
+        <label class="checkbox"><input type="checkbox" name="power"{% if site_readiness.power %} checked{% endif %}> {% translate "Power sockets where the machines go" %}</label>
+        <label class="checkbox"><input type="checkbox" name="access"{% if site_readiness.access %} checked{% endif %}> {% translate "Access for the delivery (lift, doors, parking)" %}</label>
+        <label class="checkbox"><input type="checkbox" name="date_confirmed"{% if site_readiness.date_confirmed %} checked{% endif %}> {% translate "The customer confirmed the date" %}</label>
+        <div class="field"><label for="readiness-note">{% translate "Note" %}</label><textarea id="readiness-note" name="note" rows="2">{{ site_readiness.note }}</textarea></div>
+        <div class="form-actions"><button type="submit" class="button button--secondary">{% translate "Save the site checks" %}</button></div>
+    </form>
+    {% elif not site_readiness %}<p class="empty-state">{% translate "Not checked yet." %}</p>{% endif %}
 </div>
 {% endif %}
 

@@ -66,6 +66,7 @@ class WorkReportForm(forms.ModelForm):
         model = WorkReport
         fields = [
             'findings', 'work_lines', 'action_taken', 'resolved', 'customer_name',
+            'handover_demo', 'handover_manuals', 'handover_packaging',
             'signature_waived_reason', 'recommendations', 'recommendation',
         ]
         widgets = {

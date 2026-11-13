@@ -456,6 +456,8 @@ export interface TeamTaskDetail extends TaskDetail {
   } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
   manage?: { can_cancel: boolean; can_close: boolean; can_flag: boolean; correctable_event_ids: number[] };
+  /** An installation's site checked ready before the truck goes; null for any other task. */
+  site_readiness?: SiteReadiness | null;
 }
 
 export interface CataloguePart {
@@ -816,6 +818,19 @@ export interface StaffAccount {
   can_set_password?: boolean;
 }
 
+/** An installation's site checked ready before the truck goes (api/views.py TaskSiteReadinessView). */
+export interface SiteReadiness {
+  space_and_floor: boolean;
+  power: boolean;
+  access: boolean;
+  date_confirmed: boolean;
+  note: string;
+  is_ready: boolean;
+  checked_by: string;
+  checked_at: string | null;
+  can_check: boolean;
+}
+
 /** One line on an equipment step's checklist (api/views.py MyTaskReportView). */
 export interface ChecklistRow {
   /** The planned line; null for one added on site. */
@@ -833,6 +848,8 @@ export interface ChecklistRow {
   serial_number: string;
   /** Loading: the sticker couldn't be reached (packed) — said instead of the serial. */
   serial_unreachable?: boolean;
+  /** Installation: assembled, levelled and tested — working (needed for an installed machine). */
+  tested_working?: boolean;
   /** Installation: its serial wasn't taken at loading — read it from the sticker now. Older servers: absent. */
   serial_not_taken_at_loading?: boolean;
   frame: string;

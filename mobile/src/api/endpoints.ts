@@ -3,6 +3,7 @@ import { currentLocation } from '@/location';
 
 import { API_BASE_URL, ApiRequestError, apiRequest, getActiveCountry, getToken } from './client';
 import type {
+  SiteReadiness,
   PlannedLine,
   TaskAttachment,
   ChecklistRow,
@@ -232,6 +233,8 @@ export function fetchMyReport(id: number) {
     checklist?: ChecklistRow[] | null;
     checklist_statuses?: Choice[];
     checklist_step?: 'receiving' | 'loading' | 'installation' | '';
+    /** A loading: whether its dispatch photo (the loaded truck or the delivery note) is in. */
+    has_dispatch_photo?: boolean | null;
   }>(
     `/api/my-tasks/${id}/report/`,
   );
@@ -610,3 +613,11 @@ export function fetchNewPersonForm() {
 export function createPerson(values: Record<string, string>) {
   return apiRequest<{ id: number; name: string; has_login: boolean }>('/api/people/new/', { method: 'POST', body: values });
 }
+
+/** An installation's site checks (its owner or a manager). */
+export function saveSiteReadiness(id: number, checks: {
+  space_and_floor: boolean; power: boolean; access: boolean; date_confirmed: boolean; note: string;
+}) {
+  return apiRequest<SiteReadiness>(`/api/tasks/${id}/site-readiness/`, { method: 'POST', body: checks });
+}
+
