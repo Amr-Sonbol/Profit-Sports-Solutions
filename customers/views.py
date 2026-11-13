@@ -117,7 +117,7 @@ def customer_list(request):
         customers = customers.filter(country=get_active_country(request))
     if search:
         customers = customers.filter(
-            Q(name__icontains=search) | Q(contact_email__icontains=search)
+            Q(name__matches=search) | Q(contact_email__icontains=search) | Q(contact_phone__phone=search)
             | Q(portal_users__user__username__icontains=search),
         ).distinct()
     customers = customers.select_related('country').prefetch_related('sites', 'portal_users__user').order_by('name')

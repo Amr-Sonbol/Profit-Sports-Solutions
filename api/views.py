@@ -497,7 +497,9 @@ class CustomersView(APIView):
         ).prefetch_related('sites').order_by('name')
         search = request.query_params.get('q', '').strip()
         if search:
-            customers = customers.filter(Q(name__icontains=search) | Q(sites__name__icontains=search)).distinct()
+            customers = customers.filter(
+                Q(name__matches=search) | Q(sites__name__matches=search) | Q(contact_phone__phone=search),
+            ).distinct()
         return Response([
             {
                 'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
@@ -562,8 +564,8 @@ class MachinesView(APIView):
         if search:
             assets = assets.filter(
                 Q(serial_no__icontains=search) | Q(model_name__icontains=search)
-                | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
-                | Q(site__customer__name__icontains=search)
+                | Q(brand__name__icontains=search) | Q(site__name__matches=search)
+                | Q(site__customer__name__matches=search)
             )
         return Response([_machine(asset) for asset in assets[:100]])
 
@@ -899,7 +901,7 @@ class StaffAccountsView(APIView):
         search = request.query_params.get('q', '').strip()
         if search:
             people = people.filter(
-                Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+                Q(full_name__matches=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
             )
         now = timezone.now()
         rows = []

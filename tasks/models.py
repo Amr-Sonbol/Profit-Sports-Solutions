@@ -10,7 +10,7 @@ from customers.models import Asset, Customer, Site
 from people.models import Technician
 from reference.models import Brand, Country, Skill, TaskType
 from reports.phrases import Action, Finding
-from spots.indexes import contains_search_index
+from spots.indexes import contains_search_index, matches_search_index, phone_search_index
 from spots.uploads import SafeFileValidator
 
 # A customer's own phone photos/videos of the fault — kept separate from
@@ -477,12 +477,12 @@ class CustomerTicket(models.Model):
             # Every ticket list: one country, one status, newest first.
             models.Index(fields=['country', 'status', '-submitted_at'], name='ticket_country_status_idx'),
             contains_search_index('ticket_number', 'ticket_number_trgm'),
-            contains_search_index('company_name', 'ticket_company_trgm'),
-            contains_search_index('site_description', 'ticket_site_trgm'),
-            contains_search_index('site_address', 'ticket_address_trgm'),
+            matches_search_index('company_name', 'ticket_company_fold'),
+            matches_search_index('site_description', 'ticket_site_fold'),
+            matches_search_index('site_address', 'ticket_address_fold'),
             contains_search_index('pak_reference_number', 'ticket_pak_trgm'),
-            contains_search_index('contact_name', 'ticket_contact_trgm'),
-            contains_search_index('contact_phone', 'ticket_phone_trgm'),
+            matches_search_index('contact_name', 'ticket_contact_fold'),
+            phone_search_index('contact_phone', 'ticket_phone_digits'),
         ]
 
     def save(self, *args, **kwargs):

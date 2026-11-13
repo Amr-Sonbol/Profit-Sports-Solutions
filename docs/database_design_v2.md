@@ -1202,7 +1202,7 @@ CREATE EXTENSION pg_trgm;
 
 They take over once a search has 3 or more characters. Measured on 200,000 tasks and 100,000 tickets: single-field searches went from 14–23 ms to under 4 ms, and the cost no longer grows with the table. The app's one-box task search (`search_tasks`) searches each field on its own and merges the newest 50, since a single OR across joined tables makes Postgres read every task regardless of indexes.
 
-**Arabic spelling variants aren't folded yet** — "احمد" doesn't find "أحمد". If that matters for names, add a normalised copy of the searched columns (hamza forms → ا, ة → ه, ى → ي) and search that instead.
+**Names are searched as people type them** (`spots/indexes.py`). A name or address (customer, branch, a request's company, branch, address and contact, a technician) is searched with `__matches`: upper-cased with Arabic spelling variants folded — hamza forms and alef wasla → ا, ة → ه, ى → ي, tatweel and diacritics dropped — on both sides, so "احمد" finds "أحمد" and English reads as before; its trigram index is on exactly that form (`Folded`). **Phone numbers by their digits** (`__phone`): spaces, dashes, a country code and a leading 0 don't matter ("050 123 4567" finds "+971501234567"); fewer than four digits finds nothing; indexed on the digits (`PhoneDigits`) — a customer's, a branch's and a request's contact phone.
 
 ---
 

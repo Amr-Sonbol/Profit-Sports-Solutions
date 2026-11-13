@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from people.models import Technician
 from reference.models import Brand, Country
-from spots.indexes import contains_search_index
+from spots.indexes import contains_search_index, matches_search_index, phone_search_index
 
 
 class Customer(models.Model):
@@ -105,7 +105,7 @@ class Customer(models.Model):
         verbose_name = _('customer')
         verbose_name_plural = _('customers')
         ordering = ['name']
-        indexes = [contains_search_index('name', 'customer_name_trgm')]
+        indexes = [matches_search_index('name', 'customer_name_fold'), phone_search_index('contact_phone', 'customer_phone_digits')]
 
     def __str__(self):
         return self.name
@@ -261,8 +261,9 @@ class Site(models.Model):
         verbose_name_plural = _('sites')
         ordering = ['customer__name', 'name']
         indexes = [
-            contains_search_index('name', 'site_name_trgm'),
-            contains_search_index('address', 'site_address_trgm'),
+            matches_search_index('name', 'site_name_fold'),
+            matches_search_index('address', 'site_address_fold'),
+            phone_search_index('contact_phone', 'site_phone_digits'),
         ]
 
     def __str__(self):

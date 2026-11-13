@@ -202,7 +202,7 @@ def staff_accounts(request):
     search = request.GET.get('q', '').strip()
     if search:
         people = people.filter(
-            Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+            Q(full_name__matches=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
         )
     now = timezone.now()
     rows = [{'person': person, 'status': staff_account_status(person, locked, now)} for person in people]

@@ -10455,3 +10455,43 @@ class VisitReminderTests(TaskTestCase):
         self.task.schedule_notified_at = None
         self.task.save(update_fields=['schedule_notified_at'])
         self.assertEqual(self.remind(), 0)
+
+
+class SearchAsPeopleTypeTests(TaskTestCase):
+    """Search finds names with Arabic spelling variants folded, and phone numbers by their
+    digits whatever the format (spots/indexes.py: __matches, __phone)."""
+
+    def setUp(self):
+        super().setUp()
+        self.customer.name = 'نادي أحمد الرياضى'
+        self.customer.contact_phone = '+971 50 123 4567'
+        self.customer.save(update_fields=['name', 'contact_phone'])
+        self.task = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+
+    def found(self, text):
+        from tasks.views import search_tasks
+        return list(search_tasks(Task.objects.all(), text))
+
+    def test_arabic_spelling_variants_find_each_other(self):
+        self.assertEqual(self.found('احمد'), [self.task])     # أ written as ا
+        self.assertEqual(self.found('الرياضي'), [self.task])  # ى written as ي
+        self.assertEqual(self.found('Marina'), [self.task])   # English as before
+        self.assertEqual(self.found('marina branch'), [self.task])
+
+    def test_a_phone_number_in_any_format(self):
+        for typed in ('0501234567', '050 123 4567', '+971501234567', '50-123-4567'):
+            self.assertEqual(self.found(typed), [self.task], typed)
+        self.assertEqual(self.found('050'), [])  # too few digits to mean a number
+
+    def test_a_request_by_its_contact_phone(self):
+        from tasks.views import search_tickets
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0777', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='علي', contact_phone='+971 55 765 4321',
+            description='-', submitted_at=timezone.now(),
+        )
+        self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), '055 765 4321')), [ticket])
+        self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), 'على')), [ticket])

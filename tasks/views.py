@@ -747,14 +747,15 @@ def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
     and the newest of all those win — the same answer as one big OR, but
     without Postgres having to read every task to get it.
     """
-    sites = Site.objects.filter(Q(name__icontains=text) | Q(address__icontains=text)).values('pk')
-    customers = Customer.objects.filter(name__icontains=text).values('pk')
+    # Names and addresses with Arabic spelling variants folded; phones by their digits (spots/indexes.py).
+    sites = Site.objects.filter(Q(name__matches=text) | Q(address__matches=text)).values('pk')
+    customers = Customer.objects.filter(name__matches=text).values('pk')
     by_asset = TaskAsset.objects.filter(
         asset__in=Asset.objects.filter(serial_no__icontains=text).values('pk'),
     ).values('task_id')
     by_product = TaskProduct.objects.filter(serial_number__icontains=text).values('task_id')
     by_technician = TaskAssignment.objects.filter(
-        is_active=True, technician__full_name__icontains=text,
+        is_active=True, technician__full_name__matches=text,
     ).values('task_id')
     by_request = CustomerTicket.objects.filter(ticket_number__icontains=text).values('task_id')
     ids = set()
@@ -762,7 +763,7 @@ def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
         Q(task_number__icontains=text), Q(pak_reference_number__icontains=text),
         Q(site__in=sites), Q(site__customer__in=customers), Q(pk__in=by_asset), Q(pk__in=by_product),
         Q(pk__in=by_technician), Q(pk__in=by_request),
-        Q(site__contact_phone__icontains=text), Q(site__customer__contact_phone__icontains=text),
+        Q(site__contact_phone__phone=text), Q(site__customer__contact_phone__phone=text),
     ):
         ids.update(tasks.filter(condition).order_by('-reported_at').values_list('pk', flat=True)[:limit])
     return tasks.filter(pk__in=ids).order_by('-reported_at')[:limit]
@@ -772,9 +773,9 @@ def search_tickets(tickets, text):
     """Tickets matching `text` in anything the office searches them by —
     number, gym, site, address, contact name or phone, PAK reference."""
     return tickets.filter(
-        Q(ticket_number__icontains=text) | Q(company_name__icontains=text)
-        | Q(site_description__icontains=text) | Q(site_address__icontains=text)
-        | Q(contact_name__icontains=text) | Q(contact_phone__icontains=text)
+        Q(ticket_number__icontains=text) | Q(company_name__matches=text)
+        | Q(site_description__matches=text) | Q(site_address__matches=text)
+        | Q(contact_name__matches=text) | Q(contact_phone__phone=text)
         | Q(pak_reference_number__icontains=text),
     )
 
@@ -1856,7 +1857,7 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
         tasks = tasks.filter(task_number__icontains=task_id)
     site = params.get('site', '').strip()
     if site:
-        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
+        tasks = tasks.filter(Q(site__name__matches=site) | Q(site__address__matches=site)).distinct()
     pak_reference = params.get('pak_reference', '').strip()
     if pak_reference:
         tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
@@ -1870,7 +1871,7 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     if customer_id:
         tasks = tasks.filter(site__customer_id=customer_id)
     elif customer_name:
-        tasks = tasks.filter(site__customer__name__icontains=customer_name)
+        tasks = tasks.filter(site__customer__name__matches=customer_name)
     technician_id = params.get('technician', '')
     if technician_id:
         tasks = tasks.filter(assignments__technician_id=technician_id, assignments__is_active=True).distinct()
@@ -3633,9 +3634,9 @@ def ticket_list(request):
     if ticket_id:
         tickets = tickets.filter(ticket_number__icontains=ticket_id)
     if company:
-        tickets = tickets.filter(company_name__icontains=company)
+        tickets = tickets.filter(company_name__matches=company)
     if site:
-        tickets = tickets.filter(Q(site_description__icontains=site) | Q(site_address__icontains=site))
+        tickets = tickets.filter(Q(site_description__matches=site) | Q(site_address__matches=site))
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
     if customer_id:
@@ -3648,7 +3649,7 @@ def ticket_list(request):
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
         customer_name = customer_name or customer.name
     elif customer_name:
-        tickets = tickets.filter(Q(customer__name__icontains=customer_name) | Q(company_name__icontains=customer_name))
+        tickets = tickets.filter(Q(customer__name__matches=customer_name) | Q(company_name__matches=customer_name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     if about in CustomerTicket.About.values:
@@ -5494,7 +5495,7 @@ def technician_list(request):
         is_active=not show_inactive, country=get_active_country(request),
     ).order_by('full_name')
     if search:
-        technicians = technicians.filter(full_name__icontains=search)
+        technicians = technicians.filter(full_name__matches=search)
 
     rows = []
     technicians = list(technicians)
@@ -5531,7 +5532,7 @@ def all_technicians(request):
     search = request.GET.get('q', '').strip()
     technicians = _people_i_oversee(viewer).filter(is_active=True).select_related('country').order_by('full_name')
     if search:
-        technicians = technicians.filter(full_name__icontains=search)
+        technicians = technicians.filter(full_name__matches=search)
 
     rows = []
     technicians = list(technicians)
@@ -5941,8 +5942,8 @@ def machine_list(request):
     if search:
         assets = assets.filter(
             Q(serial_no__icontains=search) | Q(model_name__icontains=search) | Q(code__icontains=search)
-            | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
-            | Q(site__customer__name__icontains=search)
+            | Q(brand__name__icontains=search) | Q(site__name__matches=search)
+            | Q(site__customer__name__matches=search)
         )
 
     # Added by customers and not confirmed yet (?status=pending).
