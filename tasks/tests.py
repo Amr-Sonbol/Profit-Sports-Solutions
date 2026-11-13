@@ -10753,3 +10753,32 @@ class EquipmentGoldenPathTests(TaskTestCase):
                                    HTTP_AUTHORIZATION=f'Token {token}')
         self.assertIn(refused.status_code, (403, 404))
 
+
+
+class DatabaseRulesTests(TaskTestCase):
+    """Rules the database keeps itself, whatever the code (docs/database_design_v2.md)."""
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0901', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+
+    def refused(self, make):
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            make()
+
+    def test_one_pending_time_change_per_task(self):
+        ask = dict(task=self.task, requested_by=self.supervisor_user.technician, requested_scheduled_for=timezone.now(),
+                   created_at=timezone.now(), status=ScheduleChangeRequest.Status.PENDING)
+        ScheduleChangeRequest.objects.create(**ask)
+        self.refused(lambda: ScheduleChangeRequest.objects.create(**ask))
+        ScheduleChangeRequest.objects.create(**{**ask, 'status': ScheduleChangeRequest.Status.DENIED})  # decided ones: any number
+
+    def test_quantities_of_at_least_one(self):
+        from tasks.models import TaskPartNeeded
+        self.refused(lambda: TaskProduct.objects.create(task=self.task, product_code='X', quantity=0))
+        self.refused(lambda: TaskPartNeeded.objects.create(task=self.task, product_code='X', quantity=0,
+                                                            created_by=self.supervisor_user))

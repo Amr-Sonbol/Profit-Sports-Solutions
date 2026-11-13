@@ -153,6 +153,7 @@ class PartUsed(models.Model):
         verbose_name = _('part used')
         verbose_name_plural = _('parts used')
         ordering = ['report', 'part_code']
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='part_used_quantity_at_least_one')]
 
     def __str__(self):
         return f'{self.report} — {self.part_code}'

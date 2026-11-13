@@ -1,7 +1,9 @@
 # Profit Sports Solutions — Technician App
 ## Database design v2
 
-15 tables. Target stack: Django + PostgreSQL, one developer.
+49 tables (it began as 15; each one added is described below). Target stack: Django + PostgreSQL, one developer.
+
+**Rules the database keeps itself**, not only the code: one active lead per task; one pending time change per task; quantities of at least one (task products, parts needed, parts used); a stock count that changed something; one row per role and permission, per technician and skill or conduct area; deletes refused where history hangs off a row (a task's branch, its type).
 
 ---
 
@@ -652,6 +654,15 @@ The back-and-forth on a ticket, either side, in order.
 
 **Each reply sends a best-effort email the other way**, same fail-silent pattern as every other notification here. A staff reply emails `customer_ticket.contact_email`, if one was given. A customer reply emails `assigned_to`'s login email, if the ticket is assigned to someone with one on file — there's no fixed office address to fall back to, so an unassigned ticket's customer replies simply don't email anyone until someone picks it up.
 
+### ticket_reply_file
+Each file on a reply (`ticket_reply`), when there's more than one; served only to staff and to that request's own customer (`spots.media`).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| reply_id | FK → ticket_reply | cascade |
+| file | file | checked to be what its name says (`spots.uploads`) |
+
 ### ticket_internal_note
 A progress note on a ticket, visible only to whoever can manage it — separate from `ticket_reply`, which the customer sees too. Gated on `manage_tickets` directly (the same `can_manage` check `ticket_review` computes for everything else on the screen), not `is_manager_tier` — tickets are their own permission now, held by `support_manager`, `operations_manager` and `admin`, not every manager-tier person.
 
@@ -665,6 +676,15 @@ A progress note on a ticket, visible only to whoever can manage it — separate 
 | created_at | timestamptz | |
 
 **A running log, not a single overwritable field** — each note is its own row, timestamped and attributed, so a manager can see how the state of a ticket evolved over time rather than just its latest value.
+
+### ticket_internal_note_file
+Each file on an internal note — staff only, never the customer.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| note_id | FK → ticket_internal_note | cascade |
+| file | file | checked to be what its name says (`spots.uploads`) |
 
 ### ticket_notification
 A new ticket, or a new customer reply on an existing one — feeds the ticket half of the header bell, gated on `manage_tickets` (today, support manager and admin), same as `ticket_internal_note`. A plain manager, supervisor, or technician never sees it — the first for the same reason as the note above, the other two because they have no ticket access to begin with.
@@ -1247,7 +1267,6 @@ Each is a real need eventually. None belongs in the first version.
 - Preventive maintenance schedules
 - Technician leave calendar
 - Route optimisation
-- Offline mode
 
 ---
 
@@ -1272,7 +1291,7 @@ Each is a real need eventually. None belongs in the first version.
 
 **Customer (public, no login):** the feedback form — reached only through the emailed link, never linked from anywhere inside the app; and a ticket's own status page, reached by its token, which doubles as a no-login fallback for checking on or replying to a ticket without staying signed in. Submitting a new ticket itself always requires the portal login below — the old public ticket form now just redirects there.
 
-**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page with their next visit up front, their requests (tickets) and visits still to come, and the service history with each visit's report PDF — progress always in the customer's words (*Received → Being arranged → Visit booked → Done*, `customers/progress.py`), never the team's statuses; a booked day that has passed without the work being done reads as being arranged again, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that). Also **My machines** (each machine at their sites with its code, serial and service history, and *Report a problem with this machine*, which opens the form with it chosen), **a page per visit** (when, the request it came from, and once reported what they signed — machines with what was found and done, work done, parts without prices, recommendations; never the hours — plus the PDF and the signed copy, and rating the visit, which answers an emailed feedback request if one was sent), a request's page listing **the visit(s) it became**, and **Settings** (contact details, addresses, language, password — the login email stays with the office).
+**Customer (portal, login required):** their own account, created by staff from the customer's edit screen — a home page with their next visit up front, their requests (tickets) and visits still to come, and the service history with each visit's report PDF — progress always in the customer's words, as steps (*Received → Visit scheduled → On the way → On site → Done*, `customers/progress.py`) — until there's a date, "Received — we're preparing your visit…", or "Waiting for parts" with when they're expected; never the team's statuses; a scheduled day that has passed without the work being done reads as being arranged again, and a form to report a new problem at one of their own sites (the company/site/address are never typed here at all, since a login already knows all of that). Also **My machines** (each machine at their sites with its code, serial and service history, and *Report a problem with this machine*, which opens the form with it chosen), **a page per visit** (when, the request it came from, and once reported what they signed — machines with what was found and done, work done, parts without prices, recommendations; never the hours — plus the PDF and the signed copy, and rating the visit, which answers an emailed feedback request if one was sent), a request's page listing **the visit(s) it became**, and **Settings** (contact details, addresses, language, password — the login email stays with the office).
 
 **The dashboard is a summary, not a new source of truth.** It shows who's available and every open task's lead and schedule at a glance — country-scoped, same as the roster and week view — but nothing lives only there; task list and week view remain the detailed screens for actually managing that work.
 

@@ -1196,6 +1196,12 @@ class ScheduleChangeRequest(models.Model):
         verbose_name = _('schedule change request')
         verbose_name_plural = _('schedule change requests')
         ordering = ['-created_at']
+        constraints = [
+            # One request at a time per task, kept by the database too.
+            models.UniqueConstraint(
+                fields=['task'], condition=models.Q(status='pending'), name='one_pending_schedule_change_per_task',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.get_status_display()}'
@@ -1389,6 +1395,7 @@ class TaskProduct(models.Model):
         verbose_name_plural = _('task products')
         ordering = ['task', 'product_code']
         indexes = [contains_search_index('serial_number', 'taskproduct_serial_trgm')]
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='task_product_quantity_at_least_one')]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'
@@ -1433,6 +1440,7 @@ class TaskPartNeeded(models.Model):
         verbose_name = _('part needed')
         verbose_name_plural = _('parts needed')
         ordering = ['task', 'pk']
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='part_needed_quantity_at_least_one')]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code} × {self.quantity}'
@@ -1460,6 +1468,8 @@ class StockAdjustment(models.Model):
         verbose_name = _('stock count')
         verbose_name_plural = _('stock counts')
         ordering = ['-created_at']
+        # A count that matched changes nothing and isn't kept (tasks.stock.record_count).
+        constraints = [models.CheckConstraint(condition=~models.Q(quantity=0), name='stock_count_changes_something')]
 
     def __str__(self):
         return f'{self.site} — {self.product_code}: {self.quantity:+d}'
