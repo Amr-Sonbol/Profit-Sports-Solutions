@@ -1,0 +1,14 @@
+# Ruff: the Python linter (CI: .github/workflows/tests.yml). Run locally with
+#   python -m ruff check .
+# The rules here catch real mistakes, not style: unused or undefined names,
+# a name defined twice, syntax errors, and the likely-bug patterns (bugbear),
+# e.g. a function in a loop using the loop's variable.
+line-length = 120
+extend-exclude = ["mobile", "*/migrations/*", ".venv", "node_modules"]
+
+[lint]
+select = ["F", "E9", "B"]
+ignore = [
+    "B008",  # a call in a default argument: Django's own patterns use it
+    "B904",  # `raise ... from` inside except: the app's raises are deliberate
+]

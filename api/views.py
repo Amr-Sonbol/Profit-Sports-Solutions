@@ -58,13 +58,13 @@ from tasks.views import (
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
-    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
+    BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
     _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead, can_change_task,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
-    _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
+    approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
-    save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
+    save_work_report, search_tickets, team_progress_rows, today_plan,
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
@@ -72,7 +72,7 @@ from tasks.views import (
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
     BeyondStock, DISPATCH_PHOTO_MISSING, check_beyond_stock, dispatch_photo_missing, lines_to_carry,
-    is_installation, save_site_readiness, site_readiness_for_app, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
+    is_installation, save_site_readiness, site_readiness_for_app, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
     PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
@@ -2320,7 +2320,7 @@ class PartsToPrepareView(APIView):
     permission_classes = [IsTechnician]
 
     def get(self, request):
-        from tasks.parts_needed import can_prepare, part_rows, to_prepare
+        from tasks.parts_needed import can_prepare, to_prepare
 
         technician = request.user.technician
         if not can_prepare(technician):

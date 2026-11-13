@@ -2219,7 +2219,7 @@ class TicketListTests(TaskTestCase):
     def test_search_by_pak_reference_number(self):
         self.ticket.pak_reference_number = 'PAK-99001'
         self.ticket.save(update_fields=['pak_reference_number'])
-        other = CustomerTicket.objects.create(
+        CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
             contact_name='Sara', contact_phone='0509999999', pak_reference_number='PAK-11111',
             description='Bike display broken.', submitted_at=timezone.now(),
@@ -2233,7 +2233,7 @@ class TicketListTests(TaskTestCase):
     def test_search_by_site_also_matches_the_address_not_just_the_description(self):
         self.ticket.site_address = 'Dubai Marina'
         self.ticket.save(update_fields=['site_address'])
-        other = CustomerTicket.objects.create(
+        CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
             site_address='JBR, Abu Dhabi', contact_name='Sara', contact_phone='0509999999',
             description='Bike display broken.', submitted_at=timezone.now(),
@@ -4750,7 +4750,7 @@ class TechnicianBoardTests(TaskTestCase):
 
     def test_shows_a_supervisors_responsible_tasks(self):
         manager_user = User.objects.create_user('manager1', password='pass12345')
-        manager = Technician.objects.create(
+        Technician.objects.create(
             user=manager_user, country=self.country, full_name='Mona Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
@@ -9263,7 +9263,7 @@ class CorporateReportTests(TicketMachineFindingsTests):
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
     def test_the_customer_sees_the_time_on_site(self):
-        from reports.pdf import changed_after_signing, render_visit_report_html
+        from reports.pdf import render_visit_report_html
         self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2, minutes=30))
         report = self._file()
         self.assertIn('2:30 hours', render_visit_report_html(report, language='en'))

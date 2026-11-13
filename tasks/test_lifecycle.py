@@ -9,7 +9,6 @@ request ends. Run before a release:
 """
 import re
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -416,7 +415,7 @@ class ReliabilityTests(LifecycleTestCase):
         self.send_request()
         ticket = self.newest_request()
         # As on the live server: sent after the page answered (here at once, so the test can see it).
-        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'),                 patch('tasks.views._in_background', lambda work: work()):
+        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'),                 patch('tasks.notices._in_background', lambda work: work()):
             self.staff.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'add_reply', 'message': 'On it.'})
             self.send_request(about='other', need='assistance')  # the customer's own: for the admins
         failure = FailedEmail.objects.get(triggered_by=self.admin.user)
@@ -518,7 +517,6 @@ class NewRequestAlertsTests(LifecycleTestCase):
                             for item in self.staff.get('/tasks/tickets/').context['unseen_notifications']))
 
     def test_a_busy_day_of_overdue_tasks_never_hides_a_new_request_in_the_bell(self):
-        from people.context_processors import notification_bell
         long_ago = timezone.now() - timedelta(days=10)
         for index in range(15):
             Task.objects.create(
@@ -1131,7 +1129,6 @@ class ReportMachinesTests(LifecycleTestCase):
         from django.test import RequestFactory
         from tasks.views import report_preview
         from reports.forms import WorkReportForm
-        from tasks.models import Technician
         png = 'data:image/png;base64,' + base64.b64encode(
             bytes.fromhex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a1300000000049454e44ae426082'),
         ).decode()

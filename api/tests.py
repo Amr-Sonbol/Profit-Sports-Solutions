@@ -704,7 +704,7 @@ class ApiSecurityTests(ApiTestCase):
         """A customer-portal account is a real User too — it must not be
         able to reach any technician/staff endpoint just by having a token.
         """
-        customer_user = User.objects.create_user('customer1', password='pass12345')
+        User.objects.create_user('customer1', password='pass12345')
         token = self.client.post(
             '/api/login/', json.dumps({'username': 'customer1', 'password': 'pass12345'}),
             content_type='application/json',

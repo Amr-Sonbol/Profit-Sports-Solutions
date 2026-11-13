@@ -144,7 +144,7 @@ class AccessRulesTests(TaskTestCase):
             country=self.country, ticket_number='AE-T0900', company_name='Fitness First', site_description='Marina',
             contact_name='Ali', contact_phone='050', description='Stops', submitted_at=timezone.now(),
         )
-        with patch('tasks.views.push_in_their_language') as push, self.captureOnCommitCallbacks(execute=True):
+        with patch('tasks.notices.push_in_their_language') as push, self.captureOnCommitCallbacks(execute=True):
             send_new_ticket_email_to_staff(RequestFactory().get('/'), ticket)
         self.assertEqual(sorted(call.args[0].user.username for call in push.call_args_list), ['desk_uae', 'tsm1'])
         self.assertEqual(push.call_args_list[0].args[3], {'type': 'ticket', 'ticket_id': ticket.pk})
