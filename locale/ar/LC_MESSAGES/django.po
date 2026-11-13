@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 22:38+0000\n"
+"POT-Creation-Date: 2026-11-12 23:50+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -534,6 +534,9 @@ msgstr "التقدم خلال 90 يوماً"
 
 msgid "A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse stock sheet — Code, Description, the colour, and each part's picture placed in its code cell. New codes are added; existing ones get what the sheet has; nothing is deleted."
 msgstr "ملف CSV بعمودين: الكود والوصف؛ أو ملف Excel بنفس تنسيق ورقة مخزون المستودع — الكود، والوصف، واللون، وصورة كل قطعة داخل خانة الكود. تُضاف الأكواد الجديدة؛ والموجودة تأخذ ما في الملف؛ ولا يُحذف شيء."
+
+msgid "A Panatta machine: opening a PAK with Panatta? Add its number here."
+msgstr "جهاز من Panatta: هل ستفتح PAK لدى Panatta؟ أضف رقمه هنا."
 
 msgid "A brand with this name already exists. Please select it from the list."
 msgstr "توجد علامة تجارية بهذا الاسم مسبقاً. يرجى اختيارها من القائمة."
@@ -3985,6 +3988,9 @@ msgstr "لا يمكن تغيير ذلك بعد تقديم التقرير إلا 
 msgid "Only a manager or administrator can change this once work has started."
 msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من قِبل مدير أو مسؤول النظام."
 
+msgid "Only a manager plans the machines on a loading or an installation."
+msgstr "المدير فقط يخطط الأجهزة في التحميل أو التركيب."
+
 msgid "Only a manager plans the machines on a loading."
 msgstr "المدير فقط يخطّط أجهزة التحميل."
 
@@ -4183,15 +4189,6 @@ msgstr "متأخرة"
 msgid "Overloaded"
 msgstr "محمّل بالعمل أكثر من اللازم"
 
-msgid "PAK number"
-msgstr "رقم PAK"
-
-msgid "PAK reference"
-msgstr "الرقم المرجعي PAK"
-
-msgid "PAK reference number"
-msgstr "رقم مرجعي PAK"
-
 msgid "PREVIEW — not sent yet."
 msgstr "معاينة — لم يُرسل بعد."
 
@@ -4207,6 +4204,9 @@ msgstr "الصفحة غير موجودة"
 
 msgid "Pages"
 msgstr "الصفحات"
+
+msgid "Panatta PAK"
+msgstr "رقم PAK من Panatta"
 
 msgid "Part"
 msgstr "القطعة"
@@ -5561,8 +5561,8 @@ msgstr "الشحن %(value)s %(currency)s"
 msgid "Shipping address"
 msgstr "عنوان الشحن"
 
-msgid "Shipping and PAK"
-msgstr "الشحن ورقم PAK"
+msgid "Shipping and Panatta PAK"
+msgstr "الشحن ورقم PAK من Panatta"
 
 msgid "Shipping company"
 msgstr "شركة الشحن"
@@ -8731,6 +8731,9 @@ msgstr "المهمة التي تتولى هذا الجهاز (زيارة أو ش
 msgid "the technician for a self-assessment; the supervisor for a review"
 msgstr "الفني في حالة التقييم الذاتي؛ والمشرف في حالة المراجعة"
 
+msgid "the ticket number opened in the Panatta portal, when the factory is involved — optional; internal, never shown to the customer"
+msgstr "رقم التذكرة المفتوحة في بوابة Panatta عند الحاجة إلى المصنع — اختياري؛ داخلي ولا يظهر للعميل أبدًا"
+
 msgid "the visit where the technician added it, before its report"
 msgstr "الزيارة التي أضافه فيها الفني، قبل تقريرها"
 
@@ -9414,6 +9417,15 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Other internal"
 #~ msgstr "داخلية أخرى"
+
+#~ msgid "PAK number"
+#~ msgstr "رقم PAK"
+
+#~ msgid "PAK reference"
+#~ msgstr "الرقم المرجعي PAK"
+
+#~ msgid "PAK reference number"
+#~ msgstr "رقم مرجعي PAK"
 
 #~ msgid "Photo of the sticker (optional)"
 #~ msgstr "صورة الملصق (اختياري)"

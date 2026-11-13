@@ -144,7 +144,7 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
             <ThemedText type="small" themeColor="primary">+ Add a part</ThemedText>
           </TouchableOpacity>
           <TextInput
-            style={inputStyle} value={pak} onChangeText={setPak} placeholder="PAK reference number (optional)"
+            style={inputStyle} value={pak} onChangeText={setPak} placeholder="Panatta PAK (optional)"
             placeholderTextColor={theme.textSecondary}
           />
           <ThemedText type="small">Who ships it</ThemedText>
@@ -170,7 +170,7 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
             The factory ships it straight to the customer: nothing leaves our stock.
           </ThemedText>
           <TextInput
-            style={inputStyle} value={pak} onChangeText={setPak} placeholder="PAK number"
+            style={inputStyle} value={pak} onChangeText={setPak} placeholder="Panatta PAK"
             placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
           />
           <ThemedView style={styles.row}>

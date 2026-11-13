@@ -776,11 +776,19 @@ class TaskEditTests(TaskTestCase):
         self.task_type.save(update_fields=['category'])
         self.task.task_type = self.task_type
         self.task.save(update_fields=['task_type'])
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, self._payload(**{
+        plan = self._payload(**{
             **self._management_form('products', 1),
             'products-0-product_code': 'BENCH-01', 'products-0-quantity': '3', 'task_type': str(self.task_type.pk),
-        }))
+        })
+        # An installation's machines: the Manager's (or the Project Manager's, the Admin's) — a supervisor views.
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, plan)
+        self.assertFalse(self.task.products.exists())
+        Technician.objects.create(user=User.objects.create_user('manager8', password='pass12345'), country=self.country,
+                                  full_name='Mona Manager', language='en', role=Technician.Role.MANAGER,
+                                  employment_type='staff')
+        self.assertTrue(self.client.login(username='manager8', password='pass12345'))
+        response = self.client.post(self.url, plan)
         self.assertEqual(response.status_code, 302)
         lines = list(self.task.products.all())
         self.assertEqual([(line.product_code, line.quantity, line.status) for line in lines],
@@ -9021,6 +9029,18 @@ class TicketMachineDecisionTests(TaskTestCase):
             'action': 'machines', 'machines': [str(m.pk) for m in machines], 'do': do, 'decision_note': note,
         })
 
+    def test_a_panatta_machine_reminds_of_the_pak_never_requires_it(self):
+        # No Panatta machine: nothing said.
+        self.assertNotContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+        panatta = Brand.objects.create(name='Panatta')
+        self.treadmill.asset = Asset.objects.create(site=self.site, brand=panatta, model_name='Treadmill', serial_no='T-1')
+        self.treadmill.save(update_fields=['asset'])
+        self.assertContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+        # Once it has its PAK, the reminder goes; and a request without one is never blocked.
+        self.ticket.pak_reference_number = 'PAK-1234'
+        self.ticket.save(update_fields=['pak_reference_number'])
+        self.assertNotContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+
     def _create_task(self, url):
         return self.client.post(url, {
             'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
@@ -9572,11 +9592,11 @@ class EquipmentChainTests(TaskTestCase):
         self.loading.save(update_fields=['site', 'status'])
         self.client.login(username='supervisor1', password='pass12345')
         page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
-        self.assertContains(page, 'Only a manager plans the machines on a loading.')
+        self.assertContains(page, 'Only a manager plans the machines on a loading or an installation.')
         self.client.login(username='manager1', password='pass12345')
         page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
         self.assertContains(page, 'In this warehouse:')
-        self.assertNotContains(page, 'Only a manager plans the machines on a loading.')
+        self.assertNotContains(page, 'Only a manager plans the machines on a loading or an installation.')
 
 
 class ReceivingByCountTests(TaskTestCase):

@@ -248,7 +248,7 @@ export default function TaskDetailScreen() {
               {task.shipment.parts.map((part, index) => (
                 <ThemedText key={index} type="small">{part.code} × {part.quantity}</ThemedText>
               ))}
-              {task.shipment.pak_reference_number ? <Row label="PAK" value={task.shipment.pak_reference_number} /> : null}
+              {task.shipment.pak_reference_number ? <Row label="Panatta PAK" value={task.shipment.pak_reference_number} /> : null}
               {task.shipment.stage === 'shipped' ? (
                 <>
                   <Row label="Courier" value={task.shipment.shipping_company || '—'} />

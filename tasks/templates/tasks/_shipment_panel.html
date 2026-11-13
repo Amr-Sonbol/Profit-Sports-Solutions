@@ -26,7 +26,7 @@
             <dd>{% for line in shipment.parts %}<span dir="ltr">{{ line.product_code }}</span> × {{ line.quantity }}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="muted">{% translate "Not picked yet" %}</span>{% endfor %}</dd>
         </div>
         <div>
-            <dt>{% translate "PAK reference number" %}</dt>
+            <dt>{% translate "Panatta PAK" %}</dt>
             <dd dir="ltr">{{ task.pak_reference_number|default:"—" }}</dd>
         </div>
         <div>
@@ -53,7 +53,7 @@
         <h3>{% translate "Sent direct from the factory" %}</h3>
         <p class="field__help">{% translate "The factory ships it straight to the customer: nothing leaves our stock." %}</p>
         <div class="field">
-            <label for="direct-pak">{% translate "PAK number" %}</label>
+            <label for="direct-pak">{% translate "Panatta PAK" %}</label>
             <input type="text" id="direct-pak" name="pak_reference_number" dir="ltr" value="{{ task.pak_reference_number }}">
         </div>
         <div class="field">
@@ -94,7 +94,7 @@
             {% endfor %}
         </div>
         <div class="field">
-            <label for="shipment-pak">{% translate "PAK reference number" %}</label>
+            <label for="shipment-pak">{% translate "Panatta PAK" %}</label>
             <input type="text" id="shipment-pak" name="pak_reference_number" value="{{ task.pak_reference_number }}" dir="ltr">
         </div>
         <div class="field">

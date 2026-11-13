@@ -28,7 +28,7 @@ const EXTRAS: [Exclude<Extra, '' | 'dates'>, string][] = [
 // "More filters": the website task list's own fields (tasks.views.filtered_tasks).
 const TEXT_FILTERS: [string, string][] = [
   ['customer_name', 'Customer'], ['site', 'Site (branch or city)'], ['serial_number', 'Machine serial number'],
-  ['pak_reference', 'PAK reference'],
+  ['pak_reference', 'Panatta PAK'],
 ];
 
 /**

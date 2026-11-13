@@ -2028,11 +2028,24 @@ class NextStepApiTests(ManagerChoosesTheCountryTests):
 
 
 class PlanLinesApiTests(InstallationChecklistApiTests):
-    def test_a_supervisor_plans_the_machines_from_the_app(self):
-        token = self.token_for('supervisor1')
-        response = self.client.post(f'/api/tasks/{self.task.pk}/lines/', json.dumps({'lines': [
-            {'product_code': 'BENCH-01', 'quantity': 3, 'frame': '', 'arm': 'Red'},
-        ]}), content_type='application/json', **self.auth(token))
+    def _person(self, username, role):
+        from people.models import Technician
+        Technician.objects.create(user=User.objects.create_user(username, password='pass12345'), country=self.country,
+                                  full_name=username, language='en', role=role, employment_type='staff')
+        return self.token_for(username)
+
+    def test_a_manager_plans_the_machines_from_the_app(self):
+        from people.models import Technician
+        plan = json.dumps({'lines': [{'product_code': 'BENCH-01', 'quantity': 3, 'frame': '', 'arm': 'Red'}]})
+        url = f'/api/tasks/{self.task.pk}/lines/'
+        # Not the supervisor, nor the Operations Manager: an installation's machines are the
+        # Manager's, the Project Manager's and the Admin's (people.permissions.can_plan_equipment).
+        for token in (self.token_for('supervisor1'), self._person('ops9', Technician.Role.OPERATIONS_MANAGER)):
+            refused = self.client.post(url, plan, content_type='application/json', **self.auth(token))
+            self.assertEqual(refused.status_code, 400)
+            self.assertIn('Only a manager plans the machines', refused.json()['detail'])
+        token = self._person('project9', Technician.Role.PROJECT_MANAGER)
+        response = self.client.post(url, plan, content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 200, response.content)
         lines = response.json()['lines']
         # The machine already on the task stays; the three planned are added.

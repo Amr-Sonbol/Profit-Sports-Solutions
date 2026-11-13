@@ -57,7 +57,7 @@ from people.models import (
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_admin,
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_plan_equipment, get_active_country, is_last_active_admin, require_admin,
     require_all_countries, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404, tasks_for_role,
 )
@@ -2537,8 +2537,10 @@ def task_detail(request, pk):
             return redirect('tasks:task_detail', pk=task.pk)
 
     if request.method == 'POST' and request.POST.get('action') == 'create_next_step':
-        # Managers only: sending equipment on (often to another country) is theirs to decide.
+        # Sending equipment on (often to another country): the Manager, Project Manager or Admin.
         viewer = require_manager(request)
+        if not can_plan_equipment(viewer):
+            raise PermissionDenied
         step = request.POST.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             raise Http404
@@ -2678,8 +2680,8 @@ def task_detail(request, pk):
         'next_tasks': task.next_tasks.all(),
         # Receiving / loading: machines ready to carry on, and where they can go.
         'lines_to_carry': lines_to_carry(task),
-        # Sending the machines on is the manager tier's only — not a supervisor's.
-        'can_send_on': requesting_technician.is_manager_tier,
+        # Sending the machines on: the Manager, Project Manager or Admin only.
+        'can_send_on': can_plan_equipment(requesting_technician),
         'next_step_choices': [
             (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
             for step in NEXT_STEPS.get(equipment_step(task), ())
@@ -2797,10 +2799,12 @@ def task_edit(request, pk):
     previous_scheduled_for = task.scheduled_for
     previous_scheduled_date = task.scheduled_date
     products_locked = not is_manager and task.status in PRODUCTS_LOCKED_STATUSES
-    # A loading takes machines out of a warehouse's stock: the manager tier's decision, like sending them on.
+    # A loading's or an installation's machines: planned by the Manager, Project Manager or Admin
+    # only (people.permissions.can_plan_equipment) — a loading takes them out of a warehouse's stock.
     is_loading = equipment_step(task) == TaskType.Category.LOADING
-    loading_locked = is_loading and not is_manager
-    products_locked = products_locked or loading_locked
+    planned_by_managers = equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION)
+    equipment_locked = planned_by_managers and not can_plan_equipment(requesting_technician)
+    products_locked = products_locked or equipment_locked
 
     # No Delete: once a task has its machines, none is removed (save_planned_lines).
     TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS)
@@ -2838,7 +2842,7 @@ def task_edit(request, pk):
             product_form.fields['product_code'].widget.attrs['list'] = 'warehouse-codes'
     context = {
         'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked,
-        'loading_locked': loading_locked,
+        'equipment_locked': equipment_locked,
         'is_installation': is_installation(task), 'is_receiving': equipment_step(task) == TaskType.Category.RECEIVING,
         # A loading is planned from what its warehouse holds (without this task's own lines).
         'warehouse_stock': warehouse_stock_for_planning(task) if is_loading else None,
@@ -3800,6 +3804,10 @@ def ticket_access(request, technician, pk):
     }
 
 
+# The brand whose factory takes tickets (a PAK, opened in its portal).
+FACTORY_TICKET_BRAND = 'Panatta'
+
+
 def ticket_review(request, pk):
     """Dismiss, assign, or convert a ticket — restricted to manage_tickets
     like the rest of ticket triage. Whoever it's currently assigned to can
@@ -3822,6 +3830,11 @@ def ticket_review(request, pk):
     dismiss_form = DismissTicketForm()
     assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
     logistics_form = TicketLogisticsForm(instance=ticket)
+    # A Panatta machine and no PAK yet: a reminder, never a rule (most requests need none).
+    pak_reminder = (
+        not ticket.pak_reference_number and ticket.status == CustomerTicket.Status.NEW
+        and ticket.machines.filter(asset__brand__name__iexact=FACTORY_TICKET_BRAND).exists()
+    )
     edit_form = TicketEditForm(instance=ticket)
     reply_form = TicketReplyForm()
     can_reply = _ticket_is_open(ticket)
@@ -4051,7 +4064,7 @@ def ticket_review(request, pk):
             or ([ticket.task] if ticket.task_id else [])
         ),
         'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
-        'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
+        'logistics_form': logistics_form, 'pak_reminder': pak_reminder, 'edit_form': edit_form, 'can_manage': can_manage,
         # "What happens next?": who can be sent, and what the task will be (task_from_request).
         **_next_step_context(technician, ticket, can_manage),
         'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,

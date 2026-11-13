@@ -301,7 +301,7 @@
     {# Shipping: company and tracking number; "Notify the customer" always there, usable once a tracking number is set (and the branch has an email). A part shipment has its own panel for these. #}
     {% if not shipment %}
     {# The PAK reference number on its own, apart from shipping. #}
-    <h3>{% translate "PAK reference number" %}</h3>
+    <h3>{% translate "Panatta PAK" %}</h3>
     <p dir="ltr">{{ task.pak_reference_number|default:"—" }}</p>
 
     <h3>{% translate "Shipping" %}</h3>

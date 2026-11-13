@@ -38,7 +38,7 @@
         <datalist id="warehouse-codes">{% for code in warehouse_stock %}<option value="{{ code }}">{% endfor %}</datalist>
         {% endif %}
         {% if products_locked %}
-        <p class="field__help">{% if loading_locked %}{% translate "Only a manager plans the machines on a loading." %}{% else %}{% translate "This task has been completed, so its products can only be changed by a manager or administrator." %}{% endif %}</p>
+        <p class="field__help">{% if equipment_locked %}{% translate "Only a manager plans the machines on a loading or an installation." %}{% else %}{% translate "This task has been completed, so its products can only be changed by a manager or administrator." %}{% endif %}</p>
         <div class="table-wrap">
             <table>
                 <thead>

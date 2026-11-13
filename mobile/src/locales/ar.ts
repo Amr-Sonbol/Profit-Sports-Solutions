@@ -422,6 +422,8 @@ export const AR: Record<string, string> = {
   "Overloaded": "محمّل بالعمل أكثر من اللازم",
   "PAK": "PAK",
   "PAK reference": "الرقم المرجعي PAK",
+  "Panatta PAK": "رقم PAK من Panatta",
+  "Panatta PAK (optional)": "رقم PAK من Panatta (اختياري)",
   "PAK reference number (optional)": "رقم مرجع PAK (اختياري)",
   "PAK:": "PAK:",
   "Padding": "التنجيد",

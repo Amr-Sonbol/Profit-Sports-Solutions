@@ -30,7 +30,7 @@ from customers.forms import SignInEmailChangeForm
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_set_password, get_active_country, is_last_active_admin,
+    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_plan_equipment, can_set_password, get_active_country, is_last_active_admin,
     require_manager,
     scoped_or_404,
 )
@@ -2077,9 +2077,11 @@ class TaskLinesView(APIView):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
         is_manager = request.user.technician.is_manager_tier
-        # A loading takes machines out of a warehouse's stock: the manager tier's decision.
-        if equipment_step(task) == TaskType.Category.LOADING and not is_manager:
-            return task, str(_('Only a manager plans the machines on a loading.'))
+        # A loading's or an installation's machines: the Manager, Project Manager or Admin only.
+        if equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION) and not (
+            can_plan_equipment(request.user.technician)
+        ):
+            return task, str(_('Only a manager plans the machines on a loading or an installation.'))
         if not is_manager and task.status in PRODUCTS_LOCKED_STATUSES:
             return task, str(_('This task has been completed, so its products can only be changed by a manager or '
                                'administrator.'))
@@ -2146,7 +2148,9 @@ class TaskNextStepView(APIView):
 
     def post(self, request, pk):
         task = _get_team_task(request, pk)
-        viewer = require_manager(request)  # sending machines on is the manager tier's only
+        viewer = require_manager(request)  # sending machines on: the Manager, Project Manager or Admin only
+        if not can_plan_equipment(viewer):
+            raise PermissionDenied
         step = request.data.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)

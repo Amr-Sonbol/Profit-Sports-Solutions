@@ -1028,7 +1028,7 @@ class WhatHappensNextTests(LifecycleTestCase):
         self.next(choice='ship')
         self.ticket.refresh_from_db()
         page = self.staff.get(self.url)
-        self.assertContains(page, 'Shipping and PAK')
+        self.assertContains(page, 'Shipping and Panatta PAK')
         self.assertNotContains(page, 'value="update_logistics"')
 
 

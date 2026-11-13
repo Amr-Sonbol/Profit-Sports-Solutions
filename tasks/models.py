@@ -182,7 +182,10 @@ class Task(models.Model):
             'assigned to perform the work'
         ),
     )
-    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    pak_reference_number = models.CharField(
+        _('Panatta PAK'), max_length=100, blank=True,
+        help_text=_('the ticket number opened in the Panatta portal, when the factory is involved — optional; internal, never shown to the customer'),
+    )
     shipping_company = models.CharField(
         _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
     )
@@ -439,7 +442,10 @@ class CustomerTicket(models.Model):
                     'converts it'),
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
-    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    pak_reference_number = models.CharField(
+        _('Panatta PAK'), max_length=100, blank=True,
+        help_text=_('the ticket number opened in the Panatta portal, when the factory is involved — optional; internal, never shown to the customer'),
+    )
     shipping_company = models.CharField(
         _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
     )

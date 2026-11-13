@@ -142,6 +142,18 @@ def can_manage_account(actor, target):
     return True
 
 
+# Who plans a loading's or an installation's machines, and sends loaded machines on
+# to an installation (docs/access_rules.md): everyone else views. A role made later
+# (a Coordinator, say) views too unless it is one of these.
+EQUIPMENT_PLANNERS = (Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.ADMIN)
+
+
+def can_plan_equipment(technician):
+    """Plans the machines on a loading or an installation, and sends loaded
+    machines on: the Manager, the Project Manager and the Admin."""
+    return technician.role in EQUIPMENT_PLANNERS
+
+
 def can_set_password(actor):
     """Only an admin sets someone else's password (a temporary one, or one
     typed in) or changes their login email: whoever did either could sign

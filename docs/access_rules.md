@@ -174,3 +174,15 @@ else ever knows it. Unlocking, signing out of every phone, and turning a login
 off or on stay with whoever manages the account (never someone above them).
 
 A changed login email is always told to the **old** address too.
+
+## Loading and installation
+
+Planning the machines on a **loading** or an **installation**, and **sending
+loaded machines on** to an installation, are the **Manager's, the Project
+Manager's and the Admin's** only (`people.permissions.can_plan_equipment`).
+Everyone else — the Operations, Technical Support and Country Support
+Managers, supervisors, technicians, and any role made later (a Coordinator,
+say) — views them. The installer still checks each machine off on site
+(what happened, its serial and photo) and records one that turned up but
+wasn't on the paperwork: that's recording what happened, not planning.
+
