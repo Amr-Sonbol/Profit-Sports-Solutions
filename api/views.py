@@ -112,6 +112,10 @@ class LoginView(APIView):
             return Response({'detail': 'Invalid username or password.'}, status=status.HTTP_400_BAD_REQUEST)
         if not user.is_active:
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
+        # The staff app: a customer's account is refused at the door (they use the portal), never given a token.
+        if getattr(user, 'technician', None) is None:
+            return Response({'detail': 'This app is for our staff. Customers use the customer portal.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         token, _created = Token.objects.get_or_create(user=user)
         renew(token)  # a fresh 30 days (api.authentication.TOKEN_IDLE_DAYS)

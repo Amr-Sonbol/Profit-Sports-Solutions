@@ -704,11 +704,18 @@ class ApiSecurityTests(ApiTestCase):
         """A customer-portal account is a real User too — it must not be
         able to reach any technician/staff endpoint just by having a token.
         """
-        User.objects.create_user('customer1', password='pass12345')
-        token = self.client.post(
+        from rest_framework.authtoken.models import Token
+        user = User.objects.create_user('customer1', password='pass12345')
+        refused = self.client.post(
             '/api/login/', json.dumps({'username': 'customer1', 'password': 'pass12345'}),
             content_type='application/json',
-        ).json()['token']
+        )
+        # Refused at sign-in: no token at all.
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('customer portal', refused.json()['detail'])
+        self.assertFalse(Token.objects.filter(user=user).exists())
+        # And had one been made some other way, every staff endpoint still refuses it.
+        token = Token.objects.create(user=user).key
         response = self.client.get('/api/my-tasks/', **self.auth(token))
         self.assertEqual(response.status_code, 403)
 

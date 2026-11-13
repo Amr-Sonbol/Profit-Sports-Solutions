@@ -2876,6 +2876,7 @@ REQUEST_PAGE_ACTIONS = {
 FACTORY_TICKET_BRAND = 'Panatta'
 
 
+@login_required
 def ticket_review(request, pk):
     """Dismiss, assign, or convert a ticket — restricted to manage_tickets
     like the rest of ticket triage. Whoever it's currently assigned to can
@@ -4417,6 +4418,7 @@ def technician_overview(technician):
     }
 
 
+@login_required
 def technician_detail(request, pk):
     """Everything about one staff member, for whoever oversees them: their
     work still to do (today, upcoming, overdue), visits this month and

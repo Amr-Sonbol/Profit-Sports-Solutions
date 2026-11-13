@@ -20,7 +20,7 @@
     <h2>{{ ticket.subject }}</h2>
     <dl class="detail-grid">
         <div><dt>{% translate "For" %}</dt><dd>{{ ticket.assigned_to.full_name|default:"—" }}</dd></div>
-        <div><dt>{% translate "Opened by" %}</dt><dd>{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}</dd></div>
+        <div><dt>{% translate "Opened by" %}</dt><dd>{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}{% else %}—{% endif %}</dd></div>
         <div><dt>{% translate "Opened" %}</dt><dd>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</dd></div>
     </dl>
     <div class="description">
