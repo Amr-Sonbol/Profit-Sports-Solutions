@@ -1035,6 +1035,8 @@ class TaskEvent(models.Model):
         PARTS_READY = 'parts_ready', _('Parts ready to ship')
         # The last ordered part a task needed arrived (tasks.parts_needed.check_all_in).
         PARTS_ARRIVED = 'parts_arrived', _('All parts are in')
+        # A loading planned beyond its warehouse's stock, with the manager's reason (note).
+        BEYOND_STOCK = 'beyond_stock', _('Planned beyond the stock')
         SHIPPED = 'shipped', _('Shipped')
         # Someone changed it instead of its owner, while away (docs/access_rules.md).
         STEPPED_IN = 'stepped_in', _('Changed instead of the owner')
@@ -1323,6 +1325,9 @@ class TaskProduct(models.Model):
         'reference.Brand', on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name=_('brand'),
     )
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
+    # Loading: the sticker couldn't be reached (packed or stacked) — said, not forgotten;
+    # the installation reads it (docs: task_product).
+    serial_unreachable = models.BooleanField(_('serial not reachable at loading'), default=False)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
     frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)
     arm = models.CharField(_('arm color'), max_length=100, default=DEFAULT_COLOR)

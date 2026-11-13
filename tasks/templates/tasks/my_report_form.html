@@ -58,7 +58,7 @@
         {% for form in checklist_formset %}
         <fieldset class="checklist-card{% if form.errors %} checklist-card--error{% endif %}"{% if form.initial.quantity %} data-listed="{{ form.initial.quantity }}"{% endif %}>
             <legend>
-                {% if form.initial.id %}<span dir="ltr">{{ form.initial.product_code }}{% if form.initial.quantity > 1 %} × {{ form.initial.quantity }}{% endif %}</span>{% if form.initial.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}
+                {% if form.initial.id %}<span dir="ltr">{{ form.initial.product_code }}{% if form.initial.quantity > 1 %} × {{ form.initial.quantity }}{% endif %}</span>{% if form.initial.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}{% if form.initial.serial_not_taken_at_loading %} <span class="badge badge--warning">{% translate "Serial not taken at loading — read it from the sticker" %}</span>{% endif %}
                 {% elif equipment_step == 'receiving' %}{% translate "Something not on the list (optional)" %}
                 {% else %}{% translate "A machine not on the delivery note (optional)" %}{% endif %}
             </legend>

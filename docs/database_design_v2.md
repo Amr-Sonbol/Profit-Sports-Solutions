@@ -827,7 +827,7 @@ One machine's line on an **equipment task** — receiving from the factory, load
 **Codes and quantities until someone types the serial.** The container's list and sales both deal in product codes and quantities; the serial is only on the machine's sticker (no barcode — it's typed). So each step asks for exactly what that step can know:
 
 - **Receiving** stays code × quantity — one line per code, never split, no serials: the container is counted against its list, not machine by machine. A count that's off splits the line: *BENCH-01 × 18* done, *BENCH-01 × 2* missing (or damaged).
-- **Loading** is one line per machine. Typing the serial there is **optional** — a big load can go out without them.
+- **Loading** is one line per machine. Each machine's serial is **typed from its sticker, or `serial_unreachable` ticked** (*Serial not reachable (packed)* — stacked or packed out of reach): never left empty by accident, and the record shows which left without one.
 - **Installation** needs every serial. One already typed at loading arrives filled in, so the installer just compares it with the sticker and ticks it (correcting it if a different machine came); one that's still empty is typed now, with a photo of the sticker (`photo`) so the office can check it later.
 
 So each serial is typed once, wherever the machine is first handled one by one.
@@ -846,7 +846,11 @@ So each serial is typed once, wherever the machine is first handled one by one.
 
 > received (`done` receiving lines at that warehouse) − loaded (lines of loading tasks there that aren't cancelled) + counts (`stock_adjustment`, below)
 
-Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it puts them back (its lines are never removed: see above). Planning a load shows each code's stock next to it and **warns** when it would go below zero, but doesn't block: the warehouse floor is the truth, and a count corrects the figure.
+Per warehouse and code only — colours aren't separate stock, and there are no shelves. Codes are compared ignoring case and spaces. **A loading task takes its machines out the moment it's planned** — that is the reservation; there's no separate one. Cancelling it puts them back (its lines are never removed: see above). Planning a load shows each code's stock next to it; **beyond what the warehouse holds it stands only with the manager's reason** (`tasks.views.check_beyond_stock`, website and app), kept in the task's history as a `beyond_stock` event — the warehouse floor is the truth, and a count corrects the figure afterwards.
+
+**Loaded, not installed yet** (the Stock screen, `tasks.stock.not_installed_yet`): every machine that left a warehouse and isn't in place, followed along the chain — loaded and not sent on, on its way to an installation, or at the customer waiting to be installed — with the days since it was loaded, the longest first (over two weeks stands out). A machine installed, returned, missing or damaged on a later step has left it.
+
+**The machines' opening stock from a file** (the Stock screen): a warehouse and a CSV or Excel sheet of Code and Qty, each recorded as a count (`Opening stock — <file>`), so the same file twice changes nothing.
 
 **Spare parts are stock too**, by code and quantity only — never a serial. Each country has one warehouse holding its parts. They arrive on a receiving task like machines, as `part` lines (code × quantity, checked off received / missing / damaged — a photo only for a damaged or wrong one; what the part looks like is the catalogue's photo). They leave on the work report: the `part_used` lines of every report in that country come out of its warehouse, so nobody keeps a separate "out" list. So for a part:
 
@@ -896,7 +900,8 @@ The **Stock** screen lists each warehouse's machines and parts by code and quant
 | task_id | FK → task | |
 | product_code | varchar | required |
 | brand_id | FK → brand, nullable | its own brand (one delivery can mix brands); blank: the task's (`task.brand`) — a new line takes the task's, and a line carried to a next step, a follow-up or the rest of a receiving keeps its own. Picked per line on Edit task and in the app's Plan the machines |
-| serial_number | varchar | blank on receiving; optional on loading; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
+| serial_number | varchar | blank on receiving; on loading typed or `serial_unreachable` ticked; required once installed. Searchable from `task_list`, same box as `asset.serial_no` |
+| serial_unreachable | bool | loading: the sticker couldn't be reached (packed) — said, not forgotten; the installation shows *Serial not taken at loading* |
 | quantity | int | default 1; the count of that code on a receiving line, 1 per machine on a loading or an installation |
 | frame | varchar | default `Black` |
 | arm | varchar | default `Black` |

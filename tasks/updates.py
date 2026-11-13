@@ -16,7 +16,7 @@ from people.push import push_in_their_language
 # Told by their own, more specific notification already (people.push): a bell entry only.
 PUSHED_ELSEWHERE = {'assigned', 'reassigned', 'cancelled'}
 # Not about the team's work: no one is told.
-NOT_TOLD = {'negligence'}
+NOT_TOLD = {'negligence', 'beyond_stock'}
 
 
 def people_on(task):

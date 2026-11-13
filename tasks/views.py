@@ -72,7 +72,7 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    CustomerPhotosForm, CustomRoleForm, PartNeededForm, RegisterMachineForm,
+    CustomerPhotosForm, CustomRoleForm, MachineStockImportForm, PartNeededForm, RegisterMachineForm,
     AddHelperForm, AssignTicketForm, ChangePasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
@@ -2721,7 +2721,8 @@ def task_detail(request, pk):
     return render(request, 'tasks/task_detail.html', context)
 
 
-def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date, product_rows=None, is_loading=False):
+def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date, product_rows=None, is_loading=False,
+                    stock_reason=''):
     """Saves a valid TaskEditForm with everything that goes with it, on the
     website (task_edit) and from the app (api.views.TaskEditView): a moved
     time recorded and the customer told; the machines (`product_rows`, or
@@ -2742,10 +2743,12 @@ def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_da
                 occurred_at=timezone.now(), actor=request.user,
             )
             notify_customer.visit_booked(updated_task)
+        short = ''
         if product_rows is not None:
             save_planned_lines(updated_task, product_rows)
+            if is_loading:  # beyond the warehouse's stock: only with a reason (BeyondStock undoes all this)
+                short = check_beyond_stock(updated_task, stock_reason, request.user)
     warnings = []
-    short = loading_shortfall(updated_task) if is_loading and product_rows is not None else ''
     if short:
         warnings.append(short)
     notices = []
@@ -2825,14 +2828,19 @@ def task_edit(request, pk):
         )
         product_formset = None if products_locked else TaskProductFormSet(request.POST, prefix='products')
         if form.is_valid() and (products_locked or product_formset.is_valid()):
-            done, warnings = apply_task_edit(
-                request, form, previous_scheduled_for, previous_scheduled_date,
-                None if products_locked else product_formset.cleaned_data, is_loading,
-            )
-            messages.success(request, done)
-            for warning in warnings:
-                messages.warning(request, warning)
-            return redirect('tasks:task_detail', pk=task.pk)
+            try:
+                done, warnings = apply_task_edit(
+                    request, form, previous_scheduled_for, previous_scheduled_date,
+                    None if products_locked else product_formset.cleaned_data, is_loading,
+                    request.POST.get('stock_reason', ''),
+                )
+            except BeyondStock as short:
+                messages.error(request, _('%(short)s To plan it anyway, say why.') % {'short': short})
+            else:
+                messages.success(request, done)
+                for warning in warnings:
+                    messages.warning(request, warning)
+                return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
         product_formset = None if products_locked else TaskProductFormSet(initial=product_initial, prefix='products')
@@ -6714,6 +6722,35 @@ def part_list(request):
     return render(request, 'tasks/part_list.html', context)
 
 
+def _machine_counts_from_file(uploaded_file):
+    """(code, quantity) from a CSV or an Excel sheet with Code and Qty columns
+    (found by their headings; without headings, the first two columns). A row
+    with no code or no whole number for its quantity is left out."""
+    if uploaded_file.name.lower().endswith('.xlsx'):
+        import openpyxl  # only the upload needs it
+        rows = [list(row) for row in openpyxl.load_workbook(uploaded_file, read_only=True).worksheets[0].iter_rows(values_only=True)]
+    else:
+        rows = list(csv.reader(uploaded_file.read().decode('utf-8-sig', errors='replace').splitlines()))
+    rows = [['' if cell is None else str(cell).strip() for cell in row] for row in rows if row]
+    code_col, quantity_col, start = 0, 1, 0
+    for index, row in enumerate(rows[:10]):
+        headings = [cell.lower() for cell in row]
+        if 'code' in headings:
+            code_col = headings.index('code')
+            quantity_col = next((headings.index(name) for name in ('qty', 'quantity') if name in headings), code_col + 1)
+            start = index + 1
+            break
+    for row in rows[start:]:
+        code = row[code_col] if code_col < len(row) else ''
+        quantity = row[quantity_col] if quantity_col < len(row) else ''
+        try:
+            quantity = int(float(quantity))
+        except ValueError:
+            continue
+        if code and quantity >= 0:
+            yield code, quantity
+
+
 def _part_rows_from_csv(uploaded_file):
     """A CSV's rows of code, description (a first row reading "code" is a
     header) as (code, description, colour, picture, quantity) — no colour,
@@ -6853,7 +6890,30 @@ def stock(request):
     country = get_active_country(request)
     can_count = technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER
     count_form = StockCountForm(country=country)
-    if request.method == 'POST':
+    import_form = MachineStockImportForm(country=country)
+    if request.method == 'POST' and request.POST.get('action') == 'import_machines':
+        # The machines' opening stock, a warehouse at once: each row's quantity recorded as a count.
+        if not can_count:
+            raise PermissionDenied
+        import_form = MachineStockImportForm(request.POST, request.FILES, country=country)
+        if import_form.is_valid():
+            upload, warehouse = import_form.cleaned_data['file'], import_form.cleaned_data['warehouse']
+            try:
+                rows = list(_machine_counts_from_file(upload))
+            except Exception:  # anything that isn't a readable sheet
+                import_form.add_error('file', _('This file could not be read. Save it again as .xlsx or .csv and retry.'))
+            else:
+                note = _('Opening stock — %(file)s') % {'file': upload.name}
+                with transaction.atomic():
+                    changed = sum(
+                        1 for code, quantity in rows
+                        if record_count(warehouse, TaskProduct.Kind.MACHINE, code, quantity, note, request.user)
+                    )
+                messages.success(request, _('%(count)s machine codes read for %(warehouse)s; %(changed)s changed the stock.') % {
+                    'count': len(rows), 'warehouse': warehouse.name, 'changed': changed,
+                })
+                return redirect('tasks:stock')
+    elif request.method == 'POST':
         if not can_count:
             raise PermissionDenied
         count_form = StockCountForm(request.POST, country=country)
@@ -6872,13 +6932,16 @@ def stock(request):
 
     warehouses = Site.objects.filter(customer__is_internal=True, customer__country=country).order_by('name')
     context = {
-        'country': country, 'can_count': can_count, 'count_form': count_form,
+        'country': country, 'can_count': can_count, 'count_form': count_form, 'import_form': import_form,
         'warehouses': [(site, machine_stock(site)) for site in warehouses],
         'parts': part_rows(country) if country else [],
     }
     # Repairs whose parts are all in, for the warehouse to prepare (tasks.parts_needed.to_prepare).
     from tasks.parts_needed import to_prepare
     context['to_prepare'] = to_prepare(country)
+    # Machines that left a warehouse and aren't in place yet, the longest first (tasks.stock).
+    from tasks.stock import not_installed_yet
+    context['not_installed'] = not_installed_yet(country) if country else []
     return render(request, 'tasks/stock.html', context)
 
 
@@ -7636,6 +7699,27 @@ def warehouse_stock_for_planning(task):
     return {code: quantity for code, quantity in sorted(stock.items()) if quantity > 0}
 
 
+class BeyondStock(Exception):
+    """A loading's plan goes beyond its warehouse's stock and no reason was given."""
+
+
+def check_beyond_stock(task, reason, user):
+    """After a loading's plan is saved (inside its transaction): beyond the
+    warehouse's stock it stands only with the manager's reason, kept in the
+    task's history; without one, BeyondStock undoes the save. Returns the
+    warning to show ('' within stock)."""
+    short = loading_shortfall(task)
+    if not short:
+        return ''
+    if not (reason or '').strip():
+        raise BeyondStock(short)
+    TaskEvent.objects.create(
+        task=task, event_type=TaskEvent.EventType.BEYOND_STOCK, occurred_at=timezone.now(), actor=user,
+        note=f'{reason.strip()} — {short}',
+    )
+    return short
+
+
 def loading_shortfall(task):
     """A warning when a loading plans more of a code than its warehouse
     holds — not a block: the warehouse floor is the truth, and a count
@@ -7774,8 +7858,13 @@ def checklist_initial(task):
             'serial_number': line.serial_number, 'frame': line.frame, 'arm': line.arm, 'padding': line.padding,
             'trim': line.trim, 'replacement': line.replacement, 'note': line.note,
             'photo_url': line.photo.url if line.photo else '', 'added_on_site': line.added_on_site,
+            'serial_unreachable': line.serial_unreachable,
+            # Installation: its serial wasn't taken at loading (packed) — read it from the sticker now.
+            'serial_not_taken_at_loading': bool(
+                line.source_line_id and line.source_line.serial_unreachable and not line.serial_number
+            ),
         }
-        for line in task.products.order_by('pk')
+        for line in task.products.select_related('source_line').order_by('pk')
     ]
 
 
@@ -7829,6 +7918,8 @@ def _save_checklist(task, rows):
         line.product_code = cleaned['product_code']
         line.status = cleaned['status']
         line.serial_number = cleaned['serial_number']
+        if 'serial_unreachable' in cleaned:  # loading
+            line.serial_unreachable = cleaned['serial_unreachable']
         for color in TaskProductCheckForm.COLORS:
             setattr(line, color, cleaned.get(color, getattr(line, color)))
         line.replacement = cleaned.get('replacement', '')

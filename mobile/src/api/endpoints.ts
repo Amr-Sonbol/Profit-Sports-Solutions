@@ -589,9 +589,9 @@ export function fetchTaskLines(id: number) {
 }
 
 /** Replaces the plan; on a loading or an installation "× 4" becomes four lines. */
-export function saveTaskLines(id: number, lines: PlannedLine[]) {
+export function saveTaskLines(id: number, lines: PlannedLine[], stockReason = '') {
   return apiRequest<TaskLines>(`/api/tasks/${id}/lines/`, {
-    method: 'POST', body: { lines },
+    method: 'POST', body: { lines, stock_reason: stockReason },
   });
 }
 

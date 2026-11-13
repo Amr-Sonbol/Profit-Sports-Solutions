@@ -132,3 +132,60 @@ def record_count(site, kind, code, counted, note, user):
     return StockAdjustment.objects.create(
         site=site, kind=kind, product_code=key, quantity=counted - current, note=note, created_by=user,
     )
+
+
+# A machine's line on a later step that leaves it still on its way (not checked yet, or left for later).
+STILL_OPEN = ('pending', 'later')
+
+
+def not_installed_yet(country):
+    """Every machine loaded at this country's warehouses that isn't in place yet —
+    followed along the chain (loading -> installation -> follow-ups): not sent on
+    yet, on its way to an installation, or at the customer waiting to be
+    installed. Each: the loaded line, where it is ('not_sent', 'on_its_way',
+    'waiting'), the task it's on now, and the days since it was loaded; the
+    longest first. A machine installed, returned, missing or damaged on a later
+    step has left this list (those have their own follow-up)."""
+    from collections import defaultdict
+
+    from django.utils import timezone
+
+    from reference.models import TaskType
+
+    from .models import Task, TaskProduct
+
+    loaded = list(TaskProduct.objects.filter(
+        kind=TaskProduct.Kind.MACHINE, status=TaskProduct.Status.DONE,
+        task__task_type__category=TaskType.Category.LOADING, task__site__customer__country=country,
+    ).exclude(task__status=Task.Status.CANCELLED).select_related('task__site', 'task__report'))
+    # Each line's next lines along the chain, a step at a time (a few queries in all).
+    children = defaultdict(list)
+    frontier = [line.pk for line in loaded]
+    while frontier:
+        later = list(TaskProduct.objects.filter(source_line__in=frontier).exclude(
+            task__status=Task.Status.CANCELLED,
+        ).select_related('task__site'))
+        for line in later:
+            children[line.source_line_id].append(line)
+        frontier = [line.pk for line in later]
+
+    def last_steps(line):
+        return [leaf for child in children[line.pk] for leaf in last_steps(child)] if children[line.pk] else [line]
+
+    today = timezone.now()
+    rows = []
+    for line in loaded:
+        ends = last_steps(line)
+        if ends == [line]:
+            where, now_on = 'not_sent', line.task
+        else:
+            open_ends = [end for end in ends if end.status in STILL_OPEN]
+            if not open_ends:
+                continue  # in place (or returned, missing, damaged: settled on that step)
+            end = open_ends[0]
+            where, now_on = ('waiting' if end.status == 'later' else 'on_its_way'), end.task
+        report = getattr(line.task, 'report', None)
+        loaded_at = report.submitted_at if report else line.task.reported_at
+        rows.append({'line': line, 'where': where, 'task': now_on, 'days': (today - loaded_at).days})
+    rows.sort(key=lambda row: -row['days'])
+    return rows

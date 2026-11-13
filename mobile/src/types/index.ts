@@ -831,6 +831,10 @@ export interface ChecklistRow {
   /** '' until checked: done (installed), missing, damaged, wrong_item, returned, later. */
   status: string;
   serial_number: string;
+  /** Loading: the sticker couldn't be reached (packed) — said instead of the serial. */
+  serial_unreachable?: boolean;
+  /** Installation: its serial wasn't taken at loading — read it from the sticker now. Older servers: absent. */
+  serial_not_taken_at_loading?: boolean;
   frame: string;
   arm: string;
   padding: string;

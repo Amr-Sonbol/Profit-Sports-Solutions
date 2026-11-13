@@ -71,7 +71,7 @@ from tasks.views import (
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
+    BeyondStock, check_beyond_stock, lines_to_carry, loading_shortfall, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
     PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
@@ -1803,7 +1803,7 @@ class MyTaskReportView(APIView):
                 TaskProductCheckForm(
                     {key: '' if row.get(key) is None else row.get(key) for key in (
                         'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
-                        'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status',
+                        'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status', 'serial_unreachable',
                     )},
                     initial=known.get(row.get('id'), {}), step=equipment_step(task),
                 )
@@ -2134,9 +2134,15 @@ class TaskLinesView(APIView):
         errors = [form.errors for form in forms_ if not form.is_valid()]
         if errors:
             return Response({'lines': errors}, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic():
-            save_planned_lines(task, [form.cleaned_data for form in forms_])
-        warning = loading_shortfall(task) if equipment_step(task) == TaskType.Category.LOADING else ''
+        try:
+            with transaction.atomic():
+                save_planned_lines(task, [form.cleaned_data for form in forms_])
+                warning = ''
+                if equipment_step(task) == TaskType.Category.LOADING:  # beyond the stock: only with a reason
+                    warning = check_beyond_stock(task, str(request.data.get('stock_reason') or ''), request.user)
+        except BeyondStock as short:
+            return Response({'detail': str(_('%(short)s To plan it anyway, say why.') % {'short': short})},
+                            status=status.HTTP_400_BAD_REQUEST)
         return self.get(request, pk, warning=str(warning))
 
 

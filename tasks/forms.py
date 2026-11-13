@@ -1313,6 +1313,12 @@ class TaskProductCheckForm(forms.Form):
         ]
         if step != 'installation':
             self.fields['replacement'].label = _('Instead')
+        if step == 'loading' and self.initial.get('kind') != TaskProduct.Kind.PART:
+            # The middle way: the serial from the sticker, or this ticked — never left empty by accident.
+            self.fields['serial_unreachable'] = forms.BooleanField(
+                required=False, label=_('Serial not reachable (packed)'),
+                help_text=_('the installer reads it from the sticker on site'),
+            )
         if step == 'receiving':
             # Counted against the container's list by code — no serials here.
             del self.fields['serial_number']
@@ -1344,9 +1350,13 @@ class TaskProductCheckForm(forms.Form):
                 cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
         cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
         status = cleaned.get('status')
-        # Only an installed machine must have its serial; loading may leave it for the installers.
+        # An installed machine must have its serial; a loaded one has it, or says it couldn't be reached.
         if self.step == 'installation' and status == TaskProduct.Status.DONE and not cleaned['serial_number']:
             self.add_error('serial_number', _('This machine needs its serial number — type it from the sticker on the machine.'))
+        if 'serial_unreachable' in self.fields:
+            cleaned['serial_unreachable'] = bool(cleaned.get('serial_unreachable')) and not cleaned['serial_number']
+            if status == TaskProduct.Status.DONE and not cleaned['serial_number'] and not cleaned['serial_unreachable']:
+                self.add_error('serial_number', _('Type the serial from the sticker, or tick “Serial not reachable (packed)”.'))
         if 'quantity' in self.fields and not cleaned.get('quantity'):
             cleaned['quantity'] = 1
         # Receiving: the count against the list. Fewer splits the line (save_checklist), more just raises it.
@@ -2154,6 +2164,25 @@ class StockCountForm(forms.Form):
     def __init__(self, *args, country=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['site'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
+
+
+class MachineStockImportForm(forms.Form):
+    """The machines' opening stock from a file (the Stock screen): a warehouse,
+    and its counts — one row per machine code with how many are on the floor."""
+
+    warehouse = forms.ModelChoiceField(queryset=Site.objects.none(), label=_('Warehouse'))
+    file = forms.FileField(
+        label=_('CSV or Excel file'),
+        help_text=_('Two columns: Code and Qty (a first row with those headings is fine). Each quantity is recorded '
+                    'as a count — what is on the floor — so uploading the same file twice changes nothing.'),
+        validators=[SafeFileValidator(allowed_extensions=['csv', 'xlsx'])],
+    )
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['warehouse'].queryset = Site.objects.filter(
             customer__is_internal=True, customer__country=country,
         ).order_by('name')
 

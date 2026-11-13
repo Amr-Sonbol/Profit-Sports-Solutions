@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-12 23:50+0000\n"
+"POT-Creation-Date: 2026-11-13 01:12+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -90,6 +90,10 @@ msgstr[2] "جهازان"
 msgstr[3] "%(count)s أجهزة"
 msgstr[4] "%(count)s جهازًا"
 msgstr[5] "%(count)s جهاز"
+
+#, python-format
+msgid "%(count)s machine codes read for %(warehouse)s; %(changed)s changed the stock."
+msgstr "تمت قراءة %(count)s من رموز الأجهزة لـ %(warehouse)s؛ وغيّر %(changed)s منها المخزون."
 
 #, python-format
 msgid "%(count)s machine is still to install — a follow-up task can be created for it."
@@ -470,6 +474,10 @@ msgid "%(number)s — submitted by %(name)s"
 msgstr "%(number)s — مقدَّم من %(name)s"
 
 #, python-format
+msgid "%(short)s To plan it anyway, say why."
+msgstr "%(short)s لتخطيطها رغم ذلك، اذكر السبب."
+
+#, python-format
 msgid "%(source)s — %(time)s"
 msgstr "%(source)s — %(time)s"
 
@@ -568,8 +576,8 @@ msgstr "كلمة المرور المنسية أو الهاتف المفقود أ
 msgid "A helper's hours cannot exceed the total duration of the job."
 msgstr "لا يمكن أن تتجاوز ساعات المساعد المدة الإجمالية للعمل."
 
-msgid "A loading is planned from its warehouse's stock — machines from any container. Planning takes them out of stock at once; more than the warehouse holds is allowed, with a warning."
-msgstr "يُخطَّط التحميل من مخزون المستودع — أجهزة من أي حاوية. التخطيط يُخرجها من المخزون فورًا؛ ويُسمح بأكثر مما في المستودع، مع تنبيه."
+msgid "A loading is planned from its warehouse's stock — machines from any container. Planning takes them out of stock at once; more than the warehouse holds needs a reason."
+msgstr "يُخطَّط التحميل من مخزون مستودعه — أجهزة من أي حاوية. التخطيط يُخرجها من المخزون فورًا؛ وما يتجاوز ما في المستودع يحتاج إلى سبب."
 
 msgid "A machine not on the delivery note (optional)"
 msgstr "جهاز غير مذكور في إذن التسليم (اختياري)"
@@ -1109,6 +1117,9 @@ msgstr "شارك كمساعد في"
 
 msgid "At least 8 characters, not entirely numeric, and not a common password or one similar to your name."
 msgstr "8 أحرف على الأقل، وألا تكون أرقامًا فقط، وألا تكون كلمة مرور شائعة أو مشابهة لاسمك."
+
+msgid "At the customer, not installed"
+msgstr "لدى العميل، لم يُركَّب"
 
 msgid "At the site"
 msgstr "في الموقع"
@@ -1913,6 +1924,9 @@ msgstr "اليوم والوقت"
 msgid "Day only — the supervisor will set the exact time"
 msgstr "اليوم فقط — سيحدد المشرف الوقت بدقة"
 
+msgid "Days"
+msgstr "الأيام"
+
 msgid "Days left"
 msgstr "الأيام المتبقية"
 
@@ -2414,6 +2428,9 @@ msgstr "الانتهاء المتوقع"
 
 msgid "Estimated hours"
 msgstr "الساعات المقدرة"
+
+msgid "Every loaded machine is in place."
+msgstr "كل الأجهزة المحمّلة في مكانها."
 
 msgid "Every machine was resolved without a visit."
 msgstr "تمت معالجة جميع الأجهزة دون الحاجة إلى زيارة."
@@ -2972,6 +2989,9 @@ msgstr "المسمى الوظيفي"
 msgid "Keep me signed in on this device"
 msgstr "إبقائي مسجّلاً على هذا الجهاز"
 
+msgid "Kept in the task's history. Then record a count on the Stock screen once the floor is checked."
+msgstr "يُحفظ في سجل المهمة. ثم سجّل جردًا في شاشة المخزون بعد التحقق من المستودع."
+
 #, python-format
 msgid "Kept on task %(number)s: change them there."
 msgstr "محفوظة في المهمة %(number)s: عدّلها هناك."
@@ -3071,6 +3091,12 @@ msgstr "تم التحميل"
 
 msgid "Loaded Equipment"
 msgstr "المعدات المُحمَّلة"
+
+msgid "Loaded, not installed yet"
+msgstr "محمّل، لم يُركَّب بعد"
+
+msgid "Loaded, not sent to an installation"
+msgstr "محمّل، لم يُرسَل إلى تركيب"
 
 msgid "Loading"
 msgstr "التحميل"
@@ -3952,6 +3978,9 @@ msgstr "من إجمالي عرض السعر. فارغ: لا خصم متفق عل
 msgid "On"
 msgstr "مُفعّلة"
 
+msgid "On its way to the installation"
+msgstr "في الطريق إلى التركيب"
+
 msgid "On site"
 msgstr "في الموقع"
 
@@ -3990,9 +4019,6 @@ msgstr "لا يمكن تغيير ذلك بعد بدء العمل إلا من ق�
 
 msgid "Only a manager plans the machines on a loading or an installation."
 msgstr "المدير فقط يخطط الأجهزة في التحميل أو التركيب."
-
-msgid "Only a manager plans the machines on a loading."
-msgstr "المدير فقط يخطّط أجهزة التحميل."
 
 msgid "Only a task stopped on site can be given a new visit here."
 msgstr "لا يمكن حجز زيارة جديدة هنا إلا لمهمة توقف العمل فيها في الموقع."
@@ -4389,6 +4415,9 @@ msgstr "اختر الأعمال المنفّذة."
 msgid "Planned"
 msgstr "مخططة"
 
+msgid "Planned beyond the stock"
+msgstr "مخطط بما يتجاوز المخزون"
+
 msgid "Planned for an earlier day and not done yet."
 msgstr "كانت مخططة ليوم سابق ولم تُنجز بعد."
 
@@ -4731,6 +4760,9 @@ msgstr "سبب استبدال الفني الرئيسي الحالي"
 
 msgid "Reason this ticket will not become a task, for example spam, a duplicate or outside our scope."
 msgstr "سبب عدم تحويل هذه التذكرة إلى مهمة، كأن تكون رسالة مزعجة أو مكررة أو خارج نطاق عملنا."
+
+msgid "Reason, if this is more than the warehouse holds"
+msgstr "السبب، إذا كان أكثر مما في المستودع"
 
 msgid "Reason:"
 msgstr "السبب:"
@@ -5445,6 +5477,12 @@ msgstr "يُرسل إلى مسؤول كل فرع عندما ينطلق فنين�
 
 msgid "Serial No."
 msgstr "الرقم التسلسلي"
+
+msgid "Serial not reachable (packed)"
+msgstr "الرقم التسلسلي غير ظاهر (مغلّف)"
+
+msgid "Serial not taken at loading — read it from the sticker"
+msgstr "لم يُسجَّل الرقم التسلسلي عند التحميل — اقرأه من الملصق"
 
 msgid "Serial number"
 msgstr "الرقم التسلسلي"
@@ -6663,11 +6701,17 @@ msgstr "الثلاثاء"
 msgid "Turn down this schedule change?"
 msgstr "رفض هذا التغيير في الموعد؟"
 
+msgid "Two columns: Code and Qty (a first row with those headings is fine). Each quantity is recorded as a count — what is on the floor — so uploading the same file twice changes nothing."
+msgstr "عمودان: الرمز والكمية (يمكن أن يحمل الصف الأول هذين العنوانين). تُسجَّل كل كمية جردًا — ما هو موجود فعلًا — لذا فإن رفع الملف نفسه مرتين لا يغيّر شيئًا."
+
 msgid "Type"
 msgstr "النوع"
 
 msgid "Type a name"
 msgstr "اكتب اسمًا"
+
+msgid "Type the serial from the sticker, or tick “Serial not reachable (packed)”."
+msgstr "اكتب الرقم التسلسلي من الملصق، أو اختر «الرقم التسلسلي غير ظاهر (مغلّف)»."
 
 msgid "Type the serial number from the machine's plate, or tick “No readable serial plate”."
 msgstr "اكتب الرقم التسلسلي من لوحة الجهاز، أو حدّد «لا توجد لوحة رقم تسلسلي مقروءة»."
@@ -6737,6 +6781,9 @@ msgstr "رفع"
 
 msgid "Upload a list"
 msgstr "رفع قائمة"
+
+msgid "Upload the machines' opening stock"
+msgstr "رفع المخزون الافتتاحي للأجهزة"
 
 msgid "Usage or maintenance instructions provided"
 msgstr "تم تقديم تعليمات الاستخدام أو الصيانة"
@@ -7129,6 +7176,9 @@ msgstr "عند تعيينه قائدًا أو إضافته مساعدًا."
 
 msgid "Where"
 msgstr "المكان"
+
+msgid "Where it is"
+msgstr "أين هو"
 
 msgid "Where spare and replacement parts should be delivered."
 msgstr "المكان الذي تُسلَّم إليه قطع الغيار والاستبدال."
@@ -8407,6 +8457,9 @@ msgstr "أرسله"
 msgid "sent direct from the factory"
 msgstr "أُرسلت مباشرة من المصنع"
 
+msgid "serial not reachable at loading"
+msgstr "الرقم التسلسلي غير ظاهر عند التحميل"
+
 msgid "serial number"
 msgstr "الرقم التسلسلي"
 
@@ -8679,6 +8732,9 @@ msgstr "اليوم الذي خطط له المشرف"
 
 msgid "the difference the count made: + found, − short"
 msgstr "الفرق الذي أحدثه الجرد: + زيادة، − نقص"
+
+msgid "the installer reads it from the sticker on site"
+msgstr "يقرؤه فني التركيب من الملصق في الموقع"
 
 msgid "the language of every customer's visit report here: Arabic in Saudi Arabia and Egypt, English elsewhere"
 msgstr "لغة تقارير الزيارة لجميع العملاء هنا: العربية في السعودية ومصر، والإنجليزية في غيرهما"
@@ -9402,6 +9458,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Notify again"
 #~ msgstr "إشعار مرة أخرى"
+
+#~ msgid "Only a manager plans the machines on a loading."
+#~ msgstr "المدير فقط يخطّط أجهزة التحميل."
 
 #~ msgid "Open customer record"
 #~ msgstr "فتح سجل العميل"

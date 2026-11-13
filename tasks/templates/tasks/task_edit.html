@@ -31,11 +31,18 @@
         <h2>{% translate "Products" %}</h2>
         {% if warehouse_stock is not None %}
         {# A loading: planned from what its warehouse holds. #}
-        <p class="field__help">{% translate "A loading is planned from its warehouse's stock — machines from any container. Planning takes them out of stock at once; more than the warehouse holds is allowed, with a warning." %}</p>
+        <p class="field__help">{% translate "A loading is planned from its warehouse's stock — machines from any container. Planning takes them out of stock at once; more than the warehouse holds needs a reason." %}</p>
         <p><strong>{% translate "In this warehouse:" %}</strong>
             {% for code, quantity in warehouse_stock.items %}<span dir="ltr">{{ code }} × {{ quantity }}</span>{% if not forloop.last %} · {% endif %}{% empty %}{% translate "nothing in stock" %}{% endfor %}
         </p>
         <datalist id="warehouse-codes">{% for code in warehouse_stock %}<option value="{{ code }}">{% endfor %}</datalist>
+        {% if not products_locked %}
+        <div class="field">
+            <label for="stock-reason">{% translate "Reason, if this is more than the warehouse holds" %}</label>
+            <input type="text" id="stock-reason" name="stock_reason" value="{{ request.POST.stock_reason }}" maxlength="300">
+            <p class="field__help">{% translate "Kept in the task's history. Then record a count on the Stock screen once the floor is checked." %}</p>
+        </div>
+        {% endif %}
         {% endif %}
         {% if products_locked %}
         <p class="field__help">{% if equipment_locked %}{% translate "Only a manager plans the machines on a loading or an installation." %}{% else %}{% translate "This task has been completed, so its products can only be changed by a manager or administrator." %}{% endif %}</p>

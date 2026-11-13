@@ -1,3 +1,4 @@
+import json
 import tempfile
 from unittest.mock import patch
 from datetime import date, datetime, time, timedelta
@@ -9674,11 +9675,13 @@ class ReceivingByCountTests(TaskTestCase):
         line.refresh_from_db()
         self.assertEqual((line.quantity, line.status), (2, 'done'))
 
-    def test_the_serial_is_optional_at_loading_and_required_at_installation(self):
+    def test_loading_takes_the_serial_or_says_it_was_out_of_reach_installation_needs_it(self):
         line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01')
         row = {'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done', 'serial_number': ''}
-        self.assertTrue(self._check([row], step='loading')[0].is_valid())
-        self.assertIn('serial_number', self._check([row], step='installation')[0].errors)
+        self.assertIn('serial_number', self._check([row], step='loading')[0].errors)
+        self.assertTrue(self._check([{**row, 'serial_unreachable': 'on'}], step='loading')[0].is_valid())
+        self.assertTrue(self._check([{**row, 'serial_number': 'TG-5'}], step='loading')[0].is_valid())
+        self.assertIn('serial_number', self._check([{**row, 'serial_unreachable': 'on'}], step='installation')[0].errors)
 
     def test_received_lines_stay_in_the_warehouse(self):
         # Loading is planned from the warehouse's stock instead (EquipmentChainTests).
@@ -10495,3 +10498,171 @@ class SearchAsPeopleTypeTests(TaskTestCase):
         )
         self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), '055 765 4321')), [ticket])
         self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), 'على')), [ticket])
+
+
+class EquipmentGoldenPathTests(TaskTestCase):
+    """The whole equipment chain as people do it — received at the Dubai warehouse,
+    loaded, sent to a gym, installed, what wasn't installed followed up — with the
+    warehouse stock checked at every step and the customer's machine list at the end."""
+
+    def setUp(self):
+        super().setUp()
+        from rest_framework.authtoken.models import Token
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other',
+                                       is_internal=True)
+        self.warehouse = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
+        self.types = {
+            step: TaskType.objects.create(code=step[:4], name=step.title(), name_ar=step, category=step)
+            for step in ('receiving', 'loading', 'installation')
+        }
+        self.manager = Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.manager_token = Token.objects.create(user=self.manager.user).key
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+
+    def stock(self):
+        from tasks.stock import machine_stock
+        return machine_stock(self.warehouse).get('EXCITE-RUN', 0)
+
+    def task(self, number, step, site):
+        task = Task.objects.create(
+            task_number=number, site=site, task_type=self.types[step], brand=self.brand,
+            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=Technician.objects.get(user=self.supervisor_user),
+        )
+        TaskAssignment.objects.create(task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+        return task
+
+    def file_checklist(self, task, rows):
+        """The lead files the step's report with its checklist (website)."""
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'],
+                        'checklist-TOTAL_FORMS': str(len(rows)), 'checklist-INITIAL_FORMS': str(len(rows)),
+                        'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
+        for index, row in enumerate(rows):
+            payload.update({f'checklist-{index}-{key}': value for key, value in row.items()})
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/my/{task.pk}/report/', payload)
+        self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
+
+    def test_a_loaded_machine_has_its_serial_or_says_it_was_out_of_reach(self):
+        loading = self.task('AE-0102', 'loading', self.warehouse)
+        line = TaskProduct.objects.create(task=loading, product_code='EXCITE-RUN')
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'], 'checklist-TOTAL_FORMS': '1',
+                        'checklist-INITIAL_FORMS': '1', 'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000',
+                        'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+                        'checklist-0-status': 'done', 'checklist-0-serial_number': ''})
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/my/{loading.pk}/report/', payload)
+        self.assertContains(response, 'Serial not reachable (packed)')
+        self.assertContains(response, 'or tick')
+        line.refresh_from_db()
+        self.assertEqual(line.status, TaskProduct.Status.PENDING)  # nothing saved
+
+    def test_received_loaded_installed_and_followed_up(self):
+        # 1. Received: three treadmills counted in at the warehouse.
+        receiving = self.task('AE-0101', 'receiving', self.warehouse)
+        line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', quantity=3)
+        self.file_checklist(receiving, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done'}])
+        self.assertEqual(self.stock(), 3)
+
+        # 2. The manager plans a loading of two (from the app): they leave stock at once.
+        loading = self.task('AE-0102', 'loading', self.warehouse)
+        planned = self.client.post(f'/api/tasks/{loading.pk}/lines/', json.dumps({'lines': [
+            {'product_code': 'EXCITE-RUN', 'quantity': 2},
+        ]}), content_type='application/json', HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(planned.status_code, 200, planned.content)
+        self.assertEqual(self.stock(), 1)
+
+        # 3. Loaded: one serial read from its sticker, the other packed out of reach.
+        first, second = loading.products.order_by('pk')
+        self.file_checklist(loading, [
+            {'id': first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': second.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': '',
+             'serial_unreachable': 'on'},
+        ])
+        self.assertEqual(self.stock(), 1)
+        second.refresh_from_db()
+        self.assertTrue(second.serial_unreachable)
+        from tasks.stock import not_installed_yet
+        self.assertEqual([row['where'] for row in not_installed_yet(self.country)], ['not_sent', 'not_sent'])
+
+        # 4. The manager sends both to the gym's installation.
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(f'/tasks/{loading.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk,
+            'lines': [first.pk, second.pk], 'supervisor': self.supervisor_user.technician.pk,
+        })
+        installation = Task.objects.get(previous_task=loading)
+        self.assertEqual(sorted(installation.products.values_list('serial_number', flat=True)), ['', 'TG-1'])
+        self.assertEqual({row['where'] for row in not_installed_yet(self.country)}, {'on_its_way'})
+        installation.status = Task.Status.IN_PROGRESS
+        installation.save(update_fields=['status'])
+        TaskAssignment.objects.create(task=installation, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+
+        # 5. Installed: one in place (its serial confirmed), one left for later. The one packed
+        #    out of reach at loading says so to the installer.
+        carried_first, carried_second = installation.products.order_by('source_line_id')
+        self.client.login(username='tech1', password='pass12345')
+        self.assertContains(self.client.get(f'/tasks/my/{installation.pk}/report/'), 'Serial not taken at loading')
+        self.file_checklist(installation, [
+            {'id': carried_first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': carried_second.pk, 'product_code': 'EXCITE-RUN', 'status': 'later', 'serial_number': ''},
+        ])
+        self.assertTrue(Asset.objects.filter(site=self.site, serial_no='TG-1', code='EXCITE-RUN').exists())
+        # The installed one has left "Loaded, not installed yet"; the other waits at the gym.
+        self.assertEqual([(row['line'], row['where']) for row in not_installed_yet(self.country)], [(second, 'waiting')])
+        self.assertEqual(self.stock(), 1)  # installing doesn't touch the warehouse
+
+        # 6. What wasn't installed is followed up, carrying the machine on.
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(f'/tasks/{installation.pk}/', {'action': 'create_follow_up'})
+        follow_up = Task.objects.get(previous_task=installation)
+        self.assertEqual(follow_up.products.get().source_line, carried_second)
+        self.assertEqual([(row['line'], row['where'], row['task']) for row in not_installed_yet(self.country)],
+                         [(second, 'on_its_way', follow_up)])
+        # The journey of the installed machine, from the warehouse to the gym.
+        self.assertEqual(carried_first.source_line, first)
+
+    def test_beyond_the_warehouse_stock_only_with_a_reason(self):
+        from tasks.stock import machine_stock
+        loading = self.task('AE-0103', 'loading', self.warehouse)
+        url = f'/api/tasks/{loading.pk}/lines/'
+        plan = {'lines': [{'product_code': 'EXCITE-RUN', 'quantity': 2}]}  # nothing in stock
+        refused = self.client.post(url, json.dumps(plan), content_type='application/json',
+                                   HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('say why', refused.json()['detail'])
+        self.assertFalse(loading.products.exists())  # nothing saved
+        saved = self.client.post(url, json.dumps({**plan, 'stock_reason': 'Two came back from a demo'}),
+                                 content_type='application/json', HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(machine_stock(self.warehouse)['EXCITE-RUN'], -2)
+        event = loading.events.get(event_type=TaskEvent.EventType.BEYOND_STOCK)
+        self.assertIn('Two came back from a demo', event.note)
+
+    def test_the_machines_opening_stock_from_a_file(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.login(username='manager1', password='pass12345')
+        RolePermission.objects.update_or_create(
+            role=Technician.Role.MANAGER, permission=RolePermission.Permission.VIEW_STOCK, defaults={'allowed': True},
+        )
+        sheet = b'Code,Qty\nEXCITE-RUN,5\nBENCH-01,3\n,4\nBIKE-2,not a number\n'
+        for _ in range(2):  # the same file twice: still 5 and 3
+            self.client.post('/tasks/stock/', {
+                'action': 'import_machines', 'warehouse': self.warehouse.pk,
+                'file': SimpleUploadedFile('opening.csv', sheet, content_type='text/csv'),
+            })
+        from tasks.stock import machine_stock
+        self.assertEqual(machine_stock(self.warehouse), {'EXCITE-RUN': 5, 'BENCH-01': 3})
+        page = self.client.get('/tasks/stock/')
+        self.assertContains(page, 'Loaded, not installed yet')
+        self.assertContains(page, 'opening stock')
+
