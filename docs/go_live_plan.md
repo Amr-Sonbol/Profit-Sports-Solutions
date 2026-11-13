@@ -73,6 +73,8 @@ undone for it. Likewise a customer admin role who manages their own people.
   with no day, a report waiting — and later the daily summary by email. Every
   hour it also runs `manage.py send_visit_reminders` (added 2026-11-12): the
   customer's day-before reminder of their visit, which nothing sends until then.
+  Monthly, `manage.py prune_audit --keep-days 730` (the Audit log's two years).
+  When something goes wrong: `docs/incident_runbook.md`.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.
 - **Two-step sign-in for the Admin** (added 2026-11-12), and ideally the

@@ -54,6 +54,9 @@ class CountryTimezoneTokenAuthentication(TokenAuthentication):
     def authenticate(self, request):
         result = super().authenticate(request)
         if result is not None:
+            # The app's requests sign in here, after the middleware: the audit trail is told who (spots.audit).
+            from spots.audit import set_actor
+            set_actor(result[0])
             technician = getattr(result[0], 'technician', None)
             if technician is not None:
                 country = technician.country

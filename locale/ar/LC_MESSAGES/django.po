@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 01:47+0000\n"
+"POT-Creation-Date: 2026-11-13 11:19+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -734,11 +734,11 @@ msgstr "الإكسسوارات"
 msgid "Account"
 msgstr "الحساب"
 
+msgid "Account action"
+msgstr "إجراء على الحساب"
+
 msgid "Across the company"
 msgstr "على مستوى الشركة"
-
-msgid "Action"
-msgstr "الإجراء"
 
 msgid "Action Taken"
 msgstr "الإجراء المتخذ"
@@ -858,9 +858,6 @@ msgstr "إضافة رحلة"
 msgid "Add user"
 msgstr "إضافة مستخدم"
 
-msgid "Added"
-msgstr "أُضيف"
-
 msgid "Added as helper"
 msgstr "أُضفت كمساعد"
 
@@ -925,9 +922,6 @@ msgstr "جميع معدات %(brand)s"
 
 msgid "All active technicians across all countries, for tracking, inspection and audit. This view is not affected by the country selector above."
 msgstr "جميع الفنيين النشطين في جميع الدول، لأغراض المتابعة والفحص والتدقيق. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
-
-msgid "All additions, changes and deletions made through Django admin, together with every account action (logins created, passwords reset, accounts unlocked, devices signed out, logins enabled or disabled), newest first. A task's history is shown on its detail page."
-msgstr "جميع الإضافات والتعديلات والحذف التي تمت من خلال لوحة إدارة Django، مع كل إجراء على الحسابات (إنشاء حسابات الدخول، وإعادة تعيين كلمات المرور، وفك القفل، وتسجيل الخروج من الأجهزة، وتفعيل الدخول أو تعطيله)، الأحدث أولًا. يظهر سجل المهمة في صفحة تفاصيلها."
 
 msgid "All bolts checked and tightened."
 msgstr "تم فحص جميع البراغي وإحكام شدّها."
@@ -1016,11 +1010,17 @@ msgstr "الرد بدون زيارة"
 msgid "Answered and closed. The customer has been told."
 msgstr "تم الرد والإغلاق. تم إبلاغ العميل."
 
+msgid "Any record"
+msgstr "أي سجل"
+
 msgid "Any time that day"
 msgstr "في أي وقت من ذلك اليوم"
 
 msgid "Any time today"
 msgstr "في أي وقت اليوم"
+
+msgid "Anything"
+msgstr "أي شيء"
 
 msgid "Anything else we should know"
 msgstr "أي معلومات أخرى ينبغي أن نعرفها"
@@ -1436,6 +1436,9 @@ msgstr "تم التعديل"
 
 msgid "Changed instead of the owner"
 msgstr "تغيير بدلاً من المسؤول"
+
+msgid "Changes"
+msgstr "التغييرات"
 
 msgid "Chargeable"
 msgstr "مدفوعة"
@@ -2511,6 +2514,9 @@ msgstr "التاريخ المتوقع"
 msgid "Expecting a delay?"
 msgstr "هل تتوقع تأخيراً؟"
 
+msgid "Export (CSV)"
+msgstr "تصدير (CSV)"
+
 msgid "Factory offer"
 msgstr "عرض المصنع"
 
@@ -2843,6 +2849,9 @@ msgstr "لقد وصلت"
 msgid "IANA name, e.g. Asia/Riyadh"
 msgstr "اسم IANA، مثال: Asia/Riyadh"
 
+msgid "IP address"
+msgstr "عنوان IP"
+
 msgid "ISO code"
 msgstr "رمز ISO"
 
@@ -3028,6 +3037,9 @@ msgstr "محفوظة في المهمة %(number)s: عدّلها هناك."
 
 msgid "Kind"
 msgstr "النوع"
+
+msgid "Kind of record"
+msgstr "نوع السجل"
 
 msgid "Kind regards,"
 msgstr "مع أطيب التحيات،"
@@ -4008,9 +4020,6 @@ msgstr "إشعار العميل"
 msgid "Number"
 msgstr "الرقم"
 
-msgid "Object"
-msgstr "العنصر"
-
 msgid "Off the quotation total. Empty: no discount agreed."
 msgstr "من إجمالي عرض السعر. فارغ: لا خصم متفق عليه."
 
@@ -4861,11 +4870,17 @@ msgstr "التوصية"
 msgid "Recommendations"
 msgstr "التوصيات"
 
+msgid "Record"
+msgstr "السجل"
+
 msgid "Record a count"
 msgstr "تسجيل جرد"
 
 msgid "Record count"
 msgstr "تسجيل الجرد"
+
+msgid "Record, details or IP"
+msgstr "السجل أو التفاصيل أو عنوان IP"
 
 msgid "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time."
 msgstr "هل سُجّل ذلك عن طريق الخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك، يمكن للمدير تصحيح الوقت."
@@ -5701,6 +5716,9 @@ msgstr "تسجيل الخروج من التطبيق على كل هواتفك؟"
 msgid "Sign-in email"
 msgstr "بريد تسجيل الدخول"
 
+msgid "Sign-in failed"
+msgstr "فشل تسجيل الدخول"
+
 msgid "Sign-in name"
 msgstr "اسم الدخول"
 
@@ -5715,6 +5733,9 @@ msgstr "وقّعه"
 
 msgid "Signed in"
 msgstr "مسجّل الدخول"
+
+msgid "Signed out"
+msgstr "تسجيل الخروج"
 
 msgid "Signed version (PDF)"
 msgstr "النسخة الموقّعة (PDF)"
@@ -6706,6 +6727,9 @@ msgstr "تم تحديد الوقت."
 msgid "Time to be confirmed"
 msgstr "الوقت سيُحدَّد لاحقًا"
 
+msgid "To"
+msgstr "إلى"
+
 #, python-format
 msgid "To complete the repair at %(site)s, we have ordered the parts it needs."
 msgstr "لإتمام الإصلاح في %(site)s، قمنا بطلب قطع الغيار اللازمة."
@@ -7190,6 +7214,9 @@ msgstr "مرحباً بك. يرجى استكمال إعداد حسابك."
 msgid "Welcome. Please set your password."
 msgstr "مرحباً بك. يرجى تعيين كلمة المرور."
 
+msgid "What"
+msgstr "ماذا"
+
 msgid "What do you need?"
 msgstr "ما الذي تحتاج إليه؟"
 
@@ -7300,6 +7327,9 @@ msgstr "ما القطع التي تحتاج إليها؟"
 
 msgid "Who"
 msgstr "من"
+
+msgid "Who did what, when, from where, and what it changed: every change to customers, branches, machines, staff, roles, settings, tasks, requests, reports and stock, every sign-in (and failed one), and every account action. Newest first. Passwords are never shown, only that one changed."
+msgstr "من فعل ماذا، ومتى، ومن أين، وما الذي غيّره: كل تغيير في العملاء والفروع والأجهزة والموظفين والأدوار والإعدادات والمهام والطلبات والتقارير والمخزون، وكل تسجيل دخول (والفاشل منه)، وكل إجراء على الحسابات. الأحدث أولًا. لا تُعرض كلمات المرور أبدًا، بل فقط أنها تغيّرت."
 
 msgid "Who receives it"
 msgstr "من يستلمها"
@@ -7685,6 +7715,12 @@ msgstr "مُسندة إلى"
 msgid "attachment"
 msgstr "مرفق"
 
+msgid "audit entries"
+msgstr "قيود التدقيق"
+
+msgid "audit entry"
+msgstr "قيد تدقيق"
+
 msgid "author"
 msgstr "الكاتب"
 
@@ -7737,6 +7773,9 @@ msgstr "الفئة"
 
 msgid "changed at"
 msgstr "وقت التعديل"
+
+msgid "changes"
+msgstr "التغييرات"
 
 msgid "checked at"
 msgstr "تاريخ الفحص"
@@ -7918,6 +7957,9 @@ msgstr "وقت رفع إشعار التسليم"
 
 msgid "description"
 msgstr "الوصف"
+
+msgid "details"
+msgstr "التفاصيل"
 
 msgid "dismissal reason"
 msgstr "سبب الرفض"
@@ -8156,6 +8198,9 @@ msgstr "المسمى الوظيفي"
 
 msgid "kind"
 msgstr "النوع"
+
+msgid "kind of record"
+msgstr "نوع السجل"
 
 msgid "labour hours"
 msgstr "ساعات العمل"
@@ -8439,6 +8484,12 @@ msgstr "المستلمون"
 
 msgid "recommendations"
 msgstr "التوصيات"
+
+msgid "record"
+msgstr "السجل"
+
+msgid "record (name)"
+msgstr "السجل (الاسم)"
 
 msgid "recorded by"
 msgstr "سجّلها"
@@ -9044,6 +9095,9 @@ msgstr "لدينا مخزون هنا؛ وبدونه تُرسل شحنة القط
 msgid "weekend days"
 msgstr "أيام عطلة نهاية الأسبوع"
 
+msgid "what"
+msgstr "ماذا"
+
 msgid "what the customer is owed"
 msgstr "ما هو مستحق للعميل"
 
@@ -9055,6 +9109,9 @@ msgstr "ما تم العثور عليه، بلغة التقرير — عندما
 
 msgid "what was received, loaded or installed instead, if not the item listed"
 msgstr "ما تم استلامه أو تحميله أو تركيبه بدلًا من الصنف المذكور"
+
+msgid "when"
+msgstr "متى"
 
 msgid "when off, a supervisor sends it by hand from the task details instead"
 msgstr "عند إيقافها، يرسلها المشرف يدويًا من تفاصيل المهمة"
@@ -9076,6 +9133,12 @@ msgstr "البريد الذي أُرسلت إليه نسخة PDF عند رفع �
 
 msgid "whether this technician can currently be assigned work; separate from active status"
 msgstr "ما إذا كان يمكن حالياً إسناد العمل إلى هذا الفني؛ وهو مستقل عن حالة التفعيل"
+
+msgid "who"
+msgstr "من"
+
+msgid "who (name)"
+msgstr "من (الاسم)"
 
 msgid "who does it — anyone in the country; can be left for the assign screen"
 msgstr "من يقوم بها — أي شخص في الدولة؛ ويمكن تركه لشاشة التعيين"
@@ -9165,17 +9228,26 @@ msgstr "← العودة إلى الفنيين النشطين"
 #~ msgid "Accepted"
 #~ msgstr "مقبولة"
 
+#~ msgid "Action"
+#~ msgstr "الإجراء"
+
 #~ msgid "Add a contact email"
 #~ msgstr "إضافة بريد إلكتروني للتواصل"
 
 #~ msgid "Add customer"
 #~ msgstr "إضافة عميل"
 
+#~ msgid "Added"
+#~ msgstr "أُضيف"
+
 #~ msgid "Advice given (solved by phone or instructions)"
 #~ msgstr "تم تقديم النصيحة (حُلّت بالهاتف أو بالتعليمات)"
 
 #~ msgid "All active customers across all countries, for search and management. This view is not affected by the country selector above."
 #~ msgstr "جميع العملاء النشطين في جميع الدول، لأغراض البحث والإدارة. لا يتأثر هذا العرض بمحدِّد الدولة أعلاه."
+
+#~ msgid "All additions, changes and deletions made through Django admin, together with every account action (logins created, passwords reset, accounts unlocked, devices signed out, logins enabled or disabled), newest first. A task's history is shown on its detail page."
+#~ msgstr "جميع الإضافات والتعديلات والحذف التي تمت من خلال لوحة إدارة Django، مع كل إجراء على الحسابات (إنشاء حسابات الدخول، وإعادة تعيين كلمات المرور، وفك القفل، وتسجيل الخروج من الأجهزة، وتفعيل الدخول أو تعطيله)، الأحدث أولًا. يظهر سجل المهمة في صفحة تفاصيلها."
 
 #~ msgid "All countries combined. This is the figure reported to leadership, not a per-country ranking."
 #~ msgstr "جميع الدول مجتمعة. هذا هو الرقم المرفوع إلى الإدارة العليا، وليس ترتيباً لكل دولة على حدة."
@@ -9576,6 +9648,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Notify again"
 #~ msgstr "إشعار مرة أخرى"
+
+#~ msgid "Object"
+#~ msgstr "العنصر"
 
 #~ msgid "Only a manager plans the machines on a loading."
 #~ msgstr "المدير فقط يخطّط أجهزة التحميل."

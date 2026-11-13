@@ -116,6 +116,8 @@ MIDDLEWARE = [
     'spots.hosts.PortalHostMiddleware',
     # Who is making the request, so an email that fails later can be shown to them (spots.email_failures).
     'spots.email_failures.CurrentUserMiddleware',
+    # Who is making the request and from where, for the audit trail of what it changes (spots.audit).
+    'spots.audit.AuditContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     # An admin viewing the portal as a customer (customers.views.view_as_start):
     # after messages (it uses them), before the language and timezone, so those

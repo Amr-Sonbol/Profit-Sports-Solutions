@@ -4450,7 +4450,7 @@ def view_as_user_start(request, pk):
     check a complaint (spots.middleware.ViewAsCustomerMiddleware) — view
     only, their password untouched, nothing sent or marked read for them;
     recorded in the Audit log. Not another admin."""
-    from django.contrib.admin.models import CHANGE, LogEntry
+    from django.contrib.admin.models import CHANGE
 
     from spots.middleware import VIEW_AS_USER_SESSION_KEY
 
@@ -5006,21 +5006,56 @@ def role_permissions(request):
 
 @login_required
 def audit_log(request):
-    """Who did what, anywhere in Django admin — add/change/delete, with
-    the actor and a timestamp, for free from Django's own LogEntry.
-    Admin-only, same reasoning as Roles & permissions: this is oversight
-    of everyone, including other admins, so it stays off the manager-tier
-    floor. Covers /admin/ actions, plus every account action from Staff
-    and Customer accounts and the edit pages (customers.accounts.
-    log_account_action); task actions have their own trail (TaskEvent).
+    """Who did what, when, from where, and what it changed (spots.audit,
+    people.AuditEntry): every change to the records that matter, whichever page
+    or app screen made it, every sign-in (and failed one), every account action
+    and the admin site's. Admin-only — oversight of everyone, other admins
+    included. Searched by person, what happened, kind of record, dates and any
+    text; ?export=csv for the same rows as a spreadsheet. A task's own story is
+    on its page too (TaskEvent).
     """
+    import csv
+
+    from people.models import AuditEntry
     require_admin(request)
-
-    entries = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
-    paginator = Paginator(entries, 50)
-    page_obj = paginator.get_page(request.GET.get('page'))
-
-    return render(request, 'tasks/audit_log.html', {'page_obj': page_obj})
+    entries = AuditEntry.objects.all()
+    filters = {key: request.GET.get(key, '').strip() for key in ('who', 'action', 'kind', 'q', 'since', 'until', 'record')}
+    if filters['who']:
+        entries = entries.filter(actor_name__icontains=filters['who'])
+    if filters['action'] in AuditEntry.Action.values:
+        entries = entries.filter(action=filters['action'])
+    if filters['kind']:
+        entries = entries.filter(object_type=filters['kind'])
+    if filters['record']:
+        entries = entries.filter(object_id=filters['record'])
+    if filters['q']:
+        entries = entries.filter(
+            Q(object_repr__icontains=filters['q']) | Q(message__icontains=filters['q']) | Q(ip__startswith=filters['q']),
+        )
+    since, until = parse_date(filters['since']), parse_date(filters['until'])
+    if since:
+        entries = entries.filter(at__date__gte=since)
+    if until:
+        entries = entries.filter(at__date__lte=until)
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="audit-log.csv"'
+        response.write('\ufeff')  # so Excel reads Arabic names right
+        writer = csv.writer(response)
+        writer.writerow(['when (UTC)', 'who', 'IP', 'what', 'kind', 'record', 'name', 'changes', 'details'])
+        for entry in entries[:50000]:
+            writer.writerow([
+                entry.at.isoformat(), entry.actor_name, entry.ip or '', entry.get_action_display(), entry.object_type,
+                entry.object_id, entry.object_repr,
+                '; '.join(f'{field}: {pair[0]} -> {pair[1]}' for field, pair in entry.changes.items()), entry.message,
+            ])
+        return response
+    kinds = AuditEntry.objects.exclude(object_type='').values_list('object_type', flat=True).distinct().order_by('object_type')
+    return render(request, 'tasks/audit_log.html', {
+        'page_obj': Paginator(entries, 50).get_page(request.GET.get('page')),
+        'filters': filters, 'actions': AuditEntry.Action.choices, 'kinds': kinds,
+        'query': '&'.join(f'{key}={value}' for key, value in filters.items() if value),
+    })
 
 
 def _shift_month(first_of_month, delta):

@@ -351,7 +351,9 @@ class RolePermission(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
+        # A built-in role by its name; a custom role ("custom-7") by its key.
+        role = dict(Technician.Role.choices).get(self.role, self.role)
+        return f'{role} — {self.get_permission_display()}: {self.allowed}'
 
 
 def _default_new_ticket_roles():
@@ -642,6 +644,50 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f'{self.technician} — {self.token[:24]}'
+
+
+class AuditEntry(models.Model):
+    """One thing done in the system, for the Audit log (spots.audit): who, from
+    where, when, to which record, and what it changed (each field's value
+    before and after). Passwords are never kept, only that one changed."""
+
+    class Action(models.TextChoices):
+        CREATED = 'created', _('Created')
+        CHANGED = 'changed', _('Changed')
+        DELETED = 'deleted', _('Deleted')
+        ACCOUNT = 'account', _('Account action')
+        SIGNED_IN = 'signed_in', _('Signed in')
+        SIGN_IN_FAILED = 'sign_in_failed', _('Sign-in failed')
+        SIGNED_OUT = 'signed_out', _('Signed out')
+
+    at = models.DateTimeField(_('when'), db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_entries',
+        verbose_name=_('who'),
+    )
+    # Kept as it was, even if the account goes later.
+    actor_name = models.CharField(_('who (name)'), max_length=150, blank=True)
+    ip = models.GenericIPAddressField(_('IP address'), null=True, blank=True)
+    action = models.CharField(_('what'), max_length=20, choices=Action.choices)
+    object_type = models.CharField(_('kind of record'), max_length=100, blank=True)
+    object_id = models.CharField(_('record'), max_length=64, blank=True)
+    object_repr = models.CharField(_('record (name)'), max_length=200, blank=True)
+    # {field: [before, after]}
+    changes = models.JSONField(_('changes'), default=dict, blank=True)
+    message = models.TextField(_('details'), blank=True)
+
+    class Meta:
+        verbose_name = _('audit entry')
+        verbose_name_plural = _('audit entries')
+        ordering = ['-at', '-pk']
+        indexes = [
+            models.Index(fields=['object_type', 'object_id']),
+            models.Index(fields=['actor', 'at']),
+            models.Index(fields=['action', 'at']),
+        ]
+
+    def __str__(self):
+        return f'{self.at:%Y-%m-%d %H:%M} {self.actor_name or "—"} {self.action} {self.object_repr}'
 
 
 class AppError(models.Model):

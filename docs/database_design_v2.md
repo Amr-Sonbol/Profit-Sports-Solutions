@@ -1,7 +1,7 @@
 # Profit Sports Solutions — Technician App
 ## Database design v2
 
-49 tables (it began as 15; each one added is described below). Target stack: Django + PostgreSQL, one developer.
+50 tables (it began as 15; each one added is described below). Target stack: Django + PostgreSQL, one developer.
 
 **Rules the database keeps itself**, not only the code: one active lead per task; one pending time change per task; quantities of at least one (task products, parts needed, parts used); a stock count that changed something; one row per role and permission, per technician and skill or conduct area; deletes refused where history hangs off a row (a task's branch, its type).
 
@@ -526,6 +526,21 @@ A phone that can receive push notifications for a technician (any role) — regi
 | created_at | timestamptz | |
 
 Sent through Expo's push service (`people/push.py`), best-effort and fail-silent like email — a failed push never blocks the action behind it; a token Expo reports as no longer registered is deleted. **Sent when:** a technician is made lead or helper on a task; a technician's report is waiting on the task's responsible supervisor; a ticket is escalated to someone; a task message names someone. Never for their own actions. Off entirely unless `EXPO_PUSH_ENABLED` is on (it is by default; tests and local runs without phones simply have no devices registered).
+
+### audit_entry
+The audit trail (`spots.audit`): who did what, when, from where, and what it changed — recorded by itself (signals) whichever page or app screen made the change, for the records that matter (customers, branches, machines, portal logins, staff, roles and permissions, notification settings, reference data, tasks, parts needed, machine lines, stock counts, site readiness, requests, reports, accounts); every sign-in (website and app), failed one and sign-out; Django's admin log copied in. Passwords are never kept, only that one changed. Read on the Audit log page (Admin; searchable, CSV); kept two years (`manage.py prune_audit`). `docs/incident_runbook.md` says how to use it when something goes wrong.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | PK | |
+| at | timestamptz | indexed |
+| actor_id | FK → user | nullable (a failed sign-in has none) |
+| actor_name | varchar | the name as it was, kept if the account goes |
+| ip | inet | nullable — the first address the proxy passed on |
+| action | varchar | created, changed, deleted, account, signed_in, sign_in_failed, signed_out |
+| object_type / object_id / object_repr | varchar | the record (`customers.site`, its id, its name) |
+| changes | json | `{field: [before, after]}` |
+| message | text | the account action, or the account a failed sign-in tried |
 
 ### app_error
 Something that went wrong in the phone app — a screen that crashed, an error nobody caught — sent by the app itself (`mobile/src/error-reporting.ts` → `POST /api/app-errors/`), so a failure on a technician's phone in the field reaches the office. Accepted before sign-in too (no token needed); never more than 100 an hour in all. The admins' bell shows how many are new; the list is in the Django admin, and opening it marks them seen.

@@ -119,6 +119,10 @@ class LoginView(APIView):
 
         token, _created = Token.objects.get_or_create(user=user)
         renew(token)  # a fresh 30 days (api.authentication.TOKEN_IDLE_DAYS)
+        # In the audit trail, like a website sign-in (spots.audit).
+        from people.models import AuditEntry
+        from spots.audit import client_ip, record
+        record(AuditEntry.Action.SIGNED_IN, user, user=user, ip=client_ip(request._request), message='app')
         # So Staff accounts' "Last sign-in" counts the app, not only the website.
         update_last_login(None, user)
         return Response({'token': token.key, **_me_payload(user, request)})
