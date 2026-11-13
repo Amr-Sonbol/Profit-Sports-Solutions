@@ -187,6 +187,47 @@
                 return;
             }
         }
+        // Machines: at least one card filled in before "Check and send" (the server checks the rest).
+        var cards = steps[current].querySelector('[data-machine-cards]');
+        if (direction > 0 && cards && cards.offsetParent !== null) {
+            var filled = Array.prototype.some.call(cards.querySelectorAll('[data-machine-card]:not([hidden])'), function (card) {
+                return Array.prototype.some.call(card.querySelectorAll('select, textarea, input[type="text"]'), function (field) {
+                    return field.value.trim() !== '';
+                });
+            });
+            steps[current].querySelector('[data-machines-required]').hidden = filled;
+            if (!filled) {
+                return;
+            }
+            // Each card's own required answers (as the server asks them: a repair's two photos too),
+            // before leaving the step — files chosen now would be lost if the server sent the page back.
+            var firstMissing = null;
+            cards.querySelectorAll('[data-machine-card]:not([hidden]) [data-card-required]').forEach(function (wrapper) {
+                var note = wrapper.querySelector('[data-card-missing]');
+                if (note) {
+                    note.remove();
+                }
+                wrapper.classList.remove('field--error');
+                if (wrapper.offsetParent === null) {
+                    return;  // not asked for this kind of request or machine
+                }
+                var field = wrapper.querySelector('select, textarea, input:not([type="hidden"])');
+                var answered = field && (field.type === 'file' ? field.files.length > 0 : field.value.trim() !== '');
+                if (!answered) {
+                    var missing = document.createElement('p');
+                    missing.className = 'field__error';
+                    missing.setAttribute('data-card-missing', '');
+                    missing.textContent = cards.getAttribute('data-missing-text');
+                    wrapper.appendChild(missing);
+                    wrapper.classList.add('field--error');
+                    firstMissing = firstMissing || field;
+                }
+            });
+            if (firstMissing) {
+                firstMissing.focus();
+                return;
+            }
+        }
         var next = current + direction;
         while (steps[next] && steps[next].hasAttribute('data-step-skip')) {
             next += direction;
@@ -217,8 +258,9 @@
         button.addEventListener('click', function () { move(-1); });
     });
 
+    // The server sent the page back: open the step its message is on (hidden notes don't count).
     var withError = steps.findIndex(function (step) {
-        return step.querySelector('.field--error, .field__error:not([data-step-required])');
+        return step.querySelector('.field--error, .field__error:not([hidden])');
     });
     if (withError > -1) {
         show(withError);

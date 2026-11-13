@@ -20,8 +20,11 @@
         {# One site: already chosen, nothing to ask. #}
         {% if field.name == 'site' and form.fields.site.queryset.count == 1 %}
         <input type="hidden" name="{{ field.html_name }}" value="{{ field.value|default:'' }}">
-        {# One branch: chosen for them — but a new one may have opened. #}
-        <p class="field__help field--wide"><a href="{% url 'customers:portal_branch_request' %}">{% translate "Your branch isn't listed? Request a new branch" %}</a></p>
+        {# One branch: chosen for them, and said — but a new one may have opened. #}
+        <div class="field field--wide">
+            <label>{% translate "Branch" %}</label>
+            <p><bdi>{{ form.fields.site.queryset.first.name }}</bdi> · <a href="{% url 'customers:portal_branch_request' %}">{% translate "Opened a new branch? Request it" %}</a></p>
+        </div>
         {% else %}
         <div class="field{% if field.errors %} field--error{% endif %}">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>

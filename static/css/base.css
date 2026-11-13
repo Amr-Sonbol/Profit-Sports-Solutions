@@ -5588,3 +5588,50 @@ details.review-more:not(.section) {
     gap: 0.35rem;
     margin-block-start: 0.75rem;
 }
+
+/* A request's or visit's status: one width down the list, so every row's progress bar lines up. */
+.portal-row__status {
+    flex: 0 0 15rem;
+    text-align: end;
+}
+
+@media (max-width: 40rem) {
+    .portal-row__status {
+        flex-basis: 100%;
+        text-align: start;
+    }
+}
+
+/* A tick box from a plain field loop (label above, box below): the box beside its label, everywhere. */
+.field:has(> input[type="checkbox"]) {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 0.5rem;
+}
+
+.field:has(> input[type="checkbox"]) > input[type="checkbox"] {
+    order: -1;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.field:has(> input[type="checkbox"]) > label {
+    flex: 1 1 0;
+    margin: 0;
+    color: var(--color-text);
+    font-size: 0.95rem;
+}
+
+.field:has(> input[type="checkbox"]) > .field__help,
+.field:has(> input[type="checkbox"]) > .field__error {
+    flex-basis: 100%;
+}
+
+/* Short and long pages line up: the scrollbar's room is always kept. */
+html {
+    scrollbar-gutter: stable;
+}

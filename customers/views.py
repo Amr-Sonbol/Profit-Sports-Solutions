@@ -49,7 +49,7 @@ from spots.throttle import link_email_allowed
 from .models import Asset, Customer, PortalUser, Site, portal_customer
 from . import notify
 from .progress import (
-    DONE_STATUSES, is_booked, is_upcoming, progress_steps, ticket_progress, visit_day, visit_progress, with_today_taps,
+    DONE_STATUSES, ON_SITE, ON_THE_WAY, is_booked, is_upcoming, progress_steps, ticket_progress, shown_day, visit_day, visit_progress, with_today_taps,
 )
 
 # Only the name is required: a file of just customer_name and
@@ -740,10 +740,7 @@ def _portal_visits(customer):
         visit.has_report = report is not None
         visit.report_changed = report is not None and changed_after_signing(report)
         visit.progress = visit_progress(visit)
-        visit.day = visit_day(visit)
-        if is_upcoming(visit) and visit.day and visit.day < timezone.localdate():
-            # Its day passed without the work being done: a new date is coming, not this one.
-            visit.day = None
+        visit.day = shown_day(visit, visit.progress)
     upcoming = sorted((v for v in visits if is_upcoming(v)), key=lambda v: (v.day is None, v.day or date.max))
     history = sorted(
         (v for v in visits if not is_upcoming(v)),
@@ -765,10 +762,13 @@ def portal_home(request):
     tickets = _portal_requests(customer)
     upcoming, history = _portal_visits(customer)
     # Needs your attention: the bell's items, then visits still to rate it doesn't already mention.
+    next_visit = next((v for v in upcoming if v.day), None)
     in_bell = set(customer.notifications.filter(seen_at__isnull=True, task__isnull=False).values_list('task_id', flat=True))
     return render(request, 'customers/portal_home.html', {
         'customer': customer,
-        'next_visit': next((v for v in upcoming if v.day), None),
+        'next_visit': next_visit,
+        # The technician on the way or on site: "Your visit now", not "next".
+        'next_visit_under_way': next_visit is not None and next_visit.progress in (ON_THE_WAY, ON_SITE),
         'open_count': sum(1 for ticket in tickets if ticket.is_open),
         'upcoming_count': len(upcoming),
         'machine_count': Asset.objects.filter(site__customer=customer).exclude(status=Asset.Status.RETIRED).count(),
@@ -977,7 +977,8 @@ def portal_visit(request, pk):
     for ticket in requests:
         ticket.progress = ticket_progress(ticket)
     context = {
-        'visit': task, 'day': visit_day(task), 'progress': visit_progress(task), 'report': report,
+        'visit': task, 'progress': visit_progress(task), 'report': report,
+        'day': shown_day(task, visit_progress(task)),
         # Back to the list it's on: still to come, or history.
         'upcoming': is_upcoming(task),
         'feedback': feedback if feedback and feedback.submitted_at else None, 'can_rate': can_rate,
@@ -1190,7 +1191,7 @@ def portal_ticket_new(request):
                 )
             send_ticket_confirmation_to_customer(request, ticket)
             send_new_ticket_email_to_staff(request, ticket)
-            messages.success(request, _('Ticket %(number)s submitted.') % {'number': ticket.ticket_number})
+            messages.success(request, _('Request %(number)s sent.') % {'number': ticket.ticket_number})
             return redirect('customers:portal_home')
     else:
         form = CustomerPortalTicketForm(customer=customer, initial={

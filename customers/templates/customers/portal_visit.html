@@ -18,7 +18,7 @@
         <dl class="detail-grid">
             <div>
                 <dt>{% translate "Date" %}</dt>
-                <dd>{% if report %}{{ report.submitted_at|date:"l j F Y" }}{% elif booked %}{{ day|date:"l j F Y" }}{% else %}{% translate "Date to be set" %}{% endif %}</dd>
+                <dd>{% if report %}{{ report.submitted_at|date:"l j F Y" }}{% elif day %}{{ day|date:"l j F Y" }}{% else %}{% translate "Date to be set" %}{% endif %}</dd>
             </div>
             {% if not report and booked and visit.scheduled_for %}
             <div>

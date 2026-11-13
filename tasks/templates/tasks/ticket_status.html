@@ -38,12 +38,12 @@
     <h2>{% translate "Your request" %}</h2>
     <dl class="detail-grid">
         <div>
-            <dt>{% translate "Site / location" %}</dt>
+            <dt>{% translate "Branch" %}</dt>
             <dd>{{ ticket.site_description }}</dd>
         </div>
         <div>
             <dt>{% translate "Submitted" %}</dt>
-            <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}{% if ticket.submitted_by %} · {% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %}{% endif %}</dd>
+            <dd>{{ ticket.submitted_at|date:"j M Y" }}{% if ticket.submitted_by %} · {% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %}{% endif %}</dd>
         </div>
         <div>
             <dt>{% translate "Request type" %}</dt>
@@ -107,7 +107,7 @@
     <ul class="action-list">
         {% for visit in visits %}
         <li class="action-row portal-row">
-            <span class="portal-row__day">{% if visit.booked %}{{ visit.day|date:"j M" }}{% elif visit.has_report %}{{ visit.task.report.submitted_at|date:"j M Y" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
+            <span class="portal-row__day">{% if visit.has_report %}{{ visit.task.report.submitted_at|date:"j M Y" }}{% elif visit.day %}{{ visit.day|date:"j M Y" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
             <span class="portal-row__main">
                 <a href="{% url 'customers:portal_visit' visit.task.pk %}"><strong>{{ visit.task.task_type.display_name|default:_("Service visit") }}</strong></a>
                 <span class="muted" dir="ltr">{{ visit.task.task_number }}</span>

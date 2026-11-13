@@ -517,6 +517,7 @@ class CustomerMachineForm(forms.ModelForm):
         if len(sites) == 1:
             self.fields['site'].initial = sites[0].pk
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True).order_by('name')
+        self.fields['brand'].empty_label = _('Choose the brand')
         self.fields['serial_no'].required = True
         self.fields['sticker_photo'].validators.append(SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 

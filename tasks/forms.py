@@ -1594,7 +1594,10 @@ class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        # "Branch", as the portal says everywhere; the list starts with a question, not "---------".
+        self.fields = {'site': SiteNameChoiceField(
+            queryset=customer.sites.all(), label=_('Branch'), empty_label=_('Choose the branch'),
+        ), **self.fields}
         self.fields['attachments'] = message_files_field(_('Files'))
         # Chosen by the customer every time: nothing is assumed.
         about_choices = [c for c in CustomerTicket.About.choices if c[0] != CustomerTicket.About.NEW_BRANCH]
@@ -1666,7 +1669,7 @@ class TicketMachineForm(forms.Form):
         validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
     problem = forms.ChoiceField(
-        choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
+        choices=[('', _('Choose…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
     )
     # Guided, so the team can prepare the right parts: the four things to say.
     description = forms.CharField(

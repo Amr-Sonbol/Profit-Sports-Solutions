@@ -614,7 +614,10 @@ def progress_context(request, technician):
     reliability = _reliability_stats(technician)
 
     leaderboard = _leaderboard(technician.country)
-    rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
+    # Ranked once they have points: a newcomer isn't "last of 29".
+    rank = next(
+        (position for position, (t, points) in enumerate(leaderboard, start=1) if t.pk == technician.pk and points), None,
+    )
 
     _today, start, end = _week_window(request, technician.country)
     my_assignments = TaskAssignment.objects.filter(technician=technician, is_active=True)

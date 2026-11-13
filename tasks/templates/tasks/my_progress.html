@@ -59,14 +59,14 @@
         <div>
             <dt>{% if viewing_other %}{% translate "Ranking in the country" %}{% else %}{% translate "Ranking in your country" %}{% endif %}</dt>
             <dd>
-                {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}—{% endif %}
+                {% if rank %}{% blocktranslate %}#{{ rank }} of {{ leaderboard_size }}{% endblocktranslate %}{% else %}<span class="muted">{% translate "Not ranked yet" %}</span>{% endif %}
             </dd>
         </div>
     </dl>
     {% if certification.cardio_ready %}
     <p class="muted">{% translate "Certified in advanced skills." %}</p>
     {% endif %}
-    {% if not viewing_other %}<p><a href="{% url 'tasks:my_skills' %}" class="back-link">{% translate "Self-assess a skill or conduct area" %}</a></p>{% endif %}
+    {% if not viewing_other %}<p><a href="{% url 'tasks:my_skills' %}" class="button button--secondary">{% translate "Self-assess a skill or conduct area" %}</a></p>{% endif %}
 </div>
 
 <div class="section">

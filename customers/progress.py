@@ -35,6 +35,13 @@ def visit_day(task):
     return timezone.localtime(task.scheduled_for).date() if task.scheduled_for else task.scheduled_date
 
 
+def shown_day(task, progress):
+    """The day the customer is shown for a visit: its day — also while it's under
+    way, a job over several days included — except one that passed with the work
+    not done (rescheduling: a new date is coming, not that one)."""
+    return None if progress is RESCHEDULING else visit_day(task)
+
+
 def visit_progress(task):
     """A visit (task) as the customer sees it. A booked day that has
     passed with the work not done is rescheduling, not booked."""

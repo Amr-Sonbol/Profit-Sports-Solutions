@@ -31,7 +31,7 @@
                     {# The customer's stars, or a nudge to give them. #}
                     {% if visit.to_rate %}<span class="badge badge--warning">{% translate "Rate this visit" %}</span>
                     {% elif visit.rating %}<span class="portal-stars" title="{% blocktranslate with rating=visit.rating %}You rated it {{ rating }} out of 5.{% endblocktranslate %}">{% for n in "12345" %}{% if forloop.counter <= visit.rating %}★{% else %}☆{% endif %}{% endfor %}</span>{% endif %}
-                    <span class="badge {{ visit.progress.1 }}">{{ visit.progress.0 }}</span>
+                    <span class="portal-row__status"><span class="badge {{ visit.progress.1 }}">{{ visit.progress.0 }}</span></span>
                 </a>
                 {% if visit.has_report %}{% include "customers/_report_download.html" with visit=visit changed=visit.report_changed %}{% endif %}
             </li>

@@ -27,10 +27,10 @@
                     <span class="portal-row__main">
                         <strong dir="ltr">{{ ticket.ticket_number }}</strong>
                         <span>{{ ticket.request_type }}{% if ticket.subject %} — {{ ticket.subject }}{% endif %}</span>
-                        <span class="muted">{{ ticket.site_description }} · {{ ticket.submitted_at|date:"j M Y" }}</span>
+                        <span class="muted"><bdi>{{ ticket.site_description }}</bdi> · {{ ticket.submitted_at|date:"j M Y" }}</span>
                         {% if ticket.is_open %}{% include "_progress_steps.html" with steps=ticket.steps label=ticket.progress.0 %}{% endif %}
                     </span>
-                    <span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span>
+                    <span class="portal-row__status"><span class="badge {{ ticket.progress.1 }}">{{ ticket.progress.0 }}</span></span>
                 </a>
                 {# Finished: its report, one click away. #}
                 {% if ticket.report_visit %}{% include "customers/_report_download.html" with visit=ticket.report_visit %}{% endif %}

@@ -15,7 +15,6 @@
 <form method="post" enctype="multipart/form-data" novalidate data-report-steps>
     {% csrf_token %}
     {% if form.non_field_errors %}<p class="flash flash--error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
-    {% if machines.non_form_errors %}<p class="flash flash--error">{{ machines.non_form_errors|join:" " }}</p>{% endif %}
 
     <ol class="progress-steps report-steps__bar" hidden data-steps-bar>
         <li class="progress-steps__step" data-step-label>{% translate "1. Where" %}</li>
@@ -82,7 +81,10 @@
         <h2 data-show-need="parts">{% translate "Which machines, and which parts?" %}</h2>
         <p class="field__help">{% translate "Add each machine separately, with its own photos, so our team can prepare the right parts for each one." %}</p>
         {{ machines.management_form }}
-        <div class="machine-cards" data-machine-cards>
+        {# The server's "add at least one machine": on this step, so the steps reopen here. #}
+        {% for error in machines.non_form_errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        <p class="field__error" hidden data-machines-required>{% translate "Please choose a machine and tell us what's needed." %}</p>
+        <div class="machine-cards" data-machine-cards data-missing-text="{% translate 'Please fill this in before continuing.' %}">
             {% for machine in machines %}
             <fieldset class="machine-card" data-machine-card{% if not forloop.first and not machine.has_changed and not machine.errors %} hidden{% endif %}>
                 <legend>{% blocktranslate with number=forloop.counter %}Machine {{ number }}{% endblocktranslate %}</legend>
@@ -95,7 +97,7 @@
                 {% if not machine.has_machines %}<input type="hidden" name="{{ machine.which.html_name }}" value="new">{% endif %}
                 <div class="form-grid">
                     {% for field in machine %}{% if field.name != 'which' %}
-                    <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"
+                    <div class="field{% if field.errors %} field--error{% endif %}{% if field.name == 'description' or field.name == 'files' %} field--wide{% endif %}"{% if field.name != 'code' %} data-card-required{% endif %}
                         {% if field.name == 'asset' %}{% if not machine.has_machines %}hidden{% endif %}{% elif field.name == 'model_name' or field.name == 'serial_no' or field.name == 'code' %}data-show-for="new"{% elif field.name == 'serial_photo' %}data-show-need="repair"{% elif field.name == 'problem' %}data-show-need="repair"{% elif field.name == 'description' %}data-parts-placeholder="{% translate 'Example: Two replacement running belts and one safety key for this treadmill.' %}"{% endif %}>
                         {% if field.name == 'description' %}
                         <label for="{{ field.id_for_label }}" data-show-need="repair">{{ field.label }}</label>

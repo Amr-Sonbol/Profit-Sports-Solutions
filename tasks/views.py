@@ -45,7 +45,7 @@ from tasks.parts_needed import is_shipment as parts_is_shipment
 from tasks.parts_needed import report_parts as parts_needed_report_parts
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
-from customers.progress import is_booked, progress_steps, ticket_progress, visit_day, visit_progress
+from customers.progress import is_booked, progress_steps, ticket_progress, shown_day, visit_progress
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
@@ -2379,7 +2379,7 @@ def _ticket_visits(ticket):
             parcels.append(shipments.for_customer(task))
             continue
         visits.append({
-            'task': task, 'progress': visit_progress(task), 'day': visit_day(task),
+            'task': task, 'progress': visit_progress(task), 'day': shown_day(task, visit_progress(task)),
             'booked': is_booked(visit_progress(task)), 'has_report': getattr(task, 'report', None) is not None,
         })
     return {'visits': visits, 'shipments': parcels}
