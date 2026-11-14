@@ -94,8 +94,8 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     priority_display = serializers.CharField(source='get_priority_display')
     task_type_name = serializers.CharField(source='task_type.display_name', default='')
     brand_name = serializers.CharField(source='brand.name', default='')
-    required_skill_name = serializers.CharField(source='required_skill.display_name', default='')
     events = serializers.SerializerMethodField()
+    about_display = serializers.CharField(source='get_about_display', read_only=True)
     # Who created the task, and when (Task.creator); who last changed it (spots.audit.trail).
     created_by = serializers.SerializerMethodField()
     last_changed = serializers.SerializerMethodField()
@@ -127,7 +127,8 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'site_contact_name', 'site_contact_phone', 'directions_url', 'machines', 'machine_cards', 'scheduled_date',
             'parts_needed', 'parts_prepared', 'delivery_note_url',
             'status', 'status_display', 'priority', 'priority_display',
-            'task_type_name', 'brand_name', 'required_skill_name', 'description',
+            'task_type_name', 'brand_name', 'about', 'about_display', 'done_by', 'subcontractor_name',
+            'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
             'events', 'attachments', 'next_action', 'shipment', 'from_request', 'is_lead', 'can_file_report',
             'created_by', 'last_changed',

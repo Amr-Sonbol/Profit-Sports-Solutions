@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
 from people.models import Technician
-from reference.models import Brand, Country, Skill, TaskType
+from reference.models import Brand, Country, TaskType
 from reports.phrases import Action, Finding
 from spots.indexes import contains_search_index, matches_search_index, phone_search_index
 from spots.uploads import SafeFileValidator
@@ -125,11 +125,28 @@ class Task(models.Model):
         Brand, on_delete=models.PROTECT, related_name='tasks',
         null=True, blank=True, verbose_name=_('brand'),
     )
-    required_skill = models.ForeignKey(
-        Skill, on_delete=models.PROTECT, related_name='tasks',
-        null=True, blank=True, verbose_name=_('required skill'),
-    )
-    min_level = models.PositiveSmallIntegerField(_('minimum level'), null=True, blank=True)
+    # What it's about (a request's own "about"; chosen on New task) — machines, flooring,
+    # accessories, lockers or other: filtered, counted (the Monthly report), and machine-only
+    # steps stay with machines.
+    class About(models.TextChoices):
+        MACHINES = 'machines', _('Machines')
+        FLOORING = 'flooring', _('Flooring')
+        ACCESSORIES = 'accessories', _('Accessories')
+        LOCKERS = 'lockers', _('Lockers')
+        OTHER = 'other', _('Other')
+
+    about = models.CharField(_('about'), max_length=20, choices=About.choices, default=About.MACHINES)
+
+    # Who does it: our team, or a subcontractor (flooring, say) — our supervisor still checks
+    # the result and files the report.
+    class DoneBy(models.TextChoices):
+        OUR_TEAM = 'our_team', _('Our team')
+        SUBCONTRACTOR = 'subcontractor', _('A subcontractor')
+
+    done_by = models.CharField(_('done by'), max_length=20, choices=DoneBy.choices, default=DoneBy.OUR_TEAM)
+    subcontractor_name = models.CharField(_('subcontractor'), max_length=150, blank=True)
+    subcontractor_contact = models.CharField(_('subcontractor contact'), max_length=150, blank=True,
+                                             help_text=_('A phone number or an email.'))
     description = models.TextField(_('description'), blank=True, help_text=_('what the customer reported'))
     reported_serial_numbers = models.TextField(
         _('reported serial numbers'), blank=True,

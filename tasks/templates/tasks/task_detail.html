@@ -47,16 +47,16 @@
             <dd>{{ task.brand.name|default:"—" }}</dd>
         </div>
         <div>
-            <dt>{% translate "Required skill" %}</dt>
-            <dd>{{ task.required_skill.display_name|default:"—" }}{% if task.min_level %} ({% translate "level" %} {{ task.min_level }}){% endif %}</dd>
-        </div>
-        <div>
             <dt>{% translate "Billing type" %}</dt>
             <dd>{{ task.get_billing_type_display }}</dd>
         </div>
         <div>
             <dt>{% translate "Source" %}</dt>
             <dd>{{ task.get_source_display }}</dd>
+        </div>
+        <div>
+            <dt>{% translate "About" %}</dt>
+            <dd>{{ task.get_about_display }}{% if task.done_by == 'subcontractor' %} · {% translate "by" %} <bdi>{{ task.subcontractor_name }}</bdi>{% if task.subcontractor_contact %} <span class="muted" dir="ltr">({{ task.subcontractor_contact }})</span>{% endif %}{% endif %}</dd>
         </div>
         <div>
             <dt>{% translate "Responsible supervisor" %}</dt>
@@ -593,7 +593,7 @@
             </div>
             <div class="field">
                 <label for="next-site">{% translate "Where" %}</label>
-                <select name="site" id="next-site" required>
+                <select name="site" id="next-site">
                     {% for step, label, sites in next_step_choices %}
                     <optgroup label="{{ label }}" data-for-step="{{ step }}">
                         {% for site in sites %}<option value="{{ site.pk }}">{{ site.customer.country.display_name }} — {{ site.customer.name }} — {{ site.name }}</option>{% endfor %}
@@ -616,6 +616,27 @@
                 <p class="field__help">{% translate "Going to another country? Choose who supervises it there." %}</p>
             </div>
         </div>
+        {% if next_step_customers %}
+        {# Not in the list yet: a new branch, made here (an installation only). #}
+        <details class="new-branch">
+            <summary>{% translate "+ New branch" %}</summary>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="new-branch-customer">{% translate "Customer" %}</label>
+                    <select name="new_branch_customer" id="new-branch-customer">
+                        <option value="">{% translate "Choose the customer" %}</option>
+                        {% for customer in next_step_customers %}<option value="{{ customer.pk }}">{{ customer.country.display_name }} — {{ customer.name }}</option>{% endfor %}
+                    </select>
+                    <p class="field__help"><a href="{% url 'customers:customer_create' %}" target="_blank" rel="noopener">{% translate "A new customer? Create it first" %}</a></p>
+                </div>
+                <div class="field"><label for="new-branch-name">{% translate "Branch name" %}</label><input type="text" name="new_branch_name" id="new-branch-name" maxlength="150"></div>
+                <div class="field field--wide"><label for="new-branch-address">{% translate "Address" %}</label><input type="text" name="new_branch_address" id="new-branch-address"></div>
+                <div class="field"><label for="new-branch-contact">{% translate "Contact name" %}</label><input type="text" name="new_branch_contact" id="new-branch-contact" maxlength="150"></div>
+                <div class="field"><label for="new-branch-phone">{% translate "Contact phone" %}</label><input type="tel" name="new_branch_phone" id="new-branch-phone" maxlength="30"></div>
+            </div>
+            <p class="field__help">{% translate "Filled in, the machines go to this new branch instead of the one chosen above; the customer is told by email." %}</p>
+        </details>
+        {% endif %}
         <p class="field__help">{% translate "The machines to carry, with their serial numbers and colors:" %}</p>
         {% for line in lines_to_carry %}
         <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.quantity > 1 %} × {{ line.quantity }}{% endif %}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>

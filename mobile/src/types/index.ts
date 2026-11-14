@@ -104,6 +104,11 @@ export interface MachineCardData {
 
 export interface TaskDetail {
   id: number;
+  // What it's about, and who does it (our team, or a subcontractor).
+  about?: string;
+  about_display?: string;
+  done_by?: 'our_team' | 'subcontractor';
+  subcontractor_name?: string;
   /** Who created the task, and when (tasks.models.Task.creator). */
   created_by?: { name: string; role: string; at: string | null };
   /** Who last changed it (spots.audit.trail), or null. */
@@ -119,7 +124,6 @@ export interface TaskDetail {
   priority_display: string;
   task_type_name: string;
   brand_name: string;
-  required_skill_name: string;
   description: string;
   reported_at: string;
   promised_at: string | null;
@@ -465,6 +469,8 @@ export interface TeamTaskDetail extends TaskDetail {
       steps: { value: string; label: string; sites: (Choice & { country?: number })[] }[];
       /** Who can supervise it there; empty keeps this task's own (same country only). Older servers: absent. */
       supervisors?: (Choice & { country: number })[];
+      /** "+ New branch": the customers it can be added to (whoever creates branches); empty otherwise. */
+      customers?: (Choice & { country: number })[];
     } | null;
   } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
@@ -486,9 +492,9 @@ export interface Candidate {
   is_available: boolean;
   // Their home country when they're working here on a trip, else null.
   visiting_from: string | null;
-  skill_level: number | null;
-  next_task_number: string | null;
-  next_task_at: string | null;
+  // Their day, in words (tasks.views.day_text), and its kind for the dot.
+  day_state: 'free' | 'busy' | 'clash' | 'off' | 'no_day';
+  day_text: string;
 }
 
 /** A task on the Today screen (/api/my-today/). */

@@ -377,7 +377,7 @@ Unique on (technician_id, skill_id) — a fresh rating overwrites this row; the 
 Append-only. Every self-rating and every supervisor review that has ever touched a (technician, skill) pair, never edited or deleted. Same columns as `technician_skill` (evidence included) minus the uniqueness constraint. This is what makes a self-rating auditable: nothing is lost when a supervisor overwrites it.
 
 ### technician_conduct / technician_conduct_assessment
-The same two tables, minus `evidence` — a conduct area (cleanliness, punctuality, ...) isn't a specific repair task, so there's nothing to film — except `skill_id` becomes `conduct_area_id`, pointing at `conduct_area` instead. Kept as separate tables rather than folding conduct areas into `skill`, because merging them would blur what `skill` means everywhere else it's used (`task.required_skill`, the assign screen's candidate levels).
+The same two tables, minus `evidence` — a conduct area (cleanliness, punctuality, ...) isn't a specific repair task, so there's nothing to film — except `skill_id` becomes `conduct_area_id`, pointing at `conduct_area` instead. Kept as separate tables rather than folding conduct areas into `skill`, because merging them would blur what `skill` means everywhere else it's used (training and certification — tasks no longer carry a required skill, tasks 0103, owner 13 Nov 2026).
 
 ### How a level gets set
 
@@ -430,8 +430,10 @@ This status is shown to the technician themselves (My progress) and to superviso
 | site_id | FK → site | **the only certain field at creation** |
 | task_type_id | FK → task_type | nullable |
 | brand_id | FK → brand | nullable |
-| required_skill_id | FK → skill | nullable |
-| min_level | int | nullable |
+| about | varchar | machines (default), flooring, accessories, lockers, other — what it's about: from the request (`customer_ticket.about`) or chosen on New task; the task list filters on it (tasks 0104, owner 13 Nov 2026) |
+| done_by | varchar | our_team (default) or subcontractor — who does it; our supervisor still checks and files the report |
+| subcontractor_name | varchar | blank — required when done by a subcontractor |
+| subcontractor_contact | varchar | blank — a phone number or an email |
 | description | text | what the customer reported |
 | reported_serial_numbers | text | blank — one per line, copied from `customer_ticket.serial_numbers` at conversion; editable afterward like `description` |
 | priority | varchar | low, normal, high, emergency |

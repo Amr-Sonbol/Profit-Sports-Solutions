@@ -52,17 +52,16 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
-    report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
+    new_branch_for_next_step, next_step_customers, report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
     report_machine_photo_gaps,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
-    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    _assignment_candidates, _next_technician_action, _with_day_load, day_text, _require_task_owner, _set_lead,
     _ticket_is_open, can_act_on_internal_ticket, can_change_task,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
-    _technicians_with_next_scheduled_task,
     approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
     save_work_report, search_tickets, team_progress_rows, today_plan,
@@ -421,9 +420,14 @@ class MyScheduleView(APIView):
 # The fields the app's New task screen fills in — the website form's,
 # less adding a new site / brand / task type there (admin and desk work).
 APP_TASK_FIELDS = [
-    'site', 'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority', 'source',
+    'site', 'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
+    'description', 'priority', 'source',
     'is_warranty', 'billing_type', 'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
 ]
+
+
+# A new branch made from the app's New task (tasks.forms.TaskCreateForm's new-site fields).
+NEW_SITE_FIELDS = ['new_site_customer', 'new_site_name', 'new_site_address', 'new_site_contact_name', 'new_site_contact_phone']
 
 
 def require_role_permission_or_403(request, permission):
@@ -459,7 +463,8 @@ class TaskCreateView(APIView):
     def get(self, request):
         form = self._form(request)
         fields = {}
-        for name in APP_TASK_FIELDS:
+        # "+ New branch" too, for whoever creates customers and branches (the form has its fields then).
+        for name in APP_TASK_FIELDS + [name for name in NEW_SITE_FIELDS if name in form.fields]:
             field = form.fields[name]
             initial = form[name].initial
             fields[name] = {
@@ -473,7 +478,7 @@ class TaskCreateView(APIView):
         return Response({'fields': fields})
 
     def post(self, request):
-        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS}
+        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS + NEW_SITE_FIELDS}
         if str(data['is_warranty']).lower() not in ('true', '1', 'on'):
             data.pop('is_warranty')
         form = self._form(request, data)
@@ -1452,7 +1457,7 @@ class TaskListView(APIView):
 def _get_my_assignment(request, pk):
     return get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer__country', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer__country', 'task__task_type', 'task__brand',
         ),
         task__pk=pk, technician=request.user.technician, is_active=True,
     )
@@ -1982,7 +1987,7 @@ def _get_team_task(request, pk):
     """
     return scoped_or_404(
         Task.objects.select_related(
-            'site__customer__country', 'task_type', 'brand', 'required_skill', 'responsible_supervisor', 'report',
+            'site__customer__country', 'task_type', 'brand', 'responsible_supervisor', 'report',
         ).prefetch_related('assignments__technician', 'report__parts_used'),
         pk, request.user.technician, get_active_country(request), 'site__customer__country',
     )
@@ -2073,6 +2078,12 @@ def _team_task_response(request, task):
                  'country': person.country_id}
                 for person in next_step_supervisors(technician)
             ],
+            # "+ New branch": whoever creates branches, among the customers they reach.
+            'customers': [
+                {'value': str(customer.pk), 'label': f'{customer.country.display_name} — {customer.name}',
+                 'country': customer.country_id}
+                for customer in next_step_customers(technician)
+            ] if can_create_customers(technician) else [],
             # The button's words.
             'title': str(_('Send to installation')),
         } if lines_to_carry(task) and technician.is_manager_tier else None,
@@ -2189,7 +2200,12 @@ class TaskNextStepView(APIView):
         step = request.data.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)
-        site = get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
+        site, error = (None, '')
+        if step == TaskType.Category.INSTALLATION:  # "+ New branch", as on the website (3A)
+            site, error = new_branch_for_next_step(request._request, viewer, request.data)
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        site = site or get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
         task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
         wanted = {str(value) for value in request.data.get('lines') or []}
         chosen = [line for line in lines_to_carry(task) if str(line.pk) in wanted]
@@ -2816,9 +2832,7 @@ class TeamTaskCandidatesView(APIView):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
         assigned_ids = {a.technician_id for a in task.assignments.all() if a.is_active}
-        candidates = _technicians_with_next_scheduled_task(
-            _candidates_with_skill_level(_assignment_candidates(task, exclude_ids=assigned_ids), task),
-        )
+        candidates = _with_day_load(_assignment_candidates(task, exclude_ids=assigned_ids), task)
         return Response([
             {
                 'id': technician.pk,
@@ -2827,11 +2841,9 @@ class TeamTaskCandidatesView(APIView):
                 # Their home country when they're here on a trip, else null.
                 'visiting_from': technician.country.display_name
                 if technician.country_id != task.site.customer.country_id else None,
-                'skill_level': technician.skill_level,
-                'next_task_number': technician.next_scheduled_task.task_number
-                if technician.next_scheduled_task else None,
-                'next_task_at': technician.next_scheduled_task.scheduled_for
-                if technician.next_scheduled_task else None,
+                # Their day, in the same words as the website: 'free', 'busy', 'clash', 'off', 'no_day'.
+                'day_state': technician.day_state,
+                'day_text': str(day_text(technician)),
             }
             for technician in candidates
         ])

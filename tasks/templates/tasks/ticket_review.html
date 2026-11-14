@@ -33,6 +33,16 @@
             <p>{% blocktranslate with name=ticket.site.name %}Branch added: <strong>{{ name }}</strong>. A task created from this request starts there.{% endblocktranslate %}</p>
             {% if 'manage_customers' in role_permissions %}<p><a href="{% url 'customers:site_edit' ticket.site.pk %}">{% translate "Set its warranty start and other details" %}</a></p>{% endif %}
         </div>
+        {% elif not ticket.customer and ticket.company_name and can_create_branch %}
+        {# A caller who isn't a customer yet: the customer (and the branch, if given) in one click. #}
+        <div class="review-callout">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_customer">
+                <button type="submit" class="button">{% blocktranslate with name=ticket.company_name %}Create the customer “{{ name }}”{% endblocktranslate %}{% if ticket.site_description %} {% blocktranslate with branch=ticket.site_description %}and its branch “{{ branch }}”{% endblocktranslate %}{% endif %}</button>
+            </form>
+            <p class="field__help">{% translate "Not a customer yet. One of the same name in this country is linked instead of a second one." %}</p>
+        </div>
         {% elif ticket.about == 'new_branch' and ticket.customer and can_create_branch %}
         {# One click: the branch made from what the customer typed, and linked to this request. #}
         <div class="review-callout">

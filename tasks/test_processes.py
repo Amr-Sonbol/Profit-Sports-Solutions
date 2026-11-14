@@ -152,3 +152,117 @@ class FollowUpsTests(TaskTestCase):
         first.status = Task.Status.CANCELLED  # called off: its machines are still to install
         first.save(update_fields=['status'])
         self.assertEqual(set(still_to_install(installation)), {damaged, later})
+
+
+class WhatItsAboutTests(TaskTestCase):
+
+    def test_a_flooring_request_becomes_a_flooring_task_and_the_list_filters_it(self):
+        from tasks.views import create_task  # noqa: F401 — the path every New task takes
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T1701', customer=self.customer, site=self.site,
+            company_name='Fitness First', site_description='Marina', contact_name='Ali', contact_phone='050',
+            description='Tiles lifting near the racks', submitted_at=timezone.now(),
+            about=CustomerTicket.About.FLOORING, need=CustomerTicket.Need.REPAIR,
+        )
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/new/?ticket={ticket.pk}')
+        form = page.context['form']
+        data = {name: ('' if form[name].value() is None else form[name].value()) for name in form.fields}
+        data.update({'priority': Task.Priority.NORMAL, 'done_by': Task.DoneBy.SUBCONTRACTOR, 'subcontractor_name': ''})
+        data = {k: v for k, v in data.items() if v not in (None, False)}
+        refused = self.client.post(f'/tasks/new/?ticket={ticket.pk}', data)
+        self.assertIn('subcontractor_name', refused.context['form'].errors)  # a subcontractor is named
+        data['subcontractor_name'] = 'Gulf Floors LLC'
+        self.client.post(f'/tasks/new/?ticket={ticket.pk}', data)
+        task = Task.objects.get(task_number__isnull=False, site=self.site, description__icontains='Tiles')
+        self.assertEqual((task.about, task.done_by, task.subcontractor_name),
+                         (Task.About.FLOORING, Task.DoneBy.SUBCONTRACTOR, 'Gulf Floors LLC'))
+        listed = self.client.get('/tasks/', {'about': 'flooring', 'status': 'all'}).context['page_obj']
+        self.assertEqual([t.pk for t in listed], [task.pk])
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend', SEND_EMAILS_IN_BACKGROUND=False)
+class NewBranchWhileSendingOnTests(TaskTestCase):
+
+    def setUp(self):
+        super().setUp()
+        from customers.models import Customer, Site
+        from people.models import Technician
+        self.manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=self.manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
+        warehouse = Site.objects.create(customer=ours, name='Jebel Ali warehouse', address='Jebel Ali')
+        loading_type = TaskType.objects.create(code='type_load', name='Loading', category=TaskType.Category.LOADING)
+        self.loading = Task.objects.create(
+            task_number='AE-1801', site=warehouse, task_type=loading_type, priority=Task.Priority.NORMAL,
+            source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
+            created_by=self.manager, status=Task.Status.CLOSED,
+        )
+        self.lines = [TaskProduct.objects.create(task=self.loading, product_code=f'RUN-{n}', serial_number=f'S{n}',
+                                                 status=TaskProduct.Status.DONE) for n in range(2)]
+        self.customer.contact_email = 'owner@fitnessfirst.example'
+        self.customer.save(update_fields=['contact_email'])
+        self.client.force_login(self.manager)
+
+    def send(self, line, **branch):
+        return self.client.post(f'/tasks/{self.loading.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'lines': [line.pk], **branch,
+        })
+
+    def test_a_new_branch_made_right_there_and_one_installation_per_branch(self):
+        mail.outbox.clear()
+        self.send(self.lines[0], new_branch_customer=self.customer.pk, new_branch_name='JBR Branch',
+                  new_branch_address='JBR Walk, Dubai', new_branch_contact='Omar', new_branch_phone='0509999999')
+        branch = self.customer.sites.get(name='JBR Branch')
+        installation = Task.objects.get(site=branch)
+        self.assertEqual(installation.products.count(), 1)
+        self.assertEqual([m.to for m in mail.outbox], [['owner@fitnessfirst.example']])
+        # More machines for the same branch: added to its open installation, not a second task.
+        self.send(self.lines[1], site=branch.pk)
+        self.assertEqual(Task.objects.filter(site=branch).count(), 1)
+        self.assertEqual(installation.products.count(), 2)
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend', SEND_EMAILS_IN_BACKGROUND=False)
+class PhoneRequestsTests(TaskTestCase):
+
+    def setUp(self):
+        super().setUp()
+        from people.models import Technician
+        self.desk = User.objects.create_user('desk1', password='pass12345')
+        Technician.objects.create(user=self.desk, country=self.country, full_name='Desk', language='en',
+                                  role=Technician.Role.COUNTRY_SUPPORT, employment_type='staff')
+        self.support = User.objects.create_user('support1', password='pass12345')
+        Technician.objects.create(user=self.support, country=self.country, full_name='Support', language='en',
+                                  role=Technician.Role.SUPPORT_MANAGER, employment_type='staff')
+
+    def open_ticket(self, **data):
+        self.client.force_login(self.desk)
+        base = {'source': CustomerTicket.Source.PHONE, 'description': 'Called in', 'contact_name': 'Omar',
+                'contact_phone': '0509999999'}
+        self.client.post('/tasks/tickets/open/', {**base, **data})
+        return CustomerTicket.objects.latest('pk')
+
+    def test_a_new_branch_by_phone(self):
+        ticket = self.open_ticket(about='new_branch', new_branch_customer=self.customer.pk,
+                                  site_description='JBR Branch', site_address='JBR Walk')
+        self.assertEqual((ticket.customer, ticket.site, ticket.about), (self.customer, None, 'new_branch'))
+        self.client.force_login(self.support)
+        self.client.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'})
+        ticket.refresh_from_db()
+        self.assertEqual(ticket.site.name, 'JBR Branch')
+
+    def test_a_caller_who_is_not_a_customer_yet(self):
+        ticket = self.open_ticket(about='machines', company_name='Iron Gym', site_description='Al Quoz',
+                                  site_address='Al Quoz 3, Dubai')
+        self.assertIsNone(ticket.customer)
+        # The desk can't create customers; a manager can, in one click.
+        self.client.force_login(self.desk)
+        self.client.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_customer'})
+        ticket.refresh_from_db()
+        self.assertIsNone(ticket.customer)
+        self.client.force_login(self.support)
+        self.client.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_customer'})
+        ticket.refresh_from_db()
+        self.assertEqual((ticket.customer.name, ticket.site.name), ('Iron Gym', 'Al Quoz'))

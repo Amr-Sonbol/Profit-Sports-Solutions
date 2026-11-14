@@ -41,6 +41,8 @@ export default function NewTaskScreen() {
   const [fields, setFields] = useState<Record<string, FormFieldSpec> | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [warranty, setWarranty] = useState(false);
+  // "+ New branch" instead of an existing site (whoever creates branches: the server sends its fields).
+  const [newSite, setNewSite] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -145,7 +147,10 @@ export default function NewTaskScreen() {
     setIsBusy(true);
     setErrors({});
     try {
-      const result = await createTask({ ...values, is_warranty: warranty });
+      const sent = newSite ? { ...values, site: '' } : Object.fromEntries(
+        Object.entries(values).filter(([name]) => !name.startsWith('new_site_')),
+      );
+      const result = await createTask({ ...sent, is_warranty: warranty });
       const open = () => router.replace(`/team-task/${result.id}`);
       if (result.warning) {
         alert(t('Task {number} created', { number: result.task_number }), result.warning, [{ text: 'OK', onPress: open }]);
@@ -176,7 +181,32 @@ export default function NewTaskScreen() {
             </TouchableOpacity>
             <ThemedText type="title">New task</ThemedText>
 
-            {picker('site', false, 'Customer — site')}
+            {newSite ? null : picker('site', false, 'Customer — site')}
+            {fields.new_site_customer ? (
+              newSite ? (
+                <ThemedView style={styles.field}>
+                  <ThemedText type="smallBold">New branch</ThemedText>
+                  {picker('new_site_customer')}
+                  {(['new_site_name', 'new_site_address', 'new_site_contact_name', 'new_site_contact_phone'] as const).map((name) => (
+                    <ThemedView key={name} style={styles.field}>
+                      <ThemedText type="small">{fields[name]?.label}</ThemedText>
+                      <TextInput
+                        style={inputStyle} value={values[name] ?? ''} onChangeText={set(name)}
+                        placeholderTextColor={theme.textSecondary}
+                      />
+                      {errors[name] ? <ThemedText type="small" themeColor="danger">{errors[name]}</ThemedText> : null}
+                    </ThemedView>
+                  ))}
+                  <TouchableOpacity onPress={() => setNewSite(false)}>
+                    <ThemedText type="small" themeColor="primary">Choose an existing site instead</ThemedText>
+                  </TouchableOpacity>
+                </ThemedView>
+              ) : (
+                <TouchableOpacity onPress={() => setNewSite(true)}>
+                  <ThemedText type="small" themeColor="primary">+ New branch</ThemedText>
+                </TouchableOpacity>
+              )
+            ) : null}
             {picker('task_type', true)}
             {picker('brand', true)}
 
@@ -189,6 +219,23 @@ export default function NewTaskScreen() {
               {errors.description ? <ThemedText type="small" themeColor="danger">{errors.description}</ThemedText> : null}
             </ThemedView>
 
+            {chips('about')}
+            {chips('done_by')}
+            {values.done_by === 'subcontractor' ? (
+              <ThemedView style={styles.field}>
+                <ThemedText type="smallBold">{fields.subcontractor_name.label}</ThemedText>
+                <TextInput
+                  style={inputStyle} value={values.subcontractor_name ?? ''} onChangeText={set('subcontractor_name')}
+                  placeholderTextColor={theme.textSecondary}
+                />
+                {errors.subcontractor_name ? <ThemedText type="small" themeColor="danger">{errors.subcontractor_name}</ThemedText> : null}
+                <ThemedText type="smallBold">{fields.subcontractor_contact.label}</ThemedText>
+                <TextInput
+                  style={inputStyle} value={values.subcontractor_contact ?? ''} onChangeText={set('subcontractor_contact')}
+                  placeholderTextColor={theme.textSecondary}
+                />
+              </ThemedView>
+            ) : null}
             {chips('priority')}
             {chips('source')}
             {chips('billing_type')}
@@ -209,8 +256,6 @@ export default function NewTaskScreen() {
               {errors.estimated_hours ? <ThemedText type="small" themeColor="danger">{errors.estimated_hours}</ThemedText> : null}
             </ThemedView>
 
-            {picker('required_skill', true)}
-            {values.required_skill ? chips('min_level') : null}
             {picker('responsible_supervisor', true)}
 
             {errors.form ? <ThemedText themeColor="danger">{errors.form}</ThemedText> : null}

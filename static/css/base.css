@@ -5666,3 +5666,20 @@ button.is-sending {
     opacity: 0.6;
     cursor: progress;
 }
+
+/* A person's day (tasks/_day_state.html): a small coloured dot, then the words. */
+.day-state::before {
+    content: "";
+    display: inline-block;
+    inline-size: 0.55rem;
+    block-size: 0.55rem;
+    margin-inline-end: 0.4rem;
+    border-radius: 50%;
+    vertical-align: middle;
+    background: var(--color-border);
+}
+
+.day-state--free::before { background: var(--color-success); }
+.day-state--busy::before { background: var(--color-warning); }
+.day-state--clash::before,
+.day-state--off::before { background: var(--color-danger, #c62828); }

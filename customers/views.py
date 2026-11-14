@@ -245,6 +245,9 @@ def customer_detail(request, pk):
             site = form.save(commit=False)
             site.customer = customer
             site.save()
+            if from_request is None:
+                from tasks.equipment import tell_customer_new_branch
+                tell_customer_new_branch(request, site)  # set up by us, not asked for: the customer is told
             if from_request is not None:
                 # The request now has its branch: a task made from it (its installation, say) starts there.
                 from_request.site = site

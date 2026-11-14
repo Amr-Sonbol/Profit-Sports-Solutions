@@ -84,9 +84,12 @@ def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=
     if not recipient:
         return False
     ticket = ticket or (request_of(task) if task is not None else None)
-    number, reference_text = (
-        (ticket.ticket_number, REQUEST_REFERENCE) if ticket is not None else (task.task_number, VISIT_REFERENCE)
-    )
+    if ticket is not None:
+        number, reference_text = ticket.ticket_number, REQUEST_REFERENCE
+    elif task is not None:
+        number, reference_text = task.task_number, VISIT_REFERENCE
+    else:
+        number, reference_text = '', None  # about no request or visit (a branch set up for them)
     if link is None:
         link, button = request_link(ticket, request), VIEW_REQUEST
 
@@ -97,7 +100,7 @@ def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=
                 key: str(value() if callable(value) else value) for key, value in (values or {}).items()
             }
             filled['contact'] = contact
-            reference = str(reference_text) % {'number': number}
+            reference = str(reference_text) % {'number': number} if reference_text else ''
             body = [str(GREETING) % filled]
             for paragraph in paragraphs:
                 text = paragraph() if callable(paragraph) else paragraph
@@ -109,7 +112,7 @@ def send(*, country, recipient, contact, title, paragraphs, values=None, ticket=
             sections.append({
                 'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': str(button or ''),
                 'footer': str(FOOTER),
-                'subject': str(SUBJECT) % {'title': str(title), 'reference': reference},
+                'subject': str(SUBJECT) % {'title': str(title), 'reference': reference} if reference else str(title),
                 'paragraphs': [text for text in body if text],
             })
     subject = ' | '.join(section['subject'] for section in sections)
@@ -172,6 +175,11 @@ PARTS_ORDERED_BODY = _('To complete the repair at %(site)s, we have ordered the 
 PARTS_ORDERED_BY = _('We expect them by %(date)s.')
 PARTS_ORDERED_VISIT = _('We will arrange the visit as soon as they arrive.')
 PARTS_ORDERED_SHIP = _('We will ship them to you as soon as they arrive.')
+
+NEW_BRANCH_TITLE = _('Your new branch is set up')
+NEW_BRANCH_BODY = _('We have set up your branch %(site)s with us.')
+NEW_BRANCH_NEXT = _('You can follow its installation, its machines and their visits in your customer portal.')
+PORTAL_BUTTON = _('Open the customer portal')
 
 VISIT_CANCELLED_TITLE = _('Your visit has been cancelled')
 VISIT_CANCELLED_BODY = _('The visit planned at %(site)s for your request %(reference)s has been cancelled.')

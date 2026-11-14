@@ -564,9 +564,19 @@ export function createFollowUp(id: number) {
 }
 
 /** The chain's next step (loading / installation) at a site, for the machines chosen. */
-export function createNextStep(id: number, step: string, site: string, lines: number[], supervisor = '') {
+/** A new branch made while sending machines on (an installation): its customer and details. */
+export type NewBranch = { customer: string; name: string; address: string; contact: string; phone: string };
+
+export function createNextStep(id: number, step: string, site: string, lines: number[], supervisor = '', newBranch?: NewBranch) {
   return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/next-step/`, {
-    method: 'POST', body: { step, site, lines, supervisor },
+    method: 'POST',
+    body: {
+      step, site, lines, supervisor,
+      ...(newBranch ? {
+        new_branch_customer: newBranch.customer, new_branch_name: newBranch.name, new_branch_address: newBranch.address,
+        new_branch_contact: newBranch.contact, new_branch_phone: newBranch.phone,
+      } : {}),
+    },
   });
 }
 

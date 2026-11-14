@@ -65,7 +65,7 @@ class TaskCreateForm(forms.ModelForm):
     )
 
     PLAIN_FIELD_NAMES = [
-        'required_skill', 'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
+        'about', 'done_by', 'subcontractor_name', 'subcontractor_contact', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
         'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor', 'lead',
     ]
 
@@ -79,7 +79,7 @@ class TaskCreateForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'site', 'task_type', 'brand', 'required_skill', 'min_level',
+            'site', 'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
             'description', 'priority', 'source', 'is_warranty', 'billing_type',
             'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
         ]
@@ -92,6 +92,8 @@ class TaskCreateForm(forms.ModelForm):
     def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, owner_required=False,
                  can_add_site=False, **kwargs):
         super().__init__(*args, **kwargs)
+        for name in ('about', 'done_by'):
+            self.fields[name].required = False
         self.is_admin = is_admin
         # "+ Add new site": whoever creates customers and branches (people.permissions.can_create_customers).
         self.can_add_site = can_add_site
@@ -108,7 +110,6 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['site'].required = False
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
         if can_add_site:
             self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
         else:
@@ -132,7 +133,6 @@ class TaskCreateForm(forms.ModelForm):
         # PositiveSmallIntegerField has no upper bound of its own, so without
         # this a nonsense value here is a clean model concern, not just a
         # display one.
-        self.fields['min_level'].validators.append(MaxValueValidator(4))
         # No job realistically runs longer than a couple of days unattended;
         # caught here so a typo (20 instead of 2.0) is a clean form error,
         # not a silently absurd estimated finish time.
@@ -213,6 +213,21 @@ class TaskCreateForm(forms.ModelForm):
     def plain_fields(self):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
         return [self[name] for name in self.PLAIN_FIELD_NAMES if name in self.fields]
+
+    def clean_about(self):
+        """Not sent (an older screen): the task keeps what it's about."""
+        return self.cleaned_data.get('about') or self.instance.about or Task.About.MACHINES
+
+    def clean_done_by(self):
+        """Not sent: the task keeps who does it."""
+        return self.cleaned_data.get('done_by') or self.instance.done_by or Task.DoneBy.OUR_TEAM
+
+    def clean_subcontractor_name(self):
+        """A subcontractor's work names the subcontractor."""
+        name = (self.cleaned_data.get('subcontractor_name') or '').strip()
+        if self.data.get(self.add_prefix('done_by')) == Task.DoneBy.SUBCONTRACTOR and not name:
+            raise forms.ValidationError(_('Please name the subcontractor.'))
+        return name
 
     def clean(self):
         cleaned = super().clean()
@@ -311,7 +326,8 @@ class TaskEditForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'task_type', 'brand', 'required_skill', 'min_level', 'description', 'reported_serial_numbers',
+            'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
+            'description', 'reported_serial_numbers',
             'priority', 'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
             'responsible_supervisor', 'pak_reference_number', 'shipping_company', 'shipping_tracking_number',
             'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
@@ -329,11 +345,11 @@ class TaskEditForm(forms.ModelForm):
 
     def __init__(self, *args, country, is_manager, **kwargs):
         super().__init__(*args, **kwargs)
+        for name in ('about', 'done_by'):
+            self.fields[name].required = False
         self.is_manager = is_manager
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
-        self.fields['min_level'].validators.append(MaxValueValidator(4))
         self.fields['estimated_hours'].validators.append(MinValueValidator(0))
         self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
         self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
@@ -370,7 +386,7 @@ class TaskEditForm(forms.ModelForm):
             # all the way past the shipment/document fields, nowhere near
             # scheduled_for itself. Move them to sit right next to it.
             self.order_fields([
-                'task_type', 'brand', 'required_skill', 'min_level', 'description',
+                'task_type', 'brand', 'description',
                 'reported_serial_numbers', 'priority',
                 'source', 'is_warranty', 'billing_type', 'promised_at',
                 'schedule_mode', 'scheduled_for', 'scheduled_date_only',
@@ -424,6 +440,21 @@ class TaskEditForm(forms.ModelForm):
         """A task always has its owner (docs/access_rules.md): handing it over picks
         someone else; leaving it empty keeps the one it has."""
         return self.cleaned_data.get('responsible_supervisor') or self.instance.responsible_supervisor
+
+    def clean_about(self):
+        """Not sent (an older screen): the task keeps what it's about."""
+        return self.cleaned_data.get('about') or self.instance.about or Task.About.MACHINES
+
+    def clean_done_by(self):
+        """Not sent: the task keeps who does it."""
+        return self.cleaned_data.get('done_by') or self.instance.done_by or Task.DoneBy.OUR_TEAM
+
+    def clean_subcontractor_name(self):
+        """A subcontractor's work names the subcontractor."""
+        name = (self.cleaned_data.get('subcontractor_name') or '').strip()
+        if self.data.get(self.add_prefix('done_by')) == Task.DoneBy.SUBCONTRACTOR and not name:
+            raise forms.ValidationError(_('Please name the subcontractor.'))
+        return name
 
     def clean(self):
         cleaned = super().clean()
@@ -1825,7 +1856,17 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
     site's (or customer's) own contact.
     """
 
-    site = SiteChoiceField(queryset=Site.objects.none(), label=_('Customer and site'))
+    about = forms.ChoiceField(label=_('What is it about?'), choices=CustomerTicket.About.choices,
+                              initial=CustomerTicket.About.MACHINES, required=False)
+
+    def clean_about(self):
+        """Not said: machines, the usual."""
+        return self.cleaned_data.get('about') or CustomerTicket.About.MACHINES
+    site = SiteChoiceField(queryset=Site.objects.none(), label=_('Customer and site'), required=False)
+    # A new branch of an existing customer: the customer, and the branch typed below.
+    new_branch_customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(), required=False, label=_('Customer (for a new branch)'),
+    )
     source = forms.ChoiceField(
         label=_('How the customer reached us'),
         choices=[
@@ -1837,9 +1878,14 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
     class Meta:
         model = CustomerTicket
         fields = [
-            'site', 'source', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
+            'about', 'site', 'new_branch_customer', 'company_name', 'site_description', 'site_address',
+            'source', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
             'serial_numbers', 'description', 'notes',
         ]
+        labels = {
+            'company_name': _('Company (not a customer yet)'), 'site_description': _('Branch name'),
+            'site_address': _('Branch address'),
+        }
         widgets = {
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
@@ -1859,6 +1905,32 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
             self.fields[name].help_text = _("Leave blank to use the site's own contact details.")
         # On a phone call the serials often aren't known yet.
         self.fields['serial_numbers'].required = False
+        self.fields['new_branch_customer'].queryset = Customer.objects.filter(
+            country=country, is_active=True, is_internal=False,
+        ).order_by('name')
+        for name in ('company_name', 'site_description', 'site_address'):
+            self.fields[name].required = False
+        self.fields['company_name'].help_text = _(
+            'Only for a caller who is not a customer yet: a manager creates the customer from the request.',
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        about = cleaned.get('about')
+        site, customer = cleaned.get('site'), cleaned.get('new_branch_customer')
+        company = (cleaned.get('company_name') or '').strip()
+        if about == CustomerTicket.About.NEW_BRANCH:
+            # A branch that doesn't exist yet: whose, its name and address.
+            if not (customer or company):
+                self.add_error('new_branch_customer', _('Choose the customer, or type the company if it is new.'))
+            if not (cleaned.get('site_description') or '').strip():
+                self.add_error('site_description', _('Please enter the new branch\'s name.'))
+            if not (cleaned.get('site_address') or '').strip():
+                self.add_error('site_address', _('Please enter the new branch\'s address.'))
+            cleaned['site'] = None
+        elif not site and not company:
+            self.add_error('site', _('Choose the customer and site, or type the company if it is not a customer yet.'))
+        return cleaned
 
 
 class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):

@@ -5,6 +5,7 @@ wrong followed up (docs/database_design_v2.md: task_product). Shared by the
 website's pages and the app's API.
 """
 from collections import defaultdict
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.forms import formset_factory
 from django.utils import timezone, translation
@@ -165,6 +166,66 @@ def next_step_sites(viewer, step):
     return sites.order_by('customer__country__name', 'customer__name', 'name')
 
 
+def next_step_customers(viewer):
+    """The customers a new branch can be added to while sending machines on: active,
+    not our own, in the countries this person reaches."""
+    from customers.models import Customer
+    customers = Customer.objects.filter(is_active=True, is_internal=False).select_related('country')
+    if not viewer.reaches_all_countries:
+        customers = customers.filter(country=viewer.country)
+    return customers.order_by('country__name', 'name')
+
+
+def new_branch_for_next_step(request, viewer, data):
+    """(the new branch, an error, or (None, '') when none was asked for): "+ New branch"
+    while sending machines on to an installation — for whoever creates branches
+    (people.permissions.can_create_customers). The customer is told."""
+    from people.permissions import can_create_customers
+
+    name = (data.get('new_branch_name') or '').strip()
+    if not name:
+        return None, ''
+    if not can_create_customers(viewer):
+        raise PermissionDenied
+    customer = next_step_customers(viewer).filter(pk=data.get('new_branch_customer') or 0).first()
+    if customer is None:
+        return None, _('Choose the customer for the new branch.')
+    address = (data.get('new_branch_address') or '').strip()
+    if not address:
+        return None, _('Please enter the new branch\'s address.')
+    if customer.sites.filter(name__iexact=name).exists():
+        return None, _('%(customer)s already has a branch called %(name)s: choose it from the list.') % {
+            'customer': customer.name, 'name': name,
+        }
+    site = Site.objects.create(
+        customer=customer, name=name[:150], address=address,
+        contact_name=(data.get('new_branch_contact') or '').strip()[:150],
+        contact_phone=(data.get('new_branch_phone') or '').strip()[:30],
+    )
+    tell_customer_new_branch(request, site)
+    return site, ''
+
+
+def tell_customer_new_branch(request, site):
+    """A branch our staff set up (not one the customer asked for): a short email, in
+    English and Arabic — they can follow it in the portal (owner, 13 Nov 2026)."""
+    from tasks import customer_emails as emails
+    customer = site.customer
+    emails.send(
+        country=customer.country, recipient=customer.contact_email, contact=customer.contact_name or customer.name,
+        title=emails.NEW_BRANCH_TITLE, paragraphs=[emails.NEW_BRANCH_BODY, emails.NEW_BRANCH_NEXT],
+        values={'site': site.name}, request=request,
+        link=_portal_link(request), button=emails.PORTAL_BUTTON,
+    )
+
+
+def _portal_link(request):
+    from django.urls import reverse
+
+    from spots.hosts import portal_url
+    return portal_url(request, reverse('customers:portal_home'))
+
+
 def next_step_supervisors(viewer):
     """Who can own a next step: anyone who can own a task (an active
     supervisor or manager, never a technician — TaskForm's pool), in the
@@ -205,6 +266,28 @@ def create_next_step(request, task, task_type, site, lines, supervisor):
             'number': task.task_number, 'count': sum(line.quantity for line in lines),
         },
     )
+    # One installation per branch: machines sent to a branch whose installation is still
+    # open join it (its customer's request follows the one task), not a second one.
+    if task_type.category == TaskType.Category.INSTALLATION:
+        open_one = Task.objects.filter(site=site, task_type__category=TaskType.Category.INSTALLATION).exclude(
+            status__in=[Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED,
+                        Task.Status.PENDING_SUPERVISOR_REVIEW],
+        ).order_by('pk').first()
+        if open_one is not None:
+            with transaction.atomic():
+                for line in lines:
+                    for _unit in range(line.quantity):
+                        TaskProduct.objects.create(
+                            task=open_one, product_code=line.product_code, serial_number=line.serial_number,
+                            quantity=1, frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim,
+                            source_line=line, brand=line.brand,
+                        )
+                TaskEvent.objects.create(
+                    task=open_one, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=request.user,
+                    note=_('%(count)s more machines from %(number)s.') % {
+                        'count': sum(line.quantity for line in lines), 'number': task.task_number},
+                )
+            return open_one
     with transaction.atomic():
         _save_new_task(next_task)
         # A received line is code × quantity: one line per machine from here on.

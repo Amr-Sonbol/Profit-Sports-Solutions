@@ -9,7 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction, uploadFileTo,
+  approveTaskReport, assignTask, type NewBranch, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction, uploadFileTo,
 } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
 import { ShipmentSteps } from '@/components/shipment-steps';
@@ -74,6 +74,8 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   const [site, setSite] = useState('');
   const [supervisor, setSupervisor] = useState('');
   const [chosen, setChosen] = useState<number[]>(nextStep.lines.map((line) => line.id));
+  // "+ New branch" (an installation only; whoever creates branches gets customers to choose from).
+  const [newBranch, setNewBranch] = useState<NewBranch | null>(null);
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const sites = nextStep.steps.find((option) => option.value === step)?.sites ?? [];
@@ -82,7 +84,11 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   const supervisors = (nextStep.supervisors ?? []).filter((person) => person.country === siteCountry);
 
   const create = async () => {
-    if (!site) {
+    if (newBranch && !(newBranch.customer && newBranch.name.trim() && newBranch.address.trim())) {
+      setError('Choose the customer, and enter the new branch\'s name and address.');
+      return;
+    }
+    if (!site && !newBranch) {
       setError('Choose where the next step is.');
       return;
     }
@@ -92,7 +98,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     setIsBusy(true);
     setError('');
     try {
-      const created = await createNextStep(taskId, step, site, chosen, supervisor);
+      const created = await createNextStep(taskId, step, site, chosen, supervisor, newBranch ?? undefined);
       alert('Sent on', t('{number}, with {count} machines.', { number: created.task_number, count: chosen.length }));
       onCreated(created.id);
     } catch (err) {
@@ -129,6 +135,31 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
           setSupervisor('');
         }}
       />
+      {step === 'installation' && (nextStep.customers ?? []).length ? (
+        newBranch ? (
+          <ThemedView style={styles.manageBox}>
+            <ThemedText type="smallBold">New branch</ThemedText>
+            <ChoicePicker
+              label="Customer" choices={nextStep.customers ?? []} value={newBranch.customer}
+              onChange={(value) => setNewBranch({ ...newBranch, customer: value })}
+            />
+            {(['name', 'address', 'contact', 'phone'] as const).map((key) => (
+              <TextInput
+                key={key} value={newBranch[key]} onChangeText={(value) => setNewBranch({ ...newBranch, [key]: value })}
+                placeholder={t(BRANCH_FIELDS[key])} placeholderTextColor={theme.textSecondary}
+                style={{ borderWidth: 1, borderRadius: 8, padding: 10, color: theme.text, borderColor: theme.backgroundSelected }}
+              />
+            ))}
+            <ThemedText type="small" themeColor="textSecondary">The machines go to this new branch; the customer is told by email.</ThemedText>
+            <SecondaryButton label="Cancel the new branch" onPress={() => setNewBranch(null)} />
+          </ThemedView>
+        ) : (
+          <SecondaryButton
+            label="+ New branch"
+            onPress={() => setNewBranch({ customer: '', name: '', address: '', contact: '', phone: '' })}
+          />
+        )
+      ) : null}
       {site && nextStep.supervisors ? (
         <>
           <ChoicePicker
@@ -158,6 +189,9 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     </ThemedView>
   );
 }
+
+// The new branch's fields, as their placeholders say them.
+const BRANCH_FIELDS = { name: 'Branch name', address: 'Address', contact: 'Contact name', phone: 'Contact phone' } as const;
 
 /** A file's own name from its address: ".../ticket_attachments/3f9c/IMG_0001.jpg?x" → "IMG_0001.jpg". */
 function fileName(url: string): string {
@@ -402,9 +436,12 @@ export default function TeamTaskScreen() {
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
             {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
+            {task.about_display ? (
+              <Row label="About" value={task.done_by === 'subcontractor'
+                ? `${task.about_display} · ${task.subcontractor_name}` : task.about_display} />
+            ) : null}
             {task.created_by ? <Row label="Created by" value={creatorText(task.created_by)} /> : null}
             {task.last_changed ? <Row label="Last changed by" value={creatorText(task.last_changed)} /> : null}
-            {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
             ) : null}
@@ -558,16 +595,10 @@ export default function TeamTaskScreen() {
                 >
                   <ThemedText style={!candidate.is_available ? styles.unavailable : undefined}>
                     {candidate.full_name}
-                    {candidate.skill_level != null ? ` — ${t('level {level}', { level: candidate.skill_level ?? '' })}` : ''}
                     {candidate.visiting_from ? ` (${t('visiting from {country}', { country: candidate.visiting_from ?? '' })})` : ''}
                   </ThemedText>
-                  <ThemedText themeColor="textSecondary" type="small">
-                    {!candidate.is_available
-                      ? 'Unavailable'
-                      : candidate.next_task_number
-                        ? `Next: ${candidate.next_task_number}${candidate.next_task_at
-                          ? ` ${t('on {date}', { date: new Date(candidate.next_task_at).toLocaleString(locale()) })}` : ''}`
-                        : 'No bookings'}
+                  <ThemedText type="small" style={{ color: DAY_DOT[candidate.day_state] }}>
+                    {'● '}<ThemedText themeColor="textSecondary" type="small">{candidate.day_text}</ThemedText>
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -860,6 +891,11 @@ function creatorText(person: { name: string; role: string; at: string | null }):
   })}` : '';
   return `${person.name}${person.role ? ` (${person.role})` : ''}${when}`;
 }
+
+// A person's day at a glance: the dot's colour (the words come from the server, translated).
+const DAY_DOT: Record<string, string> = {
+  free: '#2E7D32', busy: '#B26A00', clash: '#C62828', off: '#C62828', no_day: '#9E9E9E',
+};
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

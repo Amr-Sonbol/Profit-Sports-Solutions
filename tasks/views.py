@@ -345,21 +345,6 @@ def _assignment_candidates(task, exclude_ids):
     ).exclude(pk__in=exclude_ids).select_related('country').order_by('full_name')
 
 
-def _candidates_with_skill_level(candidates_qs, task):
-    """Materialize candidates, annotating each with its level for the task's required skill."""
-    candidates = list(candidates_qs)
-    levels = {}
-    if task.required_skill_id:
-        levels = dict(
-            TechnicianSkill.objects.filter(
-                skill_id=task.required_skill_id, technician__in=candidates,
-            ).values_list('technician_id', 'level'),
-        )
-    for technician in candidates:
-        technician.skill_level = levels.get(technician.pk)
-    return candidates
-
-
 # A job with no estimated hours still takes up time: an hour, for clashes.
 DEFAULT_JOB_HOURS = 1
 
@@ -372,26 +357,33 @@ def _job_window(task):
     return task.scheduled_for, task.estimated_finish or task.scheduled_for + timedelta(hours=DEFAULT_JOB_HOURS)
 
 
-def _with_day_load(technicians, task):
-    """Annotate each technician with their other jobs on `task`'s day — no
-    limit, just so a supervisor sees how busy each person is:
-    `day_jobs` (their tasks that day, this one excluded, never cancelled),
-    `day_hours` (the estimates that are known) and `clashes` (those whose
-    time overlaps this task's). Nothing when the task has no day yet.
+def _with_day_load(technicians, task=None, day=None):
+    """Annotate each person with their jobs on a day — `task`'s day, or `day`
+    (New task's team panel: today) — so whoever plans sees at once who's free:
+    `day_jobs` (that day's tasks, `task` excluded, never cancelled), `day_hours`
+    (the known estimates), `clashes` (those overlapping `task`'s time),
+    `busy_from`/`busy_to` (the hours their timed jobs take) and `day_state`:
+    'off' (unavailable), 'clash', 'busy', 'free' — or 'no_day' before a day is
+    set. Sorted best first: free, then least busy; clashing and unavailable last.
     """
     technicians = list(technicians)
-    day = _calendar_day(task)
+    day = day or (_calendar_day(task) if task is not None else None)
     for technician in technicians:
         technician.day_jobs, technician.day_hours, technician.clashes = [], 0, []
+        technician.busy_from = technician.busy_to = None
     if day is None:
+        for technician in technicians:
+            technician.day_state = 'off' if not technician.is_available else 'no_day'
         return technicians
     by_technician = {technician.pk: technician for technician in technicians}
     assignments = TaskAssignment.objects.filter(
         technician__in=by_technician, is_active=True,
-    ).exclude(task=task).exclude(task__status=Task.Status.CANCELLED).filter(
+    ).exclude(task__status=Task.Status.CANCELLED).filter(
         Q(task__scheduled_for__date=day) | Q(task__scheduled_for__isnull=True, task__scheduled_date=day),
     ).select_related('task')
-    window = _job_window(task)
+    if task is not None:
+        assignments = assignments.exclude(task=task)
+    window = _job_window(task) if task is not None else None
     for assignment in assignments:
         technician, job = by_technician[assignment.technician_id], assignment.task
         technician.day_jobs.append(job)
@@ -402,7 +394,36 @@ def _with_day_load(technicians, task):
     for technician in technicians:
         technician.day_jobs.sort(key=_time_of_day)
         technician.clashes.sort(key=_time_of_day)
+        windows = [_job_window(job) for job in technician.day_jobs if _job_window(job)]
+        if windows:
+            technician.busy_from = timezone.localtime(min(start for start, _end in windows))
+            technician.busy_to = timezone.localtime(max(end for _start, end in windows))
+        technician.day_state = (
+            'off' if not technician.is_available else 'clash' if technician.clashes
+            else 'busy' if technician.day_jobs else 'free'
+        )
+    rank = {'free': 0, 'busy': 1, 'no_day': 1, 'clash': 2, 'off': 3}
+    technicians.sort(key=lambda t: (rank[t.day_state], len(t.day_jobs), t.full_name))
     return technicians
+
+
+def day_text(person):
+    """A person's day in words, as tasks/_day_state.html says it (for the app)."""
+    from django.utils.translation import ngettext
+    if person.day_state == 'off':
+        return f"{_('Unavailable')} — {person.get_unavailable_reason_display()}"
+    if person.day_state == 'no_day':
+        return _('Choose a day to see')
+    if person.day_state == 'free':
+        return _('No jobs that day')
+    if person.day_state == 'clash':
+        return ', '.join(_('Busy at %(time)s') % {'time': formats.time_format(timezone.localtime(job.scheduled_for))}
+                         + f' — {job.task_number}' for job in person.clashes)
+    text = ngettext('%(count)s job', '%(count)s jobs', len(person.day_jobs)) % {'count': len(person.day_jobs)}
+    if person.busy_from:
+        text += ' · ' + _('busy %(start)s–%(end)s') % {
+            'start': formats.time_format(person.busy_from), 'end': formats.time_format(person.busy_to)}
+    return text
 
 
 def _clash_warning(technician, task):
@@ -910,6 +931,8 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     priority = params.get('priority', '')
     if priority in Task.Priority.values:
         tasks = tasks.filter(priority=priority)
+    if params.get('about', '') in Task.About.values:
+        tasks = tasks.filter(about=params['about'])
     if params.get('lead') == 'none':
         tasks = tasks.exclude(HAS_ACTIVE_LEAD)
     if params.get('scheduled') == 'none':
@@ -1569,9 +1592,19 @@ def _action_create_next_step(request, task, technician, forms):
     step = request.POST.get('step')
     if step not in NEXT_STEPS.get(equipment_step(task), ()):
         raise Http404
-    site = get_object_or_404(next_step_sites(viewer, step), pk=request.POST.get('site'))
-    task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
     chosen = [line for line in lines_to_carry(task) if str(line.pk) in request.POST.getlist('lines')]
+    task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
+    if task_type is None or not chosen:
+        messages.error(request, _('Choose at least one machine to carry to the next step.'))
+        return _back_to(task)
+    # "+ New branch": made here, so whoever sends the machines on is never stuck (3A).
+    site, error = (None, '')
+    if step == TaskType.Category.INSTALLATION:
+        site, error = new_branch_for_next_step(request, viewer, request.POST)
+    if error:
+        messages.error(request, error)
+        return _back_to(task)
+    site = site or get_object_or_404(next_step_sites(viewer, step), pk=request.POST.get('site'))
     if task_type is None or not chosen:
         messages.error(request, _('Choose at least one machine to carry to the next step.'))
         return _back_to(task)
@@ -1688,7 +1721,7 @@ def task_detail(request, pk):
 
     task = _scoped_or_404(
         Task.objects.select_related(
-            'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
+            'site__customer__country', 'task_type', 'brand', 'created_by', 'report',
             'responsible_supervisor',
         ).prefetch_related('report__parts_used'),
         pk, requesting_technician, get_active_country(request), 'site__customer__country',
@@ -1790,6 +1823,10 @@ def task_detail(request, pk):
         # Who supervises it there, by country (next_step_supervisor).
         'next_step_supervisors': (
             next_step_supervisors(requesting_technician) if requesting_technician.is_manager_tier else []
+        ),
+        # "+ New branch" while sending on: whoever creates branches, among the customers they reach.
+        'next_step_customers': (
+            next_step_customers(requesting_technician) if can_create_customers(requesting_technician) else []
         ),
         'report': getattr(task, 'report', None),
         'report_changed_after_signing': _report_changed_after_signing(task),
@@ -2114,6 +2151,7 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
                 contact_phone=cleaned.get('new_site_contact_phone', '').strip(),
                 access_notes=cleaned.get('new_site_access_notes', '').strip(),
             )
+            tell_customer_new_branch(request, site)  # set up by us: the customer is told
 
         brand = cleaned.get('brand')
         if not brand and cleaned.get('new_brand_name'):
@@ -2140,6 +2178,8 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
         if task_type is not None and task_type.category == TaskType.Category.PART_SHIPMENT and selected_machines:
             machine_decision = TicketMachine.Decision.SHIP_PART
         task.task_type = task_type
+        if ticket is not None and ticket.about in Task.About.values:
+            task.about = ticket.about  # what the customer said it's about
         task.created_by = request.user
         # One owner from the start (docs/access_rules.md): the supervisor it's given to, else whoever created it.
         if not task.responsible_supervisor_id and creator.role != Technician.Role.TECHNICIAN:
@@ -2284,11 +2324,8 @@ def task_create(request):
     # So whoever's creating this can see everyone's upcoming schedule
     # right here and pick a date that doesn't collide — no separate trip
     # to the week board just to check.
-    team_schedule = _supervisors_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=country).exclude(role=Technician.Role.TECHNICIAN),
-    ) + _technicians_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=country, role=Technician.Role.TECHNICIAN),
-    )
+    # Each person's day today, best first (the same words as choosing the team on Assign).
+    team_schedule = _with_day_load(Technician.objects.filter(is_active=True, country=country), day=timezone.localdate())
     # Everyone's next booking shows; only those the creator oversees link to their schedule.
     _mark_openable(team_schedule, requesting_technician)
 
@@ -2763,6 +2800,36 @@ def _request_create_branch(request, ticket, technician, access, forms):
     return _back_to_request(ticket)
 
 
+def _request_create_customer(request, ticket, technician, access, forms):
+    """A request from a company that isn't a customer yet: the customer (and its branch,
+    when one was given) made from what was typed — or, one of that name already in the
+    country, that one. For whoever creates customers and branches."""
+    if ticket.customer_id or not ticket.company_name.strip():
+        return None
+    if not can_create_customers(technician):
+        raise PermissionDenied
+    name = ticket.company_name.strip()
+    customer = Customer.objects.filter(country=ticket.country, name__iexact=name, is_internal=False).first()
+    if customer is None:
+        customer = Customer.objects.create(
+            country=ticket.country, name=name[:150], segment=Customer.Segment.OTHER,
+            contact_name=ticket.contact_name, contact_phone=ticket.contact_phone, contact_email=ticket.contact_email,
+        )
+        messages.success(request, _('Customer %(name)s created.') % {'name': customer.name})
+    else:
+        messages.info(request, _('%(name)s is already a customer: linked to it.') % {'name': customer.name})
+    ticket.customer = customer
+    ticket.save(update_fields=['customer'])
+    if ticket.site_description.strip() and ticket.site_address.strip():
+        site = customer.sites.filter(name__iexact=ticket.site_description.strip()).first() or Site.objects.create(
+            customer=customer, name=ticket.site_description.strip()[:150], address=ticket.site_address,
+            contact_name=ticket.contact_name, contact_phone=ticket.contact_phone, contact_email=ticket.contact_email,
+        )
+        ticket.site = site
+        ticket.save(update_fields=['site'])
+    return _back_to_request(ticket)
+
+
 def _request_escalate(request, ticket, technician, access, forms):
     if not access['can_escalate']:
         return None
@@ -2900,6 +2967,7 @@ REQUEST_PAGE_ACTIONS = {
     'machines': (_request_machines, True),
     'add_customer_photos': (_request_add_customer_photos, True),
     'create_branch': (_request_create_branch, True),
+    'create_customer': (_request_create_customer, True),
     'escalate': (_request_escalate, True),
     'add_internal_note': (_request_add_internal_note, True),
     'add_reply': (_request_add_reply, True),
@@ -3141,9 +3209,7 @@ def task_assign(request, pk):
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'candidates': _mark_openable(_with_day_load(
-            _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)), task,
-        ), requesting_technician),
+        'candidates': _mark_openable(_with_day_load(candidates_qs, task), requesting_technician),
         'task_day': _calendar_day(task),
         'locked': locked,
         'manager_override': manager_override,
@@ -6029,7 +6095,7 @@ def my_task_detail(request, pk):
 
     assignment = get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer', 'task__task_type', 'task__brand',
         ),
         task__pk=pk, technician=technician, is_active=True,
     )
@@ -6829,16 +6895,29 @@ def ticket_open(request):
         ticket.country = country
         ticket.opened_by = request.user
         ticket.submitted_at = now
-        site = form.cleaned_data['site']
-        ticket.customer = site.customer
-        ticket.site = site
-        ticket.company_name = site.customer.name
-        ticket.customer_code = site.customer.code
-        ticket.site_description = site.name
-        ticket.site_address = site.address
-        ticket.contact_name = ticket.contact_name or site.effective_contact_name
-        ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
-        ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
+        site, branch_customer = form.cleaned_data['site'], form.cleaned_data.get('new_branch_customer')
+        ticket.about = form.cleaned_data['about']
+        if site is not None:
+            # A customer's branch: everything from it.
+            ticket.customer = site.customer
+            ticket.site = site
+            ticket.company_name = site.customer.name
+            ticket.customer_code = site.customer.code
+            ticket.site_description = site.name
+            ticket.site_address = site.address
+            ticket.contact_name = ticket.contact_name or site.effective_contact_name
+            ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
+            ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
+        elif branch_customer is not None:
+            # A new branch of a customer: created from the request ("Create the branch").
+            ticket.customer = branch_customer
+            ticket.company_name = branch_customer.name
+            ticket.customer_code = branch_customer.code
+            ticket.contact_name = ticket.contact_name or branch_customer.contact_name
+            ticket.contact_phone = ticket.contact_phone or branch_customer.contact_phone
+            ticket.contact_email = ticket.contact_email or branch_customer.contact_email or ''
+        # Else a caller who isn't a customer yet: their company typed in; the customer is created
+        # from the request ("Create the customer").
         with transaction.atomic():
             save_new_ticket(ticket)
             for uploaded_file in form.cleaned_data['attachments']:
@@ -7083,7 +7162,7 @@ def internal_ticket(request, pk):
 
 # Moved to tasks/equipment.py; still importable from here.
 from .equipment import (  # noqa: E402,F401
-    BeyondStock, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
+    BeyondStock, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
 )
 
 

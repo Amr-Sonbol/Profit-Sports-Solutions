@@ -73,7 +73,7 @@ class TaskDetailTests(TaskTestCase):
         super().setUp()
         self.task = Task.objects.create(
             task_number='UAE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
-            required_skill=self.skill, min_level=2, description='Belt making noise',
+            description='Belt making noise',
             priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
             reported_at=timezone.now(), promised_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
@@ -449,7 +449,7 @@ class TaskEditTests(TaskTestCase):
         super().setUp()
         self.task = Task.objects.create(
             task_number='UAE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
-            required_skill=self.skill, min_level=2, description='Belt making noise',
+            description='Belt making noise',
             priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
             reported_at=timezone.now(), promised_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
@@ -604,12 +604,6 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual(self.task.scheduled_date, date(2026, 9, 21))
         self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists())
         self.assertEqual(len(mail.outbox), 0)
-
-    def test_min_level_above_scale_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, self._payload(min_level='5'))
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['form'].errors.get('min_level'))
 
     def test_rescheduling_does_not_auto_notify_when_setting_is_off(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -1839,25 +1833,23 @@ class TaskCreateTests(TaskTestCase):
         self.assertIn(task.task_number, mail.outbox[0].subject)
         self.assertEqual(mail.outbox[0].to, [manager_user.email])
 
-    def test_team_schedule_shows_who_is_already_booked(self):
+    def test_the_team_panel_shows_each_persons_day_today(self):
+        today_10 = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
         busy_task = Task.objects.create(
             task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
-            scheduled_for=timezone.now() + timedelta(days=1),
+            scheduled_for=today_10,
         )
         TaskAssignment.objects.create(
             task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
             assigned_at=timezone.now(), is_active=True,
         )
-
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/new/')
-
-        team = {p.pk: p for p in response.context['team_schedule']}
-        self.assertEqual(team[self.technician.pk].next_scheduled_task, busy_task)
+        team = {p.pk: p.day_state for p in response.context['team_schedule']}
         supervisor = Technician.objects.get(user=self.supervisor_user)
-        self.assertIsNone(team[supervisor.pk].next_scheduled_task)
+        self.assertEqual((team[self.technician.pk], team[supervisor.pk]), ('busy', 'free'))
 
     def test_manager_creating_a_task_with_a_schedule_locks_it(self):
         manager_user = User.objects.create_user('manager1', password='pass12345')
@@ -2090,15 +2082,6 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Task.objects.count(), 0)
         self.assertTrue(response.context['form'].errors.get('new_task_type_code'))
-
-    def test_min_level_above_the_skill_scale_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post('/tasks/new/', self._base_new_task_payload(
-            site=self.site.pk, min_level='5',
-        ))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Task.objects.count(), 0)
-        self.assertTrue(response.context['form'].errors.get('min_level'))
 
     def test_estimated_hours_over_48_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -3063,7 +3046,7 @@ class TaskAssignTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.task = Task.objects.create(
-            task_number='AE-0001', site=self.site, required_skill=self.skill,
+            task_number='AE-0001', site=self.site,
             priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
             billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.NEW,
@@ -3156,24 +3139,32 @@ class TaskAssignTests(TaskTestCase):
         event = self.task.events.get()
         self.assertEqual(event.event_type, TaskEvent.EventType.ASSIGNED)
 
-    def test_candidates_show_their_next_scheduled_task(self):
+    def test_each_candidate_shows_their_day_in_words_best_first(self):
+        # The task is tomorrow at 15:00; the technician already works 9:00-11:00 that day.
+        tomorrow = timezone.localtime() + timedelta(days=1)
+        self.task.scheduled_for = tomorrow.replace(hour=15, minute=0, second=0, microsecond=0)
+        self.task.save(update_fields=['scheduled_for'])
         busy_task = Task.objects.create(
             task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
-            scheduled_for=timezone.now() + timedelta(days=1),
+            scheduled_for=tomorrow.replace(hour=9, minute=0, second=0, microsecond=0), estimated_hours=2,
         )
         TaskAssignment.objects.create(
             task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
             assigned_at=timezone.now(), is_active=True,
         )
-
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
-
-        candidates = {c.pk: c for c in response.context['candidates']}
-        self.assertEqual(candidates[self.technician.pk].next_scheduled_task, busy_task)
-        self.assertIsNone(candidates[self.helper.pk].next_scheduled_task)
+        candidates = list(response.context['candidates'])
+        states = {c.pk: c.day_state for c in candidates}
+        self.assertEqual((states[self.technician.pk], states[self.helper.pk]), ('busy', 'free'))
+        busy = next(c for c in candidates if c.pk == self.technician.pk)
+        # Busy from its start to its estimated finish (shown in the country's time).
+        self.assertEqual((busy.busy_from, busy.busy_to), (busy_task.scheduled_for, busy_task.scheduled_for + timedelta(hours=2)))
+        # Free people first.
+        self.assertLess([c.pk for c in candidates].index(self.helper.pk), [c.pk for c in candidates].index(self.technician.pk))
+        self.assertContains(response, 'No jobs that day')
 
     def test_replace_lead_without_reason_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
