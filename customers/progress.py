@@ -126,10 +126,15 @@ def ticket_progress(ticket):
     if ticket.status == CustomerTicket.Status.NEW:
         return RECEIVED
     if ticket.status == CustomerTicket.Status.CONVERTED:
-        # Its visit cancelled: the request isn't settled, the team arranges it again.
-        if not ticket.task_id or ticket.task.status == Task.Status.CANCELLED:
+        # Split over several visits (one per machine, say): the least advanced one — a request
+        # isn't "Done" while one of its visits is still to come. A machine still waiting: arranging.
+        visits = {machine.task for machine in ticket.machines.all() if machine.task_id}
+        if ticket.task_id:
+            visits.add(ticket.task)
+        visits = [visit for visit in visits if visit.status != Task.Status.CANCELLED]
+        if not visits or any(not machine.decision for machine in ticket.machines.all()):
             return BEING_ARRANGED
-        return visit_progress(ticket.task)
+        return min((visit_progress(visit) for visit in visits), key=_step_index)
     if ticket.status == CustomerTicket.Status.CLOSED:
         return RESOLVED
     return CLOSED
@@ -148,6 +153,13 @@ STEP_OF = (
     (RECEIVED, 0), (BEING_ARRANGED, 0), (WAITING_FOR_PARTS, 0), (RESCHEDULING, 0), (VISIT_BOOKED, 1), (ON_THE_WAY, 2), (ON_SITE, 3),
     (DONE, 4), (RESOLVED, 4),
 )
+
+
+def _step_index(progress):
+    """How far a progress word is along the way to a visit (STEP_OF; booked is 1)."""
+    if is_booked(progress):
+        return 1
+    return next((index for step, index in STEP_OF if step is progress), 0)
 
 
 def progress_steps(progress):

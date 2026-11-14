@@ -132,7 +132,7 @@ A managed list the office maintains. Never free text — free text becomes "repa
 | code | varchar | stable key, never changes |
 | name | varchar | |
 | name_ar | varchar | |
-| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`). Also `part_shipment` — a spare part sent to the customer instead of a visit (*Part shipments*, under `task_product`); seeded type *Spare Part Shipment* (reference 0032) |
+| category | varchar | `installation`, `maintenance`, or a step of the **equipment chain** before an installation: `receiving` (from the factory, at a warehouse — the warehouse manager; adds to the warehouse's stock) and `loading` (at a warehouse; takes from its stock — see *Warehouse stock* under `task_product`). Seeded types: *Receiving from the Factory*, *Loading* (reference 0029). Receiving, loading and installation tasks share the on-site checklist (`task_product`). Also `part_shipment` — a spare part sent to the customer instead of a visit (*Part shipments*, under `task_product`); seeded type *Spare Part Shipment* (reference 0032). And `consultation` — advice without machines: *Site Consultation / Assessment* and *Online Meeting* (reference 0034/0035; no readiness checks, no machine plans, not the warehouse's) |
 | requires_photos | bool | |
 | requires_signature | bool | |
 | checklist_template | jsonb | the fields the report form shows for this type |
@@ -237,9 +237,10 @@ One physical machine. **Created by the technician at the first service visit, no
 | site_id | FK → site | |
 | brand_id | FK → brand | |
 | model_name | varchar | free text from the plate |
-| serial_no | varchar | nullable |
+| serial_no | varchar | blank when unknown. **One machine per serial and brand** (any case): a database rule (`asset_one_serial_per_brand`, customers 0036; duplicates found before it were marked "(duplicate <id>)", 0035) |
 | code | varchar | blank — the product code (e.g. BENCH-01), on the delivery note and the sticker beside the serial; optional when a technician records a machine, the line's product code for one installed |
 | installed_on | date | nullable |
+| installed_from_id | FK → task_product | nullable, one-to-one — the installation's line it was registered from (`tasks.equipment.register_installed_machines`): each save of that report updates this machine (a corrected serial corrects it, not a second one); customers 0037 |
 | status | varchar | active, faulty, retired, or pending — added by the customer, waiting for confirmation |
 | sticker_photo | file | nullable — the customer's photo of the sticker, when they added it |
 | registered_on_task_id | FK → task | nullable, `SET_NULL` — a machine the technician added during that visit, registered then (status `pending`) so its serial plate, before and after can be taken before the report (`tasks.views.register_task_machine`); the report makes it `active` |

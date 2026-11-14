@@ -82,7 +82,12 @@ def save_planned_lines(task, rows):
 
 
 # Lines that weren't installed and still need to be: the follow-up's.
-STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
+# Still to install at the customer's: missing, left for later, never checked — and damaged or wrong
+# ones, which wait for their replacement (docs/scenarios.md D, C2).
+STILL_TO_INSTALL = (
+    TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING,
+    TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM,
+)
 
 
 # What can follow each step of the equipment chain. A receiving only adds
@@ -141,9 +146,12 @@ def lines_to_carry(task):
     installation yet."""
     if equipment_step(task) not in NEXT_STEPS:
         return []
+    from django.db.models import Exists, OuterRef
+    # Carried on to a next step that's still going: not again. To one that was cancelled: free again.
+    carried = TaskProduct.objects.filter(source_line=OuterRef('pk')).exclude(task__status=Task.Status.CANCELLED)
     return list(task.products.filter(
-        status=TaskProduct.Status.DONE, kind=TaskProduct.Kind.MACHINE, carried_to__isnull=True,
-    ).order_by('pk'))
+        status=TaskProduct.Status.DONE, kind=TaskProduct.Kind.MACHINE,
+    ).exclude(Exists(carried)).order_by('pk'))
 
 
 def next_step_sites(viewer, step):
@@ -214,14 +222,17 @@ def create_next_step(request, task, task_type, site, lines, supervisor):
 
 def still_to_install(task):
     """An installation's machines not installed yet (missing, later, never
-    checked) once its report is in — what a follow-up task is for. Empty
-    once a follow-up was made for them."""
-    if not (is_installation(task) and has_checklist(task)) or getattr(task, 'report', None) is None             or task.next_tasks.exists():
+    checked, damaged or wrong — waiting for a replacement) once its report is in:
+    what a follow-up is for. Each only once: a line already carried to a
+    follow-up that's still going isn't again (a second follow-up takes the rest)."""
+    from django.db.models import Exists, OuterRef
+    if not (is_installation(task) and has_checklist(task)) or getattr(task, 'report', None) is None:
         return []
-    return list(task.products.filter(status__in=STILL_TO_INSTALL))
+    carried = TaskProduct.objects.filter(source_line=OuterRef('pk')).exclude(task__status=Task.Status.CANCELLED)
+    return list(task.products.filter(status__in=STILL_TO_INSTALL).exclude(Exists(carried)))
 
 
-def create_follow_up(task, user):
+def create_follow_up(task, user, request=None):
     """A follow-up installation for exactly the machines still to install:
     same site, type, brand and supervisor, linked as the next step, each
     machine's line carried over (source_line) to check off again. Returns
@@ -243,6 +254,8 @@ def create_follow_up(task, user):
             )
         TaskEvent.objects.create(task=follow_up, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=user)
         TaskNotification.objects.create(task=follow_up, created_at=timezone.now())
+    if request is not None:
+        _send_new_task_email_to_staff(request, follow_up)  # like a next step: the staff are told
     return follow_up
 
 
@@ -429,8 +442,8 @@ def register_installed_machines(task):
     builds its history. One serial per brand: one already on file is that
     machine — at this site nothing to add; at another, it isn't added a second
     time, and is returned as (line, the machine on file) for the manager to
-    check (open_equipment_follow_up). Called when the installation's report is
-    first sent.
+    check (open_equipment_follow_up). Called each time the installation's report is
+    saved — a correction corrects the machines it registered.
     """
     if not is_installation(task):
         return []
@@ -440,14 +453,29 @@ def register_installed_machines(task):
         brand = product.brand or task.brand
         if brand is None:
             continue  # the review says so: no brand, nothing to add
-        on_file = Asset.objects.filter(brand=brand, serial_no__iexact=product.serial_number).select_related('site').first()
+        on_file = (Asset.objects.filter(brand=brand, serial_no__iexact=product.serial_number)
+                   .select_related('site').first())
+        mine = Asset.objects.filter(installed_from=product).first()
+        if mine is not None:
+            # Registered from this line before: a corrected report corrects it (unless the
+            # corrected serial is another machine's — then that's followed up, below).
+            if on_file is None or on_file.pk == mine.pk:
+                changed = (mine.serial_no, mine.brand_id, mine.code) != (product.serial_number, brand.pk, product.product_code)
+                if changed:
+                    mine.serial_no, mine.brand, mine.code = product.serial_number, brand, product.product_code
+                    mine.model_name = mine.model_name or product.product_code
+                    mine.save()
+                continue
         if on_file is None:
             Asset.objects.create(
                 site=task.site, brand=brand, model_name=product.product_code, code=product.product_code,
-                serial_no=product.serial_number, installed_on=today,
+                serial_no=product.serial_number, installed_on=today, installed_from=product,
             )
         elif on_file.site_id != task.site_id:
             elsewhere.append((product, on_file))
+        elif on_file.installed_from_id is None:
+            on_file.installed_from = product
+            on_file.save(update_fields=['installed_from'])
     return elsewhere
 
 

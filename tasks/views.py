@@ -1638,7 +1638,7 @@ def _action_create_follow_up(request, task, technician, forms):
     if not still_to_install(task):
         messages.error(request, _('Nothing is left to install on this task.'))
         return _back_to(task)
-    follow_up = create_follow_up(task, request.user)
+    follow_up = create_follow_up(task, request.user, request)
     messages.success(request, _('Follow-up task %(number)s created for the machines still to install.') % {
         'number': follow_up.task_number,
     })
@@ -2217,6 +2217,9 @@ def task_create(request):
         if not requesting_technician.is_any_manager:
             internal = internal.none()
         ticket = get_object_or_404(customer_tickets | internal, pk=ticket_id)
+        # Its times are its own country's (the visit time typed here, the customer's email) —
+        # not the country this person is looking at.
+        timezone.activate(ZoneInfo(ticket.country.timezone))
         if ticket.about == CustomerTicket.About.NEW_BRANCH and not ticket.site_id:
             # A branch that doesn't exist yet: added (and linked) from the request first.
             messages.error(request, _('Add the branch first (button above); then you can create its task here.'))
@@ -2522,7 +2525,7 @@ def decide_request_next(request, technician, ticket, choice, machine_ids, superv
     One decision at a time per request: the request is locked while it's
     decided, so a double click, or two people at once, never make two tasks.
     """
-    with transaction.atomic():
+    with transaction.atomic(), timezone.override(ZoneInfo(ticket.country.timezone)):  # its own country's times
         locked = CustomerTicket.objects.select_for_update().get(pk=ticket.pk)
         if not ticket.machines.exists() and locked.status != CustomerTicket.Status.NEW:
             return _('This request has already been handled.'), '', None
@@ -4637,6 +4640,35 @@ def cancel_task(task, user, note):
     )
     for assignment in task.assignments.filter(is_active=True).select_related('technician'):
         push_cancelled(assignment.technician, task)
+    _back_to_the_desk(task)
+
+
+def _back_to_the_desk(task):
+    """A visit made from a request, cancelled: the request isn't settled. Its
+    machines wait for "What happens next?" again, the request is back on the
+    desk (its bell), and the customer is told (English and Arabic)."""
+    from tasks import customer_emails as emails
+
+    machines = TicketMachine.objects.filter(task=task)
+    tickets = {machine.ticket for machine in machines.select_related('ticket')}
+    tickets |= set(CustomerTicket.objects.filter(task=task))
+    machines.update(task=None, decision='', decision_reason='', decision_note='', decided_by=None, decided_at=None)
+    for ticket in tickets:
+        if ticket.status not in (CustomerTicket.Status.CONVERTED, CustomerTicket.Status.NEW):
+            continue
+        # Another visit still going for its other machines stays its visit; else none.
+        ticket.task = next((machine.task for machine in ticket.machines.exclude(task=None).select_related('task')
+                            if machine.task.status != Task.Status.CANCELLED), None)
+        ticket.status = CustomerTicket.Status.CONVERTED if ticket.task else CustomerTicket.Status.NEW
+        ticket.save(update_fields=['task', 'status'])
+        TicketNotification.objects.create(ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now())
+        if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+            emails.send(
+                country=ticket.country, recipient=ticket.contact_email,
+                contact=ticket.contact_name or ticket.company_name, title=emails.VISIT_CANCELLED_TITLE,
+                paragraphs=[emails.VISIT_CANCELLED_BODY, emails.VISIT_CANCELLED_NEXT],
+                values={'site': task.site.name}, ticket=ticket,
+            )
 
 
 def flag_negligence(task, user, note):
@@ -4774,6 +4806,15 @@ def move_open_tasks(technician, successor, actor):
                 assignment.ended_at = now
                 assignment.end_reason = TaskAssignment.EndReason.LEFT_COMPANY
                 assignment.save(update_fields=['is_active', 'ended_at', 'end_reason'])
+    # What they own goes with it: their open tasks and the requests and internal tasks they hold
+    # (saved one by one, so each handover is in the Audit log).
+    for owned in Task.objects.filter(responsible_supervisor=technician).exclude(
+            status__in=[Task.Status.CLOSED, Task.Status.CANCELLED]):
+        owned.responsible_supervisor = successor
+        owned.save(update_fields=['responsible_supervisor'])
+    for held in CustomerTicket.objects.filter(assigned_to=technician, status=CustomerTicket.Status.NEW):
+        held.assigned_to = successor
+        held.save(update_fields=['assigned_to'])
     return len(tasks)
 
 
@@ -6240,8 +6281,9 @@ def save_work_report(request, task, technician, report_form, part_rows):
                     feedback.delete()
             _in_background(send)
         transaction.on_commit(send_copy)
+    # The customer's machines, from every save (a correction corrects them: tasks.equipment).
+    elsewhere = register_installed_machines(task)
     if saved_report.first_submission:
-        elsewhere = register_installed_machines(task)
         if has_checklist(task):  # missing, damaged or wrong machines, a serial on file elsewhere: followed up
             open_equipment_follow_up(task, request.user, elsewhere)
         notify_customer.report_ready(task)

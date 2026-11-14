@@ -152,6 +152,8 @@ class TaskType(models.Model):
         LOADING = 'loading', _('Loading')
         # A spare part sent to the customer, no visit (tasks.shipments).
         PART_SHIPMENT = 'part_shipment', _('Spare part shipment')
+        # Advice: a site consultation or an online meeting — no machines, no readiness checks.
+        CONSULTATION = 'consultation', _('Consultation')
 
     code = models.CharField(
         _('code'), max_length=50, unique=True,

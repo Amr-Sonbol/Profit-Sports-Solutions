@@ -173,6 +173,10 @@ PARTS_ORDERED_BY = _('We expect them by %(date)s.')
 PARTS_ORDERED_VISIT = _('We will arrange the visit as soon as they arrive.')
 PARTS_ORDERED_SHIP = _('We will ship them to you as soon as they arrive.')
 
+VISIT_CANCELLED_TITLE = _('Your visit has been cancelled')
+VISIT_CANCELLED_BODY = _('The visit planned at %(site)s for your request %(reference)s has been cancelled.')
+VISIT_CANCELLED_NEXT = _('Our team is arranging the next step and will contact you shortly.')
+
 REMINDER_TITLE = _('Reminder: your visit tomorrow')
 REMINDER_BODY = _('A reminder that our technician will visit %(site)s tomorrow, %(date)s, at %(time)s.')
 REMINDER_NEXT = _('If this time is no longer convenient, please let us know as soon as possible.')

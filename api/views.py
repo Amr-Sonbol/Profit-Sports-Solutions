@@ -2372,7 +2372,7 @@ class TaskFollowUpView(APIView):
         _require_task_owner(request, task)
         if not still_to_install(task):
             return Response({'detail': str(_('Nothing is left to install on this task.'))}, status=status.HTTP_400_BAD_REQUEST)
-        follow_up = create_follow_up(task, request.user)
+        follow_up = create_follow_up(task, request.user, request)
         return Response({'id': follow_up.pk, 'task_number': follow_up.task_number}, status=status.HTTP_201_CREATED)
 
 

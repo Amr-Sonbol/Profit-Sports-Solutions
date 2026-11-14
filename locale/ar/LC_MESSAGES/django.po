@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 16:08+0000\n"
+"POT-Creation-Date: 2026-11-14 03:31+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -1670,6 +1670,9 @@ msgstr "أكّد المهمة"
 
 msgid "Console replaced"
 msgstr "تم استبدال لوحة التحكم"
+
+msgid "Consultation"
+msgstr "استشارة"
 
 msgid "Contact"
 msgstr "جهة الاتصال"
@@ -4260,6 +4263,9 @@ msgstr "توصياتنا"
 msgid "Our team has replied to your request %(reference)s:"
 msgstr "رد فريقنا على طلبكم %(reference)s:"
 
+msgid "Our team is arranging the next step and will contact you shortly."
+msgstr "يعمل فريقنا على ترتيب الخطوة التالية وسيتواصل معكم قريبًا."
+
 msgid "Our team responds within 24 hours, Sunday to Friday, and you will receive an email as soon as there is an update. If you have not done so already, please add photos or videos of each issue: they help us resolve it promptly."
 msgstr "يرد فريقنا خلال 24 ساعة، من الأحد إلى الجمعة، وستصلكم رسالة بريد إلكتروني فور وجود أي تحديث. إن لم تكونوا قد فعلتم ذلك بعد، يرجى إضافة صور أو مقاطع فيديو لكل مشكلة: فهي تساعدنا على حلها بسرعة."
 
@@ -6424,6 +6430,10 @@ msgstr "بدأت الزيارة: لم يعد بالإمكان تغيير موع�
 msgid "The visit is called off before any report. The assigned staff are told, and the customer's request stays open for follow-up."
 msgstr "تُلغى الزيارة قبل أي تقرير. يُبلَّغ الفريق المكلَّف، ويبقى طلب العميل مفتوحًا للمتابعة."
 
+#, python-format
+msgid "The visit planned at %(site)s for your request %(reference)s has been cancelled."
+msgstr "أُلغيت الزيارة المقررة إلى %(site)s لطلبكم %(reference)s."
+
 msgid "The visit report appears here once our team has finished, and you can download it."
 msgstr "يظهر تقرير الزيارة هنا عندما ينتهي فريقنا، ويمكنك تنزيله."
 
@@ -6626,6 +6636,9 @@ msgstr "تم تعديل هذا التقرير بعد أن وقّعه العمي�
 #, python-format
 msgid "This report was changed after the customer signed it on %(date)s. The signature below applies to the version signed at that time."
 msgstr "تم تعديل هذا التقرير بعد أن وقّعه العميل بتاريخ %(date)s. ينطبق التوقيع أدناه على النسخة التي وُقّعت في ذلك الوقت."
+
+msgid "This request has already been handled."
+msgstr "تمت معالجة هذا الطلب بالفعل."
 
 msgid "This request has been reviewed and closed. Please contact us if you require further assistance."
 msgstr "تمت مراجعة هذا الطلب وإغلاقه. يُرجى التواصل معنا إذا احتجت إلى مزيد من المساعدة."
@@ -7650,6 +7663,9 @@ msgstr "اسم المستخدم: %(username)s. بعد ذلك، سجّل الدخ
 msgid "Your visit"
 msgstr "زيارتك"
 
+msgid "Your visit has been cancelled"
+msgstr "أُلغيت زيارتكم"
+
 msgid "Your visit is running late"
 msgstr "تأخير في موعد زيارتكم"
 
@@ -8208,6 +8224,9 @@ msgstr "إذا تم تركيب صنف مختلف"
 
 msgid "if not all of them — then say what happened to the rest"
 msgstr "إذا لم يصل الكل — اذكر ما حدث للباقي"
+
+msgid "installed from"
+msgstr "رُكِّب من"
 
 msgid "installed on"
 msgstr "تاريخ التركيب"
@@ -9845,9 +9864,6 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "This is not a customer account."
 #~ msgstr "هذا ليس حساب عميل."
-
-#~ msgid "This request has been resolved."
-#~ msgstr "تم حل هذا الطلب."
 
 #~ msgid "This ticket has been resolved. Please contact us if you require further assistance."
 #~ msgstr "تم حل هذه التذكرة. يرجى التواصل معنا إذا احتجتم إلى مزيد من المساعدة."

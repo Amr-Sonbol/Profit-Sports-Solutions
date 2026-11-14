@@ -3,6 +3,7 @@ import secrets
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.db.models.functions import Upper
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -380,6 +381,12 @@ class Asset(models.Model):
         _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    # The installation's line it came from (tasks.equipment.register_installed_machines):
+    # a corrected report corrects this machine, not a second one.
+    installed_from = models.OneToOneField(
+        'tasks.TaskProduct', on_delete=models.SET_NULL, null=True, blank=True, related_name='installed_machine',
+        verbose_name=_('installed from'),
+    )
     # The product code (e.g. BENCH-01) — on the delivery note and the sticker, beside the serial.
     code = models.CharField(_('code'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)
@@ -398,6 +405,13 @@ class Asset(models.Model):
         verbose_name = _('asset')
         verbose_name_plural = _('assets')
         ordering = ['site__name', 'model_name']
+        constraints = [
+            # One machine per serial number and brand, whatever the case it's typed in
+            # (the forms say so first; this keeps it even when two people save at once).
+            models.UniqueConstraint(
+                Upper('serial_no'), 'brand', condition=~models.Q(serial_no=''), name='asset_one_serial_per_brand',
+            ),
+        ]
         indexes = [
             models.Index(fields=['site', 'status']),
             contains_search_index('serial_no', 'asset_serial_trgm'),

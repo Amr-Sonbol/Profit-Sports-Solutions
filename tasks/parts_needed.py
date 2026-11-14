@@ -180,7 +180,10 @@ def to_prepare(country):
     shipments: they're prepared on their own step."""
     tasks = Task.objects.filter(
         site__customer__country=country, parts_needed__isnull=False, parts_prepared_at__isnull=True,
-    ).exclude(status__in=[Task.Status.CLOSED, Task.Status.CANCELLED]).exclude(
+    ).exclude(status__in=[
+        # Finished (filed, approved or closed) or cancelled: nothing left to prepare.
+        Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED,
+    ]).exclude(
         task_type__category=TaskType.Category.PART_SHIPMENT,
     ).distinct().select_related('site__customer')
     ready = [task for task in tasks if all_in(task)]
