@@ -217,7 +217,9 @@ A hotel group is one customer with many sites.
 | latitude, longitude | decimal(9,6) | nullable — where the site is on the map; technicians' taps are checked against it |
 | location_source | varchar | blank, `office` or `arrival` |
 | warranty_start | date | nullable — normally the installation or handover date; new customers and new branches get 2 years |
-| warranty_until | date | nullable — filled in as start + 2 years unless set otherwise. **Under warranty everything at the branch is free** (parts, shipping, service): its terms show as "Free", and a new task there defaults to billing = warranty |
+| kind | varchar | blank for a customer's branch; for our own sites `warehouse` (stock, loadable) or `showroom` (not offered for loading) — customers 0039/0040 |
+| ppm_every_months | smallint | nullable — preventive maintenance under contract: closing one plans the next that many months on (`tasks.views.plan_next_ppm`) |
+| warranty_until | date | nullable — filled in as start + 2 years unless set otherwise. Ending within 30 days: in the bell of whoever edits customers. **Under warranty everything at the branch is free** (parts, shipping, service): its terms show as "Free", and a new task there defaults to billing = warranty |
 | quotation_discount, shipping_cost, service_cost | decimal | nullable — this branch's own terms where they differ from the customer's; empty: the customer's (`Site.commercial_terms`) |
 
 **A site's map location comes from the office or the first arrival.** A manager pastes coordinates or a full Google Maps link on the site's edit page (`location_source = office`). Where nobody has, the first technician to tap "Arrived" there sets it (`arrival`) — the edit page then says so, so someone checks it. Clearing the field clears it, and the next arrival sets it again.
@@ -240,6 +242,7 @@ One physical machine. **Created by the technician at the first service visit, no
 | serial_no | varchar | blank when unknown. **One machine per serial and brand** (any case): a database rule (`asset_one_serial_per_brand`, customers 0036; duplicates found before it were marked "(duplicate <id>)", 0035) |
 | code | varchar | blank — the product code (e.g. BENCH-01), on the delivery note and the sticker beside the serial; optional when a technician records a machine, the line's product code for one installed |
 | installed_on | date | nullable |
+| on_loan_until | date | nullable — lent out (a demo), due back by then; past it, the bell. Moved without it: not a loan |
 | installed_from_id | FK → task_product | nullable, one-to-one — the installation's line it was registered from (`tasks.equipment.register_installed_machines`): each save of that report updates this machine (a corrected serial corrects it, not a second one); customers 0037 |
 | status | varchar | active, faulty, retired, or pending — added by the customer, waiting for confirmation |
 | sticker_photo | file | nullable — the customer's photo of the sticker, when they added it |
@@ -452,6 +455,8 @@ This status is shown to the technician themselves (My progress) and to superviso
 | pak_reference_number | varchar | blank — the **Panatta PAK**: the ticket opened in the Panatta portal when the factory is involved, so optional (most requests need none; a request about a Panatta machine without one shows a reminder, never a rule). Internal only, never emailed to the customer |
 | shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
+| quote_status | varchar | blank, sent, approved, refused — the quotation's answer: by the customer on the portal or recorded by the owner; sent a week ago with no answer, the owner's bell |
+| quote_status_at | timestamptz | nullable — when it was sent or answered |
 | quotation | file | nullable — pdf/image, edit screen only, never on create |
 | quotation_uploaded_at | timestamptz | nullable — set when the file is uploaded, cleared when it's removed |
 | factory_offer | file | nullable — pdf/image, edit screen only |

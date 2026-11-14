@@ -368,6 +368,7 @@ export default function TaskDetailScreen() {
           ) : null}
 
           <TaskMessages taskId={task.id} />
+          <IncidentReport taskId={task.id} />
 
           {/* The report: last, just before the history. */}
           {task.can_file_report ? (
@@ -455,3 +456,48 @@ const styles = StyleSheet.create({
   courierChip: { borderWidth: 1, borderRadius: Spacing.four, paddingVertical: Spacing.one, paddingHorizontal: Spacing.three },
   input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, fontSize: 16 },
 });
+
+/** "Report a safety incident" (someone hurt, a machine dangerous): the Manager and the Operations
+ * Manager are told at once and the task's machines go out of use (tasks.equipment.report_safety_incident). */
+function IncidentReport({ taskId }: { taskId: number }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  if (!open) {
+    return (
+      <TouchableOpacity onPress={() => setOpen(true)}>
+        <ThemedText type="small" themeColor="danger">Report a safety incident</ThemedText>
+      </TouchableOpacity>
+    );
+  }
+  const send = async () => {
+    if (!note.trim()) return;
+    setBusy(true);
+    try {
+      await sendTaskAction(taskId, 'incident', note.trim());
+      setMessage('Reported: the Manager and the Operations Manager are told; the machines are out of use.');
+      setNote('');
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Not sent. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <ThemedView style={{ gap: 8 }}>
+      <ThemedText type="smallBold" themeColor="danger">Report a safety incident</ThemedText>
+      <TextInput
+        value={note} onChangeText={setNote} multiline placeholder="What happened"
+        placeholderTextColor={theme.textSecondary}
+        style={{ borderWidth: 1, borderRadius: 8, padding: 10, minHeight: 70, color: theme.text, borderColor: theme.backgroundSelected }}
+      />
+      {message ? <ThemedText type="small">{message}</ThemedText> : null}
+      <TouchableOpacity onPress={send} disabled={busy || !note.trim()}>
+        <ThemedText type="smallBold" themeColor="danger">{busy ? 'Sending…' : 'Report'}</ThemedText>
+      </TouchableOpacity>
+    </ThemedView>
+  );
+}

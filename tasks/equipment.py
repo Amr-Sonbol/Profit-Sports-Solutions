@@ -96,8 +96,17 @@ STILL_TO_INSTALL = (
 # to the warehouse's stock; a loading is planned from that stock (its Edit
 # screen), so machines from two containers can go on one truck.
 NEXT_STEPS = {
-    TaskType.Category.LOADING: (TaskType.Category.INSTALLATION,),
+    # To a customer's installation, or to another of our warehouses (a transfer: its receiving).
+    TaskType.Category.LOADING: (TaskType.Category.INSTALLATION, TaskType.Category.RECEIVING),
 }
+
+
+def next_step_label(step):
+    """How "send on" names a next step."""
+    return {
+        TaskType.Category.INSTALLATION: _('An installation at a customer'),
+        TaskType.Category.RECEIVING: _('Another of our warehouses (a transfer)'),
+    }.get(step, TaskType.Category(step).label)
 
 
 def warehouse_stock_for_planning(task):
@@ -164,7 +173,10 @@ def next_step_sites(viewer, step):
     customer's site for an installation — in every country for the manager
     tier (the chain crosses borders; only they send machines on)."""
     sites = Site.objects.filter(customer__is_active=True).select_related('customer__country')
-    sites = sites.filter(customer__is_internal=(step == TaskType.Category.LOADING))
+    ours = step in (TaskType.Category.LOADING, TaskType.Category.RECEIVING)
+    sites = sites.filter(customer__is_internal=ours)
+    if ours:
+        sites = sites.exclude(kind=Site.Kind.SHOWROOM)  # a showroom shows machines; it doesn't stock them
     if not viewer.reaches_all_countries:
         sites = sites.filter(customer__country=viewer.country)
     return sites.order_by('customer__country__name', 'customer__name', 'name')
@@ -636,6 +648,36 @@ def open_quality_follow_up(task, user, why):
             'site': task.site.name},
     )
     return open_internal_ticket(getattr(user, 'technician', None), user, ticket)
+
+
+def report_safety_incident(task, user, note):
+    """A safety incident on a task (someone hurt, a machine dangerous): the machines on it
+    are taken out of use, the country's Manager gets an internal task due today, and
+    whoever watches the company (the Operations Manager, the COO) is told on the phone
+    at once (docs/scenarios.md E). Returns the internal task."""
+    from customers.models import Asset
+    from people.push import push_in_their_language
+
+    Asset.objects.filter(task_assets__task=task).exclude(status=Asset.Status.RETIRED).update(status=Asset.Status.FAULTY)
+    country = task.site.customer.country
+    manager = Technician.objects.filter(
+        role=Technician.Role.MANAGER, country=country, is_active=True, user__isnull=False,
+    ).order_by('pk').first() or task.responsible_supervisor
+    if manager is None:
+        return None
+    ticket = CustomerTicket(
+        kind=CustomerTicket.Kind.INTERNAL, country=country, assigned_to=manager, linked_task=task,
+        due_on=timezone.localdate(), subject=str(_('Safety incident: %(number)s')) % {'number': task.task_number},
+        description=note,
+    )
+    ticket = open_internal_ticket(getattr(user, 'technician', None), user, ticket)
+    for watcher in Technician.objects.filter(is_active=True, custom_role__isnull=True, role__in=[
+            Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO]):
+        push_in_their_language(
+            watcher, lambda: _('Safety incident'),
+            lambda: f'{task.task_number} — {task.site.name}', {'type': 'internal_ticket', 'ticket_id': ticket.pk},
+        )
+    return ticket
 
 
 # Defined with the pages in tasks.views; imported last, so either module can load first.

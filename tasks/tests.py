@@ -1834,7 +1834,9 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(mail.outbox[0].to, [manager_user.email])
 
     def test_the_team_panel_shows_each_persons_day_today(self):
-        today_10 = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+        from zoneinfo import ZoneInfo  # 10:00 today in the branch's country, as the panel counts its day
+        today_10 = timezone.localtime(timezone=ZoneInfo(self.site.customer.country.timezone)).replace(
+            hour=10, minute=0, second=0, microsecond=0)
         busy_task = Task.objects.create(
             task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
@@ -9527,7 +9529,7 @@ class EquipmentChainTests(TaskTestCase):
 
     def test_loaded_machines_go_to_an_installation_in_another_country(self):
         self.client.login(username='manager1', password='pass12345')
-        self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
+        self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send on')
         sara = Technician.objects.get(user=self.supervisor_user)  # in the UAE
         saudi_supervisor = Technician.objects.create(
             user=User.objects.create_user('ksa_super', password='x'), country=self.saudi, full_name='Khalid Super',
@@ -10674,15 +10676,17 @@ class EquipmentGoldenPathTests(TaskTestCase):
         line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', quantity=4)
         self.file_checklist(receiving, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done',
                                          'received': '3', 'rest_status': 'damaged', 'note': 'Crushed in transit'}])
-        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL)
+        # (its missing delivery note is followed up too — a second internal task)
+        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL, description__icontains='Crushed')
         self.assertEqual(follow_up.assigned_to, self.manager)
         self.assertIn('AE-0104', follow_up.subject)
         self.assertIn('Crushed in transit', follow_up.description)
         # Nothing wrong: nothing to follow up.
         receiving_ok = self.task('AE-0105', 'receiving', self.warehouse)
         line_ok = TaskProduct.objects.create(task=receiving_ok, product_code='EXCITE-RUN', quantity=2)
+        Task.objects.filter(pk=receiving_ok.pk).update(delivery_note='tasks/delivery_notes/dn.pdf')  # with its note
         self.file_checklist(receiving_ok, [{'id': line_ok.pk, 'product_code': 'EXCITE-RUN', 'status': 'done'}])
-        self.assertEqual(CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL).count(), 1)
+        self.assertFalse(CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL, linked_task=receiving_ok).exists())
 
     def test_one_serial_per_brand(self):
         other_branch = Site.objects.create(customer=self.customer, name='Downtown Branch', address='Dubai')

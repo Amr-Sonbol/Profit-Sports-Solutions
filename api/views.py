@@ -52,7 +52,7 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
-    new_branch_for_next_step, next_step_customers, report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
+    new_branch_for_next_step, next_step_customers, next_step_label, report_safety_incident, report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
     report_machine_photo_gaps,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
@@ -1528,6 +1528,13 @@ class MyTaskActionView(APIView):
             ship_and_tell_customer(task, request.user, company, str(request.data.get('shipping_tracking_number') or ''))
             return Response({'status': task.status})
 
+        if action == 'incident':  # a safety incident (tasks.equipment.report_safety_incident)
+            note = str(request.data.get('note', '')).strip()
+            if not note:
+                return Response({'detail': str(_('Please say what happened.'))}, status=status.HTTP_400_BAD_REQUEST)
+            report_safety_incident(task, request.user, note)
+            return Response({'status': task.status})
+
         if action == 'undo':
             if not undo_last_tap(task, request.user):
                 return Response(
@@ -2066,7 +2073,7 @@ def _team_task_response(request, task):
             ],
             'steps': [
                 {
-                    'value': step, 'label': str(TaskType.Category(step).label),
+                    'value': step, 'label': str(next_step_label(step)),
                     'sites': [
                         {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}',
                          'country': site.customer.country_id}
@@ -2089,7 +2096,7 @@ def _team_task_response(request, task):
                 for customer in next_step_customers(technician)
             ] if can_create_customers(technician) else [],
             # The button's words.
-            'title': str(_('Send to installation')),
+            'title': str(_('Send on')),
         } if lines_to_carry(task) and technician.is_manager_tier else None,
     } if lines or task.previous_task_id else None
     data['actions'] = _task_actions(request, task, owns)

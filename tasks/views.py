@@ -933,6 +933,9 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
         tasks = tasks.filter(priority=priority)
     if params.get('about', '') in Task.About.values:
         tasks = tasks.filter(about=params['about'])
+    if params.get('quote') == 'waiting':  # the bell's "quotations unanswered for a week"
+        tasks = tasks.filter(quote_status=Task.QuoteStatus.SENT,
+                             quote_status_at__lt=timezone.now() - timedelta(days=7))
     if params.get('parts') == 'late':  # the bell's "ordered parts are late"
         tasks = tasks.filter(
             parts_needed__source='ordered', parts_needed__arrived_at__isnull=True,
@@ -1146,7 +1149,45 @@ def approve_report_as_manager(task, actor):
     TaskEvent.objects.create(
         task=task, event_type=TaskEvent.EventType.REPORT_APPROVED, occurred_at=timezone.now(), actor=actor,
     )
+    plan_next_ppm(task, actor)
     return True
+
+
+PPM_TYPE_CODE = 'preventive_maintenance'
+
+
+def _months_later(day, months):
+    """The same day `months` later (the month's last day when it's shorter)."""
+    from calendar import monthrange
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return day.replace(year=year, month=month, day=min(day.day, monthrange(year, month)[1]))
+
+
+def plan_next_ppm(task, actor):
+    """A preventive maintenance closed at a branch on a PPM contract (Site.ppm_every_months):
+    the next one, on the calendar that many months on (a day, the time set later), owned by
+    the same person — once (not when one is already planned). Returns it, or None."""
+    months = task.site.ppm_every_months
+    if not months or not task.task_type_id or task.task_type.code != PPM_TYPE_CODE:
+        return None
+    open_statuses = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED]
+    if Task.objects.filter(site=task.site, task_type=task.task_type, status__in=open_statuses).exists():
+        return None
+    next_visit = Task(
+        site=task.site, task_type=task.task_type, brand=task.brand, priority=Task.Priority.NORMAL,
+        source=Task.Source.INTERNAL, billing_type=task.billing_type, is_warranty=task.is_warranty,
+        reported_at=timezone.now(), created_by=actor, status=Task.Status.NEW,
+        responsible_supervisor=task.responsible_supervisor, previous_task=task,
+        scheduled_date=_months_later(timezone.localdate(), months),
+        description=_('Preventive maintenance under contract (every %(months)s months), after %(number)s.') % {
+            'months': months, 'number': task.task_number},
+    )
+    with transaction.atomic():
+        _save_new_task(next_visit)
+        TaskEvent.objects.create(task=next_visit, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(),
+                                 actor=actor)
+    return next_visit
 
 
 def _report_changed_after_signing(task):
@@ -1683,6 +1724,30 @@ def _action_create_follow_up(request, task, technician, forms):
     return _back_to(follow_up)
 
 
+def _action_report_incident(request, task, technician, forms):
+    """Anyone on the task, or who can see it, reports a safety incident (docs/scenarios.md E)."""
+    note = request.POST.get('incident_note', '').strip()
+    if not note:
+        messages.error(request, _('Please say what happened.'))
+        return _back_to(task)
+    report_safety_incident(task, request.user, note)
+    messages.success(request, _('Safety incident reported: the Manager and the Operations Manager are told; '
+                                'its machines are out of use.'))
+    return _back_to(task)
+
+
+def _action_quote_status(request, task, technician, forms):
+    """The quotation: sent, approved or refused (an answer by phone, say) — its owner."""
+    _require_task_owner(request, task)
+    status = request.POST.get('quote_status', '')
+    if status not in Task.QuoteStatus.values or not task.quotation:
+        return _back_to(task)
+    task.quote_status, task.quote_status_at = status, timezone.now()
+    task.save(update_fields=['quote_status', 'quote_status_at'])
+    messages.success(request, _('Saved.'))
+    return _back_to(task)
+
+
 def _action_send_feedback_request(request, task, technician, forms):
     require_manager(request)
     _require_task_owner(request, task)
@@ -1691,6 +1756,8 @@ def _action_send_feedback_request(request, task, technician, forms):
 
 
 TASK_PAGE_ACTIONS = {
+    'quote_status': _action_quote_status,
+    'report_incident': _action_report_incident,
     'site_readiness': _action_site_readiness,
     'add_message': _action_add_message,
     'notify_schedule': _action_notify_schedule,
@@ -1822,7 +1889,7 @@ def task_detail(request, pk):
         # Sending the machines on: the Manager, Project Manager or Admin only.
         'can_send_on': can_plan_equipment(requesting_technician),
         'next_step_choices': [
-            (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
+            (step, next_step_label(step), next_step_sites(requesting_technician, step))
             for step in NEXT_STEPS.get(equipment_step(task), ())
         ],
         # Who supervises it there, by country (next_step_supervisor).
@@ -1857,6 +1924,11 @@ def task_detail(request, pk):
         ),
         # Edit, and the changes on the page: the owner, or someone allowed to step in.
         'can_change': can_change_task(requesting_technician, task),
+        # Its machines visited twice or more in the last 90 days besides this (docs/scenarios.md E).
+        'repeat_visits': Task.objects.filter(
+            task_assets__asset__task_assets__task=task, reported_at__gte=timezone.now() - timedelta(days=90),
+        ).exclude(pk=task.pk).exclude(status=Task.Status.CANCELLED).distinct().count(),
+        'quote_statuses': Task.QuoteStatus.choices,
         'can_approve_as_supervisor': (
             requesting_technician.is_manager_tier
             or requesting_technician.id == task.responsible_supervisor_id
@@ -4639,17 +4711,58 @@ def machine_list(request):
             | Q(site__customer__name__matches=search)
         )
 
+    if request.GET.get('loan') == 'due':  # the bell's "on loan, due back"
+        assets = assets.filter(on_loan_until__lt=timezone.localdate())
     # Added by customers and not confirmed yet (?status=pending).
     pending_count = assets.filter(status=Asset.Status.PENDING).count()
     showing_pending = request.GET.get('status') == 'pending'
     if showing_pending:
         assets = assets.filter(status=Asset.Status.PENDING)
 
+    # A factory recall or safety notice (docs/scenarios.md H): one visit per branch for every
+    # machine this search finds — the manager tier, with the notice's words.
+    technician = request.user.technician
+    can_recall = technician.is_manager_tier and bool(search)
+    if request.method == 'POST' and request.POST.get('action') == 'recall' and can_recall:
+        notice = request.POST.get('notice', '').strip()
+        affected = list(assets.exclude(status=Asset.Status.RETIRED).exclude(status=Asset.Status.PENDING))
+        if not notice or not affected:
+            messages.error(request, _('Write the notice, and search for the machines it concerns.'))
+        else:
+            made = create_recall_visits(request, affected, notice)
+            messages.success(request, _('%(count)s visits created, one per branch.') % {'count': len(made)})
+        return redirect(f"{reverse('tasks:machine_list')}?q={search}")
+
     paginator = Paginator(assets, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'tasks/machine_list.html', {
         'page_obj': page_obj, 'search': search, 'pending_count': pending_count, 'showing_pending': showing_pending,
+        'can_recall': can_recall,
     })
+
+
+def create_recall_visits(request, machines, notice):
+    """One inspection visit per branch for these machines (a recall), its serials listed."""
+    by_site = {}
+    for machine in machines:
+        by_site.setdefault(machine.site, []).append(machine)
+    task_type = TaskType.objects.filter(code='safety_inspection').first()
+    made = []
+    for site, on_site in by_site.items():
+        task = Task(
+            site=site, task_type=task_type, brand=on_site[0].brand, priority=Task.Priority.HIGH,
+            source=Task.Source.INTERNAL, billing_type=Task.BillingType.WARRANTY, is_warranty=True,
+            reported_at=timezone.now(), created_by=request.user, status=Task.Status.NEW,
+            description=_('Factory recall: %(notice)s') % {'notice': notice},
+            reported_serial_numbers='\n'.join(machine.serial_no for machine in on_site if machine.serial_no),
+        )
+        with transaction.atomic():
+            _save_new_task(task)
+            TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(),
+                                     actor=request.user, note=notice)
+            TaskNotification.objects.create(task=task, created_at=timezone.now())
+        made.append(task)
+    return made
 
 
 @login_required
@@ -4704,7 +4817,9 @@ def machine_detail(request, pk):
         if request.POST.get('action') == 'move':
             branch = get_object_or_404(branches, pk=request.POST.get('site'))
             asset.site = branch
-            asset.save(update_fields=['site'])
+            # Lent (a demo machine): due back by then — the bell reminds; moved without it, it's not a loan.
+            asset.on_loan_until = parse_date(request.POST.get('on_loan_until', '') or '') or None
+            asset.save(update_fields=['site', 'on_loan_until'])
             messages.success(request, _('Machine moved to %(site)s.') % {'site': branch})
         else:
             asset.status = Asset.Status.RETIRED
@@ -4735,6 +4850,7 @@ def close_task_directly(task, user, note):
     TaskEvent.objects.create(
         task=task, event_type=TaskEvent.EventType.CLOSED, occurred_at=timezone.now(), actor=user, note=note,
     )
+    plan_next_ppm(task, user)
 
 
 def cancel_task(task, user, note):
@@ -6141,6 +6257,15 @@ def my_task_detail(request, pk):
         task__pk=pk, technician=technician, is_active=True,
     )
     task = assignment.task
+    if request.method == 'POST' and request.POST.get('action') == 'report_incident':
+        note = request.POST.get('incident_note', '').strip()
+        if note:
+            report_safety_incident(task, request.user, note)
+            messages.success(request, _('Safety incident reported: the Manager and the Operations Manager are told; '
+                                        'its machines are out of use.'))
+        else:
+            messages.error(request, _('Please say what happened.'))
+        return redirect('tasks:my_task_detail', pk=task.pk)
     if request.method == 'POST':
         # One tap at a time on a task (a double tap, a slow connection): the task is locked,
         # its state read again, so the second press finds the step already done.
@@ -6393,6 +6518,9 @@ def save_work_report(request, task, technician, report_form, part_rows):
     if saved_report.first_submission:
         if has_checklist(task):  # missing, damaged or wrong machines, a serial on file elsewhere: followed up
             open_equipment_follow_up(task, request.user, elsewhere)
+        if equipment_step(task) == TaskType.Category.RECEIVING and not task.delivery_note:
+            # A container without its delivery note: followed up (docs/scenarios.md A).
+            open_quality_follow_up(task, request.user, _('Delivery note missing: %(number)s'))
         if not saved_report.resolved:  # not settled on this visit: its owner follows it up
             open_quality_follow_up(task, request.user, _('Not resolved on the visit: %(number)s'))
         notify_customer.report_ready(task)
@@ -7230,7 +7358,7 @@ def internal_ticket(request, pk):
 
 # Moved to tasks/equipment.py; still importable from here.
 from .equipment import (  # noqa: E402,F401
-    BeyondStock, open_quality_follow_up, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
+    BeyondStock, next_step_label, report_safety_incident, open_quality_follow_up, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
 )
 
 

@@ -97,6 +97,10 @@
                 {% for branch in branches %}<option value="{{ branch.pk }}">{{ branch.customer.name }} — {{ branch.name }}</option>{% endfor %}
             </select>
         </div>
+        <div class="field">
+            <label for="loan-until">{% translate "On loan until (a demo)" %}</label>
+            <input type="date" name="on_loan_until" id="loan-until">
+        </div>
         <div class="field field--wide">
             <label for="move-reason">{% translate "Reason" %}</label>
             <input type="text" name="reason" id="move-reason" required placeholder="{% translate 'Sold from the showroom, relocated, taken back…' %}">

@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from axes.utils import reset as axes_reset
 from django.contrib import messages
@@ -106,8 +106,13 @@ def customer_list(request):
 
     show_inactive = request.GET.get('status') == 'inactive'
     search = request.GET.get('q', '').strip()
+    warranty_ending = request.GET.get('warranty') == 'ending'  # the bell's "warranty ends within 30 days"
     country_id = request.GET.get('country', '')
     customers = Customer.objects.filter(is_active=not show_inactive)
+    if warranty_ending:
+        today = timezone.localdate()
+        customers = customers.filter(sites__warranty_until__gte=today,
+                                     sites__warranty_until__lte=today + timedelta(days=30)).distinct()
     if technician.reaches_all_countries and country_id == 'all':
         pass
     elif technician.reaches_all_countries and country_id.isdigit():
@@ -967,6 +972,21 @@ def portal_visit(request, pk):
     feedback = getattr(task, 'feedback', None)
     can_rate = report is not None and task.status in DONE_STATUSES and not (feedback and feedback.submitted_at)
     rating_form = CustomerFeedbackForm()
+    # A quotation waiting for their answer (docs/scenarios.md E): approve or refuse it here.
+    if (request.method == 'POST' and request.POST.get('action') in ('quote_approve', 'quote_refuse')
+            and task.quotation and task.quote_status == Task.QuoteStatus.SENT and not request.viewing_as):
+        task.quote_status = (Task.QuoteStatus.APPROVED if request.POST['action'] == 'quote_approve'
+                             else Task.QuoteStatus.REFUSED)
+        task.quote_status_at = timezone.now()
+        task.save(update_fields=['quote_status', 'quote_status_at'])
+        if task.responsible_supervisor:
+            from people.push import push_in_their_language
+            push_in_their_language(
+                task.responsible_supervisor, lambda: _('Quotation answered'),
+                lambda: f'{task.task_number} — {task.get_quote_status_display()}', {'type': 'team_task', 'task_id': task.pk},
+            )
+        messages.success(request, _('Thank you — your answer has been sent to our team.'))
+        return redirect('customers:portal_visit', pk=task.pk)
     if request.method == 'POST' and can_rate:
         rating_form = CustomerFeedbackForm(request.POST)
         if rating_form.is_valid():

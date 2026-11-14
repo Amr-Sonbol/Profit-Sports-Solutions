@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-14 18:34+0000\n"
+"POT-Creation-Date: 2026-11-14 19:27+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -62,6 +62,16 @@ msgid "%(code)s (%(serial)s): this serial is already on file at %(site)s — che
 msgstr "%(code)s (%(serial)s): هذا الرقم التسلسلي مسجّل لدى %(site)s — تحقق من الملصق؛ وإن نُقل الجهاز فانقله من صفحة الجهاز."
 
 #, python-format
+msgid "%(count)s branch's warranty ends within 30 days"
+msgid_plural "%(count)s branches' warranties end within 30 days"
+msgstr[0] "لا ضمانات تنتهي قريبًا"
+msgstr[1] "ينتهي ضمان فرع واحد خلال 30 يومًا"
+msgstr[2] "ينتهي ضمان فرعين خلال 30 يومًا"
+msgstr[3] "ينتهي ضمان %(count)s فروع خلال 30 يومًا"
+msgstr[4] "ينتهي ضمان %(count)s فرعًا خلال 30 يومًا"
+msgstr[5] "ينتهي ضمان %(count)s فرع خلال 30 يومًا"
+
+#, python-format
 msgid "%(count)s fewer than last month"
 msgstr "أقل بـ %(count)s من الشهر الماضي"
 
@@ -74,6 +84,16 @@ msgstr[2] "متابعتان متأخرتان"
 msgstr[3] "%(count)s متابعات متأخرة"
 msgstr[4] "%(count)s متابعة متأخرة"
 msgstr[5] "%(count)s متابعة متأخرة"
+
+#, python-format
+msgid "%(count)s installation soon — the site isn't confirmed ready"
+msgid_plural "%(count)s installations soon — sites not confirmed ready"
+msgstr[0] "لا تركيبات قريبة"
+msgstr[1] "تركيب قريب — لم يُؤكَّد جاهزية الموقع"
+msgstr[2] "تركيبان قريبان — لم تُؤكَّد جاهزية الموقعين"
+msgstr[3] "%(count)s تركيبات قريبة — لم تُؤكَّد جاهزية المواقع"
+msgstr[4] "%(count)s تركيبًا قريبًا — لم تُؤكَّد جاهزية المواقع"
+msgstr[5] "%(count)s تركيب قريب — لم تُؤكَّد جاهزية المواقع"
 
 #, python-format
 msgid "%(count)s item removed"
@@ -150,6 +170,16 @@ msgstr[4] "%(count)s جهاز يحتاج إلى متابعة — راجع حال
 msgstr[5] "%(count)s جهاز يحتاج إلى متابعة — راجع حالته وملاحظته أعلاه."
 
 #, python-format
+msgid "%(count)s machine on loan is due back"
+msgid_plural "%(count)s machines on loan are due back"
+msgstr[0] "لا أجهزة معارة متأخرة"
+msgstr[1] "جهاز معار مستحق الإرجاع"
+msgstr[2] "جهازان معاران مستحقا الإرجاع"
+msgstr[3] "%(count)s أجهزة معارة مستحقة الإرجاع"
+msgstr[4] "%(count)s جهازًا معارًا مستحق الإرجاع"
+msgstr[5] "%(count)s جهاز معار مستحق الإرجاع"
+
+#, python-format
 msgid "%(count)s machine on the checklist is not checked yet."
 msgid_plural "%(count)s machines on the checklist are not checked yet."
 msgstr[0] "%(count)s جهاز في قائمة المراجعة لم يُراجع بعد."
@@ -220,6 +250,16 @@ msgstr[5] "%(count)s صورة أو فيديو"
 #, python-format
 msgid "%(count)s quantities recorded as stock at %(warehouse)s."
 msgstr "سُجّلت %(count)s كميات كمخزون في %(warehouse)s."
+
+#, python-format
+msgid "%(count)s quotation unanswered for a week"
+msgid_plural "%(count)s quotations unanswered for a week"
+msgstr[0] "لا عروض أسعار متأخرة"
+msgstr[1] "عرض سعر واحد دون رد منذ أسبوع"
+msgstr[2] "عرضا سعر دون رد منذ أسبوع"
+msgstr[3] "%(count)s عروض أسعار دون رد منذ أسبوع"
+msgstr[4] "%(count)s عرض سعر دون رد منذ أسبوع"
+msgstr[5] "%(count)s عرض سعر دون رد منذ أسبوع"
 
 #, python-format
 msgid "%(count)s report exceeding the recorded time"
@@ -324,6 +364,10 @@ msgstr[2] "فيديوهان"
 msgstr[3] "%(count)s فيديوهات"
 msgstr[4] "%(count)s فيديو"
 msgstr[5] "%(count)s فيديو"
+
+#, python-format
+msgid "%(count)s visits created, one per branch."
+msgstr "أُنشئت %(count)s زيارات، زيارة لكل فرع."
 
 #, python-format
 msgid "%(counter)s task"
@@ -626,6 +670,10 @@ msgstr "عميل في %(country)s. عند الحفظ تعود إلى التذك�
 msgid "A customer named %(name)s already exists in this country. Add a branch to it instead."
 msgstr "يوجد عميل باسم %(name)s في هذه الدولة مسبقاً. أضف فرعاً له بدلاً من ذلك."
 
+#, python-format
+msgid "A factory recall for these %(count)s machines"
+msgstr "استدعاء من المصنع لهذه الأجهزة الـ%(count)s"
+
 msgid "A forgotten password, a lost phone or a locked login is fixed on Staff accounts."
 msgstr "كلمة المرور المنسية أو الهاتف المفقود أو تسجيل الدخول المقفل يُعالَج من صفحة حسابات الموظفين."
 
@@ -707,6 +755,9 @@ msgstr "تم إرسال رابط كلمة المرور إلى %(email)s."
 
 msgid "A phone number or an email."
 msgstr "رقم هاتف أو بريد إلكتروني."
+
+msgid "A quotation is waiting for your answer"
+msgstr "عرض سعر بانتظار ردكم"
 
 #, python-format
 msgid "A reminder that our technician will visit %(site)s tomorrow, %(date)s, at %(time)s."
@@ -1071,6 +1122,12 @@ msgstr "قام المسؤول بتعيين كلمة مرور مؤقتة لحسا
 msgid "An email could not be sent: “%(subject)s” to %(recipients)s."
 msgstr "تعذّر إرسال بريد إلكتروني: «%(subject)s» إلى %(recipients)s."
 
+msgid "An installation at a customer"
+msgstr "تركيب لدى عميل"
+
+msgid "Another of our warehouses (a transfer)"
+msgstr "مستودع آخر لدينا (نقل)"
+
 msgid "Answer to the customer"
 msgstr "الرد على العميل"
 
@@ -1106,6 +1163,9 @@ msgstr "اعتماد وإغلاق؟ تُغلق المهمة."
 
 msgid "Approve for manager review"
 msgstr "الموافقة لإرساله للمدير"
+
+msgid "Approve the quotation"
+msgstr "الموافقة على عرض السعر"
 
 msgid "Approve the report? It goes to a manager for the final approval."
 msgstr "اعتماد التقرير؟ ينتقل إلى المدير للاعتماد النهائي."
@@ -1868,6 +1928,9 @@ msgstr "إنشاء مهمة داخلية"
 msgid "Create new tasks"
 msgstr "إنشاء مهام جديدة"
 
+msgid "Create one visit per branch for these machines?"
+msgstr "إنشاء زيارة لكل فرع لهذه الأجهزة؟"
+
 msgid "Create task"
 msgstr "إنشاء مهمة"
 
@@ -1881,6 +1944,9 @@ msgstr "إنشاء العميل «%(name)s»"
 
 msgid "Create the visit"
 msgstr "إنشاء الزيارة"
+
+msgid "Create the visits"
+msgstr "إنشاء الزيارات"
 
 msgid "Created"
 msgstr "أُنشئت"
@@ -2294,6 +2360,10 @@ msgstr "عنوان التسليم"
 msgid "Delivery note"
 msgstr "إشعار التسليم"
 
+#, python-format
+msgid "Delivery note missing: %(number)s"
+msgstr "إشعار التسليم مفقود: %(number)s"
+
 msgid "Denied"
 msgstr "مرفوض"
 
@@ -2640,6 +2710,10 @@ msgstr "تصدير (CSV)"
 
 msgid "Factory offer"
 msgstr "عرض المصنع"
+
+#, python-format
+msgid "Factory recall: %(notice)s"
+msgstr "استدعاء من المصنع: %(notice)s"
 
 msgid "Faulty"
 msgstr "معطل"
@@ -4192,6 +4266,9 @@ msgstr "يوم %(day)s"
 msgid "On its way to the installation"
 msgstr "في الطريق إلى التركيب"
 
+msgid "On loan until (a demo)"
+msgstr "معار حتى (للتجربة)"
+
 msgid "On site"
 msgstr "في الموقع"
 
@@ -4212,6 +4289,9 @@ msgstr "في الموعد"
 
 msgid "On-time arrival"
 msgstr "الوصول في الموعد"
+
+msgid "One inspection visit per branch is created for every machine this search finds, with their serial numbers."
+msgstr "تُنشأ زيارة فحص لكل فرع لكل الأجهزة التي يجدها هذا البحث، مع أرقامها التسلسلية."
 
 msgid "One row per site: a chain with several branches requires several rows sharing the same customer name. Re-uploading the same file is safe; existing customers and sites are matched by name and left unchanged, not duplicated."
 msgstr "صف واحد لكل موقع: تتطلب السلسلة ذات الفروع المتعددة عدة صفوف تحمل اسم العميل نفسه. إعادة رفع الملف نفسه آمنة؛ إذ تتم مطابقة العملاء والمواقع الموجودة بالاسم وتُترك دون تغيير ودون تكرار."
@@ -4773,6 +4853,9 @@ msgstr "يُرجى ذكر اسم المقاول من الباطن."
 msgid "Please say in a few words what it is about."
 msgstr "يُرجى أن توضح في كلمات قليلة موضوع الطلب."
 
+msgid "Please say what happened."
+msgstr "يُرجى ذكر ما حدث."
+
 msgid "Please say which area of the floor."
 msgstr "يُرجى ذكر منطقة الأرضية المعنية."
 
@@ -4873,6 +4956,10 @@ msgstr "تاريخ الإعداد"
 msgid "Preparing"
 msgstr "قيد التجهيز"
 
+#, python-format
+msgid "Preventive maintenance under contract (every %(months)s months), after %(number)s."
+msgstr "صيانة وقائية بموجب عقد (كل %(months)s أشهر)، بعد %(number)s."
+
 msgid "Preview report"
 msgstr "معاينة التقرير"
 
@@ -4954,6 +5041,9 @@ msgstr "روابط سريعة"
 
 msgid "Quotation"
 msgstr "عرض السعر"
+
+msgid "Quotation answered"
+msgstr "تم الرد على عرض السعر"
 
 #, python-format
 msgid "Quotation −%(value)s%%"
@@ -5091,6 +5181,12 @@ msgstr "السجل أو التفاصيل أو عنوان IP"
 msgid "Recorded in error? You may undo your last step within 10 minutes. After that, a manager can correct the time."
 msgstr "هل سُجّل ذلك عن طريق الخطأ؟ يمكنك التراجع عن خطوتك الأخيرة خلال 10 دقائق. بعد ذلك، يمكن للمدير تصحيح الوقت."
 
+msgid "Refuse"
+msgstr "رفض"
+
+msgid "Refused"
+msgstr "مرفوض"
+
 #, python-format
 msgid "Regarding visit %(number)s on %(date)s"
 msgstr "بخصوص الزيارة %(number)s بتاريخ %(date)s"
@@ -5161,6 +5257,9 @@ msgstr "إصلاحات وصلت كل قطعها — الأقرب موعداً أ
 msgid "Repairs with parts ready to prepare"
 msgstr "إصلاحات قطعها جاهزة للتحضير"
 
+msgid "Repeat visits"
+msgstr "زيارات متكررة"
+
 msgid "Replace lead"
 msgstr "استبدال الفني الرئيسي"
 
@@ -5193,6 +5292,9 @@ msgstr "التقرير (PDF)"
 
 msgid "Report a problem with this machine"
 msgstr "الإبلاغ عن مشكلة في هذا الجهاز"
+
+msgid "Report a safety incident"
+msgstr "الإبلاغ عن حادث سلامة"
 
 msgid "Report approved"
 msgstr "تم اعتماد التقرير"
@@ -5458,6 +5560,16 @@ msgstr "تم فحص سيور الجري وضبط محاذاتها وشدّها."
 msgid "Running late"
 msgstr "التأخر عن الموعد"
 
+msgid "Safety incident"
+msgstr "حادث سلامة"
+
+msgid "Safety incident reported: the Manager and the Operations Manager are told; its machines are out of use."
+msgstr "تم الإبلاغ عن حادث السلامة: أُبلغ المدير ومدير العمليات، وأُخرجت أجهزته من الخدمة."
+
+#, python-format
+msgid "Safety incident: %(number)s"
+msgstr "حادث سلامة: %(number)s"
+
 msgid "Same as the report"
 msgstr "نفس ساعات التقرير"
 
@@ -5692,6 +5804,9 @@ msgstr "إرسال الرابط"
 msgid "Send my rating"
 msgstr "إرسال تقييمي"
 
+msgid "Send on"
+msgstr "إرسال إلى الخطوة التالية"
+
 msgid "Send password link"
 msgstr "إرسال رابط كلمة المرور"
 
@@ -5715,9 +5830,6 @@ msgstr "إرسال طلب التقييم؟ يُرسل بريد إلى العمي
 
 msgid "Send to"
 msgstr "يُرسل إلى"
-
-msgid "Send to installation"
-msgstr "إرسال إلى التركيب"
 
 msgid "Send to the team"
 msgstr "إرسال إلى الفريق"
@@ -5762,6 +5874,9 @@ msgstr "أُرسلت إلى %(email)s بتاريخ %(date)s"
 
 msgid "Sent to each branch contact when our technician sets off for a visit."
 msgstr "يُرسل إلى مسؤول كل فرع عندما ينطلق فنينا إلى الزيارة."
+
+msgid "Sent to the customer"
+msgstr "أُرسل إلى العميل"
 
 msgid "Serial No."
 msgstr "الرقم التسلسلي"
@@ -5917,6 +6032,9 @@ msgstr "عرض المهام"
 msgid "Shown how to use the equipment"
 msgstr "شُرح كيفية استخدام المعدات"
 
+msgid "Showroom"
+msgstr "صالة العرض"
+
 msgid "Sick"
 msgstr "مرض"
 
@@ -6013,6 +6131,9 @@ msgstr "حتى لا يتوجه إلى الموقع دون داعٍ."
 
 msgid "Sold from the showroom, relocated, taken back…"
 msgstr "بيع من صالة العرض، نُقل، استُرجع…"
+
+msgid "Someone hurt, or a machine dangerous: the Manager and the Operations Manager are told at once, and this task's machines are taken out of use."
+msgstr "إصابة شخص، أو جهاز خطر: يُبلَّغ المدير ومدير العمليات فورًا، وتُخرج أجهزة هذه المهمة من الخدمة."
 
 msgid "Something else"
 msgstr "شيء آخر"
@@ -6315,6 +6436,9 @@ msgstr "شكراً لتواصلكم معنا. علمنا أن المشكلة ق�
 msgid "Thank you for rating this visit."
 msgstr "شكرًا لتقييمك هذه الزيارة."
 
+msgid "Thank you — your answer has been sent to our team."
+msgstr "شكرًا — أُرسل ردكم إلى فريقنا."
+
 msgid "Thank you."
 msgstr "شكراً لكم."
 
@@ -6446,6 +6570,9 @@ msgstr "المصنع"
 
 msgid "The factory ships it straight to the customer: nothing leaves our stock."
 msgstr "يشحنها المصنع مباشرة إلى العميل: لا يخرج شيء من مخزوننا."
+
+msgid "The factory's notice"
+msgstr "إشعار المصنع"
 
 msgid "The feedback request has been sent."
 msgstr "تم إرسال طلب التقييم."
@@ -7073,6 +7200,9 @@ msgstr "غير مسندة"
 msgid "Unavailable"
 msgstr "غير متاح"
 
+msgid "Under a maintenance contract: closing one visit plans the next."
+msgstr "بموجب عقد صيانة: إغلاق زيارة يخطط للتالية."
+
 msgid "Under review"
 msgstr "قيد المراجعة"
 
@@ -7633,6 +7763,9 @@ msgstr "اكتب ملاحظة للفريق…"
 
 msgid "Write a note…"
 msgstr "اكتب ملاحظة…"
+
+msgid "Write the notice, and search for the machines it concerns."
+msgstr "اكتب الإشعار، وابحث عن الأجهزة المعنية به."
 
 msgid "Write your message…"
 msgstr "اكتب رسالتك…"
@@ -8581,6 +8714,9 @@ msgstr "منها قيد التنفيذ الآن"
 msgid "of them, need a new date (missed, or stopped on site)"
 msgstr "منها تحتاج إلى موعد جديد (فائتة، أو توقف العمل في الموقع)"
 
+msgid "on loan until"
+msgstr "معار حتى"
+
 msgid "opened by"
 msgstr "فتحها"
 
@@ -8708,6 +8844,9 @@ msgstr "الترتيب"
 msgid "power sockets where the machines go"
 msgstr "مقابس كهرباء حيث توضع الأجهزة"
 
+msgid "preventive maintenance every (months)"
+msgstr "صيانة وقائية كل (أشهر)"
+
 msgid "previous step"
 msgstr "الخطوة السابقة"
 
@@ -8740,6 +8879,9 @@ msgstr "الكمية"
 
 msgid "quotation"
 msgstr "عرض السعر"
+
+msgid "quotation answered or sent"
+msgstr "تاريخ إرسال عرض السعر أو الرد عليه"
 
 msgid "quotation discount (%)"
 msgstr "خصم عرض السعر (%)"
@@ -9355,6 +9497,10 @@ msgstr "المستخدم"
 
 msgid "visit"
 msgstr "الزيارة"
+
+#, python-format
+msgid "visit %(count)s in 90 days"
+msgstr "الزيارة %(count)s خلال 90 يومًا"
 
 msgid "visit report language"
 msgstr "لغة تقرير الزيارة"
@@ -10012,6 +10158,9 @@ msgstr "← العودة إلى الفنيين النشطين"
 
 #~ msgid "Select…"
 #~ msgstr "اختر…"
+
+#~ msgid "Send to installation"
+#~ msgstr "إرسال إلى التركيب"
 
 #~ msgid "Send to loading or installation"
 #~ msgstr "إرسال إلى التحميل أو التركيب"

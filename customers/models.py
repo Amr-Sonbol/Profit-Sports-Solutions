@@ -257,6 +257,21 @@ class Site(models.Model):
         validators=[MinValueValidator(0)],
     )
 
+    # Our own sites (the customer marked is_internal): a warehouse holds stock to load; a
+    # showroom shows machines (not offered for loading). Customers' branches: blank.
+    class Kind(models.TextChoices):
+        WAREHOUSE = 'warehouse', _('Warehouse')
+        SHOWROOM = 'showroom', _('Showroom')
+
+    kind = models.CharField(_('kind'), max_length=10, choices=Kind.choices, blank=True)
+
+    # Preventive maintenance under contract: every N months. Closing one plans the next on the
+    # calendar (tasks.views.plan_next_ppm); empty, none is planned.
+    ppm_every_months = models.PositiveSmallIntegerField(
+        _('preventive maintenance every (months)'), null=True, blank=True,
+        help_text=_('Under a maintenance contract: closing one visit plans the next.'),
+    )
+
     class Meta:
         verbose_name = _('site')
         verbose_name_plural = _('sites')
@@ -381,6 +396,9 @@ class Asset(models.Model):
         _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    # Lent out (a demo machine, say): moved to the customer's branch, due back by this date —
+    # past it, the bell (tasks.views.machine_detail "Move"); moved back, cleared.
+    on_loan_until = models.DateField(_('on loan until'), null=True, blank=True)
     # The installation's line it came from (tasks.equipment.register_installed_machines):
     # a corrected report corrects this machine, not a second one.
     installed_from = models.OneToOneField(

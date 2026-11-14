@@ -246,6 +246,19 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+<details class="section incident">
+    <summary>{% translate "Report a safety incident" %}</summary>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report_incident">
+        <div class="field field--wide">
+            <label for="incident-note">{% translate "What happened" %}</label>
+            <textarea name="incident_note" id="incident-note" rows="3" required></textarea>
+            <p class="field__help">{% translate "Someone hurt, or a machine dangerous: the Manager and the Operations Manager are told at once, and this task's machines are taken out of use." %}</p>
+        </div>
+        <div class="form-actions"><button type="submit" class="button button--danger">{% translate "Report" %}</button></div>
+    </form>
+</details>
 {% endblock %}
 
 {% block scripts %}

@@ -271,7 +271,7 @@ class SiteEditForm(forms.ModelForm):
         model = Site
         fields = [
             'name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes',
-            'warranty_start', 'warranty_until',
+            'warranty_start', 'warranty_until', 'ppm_every_months',
         ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 2}),

@@ -207,6 +207,15 @@ class Task(models.Model):
         _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
     )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
+    # The quotation's answer (docs/scenarios.md E): sent, then approved or refused — by the
+    # customer on the portal, or recorded by the task's owner. Waiting a week: the owner is reminded.
+    class QuoteStatus(models.TextChoices):
+        SENT = 'sent', _('Sent to the customer')
+        APPROVED = 'approved', _('Approved')
+        REFUSED = 'refused', _('Refused')
+
+    quote_status = models.CharField(_('quotation'), max_length=10, choices=QuoteStatus.choices, blank=True)
+    quote_status_at = models.DateTimeField(_('quotation answered or sent'), null=True, blank=True)
     quotation = models.FileField(
         _('quotation'), upload_to=_task_document_path, null=True, blank=True,
         validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],

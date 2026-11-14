@@ -133,6 +133,36 @@ def notification_bell(request):
     mine = list(mine.distinct().order_by('due_on')[:10])
     if mine:
         items.append({'kind': 'follow_ups_overdue', 'created_at': timezone.now(), 'count': len(mine), 'ticket': mine[0]})
+    # Machines lent out and past their due-back date; branches whose warranty ends within 30
+    # days (docs/scenarios.md B, H) — whoever edits customers. Installations in the next 3 days
+    # whose site isn't confirmed ready — their owner (C10).
+    from customers.models import Asset, Site
+    from tasks.models import Task
+    if RolePermission.Permission.MANAGE_CUSTOMERS in allowed_permissions(request, technician):
+        loans = Asset.objects.filter(site__customer__country=country, on_loan_until__lt=today).count()
+        if loans:
+            items.append({'kind': 'loans_due', 'created_at': timezone.now(), 'count': loans})
+        ending = Site.objects.filter(customer__country=country, customer__is_active=True,
+                                     warranty_until__gte=today, warranty_until__lte=today + timedelta(days=30)).count()
+        if ending:
+            items.append({'kind': 'warranty_ending', 'created_at': timezone.now(), 'count': ending})
+    from tasks.equipment import is_installation, site_is_ready
+    soon = [task for task in Task.objects.filter(
+        responsible_supervisor=technician, task_type__category='installation',
+        status__in=['new', 'assigned', 'accepted'], scheduled_date__isnull=False,
+        scheduled_date__gte=today, scheduled_date__lte=today + timedelta(days=3),
+    ).select_related('task_type', 'site') if is_installation(task) and not site_is_ready(task)]
+    if soon:
+        items.append({'kind': 'readiness_due', 'created_at': timezone.now(), 'count': len(soon), 'task': soon[0]})
+    # Quotations sent a week ago with no answer (docs/scenarios.md E): their task's owner.
+    from datetime import timedelta as _days
+    from tasks.models import Task
+    quotes = Task.objects.filter(
+        responsible_supervisor=technician, quote_status=Task.QuoteStatus.SENT,
+        quote_status_at__lt=timezone.now() - _days(days=7),
+    ).count()
+    if quotes:
+        items.append({'kind': 'quotes_waiting', 'created_at': timezone.now(), 'count': quotes})
     # Ordered parts past their expected date (docs/scenarios.md E): the task's owner, and whoever
     # prepares parts in that country — until they arrive.
     from tasks.models import TaskPartNeeded

@@ -54,6 +54,12 @@
             <dt>{% translate "Source" %}</dt>
             <dd>{{ task.get_source_display }}</dd>
         </div>
+        {% if repeat_visits >= 2 %}
+        <div>
+            <dt>{% translate "Repeat visits" %}</dt>
+            <dd><span class="badge badge--warning">{% blocktranslate with count=repeat_visits|add:1 %}visit {{ count }} in 90 days{% endblocktranslate %}</span></dd>
+        </div>
+        {% endif %}
         <div>
             <dt>{% translate "About" %}</dt>
             <dd>{{ task.get_about_display }}{% if task.done_by == 'subcontractor' %} · {% translate "by" %} <bdi>{{ task.subcontractor_name }}</bdi>{% if task.subcontractor_contact %} <span class="muted" dir="ltr">({{ task.subcontractor_contact }})</span>{% endif %}{% endif %}</dd>
@@ -266,6 +272,17 @@
                 {% if task.quotation %}
                 {% include "_attachment.html" with file=task.quotation %}
                 {% if task.quotation_uploaded_at %}<span class="muted">{{ task.quotation_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
+                <br>{% if task.quote_status %}<span class="badge badge--{% if task.quote_status == 'approved' %}good{% elif task.quote_status == 'refused' %}bad{% else %}neutral{% endif %}">{{ task.get_quote_status_display }}</span>{% if task.quote_status_at %} <span class="muted">{{ task.quote_status_at|date:"j M Y" }}</span>{% endif %}{% endif %}
+                {% if can_change %}
+                <form method="post" class="inline-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="quote_status">
+                    <select name="quote_status" aria-label="{% translate 'Quotation' %}">
+                        {% for value, label in quote_statuses %}<option value="{{ value }}"{% if task.quote_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="button button--secondary">{% translate "Save" %}</button>
+                </form>
+                {% endif %}
                 {% else %}—{% endif %}
             </dd>
         </div>
@@ -583,7 +600,7 @@
     <form method="post" class="next-step" data-confirm="{% translate "Send the machines on to the next step? A new task is made." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_next_step">
-        <h3>{% translate "Send to installation" %}</h3>
+        <h3>{% translate "Send on" %}</h3>
         <div class="form-grid">
             <div class="field">
                 <label for="next-step">{% translate "Next step" %}</label>
@@ -641,7 +658,7 @@
         {% for line in lines_to_carry %}
         <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.quantity > 1 %} × {{ line.quantity }}{% endif %}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>
         {% endfor %}
-        <button type="submit" class="button">{% translate "Send to installation" %}</button>
+        <button type="submit" class="button">{% translate "Send on" %}</button>
     </form>
     {% endif %}
     {% if still_to_install %}
@@ -968,6 +985,19 @@
     </ul>
 </div>
 {% endif %}{% endwith %}
+<details class="section incident">
+    <summary>{% translate "Report a safety incident" %}</summary>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report_incident">
+        <div class="field field--wide">
+            <label for="incident-note">{% translate "What happened" %}</label>
+            <textarea name="incident_note" id="incident-note" rows="3" required></textarea>
+            <p class="field__help">{% translate "Someone hurt, or a machine dangerous: the Manager and the Operations Manager are told at once, and this task's machines are taken out of use." %}</p>
+        </div>
+        <div class="form-actions"><button type="submit" class="button button--danger">{% translate "Report" %}</button></div>
+    </form>
+</details>
 {% record_trail task show_created=False %}
 {% endblock %}
 

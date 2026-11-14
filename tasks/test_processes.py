@@ -352,7 +352,6 @@ class VisitsThatDidntSettleItTests(TaskTestCase):
 
     def test_a_low_rating_opens_a_follow_up_to_the_owner(self):
         from reports.models import CustomerFeedback
-        from tasks.equipment import open_quality_follow_up  # noqa: F401
         task = make_task(self, 'AE-2101', status=Task.Status.CLOSED)
         feedback = CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), token='tok-2101')
         self.client.post('/reports/feedback/tok-2101/', {'rating': 2, 'comment': 'Late and messy'})
@@ -370,3 +369,96 @@ class VisitsThatDidntSettleItTests(TaskTestCase):
                                       expected_on=timezone.localdate() - timedelta(days=2), created_by=self.supervisor_user)
         self.client.login(username='supervisor1', password='pass12345')
         self.assertContains(self.client.get('/tasks/'), 'Ordered parts are late')
+
+
+class PpmAndQuotationTests(TaskTestCase):
+
+    def test_closing_a_ppm_plans_the_next_one_once(self):
+        from tasks.views import _months_later, close_task_directly
+        self.site.ppm_every_months = 3
+        self.site.save(update_fields=['ppm_every_months'])
+        ppm = make_task(self, 'TEST-PPM-1', task_type=TaskType.objects.get(code='preventive_maintenance'),
+                        status=Task.Status.COMPLETED)
+        close_task_directly(ppm, self.supervisor_user, 'Done')
+        upcoming = Task.objects.get(previous_task=ppm)
+        self.assertEqual(upcoming.scheduled_date, _months_later(timezone.localdate(), 3))
+        other = make_task(self, 'TEST-PPM-2', task_type=ppm.task_type, status=Task.Status.COMPLETED)
+        close_task_directly(other, self.supervisor_user, 'Done')
+        self.assertFalse(Task.objects.filter(previous_task=other).exists())  # one is already planned
+
+    def test_the_customer_answers_a_quotation_on_the_portal(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from customers.models import PortalUser
+        task = make_task(self, 'AE-2401', status=Task.Status.NEW)
+        task.quotation = SimpleUploadedFile('quote.pdf', b'%PDF-1.4 quote', content_type='application/pdf')
+        task.quote_status, task.quote_status_at = Task.QuoteStatus.SENT, timezone.now()
+        task.save()
+        customer = User.objects.create_user('ali@fitnessfirst.example', password='pass12345')
+        PortalUser.objects.create(customer=self.customer, user=customer)
+        self.client.force_login(customer)
+        page = self.client.get(f'/customers/portal/visits/{task.pk}/')
+        self.assertContains(page, 'A quotation is waiting for your answer')
+        self.client.post(f'/customers/portal/visits/{task.pk}/', {'action': 'quote_approve'})
+        task.refresh_from_db()
+        self.assertEqual(task.quote_status, Task.QuoteStatus.APPROVED)
+
+    def test_an_unanswered_quotation_reminds_its_owner_after_a_week(self):
+        from datetime import timedelta
+        task = make_task(self, 'AE-2501', status=Task.Status.NEW)
+        Task.objects.filter(pk=task.pk).update(quote_status=Task.QuoteStatus.SENT,
+                                               quote_status_at=timezone.now() - timedelta(days=8))
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertContains(self.client.get('/tasks/'), 'unanswered for a week')
+
+
+class ShowroomTransfersIncidentsTests(TaskTestCase):
+
+    def setUp(self):
+        super().setUp()
+        from customers.models import Customer, Site
+        from people.models import Technician
+        self.manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=self.manager, country=self.country, full_name='Mona', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        ours = Customer.objects.create(country=self.country, name='Profit', segment='other', is_internal=True)
+        self.warehouse = Site.objects.create(customer=ours, name='Jebel Ali', address='JA', kind=Site.Kind.WAREHOUSE)
+        self.second = Site.objects.create(customer=ours, name='Al Quoz', address='AQ', kind=Site.Kind.WAREHOUSE)
+        self.showroom = Site.objects.create(customer=ours, name='Showroom', address='SZR', kind=Site.Kind.SHOWROOM)
+
+    def test_a_showroom_isnt_stock_and_a_loading_can_go_to_another_warehouse(self):
+        from tasks.equipment import NEXT_STEPS, next_step_sites
+        manager = self.manager.technician
+        self.assertIn(TaskType.Category.RECEIVING, NEXT_STEPS[TaskType.Category.LOADING])
+        warehouses = set(next_step_sites(manager, TaskType.Category.RECEIVING))
+        self.assertEqual(warehouses, {self.warehouse, self.second})  # not the showroom
+
+    def test_a_safety_incident_takes_the_machines_out_of_use_and_tells_the_manager(self):
+        from customers.models import Asset
+        from tasks.models import TaskAsset
+        task = make_task(self, 'TEST-INC-1', status=Task.Status.IN_PROGRESS)
+        TaskAsset.objects.create(task=task, asset=self.asset, outcome=TaskAsset.Outcome.choices[0][0])
+        self.client.force_login(self.manager)
+        self.client.post(f'/tasks/{task.pk}/', {'action': 'report_incident', 'incident_note': 'Belt snapped, a member fell'})
+        self.asset.refresh_from_db()
+        self.assertEqual(self.asset.status, Asset.Status.FAULTY)
+        incident = CustomerTicket.objects.get(linked_task=task)
+        self.assertEqual(incident.assigned_to, self.manager.technician)
+        from zoneinfo import ZoneInfo
+        self.assertEqual(incident.due_on, timezone.localdate(timezone=ZoneInfo(self.country.timezone)))  # its country's today
+
+    def test_a_factory_recall_makes_a_visit_per_branch(self):
+        from customers.models import Asset, Site
+        branch = Site.objects.create(customer=self.customer, name='JBR', address='JBR')
+        for site in (self.site, branch):
+            Asset.objects.create(site=site, brand=self.brand, model_name='Run 900', serial_no=f'R9-{site.pk}')
+        self.client.force_login(self.manager)
+        self.client.post('/tasks/machines/?q=Run 900', {'action': 'recall', 'notice': 'Belt motor recall 2026-11'})
+        recalls = Task.objects.filter(description__icontains='Belt motor recall')
+        self.assertEqual(set(recalls.values_list('site', flat=True)), {self.site.pk, branch.pk})
+
+    def test_a_receiving_without_its_delivery_note_is_followed_up(self):
+        receiving = make_task(self, 'TEST-REC-1', TaskType.Category.RECEIVING, site=self.warehouse)
+        from tasks.equipment import open_quality_follow_up as follow
+        follow(receiving, self.manager, 'Delivery note missing: %(number)s')
+        self.assertTrue(CustomerTicket.objects.filter(linked_task=receiving, subject__icontains='Delivery note').exists())
