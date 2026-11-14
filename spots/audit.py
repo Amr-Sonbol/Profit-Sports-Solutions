@@ -17,6 +17,7 @@ from contextvars import ContextVar
 from django.apps import apps
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -43,10 +44,20 @@ SECRET_FIELDS = {'password'}
 
 
 def client_ip(request):
-    """The address a request came from — the first one the proxy passed on (the live
-    server sits behind one), else the connection's own."""
-    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    return (forwarded.split(',')[0].strip() if forwarded else request.META.get('REMOTE_ADDR')) or None
+    """The address a request came from: the one our proxy added (the last in
+    X-Forwarded-For — the earlier ones are whatever the client sent, so not to be
+    trusted), else the connection's own. Never anything that isn't an address."""
+    import ipaddress
+
+    forwarded = [part.strip() for part in request.META.get('HTTP_X_FORWARDED_FOR', '').split(',') if part.strip()]
+    for candidate in (forwarded[-1] if forwarded else None, request.META.get('REMOTE_ADDR')):
+        if not candidate:
+            continue
+        try:
+            return str(ipaddress.ip_address(candidate))
+        except ValueError:
+            continue
+    return None
 
 
 class AuditContextMiddleware:
@@ -75,7 +86,9 @@ def record(action, obj=None, changes=None, message='', user=None, user_id=None, 
     """One entry in the audit trail (people.AuditEntry). It never stops the work it
     records: a failure here is logged (Sentry) and the save goes on."""
     try:
-        return _record(action, obj, changes, message, user, user_id, ip, at)
+        # Its own savepoint: a failed entry is undone alone, never the change it records.
+        with transaction.atomic():
+            return _record(action, obj, changes, message, user, user_id, ip, at)
     except Exception:
         logger.exception('Audit entry not recorded: %s %s', action, obj.__class__.__name__ if obj is not None else '')
         return None

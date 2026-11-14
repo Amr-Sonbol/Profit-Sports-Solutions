@@ -125,13 +125,19 @@ def record_count(site, kind, code, counted, note, user):
     """A hand count: `counted` is what's on the shelf; stores the difference
     from what the app works out, if any. Returns the StockAdjustment, or
     None when the count matched."""
+    from django.db import transaction
+
+    from customers.models import Site
     key = stock_key(code)
-    current = (machine_stock(site) if kind == TaskProduct.Kind.MACHINE else part_stock(site.customer.country)).get(key, 0)
-    if counted == current:
-        return None
-    return StockAdjustment.objects.create(
-        site=site, kind=kind, product_code=key, quantity=counted - current, note=note, created_by=user,
-    )
+    with transaction.atomic():
+        # One count at a time per warehouse: two people counting the same shelf don't double the difference.
+        list(Site.objects.select_for_update().filter(pk=site.pk).values_list('pk', flat=True))
+        current = (machine_stock(site) if kind == TaskProduct.Kind.MACHINE else part_stock(site.customer.country)).get(key, 0)
+        if counted == current:
+            return None
+        return StockAdjustment.objects.create(
+            site=site, kind=kind, product_code=key, quantity=counted - current, note=note, created_by=user,
+        )
 
 
 # A machine's line on a later step that leaves it still on its way (not checked yet, or left for later).

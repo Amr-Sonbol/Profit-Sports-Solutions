@@ -1494,9 +1494,12 @@ class MyTaskActionView(APIView):
 
     permission_classes = [IsTechnician]
 
+    @transaction.atomic
     def post(self, request, pk):
         assignment = _get_my_assignment(request, pk)
-        task = assignment.task
+        # One tap at a time on a task (an app retry, a double tap): locked, read again.
+        task = Task.objects.select_for_update().get(pk=assignment.task_id)
+        assignment.task = task
         is_lead = assignment.role == TaskAssignment.Role.LEAD
         if not is_lead:
             return Response({'detail': 'Only the lead can act on this task.'}, status=status.HTTP_403_FORBIDDEN)

@@ -40,9 +40,24 @@ undone for it. Likewise a customer admin role who manages their own people.
 
 ## 2. Hosting and running
 
-- **Hosting:** `render.yaml` is prepared for Render (Frankfurt; deploys only
-  after the GitHub tests pass). Confirm the choice, then the real domain, the
-  portal's own address (`PORTAL_HOST`) and the staff one (`STAFF_HOST`).
+- **Hosting:** `render.yaml` is ready for Render (Frankfurt; deploys only
+  after the GitHub tests pass) — sized for go-live (14 Nov 2026,
+  `docs/hardening_plan.md` D9): the Pro workspace, a 1 CPU / 2 GB web server
+  (2 workers × 4 threads, 60 s timeout, renewed every ~1,000 requests), a 1 GB
+  database with 20 GB of disk, and the **scheduled jobs as Render cron jobs**
+  (`spots-hourly`: visit reminders and expired sign-ins; `spots-monthly`: the
+  Audit log's clean-up). Then the real domain, the portal's own address
+  (`PORTAL_HOST`) and the staff one (`STAFF_HOST`). **Before creating anything:
+  the legal check on data location** (Render can't move a service between
+  regions).
+- **Photos, reports and documents on Cloudflare R2** (built 14 Nov 2026,
+  `spots.storage`): private — each file opened through the app's own check,
+  then a five-minute link. To switch on: the company creates the Cloudflare
+  account and an R2 bucket with the **EU jurisdiction**, and an API token for
+  it; on Render fill in `R2_BUCKET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`; run `manage.py copy_media_to_storage` once; check a
+  few photos and a report PDF; then remove the `disk:` from `render.yaml`
+  (deploys without downtime, a second server possible).
 - **Live settings:** secret key, debug off, real mail credentials, the app
   sign-in token's expiry.
 - **Already built in (2026-11-11), nothing to do but keep:**
@@ -74,6 +89,8 @@ undone for it. Likewise a customer admin role who manages their own people.
   hour it also runs `manage.py send_visit_reminders` (added 2026-11-12): the
   customer's day-before reminder of their visit, which nothing sends until then.
   Monthly, `manage.py prune_audit --keep-days 730` (the Audit log's two years).
+  **Set up in `render.yaml`** (14 Nov 2026): `spots-hourly` and `spots-monthly`;
+  check their first runs in Render's logs.
   When something goes wrong: `docs/incident_runbook.md`.
 - **The phone app:** real builds with EAS (`eas build`, then `eas submit`),
   pointing at the live server.

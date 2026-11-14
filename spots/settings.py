@@ -283,8 +283,26 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # django.contrib.staticfiles serves STATICFILES_DIRS on the fly instead.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Uploaded files: on Cloudflare R2 once R2_BUCKET is set (spots.storage — private,
+# opened only through the app's own check), else on disk (MEDIA_ROOT). R2's EU
+# jurisdiction by default (docs/hardening_plan.md D9: data location).
+R2_BUCKET = config('R2_BUCKET', default='')
+R2_ACCOUNT_ID = config('R2_ACCOUNT_ID', default='')
+R2_JURISDICTION = config('R2_JURISDICTION', default='eu')
+R2_ENDPOINT = (
+    f"https://{R2_ACCOUNT_ID}.{R2_JURISDICTION + '.' if R2_JURISDICTION else ''}r2.cloudflarestorage.com"
+    if R2_BUCKET else ''
+)
 STORAGES = {
     'default': {
+        'BACKEND': 'spots.storage.PrivateMediaStorage',
+        'OPTIONS': {
+            'bucket_name': R2_BUCKET, 'endpoint_url': R2_ENDPOINT, 'region_name': 'auto',
+            'access_key': config('R2_ACCESS_KEY_ID', default=''),
+            'secret_key': config('R2_SECRET_ACCESS_KEY', default=''),
+            'signature_version': 's3v4',
+        },
+    } if R2_BUCKET else {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {

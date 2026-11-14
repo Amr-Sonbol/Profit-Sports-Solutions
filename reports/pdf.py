@@ -36,8 +36,18 @@ def _local_file(url):
 
 
 def _url_fetcher(url, *args, **kwargs):
+    from django.core.files.storage import default_storage
     from weasyprint.urls import URLFetcherResponse
 
+    path = urlparse(url).path
+    media_prefix = '/' + settings.MEDIA_URL.strip('/') + '/'
+    if path.startswith(media_prefix) and hasattr(default_storage, 'signed_url'):
+        # Uploads on R2 (spots.storage): read through the storage, never fetched over the web.
+        name = path[len(media_prefix):]
+        if '..' in name.split('/') or not default_storage.exists(name):
+            raise ValueError(f'Not a stored file: {url}')
+        with default_storage.open(name, 'rb') as stored:
+            return URLFetcherResponse(url, body=stored.read())
     local = _local_file(url)
     if local is None:
         raise ValueError(f'Not a local file: {url}')

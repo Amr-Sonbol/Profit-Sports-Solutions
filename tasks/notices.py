@@ -3,7 +3,6 @@ through _send_notification_email (the layout, the Customer Service signature
 for customers, attachments, in the background with failures recorded); the
 customer's (tasks.customer_emails) and the staff's own.
 """
-import threading
 from datetime import timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -13,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.finders import find as find_static_file
 from django.core import signing
 from django.core.mail import EmailMultiAlternatives
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import (
     Q,
 )
@@ -38,24 +37,10 @@ from .equipment import (  # noqa: E402,F401
 
 
 def _in_background(work):
-    """Run `work` once the request's changes are saved, on its own thread, so
-    the person doesn't wait for the mail server (or a PDF) — and nothing is
-    sent for a change that was rolled back. At once under the test runner
-    (settings.SEND_EMAILS_IN_BACKGROUND). Returns what `work` returned when
-    run at once, else None."""
-    if not settings.SEND_EMAILS_IN_BACKGROUND:
-        return work()
-
-    def run():
-        try:
-            work()
-        except Exception:  # noqa: BLE001 — nobody is waiting for it; log it, so it reaches Sentry
-            logger.exception('Background work failed')
-        finally:
-            connection.close()  # the thread's own database connection
-
-    transaction.on_commit(lambda: threading.Thread(target=run).start())
-    return None
+    """Run `work` once the request's changes are saved, on the shared bounded pool
+    (spots.background) — the person doesn't wait for the mail server or a PDF."""
+    from spots.background import in_background
+    return in_background(work)
 
 
 # What one email can carry in files: mail servers commonly refuse much more.

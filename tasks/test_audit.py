@@ -46,7 +46,7 @@ class AuditTrailTests(TaskTestCase):
         AuditEntry.objects.all().delete()
         saved = self.client.post(f'/api/tasks/{task.pk}/site-readiness/', json.dumps({'power': True}),
                                  content_type='application/json', HTTP_AUTHORIZATION=f'Token {token}',
-                                 HTTP_X_FORWARDED_FOR='203.0.113.7, 10.0.0.1')
+                                 HTTP_X_FORWARDED_FOR='10.0.0.1, 203.0.113.7')  # the last: what our proxy saw
         self.assertEqual(saved.status_code, 200, saved.content)
         entry = AuditEntry.objects.get(object_type='tasks.sitereadiness', action=AuditEntry.Action.CREATED)
         self.assertEqual((entry.actor, entry.ip), (self.supervisor_user, '203.0.113.7'))
@@ -92,3 +92,16 @@ class AuditTrailTests(TaskTestCase):
         self.assertIn('Marina Walk', export.content.decode('utf-8-sig'))
         self.client.login(username='supervisor1', password='pass12345')
         self.assertEqual(self.client.get('/tasks/audit-log/').status_code, 403)
+
+    def test_a_forged_or_odd_address_never_breaks_a_save(self):
+        # Whatever a client puts in X-Forwarded-For: the save goes through; the address is ours or none.
+        self.client.login(username='admin1', password='pass12345')
+        page = self.client.get(f'/customers/sites/{self.site.pk}/edit/')
+        form = page.context['form']
+        data = {name: ('' if form[name].value() is None else form[name].value()) for name in form.fields}
+        data['name'] = 'Marina Gate'
+        self.client.post(f'/customers/sites/{self.site.pk}/edit/', data, HTTP_X_FORWARDED_FOR='unknown')
+        self.site.refresh_from_db()
+        self.assertEqual(self.site.name, 'Marina Gate')
+        entry = AuditEntry.objects.filter(object_type='customers.site', action=AuditEntry.Action.CHANGED).latest('at')
+        self.assertEqual(entry.ip, '127.0.0.1')  # the connection's own (the test client's)

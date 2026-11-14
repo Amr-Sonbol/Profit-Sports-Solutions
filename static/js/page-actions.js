@@ -20,3 +20,26 @@ document.addEventListener('click', (event) => {
     history.back();
   }
 });
+
+// A form sends once: right after it's sent, its buttons wait ("is-sending") so a
+// double click — or a second press on a slow connection — never sends it twice.
+// Not a form some script stopped (a confirm, a check), nor one opening elsewhere;
+// back on the page (the browser's Back), the buttons work again.
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || form.method.toLowerCase() !== 'post' || form.target) return;
+  setTimeout(() => {
+    if (event.defaultPrevented) return;
+    form.querySelectorAll('button:not([type="button"]), input[type="submit"]').forEach((button) => {
+      button.disabled = true;
+      button.classList.add('is-sending');
+    });
+  }, 0);
+});
+
+window.addEventListener('pageshow', () => {
+  document.querySelectorAll('.is-sending').forEach((button) => {
+    button.disabled = false;
+    button.classList.remove('is-sending');
+  });
+});

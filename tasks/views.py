@@ -2095,6 +2095,16 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
     """
     cleaned = form.cleaned_data
     with transaction.atomic():
+        if ticket is not None:
+            # One task per request (or per machine), whatever the double clicks: the request is
+            # locked; one already made from it is returned instead of a second.
+            locked = CustomerTicket.objects.select_for_update().get(pk=ticket.pk)
+            done = [machine.task for machine in TicketMachine.objects.filter(
+                pk__in=[machine.pk for machine in selected_machines]).exclude(task=None).select_related('task')]
+            if selected_machines and len(done) == len(selected_machines):
+                return done[0]
+            if not selected_machines and locked.task_id and not ticket.machines.exists():
+                return locked.task
         site = cleaned.get('site')
         if not site:
             site = Site.objects.create(
@@ -2508,7 +2518,19 @@ def decide_request_next(request, technician, ticket, choice, machine_ids, superv
     to the customer; once no machine waits, closed and the customer told).
     The website's request page and the app (api.views.TicketNextView).
     Returns (error, success message, the new task or None).
+
+    One decision at a time per request: the request is locked while it's
+    decided, so a double click, or two people at once, never make two tasks.
     """
+    with transaction.atomic():
+        locked = CustomerTicket.objects.select_for_update().get(pk=ticket.pk)
+        if not ticket.machines.exists() and locked.status != CustomerTicket.Status.NEW:
+            return _('This request has already been handled.'), '', None
+        return _decide_request_next(request, technician, ticket, choice, machine_ids, supervisor_id, lead_id, when,
+                                    reason, answer)
+
+
+def _decide_request_next(request, technician, ticket, choice, machine_ids, supervisor_id, lead_id, when, reason, answer):
     undecided = ticket.machines.filter(decision='')
     selected = list(undecided.filter(pk__in=[str(v) for v in machine_ids if str(v).isdigit()]))
     if undecided.exists() and not selected:
@@ -5960,6 +5982,7 @@ def _shipment_post(request, task, technician, back):
 
 
 @login_required
+@transaction.atomic
 def my_task_detail(request, pk):
     technician = require_technician(request)
 
@@ -5970,6 +5993,11 @@ def my_task_detail(request, pk):
         task__pk=pk, technician=technician, is_active=True,
     )
     task = assignment.task
+    if request.method == 'POST':
+        # One tap at a time on a task (a double tap, a slow connection): the task is locked,
+        # its state read again, so the second press finds the step already done.
+        list(Task.objects.select_for_update().filter(pk=task.pk).values_list('pk', flat=True))
+        task.refresh_from_db()
     is_lead = assignment.role == TaskAssignment.Role.LEAD
     next_action = _next_technician_action(task) if is_lead else None
     is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)

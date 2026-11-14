@@ -133,8 +133,8 @@ class ContentSecurityPolicyMiddleware:
                 f"script-src 'self' 'nonce-{request.csp_nonce}' https://unpkg.com",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
                 "font-src 'self' https://fonts.gstatic.com",
-                "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org",
-                "media-src 'self' blob:",
+                "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org" + _r2(),
+                "media-src 'self' blob:" + _r2(),
                 "connect-src 'self'",
                 "object-src 'none'",
                 "base-uri 'self'",
@@ -142,6 +142,12 @@ class ContentSecurityPolicyMiddleware:
                 "frame-ancestors 'none'",
             ])
         return response
+
+
+def _r2():
+    """R2's address, when uploads live there (spots.storage): the signed links open from it."""
+    from django.conf import settings
+    return f' {settings.R2_ENDPOINT}' if getattr(settings, 'R2_ENDPOINT', '') else ''
 
 
 def _own_addresses():
