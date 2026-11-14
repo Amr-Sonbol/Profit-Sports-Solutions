@@ -190,7 +190,7 @@ export default function InternalTaskScreen() {
             {entry.files.length ? <MediaStrip items={entry.files} /> : null}
           </ThemedView>
         )) : <ThemedText type="small" themeColor="textSecondary">No notes.</ThemedText>}
-        {ticket.is_open ? (
+        {ticket.can_act ? (
           <>
             <ThemedView style={styles.sendRow}>
               <TextInput
@@ -206,7 +206,7 @@ export default function InternalTaskScreen() {
         ) : null}
         {actionError ? <ThemedText themeColor="danger">{actionError}</ThemedText> : null}
 
-        {ticket.is_open ? (
+        {ticket.can_act ? (
           <ThemedView style={[styles.panel, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">Hand it to someone else</ThemedText>
             <ChoicePicker
@@ -227,7 +227,7 @@ export default function InternalTaskScreen() {
           </ThemedView>
         ) : null}
 
-        {ticket.is_open ? (
+        {ticket.can_act ? (
           <ThemedView style={[styles.panel, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">Close with the result</ThemedText>
             <TextInput

@@ -85,7 +85,7 @@ def notification_bell(request):
     overdue = (company_unscheduled_tasks(technician) if watches_company(technician)
                else overdue_unscheduled_tasks(country, technician))
     # The Operations Manager hears later than the Technical Support Manager (tasks.alarms.ALARM_HOURS).
-    later = technician.role == Technician.Role.OPERATIONS_MANAGER
+    later = technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO)
     if len(overdue) == 1:
         items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0],
                       'later': later})

@@ -770,13 +770,18 @@ class PartShippedBellTests(PartShipmentTests):
 
 class NewBranchRequestTests(LifecycleTestCase):
     def test_one_click_creates_the_branch_from_the_request(self):
+        # The desk handles the request; a manager creates the branch (docs/access_rules.md).
         self._staff('desk1', 'UAE Desk', Technician.Role.COUNTRY_SUPPORT)
+        self._staff('support1', 'Tech Support', Technician.Role.SUPPORT_MANAGER)
         self.portal.post('/customers/portal/branches/new/', {
             'name': 'JBR Branch', 'address': 'JBR Walk', 'contact_name': 'Omar', 'contact_phone': '0509999999',
             'contact_email': 'omar@fitnessfirst.example', 'opening_date': '2026-12-01', 'message': 'Opens soon.',
         })
         ticket = self.newest_request()
-        desk = self.client_for('desk1')
+        counter = self.client_for('desk1')
+        self.assertNotContains(counter.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
+        self.assertEqual(counter.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'}).status_code, 403)
+        desk = self.client_for('support1')
         self.assertContains(desk.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
         desk.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'})
         ticket.refresh_from_db()

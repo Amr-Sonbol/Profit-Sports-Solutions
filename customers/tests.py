@@ -88,15 +88,17 @@ class CustomerCreateTests(CustomerTestCase):
         response = self.client.get('/customers/new/')
         self.assertEqual(response.status_code, 403)
 
-    def test_manager_gets_403(self):
+    def test_a_manager_creates_customers_a_supervisor_does_not(self):
+        # Who creates customers and branches: docs/access_rules.md (owner, 13 Nov 2026).
         manager_user = User.objects.create_user('manager1', password='pass12345')
         Technician.objects.create(
             user=manager_user, country=self.country, full_name='Mona Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.post('/customers/new/', {'name': 'Gold Gym', 'segment': 'gym'})
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get('/customers/new/').status_code, 200)
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertEqual(self.client.get('/customers/new/').status_code, 403)
 
     def _new(self, url='/customers/new/', **overrides):
         return self.client.post(url, {

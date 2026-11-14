@@ -29,7 +29,7 @@ User = get_user_model()
 EXPECTED = Path(__file__).with_name('access_matrix.json')
 
 ROLES = [
-    'admin', 'operations_manager', 'project_manager', 'support_manager', 'country_support', 'manager',
+    'admin', 'coo', 'operations_manager', 'project_manager', 'support_manager', 'country_support', 'manager',
     'supervisor', 'warehouse_manager', 'technician',
 ]
 

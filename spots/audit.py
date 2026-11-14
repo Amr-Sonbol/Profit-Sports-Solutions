@@ -19,6 +19,7 @@ from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +213,32 @@ def connect():
     user_logged_in.connect(_signed_in, dispatch_uid='audit:in', weak=False)
     user_logged_out.connect(_signed_out, dispatch_uid='audit:out', weak=False)
     user_login_failed.connect(_sign_in_failed, dispatch_uid='audit:failed', weak=False)
+
+
+def trail(obj):
+    """Who created `obj` and who last changed it (AuditEntry or None each), and —
+    for a task — what was removed from it (its parts, machine lines, documents):
+    the newest 20. For the record's own page (templatetags.record_trail) and the app."""
+    from people.models import AuditEntry
+    entries = AuditEntry.objects.filter(
+        object_type=obj._meta.label_lower, object_id=str(obj.pk),
+    ).select_related('actor__technician')
+    removed = []
+    if obj._meta.label_lower == 'tasks.task':
+        removed = list(AuditEntry.objects.filter(
+            action=AuditEntry.Action.DELETED, changes__task__0=str(obj.pk),
+        ).select_related('actor__technician').order_by('-at')[:20])
+    return {
+        'created': entries.filter(action=AuditEntry.Action.CREATED).order_by('at').first(),
+        'changed': entries.filter(action=AuditEntry.Action.CHANGED).order_by('-at', '-pk').first(),
+        'removed': removed,
+    }
+
+
+def who(entry):
+    """"Sara Super (Supervisor)" for an audit entry; "System" when nobody did it."""
+    if entry is None:
+        return ''
+    technician = getattr(entry.actor, 'technician', None) if entry.actor_id else None
+    name = entry.actor_name or str(_('System'))
+    return f'{name} ({technician.title})' if technician else name

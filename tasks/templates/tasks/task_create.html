@@ -52,7 +52,7 @@
                 {% endif %}
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            {% if user.technician.role == 'admin' %}
+            {% if form.can_add_site %}
             <input type="checkbox" id="toggle-new-site" class="toggle-checkbox" hidden>
             <label for="toggle-new-site" class="add-new-toggle">{% translate "+ Add new site" %}</label>
             <fieldset class="new-item-fieldset">

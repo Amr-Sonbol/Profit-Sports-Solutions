@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n report_text %}
+{% load i18n report_text  record_trail %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -21,7 +21,7 @@
 {% if departed_on_task %}
 <p class="flash flash--error">
     {% translate "A member of this task team has left the company." %}
-    {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
+    {% if 'assign_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
 </p>
 {% endif %}
 
@@ -35,7 +35,7 @@
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Details" %}</h2>
-        {% if 'create_tasks' in role_permissions %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
+        {% if 'create_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
     </div>
     <dl class="detail-grid">
         <div>
@@ -62,6 +62,12 @@
             <dt>{% translate "Responsible supervisor" %}</dt>
             <dd>{{ task.responsible_supervisor.full_name|default:"—" }}</dd>
         </div>
+        {% with creator=task.creator %}
+        <div>
+            <dt>{% translate "Created by" %}</dt>
+            <dd><bdi>{{ creator.name }}</bdi>{% if creator.role %} <span class="muted">({{ creator.role }})</span>{% endif %}{% if creator.at %} · {{ creator.at|date:"j M Y, H:i" }}{% endif %}</dd>
+        </div>
+        {% endwith %}
         <div>
             <dt>{% translate "Reported" %}</dt>
             <dd>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
@@ -184,7 +190,7 @@
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Assignment" %}</h2>
-        {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>{% endif %}
+        {% if 'assign_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>{% endif %}
     </div>
     {% if active_lead or active_helpers %}
     <ul class="plain-list">
@@ -328,7 +334,7 @@
         {% else %}
         <button type="button" class="button button--secondary" disabled title="{% translate 'Add a contact email address for this site first.' %}">{% translate "Notify the customer" %}</button>
         {% endif %}
-        {% if user.technician.is_manager_tier %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit shipping" %}</a>{% endif %}
+        {% if user.technician.is_manager_tier and can_change %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit shipping" %}</a>{% endif %}
     </div>
     {% if not task.shipping_tracking_number %}<p class="field__help">{% translate "Add a tracking number (Edit) first; then you can send it to the customer." %}</p>
     {% elif not task.site.contact_email %}<p class="field__help">{% translate "Add a contact email address for this site first." %}</p>{% endif %}
@@ -645,6 +651,7 @@
     {% if report_changed_after_signing %}
     <p class="flash flash--error">{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}This report has been changed since the customer signed it on {{ date }}. Please ask the customer to sign the updated report, or refer to the signed version.{% endblocktranslate %}</p>
     {% endif %}
+    {% include "tasks/_approvals.html" with approvals=task.approvals staff=True %}
     {# The photos, for whoever checks the work: right above approving. #}
     <h3>{% translate "Photos" %}</h3>
     {% include "tasks/_visit_photos.html" %}
@@ -927,6 +934,7 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% record_trail task show_created=False %}
 {% endblock %}
 
 {% block scripts %}

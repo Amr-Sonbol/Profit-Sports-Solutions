@@ -440,6 +440,10 @@ def home_summary(request, technician):
         add(_('Machines added by customers, to confirm'), Asset.objects.filter(
             status=Asset.Status.PENDING, site__customer__country=country,
         ).count(), f"{reverse('tasks:machine_list')}?status=pending")
+    from tasks.parts_needed import can_prepare, to_prepare
+    if can_prepare(technician):
+        # The warehouse's own job (or the managers', where there's no warehouse manager).
+        add(_('Repairs with parts ready to prepare'), len(to_prepare(country)), reverse('tasks:parts_to_prepare'))
     if technician.role != Technician.Role.TECHNICIAN:
         add(_('Internal tasks assigned to you'), CustomerTicket.objects.filter(
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,

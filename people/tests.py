@@ -22,7 +22,7 @@ class SeedRolePermissionsTests(TestCase):
         # Since people 0057 the Operations Manager and the Technical Support
         # Manager hold every permission an admin does; a Country Support
         # Manager also manage_customers.
-        expected_allowed_roles = {'supervisor', 'manager', 'admin', 'operations_manager', 'support_manager', 'project_manager'}
+        expected_allowed_roles = {'supervisor', 'manager', 'admin', 'operations_manager', 'coo', 'support_manager', 'project_manager'}
         other_permissions = set(RolePermission.Permission) - {
             RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.VIEW_DASHBOARD,
             RolePermission.Permission.VIEW_MACHINES, RolePermission.Permission.VIEW_TASKS,
@@ -47,7 +47,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_STOCK, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'coo', 'support_manager', 'admin', 'project_manager'})
 
     def test_view_tasks_also_includes_the_warehouse_manager(self):
         # The warehouse manager needs to search tasks by PAK reference and
@@ -58,7 +58,7 @@ class SeedRolePermissionsTests(TestCase):
             ).values_list('role', flat=True),
         )
         # And (0057) the Technical Support Manager, and a Country Support Manager following its requests on.
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'project_manager',
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'warehouse_manager', 'operations_manager', 'coo', 'project_manager',
                                          'support_manager', 'country_support', 'admin'})
 
     def test_open_tickets_is_support_and_operations_managers_and_admin(self):
@@ -67,7 +67,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.OPEN_TICKETS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'coo', 'admin'})
 
     def test_manage_tickets_is_support_and_operations_managers_and_admin(self):
         allowed_roles = set(
@@ -75,7 +75,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'country_support', 'operations_manager', 'coo', 'admin'})
 
     def test_customer_accounts_is_support_and_operations_managers_and_admin(self):
         allowed_roles = set(
@@ -83,7 +83,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'coo', 'admin'})
 
     def test_tickets_in_all_countries_is_support_and_operations_managers_and_admin(self):
         # The Country Support Manager handles one country's tickets only.
@@ -92,7 +92,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'coo', 'admin'})
 
     def test_view_dashboard_is_for_managers_and_above(self):
         # Technicians and supervisors have My week and My progress instead
@@ -113,7 +113,7 @@ class SeedRolePermissionsTests(TestCase):
             ).values_list('role', flat=True),
         )
         self.assertEqual(
-            allowed_roles, {'supervisor', 'manager', 'support_manager', 'country_support', 'operations_manager', 'admin', 'project_manager'},
+            allowed_roles, {'supervisor', 'manager', 'support_manager', 'country_support', 'operations_manager', 'coo', 'admin', 'project_manager'},
         )
 
     def test_view_technicians_also_includes_the_operations_manager(self):
@@ -122,7 +122,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.VIEW_TECHNICIANS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
+        self.assertEqual(allowed_roles, {'supervisor', 'manager', 'operations_manager', 'coo', 'support_manager', 'admin', 'project_manager'})
 
     def test_decide_escalated_tickets_is_the_upper_chain_and_admin(self):
         allowed_roles = set(
@@ -132,7 +132,7 @@ class SeedRolePermissionsTests(TestCase):
         )
         # The Technical Support Manager decides what a Country Support
         # Manager escalates; the Operations Manager what's forwarded on.
-        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'admin'})
+        self.assertEqual(allowed_roles, {'support_manager', 'operations_manager', 'coo', 'admin'})
 
     def test_manage_parts_is_manager_warehouse_manager_and_admin(self):
         allowed_roles = set(
@@ -140,7 +140,7 @@ class SeedRolePermissionsTests(TestCase):
                 permission=RolePermission.Permission.MANAGE_PARTS, allowed=True,
             ).values_list('role', flat=True),
         )
-        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'support_manager', 'admin', 'project_manager'})
+        self.assertEqual(allowed_roles, {'manager', 'warehouse_manager', 'operations_manager', 'coo', 'support_manager', 'admin', 'project_manager'})
 
     def test_every_role_has_a_row_for_every_permission(self):
         self.assertEqual(

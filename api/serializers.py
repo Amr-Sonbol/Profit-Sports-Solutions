@@ -1,4 +1,5 @@
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from reports.models import PartUsed, WorkReport
@@ -95,6 +96,9 @@ class TaskDetailSerializer(serializers.ModelSerializer):
     brand_name = serializers.CharField(source='brand.name', default='')
     required_skill_name = serializers.CharField(source='required_skill.display_name', default='')
     events = serializers.SerializerMethodField()
+    # Who created the task, and when (Task.creator); who last changed it (spots.audit.trail).
+    created_by = serializers.SerializerMethodField()
+    last_changed = serializers.SerializerMethodField()
     attachments = TaskAttachmentSerializer(many=True, read_only=True)
     next_action = serializers.SerializerMethodField()
     shipment = serializers.SerializerMethodField()
@@ -126,8 +130,20 @@ class TaskDetailSerializer(serializers.ModelSerializer):
             'task_type_name', 'brand_name', 'required_skill_name', 'description',
             'reported_at', 'promised_at', 'scheduled_for', 'estimated_hours',
             'events', 'attachments', 'next_action', 'shipment', 'from_request', 'is_lead', 'can_file_report',
+            'created_by', 'last_changed',
             'requires_signature', 'undoable_step',
         ]
+
+    def get_last_changed(self, obj):
+        from spots.audit import trail, who
+        changed = trail(obj)['changed']
+        return {'name': who(changed), 'role': '', 'at': timezone.localtime(changed.at).isoformat()} if changed else None
+
+    def get_created_by(self, obj):
+        creator = obj.creator()
+        if creator['at']:
+            creator['at'] = timezone.localtime(creator['at']).isoformat()
+        return creator
 
     def get_events(self, obj):
         """The history, everyone's name fetched with it. A negligence flag is a
@@ -273,6 +289,8 @@ class TeamTaskDetailSerializer(TaskDetailSerializer):
     lead = serializers.SerializerMethodField()
     helpers = serializers.SerializerMethodField()
     report = serializers.SerializerMethodField()
+    # Who reviewed and who approved the report, and whose turn it is (Task.approvals).
+    approvals = serializers.SerializerMethodField()
     responsible_supervisor_name = serializers.CharField(source='responsible_supervisor.full_name', default='')
     can_assign = serializers.SerializerMethodField()
     can_supervisor_approve = serializers.SerializerMethodField()
@@ -280,7 +298,7 @@ class TeamTaskDetailSerializer(TaskDetailSerializer):
 
     class Meta(TaskDetailSerializer.Meta):
         fields = TaskDetailSerializer.Meta.fields + [
-            'lead', 'helpers', 'report', 'responsible_supervisor_name',
+            'lead', 'helpers', 'report', 'approvals', 'responsible_supervisor_name',
             'can_assign', 'can_supervisor_approve', 'can_manager_approve',
         ]
 
@@ -295,6 +313,13 @@ class TeamTaskDetailSerializer(TaskDetailSerializer):
         return AssignmentSerializer(
             [a for a in self._active(obj) if a.role == TaskAssignment.Role.HELPER], many=True,
         ).data
+
+    def get_approvals(self, obj):
+        found = obj.approvals()
+        for key in ('reviewed', 'approved'):
+            if found[key]:
+                found[key] = {**found[key], 'at': timezone.localtime(found[key]['at']).isoformat()}
+        return found
 
     def get_report(self, obj):
         report = getattr(obj, 'report', None)

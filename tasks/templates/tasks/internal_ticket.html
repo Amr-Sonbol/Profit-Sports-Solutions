@@ -62,7 +62,7 @@
     <p class="empty-state">{% translate "No notes." %}</p>
     {% endif %}
 
-    {% if is_open %}
+    {% if can_act %}
     {% translate "Add note" as note_label %}{% include "_composer.html" with form=note_form action="add_note" button=note_label %}
     {% endif %}
 </div>
@@ -74,7 +74,7 @@
 </div>
 {% endif %}
 
-{% if is_open %}
+{% if can_act %}
 <div class="section">
     <h2>{% translate "Reassign to another staff member" %}</h2>
     <form method="post" class="form-grid" novalidate>

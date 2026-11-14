@@ -141,6 +141,9 @@ def urgent_account_action(request, actor, target, action):
         log_account_action(request, target, 'Staff login turned off')
         return _('Login disabled for %(name)s.') % {'name': target.full_name}, '', ''
     if action == 'enable' and not user.is_active:
+        if not target.is_active:
+            # They left the company: they come back only through Reactivate, by a manager.
+            return '', _('%(name)s has left the company. Reactivate them first.') % {'name': target.full_name}, ''
         user.is_active = True
         user.save(update_fields=['is_active'])
         log_account_action(request, target, 'Staff login turned on')

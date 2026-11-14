@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: spots\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 14:14+0000\n"
+"POT-Creation-Date: 2026-11-13 16:08+0000\n"
 "Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -64,6 +64,16 @@ msgstr "%(code)s (%(serial)s): هذا الرقم التسلسلي مسجّل م�
 #, python-format
 msgid "%(count)s fewer than last month"
 msgstr "أقل بـ %(count)s من الشهر الماضي"
+
+#, python-format
+msgid "%(count)s item removed"
+msgid_plural "%(count)s items removed"
+msgstr[0] "لم يُحذف أي عنصر"
+msgstr[1] "حُذف عنصر واحد"
+msgstr[2] "حُذف عنصران"
+msgstr[3] "حُذفت %(count)s عناصر"
+msgstr[4] "حُذف %(count)s عنصرًا"
+msgstr[5] "حُذف %(count)s عنصر"
 
 #, python-format
 msgid "%(count)s job"
@@ -434,6 +444,10 @@ msgid "%(name)s has been unlocked."
 msgstr "تم إلغاء قفل حساب %(name)s."
 
 #, python-format
+msgid "%(name)s has left the company. Reactivate them first."
+msgstr "غادر %(name)s الشركة. أعد تفعيله أولًا."
+
+#, python-format
 msgid "%(name)s has no email address on record and was therefore notified in the application only. Please add an email address to their profile."
 msgstr "لا يوجد بريد إلكتروني مسجَّل لـ %(name)s، لذا تم إشعاره داخل التطبيق فقط. يرجى إضافة بريد إلكتروني إلى ملفه الشخصي."
 
@@ -597,6 +611,9 @@ msgstr "غادر أحد أعضاء فريق هذه المهمة الشركة."
 
 msgid "A new branch"
 msgstr "فرع جديد"
+
+msgid "A new branch: a manager creates it from this request (the Manager, Project, Technical Support or Operations Manager, the COO or the Admin)."
+msgstr "فرع جديد: يُنشئه مدير من هذا الطلب (المدير، أو مدير المشاريع، أو مدير الدعم الفني، أو مدير العمليات، أو الرئيس التنفيذي للعمليات، أو المسؤول)."
 
 msgid "A new machine"
 msgstr "جهاز جديد"
@@ -1046,6 +1063,9 @@ msgstr "اعتماد هذا التغيير في الموعد؟"
 msgid "Approved"
 msgstr "معتمد"
 
+msgid "Approved by"
+msgstr "اعتمده"
+
 msgid "Approved by supervisor"
 msgstr "اعتمده المشرف"
 
@@ -1348,6 +1368,9 @@ msgstr "العلامات التجارية"
 
 msgid "By country"
 msgstr "حسب الدولة"
+
+msgid "COO"
+msgstr "الرئيس التنفيذي للعمليات"
 
 msgid "CSV file"
 msgstr "ملف CSV"
@@ -3058,6 +3081,9 @@ msgstr "اللغة"
 
 msgid "Large equipment"
 msgstr "معدات كبيرة"
+
+msgid "Last changed by"
+msgstr "آخر تعديل بواسطة"
 
 msgid "Last check-in"
 msgstr "آخر تسجيل"
@@ -4967,6 +4993,9 @@ msgstr "تم الإصلاح"
 msgid "Repairs whose parts are all in — the soonest visit first. Open one to mark its parts prepared."
 msgstr "إصلاحات وصلت كل قطعها — الأقرب موعداً أولاً. افتح إحداها لتسجيل قطعها كمجهّزة."
 
+msgid "Repairs with parts ready to prepare"
+msgstr "إصلاحات قطعها جاهزة للتحضير"
+
 msgid "Replace lead"
 msgstr "استبدال الفني الرئيسي"
 
@@ -5227,6 +5256,9 @@ msgstr "مراجعة التذاكر المرسلة من العملاء"
 msgid "Review skills"
 msgstr "مراجعة المهارات"
 
+msgid "Reviewed by"
+msgstr "راجعه"
+
 msgid "Role"
 msgstr "الدور"
 
@@ -5426,8 +5458,8 @@ msgstr "اختر القطاع"
 msgid "Select a site, or add a new one below."
 msgstr "يرجى اختيار موقع، أو إضافة موقع جديد أدناه."
 
-msgid "Select a site. An administrator can add a new site if it is not listed."
-msgstr "يرجى اختيار موقع. يمكن للمسؤول إضافة موقع جديد إذا لم يكن مدرجاً."
+msgid "Select a site. A manager can add a new site if it is not listed."
+msgstr "اختر موقعًا. يمكن للمدير إضافة موقع جديد إن لم يكن مدرجًا."
 
 msgid "Select an existing brand or add a new one below, not both."
 msgstr "يرجى اختيار علامة تجارية موجودة أو إضافة علامة جديدة أدناه، وليس كليهما."
@@ -5916,6 +5948,9 @@ msgstr "تفعيل"
 msgid "Switched off"
 msgstr "موقوفة"
 
+msgid "System"
+msgstr "النظام"
+
 msgid "TNT"
 msgstr "TNT"
 
@@ -6361,6 +6396,9 @@ msgstr "يقرّر المشرف"
 
 msgid "The supervisor has been notified of the shipment."
 msgstr "تم إشعار المشرف بالشحنة."
+
+msgid "The task had no owner"
+msgstr "لم يكن للمهمة مسؤول"
 
 msgid "The technician is working on it."
 msgstr "الفني يعمل عليها."
@@ -7091,6 +7129,12 @@ msgstr "بانتظار مراجعة المشرف"
 
 msgid "Waiting for the Technical Support Manager — you may approve it instead."
 msgstr "بانتظار مدير الدعم الفني — يمكنك اعتماده بدلاً منه."
+
+msgid "Waiting for the final approval"
+msgstr "بانتظار الاعتماد النهائي"
+
+msgid "Waiting for the supervisor's review"
+msgstr "بانتظار مراجعة المشرف"
 
 msgid "Warehouse"
 msgstr "المستودع"

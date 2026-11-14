@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n  record_trail %}
 
 {% block title %}{{ technician.full_name }} — Profit Sports Solutions{% endblock %}
 
@@ -83,4 +83,5 @@
     </table></div>
 </div>
 {% endif %}
+{% record_trail technician %}
 {% endblock %}

@@ -2,6 +2,7 @@
  "home": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -15,6 +16,7 @@
  "task_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -28,6 +30,7 @@
  "dashboard": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -41,6 +44,7 @@
  "task_week": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -54,6 +58,7 @@
  "all_week": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -67,6 +72,7 @@
  "all_week_tasks": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -80,6 +86,7 @@
  "my_week": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -93,6 +100,7 @@
  "my_progress": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -106,6 +114,7 @@
  "my_skills": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -119,6 +128,7 @@
  "my_profile": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -132,6 +142,7 @@
  "parts_to_prepare": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -145,6 +156,7 @@
  "my_task_detail": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -158,6 +170,7 @@
  "my_report_form": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -171,6 +184,7 @@
  "task_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -184,6 +198,7 @@
  "ticket_form": {
   "anonymous": "sign-in",
   "admin": "sign-in",
+  "coo": "sign-in",
   "operations_manager": "sign-in",
   "project_manager": "sign-in",
   "support_manager": "sign-in",
@@ -197,6 +212,7 @@
  "ticket_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -210,6 +226,7 @@
  "ticket_open": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -223,6 +240,7 @@
  "internal_tickets": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -236,6 +254,7 @@
  "internal_ticket_new": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -249,10 +268,11 @@
  "internal_ticket": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
-  "country_support": "open",
+  "country_support": "not-found",
   "manager": "open",
   "supervisor": "open",
   "warehouse_manager": "open",
@@ -262,6 +282,7 @@
  "ticket_review": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -275,6 +296,7 @@
  "ticket_review_other_customer": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -288,6 +310,7 @@
  "technician_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -301,6 +324,7 @@
  "all_technicians": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -314,6 +338,7 @@
  "technician_hours": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -327,6 +352,7 @@
  "technician_hours_export": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -340,6 +366,7 @@
  "team_map": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -353,6 +380,7 @@
  "staff_accounts": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -366,6 +394,7 @@
  "technician_availability": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -379,6 +408,7 @@
  "technician_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -392,6 +422,7 @@
  "technician_detail": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -405,6 +436,7 @@
  "technician_board": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -418,6 +450,7 @@
  "technician_progress": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -431,6 +464,7 @@
  "technician_skills": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -444,6 +478,7 @@
  "technician_edit": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -457,6 +492,7 @@
  "view_as_user_start": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -470,6 +506,7 @@
  "team_progress": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -483,6 +520,7 @@
  "machine_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -496,6 +534,7 @@
  "machine_detail": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -509,6 +548,7 @@
  "role_permissions": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -522,6 +562,7 @@
  "notification_settings": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -535,6 +576,7 @@
  "audit_log": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -548,6 +590,7 @@
  "monthly_report": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -561,6 +604,7 @@
  "monthly_report_export": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -574,6 +618,7 @@
  "skill_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -587,6 +632,7 @@
  "skill_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -600,6 +646,7 @@
  "conduct_area_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -613,6 +660,7 @@
  "brand_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -626,6 +674,7 @@
  "brand_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -639,6 +688,7 @@
  "part_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -652,6 +702,7 @@
  "stock": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -665,6 +716,7 @@
  "country_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -678,6 +730,7 @@
  "country_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -691,6 +744,7 @@
  "task_detail": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -704,6 +758,7 @@
  "task_detail_other_country": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -717,6 +772,7 @@
  "task_edit": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -730,6 +786,7 @@
  "task_assign": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -743,6 +800,7 @@
  "task_report_correct": {
   "anonymous": "sign-in",
   "admin": "redirect",
+  "coo": "redirect",
   "operations_manager": "redirect",
   "project_manager": "redirect",
   "support_manager": "redirect",
@@ -756,6 +814,7 @@
  "task_report_pdf": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -769,6 +828,7 @@
  "customer_list": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -782,11 +842,12 @@
  "customer_create": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
-  "project_manager": "refused",
+  "project_manager": "open",
   "support_manager": "open",
   "country_support": "refused",
-  "manager": "refused",
+  "manager": "open",
   "supervisor": "refused",
   "warehouse_manager": "refused",
   "technician": "refused",
@@ -795,6 +856,7 @@
  "customer_import": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -808,6 +870,7 @@
  "customer_import_template": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -821,6 +884,7 @@
  "customer_detail": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -834,6 +898,7 @@
  "customer_edit": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -847,6 +912,7 @@
  "site_edit": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -860,6 +926,7 @@
  "view_as_start": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -873,6 +940,7 @@
  "portal_home": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -886,6 +954,7 @@
  "portal_requests": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -899,6 +968,7 @@
  "portal_visits": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -912,6 +982,7 @@
  "portal_reports": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -925,6 +996,7 @@
  "portal_machines": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -938,6 +1010,7 @@
  "portal_machine": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -951,6 +1024,7 @@
  "portal_machine_other_customer": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -964,6 +1038,7 @@
  "portal_visit": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -977,6 +1052,7 @@
  "portal_visit_other_customer": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -990,6 +1066,7 @@
  "portal_ticket_new": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1003,6 +1080,7 @@
  "portal_branch_request": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1016,6 +1094,7 @@
  "portal_machine_add": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1029,6 +1108,7 @@
  "portal_settings": {
   "anonymous": "sign-in",
   "admin": "refused",
+  "coo": "refused",
   "operations_manager": "refused",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1042,6 +1122,7 @@
  "api_me": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1055,6 +1136,7 @@
  "api_my_tasks": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1068,6 +1150,7 @@
  "api_my_today": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1081,6 +1164,7 @@
  "api_my_schedule": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1094,6 +1178,7 @@
  "api_my_progress": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1107,6 +1192,7 @@
  "api_my_skills": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1120,6 +1206,7 @@
  "api_my_task_detail": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -1133,6 +1220,7 @@
  "api_my_task_report": {
   "anonymous": "sign-in",
   "admin": "not-found",
+  "coo": "not-found",
   "operations_manager": "not-found",
   "project_manager": "not-found",
   "support_manager": "not-found",
@@ -1146,6 +1234,7 @@
  "api_tasks": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1159,6 +1248,7 @@
  "api_task_filters": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1172,6 +1262,7 @@
  "api_team_task": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1185,6 +1276,7 @@
  "api_team_task_other_country": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1198,6 +1290,7 @@
  "api_task_lines": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1211,6 +1304,7 @@
  "api_task_messages": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1224,6 +1318,7 @@
  "api_task_candidates": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1237,6 +1332,7 @@
  "api_task_edit": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "refused",
@@ -1250,6 +1346,7 @@
  "api_task_manage": {
   "anonymous": "sign-in",
   "admin": "post-only",
+  "coo": "post-only",
   "operations_manager": "post-only",
   "project_manager": "post-only",
   "support_manager": "post-only",
@@ -1263,6 +1360,7 @@
  "api_tickets": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -1276,6 +1374,7 @@
  "api_ticket": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -1289,6 +1388,7 @@
  "api_ticket_other_customer": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "refused",
   "support_manager": "open",
@@ -1302,6 +1402,7 @@
  "api_internal_tickets": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1315,10 +1416,11 @@
  "api_internal_ticket": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
-  "country_support": "open",
+  "country_support": "not-found",
   "manager": "open",
   "supervisor": "open",
   "warehouse_manager": "open",
@@ -1328,6 +1430,7 @@
  "api_customers": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1341,6 +1444,7 @@
  "api_customer": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1354,6 +1458,7 @@
  "api_machines": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1367,6 +1472,7 @@
  "api_machine": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1380,6 +1486,7 @@
  "api_dashboard": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1393,6 +1500,7 @@
  "api_team_today": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1406,6 +1514,7 @@
  "api_team_progress": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1419,6 +1528,7 @@
  "api_team_map": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1432,6 +1542,7 @@
  "api_waiting": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1445,6 +1556,7 @@
  "api_bell": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1458,6 +1570,7 @@
  "api_hours": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1471,6 +1584,7 @@
  "api_parts": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1484,6 +1598,7 @@
  "api_parts_to_prepare": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1497,6 +1612,7 @@
  "api_staff_accounts": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1510,6 +1626,7 @@
  "api_person": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",
@@ -1523,6 +1640,7 @@
  "api_website_menu": {
   "anonymous": "sign-in",
   "admin": "open",
+  "coo": "open",
   "operations_manager": "open",
   "project_manager": "open",
   "support_manager": "open",

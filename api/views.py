@@ -30,7 +30,7 @@ from customers.forms import SignInEmailChangeForm
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_plan_equipment, can_set_password, get_active_country, is_last_active_admin,
+    ACTIVE_COUNTRY_SESSION_KEY, can_create_customers, can_manage_account, can_plan_equipment, can_set_password, get_active_country, is_last_active_admin,
     require_manager,
     scoped_or_404,
 )
@@ -59,7 +59,8 @@ from tasks.views import (
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
     BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
-    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead, can_change_task,
+    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    _ticket_is_open, can_act_on_internal_ticket, can_change_task,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
     _technicians_with_next_scheduled_task,
     approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
@@ -78,7 +79,7 @@ from tasks.views import (
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
     add_ticket_note, decide_request_next, send_staff_reply, ticket_access, ticket_for_app, team_today,
-    waiting_for, can_give_final_approval, require_final_approver, technician_overview,
+    waiting_for, can_give_final_approval, gave_supervisor_approval, require_final_approver, technician_overview,
     add_internal_ticket_note, close_internal_ticket, internal_ticket_for_app, open_internal_ticket,
     reassign_internal_ticket,
 )
@@ -451,7 +452,9 @@ class TaskCreateView(APIView):
             raise PermissionDenied
         technician = request.user.technician
         return TaskCreateForm(data, country=get_active_country(request) or technician.country,
-                              is_admin=technician.role == Technician.Role.ADMIN)
+                              is_admin=technician.role == Technician.Role.ADMIN,
+                              owner_required=technician.role == Technician.Role.TECHNICIAN,
+                              can_add_site=can_create_customers(technician))
 
     def get(self, request):
         form = self._form(request)
@@ -756,6 +759,8 @@ class InternalTicketView(APIView):
         technician, ticket = _internal_ticket_for(request, pk)
         if ticket.status != CustomerTicket.Status.NEW:
             return Response({'detail': str(_('This internal task is closed.'))}, status=400)
+        if not can_act_on_internal_ticket(technician, ticket):
+            raise PermissionDenied
         action = request.data.get('action')
         note = None
         if action == 'note':
@@ -2004,7 +2009,10 @@ def _team_task_response(request, task):
         'can_supervisor_approve': (
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
         ),
-        'can_manager_approve': task.status == Task.Status.COMPLETED and can_give_final_approval(technician),
+        'can_manager_approve': (
+            task.status == Task.Status.COMPLETED and can_give_final_approval(technician)
+            and not gave_supervisor_approval(task, request.user)
+        ),
         # Negligence flags: the manager tier's only (TaskDetailSerializer.get_events).
         'show_negligence': technician.is_manager_tier,
         # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
@@ -2277,6 +2285,7 @@ class TaskPartsNeededView(APIView):
         if request.data.get('action') == 'edit':
             if not request.user.technician.is_manager_tier:
                 raise PermissionDenied  # correcting a part: managers only
+            _require_task_owner(request, task)
             if not request.data.get('line'):
                 return Response({'detail': 'Which part?'}, status=status.HTTP_400_BAD_REQUEST)
         else:
@@ -2357,6 +2366,7 @@ class TaskFollowUpView(APIView):
         task = _get_team_task(request, pk)
         if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
             raise PermissionDenied
+        _require_task_owner(request, task)
         if not still_to_install(task):
             return Response({'detail': str(_('Nothing is left to install on this task.'))}, status=status.HTTP_400_BAD_REQUEST)
         follow_up = create_follow_up(task, request.user)
@@ -2517,6 +2527,7 @@ class TaskDocumentView(APIView):
         task = _get_team_task(request, pk)
         if request.user.technician.role == Technician.Role.TECHNICIAN:
             raise PermissionDenied
+        _require_task_owner(request, task)
         form = StaffAttachmentUploadForm(request.data, request.FILES)
         if not form.is_valid():
             return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
@@ -2722,6 +2733,7 @@ class TaskActionView(APIView):
                 rebook_visit(task, request.user, form.cleaned_data['scheduled_for'], form.cleaned_data['note'])
         elif action == 'send_feedback_request':
             require_manager(request)
+            _require_task_owner(request, task)
             error = send_feedback_request(request, task)
         elif action == 'reopen':
             if technician.role != Technician.Role.ADMIN:
@@ -2932,6 +2944,7 @@ class TeamTaskApproveView(APIView):
         if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
             if not can_supervisor_approve(technician, task):
                 raise PermissionDenied
+            _require_task_owner(request, task)
             approve_report_as_supervisor(task, request.user)
         elif task.status == Task.Status.COMPLETED:
             require_final_approver(request, task)
@@ -3123,8 +3136,7 @@ class TicketReplyView(APIView):
                 raise PermissionDenied
             add_ticket_note(request.user, ticket, message)
             return Response({'message': _('Note added.')}, status=201)
-        if not (access['can_manage'] and ticket.status not in (
-                CustomerTicket.Status.CLOSED, CustomerTicket.Status.DISMISSED)):
+        if not (access['can_manage'] and _ticket_is_open(ticket)):
             raise PermissionDenied
         send_staff_reply(request, ticket, message)
         return Response({'message': _('Reply sent.')}, status=201)

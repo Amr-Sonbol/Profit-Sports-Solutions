@@ -85,7 +85,7 @@ def late_reports(technician, now=None):
     Manager's safety net (docs/access_rules.md); nobody else's. Oldest first,
     each with `waiting_since` and `waiting_days`. Live: gone once approved.
     """
-    if technician.role != Technician.Role.OPERATIONS_MANAGER:
+    if technician.custom_role_id or technician.role not in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO):
         return []
     return _late_reports(now)
 
@@ -144,18 +144,19 @@ def new_ticket_people(country):
 # no day after 24) reach the Technical Support Manager and the Operations
 # Manager, whichever country they're looking at; the full summary at the top of
 # the Dashboard (company_summary) is the Technical Support Manager's alone.
-COMPANY_WATCH_ROLES = (Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER)
+COMPANY_WATCH_ROLES = (Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO)
 COMPANY_SUMMARY_ROLES = (Technician.Role.SUPPORT_MANAGER,)
 # Each level up hears later, of what the level below didn't solve: (blocked, no day), in working hours.
 # The Operations Manager only of what stayed stuck after the Technical Support Manager knew.
 ALARM_HOURS = {
     Technician.Role.SUPPORT_MANAGER: (2, UNSCHEDULED_ALARM_HOURS),
     Technician.Role.OPERATIONS_MANAGER: (2 * 24, 3 * 24),  # 2 working days; 3 working days
+    Technician.Role.COO: (2 * 24, 3 * 24),  # as the Operations Manager
 }
 
 
 def watches_company(technician):
-    return technician is not None and technician.role in COMPANY_WATCH_ROLES
+    return technician is not None and not technician.custom_role_id and technician.role in COMPANY_WATCH_ROLES
 
 
 def company_unscheduled_tasks(technician, now=None):

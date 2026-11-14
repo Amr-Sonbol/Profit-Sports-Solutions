@@ -104,6 +104,10 @@ export interface MachineCardData {
 
 export interface TaskDetail {
   id: number;
+  /** Who created the task, and when (tasks.models.Task.creator). */
+  created_by?: { name: string; role: string; at: string | null };
+  /** Who last changed it (spots.audit.trail), or null. */
+  last_changed?: { name: string; role: string; at: string | null } | null;
   task_number: string;
   site_name: string;
   site_address: string;
@@ -416,6 +420,14 @@ export interface TaskActions {
   reopen: boolean;
 }
 
+/** Who reviewed or approved a report (tasks.models.Task.approvals). */
+export interface Approval {
+  name: string;
+  role: string;
+  at: string;
+  instead: boolean;
+}
+
 export interface TeamTaskDetail extends TaskDetail {
   /** Older servers: absent. */
   actions?: TaskActions;
@@ -431,6 +443,7 @@ export interface TeamTaskDetail extends TaskDetail {
   can_assign: boolean;
   can_supervisor_approve: boolean;
   can_manager_approve: boolean;
+  approvals?: { reviewed: Approval | null; approved: Approval | null; waiting: 'review' | 'approval' | null };
   /** An equipment task's machines, the chain around it, and the follow-up offer. */
   equipment?: {
     lines: {
@@ -754,6 +767,8 @@ export interface InternalTicketDetail {
   status: string;
   status_display: string;
   is_open: boolean;
+  // Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
+  can_act: boolean;
   subject: string;
   description: string;
   assigned_to: { id: number; name: string } | null;

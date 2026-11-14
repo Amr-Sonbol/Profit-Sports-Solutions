@@ -1,7 +1,11 @@
 # Who sees, who changes — the rule book
 
 What each person can see and change, for tasks and internal tasks. The code
-follows this one place (people/access.py); keep the two in step. Agreed with
+keeps these rules in `people/permissions.py` (accounts, customers, loading),
+`tasks/views.py` (`can_step_in`, `_require_task_owner`, approvals, internal
+tasks) and the Roles & permissions switches; keep them in step with this page.
+Locked by tests: `tasks/test_access_matrix.py` (who opens each page and app
+screen) and `tasks/test_action_matrix.py` (who can do each sensitive action). Agreed with
 the owner, November 2026.
 
 ## Roles
@@ -10,12 +14,12 @@ A role is what someone **can do**, not what they're **called**: each person
 can have a job title (a General Manager with the Operations Manager's role, a
 "Customer Service Coordinator" with Country Support's), shown wherever they're
 listed. Give someone the role whose powers fit, and the title they're known
-by. For a position no role fits (a COO, a General Manager), the Admin makes a
-**role of their own** on Roles & permissions: based on a built-in role, whose
-fixed rules it follows, with its own switches — a COO based on the Operations
-Manager, with Tickets switched off. Stage 1 of capability-based roles; later
-stages turn the remaining fixed rules (stepping in, approvals, company watch,
-whose pages one opens, area…) into switches as well.
+by. For a position no role fits, the Admin makes a **role of their own** on
+Roles & permissions (a "Coordinator"), based on a built-in role. **It has only
+the switches ticked for it** (owner, 13 Nov 2026): none of the built-in roles'
+fixed powers — managing staff logins, stepping in on others' tasks, approving
+reports, planning loadings, creating customers, watching the whole company —
+and it stays in its own country.
 
 | Role | Area |
 |---|---|
@@ -27,6 +31,7 @@ whose pages one opens, area…) into switches as well.
 | Project Manager | every country — like a Manager, no customer requests (no Tickets) |
 | Technical Support Manager | every country |
 | Operations Manager | every country |
+| COO | every country — as the Operations Manager; above him on Staff accounts |
 | Admin | every country |
 
 ## Tasks (field work)
@@ -40,7 +45,7 @@ whose pages one opens, area…) into switches as well.
 | Warehouse Manager | stock-related tasks in their country: part shipments, receiving, loading, installations |
 | Country Support Manager | every task in their country (to answer customers); changes none |
 | Manager | every task in their country |
-| Project Manager, Technical Support Manager, Operations Manager, Admin | every task, every country |
+| Project Manager, Technical Support Manager, Operations Manager, COO, Admin | every task, every country |
 
 **Changing — one owner per task.**
 - Every task has **one owner**: the person who created it, or the supervisor it
@@ -56,7 +61,9 @@ whose pages one opens, area…) into switches as well.
   travel or leave. The new owner is told.
 - **Stepping in.** When the owner is away, these can change it anyway; each
   change is recorded in the history and the owner is told:
-  - the **Operations Manager** and **Admin** — any task;
+  - the **Operations Manager**, the **COO** and the **Admin** — any task;
+  - the **Manager** and the **Project Manager** — a **loading or an installation**
+    (they plan its machines), whoever created it;
   - the country **Manager** — tasks in their own country.
   The Technical Support Manager and the Project Manager change only the tasks
   they own.
@@ -65,12 +72,15 @@ whose pages one opens, area…) into switches as well.
 - A time a manager-level owner set is **locked** for a supervisor: he asks to
   move it, and the owner approves or refuses (as before).
 - The **technician** always does their own steps and report.
-- Tasks with no owner yet (from before this rule) stay open to whoever the
-  role allows, until one is set.
+- **A task always has an owner**: it can be handed over, never left blank;
+  someone who can't own tasks (a field role) chooses one when creating it. A
+  task with no owner (from before this rule) is changed only by those who
+  step in, who give it one.
 
 ### The work report: review, then approval
 
-1. The technician submits it → **the task's supervisor (owner)** reviews it;
+1. The technician submits it → **the task's supervisor (owner)** reviews it
+   (or someone stepping in — recorded);
    he is told on his phone and it's in his *Waiting for me*. A supervisor's own
    report skips this step.
 2. Reviewed → **the Technical Support Manager** gives the final approval,
@@ -79,8 +89,13 @@ whose pages one opens, area…) into switches as well.
 3. The **Operations Manager** and **Admin** may approve instead — recorded in
    the history ("Instead of the Technical Support Manager"). They aren't told
    of each report — but a report **waiting more than 2 working days** shows in
-   the Operations Manager's bell and Waiting for me until it's approved. A Manager, the Project Manager and a supervisor see the
-   report but don't approve it.
+   the Operations Manager's and the COO's bell and Waiting for me until it's
+   approved. A Manager, the Project Manager and a supervisor see the report but
+   don't give the final approval.
+4. **Two different people**: whoever gave the supervisor's approval can't give
+   the final one too.
+5. Correcting a report already filed (signed by the customer): its owner, or
+   someone stepping in (recorded).
 
 ## Watching the whole company
 
@@ -114,8 +129,10 @@ its own reports waiting over 2 working days — not the summary.
 ## People (their pages, schedules, skills, progress)
 
 - **Admin:** everyone.
-- **Manager, Project Manager, Technical Support Manager, Operations Manager:**
-  supervisors and technicians.
+- **Manager, Project Manager, Technical Support Manager, Operations Manager,
+  COO:** supervisors and technicians. Their record (name, phone, photo…) is
+  edited by whoever oversees them; a Supervisor edits technicians'.
+- **Availability** (on the website and in the app): of the people one oversees.
 - **Supervisor:** technicians.
 - **Warehouse Manager and Country Support:** nobody.
 
@@ -141,6 +158,11 @@ task needs go through that task (a part shipment).
 
 ## Customers
 
+- **Creating a customer or a branch** (owner, 13 Nov 2026) — from a request,
+  the Customers page, or while planning an installation: the **Manager, Project
+  Manager, Technical Support Manager, Operations Manager, COO and Admin** (a
+  Manager in their own country). Inviting its people to the portal: whoever
+  manages portal logins.
 - **Seeing and editing are two switches.** "View customers and sites" opens
   the customer list, a customer's page, its branches, contacts and machines.
   "Edit customers, sites and machines" changes them: the customer's details,
@@ -170,8 +192,23 @@ else's password.
 
 Everyone else who manages accounts sends the person a **link to their own email**
 (a setup or password link) — the person chooses their own password, so nobody
-else ever knows it. Unlocking, signing out of every phone, and turning a login
-off or on stay with whoever manages the account (never someone above them).
+else ever knows it.
+
+**Who manages whose staff login** (unlocking, signing out of every phone, turning
+it off or on, the setup link) — `people.permissions.can_manage_account`, the same
+on the website and in the app:
+
+| Who | Whose logins |
+|---|---|
+| Admin | everyone's |
+| COO | everyone's but the Admin's |
+| Operations Manager | everyone's but the Admin's and the COO's |
+| Manager, Project Manager, Technical Support Manager | Supervisors', Technicians', Warehouse Managers' and Country Support's — in their own country (the Manager), or everywhere (who reaches every country) |
+| everyone else, and any role made on Roles & permissions | nobody's |
+
+Someone who **left the company** isn't switched back on from Staff accounts:
+they're **reactivated** first, by whoever manages their login (never by a
+Supervisor).
 
 A changed login email is always told to the **old** address too.
 

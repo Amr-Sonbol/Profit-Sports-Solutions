@@ -51,7 +51,7 @@ from people.models import (
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, can_plan_equipment, get_active_country, is_last_active_admin, require_admin,
+    ACTIVE_COUNTRY_SESSION_KEY, can_create_customers, can_manage_account, can_plan_equipment, get_active_country, is_last_active_admin, require_admin,
     require_all_countries, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404, tasks_for_role,
 )
@@ -444,20 +444,9 @@ def _technicians_with_next_scheduled_task(technicians):
 
 
 def _supervisors_with_next_scheduled_task(supervisors):
-    """Same as _technicians_with_next_scheduled_task, but for whoever is
-    picked as a task's responsible_supervisor — that's a direct FK on
-    Task, not a TaskAssignment row, so the lookup is simpler.
-    """
-    supervisors = list(supervisors)
-    upcoming = Task.objects.filter(
-        responsible_supervisor__in=supervisors, status__in=OPEN_STATUSES, scheduled_for__gte=timezone.now(),
-    ).select_related('site__customer').order_by('scheduled_for')
-    next_by_supervisor = {}
-    for task in upcoming:
-        next_by_supervisor.setdefault(task.responsible_supervisor_id, task)
-    for supervisor in supervisors:
-        supervisor.next_scheduled_task = next_by_supervisor.get(supervisor.pk)
-    return supervisors
+    """Same as _technicians_with_next_scheduled_task: a supervisor is booked by
+    the jobs they're on (lead or helper), not the tasks they own."""
+    return _technicians_with_next_scheduled_task(supervisors)
 
 
 def _skills_with_current_rating(technician):
@@ -1048,12 +1037,17 @@ def task_list(request):
 
 
 def can_supervisor_approve(technician, task):
-    """The task's own responsible_supervisor signs off on a technician's
-    report before it ever reaches a manager; a manager can also do this
-    themselves (a superset, same as everywhere else), which matters if no
-    supervisor is set yet.
-    """
-    return technician.is_manager_tier or technician.id == task.responsible_supervisor_id
+    """The task's owner reviews a technician's report before it goes on to the
+    final approval; someone allowed to step in may instead (recorded:
+    _require_task_owner). Nobody else (docs/access_rules.md)."""
+    return can_change_task(technician, task)
+
+
+def gave_supervisor_approval(task, user):
+    """Whether `user` approved this task's latest report as its supervisor: the
+    final approval is then someone else's (two people, docs/access_rules.md)."""
+    last = task.events.filter(event_type=TaskEvent.EventType.SUPERVISOR_APPROVED).order_by('-occurred_at').first()
+    return last is not None and last.actor_id == user.pk
 
 
 def approve_report_as_supervisor(task, actor):
@@ -1077,8 +1071,8 @@ def can_give_final_approval(technician):
     """The final approval of a report, which closes the task, is the Technical
     Support Manager's (docs/access_rules.md); the Operations Manager and Admin
     may step in. The website's button, the app and Waiting for me."""
-    return technician.role in (
-        Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN,
+    return not technician.custom_role_id and technician.role in (
+        Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN,
     )
 
 
@@ -1088,6 +1082,8 @@ def require_final_approver(request, task):
     technician = require_technician(request)
     if not can_give_final_approval(technician):
         raise PermissionDenied
+    if task.status == Task.Status.COMPLETED and gave_supervisor_approval(task, request.user):
+        raise PermissionDenied  # the same person doesn't give both approvals
     if (technician.role != Technician.Role.SUPPORT_MANAGER and request.method == 'POST'
             and task.status == Task.Status.COMPLETED):  # only when there's a report to approve
         TaskEvent.objects.create(
@@ -1454,6 +1450,7 @@ def _action_notify_shipping(request, task, technician, forms):
 def _action_upload_document(request, task, technician, forms):
     if technician.role == Technician.Role.TECHNICIAN:
         return None
+    _require_task_owner(request, task)
     forms['staff_upload_form'] = form = StaffAttachmentUploadForm(request.POST, request.FILES)
     if form.is_valid():
         _save_attachment(request, task, form.cleaned_data['file'], form.cleaned_data['purpose'],
@@ -1466,6 +1463,7 @@ def _action_upload_document(request, task, technician, forms):
 def _action_approve_report_supervisor(request, task, technician, forms):
     if not can_supervisor_approve(technician, task):
         raise PermissionDenied
+    _require_task_owner(request, task)  # stepping in: recorded
     if approve_report_as_supervisor(task, request.user):
         messages.success(request, _('Approved. The task now awaits the Technical Support Manager\'s approval.'))
     else:
@@ -1601,6 +1599,7 @@ def _action_edit_part_needed(request, task, technician, forms):
     from tasks import parts_needed
     if not technician.is_manager_tier:
         raise PermissionDenied  # correcting a part: managers only
+    _require_task_owner(request, task)
     line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
     form = PartNeededForm(request.POST, prefix=f'part{line.pk}')
     if form.is_valid():
@@ -1635,6 +1634,7 @@ def _action_parts_needed(request, task, technician, forms):
 
 def _action_create_follow_up(request, task, technician, forms):
     require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
     if not still_to_install(task):
         messages.error(request, _('Nothing is left to install on this task.'))
         return _back_to(task)
@@ -1647,6 +1647,7 @@ def _action_create_follow_up(request, task, technician, forms):
 
 def _action_send_feedback_request(request, task, technician, forms):
     require_manager(request)
+    _require_task_owner(request, task)
     _said(request, send_feedback_request(request, task), _('The feedback request has been sent.'))
     return _back_to(task)
 
@@ -1809,7 +1810,11 @@ def task_detail(request, pk):
         'customer_has_current_time': customer_has_current_time(task),
         'can_upload_staff_document': can_upload_staff_document,
         'staff_upload_form': forms['staff_upload_form'],
-        'can_give_final_approval': can_give_final_approval(requesting_technician),
+        'can_give_final_approval': (
+            can_give_final_approval(requesting_technician) and not gave_supervisor_approval(task, request.user)
+        ),
+        # Edit, and the changes on the page: the owner, or someone allowed to step in.
+        'can_change': can_change_task(requesting_technician, task),
         'can_approve_as_supervisor': (
             requesting_technician.is_manager_tier
             or requesting_technician.id == task.responsible_supervisor_id
@@ -1980,6 +1985,8 @@ def _task_form_for(requesting_technician, ticket, data=None):
     return TaskCreateForm(
         data, country=ticket.country, ticket=ticket, is_admin=requesting_technician.role == Technician.Role.ADMIN,
         can_assign=_has_permission(requesting_technician, RolePermission.Permission.ASSIGN_TASKS),
+        owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+        can_add_site=can_create_customers(requesting_technician),
     )
 
 
@@ -2238,6 +2245,8 @@ def task_create(request):
     if request.method == 'POST':
         form = lock_type(TaskCreateForm(
             request.POST, country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign,
+            owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+            can_add_site=can_create_customers(requesting_technician),
         ))
         if form.is_valid():
             task = create_task(request, form, requesting_technician, ticket, selected_machines, machine_decision)
@@ -2251,7 +2260,11 @@ def task_create(request):
                 messages.warning(request, clash)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = lock_type(TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign))
+        form = lock_type(TaskCreateForm(
+            country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign,
+            owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+            can_add_site=can_create_customers(requesting_technician),
+        ))
         if selected_machines:
             form.fields['description'].initial = ticket_machines_text(selected_machines)[1]
 
@@ -2707,6 +2720,8 @@ def _request_create_branch(request, ticket, technician, access, forms):
     (the email is the one in their message, if any). Linked, so its task starts there."""
     if not (ticket.about == CustomerTicket.About.NEW_BRANCH and ticket.customer_id and not ticket.site_id):
         return None
+    if not can_create_customers(technician):
+        raise PermissionDenied
     email = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', ticket.description or '')
     site = ticket.customer.sites.filter(name__iexact=ticket.site_description.strip()).first()
     if site is None:
@@ -2924,6 +2939,8 @@ def ticket_review(request, pk):
         ),
         'ticket': ticket, 'dismiss_form': forms['dismiss_form'], 'assign_form': forms['assign_form'],
         'logistics_form': forms['logistics_form'], 'pak_reminder': pak_reminder, 'edit_form': forms['edit_form'], 'can_manage': can_manage,
+        # A customer's new branch: whoever creates branches (people.permissions.can_create_customers).
+        'can_create_branch': can_manage and can_create_customers(request.user.technician),
         # "What happens next?": who can be sent, and what the task will be (task_from_request).
         **_next_step_context(technician, ticket, can_manage),
         'reply_form': forms['reply_form'], 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
@@ -2943,15 +2960,22 @@ def can_step_in(technician, task):
     """Who may change a task instead of its owner, while they're away: the
     Operations Manager and Admin anywhere, the country Manager in their own
     country (docs/access_rules.md)."""
-    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN):
+    if technician.custom_role_id:
+        return False  # a role made on Roles & permissions: only its switches
+    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN):
+        return True
+    # A loading or an installation: whoever plans its machines (the Manager, the Project Manager)
+    # may step in on it, whoever created it — recorded like any stepping in.
+    if can_plan_equipment(technician) and equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION):
         return True
     return technician.role == Technician.Role.MANAGER and technician.country_id == task.site.customer.country_id
 
 
 def task_owned_by(technician, task):
-    """True for the task's owner (its responsible supervisor), and for anyone
-    while it has no owner yet (from before the rule) — the role decides then."""
-    return not task.responsible_supervisor_id or task.responsible_supervisor_id == technician.id
+    """True for the task's owner (its responsible supervisor). A task with no
+    owner has nobody's: only someone allowed to step in changes it (and gives
+    it an owner)."""
+    return bool(task.responsible_supervisor_id) and task.responsible_supervisor_id == technician.id
 
 
 def can_change_task(technician, task):
@@ -2970,9 +2994,10 @@ def _require_task_owner(request, task):
         raise PermissionDenied
     if request.method == 'POST' and not getattr(request, '_stepped_in', False):
         request._stepped_in = True
+        owner = task.responsible_supervisor
         TaskEvent.objects.create(
             task=task, event_type=TaskEvent.EventType.STEPPED_IN, occurred_at=timezone.now(), actor=request.user,
-            note=_('Instead of %(name)s') % {'name': task.responsible_supervisor.full_name},
+            note=_('Instead of %(name)s') % {'name': owner.full_name} if owner else _('The task had no owner'),
         )
 
 
@@ -3117,14 +3142,14 @@ def technician_availability(request):
     """
     require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
     active_country = get_active_country(request)
-    technicians = Technician.objects.filter(is_active=True, country=active_country).order_by('full_name')
+    viewer = request.user.technician
+    # Whose availability: the people this person oversees (the same as the app).
+    technicians = _people_i_oversee(viewer).filter(is_active=True, country=active_country).order_by('full_name')
     mark_unavailable_form = MarkUnavailableForm()
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        technician = get_object_or_404(
-            Technician, pk=request.POST.get('technician_id'), country=active_country,
-        )
+        technician = get_object_or_404(technicians, pk=request.POST.get('technician_id'))
 
         if action == 'mark_unavailable':
             mark_unavailable_form = MarkUnavailableForm(request.POST)
@@ -3521,6 +3546,9 @@ def _my_tasks(technician):
         tasks = list(tasks)
         for task in tasks:
             task.my_role = roles[task.pk]
+            # Owned, not on it: its task page (the job page is for whoever does the job).
+            if task.my_role == 'responsible':
+                task.page_url = reverse('tasks:task_detail', args=[task.pk])
         return tasks
 
     return mine, with_role
@@ -4125,6 +4153,9 @@ def technician_list(request):
         technician = get_object_or_404(
             _people_i_oversee(viewer), pk=request.POST.get('technician_id'), country=get_active_country(request),
         )
+        # Bringing someone back is a manager's, like letting them go (and turns their login back on).
+        if not (viewer.is_manager_tier and can_manage_account(viewer, technician)):
+            raise PermissionDenied
         technician.set_active(True)
         messages.success(request, _('Technician reactivated.'))
         return redirect(f"{reverse('tasks:technician_list')}?status=inactive")
@@ -4751,10 +4782,8 @@ def technician_edit(request, pk):
     technician = _scoped_or_404(
         _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
-    # Someone below this person can look, but not change anything — an
-    # email or password change would let them sign in as them.
-    if request.method == 'POST' and not can_manage_account(requesting_technician, technician):
-        raise PermissionDenied
+    # Their record (name, phone, photo…): whoever oversees them (the queryset above).
+    # Their login and their leaving follow the rank (can_manage_account, below).
     was_last_admin = is_last_active_admin(technician) if technician.is_active else False
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager, is_admin=is_admin)
@@ -4786,7 +4815,7 @@ def technician_edit(request, pk):
     # (a setup link to their own email, or — the Admin — a generated temporary password).
     has_login = can_manage and technician.user_id is not None
 
-    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
+    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and can_manage:
         deactivate_form = DeactivateTechnicianForm(request.POST, technician=technician)
         if was_last_admin:
             messages.error(request, _('This is the only administrator able to sign in, so they cannot be '
@@ -6367,6 +6396,10 @@ def task_report_correct(request, pk):
     if getattr(task, 'report', None) is None or task.status not in MANAGER_REPORT_CORRECTABLE_STATUSES:
         messages.error(request, _('This task has no filed report to correct.'))
         return redirect('tasks:task_detail', pk=task.pk)
+    # A customer-signed report: its owner corrects it, or someone stepping in (recorded).
+    if not can_change_task(manager, task):
+        raise PermissionDenied
+    _require_task_owner(request, task)
     return _report_form(request, task, manager, reverse('tasks:task_detail', args=[task.pk]))
 
 
@@ -6753,7 +6786,7 @@ def ticket_open(request):
     return render(request, 'tasks/staff_ticket_new.html', {
         'form': form, 'kind': CustomerTicket.Kind.CUSTOMER,
         # A caller who isn't a customer yet: whoever creates customers adds them from here.
-        'can_create_customer': _has_permission(technician, RolePermission.Permission.CUSTOMER_ACCOUNTS),
+        'can_create_customer': can_create_customers(technician),
     })
 
 
@@ -6858,7 +6891,9 @@ def internal_ticket_for_app(request, technician, ticket):
         } for note in ticket.internal_notes.select_related('author__technician').prefetch_related('files').order_by('created_at')],
         'close_reason': ticket.close_reason if not is_open else '',
         'task': {'id': ticket.task_id, 'task_number': ticket.task.task_number} if ticket.task_id else None,
-        'can_convert': is_open and technician.is_any_manager,
+        'can_convert': is_open and technician.is_any_manager and can_act_on_internal_ticket(technician, ticket),
+        # Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
+        'can_act': is_open and can_act_on_internal_ticket(technician, ticket),
         'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'} for person in people],
         'website_path': reverse('tasks:internal_ticket', args=[ticket.pk]),
     }
@@ -6879,9 +6914,23 @@ def _visible_internal_tickets(technician, country):
     them or that they opened.
     """
     tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL, country=country)
-    if technician.is_any_manager or _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
+    if technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER:
         return tickets
     return tickets.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
+
+
+def can_act_on_internal_ticket(technician, ticket):
+    """Notes, handing it on and closing it: the person it's for and whoever
+    opened it (docs/access_rules.md); the Operations Manager, the COO and the
+    Admin anywhere, the country Manager in theirs, when stepping in — each
+    change is in the Audit log. Everyone else who sees it only reads."""
+    if ticket.assigned_to_id == technician.pk or ticket.opened_by_id == technician.user_id:
+        return True
+    if technician.custom_role_id:
+        return False
+    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN):
+        return True
+    return technician.role == Technician.Role.MANAGER and technician.country_id == ticket.country_id
 
 
 @login_required
@@ -6923,7 +6972,10 @@ def internal_ticket(request, pk):
     reassign_form = ReassignInternalTicketForm(country=country, initial={'assigned_to': ticket.assigned_to})
     close_form = CloseTicketForm()
 
+    can_act = can_act_on_internal_ticket(technician, ticket)
     if request.method == 'POST' and is_open:
+        if not can_act:
+            raise PermissionDenied
         action = request.POST.get('action')
         if action == 'add_note':
             note_form = InternalTicketNoteForm(request.POST, request.FILES)
@@ -6954,7 +7006,8 @@ def internal_ticket(request, pk):
         'note_form': note_form,
         'reassign_form': reassign_form,
         'close_form': close_form,
-        'can_convert': is_open and technician.is_any_manager,
+        'can_convert': is_open and can_act and technician.is_any_manager,
+        'can_act': is_open and can_act,
     })
 
 

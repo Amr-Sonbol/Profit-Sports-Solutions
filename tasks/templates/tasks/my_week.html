@@ -38,7 +38,7 @@
     <h2 class="next-job__where">{{ task.site.customer.name }} — {{ task.site.name }}</h2>
     <p class="muted">{{ task.site.address }}</p>
     <p class="badge-row">
-        <a class="task-number" href="{% url 'tasks:my_task_detail' task.pk %}">{{ task.task_number }}</a>
+        <a class="task-number" href="{% if task.page_url %}{{ task.page_url }}{% else %}{% url 'tasks:my_task_detail' task.pk %}{% endif %}">{{ task.task_number }}</a>
         {% if task.my_role == 'lead' %}<span class="badge badge--role-lead">{% translate "Lead" %}</span>
         {% elif task.my_role == 'helper' %}<span class="badge badge--role-helper">{% translate "Helper" %}</span>
         {% else %}<span class="badge badge--muted">{% translate "Responsible" %}</span>{% endif %}
@@ -46,7 +46,7 @@
         <span class="badge badge--status-{{ task.status }}">{{ task.get_status_display }}</span>
     </p>
     <div class="button-row next-job__actions">
-        {% if task.next_action %}
+        {% if task.next_action and not task.page_url %}
         <form method="post" action="{% url 'tasks:my_task_detail' task.pk %}" novalidate data-locate>
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ task.next_action }}">
@@ -60,7 +60,7 @@
         </form>
         {% endif %}
         <a href="{{ task.directions_url }}" class="button button--secondary" target="_blank" rel="noopener">{% translate "Directions" %}</a>
-        <a href="{% url 'tasks:my_task_detail' task.pk %}" class="button button--secondary">{% translate "Open task" %}</a>
+        <a href="{% if task.page_url %}{{ task.page_url }}{% else %}{% url 'tasks:my_task_detail' task.pk %}{% endif %}" class="button button--secondary">{% translate "Open task" %}</a>
     </div>
 </div>
 {% endwith %}

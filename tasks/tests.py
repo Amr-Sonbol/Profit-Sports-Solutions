@@ -77,6 +77,8 @@ class TaskDetailTests(TaskTestCase):
             priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
             reported_at=timezone.now(), promised_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            # Every task has its owner (docs/access_rules.md): the supervisor who created it.
+            responsible_supervisor=self.supervisor_user.technician,
         )
         TaskAssignment.objects.create(
             task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
@@ -3454,24 +3456,25 @@ class TaskOwnershipTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.responsible_supervisor, other_owner)
 
-    def test_any_supervisor_can_claim_an_unowned_task(self):
+    def test_a_task_is_never_left_without_an_owner(self):
+        # Every task has its owner (docs/access_rules.md): its creator unless given to someone ...
         self.task.responsible_supervisor = None
         self.task.save()
-
+        self.task.refresh_from_db()
         supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.assertEqual(self.task.responsible_supervisor, supervisor)
+        # ... and an edit that leaves the owner empty keeps them (handing over picks someone else).
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(f'/tasks/{self.task.pk}/edit/', {
             'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
             'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
-            'responsible_supervisor': supervisor.pk,
+            'responsible_supervisor': '',
             'products-TOTAL_FORMS': '0', 'products-INITIAL_FORMS': '0',
             'products-MIN_NUM_FORMS': '0', 'products-MAX_NUM_FORMS': '1000',
         })
         self.assertEqual(response.status_code, 302)
-
         self.task.refresh_from_db()
         self.assertEqual(self.task.responsible_supervisor, supervisor)
-
 
 class TaskWeekTests(TaskTestCase):
     def test_the_schedule_has_a_year_view(self):
@@ -9590,7 +9593,9 @@ class EquipmentChainTests(TaskTestCase):
         ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
         self.loading.site = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
         self.loading.status = Task.Status.NEW
-        self.loading.save(update_fields=['site', 'status'])
+        # The supervisor owns it (so may open its Edit at all), but planning its machines is a manager's.
+        self.loading.responsible_supervisor = self.supervisor_user.technician
+        self.loading.save(update_fields=['site', 'status', 'responsible_supervisor'])
         self.client.login(username='supervisor1', password='pass12345')
         page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
         self.assertContains(page, 'Only a manager plans the machines on a loading or an installation.')
@@ -9988,10 +9993,14 @@ class CompanyWatchTests(TaskTestCase):
             user=User.objects.create_user('ops1', password='pass12345'), country=self.country, full_name='Ops',
             language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
         )
+        # A fixed working day (Wednesday 12:00 UTC), not today: the weekend changes the count.
+        from datetime import datetime
+        from datetime import timezone as dt_timezone
+        now = datetime(2026, 11, 11, 12, 0, tzinfo=dt_timezone.utc)
         TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
-            occurred_at=timezone.now() - timezone.timedelta(hours=20))
-        self.assertEqual(long_blocked_tasks(self.support), [self.blocked])
-        self.assertEqual(long_blocked_tasks(ops), [])
+            occurred_at=now - timezone.timedelta(hours=20))
+        self.assertEqual(long_blocked_tasks(self.support, now=now), [self.blocked])
+        self.assertEqual(long_blocked_tasks(ops, now=now), [])
 
     def test_a_task_blocked_a_moment_ago_is_not_yet_an_alarm(self):
         TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
@@ -10013,11 +10022,11 @@ class CustomRoleTests(TaskTestCase):
         )
         self.client.login(username='admin9', password='pass12345')
         self.client.post('/tasks/roles/', {
-            'action': 'new_role', 'new-name': 'COO', 'new-name_ar': 'الرئيس التنفيذي للعمليات',
+            'action': 'new_role', 'new-name': 'General Manager', 'new-name_ar': 'المدير العام',
             'new-based_on': Technician.Role.OPERATIONS_MANAGER,
         })
         from people.models import CustomRole
-        self.coo_role = CustomRole.objects.get(name='COO')
+        self.coo_role = CustomRole.objects.get(name='General Manager')
         # Its switches start as the Operations Manager's; the Admin turns Tickets off.
         allowed = set(RolePermission.objects.filter(role=self.coo_role.key, allowed=True).values_list('permission', flat=True))
         ops = set(RolePermission.objects.filter(role=Technician.Role.OPERATIONS_MANAGER, allowed=True)
@@ -10047,15 +10056,16 @@ class CustomRoleTests(TaskTestCase):
     def test_a_coo_is_an_operations_manager_without_tickets(self):
         coo = self.add_coo()
         self.assertEqual((coo.role, coo.custom_role, coo.get_role_display()),
-                         (Technician.Role.OPERATIONS_MANAGER, self.coo_role, 'COO'))
-        # The Operations Manager's fixed rules: steps in on any task, sees every country.
+                         (Technician.Role.OPERATIONS_MANAGER, self.coo_role, 'General Manager'))
+        # Only its own switches (docs/access_rules.md, owner 13 Nov 2026): none of the built-in
+        # roles' fixed powers — no stepping in on others' tasks — and its own country.
         task = Task.objects.create(
             task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
             billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
         )
         from tasks.views import can_step_in
-        self.assertTrue(can_step_in(coo, task))
-        self.assertTrue(coo.reaches_all_countries)
+        self.assertFalse(can_step_in(coo, task))
+        self.assertFalse(coo.reaches_all_countries)
         # Its own switches: no Tickets.
         self.client.login(username='karim@example.com', password='pass12345')
         self.assertEqual(self.client.get('/tasks/tickets/').status_code, 403)

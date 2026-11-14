@@ -130,16 +130,49 @@ def require_admin(request):
     return technician
 
 
+# Whose logins each rank manages on Staff accounts (unlock, sign out phones,
+# turn off/on, setup link): never someone above or beside them.
+FIELD_AND_DESK_ROLES = (
+    Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN, Technician.Role.WAREHOUSE_MANAGER,
+    Technician.Role.COUNTRY_SUPPORT,
+)
+SENIOR_MANAGERS = (Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.SUPPORT_MANAGER)
+
+
 def can_manage_account(actor, target):
-    """Only an admin can change an admin's account, and only the manager
-    tier a manager's — otherwise someone below could reset a password or
-    change an email and sign in as the person above them.
-    """
+    """Whether `actor` may act on `target`'s login (docs/access_rules.md):
+    the Admin anyone's; the COO anyone's but the Admin's; the Operations
+    Manager anyone's but the Admin's and the COO's; the Manager, Project and
+    Technical Support Manager only the field and desk roles', in their own
+    country unless they reach every country. Nobody else, and never through
+    a role made on Roles & permissions (only its switches)."""
+    if actor.custom_role_id:
+        return False
+    if actor.role == Technician.Role.ADMIN:
+        return True
     if target.role == Technician.Role.ADMIN:
-        return actor.role == Technician.Role.ADMIN
-    if target.is_manager_tier:
-        return actor.is_manager_tier
-    return True
+        return False
+    if actor.role == Technician.Role.COO:
+        return True
+    if actor.role == Technician.Role.OPERATIONS_MANAGER:
+        return target.role != Technician.Role.COO
+    if actor.role in SENIOR_MANAGERS and target.role in FIELD_AND_DESK_ROLES:
+        return actor.reaches_all_countries or actor.country_id == target.country_id
+    return False
+
+
+# Who creates a customer or a branch — from a request, the Customers page or
+# while planning an installation (docs/access_rules.md). Editing them is the
+# "edit customers" switch.
+CUSTOMER_CREATORS = (
+    Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.SUPPORT_MANAGER,
+    Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN,
+)
+
+
+def can_create_customers(technician):
+    """Creates customers and branches: the roles in CUSTOMER_CREATORS (built-in)."""
+    return not technician.custom_role_id and technician.role in CUSTOMER_CREATORS
 
 
 # Who plans a loading's or an installation's machines, and sends loaded machines on
@@ -150,8 +183,8 @@ EQUIPMENT_PLANNERS = (Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, 
 
 def can_plan_equipment(technician):
     """Plans the machines on a loading or an installation, and sends loaded
-    machines on: the Manager, the Project Manager and the Admin."""
-    return technician.role in EQUIPMENT_PLANNERS
+    machines on: the Manager, the Project Manager and the Admin (built-in roles only)."""
+    return not technician.custom_role_id and technician.role in EQUIPMENT_PLANNERS
 
 
 def can_set_password(actor):

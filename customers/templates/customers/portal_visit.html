@@ -38,6 +38,7 @@
             {% endif %}
         </dl>
         {% if report %}
+        {% include "tasks/_approvals.html" with approvals=visit.approvals staff=False %}
         <p class="portal-actions">
             <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener" class="button">{% translate "Download the report (PDF)" %}</a>
             {% if report_changed %}<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener" class="button button--secondary">{% translate "The version you signed" %}</a>{% endif %}

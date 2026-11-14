@@ -89,9 +89,13 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, **kwargs):
+    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, owner_required=False,
+                 can_add_site=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_admin = is_admin
+        # "+ Add new site": whoever creates customers and branches (people.permissions.can_create_customers).
+        self.can_add_site = can_add_site
+        self.owner_required = owner_required
         if can_assign:
             self.fields['lead'].queryset = Technician.objects.filter(
                 is_active=True, is_available=True, country=country,
@@ -105,11 +109,11 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
         self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
-        if is_admin:
+        if can_add_site:
             self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
         else:
-            # Creating a site is admin-only (customers.views.customer_detail
-            # is the same rule) — without this, "+ Add new site" here would
+            # Creating a branch is for whoever creates customers and branches (the same
+            # rule as the customer's page) — without this, "+ Add new site" here would
             # be a second, unrestricted door to the same thing.
             for field_name in [
                 'new_site_customer', 'new_site_name', 'new_site_address',
@@ -122,7 +126,8 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
-        self.fields['responsible_supervisor'].required = False
+        # One owner from the start: whoever creates it, or — a field role can't own a task — the one chosen.
+        self.fields['responsible_supervisor'].required = self.owner_required
         # The skill level scale tops out at 4 (see TechnicianSkill.level) —
         # PositiveSmallIntegerField has no upper bound of its own, so without
         # this a nonsense value here is a clean model concern, not just a
@@ -197,7 +202,7 @@ class TaskCreateForm(forms.ModelForm):
 
                 if matched_site:
                     self.fields['site'].initial = matched_site.pk
-                elif is_admin:
+                elif can_add_site:
                     self.fields['new_site_name'].initial = ticket.site_description
                     self.fields['new_site_address'].initial = ticket.site_address
                     self.fields['new_site_contact_name'].initial = ticket.contact_name
@@ -218,10 +223,10 @@ class TaskCreateForm(forms.ModelForm):
         if site and (new_site_name or new_site_customer):
             self.add_error(None, _('Select an existing site or add a new one below, not both.'))
         elif not site and not (new_site_name and new_site_customer):
-            if self.is_admin:
+            if self.can_add_site:
                 self.add_error('site', _('Select a site, or add a new one below.'))
             else:
-                self.add_error('site', _('Select a site. An administrator can add a new site if it is not listed.'))
+                self.add_error('site', _('Select a site. A manager can add a new site if it is not listed.'))
         elif not site and Site.objects.filter(customer=new_site_customer, name__iexact=new_site_name).exists():
             self.add_error('new_site_name', _('This customer already has a site with this name.'))
 
@@ -334,6 +339,7 @@ class TaskEditForm(forms.ModelForm):
         self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+        # Handed over, never blanked: left empty, the owner stays (clean_responsible_supervisor).
         self.fields['responsible_supervisor'].required = False
 
         self.fields['promised_at'].input_formats = [DATETIME_INPUT_FORMAT]
@@ -413,6 +419,11 @@ class TaskEditForm(forms.ModelForm):
                 self.fields['promised_at'].help_text = _(
                     'Only a manager or administrator can change this once work has started.',
                 )
+
+    def clean_responsible_supervisor(self):
+        """A task always has its owner (docs/access_rules.md): handing it over picks
+        someone else; leaving it empty keeps the one it has."""
+        return self.cleaned_data.get('responsible_supervisor') or self.instance.responsible_supervisor
 
     def clean(self):
         cleaned = super().clean()

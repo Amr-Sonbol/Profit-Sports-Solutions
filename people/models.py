@@ -51,6 +51,8 @@ class Technician(models.Model):
         COUNTRY_SUPPORT = 'country_support', _('Country Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
         OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
+        # Every country, like the Operations Manager; above him on Staff accounts, below the Admin.
+        COO = 'coo', _('COO')
         # Like a Manager, in every country; no customer requests (docs/access_rules.md).
         PROJECT_MANAGER = 'project_manager', _('Project Manager')
         ADMIN = 'admin', _('Admin')
@@ -173,9 +175,11 @@ class Technician(models.Model):
         on top: only admin can reach Roles & permissions itself (see
         require_admin) — checked separately with role == Role.ADMIN.
         """
+        if self.custom_role_id:
+            return False  # a role made on Roles & permissions: only its own switches (docs/access_rules.md)
         return self.role in (
-            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.ADMIN,
-            self.Role.PROJECT_MANAGER,
+            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO, self.Role.SUPPORT_MANAGER,
+            self.Role.ADMIN, self.Role.PROJECT_MANAGER,
         )
 
     @property
@@ -197,8 +201,11 @@ class Technician(models.Model):
         country's tasks, customers and people, the all-countries boards, the
         company-wide report and the shared lists (brands, countries, skills).
         A Manager is one per country, so stays in their own."""
+        if self.custom_role_id:
+            return False  # a role made on Roles & permissions stays in its own country
         return self.role in (
-            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO,
+            self.Role.ADMIN,
         )
 
 
@@ -207,9 +214,12 @@ class Technician(models.Model):
         """Every manager role, not just the manager tier — who can see,
         open and convert any internal ticket in their country.
         """
+        if self.custom_role_id:
+            return False
         return self.role in (
             self.Role.MANAGER, self.Role.SUPPORT_MANAGER, self.Role.COUNTRY_SUPPORT,
-            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN, self.Role.PROJECT_MANAGER,
+            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER,
         )
 
     @property

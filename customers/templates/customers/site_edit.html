@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n  record_trail %}
 
 {% block title %}{% translate "Edit site" %} — {{ site.name }}{% endblock %}
 
@@ -54,4 +54,5 @@
     </form>
 </div>
 {% endif %}
+{% record_trail site %}
 {% endblock %}

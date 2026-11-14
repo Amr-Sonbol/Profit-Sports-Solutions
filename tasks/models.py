@@ -259,6 +259,16 @@ class Task(models.Model):
             contains_search_index('pak_reference_number', 'task_pak_trgm'),
         ]
 
+    def save(self, *args, **kwargs):
+        # One owner from the start (docs/access_rules.md): whoever created it, unless it was given
+        # to someone — however it's made (a screen, the app, a next step, a follow-up, an import).
+        if not self.responsible_supervisor_id and self.created_by_id:
+            from people.models import Technician
+            creator = Technician.objects.filter(user_id=self.created_by_id, is_active=True).first()
+            if creator is not None and creator.role != Technician.Role.TECHNICIAN:
+                self.responsible_supervisor = creator
+        super().save(*args, **kwargs)
+
     @property
     def estimated_finish(self):
         """scheduled_for + estimated_hours, if both are known — None otherwise."""
@@ -308,6 +318,52 @@ class Task(models.Model):
     def __str__(self):
         return self.task_number
 
+
+    def approvals(self):
+        """Who reviewed and who approved this task's latest report, and whose turn
+        it is now (its history: TaskEvent). {'reviewed': person or None,
+        'approved': person or None, 'waiting': 'review' | 'approval' | None};
+        a person is {'name', 'role', 'at', 'instead'} — `instead` when the final
+        approval wasn't the Technical Support Manager's (stepping in)."""
+        from people.models import Technician
+
+        events = list(self.events.filter(event_type__in=[
+            TaskEvent.EventType.REPORT_SUBMITTED, TaskEvent.EventType.SUPERVISOR_APPROVED,
+            TaskEvent.EventType.REPORT_APPROVED,
+        ]).select_related('actor__technician').order_by('occurred_at', 'pk'))
+        # Only what happened to the latest report (a reopened task's earlier rounds are history).
+        latest = max((i for i, e in enumerate(events) if e.event_type == TaskEvent.EventType.REPORT_SUBMITTED), default=-1)
+        found = {'reviewed': None, 'approved': None}
+        for event in events[latest + 1:]:
+            technician = getattr(event.actor, 'technician', None) if event.actor_id else None
+            person = {
+                'name': technician.full_name if technician else (event.actor.get_username() if event.actor_id else '—'),
+                'role': technician.title if technician else '',
+                'at': event.occurred_at,
+                'instead': False,
+            }
+            if event.event_type == TaskEvent.EventType.SUPERVISOR_APPROVED:
+                found['reviewed'] = person
+            else:
+                person['instead'] = technician is None or technician.role != Technician.Role.SUPPORT_MANAGER
+                found['approved'] = person
+        found['waiting'] = {
+            self.Status.PENDING_SUPERVISOR_REVIEW: 'review', self.Status.COMPLETED: 'approval',
+        }.get(self.status)
+        return found
+
+    def creator(self):
+        """Who created this task, and when: {'name', 'role', 'at'} — the person
+        (their name and job title, or the account's name) and the time of its
+        "Created" history entry (None for a task made before entries existed)."""
+        user = self.created_by
+        technician = getattr(user, 'technician', None) if user is not None else None
+        created = self.events.filter(event_type=TaskEvent.EventType.CREATED).order_by('occurred_at').first()
+        return {
+            'name': technician.full_name if technician else (user.get_full_name() or user.get_username() if user else '—'),
+            'role': technician.title if technician else '',
+            'at': created.occurred_at if created else None,
+        }
 
 class CustomerTicket(models.Model):
     """A complaint or request submitted by a logged-in customer, picking

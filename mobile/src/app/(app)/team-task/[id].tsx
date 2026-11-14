@@ -27,7 +27,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { hm } from '@/hours';
-import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
+import type { Approval, Assignment, Candidate, TeamTaskDetail } from '@/types';
 import { when } from '@/task-time';
 import { ChoicePicker } from '@/components/choice-picker';
 import { useSession } from '@/context/auth';
@@ -402,6 +402,8 @@ export default function TeamTaskScreen() {
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
             {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
+            {task.created_by ? <Row label="Created by" value={creatorText(task.created_by)} /> : null}
+            {task.last_changed ? <Row label="Last changed by" value={creatorText(task.last_changed)} /> : null}
             {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
@@ -607,6 +609,17 @@ export default function TeamTaskScreen() {
               <Row label="Resolved" value={task.report.resolved ? 'Yes' : 'No'} />
               <Row label="Time on site" value={hm(task.report.labour_hours)} />
               <Row label="Signed by" value={task.report.customer_name || '—'} />
+              {task.approvals?.reviewed ? (
+                <Row label="Reviewed by" value={approvalText(task.approvals.reviewed)} />
+              ) : null}
+              {task.approvals?.approved ? (
+                <Row label="Approved by" value={approvalText(task.approvals.approved)} />
+              ) : null}
+              {task.approvals?.waiting === 'review' ? (
+                <Row label="Approvals" value={t("Waiting for the supervisor's review")} />
+              ) : task.approvals?.waiting === 'approval' ? (
+                <Row label="Approvals" value={t('Waiting for the final approval')} />
+              ) : null}
               <ThemedText type="small" themeColor="textSecondary">Findings</ThemedText>
               <ThemedText>{task.report.findings}</ThemedText>
               {task.report.action_taken ? (
@@ -828,6 +841,24 @@ function errorText(err: ApiRequestError): string {
     }
   }
   return err.message;
+}
+
+/** "Sara Super (Supervisor) · 13 Nov 2026, 10:05" — who reviewed or approved the report. */
+function approvalText(person: Approval): string {
+  const when = new Date(person.at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const role = person.role ? ` (${person.role})` : '';
+  const instead = person.instead ? ` — ${t('Instead of the Technical Support Manager')}` : '';
+  return `${person.name}${role} · ${when}${instead}`;
+}
+
+/** "Sara Super (Supervisor) · 13 Nov 2026, 10:05" — who created the task. */
+function creatorText(person: { name: string; role: string; at: string | null }): string {
+  const when = person.at ? ` · ${new Date(person.at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })}` : '';
+  return `${person.name}${person.role ? ` (${person.role})` : ''}${when}`;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n  record_trail %}
 
 {% block title %}{{ customer.name }} — Profit Sports Solutions{% endblock %}
 
@@ -356,4 +356,5 @@
 </div>
 {% endif %}
 {% endif %}{# end of the sites tab #}
+{% record_trail customer %}
 {% endblock %}

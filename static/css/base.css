@@ -5635,3 +5635,27 @@ details.review-more:not(.section) {
 html {
     scrollbar-gutter: stable;
 }
+
+/* Who reviewed and approved a report: one line under its heading (tasks/_approvals.html). */
+.approvals-line {
+    margin-block: 0.15rem 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+}
+
+/* Who created and last changed a record: one quiet line at its foot (templates/_record_trail.html). */
+.record-trail {
+    margin-block: 0.75rem 0;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.record-trail + .record-trail {
+    margin-block-start: 0.25rem;
+}
+
+.record-trail ul {
+    margin-block: 0.25rem 0;
+    padding-inline-start: 1.25rem;
+}

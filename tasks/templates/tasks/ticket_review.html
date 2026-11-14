@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n static %}
+{% load i18n static  record_trail %}
 
 {% block title %}{{ ticket.ticket_number }} — {{ ticket.company_name }}{% endblock %}
 
@@ -33,7 +33,7 @@
             <p>{% blocktranslate with name=ticket.site.name %}Branch added: <strong>{{ name }}</strong>. A task created from this request starts there.{% endblocktranslate %}</p>
             {% if 'manage_customers' in role_permissions %}<p><a href="{% url 'customers:site_edit' ticket.site.pk %}">{% translate "Set its warranty start and other details" %}</a></p>{% endif %}
         </div>
-        {% elif ticket.about == 'new_branch' and ticket.customer and can_manage %}
+        {% elif ticket.about == 'new_branch' and ticket.customer and can_create_branch %}
         {# One click: the branch made from what the customer typed, and linked to this request. #}
         <div class="review-callout">
             <form method="post">
@@ -42,9 +42,13 @@
                 <button type="submit" class="button">{% blocktranslate with name=ticket.site_description %}Create the branch “{{ name }}”{% endblocktranslate %}</button>
             </form>
             <p class="field__help">{% translate "From the customer's details in this request: name, address and contact. You can set its warranty start afterwards." %}</p>
-            {% if user.technician.role == 'admin' %}
+            {% if can_create_branch %}
             <a href="{% url 'customers:customer_detail' ticket.customer.pk %}?tab=sites&amp;from_request={{ ticket.pk }}&amp;branch_name={{ ticket.site_description|urlencode }}&amp;branch_address={{ ticket.site_address|urlencode }}&amp;branch_contact={{ ticket.contact_name|urlencode }}&amp;branch_phone={{ ticket.contact_phone|urlencode }}#add-site">{% translate "Or check and change its details first" %}</a>
             {% endif %}
+        </div>
+        {% elif ticket.about == 'new_branch' and ticket.customer and can_manage %}
+        <div class="review-callout">
+            <p>{% translate "A new branch: a manager creates it from this request (the Manager, Project, Technical Support or Operations Manager, the COO or the Admin)." %}</p>
         </div>
         {% endif %}
         {# Machines: each with its own words, photos and videos (tasks.customer_report); otherwise their message. #}
@@ -361,6 +365,7 @@
     {% endif %}
 </aside>
 </div>
+{% record_trail ticket %}
 {% endblock %}
 
 {% block scripts %}<script src="{% static 'js/answer-suggest.js' %}?v={{ css_version }}" defer></script>{% endblock %}

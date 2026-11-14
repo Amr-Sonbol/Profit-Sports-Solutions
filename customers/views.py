@@ -21,8 +21,8 @@ from django.utils.translation import gettext as _
 
 from people.models import RolePermission, Technician
 from people.permissions import (
-    can_set_password,
-    get_active_country, require_admin, require_manager, require_permission, scoped_or_404,
+    can_create_customers, can_set_password,
+    get_active_country, require_admin, require_manager, require_permission, require_technician, scoped_or_404,
 )
 from reference.models import Country, TaskType
 from tasks.forms import ChangePasswordForm, CustomerPortalTicketForm, NewPasswordForm, TicketMachineFormSet
@@ -153,7 +153,7 @@ def customer_list(request):
     query.pop('page', None)
     return render(request, 'customers/customer_list.html', {
         'page_obj': page_obj, 'search': search, 'show_inactive': show_inactive,
-        'country_id': country_id, 'manages_logins': manages_logins, 'can_create': manages_logins,
+        'country_id': country_id, 'manages_logins': manages_logins, 'can_create': can_create_customers(technician),
         'all_countries': technician.reaches_all_countries,
         'countries': Country.objects.filter(is_active=True).order_by('name') if technician.reaches_all_countries else [],
         'portal': portal, 'status_counts': status_counts, 'inviteable': INVITEABLE, 'link_days': LINK_VALID_DAYS,
@@ -174,14 +174,19 @@ def customer_create(request):
     the country is the ticket's (the active one), and saving goes back to
     the ticket with the new branch chosen.
     """
-    require_permission(request, RolePermission.Permission.CUSTOMER_ACCOUNTS)
+    technician = require_technician(request)
+    if not can_create_customers(technician):
+        raise PermissionDenied
     next_page = request.GET.get('next', '')
-    country = get_active_country(request) if next_page == 'ticket' else None
+    # In their own country, unless they reach every country (or it's for a ticket: the ticket's).
+    country = get_active_country(request) if next_page == 'ticket' or not technician.reaches_all_countries else None
     form = NewCustomerForm(request.POST or None, country=country)
+    if not _manages_logins(technician):
+        del form.fields['invite']  # portal logins: whoever manages them
     if request.method == 'POST' and form.is_valid():
         with transaction.atomic():
             customer, site = form.save()
-        invited = form.cleaned_data['invite'] and invite_customer(request, customer)
+        invited = form.cleaned_data.get('invite') and invite_customer(request, customer)
         log_account_action(request, customer, 'Customer created and portal welcome email sent' if invited
                            else 'Customer created')
         if invited:
@@ -206,8 +211,9 @@ def customer_detail(request, pk):
     """
     requesting_technician = require_permission(request, RolePermission.Permission.VIEW_CUSTOMERS)
     is_admin = requesting_technician.role == Technician.Role.ADMIN
-    # Adding a branch, and the Portal login section: whoever manages portal logins.
-    can_add_site = _manages_logins(requesting_technician)
+    # Adding a branch: whoever creates customers and branches; the Portal login section: whoever manages them.
+    can_add_site = can_create_customers(requesting_technician)
+    manages_logins = _manages_logins(requesting_technician)
     customer = scoped_or_404(Customer.objects, pk, requesting_technician, get_active_country(request), 'country')
 
     # Commercial terms: managers and admins only; every change to the Audit log.
@@ -257,8 +263,8 @@ def customer_detail(request, pk):
         'can_edit': requesting_technician.has_permission(RolePermission.Permission.MANAGE_CUSTOMERS),
         # Its people who sign in to the portal, and what can be done to each (portal_login_action);
         # never our own warehouses.
-        'portal_section': can_add_site and not customer.is_internal,
-        'portal_people': _portal_people(customer) if can_add_site and not customer.is_internal else [],
+        'portal_section': manages_logins and not customer.is_internal,
+        'portal_people': _portal_people(customer) if manages_logins and not customer.is_internal else [],
         'link_days': LINK_VALID_DAYS, 'add_person_form': AddPortalUserForm(),
         'can_see_terms': can_see_terms, 'terms_form': terms_form, 'from_request': from_request,
         'today': timezone.localdate(),
@@ -390,10 +396,10 @@ def customer_edit(request, pk):
 
 @login_required
 def site_edit(request, pk):
-    require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
-    site = get_object_or_404(Site, pk=pk, customer__country=get_active_country(request))
+    technician = require_permission(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+    # Scoped like its customer (customer_edit): every country for whoever reaches them all.
+    site = scoped_or_404(Site.objects, pk, technician, get_active_country(request), 'customer__country')
 
-    technician = request.user.technician
     terms_form = SiteTermsForm(instance=site) if technician.is_manager_tier else None
     form = SiteEditForm(instance=site)
     if request.method == 'POST' and request.POST.get('action') == 'terms' and terms_form is not None:

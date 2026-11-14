@@ -19,7 +19,7 @@ from reference.models import Country
 
 PREFIX = 'walk-'
 ROLES = [
-    'admin', 'operations_manager', 'project_manager', 'support_manager', 'country_support', 'manager',
+    'admin', 'coo', 'operations_manager', 'project_manager', 'support_manager', 'country_support', 'manager',
     'supervisor', 'warehouse_manager', 'technician',
 ]
 

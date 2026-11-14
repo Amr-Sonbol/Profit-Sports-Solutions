@@ -38,6 +38,8 @@ class ApiTestCase(TaskTestCase):
             task_number='UAE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            # Every task has its owner (docs/access_rules.md): the supervisor who created it.
+            responsible_supervisor=self.supervisor_user.technician,
         )
         self.assignment = TaskAssignment.objects.create(
             task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
@@ -1868,6 +1870,9 @@ class ManagerTaskActionsApiTests(ManagerChoosesTheCountryTests):
 
     def test_a_manager_corrects_a_tap_cancels_and_a_supervisor_cannot(self):
         token = self.token_for('manager1')
+        # The Project Manager's own task: they change only the tasks they own (docs/access_rules.md).
+        self.task.responsible_supervisor = User.objects.get(username='manager1').technician
+        self.task.save(update_fields=['responsible_supervisor'])
         started = TaskEvent.objects.create(
             task=self.task, event_type=TaskEvent.EventType.STARTED,
             occurred_at=timezone.now() - timedelta(hours=1), actor=self.tech_user,
@@ -2053,6 +2058,9 @@ class PlanLinesApiTests(InstallationChecklistApiTests):
             self.assertEqual(refused.status_code, 400)
             self.assertIn('Only a manager plans the machines', refused.json()['detail'])
         token = self._person('project9', Technician.Role.PROJECT_MANAGER)
+        # Their own installation: the Project Manager changes only the tasks they own (docs/access_rules.md).
+        self.task.responsible_supervisor = Technician.objects.get(user__username='project9')
+        self.task.save(update_fields=['responsible_supervisor'])
         response = self.client.post(url, plan, content_type='application/json', **self.auth(token))
         self.assertEqual(response.status_code, 200, response.content)
         lines = response.json()['lines']

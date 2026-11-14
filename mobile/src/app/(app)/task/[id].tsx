@@ -214,6 +214,8 @@ export default function TaskDetailScreen() {
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
             {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
+            {task.created_by ? <Row label="Created by" value={creatorText(task.created_by)} /> : null}
+            {task.last_changed ? <Row label="Last changed by" value={creatorText(task.last_changed)} /> : null}
             {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
           </ThemedView>
 
@@ -392,6 +394,14 @@ export default function TaskDetailScreen() {
       </SafeAreaView>
     </ThemedView>
   );
+}
+
+/** "Sara Super (Supervisor) · 13 Nov 2026, 10:05" — who created the task. */
+function creatorText(person: { name: string; role: string; at: string | null }): string {
+  const when = person.at ? ` · ${new Date(person.at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })}` : '';
+  return `${person.name}${person.role ? ` (${person.role})` : ''}${when}`;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

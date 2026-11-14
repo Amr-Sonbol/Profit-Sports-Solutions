@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n %}
+{% load i18n  record_trail %}
 
 {% block title %}{{ asset.brand.name }} {{ asset.model_name }} — Profit Sports Solutions{% endblock %}
 
@@ -86,4 +86,5 @@
     <p class="empty-state">{% translate "No outcome has been recorded for this machine." %}</p>
     {% endif %}
 </div>
+{% record_trail asset %}
 {% endblock %}
