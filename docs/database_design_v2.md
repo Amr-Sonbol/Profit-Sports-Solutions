@@ -629,6 +629,11 @@ A complaint or request from a customer — or an internal matter staff need to f
 | shipping_company | varchar | blank — one of a fixed list (DHL, FedEx, UPS, Aramex, TNT, local courier, other) |
 | shipping_tracking_number | varchar | blank — set once parts have shipped |
 | task_id | FK → task | nullable — set once converted |
+| linked_task_id | FK → task | nullable — an internal task's (follow-up's) task: listed on that task's page (tasks 0105) |
+| due_on | date | nullable — when it should be done by; past it, the bell of whoever it's for and the opener, and after three more days the Operations Manager's and the COO's |
+| waiting_for | varchar | blank, factory, supplier, customer, colleague |
+| is_claim | boolean | a claim to the factory or the carrier (missing, damaged or wrong goods — opened by itself, due in 14 days) |
+| claim_outcome | varchar | blank, credit, replacement, rejected — a claim closes only with one |
 | reviewed_by_id | FK → user | nullable |
 | reviewed_at | timestamptz | nullable |
 | dismissal_reason | varchar | nullable |

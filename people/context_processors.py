@@ -1,3 +1,5 @@
+from django.utils import timezone
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
@@ -116,6 +118,33 @@ def notification_bell(request):
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
         ).exclude(kind=CustomerTicket.Kind.CUSTOMER)
     ]
+    # Follow-ups past their due date (docs/scenarios.md): whoever it's for and whoever opened it;
+    # still open three days later, whoever watches the company (the Operations Manager, the COO).
+    from datetime import timedelta
+
+    from tasks.alarms import watches_company
+    today = timezone.localdate()
+    overdue = CustomerTicket.objects.filter(
+        kind=CustomerTicket.Kind.INTERNAL, status=CustomerTicket.Status.NEW, due_on__lt=today,
+    )
+    mine = overdue.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
+    if watches_company(technician) and technician.role != technician.Role.SUPPORT_MANAGER:
+        mine = mine | overdue.filter(due_on__lt=today - timedelta(days=3))
+    mine = list(mine.distinct().order_by('due_on')[:10])
+    if mine:
+        items.append({'kind': 'follow_ups_overdue', 'created_at': timezone.now(), 'count': len(mine), 'ticket': mine[0]})
+    # Ordered parts past their expected date (docs/scenarios.md E): the task's owner, and whoever
+    # prepares parts in that country — until they arrive.
+    from tasks.models import TaskPartNeeded
+    from tasks.parts_needed import can_prepare
+    late_parts = TaskPartNeeded.objects.filter(
+        source=TaskPartNeeded.Source.ORDERED, arrived_at__isnull=True, expected_on__lt=today,
+    ).exclude(task__status__in=['closed', 'cancelled'])
+    late_parts = late_parts.filter(task__site__customer__country=country) if can_prepare(technician) else \
+        late_parts.filter(task__responsible_supervisor=technician)
+    late_count = late_parts.values('task').distinct().count()
+    if late_count:
+        items.append({'kind': 'parts_late', 'created_at': timezone.now(), 'count': late_count})
     # Customer logins locked out right now — live, so they clear the moment
     # someone unlocks them (or the lockout times out on its own).
     if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:

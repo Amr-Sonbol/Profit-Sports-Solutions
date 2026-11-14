@@ -66,7 +66,7 @@ from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
     CustomerPhotosForm, CustomRoleForm, MachineStockImportForm, PartNeededForm, RegisterMachineForm,
-    AddHelperForm, AssignTicketForm, ChangePasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
+    AddHelperForm, AssignTicketForm, ChangePasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm, WaitingForForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
@@ -933,6 +933,11 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
         tasks = tasks.filter(priority=priority)
     if params.get('about', '') in Task.About.values:
         tasks = tasks.filter(about=params['about'])
+    if params.get('parts') == 'late':  # the bell's "ordered parts are late"
+        tasks = tasks.filter(
+            parts_needed__source='ordered', parts_needed__arrived_at__isnull=True,
+            parts_needed__expected_on__lt=timezone.localdate(),
+        ).distinct()
     if params.get('lead') == 'none':
         tasks = tasks.exclude(HAS_ACTIVE_LEAD)
     if params.get('scheduled') == 'none':
@@ -4683,8 +4688,44 @@ def machine_detail(request, pk):
             messages.success(request, _('Machine removed from the customer\'s list.'))
             return redirect(f"{reverse('tasks:machine_list')}?status=pending")
 
-    context = {'asset': asset, 'task_assets': task_assets, 'can_confirm': can_confirm}
+    # Sold from the showroom, relocated, taken back, removed (docs/scenarios.md B, E): whoever
+    # edits customers moves it to another branch or retires it — with the reason, in its history.
+    can_manage = asset.status != Asset.Status.PENDING and _has_permission(
+        requesting_technician, RolePermission.Permission.MANAGE_CUSTOMERS,
+    )
+    branches = _scoped_sites(requesting_technician, get_active_country(request)).exclude(pk=asset.site_id)
+    if request.method == 'POST' and can_manage and request.POST.get('action') in ('move', 'retire'):
+        from spots.audit import record
+        from people.models import AuditEntry
+        reason = request.POST.get('reason', '').strip()
+        if not reason:
+            messages.error(request, _('Please give the reason.'))
+            return redirect('tasks:machine_detail', pk=asset.pk)
+        if request.POST.get('action') == 'move':
+            branch = get_object_or_404(branches, pk=request.POST.get('site'))
+            asset.site = branch
+            asset.save(update_fields=['site'])
+            messages.success(request, _('Machine moved to %(site)s.') % {'site': branch})
+        else:
+            asset.status = Asset.Status.RETIRED
+            asset.save(update_fields=['status'])
+            messages.success(request, _('Machine retired: it is no longer on the customer\'s list.'))
+        record(AuditEntry.Action.CHANGED, asset, message=reason)  # the reason, beside the change itself
+        return redirect('tasks:machine_detail', pk=asset.pk)
+
+    context = {
+        'asset': asset, 'task_assets': task_assets, 'can_confirm': can_confirm,
+        'can_manage': can_manage and asset.status != Asset.Status.RETIRED, 'branches': branches,
+    }
     return render(request, 'tasks/machine_detail.html', context)
+
+
+def _scoped_sites(technician, country):
+    """Branches a machine can move to: customers' and ours (a showroom), in this person's countries."""
+    sites = Site.objects.filter(customer__is_active=True).select_related('customer')
+    if not technician.reaches_all_countries:
+        sites = sites.filter(customer__country=country)
+    return sites.order_by('customer__name', 'name')
 
 
 def close_task_directly(task, user, note):
@@ -6352,6 +6393,8 @@ def save_work_report(request, task, technician, report_form, part_rows):
     if saved_report.first_submission:
         if has_checklist(task):  # missing, damaged or wrong machines, a serial on file elsewhere: followed up
             open_equipment_follow_up(task, request.user, elsewhere)
+        if not saved_report.resolved:  # not settled on this visit: its owner follows it up
+            open_quality_follow_up(task, request.user, _('Not resolved on the visit: %(number)s'))
         notify_customer.report_ready(task)
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
@@ -7005,12 +7048,16 @@ def reassign_internal_ticket(technician, user, ticket, assignee):
         _push_internal_ticket(assignee, ticket, _('New internal task assigned to you'))
 
 
-def close_internal_ticket(technician, user, ticket, result):
+def close_internal_ticket(technician, user, ticket, result, outcome=''):
+    """Closed with what came of it — a claim with its result (credit, replacement, rejected)."""
+    if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+        raise ValueError('A claim closes with its result.')
+    ticket.claim_outcome = outcome if ticket.is_claim else ''
     ticket.status = CustomerTicket.Status.CLOSED
     ticket.close_reason = result
     ticket.reviewed_by = user
     ticket.reviewed_at = timezone.now()
-    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at', 'claim_outcome'])
     other = _other_on_internal_ticket(technician, ticket)
     if other:
         _push_internal_ticket(other, ticket, _('Internal task closed'))
@@ -7041,6 +7088,11 @@ def internal_ticket_for_app(request, technician, ticket):
         'close_reason': ticket.close_reason if not is_open else '',
         'task': {'id': ticket.task_id, 'task_number': ticket.task.task_number} if ticket.task_id else None,
         'can_convert': is_open and technician.is_any_manager and can_act_on_internal_ticket(technician, ticket),
+        'linked_task': {'id': ticket.linked_task_id, 'task_number': ticket.linked_task.task_number}
+        if ticket.linked_task_id else None,
+        'due_on': ticket.due_on, 'waiting_for': ticket.get_waiting_for_display(),
+        'is_claim': ticket.is_claim, 'claim_outcome': ticket.get_claim_outcome_display(),
+        'claim_outcomes': [{'value': value, 'label': str(label)} for value, label in CustomerTicket.ClaimOutcome.choices],
         # Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
         'can_act': is_open and can_act_on_internal_ticket(technician, ticket),
         'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'} for person in people],
@@ -7094,10 +7146,12 @@ def internal_tickets(request):
     ).order_by('-submitted_at')
     if status == 'open':
         tickets = tickets.filter(status=CustomerTicket.Status.NEW)
+    elif status == 'overdue':
+        tickets = tickets.filter(status=CustomerTicket.Status.NEW, due_on__lt=timezone.localdate())
     elif status == 'closed':
         tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
     return render(request, 'tasks/internal_tickets.html', {
-        'tickets': tickets[:200], 'status': status,
+        'tickets': tickets[:200], 'status': status, 'today': timezone.localdate(),
         # Anyone who can see the list can create one (ticket_open).
         'can_open': True,
     })
@@ -7142,9 +7196,20 @@ def internal_ticket(request, pk):
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'close':
             close_form = CloseTicketForm(request.POST)
-            if close_form.is_valid():
-                close_internal_ticket(technician, request.user, ticket, close_form.cleaned_data['close_reason'])
+            outcome = request.POST.get('claim_outcome', '')
+            if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+                messages.error(request, _('A claim closes with its result: credit, replacement, or rejected.'))
+            elif close_form.is_valid():
+                close_internal_ticket(technician, request.user, ticket, close_form.cleaned_data['close_reason'], outcome)
                 messages.success(request, _('Internal task closed'))
+                return redirect('tasks:internal_ticket', pk=ticket.pk)
+        elif action == 'waiting':
+            waiting_form = WaitingForForm(request.POST)
+            if waiting_form.is_valid():
+                ticket.waiting_for = waiting_form.cleaned_data['waiting_for']
+                ticket.due_on = waiting_form.cleaned_data['due_on'] or ticket.due_on
+                ticket.save(update_fields=['waiting_for', 'due_on'])
+                messages.success(request, _('Saved.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
 
     return render(request, 'tasks/internal_ticket.html', {
@@ -7157,12 +7222,15 @@ def internal_ticket(request, pk):
         'close_form': close_form,
         'can_convert': is_open and can_act and technician.is_any_manager,
         'can_act': is_open and can_act,
+        'waiting_form': WaitingForForm(initial={'waiting_for': ticket.waiting_for, 'due_on': ticket.due_on}),
+        'claim_outcomes': CustomerTicket.ClaimOutcome.choices,
+        'overdue': is_open and ticket.due_on is not None and ticket.due_on < timezone.localdate(),
     })
 
 
 # Moved to tasks/equipment.py; still importable from here.
 from .equipment import (  # noqa: E402,F401
-    BeyondStock, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
+    BeyondStock, open_quality_follow_up, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
 )
 
 

@@ -527,6 +527,29 @@ class CustomerTicket(models.Model):
         Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket',
         verbose_name=_('task'),
     )
+
+    # An internal task followed through (docs/scenarios.md): the task it's about, when it's
+    # due, who it's waiting on — and a claim (to the factory or the carrier) closes only with
+    # its result. Overdue: the bell of whoever it's for, then the Operations Manager's.
+    class WaitingFor(models.TextChoices):
+        FACTORY = 'factory', _('The factory')
+        SUPPLIER = 'supplier', _('A supplier')
+        CUSTOMER = 'customer', _('The customer')
+        COLLEAGUE = 'colleague', _('A colleague')
+
+    class ClaimOutcome(models.TextChoices):
+        CREDIT = 'credit', _('Credit received')
+        REPLACEMENT = 'replacement', _('Replacement received')
+        REJECTED = 'rejected', _('Rejected')
+
+    linked_task = models.ForeignKey(
+        Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='follow_ups',
+        verbose_name=_('about task'),
+    )
+    due_on = models.DateField(_('due'), null=True, blank=True)
+    waiting_for = models.CharField(_('waiting for'), max_length=20, choices=WaitingFor.choices, blank=True)
+    is_claim = models.BooleanField(_('a claim'), default=False)
+    claim_outcome = models.CharField(_('claim result'), max_length=20, choices=ClaimOutcome.choices, blank=True)
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='tickets_reviewed', verbose_name=_('reviewed by'),

@@ -74,6 +74,23 @@
 </div>
 {% endif %}
 
+<div class="section">
+    <dl class="detail-grid">
+        {% if ticket.linked_task %}<div><dt>{% translate "About task" %}</dt><dd><a href="{% url 'tasks:task_detail' ticket.linked_task.pk %}" class="task-number" dir="ltr">{{ ticket.linked_task.task_number }}</a></dd></div>{% endif %}
+        <div><dt>{% translate "Due" %}</dt><dd>{% if ticket.due_on %}<span class="{% if overdue %}text-bad{% endif %}">{{ ticket.due_on|date:"j M Y" }}{% if overdue %} — {% translate "overdue" %}{% endif %}</span>{% else %}—{% endif %}</dd></div>
+        <div><dt>{% translate "Waiting for" %}</dt><dd>{{ ticket.get_waiting_for_display|default:"—" }}</dd></div>
+        {% if ticket.is_claim %}<div><dt>{% translate "A claim" %}</dt><dd>{{ ticket.get_claim_outcome_display|default:_("Open") }}</dd></div>{% endif %}
+    </dl>
+    {% if can_act %}
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="waiting">
+        {% for field in waiting_form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}
+        <div class="form-actions"><button type="submit" class="button button--secondary">{% translate "Save" %}</button></div>
+    </form>
+    {% endif %}
+</div>
+
 {% if can_act %}
 <div class="section">
     <h2>{% translate "Reassign to another staff member" %}</h2>
@@ -96,6 +113,15 @@
     <form method="post" class="form-grid" novalidate>
         {% csrf_token %}
         <input type="hidden" name="action" value="close">
+        {% if ticket.is_claim %}
+        <div class="field">
+            <label for="claim-outcome">{% translate "The claim's result" %}</label>
+            <select name="claim_outcome" id="claim-outcome" required>
+                <option value="">{% translate "Choose…" %}</option>
+                {% for value, label in claim_outcomes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        {% endif %}
         <div class="field {% if close_form.close_reason.errors %}field--error{% endif %}">
             <label for="{{ close_form.close_reason.id_for_label }}">{% translate "Result" %}</label>
             {{ close_form.close_reason }}

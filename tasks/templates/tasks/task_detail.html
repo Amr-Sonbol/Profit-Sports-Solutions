@@ -955,6 +955,19 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% with follow_ups=task.follow_ups.all %}{% if follow_ups %}
+<div class="section">
+    <h2>{% translate "Follow-ups" %}</h2>
+    <ul class="action-list">
+        {% for ticket in follow_ups %}
+        <li><a href="{% url 'tasks:internal_ticket' ticket.pk %}" class="action-row">
+            <span>{{ ticket.subject }} <span class="muted">({{ ticket.ticket_number }})</span></span>
+            <span class="badge {% if ticket.status != 'new' %}badge--good{% else %}badge--neutral{% endif %}">{% if ticket.status != 'new' %}{{ ticket.get_claim_outcome_display|default:_("Closed") }}{% elif ticket.due_on %}{% blocktranslate with day=ticket.due_on|date:"j M" %}Due {{ day }}{% endblocktranslate %}{% else %}{% translate "Open" %}{% endif %}</span>
+        </a></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}{% endwith %}
 {% record_trail task show_created=False %}
 {% endblock %}
 

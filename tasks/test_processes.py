@@ -20,7 +20,7 @@ def make_task(test, number, category=None, **extra):
     if category:
         task_type = TaskType.objects.create(code=f'type_{number}', name=f'Type {number}', category=category)
     return Task.objects.create(
-        task_number=number, site=test.site, task_type=task_type, brand=test.brand, priority=Task.Priority.NORMAL,
+        task_number=number, site=extra.pop('site', test.site), task_type=task_type, brand=test.brand, priority=Task.Priority.NORMAL,
         source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
         created_by=test.supervisor_user, **extra,
     )
@@ -266,3 +266,107 @@ class PhoneRequestsTests(TaskTestCase):
         self.client.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_customer'})
         ticket.refresh_from_db()
         self.assertEqual((ticket.customer.name, ticket.site.name), ('Iron Gym', 'Al Quoz'))
+
+
+class ClaimFollowThroughTests(TaskTestCase):
+
+    def setUp(self):
+        super().setUp()
+        from people.models import Technician
+        self.manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=self.manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        receiving = make_task(self, 'AE-1901', TaskType.Category.RECEIVING, status=Task.Status.COMPLETED)
+        TaskProduct.objects.create(task=receiving, product_code='RUN-700', quantity=1,
+                                   status=TaskProduct.Status.DAMAGED, note='Crushed corner')
+        from tasks.equipment import open_equipment_follow_up
+        self.claim = open_equipment_follow_up(receiving, self.supervisor_user)
+        self.receiving = receiving
+
+    def test_a_damaged_delivery_opens_a_linked_claim_due_in_two_weeks(self):
+        from datetime import timedelta
+        self.assertEqual(self.claim.linked_task, self.receiving)
+        self.assertTrue(self.claim.is_claim)
+        self.assertEqual(self.claim.due_on, timezone.localdate() + timedelta(days=14))
+        self.assertEqual(self.claim.waiting_for, CustomerTicket.WaitingFor.FACTORY)
+
+    def test_a_claim_closes_only_with_its_result(self):
+        self.client.force_login(self.manager)
+        url = f'/tasks/tickets/internal/{self.claim.pk}/'
+        self.client.post(url, {'action': 'close', 'close_reason': 'Sorted'})
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, CustomerTicket.Status.NEW)
+        self.client.post(url, {'action': 'close', 'close_reason': 'Panatta credited us', 'claim_outcome': 'credit'})
+        self.claim.refresh_from_db()
+        self.assertEqual((self.claim.status, self.claim.claim_outcome), (CustomerTicket.Status.CLOSED, 'credit'))
+
+    def test_an_overdue_follow_up_reaches_the_bell(self):
+        from datetime import timedelta
+        self.claim.due_on = timezone.localdate() - timedelta(days=1)
+        self.claim.save(update_fields=['due_on'])
+        self.client.force_login(self.manager)
+        self.assertContains(self.client.get('/tasks/'), 'follow-up is overdue')
+
+
+class StockStaysRightTests(TaskTestCase):
+
+    def test_left_behind_or_returned_machines_stay_in_stock(self):
+        from customers.models import Customer, Site
+        from tasks.stock import machine_stock
+        ours = Customer.objects.create(country=self.country, name='Profit', segment='other', is_internal=True)
+        warehouse = Site.objects.create(customer=ours, name='Jebel Ali', address='Jebel Ali')
+        receiving = make_task(self, 'AE-2001', TaskType.Category.RECEIVING, status=Task.Status.CLOSED, site=warehouse)
+        TaskProduct.objects.create(task=receiving, product_code='RUN', quantity=3, status=TaskProduct.Status.DONE)
+        loading = make_task(self, 'AE-2002', TaskType.Category.LOADING, site=warehouse)
+        loaded = TaskProduct.objects.create(task=loading, product_code='RUN', status=TaskProduct.Status.DONE)
+        TaskProduct.objects.create(task=loading, product_code='RUN', status=TaskProduct.Status.LATER)  # left behind
+        self.assertEqual(machine_stock(warehouse), {'RUN': 2})
+        installation = make_task(self, 'AE-2003', TaskType.Category.INSTALLATION)
+        TaskProduct.objects.create(task=installation, product_code='RUN', source_line=loaded,
+                                   status=TaskProduct.Status.RETURNED)  # the customer refused it
+        self.assertEqual(machine_stock(warehouse), {'RUN': 3})
+
+
+class MoveOrRetireTests(TaskTestCase):
+
+    def test_a_manager_moves_or_retires_a_machine_with_a_reason(self):
+        from customers.models import Asset, Site
+        from people.models import Technician
+        manager = User.objects.create_user('manager1', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        other = Site.objects.create(customer=self.customer, name='JBR', address='JBR')
+        self.client.force_login(manager)
+        url = f'/tasks/machines/{self.asset.pk}/'
+        self.client.post(url, {'action': 'move', 'site': other.pk, 'reason': ''})
+        self.asset.refresh_from_db()
+        self.assertNotEqual(self.asset.site, other)  # no reason, no move
+        self.client.post(url, {'action': 'move', 'site': other.pk, 'reason': 'Relocated by the customer'})
+        self.client.post(url, {'action': 'retire', 'reason': 'Scrapped after the flood'})
+        self.asset.refresh_from_db()
+        self.assertEqual((self.asset.site, self.asset.status), (other, Asset.Status.RETIRED))
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend', SEND_EMAILS_IN_BACKGROUND=False)
+class VisitsThatDidntSettleItTests(TaskTestCase):
+
+    def test_a_low_rating_opens_a_follow_up_to_the_owner(self):
+        from reports.models import CustomerFeedback
+        from tasks.equipment import open_quality_follow_up  # noqa: F401
+        task = make_task(self, 'AE-2101', status=Task.Status.CLOSED)
+        feedback = CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), token='tok-2101')
+        self.client.post('/reports/feedback/tok-2101/', {'rating': 2, 'comment': 'Late and messy'})
+        feedback.refresh_from_db()
+        follow_up = CustomerTicket.objects.get(linked_task=task)
+        self.assertEqual(follow_up.assigned_to, task.responsible_supervisor)
+        self.assertIn('2/5', follow_up.subject)
+
+    def test_late_parts_reach_the_owners_bell(self):
+        from datetime import timedelta
+
+        from tasks.models import TaskPartNeeded
+        task = make_task(self, 'AE-2201', status=Task.Status.ASSIGNED)
+        TaskPartNeeded.objects.create(task=task, product_code='BELT', source=TaskPartNeeded.Source.ORDERED,
+                                      expected_on=timezone.localdate() - timedelta(days=2), created_by=self.supervisor_user)
+        self.client.login(username='supervisor1', password='pass12345')
+        self.assertContains(self.client.get('/tasks/'), 'Ordered parts are late')

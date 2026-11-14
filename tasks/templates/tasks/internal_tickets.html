@@ -26,6 +26,7 @@
                 <th>{% translate "For" %}</th>
                 <th>{% translate "Opened by" %}</th>
                 <th>{% translate "Opened" %}</th>
+                <th>{% translate "Due" %}</th>
                 <th>{% translate "Status" %}</th>
             </tr>
         </thead>
@@ -37,6 +38,7 @@
                 <td>{{ ticket.assigned_to.full_name|default:"—" }}</td>
                 <td>{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }}{% else %}—{% endif %}</td>
                 <td>{{ ticket.submitted_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                <td>{% if ticket.due_on %}{{ ticket.due_on|date:"j M" }}{% if ticket.status == 'new' and ticket.due_on < today %} <span class="badge badge--bad">{% translate "overdue" %}</span>{% endif %}{% else %}—{% endif %}{% if ticket.waiting_for %}<br><span class="muted">{{ ticket.get_waiting_for_display }}</span>{% endif %}</td>
                 <td>
                     {% if ticket.status == 'new' %}<span class="badge badge--neutral">{% translate "Open" %}</span>
                     {% elif ticket.status == 'converted' %}<span class="badge badge--good">{% translate "Scheduled as a task" %}</span>

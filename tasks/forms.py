@@ -1947,10 +1947,10 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     class Meta:
         model = CustomerTicket
-        fields = ['subject', 'description', 'assigned_to']
+        fields = ['subject', 'description', 'assigned_to', 'due_on']
         labels = {'description': _('Details')}
-        help_texts = {'description': ''}
-        widgets = {'description': forms.Textarea(attrs={'rows': 5})}
+        help_texts = {'description': '', 'due_on': _('Optional: when it should be done by. Overdue, it reminds.')}
+        widgets = {'description': forms.Textarea(attrs={'rows': 5}), 'due_on': forms.DateInput(attrs={'type': 'date'})}
 
     def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1962,6 +1962,15 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
         self.fields['assigned_to'].label_from_instance = (
             lambda technician: f'{technician.full_name} — {technician.title}'
         )
+
+
+class WaitingForForm(forms.Form):
+    """Who an internal task is waiting on now (the factory, a supplier, …) — or nobody."""
+    waiting_for = forms.ChoiceField(
+        label=_('Waiting for'), required=False,
+        choices=[('', _('Nobody — we are on it'))] + CustomerTicket.WaitingFor.choices,
+    )
+    due_on = forms.DateField(label=_('Due'), required=False, widget=forms.DateInput(attrs={'type': 'date'}))
 
 
 class InternalTicketNoteForm(MessageFilesMixin, forms.Form):

@@ -977,6 +977,13 @@ def portal_visit(request, pk):
             feedback.comment = rating_form.cleaned_data['comment']
             feedback.submitted_at = now
             feedback.save()
+            if feedback.rating not in (None, '') and int(feedback.rating) <= 2:
+                # A low rating: the task's owner follows it up (docs/scenarios.md F).
+                from django.utils.translation import gettext
+
+                from tasks.equipment import open_quality_follow_up
+                open_quality_follow_up(feedback.task, None, gettext('Low rating (%(rating)s/5): %(number)s').replace(
+                    '%(rating)s', str(feedback.rating)))
             messages.success(request, _('Thank you for rating this visit.'))
             return redirect('customers:portal_visit', pk=task.pk)
     requests = list(

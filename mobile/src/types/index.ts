@@ -775,6 +775,14 @@ export interface InternalTicketDetail {
   is_open: boolean;
   // Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
   can_act: boolean;
+  // Followed through (docs/scenarios.md): the task it's about, when it's due, who it waits on;
+  // a claim closes with its result.
+  linked_task?: { id: number; task_number: string } | null;
+  due_on?: string | null;
+  waiting_for?: string;
+  is_claim?: boolean;
+  claim_outcome?: string;
+  claim_outcomes?: { value: string; label: string }[];
   subject: string;
   description: string;
   assigned_to: { id: number; name: string } | null;

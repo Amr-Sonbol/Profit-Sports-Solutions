@@ -86,5 +86,27 @@
     <p class="empty-state">{% translate "No outcome has been recorded for this machine." %}</p>
     {% endif %}
 </div>
+{% if can_manage %}
+<details class="section">
+    <summary>{% translate "Move or retire this machine" %}</summary>
+    <form method="post" class="form-grid" novalidate>
+        {% csrf_token %}
+        <div class="field">
+            <label for="move-site">{% translate "Move to branch" %}</label>
+            <select name="site" id="move-site">
+                {% for branch in branches %}<option value="{{ branch.pk }}">{{ branch.customer.name }} — {{ branch.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="field field--wide">
+            <label for="move-reason">{% translate "Reason" %}</label>
+            <input type="text" name="reason" id="move-reason" required placeholder="{% translate 'Sold from the showroom, relocated, taken back…' %}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" name="action" value="move" class="button button--secondary">{% translate "Move" %}</button>
+            <button type="submit" name="action" value="retire" class="button button--danger" data-confirm="{% translate "Retire this machine? It leaves the customer's list; its history stays." %}">{% translate "Retire" %}</button>
+        </div>
+    </form>
+</details>
+{% endif %}
 {% record_trail asset %}
 {% endblock %}

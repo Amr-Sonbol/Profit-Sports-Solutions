@@ -5,6 +5,7 @@ wrong followed up (docs/database_design_v2.md: task_product). Shared by the
 website's pages and the app's API.
 """
 from collections import defaultdict
+from datetime import timedelta
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.forms import formset_factory
@@ -103,8 +104,11 @@ def warehouse_stock_for_planning(task):
     """{code: quantity} a loading can take from its warehouse — the stock
     with this loading's own planned machines put back."""
     stock = defaultdict(int, machine_stock(task.site))
-    for code in task.products.filter(kind=TaskProduct.Kind.MACHINE).values_list('product_code', flat=True):
-        stock[stock_key(code)] += 1
+    # Put back what machine_stock took out for this loading (all but the lines left for later).
+    for code, quantity in task.products.filter(kind=TaskProduct.Kind.MACHINE).exclude(
+        status__in=[TaskProduct.Status.LATER, TaskProduct.Status.RETURNED],
+    ).values_list('product_code', 'quantity'):
+        stock[stock_key(code)] += quantity
     return {code: quantity for code, quantity in sorted(stock.items()) if quantity > 0}
 
 
@@ -566,6 +570,10 @@ def register_installed_machines(task):
 FOLLOW_UP_STATUSES = (TaskProduct.Status.MISSING, TaskProduct.Status.DAMAGED, TaskProduct.Status.WRONG_ITEM)
 
 
+# How long a claim to the factory (or the carrier) has before it's overdue.
+CLAIM_DAYS = 14
+
+
 def open_equipment_follow_up(task, user, elsewhere=()):
     """A receiving's, loading's or installation's problems, followed up: the
     machines missing, damaged or wrong (a claim to the factory or the
@@ -590,12 +598,16 @@ def open_equipment_follow_up(task, user, elsewhere=()):
             lines.append(f'- {what}: {line.get_status_display()}' + (f' — {line.note}' if line.note else ''))
         for line, on_file in elsewhere:
             lines.append('- ' + _('%(code)s (%(serial)s): this serial is already on file at %(site)s — check the '
-                                  'sticker; if the machine moved, move it on the customer\'s page.') % {
+                                  'sticker; if the machine moved, move it from the machine\'s page.') % {
                 'code': line.product_code, 'serial': line.serial_number, 'site': on_file.site.name,
             })
         step = TaskType.Category(equipment_step(task)).label
         ticket = CustomerTicket(
             kind=CustomerTicket.Kind.INTERNAL, country=country, assigned_to=manager,
+            # Followed through: on this task, due in two weeks; missing, damaged or wrong goods are a
+            # claim (to the factory or the carrier), closed only with its result.
+            linked_task=task, due_on=timezone.localdate() + timedelta(days=CLAIM_DAYS), is_claim=bool(problems),
+            waiting_for=CustomerTicket.WaitingFor.FACTORY if problems else '',
             subject=_('To follow up: %(step)s %(number)s') % {'step': step, 'number': task.task_number},
             description='\n'.join([
                 _('Found when the report was filed for %(number)s at %(site)s:') % {
@@ -604,6 +616,25 @@ def open_equipment_follow_up(task, user, elsewhere=()):
                 *lines,
             ]),
         )
+    return open_internal_ticket(getattr(user, 'technician', None), user, ticket)
+
+
+def open_quality_follow_up(task, user, why):
+    """A visit that didn't settle it — a report "not resolved", or a customer's rating
+    of 2 or less (docs/scenarios.md D, F): an internal task to the task's owner, on the
+    task, due in a week. Once per task and reason."""
+    owner = task.responsible_supervisor
+    if owner is None or not owner.is_active:
+        return None
+    subject = why % {'number': task.task_number}
+    if CustomerTicket.objects.filter(linked_task=task, subject=subject).exists():
+        return None
+    ticket = CustomerTicket(
+        kind=CustomerTicket.Kind.INTERNAL, country=task.site.customer.country, assigned_to=owner,
+        subject=subject, linked_task=task, due_on=timezone.localdate() + timedelta(days=7),
+        description=str(_('%(site)s — what follows: another visit, parts, a call to the customer.')) % {
+            'site': task.site.name},
+    )
     return open_internal_ticket(getattr(user, 'technician', None), user, ticket)
 
 

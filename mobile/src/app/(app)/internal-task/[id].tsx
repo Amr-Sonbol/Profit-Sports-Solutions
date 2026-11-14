@@ -15,7 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { confirmAction } from '@/confirm';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { t } from '@/i18n';
+import { locale, t } from '@/i18n';
 import { withCountryCopy } from '@/offline';
 import type { PickedFile } from '@/pick-files';
 import { ago } from '@/task-time';
@@ -50,6 +50,8 @@ export default function InternalTaskScreen() {
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [assignee, setAssignee] = useState('');
   const [result, setResult] = useState('');
+  // A claim closes with its result (credit, replacement, rejected).
+  const [outcome, setOutcome] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -157,6 +159,22 @@ export default function InternalTaskScreen() {
         <ThemedView style={[styles.card, { borderColor: theme.backgroundSelected }]}>
           <ThemedText type="small" themeColor="textSecondary">For</ThemedText>
           <ThemedText type="smallBold">{ticket.assigned_to?.name ?? '—'}</ThemedText>
+          {ticket.linked_task ? (
+            <TouchableOpacity onPress={() => router.push(`/team-task/${ticket.linked_task?.id}`)}>
+              <ThemedText type="small" themeColor="primary">{t('About task {number}', { number: ticket.linked_task.task_number })}</ThemedText>
+            </TouchableOpacity>
+          ) : null}
+          {ticket.due_on ? (
+            <ThemedText type="small" themeColor={ticket.is_open && ticket.due_on < new Date().toISOString().slice(0, 10) ? 'danger' : 'textSecondary'}>
+              {t('Due {date}', { date: new Date(ticket.due_on).toLocaleDateString(locale()) })}
+            </ThemedText>
+          ) : null}
+          {ticket.waiting_for ? (
+            <ThemedText type="small" themeColor="textSecondary">{t('Waiting for {who}', { who: ticket.waiting_for })}</ThemedText>
+          ) : null}
+          {ticket.is_claim ? (
+            <ThemedText type="small" themeColor="textSecondary">{t('A claim: {result}', { result: ticket.claim_outcome || t('Open') })}</ThemedText>
+          ) : null}
         </ThemedView>
         <ThemedText>{ticket.description}</ThemedText>
         {ticket.files.length ? <MediaStrip items={ticket.files} /> : null}
@@ -230,15 +248,18 @@ export default function InternalTaskScreen() {
         {ticket.can_act ? (
           <ThemedView style={[styles.panel, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="smallBold">Close with the result</ThemedText>
+            {ticket.is_claim ? (
+              <ChoicePicker label="The claim's result" choices={ticket.claim_outcomes ?? []} value={outcome} onChange={setOutcome} />
+            ) : null}
             <TextInput
               style={[input, styles.tall]} value={result} onChangeText={setResult} multiline
               placeholder="For example stock ordered, vendor responded or issue resolved." placeholderTextColor={theme.textSecondary}
             />
             <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.primary }, (busy || !result.trim()) && styles.dim]}
-              disabled={busy || !result.trim()}
+              style={[styles.button, { backgroundColor: theme.primary }, (busy || !result.trim() || (ticket.is_claim && !outcome)) && styles.dim]}
+              disabled={busy || !result.trim() || (ticket.is_claim && !outcome)}
               onPress={() => act(
-                { action: 'close', result: result.trim() }, 'Close this internal task?',
+                { action: 'close', result: result.trim(), claim_outcome: outcome }, 'Close this internal task?',
                 'It can no longer be changed.', 'Close', 'Internal task closed',
               )}
             >

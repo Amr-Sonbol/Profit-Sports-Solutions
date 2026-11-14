@@ -32,20 +32,27 @@ def _add(totals, rows, sign=1):
 
 
 def machine_stock(site):
-    """{code: quantity} of machines at one warehouse. Out is every machine
-    on a loading task there — planned is enough, that's the reservation —
-    and any carried straight from a receiving there to an installation,
-    which the app allowed before loading was planned from stock."""
+    """{code: quantity} of usable machines at one warehouse. Out is every
+    machine on a loading there — planned (the reservation), loaded, or found
+    missing or damaged there (not usable) — except one left behind for later
+    (still on the shelf); and any carried straight from a receiving there to an
+    installation. Back in: one the customer refused or returned at the installation."""
     lines = TaskProduct.objects.filter(kind=TaskProduct.Kind.MACHINE).exclude(task__status=Task.Status.CANCELLED)
     totals = defaultdict(int)
     _add(totals, lines.filter(
         task__site=site, task__task_type__category=TaskType.Category.RECEIVING, status=TaskProduct.Status.DONE,
     ).values_list('product_code', 'quantity'))
     _add(totals, lines.filter(
-        Q(task__site=site, task__task_type__category=TaskType.Category.LOADING)
+        (Q(task__site=site, task__task_type__category=TaskType.Category.LOADING)
+         & ~Q(status__in=[TaskProduct.Status.LATER, TaskProduct.Status.RETURNED]))
         | Q(task__task_type__category=TaskType.Category.INSTALLATION, source_line__task__site=site,
             source_line__task__task_type__category=TaskType.Category.RECEIVING),
     ).values_list('product_code', 'quantity'), sign=-1)
+    # Refused or returned at the customer's: back on this warehouse's shelf.
+    _add(totals, lines.filter(
+        task__task_type__category=TaskType.Category.INSTALLATION, status=TaskProduct.Status.RETURNED,
+        source_line__task__site=site,
+    ).values_list('product_code', 'quantity'))
     _add(totals, StockAdjustment.objects.filter(
         site=site, kind=TaskProduct.Kind.MACHINE,
     ).values_list('product_code', 'quantity'))

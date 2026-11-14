@@ -67,6 +67,14 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
                         </a>
+                        {% elif notification.kind == 'follow_ups_overdue' %}
+                        <a href="{% if notification.count == 1 %}{% url 'tasks:internal_ticket' notification.ticket.pk %}{% else %}{% url 'tasks:internal_tickets' %}?status=overdue{% endif %}" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} follow-up is overdue{% plural %}{{ count }} follow-ups are overdue{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'parts_late' %}
+                        <a href="{% url 'tasks:task_list' %}?parts=late" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}Ordered parts are late for {{ count }} task{% plural %}Ordered parts are late for {{ count }} tasks{% endblocktranslate %}
+                        </a>
                         {% elif notification.kind == 'internal_ticket' %}
                         <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
                             {% translate "Internal task assigned to you" %}

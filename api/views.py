@@ -780,9 +780,13 @@ class InternalTicketView(APIView):
             reassign_internal_ticket(technician, request.user, ticket, form.cleaned_data['assigned_to'])
         elif action == 'close':
             form = CloseTicketForm({'close_reason': request.data.get('result', '')})
+            outcome = str(request.data.get('claim_outcome', ''))
+            if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+                return Response({'detail': str(_('A claim closes with its result: credit, replacement, or rejected.'))},
+                                status=400)
             if not form.is_valid():
                 return Response({'detail': str(_('Please write the result.'))}, status=400)
-            close_internal_ticket(technician, request.user, ticket, form.cleaned_data['close_reason'])
+            close_internal_ticket(technician, request.user, ticket, form.cleaned_data['close_reason'], outcome)
         else:
             return Response({'detail': 'Unknown action.'}, status=400)
         data = internal_ticket_for_app(request, technician, ticket)
