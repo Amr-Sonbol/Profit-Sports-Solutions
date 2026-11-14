@@ -28,7 +28,64 @@
         </div>
     </form>
 </div>
+{# The machines' opening stock, a warehouse at once (the parts' is on the Parts page). #}
+<details class="section disclosure"{% if import_form.errors %} open{% endif %}>
+    <summary class="button button--secondary">{% translate "Upload the machines' opening stock" %}</summary>
+    <form method="post" enctype="multipart/form-data" class="form-grid disclosure__body" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="import_machines">
+        {% for field in import_form %}
+        <div class="field {% if field.errors %}field--error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="field field--submit">
+            <button type="submit" class="button">{% translate "Upload" %}</button>
+        </div>
+    </form>
+</details>
 {% endif %}
+
+{# Machines that left a warehouse and aren't in place yet: a lost or late delivery stands out. #}
+<div class="section">
+    <h2>{% translate "Loaded, not installed yet" %}</h2>
+    {% if not_installed %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Machine" %}</th>
+                    <th>{% translate "Serial number" %}</th>
+                    <th>{% translate "From" %}</th>
+                    <th>{% translate "Where it is" %}</th>
+                    <th>{% translate "Days" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in not_installed %}
+                <tr>
+                    <td dir="ltr">{{ row.line.product_code }}</td>
+                    <td dir="ltr">{{ row.line.serial_number|default:"—" }}</td>
+                    <td>{{ row.line.task.site.name }}</td>
+                    <td>
+                        {% if row.where == 'not_sent' %}{% translate "Loaded, not sent to an installation" %}
+                        {% elif row.where == 'waiting' %}{% translate "At the customer, not installed" %}
+                        {% else %}{% translate "On its way to the installation" %}{% endif %}
+                        — <a href="{% url 'tasks:task_detail' row.task.pk %}" dir="ltr">{{ row.task.task_number }}</a>, {{ row.task.site.name }}
+                    </td>
+                    <td>{% if row.days > 14 %}<span class="badge badge--warning">{{ row.days }}</span>{% else %}{{ row.days }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="empty-state">{% translate "Every loaded machine is in place." %}</p>
+    {% endif %}
+</div>
 
 {% for site, machines in warehouses %}
 <div class="section">

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n static %}
+{% load i18n static  record_trail %}
 
 {% block title %}{{ ticket.ticket_number }} — {{ ticket.company_name }}{% endblock %}
 
@@ -33,7 +33,17 @@
             <p>{% blocktranslate with name=ticket.site.name %}Branch added: <strong>{{ name }}</strong>. A task created from this request starts there.{% endblocktranslate %}</p>
             {% if 'manage_customers' in role_permissions %}<p><a href="{% url 'customers:site_edit' ticket.site.pk %}">{% translate "Set its warranty start and other details" %}</a></p>{% endif %}
         </div>
-        {% elif ticket.about == 'new_branch' and ticket.customer and can_manage %}
+        {% elif not ticket.customer and ticket.company_name and can_create_branch %}
+        {# A caller who isn't a customer yet: the customer (and the branch, if given) in one click. #}
+        <div class="review-callout">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_customer">
+                <button type="submit" class="button">{% blocktranslate with name=ticket.company_name %}Create the customer “{{ name }}”{% endblocktranslate %}{% if ticket.site_description %} {% blocktranslate with branch=ticket.site_description %}and its branch “{{ branch }}”{% endblocktranslate %}{% endif %}</button>
+            </form>
+            <p class="field__help">{% translate "Not a customer yet. One of the same name in this country is linked instead of a second one." %}</p>
+        </div>
+        {% elif ticket.about == 'new_branch' and ticket.customer and can_create_branch %}
         {# One click: the branch made from what the customer typed, and linked to this request. #}
         <div class="review-callout">
             <form method="post">
@@ -42,9 +52,13 @@
                 <button type="submit" class="button">{% blocktranslate with name=ticket.site_description %}Create the branch “{{ name }}”{% endblocktranslate %}</button>
             </form>
             <p class="field__help">{% translate "From the customer's details in this request: name, address and contact. You can set its warranty start afterwards." %}</p>
-            {% if user.technician.role == 'admin' %}
+            {% if can_create_branch %}
             <a href="{% url 'customers:customer_detail' ticket.customer.pk %}?tab=sites&amp;from_request={{ ticket.pk }}&amp;branch_name={{ ticket.site_description|urlencode }}&amp;branch_address={{ ticket.site_address|urlencode }}&amp;branch_contact={{ ticket.contact_name|urlencode }}&amp;branch_phone={{ ticket.contact_phone|urlencode }}#add-site">{% translate "Or check and change its details first" %}</a>
             {% endif %}
+        </div>
+        {% elif ticket.about == 'new_branch' and ticket.customer and can_manage %}
+        <div class="review-callout">
+            <p>{% translate "A new branch: a manager creates it from this request (the Manager, Project, Technical Support or Operations Manager, the COO or the Admin)." %}</p>
         </div>
         {% endif %}
         {# Machines: each with its own words, photos and videos (tasks.customer_report); otherwise their message. #}
@@ -133,7 +147,7 @@
         <ul class="internal-notes">
             {% for note in internal_notes %}
             <li class="internal-note">
-                <p class="internal-note__meta"><strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>{% if note.author.technician %} · {{ note.author.technician.get_role_display }}{% endif %} · {{ note.created_at|date:"j M Y, P" }}</p>
+                <p class="internal-note__meta"><strong>{{ note.author.technician.full_name|default:note.author.get_username }}</strong>{% if note.author.technician %} · {{ note.author.technician.title }}{% endif %} · {{ note.created_at|date:"j M Y, P" }}</p>
                 <p class="pre-line">{{ note.message }}</p>
                 {% with files=note.all_files %}{% if files %}<p class="chat-attachment attachment-list">{% for file in files %}{% include "_attachment.html" with file=file %}{% endfor %}</p>{% endif %}{% endwith %}
             </li>
@@ -215,7 +229,7 @@
             <div><dt>{% translate "Status" %}</dt><dd>{{ ticket.get_status_display }}</dd></div>
             <div>
                 <dt>{% translate "Assigned to" %}</dt>
-                <dd>{% if ticket.assigned_to %}{{ ticket.assigned_to.full_name }} <span class="muted">({{ ticket.assigned_to.get_role_display }})</span>{% else %}<span class="muted">{% translate "Not yet assigned." %}</span>{% endif %}</dd>
+                <dd>{% if ticket.assigned_to %}{{ ticket.assigned_to.full_name }} <span class="muted">({{ ticket.assigned_to.title }})</span>{% else %}<span class="muted">{% translate "Not yet assigned." %}</span>{% endif %}</dd>
             </div>
             {% if ticket.status == 'converted' and ticket_tasks %}
             <div><dt>{% translate "Tasks" %}</dt><dd>{% for task in ticket_tasks %}<a class="task-number" href="{% url 'tasks:task_detail' task.pk %}" dir="ltr">{{ task.task_number }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</dd></div>
@@ -270,7 +284,7 @@
             {% if ticket.shipping_address %}<div><dt>{% translate "Shipping address" %}</dt><dd class="pre-line">{{ ticket.shipping_address }}</dd></div>{% endif %}
             <div>
                 <dt>{% translate "Submitted" %}</dt>
-                <dd>{{ ticket.submitted_at|date:"j M Y, P" }}<span class="compact-table__sub">{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {% endif %}{{ ticket.get_source_display }}</span></dd>
+                <dd>{{ ticket.submitted_at|date:"j M Y, P" }}<span class="compact-table__sub">{% if ticket.opened_by %}{{ ticket.opened_by.technician.full_name|default:ticket.opened_by.get_username }} · {% elif ticket.submitted_by %}{% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %} · {% endif %}{{ ticket.get_source_display }}</span></dd>
             </div>
         </dl>
     </section>
@@ -280,10 +294,10 @@
     {% if ticket.task %}
     {# Once there's a task, shipping and the PAK number live there: one place to update. #}
     <section class="section review-card">
-        <h2>{% translate "Shipping and PAK" %}</h2>
+        <h2>{% translate "Shipping and Panatta PAK" %}</h2>
         <dl class="review-facts">
             <div><dt>{% translate "Shipping" %}</dt><dd>{{ ticket.task.get_shipping_company_display|default:"—" }}{% if ticket.task.shipping_tracking_number %} · <span dir="ltr">{{ ticket.task.shipping_tracking_number }}</span>{% endif %}</dd></div>
-            <div><dt>{% translate "PAK reference number" %}</dt><dd dir="ltr">{{ ticket.task.pak_reference_number|default:"—" }}</dd></div>
+            <div><dt>{% translate "Panatta PAK" %}</dt><dd dir="ltr">{{ ticket.task.pak_reference_number|default:"—" }}</dd></div>
         </dl>
         <p class="field__help">{% blocktranslate with number=ticket.task.task_number %}Kept on task {{ number }}: change them there.{% endblocktranslate %} <a href="{% url 'tasks:task_detail' ticket.task.pk %}" class="task-number" dir="ltr">{{ ticket.task.task_number }}</a></p>
     </section>
@@ -322,13 +336,14 @@
     </details>
 
     {# The PAK reference number, on its own; shipping kept as it is. #}
-    <details class="section review-card review-more"{% if logistics_form.pak_reference_number.errors %} open{% endif %}>
-        <summary>{% translate "PAK reference number" %}{% if ticket.pak_reference_number %} · <span dir="ltr">{{ ticket.pak_reference_number }}</span>{% endif %}</summary>
+    <details class="section review-card review-more"{% if logistics_form.pak_reference_number.errors or pak_reminder %} open{% endif %}>
+        <summary>{% translate "Panatta PAK" %}{% if ticket.pak_reference_number %} · <span dir="ltr">{{ ticket.pak_reference_number }}</span>{% endif %}</summary>
         <form method="post" class="review-more__body" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="update_logistics">
             <input type="hidden" name="shipping_company" value="{{ ticket.shipping_company }}">
             <input type="hidden" name="shipping_tracking_number" value="{{ ticket.shipping_tracking_number }}">
+            {% if pak_reminder %}<p class="field__help">{% translate "A Panatta machine: opening a PAK with Panatta? Add its number here." %}</p>{% endif %}
             {% with field=logistics_form.pak_reference_number %}
             <div class="field {% if field.errors %}field--error{% endif %}">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -360,6 +375,7 @@
     {% endif %}
 </aside>
 </div>
+{% record_trail ticket %}
 {% endblock %}
 
 {% block scripts %}<script src="{% static 'js/answer-suggest.js' %}?v={{ css_version }}" defer></script>{% endblock %}

@@ -1,7 +1,8 @@
 from django import forms
+from django.db.models import Q
 from django.contrib.auth import forms as auth_forms
 from django.contrib.auth import get_user_model, password_validation
-from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import lazy
@@ -16,11 +17,13 @@ from people.models import (
 from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.phrases import Action, Finding
 
+from spots.uploads import SafeFileValidator
+
 from .models import (
     ALLOWED_TICKET_ATTACHMENT_EXTENSIONS, DEFAULT_COLOR, MAX_TASK_DOCUMENT_BYTES, STEP_DONE_LABELS, MAX_TICKET_ATTACHMENT_BYTES,
     MAX_TICKET_ATTACHMENT_COUNT, MAX_TICKET_MACHINES, SERIAL_PHOTO_EXTENSIONS, CustomerTicket, Task, TaskAssignment,
     TaskAsset,
-    TaskAttachment, TaskEvent, TaskProduct, TicketEscalation, TicketMachine,
+    TaskAttachment, TaskEvent, TaskPartNeeded, TaskProduct, TicketEscalation, TicketMachine,
 )
 
 DATETIME_INPUT_FORMAT = '%Y-%m-%dT%H:%M'
@@ -62,7 +65,7 @@ class TaskCreateForm(forms.ModelForm):
     )
 
     PLAIN_FIELD_NAMES = [
-        'required_skill', 'min_level', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
+        'about', 'done_by', 'subcontractor_name', 'subcontractor_contact', 'description', 'priority', 'source', 'is_warranty', 'billing_type',
         'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor', 'lead',
     ]
 
@@ -76,7 +79,7 @@ class TaskCreateForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'site', 'task_type', 'brand', 'required_skill', 'min_level',
+            'site', 'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
             'description', 'priority', 'source', 'is_warranty', 'billing_type',
             'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
         ]
@@ -86,9 +89,15 @@ class TaskCreateForm(forms.ModelForm):
             'scheduled_for': forms.DateTimeInput(format=DATETIME_INPUT_FORMAT, attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, **kwargs):
+    def __init__(self, *args, country, ticket=None, is_admin=False, can_assign=False, owner_required=False,
+                 can_add_site=False, **kwargs):
         super().__init__(*args, **kwargs)
+        for name in ('about', 'done_by'):
+            self.fields[name].required = False
         self.is_admin = is_admin
+        # "+ Add new site": whoever creates customers and branches (people.permissions.can_create_customers).
+        self.can_add_site = can_add_site
+        self.owner_required = owner_required
         if can_assign:
             self.fields['lead'].queryset = Technician.objects.filter(
                 is_active=True, is_available=True, country=country,
@@ -101,12 +110,11 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['site'].required = False
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
-        if is_admin:
+        if can_add_site:
             self.fields['new_site_customer'].queryset = Customer.objects.filter(is_active=True, country=country)
         else:
-            # Creating a site is admin-only (customers.views.customer_detail
-            # is the same rule) — without this, "+ Add new site" here would
+            # Creating a branch is for whoever creates customers and branches (the same
+            # rule as the customer's page) — without this, "+ Add new site" here would
             # be a second, unrestricted door to the same thing.
             for field_name in [
                 'new_site_customer', 'new_site_name', 'new_site_address',
@@ -119,12 +127,12 @@ class TaskCreateForm(forms.ModelForm):
         self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
-        self.fields['responsible_supervisor'].required = False
+        # One owner from the start: whoever creates it, or — a field role can't own a task — the one chosen.
+        self.fields['responsible_supervisor'].required = self.owner_required
         # The skill level scale tops out at 4 (see TechnicianSkill.level) —
         # PositiveSmallIntegerField has no upper bound of its own, so without
         # this a nonsense value here is a clean model concern, not just a
         # display one.
-        self.fields['min_level'].validators.append(MaxValueValidator(4))
         # No job realistically runs longer than a couple of days unattended;
         # caught here so a typo (20 instead of 2.0) is a clean form error,
         # not a silently absurd estimated finish time.
@@ -194,7 +202,7 @@ class TaskCreateForm(forms.ModelForm):
 
                 if matched_site:
                     self.fields['site'].initial = matched_site.pk
-                elif is_admin:
+                elif can_add_site:
                     self.fields['new_site_name'].initial = ticket.site_description
                     self.fields['new_site_address'].initial = ticket.site_address
                     self.fields['new_site_contact_name'].initial = ticket.contact_name
@@ -206,6 +214,21 @@ class TaskCreateForm(forms.ModelForm):
         """The fields with no create-or-reuse toggle, for the template's generic loop."""
         return [self[name] for name in self.PLAIN_FIELD_NAMES if name in self.fields]
 
+    def clean_about(self):
+        """Not sent (an older screen): the task keeps what it's about."""
+        return self.cleaned_data.get('about') or self.instance.about or Task.About.MACHINES
+
+    def clean_done_by(self):
+        """Not sent: the task keeps who does it."""
+        return self.cleaned_data.get('done_by') or self.instance.done_by or Task.DoneBy.OUR_TEAM
+
+    def clean_subcontractor_name(self):
+        """A subcontractor's work names the subcontractor."""
+        name = (self.cleaned_data.get('subcontractor_name') or '').strip()
+        if self.data.get(self.add_prefix('done_by')) == Task.DoneBy.SUBCONTRACTOR and not name:
+            raise forms.ValidationError(_('Please name the subcontractor.'))
+        return name
+
     def clean(self):
         cleaned = super().clean()
 
@@ -215,10 +238,10 @@ class TaskCreateForm(forms.ModelForm):
         if site and (new_site_name or new_site_customer):
             self.add_error(None, _('Select an existing site or add a new one below, not both.'))
         elif not site and not (new_site_name and new_site_customer):
-            if self.is_admin:
+            if self.can_add_site:
                 self.add_error('site', _('Select a site, or add a new one below.'))
             else:
-                self.add_error('site', _('Select a site. An administrator can add a new site if it is not listed.'))
+                self.add_error('site', _('Select a site. A manager can add a new site if it is not listed.'))
         elif not site and Site.objects.filter(customer=new_site_customer, name__iexact=new_site_name).exists():
             self.add_error('new_site_name', _('This customer already has a site with this name.'))
 
@@ -303,7 +326,8 @@ class TaskEditForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'task_type', 'brand', 'required_skill', 'min_level', 'description', 'reported_serial_numbers',
+            'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
+            'description', 'reported_serial_numbers',
             'priority', 'source', 'is_warranty', 'billing_type', 'promised_at', 'scheduled_for', 'estimated_hours',
             'responsible_supervisor', 'pak_reference_number', 'shipping_company', 'shipping_tracking_number',
             'quotation', 'factory_offer', 'invoice', 'invoice_visible_to_supervisor', 'delivery_note',
@@ -321,16 +345,17 @@ class TaskEditForm(forms.ModelForm):
 
     def __init__(self, *args, country, is_manager, **kwargs):
         super().__init__(*args, **kwargs)
+        for name in ('about', 'done_by'):
+            self.fields[name].required = False
         self.is_manager = is_manager
         self.fields['task_type'].queryset = TaskType.objects.filter(is_active=True)
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True)
-        self.fields['required_skill'].queryset = Skill.objects.filter(is_active=True)
-        self.fields['min_level'].validators.append(MaxValueValidator(4))
         self.fields['estimated_hours'].validators.append(MinValueValidator(0))
         self.fields['estimated_hours'].validators.append(MaxValueValidator(48))
         self.fields['responsible_supervisor'].queryset = Technician.objects.filter(
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
+        # Handed over, never blanked: left empty, the owner stays (clean_responsible_supervisor).
         self.fields['responsible_supervisor'].required = False
 
         self.fields['promised_at'].input_formats = [DATETIME_INPUT_FORMAT]
@@ -361,7 +386,7 @@ class TaskEditForm(forms.ModelForm):
             # all the way past the shipment/document fields, nowhere near
             # scheduled_for itself. Move them to sit right next to it.
             self.order_fields([
-                'task_type', 'brand', 'required_skill', 'min_level', 'description',
+                'task_type', 'brand', 'description',
                 'reported_serial_numbers', 'priority',
                 'source', 'is_warranty', 'billing_type', 'promised_at',
                 'schedule_mode', 'scheduled_for', 'scheduled_date_only',
@@ -411,6 +436,26 @@ class TaskEditForm(forms.ModelForm):
                     'Only a manager or administrator can change this once work has started.',
                 )
 
+    def clean_responsible_supervisor(self):
+        """A task always has its owner (docs/access_rules.md): handing it over picks
+        someone else; leaving it empty keeps the one it has."""
+        return self.cleaned_data.get('responsible_supervisor') or self.instance.responsible_supervisor
+
+    def clean_about(self):
+        """Not sent (an older screen): the task keeps what it's about."""
+        return self.cleaned_data.get('about') or self.instance.about or Task.About.MACHINES
+
+    def clean_done_by(self):
+        """Not sent: the task keeps who does it."""
+        return self.cleaned_data.get('done_by') or self.instance.done_by or Task.DoneBy.OUR_TEAM
+
+    def clean_subcontractor_name(self):
+        """A subcontractor's work names the subcontractor."""
+        name = (self.cleaned_data.get('subcontractor_name') or '').strip()
+        if self.data.get(self.add_prefix('done_by')) == Task.DoneBy.SUBCONTRACTOR and not name:
+            raise forms.ValidationError(_('Please name the subcontractor.'))
+        return name
+
     def clean(self):
         cleaned = super().clean()
         if self.is_manager:
@@ -436,7 +481,7 @@ class TaskEditForm(forms.ModelForm):
     def _clean_document(self, field_name):
         document = self.cleaned_data[field_name]
         if document and document.size > MAX_TASK_DOCUMENT_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 10 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 10 MB limit. Please select a smaller file.'))
         return document
 
     def clean_quotation(self):
@@ -597,6 +642,41 @@ class ChangePasswordForm(auth_forms.PasswordChangeForm):
         self.fields['old_password'].label = _('Current password')
 
 
+class CustomRoleForm(forms.ModelForm):
+    """A role the Admin makes (or renames) on Roles & permissions: its name in
+    English and Arabic, and — when made — the built-in role it's based on."""
+
+    class Meta:
+        from people.models import CustomRole
+
+        model = CustomRole
+        fields = ['name', 'name_ar', 'based_on']
+
+    def __init__(self, *args, renaming=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if renaming:  # what it's based on is chosen once, when made
+            del self.fields['based_on']
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        if name.lower() in {str(label).lower() for _value, label in Technician.Role.choices}:
+            raise forms.ValidationError(_('This is already the name of a built-in role.'))
+        return name
+
+
+class LimitedPasswordResetForm(auth_forms.PasswordResetForm):
+    """The staff "Forgot your password?" (Django's own), sending at most one
+    link per address in a while (spots.throttle) — it's open to anyone, so
+    it mustn't become a way to flood someone's inbox. The page answers the
+    same either way."""
+
+    def get_users(self, email):
+        from spots.throttle import link_email_allowed
+
+        users = list(super().get_users(email))
+        return users if users and link_email_allowed(email) else []
+
+
 class NewPasswordForm(auth_forms.SetPasswordForm):
     """Set a password without the current one: a manager's reset, or a
     customer's emailed link."""
@@ -662,14 +742,14 @@ class SelfRateSkillForm(SelfRateLevelForm):
     evidence = forms.FileField(
         label=_('Photo or video of you performing this task'),
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
     )
     note = forms.CharField(required=False, max_length=255, label=_('Note'))
 
     def clean_evidence(self):
         evidence = self.cleaned_data['evidence']
         if evidence.size > MAX_SKILL_EVIDENCE_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return evidence
 
 
@@ -700,7 +780,7 @@ class TaskAttachmentUploadForm(forms.Form):
         # instead of a generic file browser — doesn't force the camera, so
         # attaching an existing photo (e.g. one a customer sent) still works.
         widget=forms.FileInput(attrs={'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS)],
     )
     # Explicit choices, not TaskAttachment.Purpose.choices wholesale — the
     # delivery-note/written-report/other values further down belong to
@@ -708,18 +788,87 @@ class TaskAttachmentUploadForm(forms.Form):
     # upload.
     purpose = forms.ChoiceField(
         choices=[
-            (TaskAttachment.Purpose.FAULT, _('Fault')),
             (TaskAttachment.Purpose.SERIAL_PLATE, _('Serial plate')),
             (TaskAttachment.Purpose.BEFORE, _('Before')),
             (TaskAttachment.Purpose.AFTER, _('After')),
+            # A loading's dispatch photo: the loaded truck, or the signed delivery note.
+            (TaskAttachment.Purpose.DELIVERY_NOTE, _('Loaded truck or delivery note')),
         ],
         label=_('What is this?'),
     )
 
+    asset = forms.ModelChoiceField(
+        queryset=Asset.objects.none(), required=False, label=_('Which machine?'), empty_label=_('The branch'),
+    )
+
+    def __init__(self, data=None, *args, site=None, **kwargs):
+        # An older app, or a photo queued offline, still sends "fault": it's a Before photo now.
+        if data is not None and data.get('purpose') == 'fault':
+            data = data.copy()
+            data['purpose'] = TaskAttachment.Purpose.BEFORE
+        super().__init__(data, *args, **kwargs)
+        # A machine at this task's branch, or the branch as a whole.
+        if site is not None:
+            self.fields['asset'].queryset = site.assets.select_related('brand').order_by('model_name')
+        self.fields['asset'].label_from_instance = lambda asset: ' '.join(
+            part for part in (asset.brand.name if asset.brand_id else '', asset.model_name, asset.serial_no) if part
+        )
+        self.order_fields(['asset', 'purpose', 'file'])
+
+    def clean(self):
+        from .customer_report import file_kind
+
+        cleaned = super().clean()
+        # The branch has no serial plate: that photo goes with its machine.
+        if cleaned.get('purpose') == TaskAttachment.Purpose.SERIAL_PLATE and not cleaned.get('asset'):
+            self.add_error('asset', _('A serial plate photo goes with its machine. Choose which one.'))
+        file = cleaned.get('file')
+        if file and cleaned.get('purpose') in (TaskAttachment.Purpose.SERIAL_PLATE, TaskAttachment.Purpose.AFTER) \
+                and file_kind(file) != 'image':
+            self.add_error('file', _('The serial plate and after need a photo. A video can only show the fault (before).'))
+        return cleaned
+
+
+class PartNeededForm(forms.Form):
+    """A spare part a repair needs (tasks.parts_needed.add_part): code, description, quantity;
+    from our stock, or ordered (and when it should arrive, if known)."""
+
+    product_code = forms.CharField(max_length=100, label=_('Code'))
+    description = forms.CharField(
+        max_length=200, required=False, label=_('Description'),
+        help_text=_('Left empty: the catalogue\'s, for a code it knows.'),
+    )
+    quantity = forms.IntegerField(min_value=1, max_value=999, initial=1, label=_('Quantity'))
+    source = forms.ChoiceField(choices=TaskPartNeeded.Source.choices, initial=TaskPartNeeded.Source.STOCK, label=_('From'))
+    expected_on = forms.DateField(
+        required=False, label=_('Expected on'), widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text=_('Ordered: when it should arrive, if known.'),
+    )
+
+
+class RegisterMachineForm(forms.Form):
+    """A machine the technician adds during a visit — or one the customer
+    reported that isn't on their list — registered at once, so its serial
+    plate, before and after can be taken before the report
+    (tasks.views.register_task_machine)."""
+
+    brand = forms.ModelChoiceField(queryset=Brand.objects.filter(is_active=True).order_by('name'), label=_('Brand'))
+    model_name = forms.CharField(max_length=150, label=_('Model'))
+    serial_no = forms.CharField(required=False, max_length=100, label=_('Serial number'))
+    no_serial = forms.BooleanField(required=False, label=_('No readable serial plate'))
+    code = forms.CharField(required=False, max_length=100, label=_('Code'), help_text=_('optional — e.g. BENCH-01'))
+    ticket_machine = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not (cleaned.get('serial_no') or '').strip() and not cleaned.get('no_serial'):
+            self.add_error('serial_no', _('Type the serial number from the plate, or tick that it has none.'))
+        return cleaned
+
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return file
 
 
@@ -734,7 +883,7 @@ class StaffAttachmentUploadForm(forms.Form):
 
     file = forms.FileField(
         label=_('Document'),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS + ['pdf'])],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_MEDIA_EXTENSIONS + ['pdf'])],
     )
     purpose = forms.ChoiceField(
         choices=[
@@ -748,7 +897,7 @@ class StaffAttachmentUploadForm(forms.Form):
     def clean_file(self):
         file = self.cleaned_data['file']
         if file.size > MAX_MEDIA_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The file is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return file
 
 
@@ -756,7 +905,7 @@ class PhotoSizeMixin:
     def clean_photo(self):
         photo = self.cleaned_data['photo']
         if photo and photo.size > MAX_PHOTO_UPLOAD_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 5 MB.'))
+            raise forms.ValidationError(_('The photo exceeds the 5 MB limit. Please select a smaller photo.'))
         return photo
 
 
@@ -812,13 +961,49 @@ class CountryCreateForm(forms.ModelForm):
 
     class Meta:
         model = Country
-        fields = ['name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language']
+        fields = [
+            'name', 'name_ar', 'iso_code', 'task_prefix', 'timezone', 'currency_code', 'weekend_days', 'report_language',
+            'has_warehouse', 'does_visits',
+        ]
 
     def clean_weekend_days(self):
         return ','.join(sorted(self.cleaned_data['weekend_days']))
 
 
-class TechnicianCreateForm(forms.ModelForm):
+class CustomRoleChoiceMixin:
+    """The Role list with the Admin's own roles too (people.CustomRole).
+    Choosing one sets the person's base role (its `based_on`: the fixed rules)
+    and their custom role (its switches); a built-in role clears the custom one."""
+
+    def offer_custom_roles(self):
+        from people.models import CustomRole
+
+        if 'role' not in self.fields:
+            return
+        choices = list(Technician.Role.choices) + [(role.key, role.display_name) for role in CustomRole.objects.all()]
+        field = forms.ChoiceField(choices=[('', '---------')] + choices, label=self.fields['role'].label)
+        if self.instance.pk:
+            field.initial = self.instance.custom_role.key if self.instance.custom_role_id else self.instance.role
+        self.fields['role'] = field  # same place in the form
+
+    def apply_custom_role(self, cleaned):
+        from people.models import CustomRole
+
+        value = cleaned.get('role') or ''
+        if 'role' not in self.fields or not value:
+            return
+        if value.startswith('custom-'):
+            role = CustomRole.objects.filter(pk=value.split('-', 1)[1]).first()
+            if role is None:
+                self.add_error('role', _('Please choose a role.'))
+                return
+            cleaned['role'] = role.based_on
+            self.instance.custom_role = role
+        else:
+            self.instance.custom_role = None
+
+
+class TechnicianCreateForm(CustomRoleChoiceMixin, forms.ModelForm):
     """Adding anyone on the staff, in one step: role, name, the country
     they work in (chosen here, not whichever one the admin happens to be
     viewing), and their email — which becomes their login, with a setup
@@ -835,7 +1020,7 @@ class TechnicianCreateForm(forms.ModelForm):
         model = Technician
         # Role first: this one screen adds every kind of staff account.
         fields = [
-            'role', 'full_name', 'country', 'phone', 'language', 'employment_type',
+            'role', 'job_title', 'full_name', 'country', 'phone', 'language', 'employment_type',
             'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
@@ -853,9 +1038,11 @@ class TechnicianCreateForm(forms.ModelForm):
         # The email goes right after the name and country.
         order = ['role', 'full_name', 'country', 'email']
         self.order_fields(order + [name for name in self.fields if name not in order])
+        self.offer_custom_roles()
 
     def clean(self):
         cleaned = super().clean()
+        self.apply_custom_role(cleaned)
         if not cleaned.get('language') and cleaned.get('country'):
             cleaned['language'] = cleaned['country'].report_language
             self.instance.language = cleaned['language']
@@ -868,7 +1055,7 @@ class TechnicianCreateForm(forms.ModelForm):
         return email
 
 
-class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
+class TechnicianEditForm(CustomRoleChoiceMixin, PhotoSizeMixin, forms.ModelForm):
     """A supervisor or manager editing someone else's record, from the
     roster. Photo/name/phone/language/email are open to anyone with
     manage_technicians; country/employment details are manager-only HR
@@ -893,7 +1080,7 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
     class Meta:
         model = Technician
         fields = [
-            'photo', 'full_name', 'phone', 'language', 'country', 'role',
+            'photo', 'full_name', 'phone', 'language', 'country', 'role', 'job_title',
             'employment_type', 'has_transport', 'can_carry_large', 'hired_on',
         ]
         widgets = {
@@ -903,55 +1090,49 @@ class TechnicianEditForm(PhotoSizeMixin, forms.ModelForm):
 
     def __init__(self, *args, is_manager=True, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk and self.instance.user_id:
+        # Their login email: the Admin's alone — whoever changed it could have a password link sent there.
+        if is_admin and self.instance.pk and self.instance.user_id:
             self.fields['email'].initial = self.instance.user.email
         else:
             del self.fields['email']
         if not is_manager:
-            for field_name in ['country', 'role', 'employment_type', 'has_transport', 'can_carry_large', 'hired_on']:
+            for field_name in ['country', 'role', 'job_title', 'employment_type', 'has_transport', 'can_carry_large',
+                               'hired_on']:
                 del self.fields[field_name]
         else:
             if 'country' in self.fields:
                 self.fields['country'].queryset = Country.objects.filter(is_active=True)
             if not is_admin:
                 del self.fields['role']
+        self.offer_custom_roles()
 
-    def save(self, commit=True):
-        technician = super().save(commit=commit)
-        if commit and technician.user_id and 'email' in self.cleaned_data:
-            technician.user.email = self.cleaned_data['email']
-            technician.user.save(update_fields=['email'])
-        return technician
+    def clean(self):
+        cleaned = super().clean()
+        self.apply_custom_role(cleaned)
+        return cleaned
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            return ''  # a login with its own sign-in name may have none
+        taken = get_user_model().objects.filter(Q(username__iexact=email) | Q(email__iexact=email))
+        if taken.exclude(pk=self.instance.user_id).exists():
+            raise forms.ValidationError(_('An account with this email address already exists.'))
+        return email
 
 
 class MyProfileForm(PhotoSizeMixin, forms.ModelForm):
-    """A technician editing their own photo, language, phone, and email —
-    their own contact details, never anyone else's decision to make. Role,
-    country, and employment stay office-side changes.
-
-    Email lives on the linked auth user, not Technician, so it's a plain
-    field here rather than a Meta field, kept in sync with request.user
-    manually in save().
+    """Someone editing their own photo, language and phone — their own
+    details, never anyone else's decision to make. Role, country and
+    employment stay office-side changes. Their sign-in email has its own
+    form (SignInEmailChangeForm): the current password, then a link sent
+    to the new address.
     """
-
-    email = forms.EmailField(required=False, label=_('Email'))
 
     class Meta:
         model = Technician
         fields = ['photo', 'language', 'phone']
         widgets = {'photo': forms.ClearableFileInput(attrs={'accept': 'image/*'})}
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields['email'].initial = self.instance.user.email
-
-    def save(self, commit=True):
-        technician = super().save(commit=commit)
-        if commit:
-            technician.user.email = self.cleaned_data['email']
-            technician.user.save(update_fields=['email'])
-        return technician
 
 
 class BlockTaskForm(forms.Form):
@@ -1156,7 +1337,7 @@ class TaskProductCheckForm(forms.Form):
     note = forms.CharField(required=False, label=_('Note'), widget=forms.Textarea(attrs={'rows': 2}))
     photo = forms.FileField(
         required=False, label=_('Photo'), widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
 
     # Receiving, when fewer arrived than listed: what happened to the rest.
@@ -1176,6 +1357,17 @@ class TaskProductCheckForm(forms.Form):
         ]
         if step != 'installation':
             self.fields['replacement'].label = _('Instead')
+        if step == 'installation' and self.initial.get('kind') != TaskProduct.Kind.PART:
+            # Commissioning: each installed machine assembled, levelled and tested.
+            self.fields['tested_working'] = forms.BooleanField(
+                required=False, label=_('Assembled, levelled and tested — working'),
+            )
+        if step == 'loading' and self.initial.get('kind') != TaskProduct.Kind.PART:
+            # The middle way: the serial from the sticker, or this ticked — never left empty by accident.
+            self.fields['serial_unreachable'] = forms.BooleanField(
+                required=False, label=_('Serial not reachable (packed)'),
+                help_text=_('the installer reads it from the sticker on site'),
+            )
         if step == 'receiving':
             # Counted against the container's list by code — no serials here.
             del self.fields['serial_number']
@@ -1207,9 +1399,17 @@ class TaskProductCheckForm(forms.Form):
                 cleaned[color] = (cleaned.get(color) or '').strip() or DEFAULT_COLOR
         cleaned['serial_number'] = (cleaned.get('serial_number') or '').strip()
         status = cleaned.get('status')
-        # Only an installed machine must have its serial; loading may leave it for the installers.
+        # An installed machine must have its serial; a loaded one has it, or says it couldn't be reached.
         if self.step == 'installation' and status == TaskProduct.Status.DONE and not cleaned['serial_number']:
             self.add_error('serial_number', _('This machine needs its serial number — type it from the sticker on the machine.'))
+        if 'tested_working' in self.fields:
+            cleaned['tested_working'] = bool(cleaned.get('tested_working')) and status == TaskProduct.Status.DONE
+            if status == TaskProduct.Status.DONE and not cleaned['tested_working']:
+                self.add_error('tested_working', _('Tick it once the machine is assembled, levelled and tested — working.'))
+        if 'serial_unreachable' in self.fields:
+            cleaned['serial_unreachable'] = bool(cleaned.get('serial_unreachable')) and not cleaned['serial_number']
+            if status == TaskProduct.Status.DONE and not cleaned['serial_number'] and not cleaned['serial_unreachable']:
+                self.add_error('serial_number', _('Type the serial from the sticker, or tick “Serial not reachable (packed)”.'))
         if 'quantity' in self.fields and not cleaned.get('quantity'):
             cleaned['quantity'] = 1
         # Receiving: the count against the list. Fewer splits the line (save_checklist), more just raises it.
@@ -1228,7 +1428,7 @@ class TaskProductCheckForm(forms.Form):
             self.add_error('note', _('Say what is wrong, or add a photo.'))
         photo = cleaned.get('photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            self.add_error('photo', _('The photo is too large. The maximum size is 25 MB.'))
+            self.add_error('photo', _('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return cleaned
 
 
@@ -1344,7 +1544,7 @@ def message_files_field(label):
     return MultipleFileField(
         required=False, label=label,
         help_text=_filled_in_later(_('photos, videos or PDFs — up to %(count)d files, %(size)d MB each'), FILES_LIMIT),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
 
@@ -1355,12 +1555,12 @@ class MessageFilesMixin:
         files = [f for f in (self.cleaned_data.get('attachments') or []) if f]
         if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('Please attach at most %(count)d files.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
         for upload in files:
             if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
                 raise forms.ValidationError(
-                    _('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name},
+                    _('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {'name': upload.name},
                 )
         return files
 
@@ -1374,18 +1574,18 @@ class TicketAttachmentsForm(forms.Form):
             _('showing the issue and the serial number; up to %(count)d files, %(size)d MB each'), FILES_LIMIT,
         ),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     def clean_attachments(self):
         files = self.cleaned_data['attachments']
         if len(files) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                     'name': file.name,
                 })
         return files
@@ -1436,7 +1636,10 @@ class CustomerPortalTicketForm(MessageFilesMixin, forms.ModelForm):
 
     def __init__(self, *args, customer, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields = {'site': SiteNameChoiceField(queryset=customer.sites.all(), label=_('Site')), **self.fields}
+        # "Branch", as the portal says everywhere; the list starts with a question, not "---------".
+        self.fields = {'site': SiteNameChoiceField(
+            queryset=customer.sites.all(), label=_('Branch'), empty_label=_('Choose the branch'),
+        ), **self.fields}
         self.fields['attachments'] = message_files_field(_('Files'))
         # Chosen by the customer every time: nothing is assumed.
         about_choices = [c for c in CustomerTicket.About.choices if c[0] != CustomerTicket.About.NEW_BRANCH]
@@ -1502,13 +1705,13 @@ class TicketMachineForm(forms.Form):
     # The number itself is required (a machine is tracked by it); the photo
     # helps the technician check it.
     serial_photo = forms.FileField(
-        required=False, label=_('Photo of the sticker (optional)'),
-        help_text=_('A clear photo helps our team confirm the details. Take a photo or upload one.'),
+        required=False, label=_('Photo of the serial plate'),
+        help_text=_('The sticker with the serial number. Take a photo or upload one.'),
         widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
     )
     problem = forms.ChoiceField(
-        choices=[('', _('Select…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
+        choices=[('', _('Choose…'))] + TicketMachine.Problem.choices, label=_('Problem'), required=False,
     )
     # Guided, so the team can prepare the right parts: the four things to say.
     description = forms.CharField(
@@ -1521,12 +1724,12 @@ class TicketMachineForm(forms.Form):
         }),
     )
     files = MultipleFileField(
-        required=False, label=_('Photos or a short video'),
+        required=False, label=_('Photos or a short video of the problem'),
         # What helps the team most, so they arrive knowing the job (tasks.customer_report).
         help_text=_('What helps us most: a photo of the problem, a photo of the serial plate, and if it makes a '
                     'noise, a short video (up to 30 seconds). Up to 25 MB each.'),
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': 'image/*,video/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     def __init__(self, *args, customer, for_parts=False, **kwargs):
@@ -1566,7 +1769,7 @@ class TicketMachineForm(forms.Form):
         files = self.cleaned_data['files'] or []
         for file in files:
             if file.size > MAX_TICKET_ATTACHMENT_BYTES:
-                raise forms.ValidationError(_('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+                raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                     'name': file.name,
                 })
         return files
@@ -1585,8 +1788,8 @@ class TicketMachineForm(forms.Form):
             typed = cleaned.get('model_name') or (cleaned.get('serial_no') or '').strip()
             which = 'list' if cleaned.get('asset') else 'new' if typed else ('list' if self.has_machines else 'new')
         if which == 'list':
-            # Only the picked machine counts — anything typed for a new one is dropped.
-            cleaned['model_name'], cleaned['serial_no'], cleaned['serial_photo'] = '', '', None
+            # Only the picked machine counts — anything typed for a new one is dropped (not its plate photo).
+            cleaned['model_name'], cleaned['serial_no'] = '', ''
             if not cleaned.get('asset'):
                 self.add_error('asset', _('Please choose the machine from your list.'))
         else:
@@ -1599,13 +1802,20 @@ class TicketMachineForm(forms.Form):
                 )
         photo = cleaned.get('serial_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            self.add_error('serial_photo', _('Each file must be smaller than 25 MB. “%(name)s” exceeds this limit.') % {
+            self.add_error('serial_photo', _('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {
                 'name': photo.name,
             })
         if self.for_parts:
             cleaned['problem'] = TicketMachine.Problem.PARTS
-        elif not cleaned.get('problem'):
-            self.add_error('problem', _('Please select the problem.'))
+        else:
+            if not cleaned.get('problem'):
+                self.add_error('problem', _('Please select the problem.'))
+            # A repair: the serial plate and the fault, so the technician arrives knowing the job
+            # (and confirms these instead of taking them again: tasks.views.confirm_customer_files).
+            if not cleaned.get('serial_photo'):
+                self.add_error('serial_photo', _('Please add a photo of the serial plate (the sticker with the serial number).'))
+            if not cleaned.get('files'):
+                self.add_error('files', _('Please add a photo or a short video of the problem.'))
         return cleaned
 
 
@@ -1623,7 +1833,7 @@ class BaseTicketMachineFormSet(forms.BaseFormSet):
             raise forms.ValidationError(_('Please add at least one machine.'))
         if sum(len(form.cleaned_data.get('files') or []) for form in filled) > MAX_TICKET_ATTACHMENT_COUNT:
             raise forms.ValidationError(
-                _('A maximum of %(count)d files may be attached.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
+                _('You can attach up to %(count)d files. Please remove some and send again.') % {'count': MAX_TICKET_ATTACHMENT_COUNT},
             )
 
 
@@ -1646,7 +1856,17 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
     site's (or customer's) own contact.
     """
 
-    site = SiteChoiceField(queryset=Site.objects.none(), label=_('Customer and site'))
+    about = forms.ChoiceField(label=_('What is it about?'), choices=CustomerTicket.About.choices,
+                              initial=CustomerTicket.About.MACHINES, required=False)
+
+    def clean_about(self):
+        """Not said: machines, the usual."""
+        return self.cleaned_data.get('about') or CustomerTicket.About.MACHINES
+    site = SiteChoiceField(queryset=Site.objects.none(), label=_('Customer and site'), required=False)
+    # A new branch of an existing customer: the customer, and the branch typed below.
+    new_branch_customer = forms.ModelChoiceField(
+        queryset=Customer.objects.none(), required=False, label=_('Customer (for a new branch)'),
+    )
     source = forms.ChoiceField(
         label=_('How the customer reached us'),
         choices=[
@@ -1658,9 +1878,14 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
     class Meta:
         model = CustomerTicket
         fields = [
-            'site', 'source', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
+            'about', 'site', 'new_branch_customer', 'company_name', 'site_description', 'site_address',
+            'source', 'contact_name', 'contact_phone', 'contact_email', 'shipping_address',
             'serial_numbers', 'description', 'notes',
         ]
+        labels = {
+            'company_name': _('Company (not a customer yet)'), 'site_description': _('Branch name'),
+            'site_address': _('Branch address'),
+        }
         widgets = {
             'shipping_address': forms.Textarea(attrs={'rows': 2}),
             'serial_numbers': forms.Textarea(attrs={'rows': 3, 'placeholder': 'SN-12345\nSN-67890'}),
@@ -1680,6 +1905,32 @@ class StaffTicketForm(TicketAttachmentsForm, forms.ModelForm):
             self.fields[name].help_text = _("Leave blank to use the site's own contact details.")
         # On a phone call the serials often aren't known yet.
         self.fields['serial_numbers'].required = False
+        self.fields['new_branch_customer'].queryset = Customer.objects.filter(
+            country=country, is_active=True, is_internal=False,
+        ).order_by('name')
+        for name in ('company_name', 'site_description', 'site_address'):
+            self.fields[name].required = False
+        self.fields['company_name'].help_text = _(
+            'Only for a caller who is not a customer yet: a manager creates the customer from the request.',
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        about = cleaned.get('about')
+        site, customer = cleaned.get('site'), cleaned.get('new_branch_customer')
+        company = (cleaned.get('company_name') or '').strip()
+        if about == CustomerTicket.About.NEW_BRANCH:
+            # A branch that doesn't exist yet: whose, its name and address.
+            if not (customer or company):
+                self.add_error('new_branch_customer', _('Choose the customer, or type the company if it is new.'))
+            if not (cleaned.get('site_description') or '').strip():
+                self.add_error('site_description', _('Please enter the new branch\'s name.'))
+            if not (cleaned.get('site_address') or '').strip():
+                self.add_error('site_address', _('Please enter the new branch\'s address.'))
+            cleaned['site'] = None
+        elif not site and not company:
+            self.add_error('site', _('Choose the customer and site, or type the company if it is not a customer yet.'))
+        return cleaned
 
 
 class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
@@ -1696,10 +1947,10 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
 
     class Meta:
         model = CustomerTicket
-        fields = ['subject', 'description', 'assigned_to']
+        fields = ['subject', 'description', 'assigned_to', 'due_on']
         labels = {'description': _('Details')}
-        help_texts = {'description': ''}
-        widgets = {'description': forms.Textarea(attrs={'rows': 5})}
+        help_texts = {'description': '', 'due_on': _('Optional: when it should be done by. Overdue, it reminds.')}
+        widgets = {'description': forms.Textarea(attrs={'rows': 5}), 'due_on': forms.DateInput(attrs={'type': 'date'})}
 
     def __init__(self, *args, country, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1709,8 +1960,17 @@ class InternalTicketForm(TicketAttachmentsForm, forms.ModelForm):
             is_active=True, country=country,
         ).exclude(role=Technician.Role.TECHNICIAN).order_by('full_name')
         self.fields['assigned_to'].label_from_instance = (
-            lambda technician: f'{technician.full_name} — {technician.get_role_display()}'
+            lambda technician: f'{technician.full_name} — {technician.title}'
         )
+
+
+class WaitingForForm(forms.Form):
+    """Who an internal task is waiting on now (the factory, a supplier, …) — or nobody."""
+    waiting_for = forms.ChoiceField(
+        label=_('Waiting for'), required=False,
+        choices=[('', _('Nobody — we are on it'))] + CustomerTicket.WaitingFor.choices,
+    )
+    due_on = forms.DateField(label=_('Due'), required=False, widget=forms.DateInput(attrs={'type': 'date'}))
 
 
 class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
@@ -1723,12 +1983,12 @@ class InternalTicketNoteForm(MessageFilesMixin, forms.Form):
 class InternalTicketFileForm(forms.Form):
     """One file the app adds to an internal ticket or to a note on it — the
     same kinds and size as the website's boxes (the app sends one at a time)."""
-    file = forms.FileField(validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
+    file = forms.FileField(validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)])
 
     def clean_file(self):
         upload = self.cleaned_data['file']
         if upload.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('“%(name)s” is too large. The maximum size is 25 MB.') % {'name': upload.name})
+            raise forms.ValidationError(_('“%(name)s” exceeds the 25 MB limit. Please select a smaller file or a shorter video.') % {'name': upload.name})
         return upload
 
 
@@ -1841,11 +2101,10 @@ class AssignTicketForm(forms.Form):
 
     def __init__(self, *args, country=None, **kwargs):
         super().__init__(*args, **kwargs)
-        ticket_manager_roles = RolePermission.objects.filter(
-            permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-        ).values_list('role', flat=True)
+        from people.models import with_permission
+
         self.fields['assigned_to'].queryset = Technician.objects.filter(
-            is_active=True, country=country, role__in=list(ticket_manager_roles),
+            with_permission(RolePermission.Permission.MANAGE_TICKETS), is_active=True, country=country,
         ).order_by('full_name')
 
 
@@ -1884,15 +2143,18 @@ def escalation_deciders(escalated_by, country):
     tickets is reachable wherever it's based; otherwise only someone in
     the ticket's own country.
     """
+    from people.models import with_permission
+
     next_role = escalated_by.escalates_to_role
-    allowed = set(
-        RolePermission.objects.filter(role=next_role, allowed=True).values_list('permission', flat=True),
-    )
-    if next_role is None or RolePermission.Permission.DECIDE_ESCALATED_TICKETS not in allowed:
+    if next_role is None:
         return Technician.objects.none()
-    deciders = Technician.objects.filter(is_active=True, role=next_role).exclude(pk=escalated_by.pk)
-    if RolePermission.Permission.TICKETS_ALL_COUNTRIES not in allowed:
-        deciders = deciders.filter(country=country)
+    # The next role up — a custom role based on it too — but each person by their own
+    # switches: deciding escalations, and reaching this country (or every country's tickets).
+    deciders = Technician.objects.filter(
+        with_permission(RolePermission.Permission.DECIDE_ESCALATED_TICKETS),
+        Q(country=country) | with_permission(RolePermission.Permission.TICKETS_ALL_COUNTRIES),
+        is_active=True, role=next_role,
+    ).exclude(pk=escalated_by.pk)
     return deciders.order_by('full_name')
 
 
@@ -1959,7 +2221,7 @@ class PartForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+        self.fields['photo'].validators.append(SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_code(self):
         code = self.cleaned_data['code'].strip().upper()
@@ -1970,7 +2232,7 @@ class PartForm(forms.ModelForm):
     def clean_photo(self):
         photo = self.cleaned_data.get('photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return photo
 
 
@@ -1980,7 +2242,7 @@ class PartImportForm(forms.Form):
         help_text=_('A CSV with two columns, code and description; or an Excel sheet laid out like the warehouse '
                     'stock sheet — Code, Description, the colour, and each part\'s picture placed in its code cell. '
                     'New codes are added; existing ones get what the sheet has; nothing is deleted.'),
-        validators=[FileExtensionValidator(allowed_extensions=['csv', 'xlsx'])],
+        validators=[SafeFileValidator(allowed_extensions=['csv', 'xlsx'])],
     )
     warehouse = forms.ModelChoiceField(
         queryset=Site.objects.none(), required=False, label=_('Warehouse for the quantities'),
@@ -2008,6 +2270,25 @@ class StockCountForm(forms.Form):
     def __init__(self, *args, country=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['site'].queryset = Site.objects.filter(
+            customer__is_internal=True, customer__country=country,
+        ).order_by('name')
+
+
+class MachineStockImportForm(forms.Form):
+    """The machines' opening stock from a file (the Stock screen): a warehouse,
+    and its counts — one row per machine code with how many are on the floor."""
+
+    warehouse = forms.ModelChoiceField(queryset=Site.objects.none(), label=_('Warehouse'))
+    file = forms.FileField(
+        label=_('CSV or Excel file'),
+        help_text=_('Two columns: Code and Qty (a first row with those headings is fine). Each quantity is recorded '
+                    'as a count — what is on the floor — so uploading the same file twice changes nothing.'),
+        validators=[SafeFileValidator(allowed_extensions=['csv', 'xlsx'])],
+    )
+
+    def __init__(self, *args, country=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['warehouse'].queryset = Site.objects.filter(
             customer__is_internal=True, customer__country=country,
         ).order_by('name')
 

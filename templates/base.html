@@ -9,12 +9,12 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@800&family=Cairo:wght@800&family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v={{ css_version }}">
     {# Desktop sidebar hidden last time (static/js/sidebar.js)? Applied before the page draws. #}
-    <script>try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
+    <script nonce="{{ request.csp_nonce }}">try { if (localStorage.getItem('sidebarCollapsed') === '1') { document.documentElement.classList.add('sidebar-collapsed'); } } catch (error) {}</script>
 </head>
 {# A customer sees the portal's look (theme-portal in base.css) in their own color (Customer.brand_color, validated as #RRGGBB). #}
-<body{% if user.customer %} class="theme-portal" style="--brand: {{ user.customer.brand_color }}; --brand-text: {{ user.customer.brand_text_color }}"{% endif %}>
+<body{% if portal_customer %} class="theme-portal" style="--brand: {{ portal_customer.brand_color }}; --brand-text: {{ portal_customer.brand_text_color }}"{% endif %}>
     <header class="site-header">
-        {% if user.technician or user.customer %}
+        {% if user.technician or portal_customer %}
             <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
             <label for="nav-toggle" class="nav-toggle-button" aria-label="{% translate 'Menu' %}" role="button" tabindex="0" aria-expanded="false">
                 <span></span><span></span><span></span>
@@ -28,7 +28,7 @@
         {% if active_country %}
         <span class="badge badge--muted">{{ active_country.display_name }}</span>
         {% endif %}
-        {% if user.technician or user.customer %}{% include "_bell.html" %}{% endif %}
+        {% if user.technician or portal_customer %}{% include "_bell.html" %}{% endif %}
         <div class="lang-switch__group lang-switch__group--header">
             <form method="post" action="{% url 'set_language' %}">
                 {% csrf_token %}
@@ -41,7 +41,7 @@
                 <button type="submit" name="language" value="ar" class="lang-switch__option {% if LANGUAGE_CODE == 'ar' %}lang-switch__option--active{% endif %}">AR</button>
             </form>
         </div>
-        {% if user.is_authenticated and not user.technician and not user.customer %}
+        {% if user.is_authenticated and not user.technician and not portal_customer %}
             {# A login with neither a staff record nor a customer account: just who it is, and logging out. #}
             <nav class="site-header__links">
                 <span class="site-header__user">{{ user.get_username }}</span>
@@ -51,7 +51,7 @@
                 </form>
             </nav>
         {% endif %}
-        {% if user.customer %}
+        {% if portal_customer %}
             {# A customer gets the same menu as the staff: a sidebar on a computer, slide-in on a phone. #}
             <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
             <nav class="site-header__nav">
@@ -59,7 +59,7 @@
                 <div class="portal-account">
                     <span class="portal-account__badge" aria-hidden="true">{{ portal_initials }}</span>
                     <span class="portal-account__name">
-                        <strong>{{ user.customer.name }}</strong>
+                        <strong>{{ portal_customer.name }}</strong>
                         <span>{% translate "Customer portal" %}</span>
                     </span>
                 </div>
@@ -91,7 +91,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.path }}">
                     <label for="country-switch">{% translate "Viewing" %}</label>
-                    <select id="country-switch" name="country" onchange="this.form.submit()">
+                    <select id="country-switch" name="country" data-auto-submit>
                         {% for country in switchable_countries %}
                         <option value="{{ country.pk }}" {% if active_country.pk == country.pk %}selected{% endif %}>{{ country.display_name }}</option>
                         {% endfor %}
@@ -142,7 +142,7 @@
         {# Not where there's nowhere to go back to (spots.context_processors.page_back). #}
         {% if show_page_back %}
         {# One-tap way back on every page: wherever the user came from, or the welcome page when there's no history. Hidden where a page already has its own "Back to ..." link. #}
-        <a href="{% url 'home' %}" class="back-link page-back" onclick="if (history.length > 1) { history.back(); return false; }">{% translate "Back" %}</a>
+        <a href="{% url 'home' %}" class="back-link page-back" data-history-back>{% translate "Back" %}</a>
         {% endif %}
         {# An email that couldn't be sent, once, to whoever sent it (spots.email_failures). #}
         {% for failure in failed_emails %}
@@ -156,7 +156,8 @@
         {% block content %}{% endblock %}
     </main>
 <script src="{% static 'js/show-password.js' %}?v={{ css_version }}" defer></script>
-{% if user.technician or user.customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>
+<script src="{% static 'js/page-actions.js' %}?v={{ css_version }}" defer></script>
+{% if user.technician or portal_customer %}<script src="{% static 'js/sidebar.js' %}?v={{ css_version }}" defer></script>
 <script src="{% static 'js/bell.js' %}?v={{ css_version }}" defer></script>{% endif %}
 {# Photos made smaller on the phone before they upload; too-big files refused before a long upload. #}
 <script src="{% static 'js/file-picker.js' %}?v={{ css_version }}" defer></script>

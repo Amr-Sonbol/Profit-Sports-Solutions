@@ -1,7 +1,8 @@
-"""Customer portal accounts: the secure one-time link a customer uses to
-set their password, each account's status for the Customer accounts
-screen, and the emails that carry the link (English, plus Arabic for
-customers in Arab countries).
+"""Customer portal logins — several people per customer (PortalUser), each
+with their own: the secure one-time link a person uses to set their
+password, each login's status for the customer's Portal login section and
+the Customers list, and the emails that carry the link (English, plus
+Arabic for customers in Arab countries).
 """
 from datetime import timedelta
 
@@ -58,8 +59,8 @@ def user_for_link_token(token):
         data = signing.loads(token, salt=LINK_SALT, max_age=timedelta(days=LINK_VALID_DAYS))
     except signing.BadSignature:
         return None
-    user = get_user_model().objects.filter(pk=data.get('u'), is_active=True).select_related('customer').first()
-    if user is None or not hasattr(user, 'customer') or data.get('f') != _fingerprint(user):
+    user = get_user_model().objects.filter(pk=data.get('u'), is_active=True).select_related('portal_user').first()
+    if user is None or not hasattr(user, 'portal_user') or data.get('f') != _fingerprint(user):
         return None
     return user
 
@@ -78,26 +79,45 @@ def locked_usernames():
     }
 
 
-def account_status(customer, locked, now=None):
-    user = customer.user
-    if user is None:
-        return AccountStatus.NOT_INVITED if customer.contact_email else AccountStatus.NO_EMAIL
+def account_status(person, locked, now=None):
+    """One person's login: disabled, locked, invited (or its link expired) or active."""
+    user = person.user
     if not user.is_active:
         return AccountStatus.DISABLED
     if user.username.lower() in locked:
         return AccountStatus.LOCKED
-    if customer.must_change_password:
+    if person.must_change_password:
         now = now or timezone.now()
-        if customer.invited_at and now - customer.invited_at > timedelta(days=LINK_VALID_DAYS):
+        if person.invited_at and now - person.invited_at > timedelta(days=LINK_VALID_DAYS):
             return AccountStatus.EXPIRED
         return AccountStatus.INVITED
     return AccountStatus.ACTIVE
 
 
+# What most needs doing first, when a customer's people are in different states.
+_URGENCY = [AccountStatus.LOCKED, AccountStatus.EXPIRED, AccountStatus.INVITED, AccountStatus.ACTIVE,
+            AccountStatus.DISABLED]
+
+
+def customer_statuses(customer, locked, now=None):
+    """Every status among a customer's people — or, with no one yet, not
+    invited (there's a contact email to invite) or no email."""
+    people = customer.portal_users.all()
+    if not people:
+        return {AccountStatus.NOT_INVITED if customer.contact_email else AccountStatus.NO_EMAIL}
+    return {account_status(person, locked, now) for person in people}
+
+
+def customer_status(statuses):
+    """The one status a customer's row shows: what most needs doing first."""
+    return next((status for status in _URGENCY if status in statuses), next(iter(statuses)))
+
+
 def email_languages(customer):
     """English for everyone; Arabic too, in the same email, for a customer
-    in an Arab country."""
-    return ('en', 'ar') if customer.country.iso_code.upper() in ARAB_COUNTRY_CODES else ('en',)
+    in an Arab country (tasks.customer_emails.languages)."""
+    from tasks.customer_emails import languages
+    return languages(customer.country)
 
 
 def _in_languages(languages, build):
@@ -109,33 +129,38 @@ def _in_languages(languages, build):
     return parts
 
 
-def _send_link_email(request, customer, subject_msgid, body_msgid, button_msgid):
-    user = customer.user
+def _send_link_email(request, person, subject_msgid, body_msgid, button_msgid):
+    user = person.user
     link = portal_url(request, reverse('customers:portal_account_link', args=[make_link_token(user)]))
     _send_account_email(
-        customer, user.email, subject_msgid, body_msgid, button_msgid,
+        person, user.email, subject_msgid, body_msgid, button_msgid,
         {'link': link, 'username': user.username, 'days': LINK_VALID_DAYS}, link,
     )
 
 
-def _send_account_email(customer, recipient, subject_msgid, body_msgid, button_msgid, values, link=None):
-    """One account email in the customer's languages; `link`, when given,
-    shows as a button in the HTML version."""
+def _send_account_email(person, recipient, subject_msgid, body_msgid, button_msgid, values, link=None):
+    """One account email to a person, in their customer's languages; `link`,
+    when given, shows as a button in the HTML version."""
+    from tasks.customer_emails import CLOSING, FOOTER, TEMPLATE
     from tasks.views import _send_notification_email
 
-    values = {'contact': customer.contact_name or customer.name, **values}
+    customer = person.customer
+    values = {'contact': person.user.first_name or customer.contact_name or customer.name, **values}
     versions = _in_languages(email_languages(customer), lambda: {
-        'subject': str(subject_msgid), 'body': str(body_msgid) % values, 'button': str(button_msgid or ''),
+        'subject': str(subject_msgid), 'body': f'{str(body_msgid) % values}\n\n{CLOSING}',
+        'button': str(button_msgid or ''), 'footer': str(FOOTER),
     })
     subject = ' | '.join(version['subject'] for _code, version in versions)
     text = '\n\n— — —\n\n'.join(version['body'] for _code, version in versions)
     sections = [{
-        'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': version['button'],
+        'lang': code, 'dir': 'rtl' if code == 'ar' else 'ltr', 'button': version['button'], 'footer': version['footer'],
         # The HTML version shows the link's own paragraph as a button.
         'paragraphs': version['body'].strip().split('\n\n'),
     } for code, version in versions]
     _send_notification_email(
-        subject, text, 'customers/email/portal_link.html', {'sections': sections, 'link': link}, [recipient],
+        subject, text, TEMPLATE,
+        {'sections': sections, 'link': link, 'preview': sections[0]['paragraphs'][1],
+         'footer_lines': [version['footer'] for _code, version in versions]}, [recipient],
     )
 
 
@@ -149,9 +174,7 @@ WELCOME_BODY = gettext_lazy(
     'To activate your account, please set your password and complete your company details using the secure '
     'link below. The link is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
-    'Your username: %(username)s\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'Your username: %(username)s'
 )
 WELCOME_BUTTON = gettext_lazy('Activate my account')
 RESET_SUBJECT = gettext_lazy('Set a new password for your Profit Sports Solutions portal account')
@@ -161,58 +184,64 @@ RESET_BODY = gettext_lazy(
     'below; it is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Your username: %(username)s\n\n'
-    'If you did not request this, please disregard this email.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'If you did not request this, please disregard this email.'
 )
 RESET_BUTTON = gettext_lazy('Set a new password')
 
 
-def send_welcome(request, customer, email=None):
-    """Create the login if there isn't one yet (username = email, no usable
-    password until the customer sets one) and email the welcome link.
-    Sending again invalidates any earlier link. Returns False, sending
-    nothing, if that email already belongs to a different login.
-    """
-    if not _prepare_welcome(customer, email):
-        return False
-    _send_link_email(request, customer, WELCOME_SUBJECT, WELCOME_BODY, WELCOME_BUTTON)
-    return True
+def add_person(customer, email, name=''):
+    """A new person at the customer: their login (username = email, no
+    usable password until they set one through the welcome link). None,
+    creating nothing, if that email already belongs to a login."""
+    from .models import PortalUser
 
-
-def welcome_link(request, customer):
-    """The same welcome link the email carries, for staff to send another way
-    (WhatsApp, say) — when the email doesn't arrive. Prepared as for the email,
-    so any earlier link stops working. None if that email already belongs to a
-    different login."""
-    if not _prepare_welcome(customer):
-        return None
-    return portal_url(request, reverse('customers:portal_account_link', args=[make_link_token(customer.user)]))
-
-
-def _prepare_welcome(customer, email=None):
+    email = (email or '').strip()
     User = get_user_model()
-    if customer.user_id is None:
-        email = (email or customer.contact_email).strip()
-        if User.objects.filter(username__iexact=email).exists():
-            return False
-        user = User(username=email, email=email)
-        user.set_unusable_password()
-        user.save()
-        customer.user = user
-    else:
-        customer.user.set_unusable_password()
-        customer.user.save(update_fields=['password'])
-    customer.must_change_password = True
-    customer.invited_at = timezone.now()
-    customer.save(update_fields=['user', 'must_change_password', 'invited_at'])
+    if not email or User.objects.filter(username__iexact=email).exists():
+        return None
+    user = User(username=email, email=email, first_name=(name or '').strip()[:150])
+    user.set_unusable_password()
+    user.save()
+    return PortalUser.objects.create(customer=customer, user=user, must_change_password=True)
+
+
+def _prepare_welcome(person):
+    """A fresh start for the welcome link: no usable password, to be set at sign-in."""
+    person.user.set_unusable_password()
+    person.user.save(update_fields=['password'])
+    person.must_change_password = True
+    person.invited_at = timezone.now()
+    person.save(update_fields=['must_change_password', 'invited_at'])
+
+
+def send_welcome(request, person):
+    """Email a person the welcome link. Sending again invalidates any earlier link."""
+    _prepare_welcome(person)
+    _send_link_email(request, person, WELCOME_SUBJECT, WELCOME_BODY, WELCOME_BUTTON)
+
+
+def invite_customer(request, customer):
+    """A customer no one can sign in to yet: their contact becomes the first
+    person, and is sent the welcome email. False, sending nothing, without a
+    contact email or when it already belongs to a login."""
+    person = add_person(customer, customer.contact_email, customer.contact_name)
+    if person is None:
+        return False
+    send_welcome(request, person)
     return True
 
 
-def send_password_link(request, customer):
+def welcome_link(request, person):
+    """The same welcome link the email carries, for staff to send another way
+    (WhatsApp, say) — when the email doesn't arrive. Any earlier link stops working."""
+    _prepare_welcome(person)
+    return portal_url(request, reverse('customers:portal_account_link', args=[make_link_token(person.user)]))
+
+
+def send_password_link(request, person):
     """Email a set-a-new-password link. The current password keeps working
-    until the customer actually uses the link."""
-    _send_link_email(request, customer, RESET_SUBJECT, RESET_BODY, RESET_BUTTON)
+    until the person actually uses the link."""
+    _send_link_email(request, person, RESET_SUBJECT, RESET_BODY, RESET_BUTTON)
 
 
 EMAIL_CHANGE_SUBJECT = gettext_lazy('Confirm your new sign-in email for the Profit Sports Solutions portal')
@@ -222,9 +251,7 @@ EMAIL_CHANGE_BODY = gettext_lazy(
     'use the secure link below; it is valid for %(days)s days and can be used once.\n\n'
     '%(link)s\n\n'
     'Until you confirm, you keep signing in with your current email. If you did not request this, please '
-    'disregard this email.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'disregard this email.'
 )
 EMAIL_CHANGE_BUTTON = gettext_lazy('Confirm my new email')
 EMAIL_CHANGED_SUBJECT = gettext_lazy('Your Profit Sports Solutions portal sign-in email was changed')
@@ -232,9 +259,7 @@ EMAIL_CHANGED_BODY = gettext_lazy(
     'Dear %(contact)s,\n\n'
     'The sign-in email for your customer portal account was changed to %(new_email)s. From now on, please sign '
     'in with that address.\n\n'
-    'If you did not make this change, please contact us straight away.\n\n'
-    'Best regards,\n'
-    'Profit Sports Solutions\n'
+    'If you did not make this change, please contact us straight away.'
 )
 
 
@@ -252,32 +277,32 @@ def email_change_for_token(token):
     except signing.BadSignature:
         return None, None
     User = get_user_model()
-    user = User.objects.filter(pk=data.get('u'), is_active=True).select_related('customer').first()
+    user = User.objects.filter(pk=data.get('u'), is_active=True).select_related('portal_user').first()
     new_email = data.get('e', '')
-    if user is None or not hasattr(user, 'customer') or user.username != data.get('o'):
+    if user is None or not hasattr(user, 'portal_user') or user.username != data.get('o'):
         return None, None
     if User.objects.filter(username__iexact=new_email).exclude(pk=user.pk).exists():
         return None, None
     return user, new_email
 
 
-def send_email_change_link(request, customer, new_email):
+def send_email_change_link(request, person, new_email):
     """Email the confirmation link to the new address; nothing changes until
     it's opened."""
     link = portal_url(request, 
-        reverse('customers:portal_email_confirm', args=[make_email_change_token(customer.user, new_email)]),
+        reverse('customers:portal_email_confirm', args=[make_email_change_token(person.user, new_email)]),
     )
     _send_account_email(
-        customer, new_email, EMAIL_CHANGE_SUBJECT, EMAIL_CHANGE_BODY, EMAIL_CHANGE_BUTTON,
+        person, new_email, EMAIL_CHANGE_SUBJECT, EMAIL_CHANGE_BODY, EMAIL_CHANGE_BUTTON,
         {'link': link, 'days': EMAIL_CHANGE_VALID_DAYS}, link,
     )
 
 
-def send_email_changed_notice(customer, old_email):
+def send_email_changed_notice(person, old_email):
     """Tell the old address its sign-in email was changed, in case it
     wasn't them."""
     _send_account_email(
-        customer, old_email, EMAIL_CHANGED_SUBJECT, EMAIL_CHANGED_BODY, None, {'new_email': customer.user.email},
+        person, old_email, EMAIL_CHANGED_SUBJECT, EMAIL_CHANGED_BODY, None, {'new_email': person.user.email},
     )
 
 

@@ -21,12 +21,13 @@ from django.utils.translation import gettext_lazy
 from customers.accounts import locked_usernames, log_account_action
 from customers.forms import ChangeLoginEmailForm
 from people.models import Technician
-from people.permissions import can_manage_account, is_last_active_admin, require_manager
+from people.permissions import can_manage_account, can_set_password, is_last_active_admin, require_manager
 from reference.models import Country
 
 from .forms import TechnicianFirstLoginForm
 from .views import (
-    STAFF_LINK_VALID_DAYS, _generate_temporary_password, send_password_changed_email, send_staff_setup_link,
+    STAFF_LINK_VALID_DAYS, _generate_temporary_password, change_login_email, send_password_changed_email,
+    send_staff_setup_link,
     sign_out_of_mobile_app, staff_user_for_link_token,
 )
 
@@ -108,6 +109,8 @@ def urgent_account_action(request, actor, target, action):
     never emailed, never stored anywhere readable.
     """
     user = target.user
+    if action == 'temporary_password' and not can_set_password(actor):
+        raise PermissionDenied
     if action == 'temporary_password' and user.is_active:
         password = _generate_temporary_password()
         user.set_password(password)
@@ -138,6 +141,9 @@ def urgent_account_action(request, actor, target, action):
         log_account_action(request, target, 'Staff login turned off')
         return _('Login disabled for %(name)s.') % {'name': target.full_name}, '', ''
     if action == 'enable' and not user.is_active:
+        if not target.is_active:
+            # They left the company: they come back only through Reactivate, by a manager.
+            return '', _('%(name)s has left the company. Reactivate them first.') % {'name': target.full_name}, ''
         user.is_active = True
         user.save(update_fields=['is_active'])
         log_account_action(request, target, 'Staff login turned on')
@@ -180,18 +186,11 @@ def staff_accounts(request):
             else:
                 messages.error(request, _('No email address is recorded for this login. Please add one first.'))
         elif action == 'change_email':
+            if not can_set_password(actor):
+                raise PermissionDenied
             form = ChangeLoginEmailForm(request.POST, user=user)
             if form.is_valid():
-                old_email = user.email
-                user.email = form.cleaned_data['email']
-                fields = ['email']
-                # Logins created in the app sign in with their email; keep
-                # those two together. A login with its own sign-in name keeps it.
-                if old_email and user.username.lower() == old_email.lower():
-                    user.username = user.email
-                    fields.append('username')
-                user.save(update_fields=fields)
-                log_account_action(request, target, f'Staff email changed from {old_email or "(none)"} to {user.email}')
+                change_login_email(request, target, form.cleaned_data['email'])
                 messages.success(request, _('The email address has been changed to %(email)s.') % {'email': user.email})
             else:
                 messages.error(request, form.errors['email'][0])
@@ -206,7 +205,7 @@ def staff_accounts(request):
     search = request.GET.get('q', '').strip()
     if search:
         people = people.filter(
-            Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+            Q(full_name__matches=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
         )
     now = timezone.now()
     rows = [{'person': person, 'status': staff_account_status(person, locked, now)} for person in people]
@@ -220,6 +219,7 @@ def staff_accounts(request):
     managed = next((row for row in rows if str(row['person'].pk) == request.GET.get('manage')), None)
     if managed is not None:
         managed['can_manage'] = can_manage_account(actor, managed['person'])
+        managed['can_set_password'] = can_set_password(actor)
     query = request.GET.copy()
     query.pop('manage', None)
     return render(request, 'tasks/staff_accounts.html', {

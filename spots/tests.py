@@ -3,6 +3,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import URLPattern, URLResolver, get_resolver
 from django.utils import timezone
 
+from customers.models import PortalUser
 from people.models import Technician
 from reports.models import CustomerFeedback, WorkReport
 from tasks.models import CustomerTicket, Task, TaskAssignment
@@ -62,8 +63,7 @@ class PageSmokeTests(TaskTestCase):
             task=self.task, requested_at=timezone.now(), requested_by=self.supervisor_user,
         )
         self.portal_user = User.objects.create_user('portal1', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
 
     def _kwargs_for(self, route, name):
         """Real objects for each URL's placeholders."""
@@ -128,3 +128,85 @@ class StaffKeepMeSignedInTests(TestCase):
 
     def test_the_box_is_ticked_to_begin_with(self):
         self.assertContains(Client().get('/accounts/login/'), 'name="remember" value="1" checked')
+
+
+class BrowserProtectionTests(TestCase):
+    """The Content-Security-Policy (spots.middleware) on every page, and the
+    staff "Forgot your password?" limited like the portal's (spots.throttle)."""
+
+    def test_every_page_says_where_scripts_may_come_from(self):
+        response = self.client.get('/accounts/login/')
+        policy = response['Content-Security-Policy']
+        nonce = response.wsgi_request.csp_nonce
+        self.assertIn(f"script-src 'self' 'nonce-{nonce}' https://unpkg.com", policy)
+        self.assertIn("frame-ancestors 'none'", policy)
+        # The page's own inline script carries it; nothing uses inline event attributes.
+        self.assertContains(response, f'<script nonce="{nonce}">')
+        self.assertNotContains(response, 'onclick=')
+        self.assertNotContains(response, 'onchange=')
+
+    def test_a_new_nonce_every_request(self):
+        first = self.client.get('/accounts/login/').wsgi_request.csp_nonce
+        self.assertNotEqual(first, self.client.get('/accounts/login/').wsgi_request.csp_nonce)
+
+    def test_staff_password_reset_sends_one_link_in_a_while(self):
+        from django.core import mail
+
+        get_user_model().objects.create_user('sara', email='sara@example.com', password='pass12345')
+        for _ in range(3):
+            self.client.post('/accounts/password-reset/', {'email': 'sara@example.com'})
+        self.assertEqual(len(mail.outbox), 1)
+
+
+class UploadSafetyTests(TestCase):
+    """Every upload is what its name says (spots.uploads), and an uploaded file
+    can never act as a page of this site (spots.media.serve_media)."""
+
+    def check(self, name, content):
+        from django.core.exceptions import ValidationError
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from spots.uploads import SafeFileValidator
+        try:
+            SafeFileValidator(allowed_extensions=['jpg', 'png', 'pdf', 'mp4', 'webm', 'heic'])(
+                SimpleUploadedFile(name, content))
+            return True
+        except ValidationError:
+            return False
+
+    def test_real_files_pass_and_disguised_ones_do_not(self):
+        from spots.test_files import REAL_JPEG, REAL_MP4, REAL_PDF, REAL_PNG
+        self.assertTrue(self.check('photo.jpg', REAL_JPEG))
+        self.assertTrue(self.check('sign.png', REAL_PNG))
+        self.assertTrue(self.check('report.pdf', REAL_PDF))
+        self.assertTrue(self.check('noise.mp4', REAL_MP4))
+        self.assertFalse(self.check('photo.jpg', b'<html><script>alert(1)</script></html>'))  # a page, renamed
+        self.assertTrue(self.check('photo.jpg', REAL_PNG))  # a real screenshot a phone app named .jpg: still a photo
+        self.assertFalse(self.check('report.pdf', b'MZ not a pdf, a program'))
+        self.assertFalse(self.check('noise.mp4', b'not a video at all'))
+        self.assertFalse(self.check('tool.exe', b'MZ'))  # not an allowed kind at all
+
+    def test_uploaded_files_run_nothing_and_others_download(self):
+        import os
+        import tempfile
+
+        from django.test import override_settings
+        from spots.test_files import REAL_JPEG, REAL_PDF
+
+        media = tempfile.mkdtemp()
+        for name, content in (('a.jpg', REAL_JPEG), ('b.pdf', REAL_PDF), ('c.csv', b'a,b')):
+            with open(os.path.join(media, name), 'wb') as handle:
+                handle.write(content)
+        staff = get_user_model().objects.create_user('staff1', password='pass12345')
+        from reference.models import Country
+        Technician.objects.create(user=staff, country=Country.objects.create(
+            name='UAE', iso_code='AE', timezone='Asia/Dubai', currency_code='AED'),
+            full_name='Staff', language='en', role=Technician.Role.SUPERVISOR, employment_type='staff')
+        self.client.force_login(staff)
+        with override_settings(MEDIA_ROOT=media):
+            photo, pdf, other = (self.client.get(f'/media/{name}') for name in ('a.jpg', 'b.pdf', 'c.csv'))
+        self.assertIn('sandbox', photo['Content-Security-Policy'])
+        self.assertFalse(photo.get('Content-Disposition', '').startswith('attachment'))  # shown in the browser
+        self.assertIn("default-src 'none'", pdf['Content-Security-Policy'])
+        self.assertNotIn('sandbox', pdf['Content-Security-Policy'])  # the browser's PDF viewer runs
+        self.assertEqual(other['Content-Disposition'], 'attachment')

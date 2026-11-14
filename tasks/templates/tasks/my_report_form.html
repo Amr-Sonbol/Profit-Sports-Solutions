@@ -52,13 +52,21 @@
     </div>
     {# The repair report's machine forms still post (empty) — see the memory note on management forms. #}
     <div hidden>{{ existing_formset.management_form }}{{ new_formset.management_form }}</div>
+    {% if equipment_step == 'loading' %}
+    {# Proof of dispatch: the loaded truck, or the signed delivery note. #}
+    <div class="field" data-staff-only>
+        <label for="dispatch-photo">{% translate "Dispatch photo: the loaded truck, or the signed delivery note" %}</label>
+        {% for photo in dispatch_photos %}<a href="{{ photo.url }}" target="_blank" rel="noopener">{% translate "Taken" %} ✓</a> {% endfor %}
+        <input type="file" id="dispatch-photo" name="dispatch_photo" accept="image/*">
+    </div>
+    {% endif %}
     {{ checklist_formset.management_form }}
     {% if checklist_formset.non_form_errors %}<p class="flash flash--error">{{ checklist_formset.non_form_errors }}</p>{% endif %}
     <div class="checklist" data-staff-only>
         {% for form in checklist_formset %}
         <fieldset class="checklist-card{% if form.errors %} checklist-card--error{% endif %}"{% if form.initial.quantity %} data-listed="{{ form.initial.quantity }}"{% endif %}>
             <legend>
-                {% if form.initial.id %}<span dir="ltr">{{ form.initial.product_code }}{% if form.initial.quantity > 1 %} × {{ form.initial.quantity }}{% endif %}</span>{% if form.initial.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}
+                {% if form.initial.id %}<span dir="ltr">{{ form.initial.product_code }}{% if form.initial.quantity > 1 %} × {{ form.initial.quantity }}{% endif %}</span>{% if form.initial.kind == 'part' %} <span class="badge badge--neutral">{% translate "Spare part" %}</span>{% endif %}{% if form.initial.added_on_site %} <span class="badge badge--neutral">{% translate "Added on site" %}</span>{% endif %}{% if form.initial.serial_not_taken_at_loading %} <span class="badge badge--warning">{% translate "Serial not taken at loading — read it from the sticker" %}</span>{% endif %}
                 {% elif equipment_step == 'receiving' %}{% translate "Something not on the list (optional)" %}
                 {% else %}{% translate "A machine not on the delivery note (optional)" %}{% endif %}
             </legend>
@@ -208,6 +216,15 @@
     </div>
     <div class="section">
         <div class="form-grid">
+{% if equipment_step == 'installation' %}
+{# The handover to the customer, as their report shows it. #}
+<fieldset class="field" data-staff-only>
+    <legend>{% translate "Handover to the customer" %}</legend>
+    {% for field in report_form %}{% if field.name == 'handover_demo' or field.name == 'handover_manuals' or field.name == 'handover_packaging' %}
+    <label class="checkbox">{{ field }} {{ field.label }}</label>
+    {% endif %}{% endfor %}
+</fieldset>
+{% endif %}
             <div class="field {% if report_form.resolved.errors %}field--error{% endif %}">
                 <label>{{ report_form.resolved.label }}</label>
                 {{ report_form.resolved }}

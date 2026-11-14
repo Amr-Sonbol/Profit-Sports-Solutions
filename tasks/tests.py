@@ -1,3 +1,4 @@
+import json
 import tempfile
 from unittest.mock import patch
 from datetime import date, datetime, time, timedelta
@@ -13,7 +14,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone, translation
 
-from customers.models import Asset, Customer, Site
+from customers.models import PortalUser, Asset, Customer, Site
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment,
@@ -28,6 +29,7 @@ from .models import (
     TaskMessage, TaskMessageRecipient, TaskNotification, TaskProduct, TicketEscalation, TicketInternalNote,
     TicketMachine, TicketNotification, TicketReply,
 )
+from spots.test_files import REAL_JPEG, REAL_MP4, REAL_PNG
 
 User = get_user_model()
 
@@ -71,10 +73,12 @@ class TaskDetailTests(TaskTestCase):
         super().setUp()
         self.task = Task.objects.create(
             task_number='UAE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
-            required_skill=self.skill, min_level=2, description='Belt making noise',
+            description='Belt making noise',
             priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
             reported_at=timezone.now(), promised_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            # Every task has its owner (docs/access_rules.md): the supervisor who created it.
+            responsible_supervisor=self.supervisor_user.technician,
         )
         TaskAssignment.objects.create(
             task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
@@ -86,7 +90,7 @@ class TaskDetailTests(TaskTestCase):
         )
         TaskAttachment.objects.create(
             task=self.task, storage_kind=TaskAttachment.StorageKind.LINK, url='https://example.com/photo.jpg',
-            media_type=TaskAttachment.MediaType.PHOTO, purpose=TaskAttachment.Purpose.FAULT,
+            media_type=TaskAttachment.MediaType.PHOTO, purpose=TaskAttachment.Purpose.BEFORE,
             source=TaskAttachment.Source.TECHNICIAN, uploaded_by=self.tech_user, uploaded_at=timezone.now(),
         )
         TaskAsset.objects.create(task=self.task, asset=self.asset, outcome=TaskAsset.Outcome.REPAIRED)
@@ -445,7 +449,7 @@ class TaskEditTests(TaskTestCase):
         super().setUp()
         self.task = Task.objects.create(
             task_number='UAE-0001', site=self.site, task_type=self.task_type, brand=self.brand,
-            required_skill=self.skill, min_level=2, description='Belt making noise',
+            description='Belt making noise',
             priority=Task.Priority.HIGH, source=Task.Source.PHONE, billing_type=Task.BillingType.CONTRACT,
             reported_at=timezone.now(), promised_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
@@ -600,12 +604,6 @@ class TaskEditTests(TaskTestCase):
         self.assertEqual(self.task.scheduled_date, date(2026, 9, 21))
         self.assertFalse(self.task.events.filter(event_type=TaskEvent.EventType.RESCHEDULED).exists())
         self.assertEqual(len(mail.outbox), 0)
-
-    def test_min_level_above_scale_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, self._payload(min_level='5'))
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['form'].errors.get('min_level'))
 
     def test_rescheduling_does_not_auto_notify_when_setting_is_off(self):
         self.site.contact_email = 'manager@fitnessfirst.example'
@@ -775,11 +773,19 @@ class TaskEditTests(TaskTestCase):
         self.task_type.save(update_fields=['category'])
         self.task.task_type = self.task_type
         self.task.save(update_fields=['task_type'])
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post(self.url, self._payload(**{
+        plan = self._payload(**{
             **self._management_form('products', 1),
             'products-0-product_code': 'BENCH-01', 'products-0-quantity': '3', 'task_type': str(self.task_type.pk),
-        }))
+        })
+        # An installation's machines: the Manager's (or the Project Manager's, the Admin's) — a supervisor views.
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(self.url, plan)
+        self.assertFalse(self.task.products.exists())
+        Technician.objects.create(user=User.objects.create_user('manager8', password='pass12345'), country=self.country,
+                                  full_name='Mona Manager', language='en', role=Technician.Role.MANAGER,
+                                  employment_type='staff')
+        self.assertTrue(self.client.login(username='manager8', password='pass12345'))
+        response = self.client.post(self.url, plan)
         self.assertEqual(response.status_code, 302)
         lines = list(self.task.products.all())
         self.assertEqual([(line.product_code, line.quantity, line.status) for line in lines],
@@ -1827,25 +1833,25 @@ class TaskCreateTests(TaskTestCase):
         self.assertIn(task.task_number, mail.outbox[0].subject)
         self.assertEqual(mail.outbox[0].to, [manager_user.email])
 
-    def test_team_schedule_shows_who_is_already_booked(self):
+    def test_the_team_panel_shows_each_persons_day_today(self):
+        from zoneinfo import ZoneInfo  # 10:00 today in the branch's country, as the panel counts its day
+        today_10 = timezone.localtime(timezone=ZoneInfo(self.site.customer.country.timezone)).replace(
+            hour=10, minute=0, second=0, microsecond=0)
         busy_task = Task.objects.create(
             task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
-            scheduled_for=timezone.now() + timedelta(days=1),
+            scheduled_for=today_10,
         )
         TaskAssignment.objects.create(
             task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
             assigned_at=timezone.now(), is_active=True,
         )
-
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get('/tasks/new/')
-
-        team = {p.pk: p for p in response.context['team_schedule']}
-        self.assertEqual(team[self.technician.pk].next_scheduled_task, busy_task)
+        team = {p.pk: p.day_state for p in response.context['team_schedule']}
         supervisor = Technician.objects.get(user=self.supervisor_user)
-        self.assertIsNone(team[supervisor.pk].next_scheduled_task)
+        self.assertEqual((team[self.technician.pk], team[supervisor.pk]), ('busy', 'free'))
 
     def test_manager_creating_a_task_with_a_schedule_locks_it(self):
         manager_user = User.objects.create_user('manager1', password='pass12345')
@@ -2079,15 +2085,6 @@ class TaskCreateTests(TaskTestCase):
         self.assertEqual(Task.objects.count(), 0)
         self.assertTrue(response.context['form'].errors.get('new_task_type_code'))
 
-    def test_min_level_above_the_skill_scale_is_rejected(self):
-        self.client.login(username='supervisor1', password='pass12345')
-        response = self.client.post('/tasks/new/', self._base_new_task_payload(
-            site=self.site.pk, min_level='5',
-        ))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Task.objects.count(), 0)
-        self.assertTrue(response.context['form'].errors.get('min_level'))
-
     def test_estimated_hours_over_48_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post('/tasks/new/', self._base_new_task_payload(
@@ -2209,7 +2206,7 @@ class TicketListTests(TaskTestCase):
     def test_search_by_pak_reference_number(self):
         self.ticket.pak_reference_number = 'PAK-99001'
         self.ticket.save(update_fields=['pak_reference_number'])
-        other = CustomerTicket.objects.create(
+        CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
             contact_name='Sara', contact_phone='0509999999', pak_reference_number='PAK-11111',
             description='Bike display broken.', submitted_at=timezone.now(),
@@ -2223,7 +2220,7 @@ class TicketListTests(TaskTestCase):
     def test_search_by_site_also_matches_the_address_not_just_the_description(self):
         self.ticket.site_address = 'Dubai Marina'
         self.ticket.save(update_fields=['site_address'])
-        other = CustomerTicket.objects.create(
+        CustomerTicket.objects.create(
             country=self.country, ticket_number='AE-T0002', company_name='One Fit Gym', site_description='JBR Branch',
             site_address='JBR, Abu Dhabi', contact_name='Sara', contact_phone='0509999999',
             description='Bike display broken.', submitted_at=timezone.now(),
@@ -2715,7 +2712,7 @@ class TicketReviewTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_support_manager_can_attach_files_to_an_internal_note(self):
         quote = SimpleUploadedFile('vendor_quote.pdf', b'%PDF-1.4 not a real pdf', content_type='application/pdf')
-        photo = SimpleUploadedFile('part.jpg', b'jpeg', content_type='image/jpeg')
+        photo = SimpleUploadedFile('part.jpg', REAL_JPEG, content_type='image/jpeg')
 
         self.client.login(username='support1', password='pass12345')
         response = self.client.post(self.url, {
@@ -2762,7 +2759,7 @@ class TicketReviewTests(TaskTestCase):
 
         self.assertEqual(TicketReply.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
         # Every email carries the inline logo now — no real (downloadable)
         # attachment for a plain reply, though.
         self.assertFalse(any(isinstance(a, tuple) for a in mail.outbox[0].attachments))
@@ -2784,7 +2781,7 @@ class TicketReviewTests(TaskTestCase):
 
         self.assertEqual(TicketReply.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
         # Two attachments now: the inline logo (every email gets one) plus
         # the file itself — pick it out by filename rather than assuming a
         # position or a plain tuple, since the logo attaches as a raw
@@ -2809,23 +2806,22 @@ class TicketReviewTests(TaskTestCase):
             if thread is not threading.current_thread():
                 thread.join(timeout=10)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('New reply on your ticket', mail.outbox[0].subject)
+        self.assertIn('New reply from our team', mail.outbox[0].subject)
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_a_reply_takes_several_files_up_to_the_limit(self):
         self.client.login(username='support1', password='pass12345')
-        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(11)]
+        files = [SimpleUploadedFile(f'photo{n}.jpg', REAL_JPEG, content_type='image/jpeg') for n in range(11)]
         response = self.client.post(self.url, {'action': 'add_reply', 'message': 'Too many', 'attachments': files})
-        self.assertContains(response, 'Please attach at most 10 files.')
+        self.assertContains(response, 'You can attach up to 10 files.')
         self.assertFalse(TicketReply.objects.exists())
-        files = [SimpleUploadedFile(f'photo{n}.jpg', b'jpeg', content_type='image/jpeg') for n in range(3)]
+        files = [SimpleUploadedFile(f'photo{n}.jpg', REAL_JPEG, content_type='image/jpeg') for n in range(3)]
         self.client.post(self.url, {'action': 'add_reply', 'message': 'Three photos', 'attachments': files})
         self.assertEqual(len(TicketReply.objects.get().all_files), 3)
 
     def test_customer_reply_creates_a_new_reply_notification(self):
         portal_user = User.objects.create_user('fitnessfirst_portal2', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.ticket.customer = self.customer
         self.ticket.save(update_fields=['customer'])
 
@@ -2871,8 +2867,7 @@ class TicketStatusAccessTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.ticket = CustomerTicket.objects.create(
             country=self.country, customer=self.customer,
             ticket_number='AE-T0001', company_name='Fitness First', site_description='Marina Branch',
@@ -2889,8 +2884,7 @@ class TicketStatusAccessTests(TaskTestCase):
     def test_a_different_customer_is_told_the_link_is_for_another_account(self):
         other_customer = Customer.objects.create(country=self.country, name='Other Gym', segment='gym')
         other_user = User.objects.create_user('other_portal', password='pass12345')
-        other_customer.user = other_user
-        other_customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=other_customer, user=other_user)
 
         self.client.login(username='other_portal', password='pass12345')
         response = self.client.get(self.url, follow=True)
@@ -3054,7 +3048,7 @@ class TaskAssignTests(TaskTestCase):
     def setUp(self):
         super().setUp()
         self.task = Task.objects.create(
-            task_number='AE-0001', site=self.site, required_skill=self.skill,
+            task_number='AE-0001', site=self.site,
             priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
             billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(),
             created_by=self.supervisor_user, status=Task.Status.NEW,
@@ -3147,24 +3141,32 @@ class TaskAssignTests(TaskTestCase):
         event = self.task.events.get()
         self.assertEqual(event.event_type, TaskEvent.EventType.ASSIGNED)
 
-    def test_candidates_show_their_next_scheduled_task(self):
+    def test_each_candidate_shows_their_day_in_words_best_first(self):
+        # The task is tomorrow at 15:00; the technician already works 9:00-11:00 that day.
+        tomorrow = timezone.localtime() + timedelta(days=1)
+        self.task.scheduled_for = tomorrow.replace(hour=15, minute=0, second=0, microsecond=0)
+        self.task.save(update_fields=['scheduled_for'])
         busy_task = Task.objects.create(
             task_number='AE-0002', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
             reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
-            scheduled_for=timezone.now() + timedelta(days=1),
+            scheduled_for=tomorrow.replace(hour=9, minute=0, second=0, microsecond=0), estimated_hours=2,
         )
         TaskAssignment.objects.create(
             task=busy_task, technician=self.technician, role=TaskAssignment.Role.LEAD,
             assigned_at=timezone.now(), is_active=True,
         )
-
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.get(self.url)
-
-        candidates = {c.pk: c for c in response.context['candidates']}
-        self.assertEqual(candidates[self.technician.pk].next_scheduled_task, busy_task)
-        self.assertIsNone(candidates[self.helper.pk].next_scheduled_task)
+        candidates = list(response.context['candidates'])
+        states = {c.pk: c.day_state for c in candidates}
+        self.assertEqual((states[self.technician.pk], states[self.helper.pk]), ('busy', 'free'))
+        busy = next(c for c in candidates if c.pk == self.technician.pk)
+        # Busy from its start to its estimated finish (shown in the country's time).
+        self.assertEqual((busy.busy_from, busy.busy_to), (busy_task.scheduled_for, busy_task.scheduled_for + timedelta(hours=2)))
+        # Free people first.
+        self.assertLess([c.pk for c in candidates].index(self.helper.pk), [c.pk for c in candidates].index(self.technician.pk))
+        self.assertContains(response, 'No jobs that day')
 
     def test_replace_lead_without_reason_is_rejected(self):
         self.client.login(username='supervisor1', password='pass12345')
@@ -3447,24 +3449,25 @@ class TaskOwnershipTests(TaskTestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.responsible_supervisor, other_owner)
 
-    def test_any_supervisor_can_claim_an_unowned_task(self):
+    def test_a_task_is_never_left_without_an_owner(self):
+        # Every task has its owner (docs/access_rules.md): its creator unless given to someone ...
         self.task.responsible_supervisor = None
         self.task.save()
-
+        self.task.refresh_from_db()
         supervisor = Technician.objects.get(user=self.supervisor_user)
+        self.assertEqual(self.task.responsible_supervisor, supervisor)
+        # ... and an edit that leaves the owner empty keeps them (handing over picks someone else).
         self.client.login(username='supervisor1', password='pass12345')
         response = self.client.post(f'/tasks/{self.task.pk}/edit/', {
             'priority': Task.Priority.NORMAL, 'source': Task.Source.PHONE,
             'billing_type': Task.BillingType.CHARGEABLE, 'is_warranty': '',
-            'responsible_supervisor': supervisor.pk,
+            'responsible_supervisor': '',
             'products-TOTAL_FORMS': '0', 'products-INITIAL_FORMS': '0',
             'products-MIN_NUM_FORMS': '0', 'products-MAX_NUM_FORMS': '1000',
         })
         self.assertEqual(response.status_code, 302)
-
         self.task.refresh_from_db()
         self.assertEqual(self.task.responsible_supervisor, supervisor)
-
 
 class TaskWeekTests(TaskTestCase):
     def test_the_schedule_has_a_year_view(self):
@@ -4265,7 +4268,7 @@ class MySkillsTests(TaskTestCase):
         response = self.client.get('/tasks/my-skills/')
         self.assertEqual(response.status_code, 302)
 
-    def _evidence(self, name='proof.jpg', content=b'not a real image', content_type='image/jpeg'):
+    def _evidence(self, name='proof.jpg', content=REAL_JPEG, content_type='image/jpeg'):
         return SimpleUploadedFile(name, content, content_type=content_type)
 
     def test_self_rate_skill_creates_self_sourced_rating(self):
@@ -4302,7 +4305,8 @@ class MySkillsTests(TaskTestCase):
         )
         self.client.login(username='tech1', password='pass12345')
         self.client.post('/tasks/my-skills/', {
-            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3, 'evidence': self._evidence('better.mp4'),
+            'action': 'rate_skill', 'skill_id': self.skill.pk, 'level': 3,
+            'evidence': self._evidence('better.mp4', content=REAL_MP4, content_type='video/mp4'),
         })
         rating = TechnicianSkill.objects.get(technician=self.technician, skill=self.skill)
         self.assertEqual(rating.level, 3)
@@ -4417,7 +4421,7 @@ class MyProfileTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_technician_updates_own_photo_and_language(self):
         self.client.login(username='tech1', password='pass12345')
-        photo = SimpleUploadedFile('me.jpg', b'not a real image', content_type='image/jpeg')
+        photo = SimpleUploadedFile('me.jpg', REAL_JPEG, content_type='image/jpeg')
         response = self.client.post('/tasks/my-profile/', {
             'action': 'save_profile', 'photo': photo, 'language': Technician.Language.EN,
         })
@@ -4436,7 +4440,8 @@ class MyProfileTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['profile_form'].errors.get('photo'))
 
-    def test_technician_updates_own_phone_and_email(self):
+    def test_technician_updates_own_phone_but_not_the_email_here(self):
+        # The email changes only through its confirmation link (StaffAccountSettingsTests).
         self.client.login(username='tech1', password='pass12345')
         response = self.client.post('/tasks/my-profile/', {
             'action': 'save_profile', 'language': Technician.Language.EN,
@@ -4447,7 +4452,7 @@ class MyProfileTests(TaskTestCase):
         self.technician.refresh_from_db()
         self.tech_user.refresh_from_db()
         self.assertEqual(self.technician.phone, '0501234567')
-        self.assertEqual(self.tech_user.email, 'tarek@example.com')
+        self.assertEqual(self.tech_user.email, '')
 
     def test_get_prefills_email_from_the_linked_user(self):
         self.tech_user.email = 'tarek@example.com'
@@ -4455,7 +4460,7 @@ class MyProfileTests(TaskTestCase):
 
         self.client.login(username='tech1', password='pass12345')
         response = self.client.get('/tasks/my-profile/')
-        self.assertEqual(response.context['profile_form'].fields['email'].initial, 'tarek@example.com')
+        self.assertContains(response, 'tarek@example.com')  # shown in "Sign-in email"
 
     def test_technician_changes_own_password(self):
         Token.objects.create(user=self.tech_user)
@@ -4741,7 +4746,7 @@ class TechnicianBoardTests(TaskTestCase):
 
     def test_shows_a_supervisors_responsible_tasks(self):
         manager_user = User.objects.create_user('manager1', password='pass12345')
-        manager = Technician.objects.create(
+        Technician.objects.create(
             user=manager_user, country=self.country, full_name='Mona Manager',
             language='en', role=Technician.Role.MANAGER, employment_type='staff',
         )
@@ -4951,7 +4956,7 @@ class TechnicianSkillsTests(TaskTestCase):
         )
 
     def test_confirming_a_self_rating_keeps_its_evidence(self):
-        evidence = SimpleUploadedFile('proof.jpg', b'not a real image', content_type='image/jpeg')
+        evidence = SimpleUploadedFile('proof.jpg', REAL_JPEG, content_type='image/jpeg')
         TechnicianSkill.objects.create(
             technician=self.technician, skill=self.skill, level=2, source=TechnicianSkill.Source.SELF,
             set_by=self.technician, set_on=timezone.now().date(), evidence=evidence,
@@ -4998,6 +5003,79 @@ class TechnicianCreateTests(TaskTestCase):
         }
         payload.update(overrides)
         return payload
+
+    def test_a_new_staff_member_from_invitation_to_their_first_day(self):
+        # The whole journey, as with a customer: the Admin adds them; they get an
+        # email with a one-time link (no password sent); they choose a password;
+        # they're in, on the website and the app, seeing only what their role
+        # allows; the link then stops working; it's all in the Audit log.
+        import re
+
+        from django.contrib.admin.models import LogEntry
+        from django.core import mail
+
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(self.url, self._payload(
+            full_name='Nour Supervisor', role=Technician.Role.SUPERVISOR, country=self.country.pk,
+            email='nour@example.com',
+        ))
+        nour = Technician.objects.get(full_name='Nour Supervisor')
+        self.assertTrue(LogEntry.objects.filter(change_message__contains='setup link emailed to nour@example.com').exists())
+
+        invitation = mail.outbox[-1]
+        self.assertEqual(invitation.to, ['nour@example.com'])
+        self.assertNotIn('password:', invitation.body.lower())  # a link, never a password
+        link = re.search(r'http://testserver(/tasks/setup/[^/\s]+/)', invitation.body).group(1)
+
+        newcomer = self.client_class()
+        response = newcomer.post(link, {'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!'})
+        self.assertRedirects(response, '/', fetch_redirect_response=False)
+        nour.refresh_from_db()
+        self.assertFalse(nour.must_change_password)
+        # Signed in on the website: their own pages, not an Admin's.
+        self.assertEqual(newcomer.get('/').status_code, 200)
+        self.assertEqual(newcomer.get('/tasks/technicians/new/').status_code, 403)
+
+        # The link worked once.
+        self.assertEqual(self.client_class().get(link).status_code, 400)
+
+        # The same email and password in the phone app.
+        app = self.client_class()
+        response = app.post('/api/login/', {'username': 'nour@example.com', 'password': 'br4nd-New-Pass!'})
+        self.assertEqual(response.status_code, 200)
+        token = response.json()['token']
+        me = app.get('/api/me/', HTTP_AUTHORIZATION=f'Token {token}').json()
+        self.assertEqual(me['role'], Technician.Role.SUPERVISOR)
+
+    def test_a_job_title_is_what_they_are_called_the_role_what_they_can_do(self):
+        # A General Manager with the Operations Manager's access: listed by title everywhere,
+        # the role itself where access is managed.
+        self.client.login(username='admin1', password='pass12345')
+        self.client.post(self.url, self._payload(
+            full_name='Karim Boss', role=Technician.Role.OPERATIONS_MANAGER, job_title='General Manager',
+            country=self.country.pk, email='karim@example.com',
+        ))
+        karim = Technician.objects.get(full_name='Karim Boss')
+        self.assertEqual((karim.role, karim.title), (Technician.Role.OPERATIONS_MANAGER, 'General Manager'))
+        self.assertContains(self.client.get(f'/tasks/technicians/{karim.pk}/'), 'General Manager')
+        panel = self.client.get(f'/tasks/technicians/accounts/?manage={karim.pk}')
+        self.assertContains(panel, 'Operations Manager')  # the access role, where access is managed
+        self.assertContains(panel, 'General Manager')
+        # The app shows the title too.
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=karim.user)
+        me = self.client_class().get('/api/me/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
+        self.assertEqual((me['role'], me['role_display']), ('operations_manager', 'General Manager'))
+        # They see it themselves, on their profile and in the app — not the access role behind it.
+        karim.user.set_password('pass12345')
+        karim.user.save()
+        self.client.login(username='karim@example.com', password='pass12345')
+        profile = self.client.get('/tasks/my-profile/')
+        self.assertContains(profile, 'Job title')
+        self.assertContains(profile, 'General Manager')
+        self.assertNotContains(profile, 'Operations Manager')
+        # Without one, the role's name.
+        self.assertEqual(Technician(role=Technician.Role.SUPERVISOR).title, 'Supervisor')
 
     def test_one_step_with_their_country_and_login(self):
         # The country is chosen, not whichever one the admin is viewing; the
@@ -5100,7 +5178,7 @@ class TechnicianEditTests(TaskTestCase):
         )
         self.url = f'/tasks/technicians/{self.technician.pk}/edit/'
 
-    def _photo(self, name='photo.jpg', content=b'not a real image', content_type='image/jpeg'):
+    def _photo(self, name='photo.jpg', content=REAL_JPEG, content_type='image/jpeg'):
         return SimpleUploadedFile(name, content, content_type=content_type)
 
     def _base_payload(self, **overrides):
@@ -5276,33 +5354,29 @@ class TechnicianLoginTests(TaskTestCase):
         other_helper.refresh_from_db()
         self.assertIsNone(other_helper.user_id)
 
-    def test_manager_can_reset_an_existing_password(self):
-        # self.technician (tech1) already has a login, from TaskTestCase.
-        Token.objects.create(user=self.tech_user)
+    def test_nobody_types_in_someone_elses_password(self):
+        # Not even the Admin: a forgotten password is fixed on Staff accounts.
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)
         self.client.login(username='manager1', password='pass12345')
-        response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
+        self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', {
             'action': 'reset_password', 'new_password1': 'br4nd-New-Pass!', 'new_password2': 'br4nd-New-Pass!',
         })
-        self.assertEqual(response.status_code, 302)
         self.tech_user.refresh_from_db()
-        self.assertTrue(self.tech_user.check_password('br4nd-New-Pass!'))
-        # Temporary: the technician picks their own next time, and the
-        # app on their phone has to sign in again.
-        self.technician.refresh_from_db()
-        self.assertTrue(self.technician.must_change_password)
-        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertFalse(self.tech_user.check_password('br4nd-New-Pass!'))
+        page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        self.assertContains(page, f'/tasks/technicians/accounts/?manage={self.technician.pk}')
 
     def test_no_login_form_once_one_exists(self):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
         self.assertIsNone(response.context['login_form'])
-        self.assertIsNotNone(response.context['password_form'])
+        self.assertTrue(response.context['has_login'])
 
     def test_no_password_form_before_one_exists(self):
         self.client.login(username='manager1', password='pass12345')
         response = self.client.get(self.url)
         self.assertIsNotNone(response.context['login_form'])
-        self.assertIsNone(response.context['password_form'])
+        self.assertFalse(response.context['has_login'])
 
 
 class SkillListTests(TaskTestCase):
@@ -5764,8 +5838,7 @@ class HomeRedirectTests(TaskTestCase):
 
     def test_customer_lands_on_portal_home(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/')
         self.assertRedirects(response, '/customers/portal/')
@@ -5779,9 +5852,7 @@ class HomeRedirectTests(TaskTestCase):
 
     def test_customer_on_a_temporary_password_lands_on_portal_first_login(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.must_change_password = True
-        self.customer.save(update_fields=['user', 'must_change_password'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user, must_change_password=True)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/')
         self.assertRedirects(response, '/customers/portal/first-login/')
@@ -5839,15 +5910,17 @@ class SetLanguageTests(TaskTestCase):
 
     def test_customer_switch_persists_to_their_own_language_field(self):
         portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
 
         self.client.login(username='fitnessfirst_portal', password='pass12345')
         response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': '/customers/portal/'})
         self.assertRedirects(response, '/customers/portal/', fetch_redirect_response=False)
 
+        # Their own, not their whole company's.
+        portal_user.portal_user.refresh_from_db()
+        self.assertEqual(portal_user.portal_user.language, 'ar')
         self.customer.refresh_from_db()
-        self.assertEqual(self.customer.language, 'ar')
+        self.assertEqual(self.customer.language, 'en')
 
     def test_unsafe_next_url_falls_back_to_root(self):
         response = self.client.post('/i18n/setlang/', {'language': 'ar', 'next': 'https://evil.example/'})
@@ -6014,14 +6087,16 @@ class MyTaskDetailTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_upload_creates_photo_attachment(self):
         self.client.login(username='tech1', password='pass12345')
-        upload = SimpleUploadedFile('serial.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        upload = SimpleUploadedFile('serial.jpg', REAL_JPEG, content_type='image/jpeg')
 
+        # A serial plate photo goes with its machine.
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.SERIAL_PLATE, 'asset': self.asset.pk,
         })
         self.assertEqual(response.status_code, 302)
 
         attachment = self.task.attachments.get()
+        self.assertEqual(attachment.asset, self.asset)
         self.assertEqual(attachment.media_type, TaskAttachment.MediaType.PHOTO)
         self.assertEqual(attachment.purpose, TaskAttachment.Purpose.SERIAL_PLATE)
         self.assertEqual(attachment.storage_kind, TaskAttachment.StorageKind.FILE)
@@ -6031,7 +6106,7 @@ class MyTaskDetailTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_helper_can_upload_a_photo(self):
         self.client.login(username='helper1', password='pass12345')
-        upload = SimpleUploadedFile('before.jpg', b'fake-image-bytes', content_type='image/jpeg')
+        upload = SimpleUploadedFile('before.jpg', REAL_JPEG, content_type='image/jpeg')
 
         response = self.client.post(self.url, {
             'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
@@ -6052,7 +6127,7 @@ class MyTaskDetailTests(TaskTestCase):
         )
 
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.task.attachments.count(), 0)
@@ -6065,10 +6140,42 @@ class MyTaskDetailTests(TaskTestCase):
         )
 
         response = self.client.post(self.url, {
-            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.FAULT,
+            'action': 'upload', 'file': upload, 'purpose': TaskAttachment.Purpose.BEFORE,
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.task.attachments.count(), 0)
+
+
+    @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+    def test_each_machine_card_has_serial_before_after_and_the_same_cards_show_when_approving(self):
+        from tasks.models import TaskAsset
+        from tasks.views import visit_photo_cards
+        TaskAsset.objects.create(task=self.task, asset=self.asset)
+        self.client.login(username='tech1', password='pass12345')
+        photo = lambda: SimpleUploadedFile('p.jpg', REAL_JPEG, content_type='image/jpeg')
+        # A serial plate photo goes with its machine, never the branch.
+        response = self.client.post(self.url, {
+            'action': 'upload', 'file': photo(), 'purpose': TaskAttachment.Purpose.SERIAL_PLATE, 'asset': '',
+        })
+        self.assertIn('asset', response.context['upload_form'].errors)
+        self.assertEqual(self.task.attachments.count(), 0)
+        page = self.client.get(self.url)
+        self.assertContains(page, 'class="branch-card"')
+        self.assertContains(page, 'data-photo-slot-input', count=3)  # + Serial plate, + Before, + After
+        for purpose in (TaskAttachment.Purpose.SERIAL_PLATE, TaskAttachment.Purpose.BEFORE):
+            self.client.post(self.url, {'action': 'upload', 'file': photo(), 'purpose': purpose, 'asset': self.asset.pk})
+        (card,) = visit_photo_cards(self.task, self.task.attachments.all())['cards']
+        self.assertEqual([len(column['photos']) for column in card['columns']], [1, 1, 0])
+        # The app gets the same card.
+        from api.serializers import TaskDetailSerializer
+        (app_card,) = TaskDetailSerializer(self.task).data['machine_cards']
+        self.assertEqual(([photo['purpose'] for photo in app_card['photos']], app_card['asset_id']),
+                         (['serial_plate', 'before'], self.asset.pk))
+        # Approving (the staff page): the same card, read-only — the missing After said.
+        self.client.login(username='supervisor1', password='pass12345')
+        page = self.client.get(f'/tasks/{self.task.pk}/')
+        self.assertContains(page, 'No photo after')
+        self.assertNotContains(page, 'data-photo-slot')
 
 
 class MyReportFormTests(TaskTestCase):
@@ -6078,6 +6185,11 @@ class MyReportFormTests(TaskTestCase):
 
     def setUp(self):
         super().setUp()
+        # About the report's other rules: the machines' photos have their own tests
+        # (test_a_report_needs_every_machines_three_photos, api CustomerPhotosOnTheMachineCardTests).
+        self._photos = patch('tasks.views.report_machine_photo_gaps', return_value=[])
+        self._photos.start()
+        self.addCleanup(self._photos.stop)
         self.task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PHONE, billing_type=Task.BillingType.CHARGEABLE,
@@ -6133,6 +6245,23 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(report.copy_sent_to, 'ali@example.com')
         self.assertIsNotNone(report.copy_sent_at)
 
+    def test_the_report_email_asks_for_the_rating(self):
+        self.client.login(username='tech1', password='pass12345')
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        (email,) = mail.outbox
+        feedback = CustomerFeedback.objects.get(task=self.task)
+        self.assertIn(f'/reports/feedback/{feedback.token}/', email.body)
+        self.assertIn('Rate our visit', email.alternatives[0][0])
+        self.assertIn('How was our visit?', email.body)
+
+    def test_no_rating_counts_as_asked_when_the_email_fails(self):
+        self.client.login(username='tech1', password='pass12345')
+        with patch('tasks.views._send_notification_email', return_value=False):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, self._base_payload(send_copy_to='ali@example.com'))
+        self.assertFalse(CustomerFeedback.objects.filter(task=self.task).exists())
+
     def _send_copy_capturing_language(self):
         with patch('reports.pdf.render_visit_report_pdf', return_value=b'%PDF-test') as render:
             self.client.login(username='tech1', password='pass12345')
@@ -6147,7 +6276,8 @@ class MyReportFormTests(TaskTestCase):
         self.customer.save(update_fields=['language'])
         language, email = self._send_copy_capturing_language()
         self.assertEqual(language, 'ar')
-        self.assertNotIn('Visit report', email.subject)
+        # The PDF in Arabic; its email, like every customer email, in English and Arabic (tasks.customer_emails).
+        self.assertIn('تقرير الزيارة', email.subject)
         html = email.alternatives[0][0]
         self.assertIn('dir="rtl"', html)
         self.assertIn('Profit Sports Solutions', html)  # the company name stays in English
@@ -6256,7 +6386,7 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
-        signature = SimpleUploadedFile('sig.png', b'png bytes', content_type='image/png')
+        signature = SimpleUploadedFile('sig.png', REAL_PNG, content_type='image/png')
         response = self.client.post(self.url, {**self._base_payload(), 'signature': signature})
         self.assertEqual(response.status_code, 302)
 
@@ -6388,6 +6518,23 @@ class MyReportFormTests(TaskTestCase):
         self.assertEqual(task_asset.outcome, TaskAsset.Outcome.REPAIRED)
         self.assertEqual(Asset.objects.count(), 1)
 
+    def test_a_report_needs_every_machines_three_photos(self):
+        from api.tests import give_machine_photos
+        self._photos.stop()  # the real rule
+        self.client.login(username='tech1', password='pass12345')
+        payload = self._base_payload()
+        payload['existing-0-asset'] = str(self.asset.pk)
+        payload['existing-0-outcome'] = TaskAsset.Outcome.REPAIRED
+        response = self.client.post(self.url, payload)
+        self.assertEqual(response.status_code, 200)
+        (gap,) = response.context['report_form'].non_field_errors()  # in the technician's Arabic
+        self.assertIn(self.asset.model_name, gap)
+        self.assertFalse(TaskAsset.objects.filter(task=self.task).exists())
+        give_machine_photos(self.task, self.asset, self.tech_user)
+        self.assertEqual(self.client.post(self.url, payload).status_code, 302)
+        self.assertTrue(TaskAsset.objects.filter(task=self.task).exists())
+        self._photos.start()  # as the cleanup expects
+
     def test_recording_a_machine_the_customer_added_confirms_it(self):
         self.asset.status = Asset.Status.PENDING
         self.asset.save(update_fields=['status'])
@@ -6511,7 +6658,7 @@ class MyReportFormTests(TaskTestCase):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_signature_upload_sets_absolute_url(self):
         self.client.login(username='tech1', password='pass12345')
-        signature = SimpleUploadedFile('sig.png', b'fake-png-bytes', content_type='image/png')
+        signature = SimpleUploadedFile('sig.png', REAL_PNG, content_type='image/png')
         payload = self._base_payload()
         payload['signature'] = signature
         self.client.post(self.url, payload)
@@ -7087,8 +7234,7 @@ class TicketEscalationTests(TaskTestCase):
             language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
         )
         self.portal_user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.user = self.portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=self.portal_user)
         self.ticket = CustomerTicket.objects.create(
             country=self.country, customer=self.customer, ticket_number='AE-T0001', company_name='Fitness First',
             site_description='Marina Branch', contact_name='Ali Manager', contact_phone='0501234567',
@@ -7358,8 +7504,7 @@ class CountrySupportManagerTests(TaskTestCase):
         self._escalate('csm1', self.support)
         self._escalate('support1', self.ops, customer_message='A manager is reviewing your request.')
         self.client.get(self.url)  # shows (and clears) the staff confirmation
-        self.customer.user = User.objects.create_user('fitnessfirst_portal', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst_portal', password='pass12345'))
         self.ticket.customer = self.customer
         self.ticket.save(update_fields=['customer'])
         self.client.login(username='fitnessfirst_portal', password='pass12345')
@@ -7581,7 +7726,7 @@ class PartsCatalogueTests(TaskTestCase):
             self.client.login(username='warehouse1', password='pass12345')
             self.client.post('/tasks/parts/', {
                 'action': 'edit', 'part_id': part.pk, 'description': 'Treadmill belt', 'colour': 'Grey',
-                'photo': SimpleUploadedFile('belt.jpg', b'jpeg', content_type='image/jpeg'),
+                'photo': SimpleUploadedFile('belt.jpg', REAL_JPEG, content_type='image/jpeg'),
             })
             part.refresh_from_db()
             self.assertEqual((part.description, part.colour), ('Treadmill belt', 'Grey'))
@@ -8032,7 +8177,7 @@ class StaffOpenedTicketTests(TaskTestCase):
         self.assertEqual(customer.country, self.country)
         self.assertRedirects(response, f'/tasks/tickets/open/?site={site.pk}', fetch_redirect_response=False)
         self.assertEqual(self.client.get(response.url).context['form']['site'].value(), str(site.pk))
-        self.assertEqual(customer.user.username, 'omar@irondengym.example')  # invited
+        self.assertEqual(customer.portal_users.get().user.username, 'omar@irondengym.example')  # invited
 
         response = self._customer_ticket(site=site.pk, description='Rower display is dead')
         ticket = CustomerTicket.objects.get(customer=customer)
@@ -8050,8 +8195,7 @@ class StaffOpenedTicketTests(TaskTestCase):
     @override_settings(PORTAL_HOST='')  # the portal on this same address, not its own
     def test_the_customer_sees_it_in_their_portal_and_gets_the_email(self):
         portal_user = get_user_model().objects.create_user('fitnessportal', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='support1', password='pass12345')
         self._customer_ticket(contact_email='ali@example.com')
         ticket = CustomerTicket.objects.get()
@@ -8392,6 +8536,7 @@ class StaffAccountsTests(TaskTestCase):
     def test_temporary_password_is_shown_once_signs_out_phones_and_is_logged(self):
         from django.contrib.admin.models import LogEntry
         Token.objects.create(user=self.tech_user)
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         response = self._act('temporary_password', self.technician)
         self.assertTemplateUsed(response, 'tasks/staff_account_password.html')
@@ -8439,7 +8584,20 @@ class StaffAccountsTests(TaskTestCase):
         self.assertEqual(self._act('temporary_password', self.admin).status_code, 403)
         self.assertEqual(self._act('change_email', self.admin, email='other@example.com').status_code, 403)
 
+    def test_a_manager_sets_no_password_and_changes_no_email(self):
+        self.tech_user.email = 'tarek@example.com'
+        self.tech_user.save(update_fields=['email'])
+        self.client.login(username='manager1', password='pass12345')
+        self.assertEqual(self._act('temporary_password', self.technician).status_code, 403)
+        self.assertEqual(self._act('change_email', self.technician, email='x@example.com').status_code, 403)
+        page = self.client.get(f'/tasks/technicians/accounts/?manage={self.technician.pk}')
+        self.assertNotContains(page, 'value="temporary_password"')
+        self.assertNotContains(page, 'value="change_email"')
+        # What they can still do: a setup link, to the person's own email.
+        self.assertContains(page, 'value="send_setup_link"')
+
     def test_change_email_keeps_a_sign_in_name_that_is_not_an_email(self):
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self._act('change_email', self.technician, email='tarek.new@example.com')
         self.tech_user.refresh_from_db()
@@ -8508,6 +8666,7 @@ class PasswordChangedEmailTests(TaskTestCase):
         self.assertIn('contact your manager', mail.outbox[0].body)
 
     def test_a_temporary_password_from_staff_accounts_emails_them(self):
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.technician.pk})
         self.assertEqual(len(mail.outbox), 1)
@@ -8582,6 +8741,7 @@ class StaffSetupLinkTests(TaskTestCase):
 
     def test_a_temporary_password_kills_any_earlier_link(self):
         link = self._link()
+        Technician.objects.filter(user__username='manager1').update(role=Technician.Role.ADMIN)  # the Admin's alone
         self.client.login(username='manager1', password='pass12345')
         self.client.post('/tasks/technicians/accounts/', {'action': 'temporary_password', 'technician': self.newcomer.pk})
         self.assertEqual(self._statuses()['Hani Helper'], 'temporary')
@@ -8678,8 +8838,7 @@ class VisibleLinksTests(TaskTestCase):
             )
         ]
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         users.append('fitnessfirst')
 
         problems = {username: self._crawl(username) for username in users}
@@ -8710,8 +8869,7 @@ class SidebarPerUserTests(TaskTestCase):
 
     def test_customers_get_the_same_sidebar_with_their_own_pages(self):
         portal_user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.user = portal_user
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=portal_user)
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get('/customers/portal/')
         self.assertContains(response, 'site-header__nav"')
@@ -8868,6 +9026,18 @@ class TicketMachineDecisionTests(TaskTestCase):
             'action': 'machines', 'machines': [str(m.pk) for m in machines], 'do': do, 'decision_note': note,
         })
 
+    def test_a_panatta_machine_reminds_of_the_pak_never_requires_it(self):
+        # No Panatta machine: nothing said.
+        self.assertNotContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+        panatta = Brand.objects.create(name='Panatta')
+        self.treadmill.asset = Asset.objects.create(site=self.site, brand=panatta, model_name='Treadmill', serial_no='T-1')
+        self.treadmill.save(update_fields=['asset'])
+        self.assertContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+        # Once it has its PAK, the reminder goes; and a request without one is never blocked.
+        self.ticket.pak_reference_number = 'PAK-1234'
+        self.ticket.save(update_fields=['pak_reference_number'])
+        self.assertNotContains(self.client.get(self.review_url), 'opening a PAK with Panatta?')
+
     def _create_task(self, url):
         return self.client.post(url, {
             'site': self.site.pk, 'priority': Task.Priority.NORMAL, 'source': Task.Source.PORTAL,
@@ -8924,8 +9094,7 @@ class TicketMachineDecisionTests(TaskTestCase):
 
     def test_the_customer_sees_each_machines_status(self):
         self._decide([self.rower], 'not_covered', note='Under the gym supplier warranty.')
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.client.login(username='fitnessfirst', password='pass12345')  # the customer, not staff
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Under review')
@@ -8943,6 +9112,11 @@ class TicketMachineFindingsTests(TaskTestCase):
 
     def setUp(self):
         super().setUp()
+        # About the report's other rules: the machines' photos have their own tests
+        # (test_a_report_needs_every_machines_three_photos, api CustomerPhotosOnTheMachineCardTests).
+        self._photos = patch('tasks.views.report_machine_photo_gaps', return_value=[])
+        self._photos.start()
+        self.addCleanup(self._photos.stop)
         self.task = Task.objects.create(
             task_number='AE-0001', site=self.site, priority=Task.Priority.NORMAL,
             source=Task.Source.PORTAL, billing_type=Task.BillingType.CHARGEABLE,
@@ -8997,8 +9171,7 @@ class TicketMachineFindingsTests(TaskTestCase):
         notes = sorted(machine.get('note') for machine in report_content(self.task.report)['machines'])
         self.assertEqual(notes, ['Belt tightened.', 'Console replaced.'])
 
-        self.customer.user = User.objects.create_user('fitnessfirst', password='pass12345')
-        self.customer.save(update_fields=['user'])
+        PortalUser.objects.create(customer=self.customer, user=User.objects.create_user('fitnessfirst', password='pass12345'))
         self.client.login(username='fitnessfirst', password='pass12345')
         response = self.client.get(f'/tasks/tickets/status/{self.ticket.token}/')
         self.assertContains(response, 'Belt tightened.')
@@ -9086,7 +9259,7 @@ class CorporateReportTests(TicketMachineFindingsTests):
         self.assertFalse(WorkReport.objects.filter(task=self.task).exists())
 
     def test_the_customer_sees_the_time_on_site(self):
-        from reports.pdf import changed_after_signing, render_visit_report_html
+        from reports.pdf import render_visit_report_html
         self._tap(TaskEvent.EventType.STARTED, timezone.now() - timedelta(hours=2, minutes=30))
         report = self._file()
         self.assertIn('2:30 hours', render_visit_report_html(report, language='en'))
@@ -9150,6 +9323,19 @@ class SupervisorCreatesInternalTasksTests(TaskTestCase):
         self.assertEqual(ticket.kind, CustomerTicket.Kind.INTERNAL)
         self.assertRegex(ticket.ticket_number, r'-I0001$')  # a series of its own
         self.assertRedirects(response, f'/tasks/tickets/internal/{ticket.pk}/', fetch_redirect_response=False)
+
+    def test_all_tasks_shows_the_internal_ones_first(self):
+        # "All" means all (task_list): the internal tasks at the top, labelled.
+        supervisor = Technician.objects.get(user__username='supervisor1')
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post('/tasks/tickets/internal/new/', {
+            'subject': 'Treadmill belts', 'description': 'We need 5 belts.', 'assigned_to': supervisor.pk,
+        })
+        page = self.client.get('/tasks/')
+        self.assertEqual([ticket.subject for ticket in page.context['internal_tasks']], ['Treadmill belts'])
+        self.assertContains(page, 'Treadmill belts')
+        # Not with a filter only field tasks have.
+        self.assertEqual(self.client.get('/tasks/?lead=none').context['internal_tasks'], [])
 
     def test_a_technician_still_cannot(self):
         self.client.login(username='tech1', password='pass12345')
@@ -9259,10 +9445,10 @@ class InstallationChecklistTests(TaskTestCase):
 
     def test_the_checklist_is_saved_and_only_installed_machines_join_the_list(self):
         self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on',
              'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
-            {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': 'TG-9'},
+            {'product_code': 'EXCITE-TOP', 'status': 'done', 'serial_number': 'TG-9', 'tested_working': 'on'},
         ])
         self.run_line.refresh_from_db()
         self.bike_line.refresh_from_db()
@@ -9278,7 +9464,7 @@ class InstallationChecklistTests(TaskTestCase):
 
     def test_what_was_not_installed_gets_a_follow_up_task(self):
         self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1'},
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'later', 'serial_number': ''},
         ])
         self.client.login(username='supervisor1', password='pass12345')
@@ -9295,7 +9481,7 @@ class InstallationChecklistTests(TaskTestCase):
     def test_the_customer_gets_an_installation_report(self):
         from reports.pdf import render_visit_report_html
         report = self._check([
-            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1',
+            {'id': self.run_line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on',
              'frame': 'Red', 'arm': '', 'padding': '', 'trim': ''},
             {'id': self.bike_line.pk, 'product_code': 'EXCITE-BIKE', 'status': 'missing', 'serial_number': ''},
         ])
@@ -9343,11 +9529,20 @@ class EquipmentChainTests(TaskTestCase):
 
     def test_loaded_machines_go_to_an_installation_in_another_country(self):
         self.client.login(username='manager1', password='pass12345')
-        self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send to installation')
-        response = self.client.post(f'/tasks/{self.loading.pk}/', {
-            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk],
-        })
+        self.assertContains(self.client.get(f'/tasks/{self.loading.pk}/'), 'Send on')
+        sara = Technician.objects.get(user=self.supervisor_user)  # in the UAE
+        saudi_supervisor = Technician.objects.create(
+            user=User.objects.create_user('ksa_super', password='x'), country=self.saudi, full_name='Khalid Super',
+            language='ar', role=Technician.Role.SUPERVISOR, employment_type='staff',
+        )
+        send = {'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk, 'lines': [self.loaded.pk]}
+        # Another country: someone there must own it — not nobody, not someone from elsewhere.
+        for supervisor in ('', saudi_supervisor.pk):
+            self.client.post(f'/tasks/{self.loading.pk}/', {**send, 'supervisor': supervisor})
+            self.assertFalse(Task.objects.filter(previous_task=self.loading).exists())
+        response = self.client.post(f'/tasks/{self.loading.pk}/', {**send, 'supervisor': sara.pk})
         installation = Task.objects.get(previous_task=self.loading)
+        self.assertEqual(installation.responsible_supervisor, sara)
         self.assertRedirects(response, f'/tasks/{installation.pk}/', fetch_redirect_response=False)
         self.assertEqual(installation.site, self.site)  # the Dubai gym
         self.assertTrue(installation.task_number.startswith('AE-'))
@@ -9391,14 +9586,16 @@ class EquipmentChainTests(TaskTestCase):
         ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other', is_internal=True)
         self.loading.site = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
         self.loading.status = Task.Status.NEW
-        self.loading.save(update_fields=['site', 'status'])
+        # The supervisor owns it (so may open its Edit at all), but planning its machines is a manager's.
+        self.loading.responsible_supervisor = self.supervisor_user.technician
+        self.loading.save(update_fields=['site', 'status', 'responsible_supervisor'])
         self.client.login(username='supervisor1', password='pass12345')
         page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
-        self.assertContains(page, 'Only a manager plans the machines on a loading.')
+        self.assertContains(page, 'Only a manager plans the machines on a loading or an installation.')
         self.client.login(username='manager1', password='pass12345')
         page = self.client.get(f'/tasks/{self.loading.pk}/edit/')
         self.assertContains(page, 'In this warehouse:')
-        self.assertNotContains(page, 'Only a manager plans the machines on a loading.')
+        self.assertNotContains(page, 'Only a manager plans the machines on a loading or an installation.')
 
 
 class ReceivingByCountTests(TaskTestCase):
@@ -9476,11 +9673,13 @@ class ReceivingByCountTests(TaskTestCase):
         line.refresh_from_db()
         self.assertEqual((line.quantity, line.status), (2, 'done'))
 
-    def test_the_serial_is_optional_at_loading_and_required_at_installation(self):
+    def test_loading_takes_the_serial_or_says_it_was_out_of_reach_installation_needs_it(self):
         line = TaskProduct.objects.create(task=self.task, product_code='BENCH-01')
         row = {'id': line.pk, 'product_code': 'BENCH-01', 'status': 'done', 'serial_number': ''}
-        self.assertTrue(self._check([row], step='loading')[0].is_valid())
-        self.assertIn('serial_number', self._check([row], step='installation')[0].errors)
+        self.assertIn('serial_number', self._check([row], step='loading')[0].errors)
+        self.assertTrue(self._check([{**row, 'serial_unreachable': 'on'}], step='loading')[0].is_valid())
+        self.assertTrue(self._check([{**row, 'serial_number': 'TG-5'}], step='loading')[0].is_valid())
+        self.assertIn('serial_number', self._check([{**row, 'serial_unreachable': 'on'}], step='installation')[0].errors)
 
     def test_received_lines_stay_in_the_warehouse(self):
         # Loading is planned from the warehouse's stock instead (EquipmentChainTests).
@@ -9703,3 +9902,888 @@ class TaskUpdatesTellTheTeamTests(TaskTestCase):
         from tasks.models import TaskEventRecipient
         self._record(TaskEvent.EventType.NEGLIGENCE, self.supervisor_user)
         self.assertFalse(TaskEventRecipient.objects.exists())
+
+
+class CompanyWatchTests(TaskTestCase):
+    """The Technical Support and Operations Managers watch every country
+    (tasks.alarms): a task still blocked after 2 working hours, or with no
+    day after 24, reaches their bell wherever it is; their Dashboard (and the
+    app's) opens on the company's summary. Not a country Manager's."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth.models import User
+
+        def staff(username, role):
+            return Technician.objects.create(
+                user=User.objects.create_user(username, password='pass12345'), country=self.country,
+                full_name=username.title(), language='en', role=role, employment_type='staff',
+            )
+        self.support = staff('support1', Technician.Role.SUPPORT_MANAGER)
+        staff('manager1', Technician.Role.MANAGER)
+        egypt = Country.objects.create(name='Egypt', iso_code='EG', timezone='Africa/Cairo', currency_code='EGP')
+        site = Site.objects.create(customer=Customer.objects.create(country=egypt, name='Nile Gym', segment='gym'),
+                                   name='Zamalek', address='Cairo')
+        long_ago = timezone.now() - timezone.timedelta(days=5)
+
+        def task(number, status):
+            made = Task.objects.create(
+                task_number=number, site=site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+                billing_type=Task.BillingType.CHARGEABLE, reported_at=long_ago, created_by=self.supervisor_user,
+                status=status,
+            )
+            TaskEvent.objects.create(task=made, event_type=TaskEvent.EventType.CREATED, occurred_at=long_ago,
+                                     actor=self.supervisor_user)
+            return made
+        self.blocked = task('EG-0001', Task.Status.BLOCKED)
+        TaskEvent.objects.create(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED, occurred_at=long_ago,
+                                 actor=self.tech_user)
+        self.unscheduled = task('EG-0002', Task.Status.NEW)
+
+    def bell(self, username):
+        self.client.login(username=username, password='pass12345')
+        return {item['kind']: item for item in self.client.get('/tasks/dashboard/').context['unseen_notifications']}
+
+    def test_their_bell_has_every_countrys_alarms(self):
+        bell = self.bell('support1')  # looking at the UAE; the tasks are in Egypt
+        self.assertEqual(bell['blocked_long']['task'], self.blocked)
+        self.assertEqual(bell['unscheduled_overdue']['task'], self.unscheduled)
+        manager = self.bell('manager1')
+        self.assertNotIn('blocked_long', manager)
+        self.assertNotIn('unscheduled_overdue', manager)
+        # The Operations Manager: the urgent alarms too, but not the summary (the Technical Support Manager's).
+        from django.contrib.auth.models import User
+        Technician.objects.create(
+            user=User.objects.create_user('ops1', password='pass12345'), country=self.country, full_name='Ops',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        ops = self.bell('ops1')
+        self.assertEqual(ops['blocked_long']['task'], self.blocked)
+        self.assertEqual(ops['unscheduled_overdue']['task'], self.unscheduled)
+        self.assertIsNone(self.client.get('/tasks/dashboard/').context['company_summary'])
+
+    def test_their_dashboard_opens_on_the_company(self):
+        self.client.login(username='support1', password='pass12345')
+        summary = self.client.get('/tasks/dashboard/').context['company_summary']
+        self.assertEqual((summary['blocked'], summary['blocked_long'], summary['unscheduled_overdue']), (1, 1, 1))
+        listed = self.client.get('/tasks/', {'alarm': 'blocked_long', 'country': 'all'}).context['page_obj']
+        self.assertEqual([task.pk for task in listed], [self.blocked.pk])
+        # The same in the app.
+        from rest_framework.authtoken.models import Token
+        token = Token.objects.create(user=self.support.user)
+        app = self.client_class().get('/api/dashboard/', HTTP_AUTHORIZATION=f'Token {token.key}').json()
+        self.assertEqual(app['company_summary']['blocked_long'], 1)
+        # Not a country Manager's.
+        self.client.login(username='manager1', password='pass12345')
+        self.assertIsNone(self.client.get('/tasks/dashboard/').context['company_summary'])
+
+    def test_the_operations_manager_hears_later(self):
+        # Blocked for about a working day: the Technical Support Manager knows; the Operations
+        # Manager not yet (after 2 working days) — only what stayed stuck reaches them.
+        from django.contrib.auth.models import User
+        from tasks.alarms import long_blocked_tasks
+        ops = Technician.objects.create(
+            user=User.objects.create_user('ops1', password='pass12345'), country=self.country, full_name='Ops',
+            language='en', role=Technician.Role.OPERATIONS_MANAGER, employment_type='staff',
+        )
+        # A fixed working day (Wednesday 12:00 UTC), not today: the weekend changes the count.
+        from datetime import datetime
+        from datetime import timezone as dt_timezone
+        now = datetime(2026, 11, 11, 12, 0, tzinfo=dt_timezone.utc)
+        TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
+            occurred_at=now - timezone.timedelta(hours=20))
+        self.assertEqual(long_blocked_tasks(self.support, now=now), [self.blocked])
+        self.assertEqual(long_blocked_tasks(ops, now=now), [])
+
+    def test_a_task_blocked_a_moment_ago_is_not_yet_an_alarm(self):
+        TaskEvent.objects.filter(task=self.blocked, event_type=TaskEvent.EventType.BLOCKED).update(
+            occurred_at=timezone.now() - timezone.timedelta(minutes=30))
+        self.assertNotIn('blocked_long', self.bell('support1'))
+
+
+class CustomRoleTests(TaskTestCase):
+    """Roles the Admin makes (people.CustomRole, docs/access_rules.md): a COO
+    based on the Operations Manager, with Tickets switched off, follows the
+    Operations Manager's fixed rules and its own switches."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth.models import User
+        self.admin = Technician.objects.create(
+            user=User.objects.create_user('admin9', password='pass12345'), country=self.country, full_name='Admin',
+            language='en', role=Technician.Role.ADMIN, employment_type='staff',
+        )
+        self.client.login(username='admin9', password='pass12345')
+        self.client.post('/tasks/roles/', {
+            'action': 'new_role', 'new-name': 'General Manager', 'new-name_ar': 'المدير العام',
+            'new-based_on': Technician.Role.OPERATIONS_MANAGER,
+        })
+        from people.models import CustomRole
+        self.coo_role = CustomRole.objects.get(name='General Manager')
+        # Its switches start as the Operations Manager's; the Admin turns Tickets off.
+        allowed = set(RolePermission.objects.filter(role=self.coo_role.key, allowed=True).values_list('permission', flat=True))
+        ops = set(RolePermission.objects.filter(role=Technician.Role.OPERATIONS_MANAGER, allowed=True)
+                  .values_list('permission', flat=True))
+        self.assertEqual(allowed, ops)
+        tickets = {RolePermission.Permission.MANAGE_TICKETS, RolePermission.Permission.OPEN_TICKETS,
+                   RolePermission.Permission.TICKETS_ALL_COUNTRIES, RolePermission.Permission.DECIDE_ESCALATED_TICKETS}
+        RolePermission.objects.filter(role=self.coo_role.key, permission__in=tickets).update(allowed=False)
+
+    def add_coo(self, username='karim'):
+        self.client.login(username='admin9', password='pass12345')
+        self.client.post('/tasks/technicians/new/', {
+            'role': self.coo_role.key, 'full_name': 'Karim COO', 'country': self.country.pk, 'email': f'{username}@example.com',
+            'employment_type': 'staff', 'language': 'en',
+        })
+        coo = Technician.objects.get(full_name='Karim COO')
+        coo.user.set_password('pass12345')
+        coo.user.save()
+        return coo
+
+    def test_the_role_screen_lists_every_role(self):
+        page = self.client.get('/tasks/roles/')
+        keys = [column['key'] for column in page.context['columns']]
+        self.assertIn(Technician.Role.PROJECT_MANAGER, keys)  # missing from the screen before
+        self.assertIn(self.coo_role.key, keys)
+
+    def test_a_coo_is_an_operations_manager_without_tickets(self):
+        coo = self.add_coo()
+        self.assertEqual((coo.role, coo.custom_role, coo.get_role_display()),
+                         (Technician.Role.OPERATIONS_MANAGER, self.coo_role, 'General Manager'))
+        # Only its own switches (docs/access_rules.md, owner 13 Nov 2026): none of the built-in
+        # roles' fixed powers — no stepping in on others' tasks — and its own country.
+        task = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+        from tasks.views import can_step_in
+        self.assertFalse(can_step_in(coo, task))
+        self.assertFalse(coo.reaches_all_countries)
+        # Its own switches: no Tickets.
+        self.client.login(username='karim@example.com', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/tickets/').status_code, 403)
+        self.assertEqual(self.client.get('/tasks/').status_code, 200)
+
+    def test_a_coo_without_tickets_is_never_picked_for_requests(self):
+        from people.models import NotificationSettings
+        from tasks.alarms import new_ticket_people
+        from tasks.forms import escalation_deciders
+        coo = self.add_coo()
+        settings_row = NotificationSettings.load()
+        settings_row.new_ticket_roles = [Technician.Role.OPERATIONS_MANAGER]
+        settings_row.save()
+        self.assertNotIn(coo, list(new_ticket_people(self.country)))
+        support = Technician.objects.create(
+            user=__import__('django.contrib.auth.models', fromlist=['User']).User.objects.create_user('tsm9', password='x'),
+            country=self.country, full_name='TSM', language='en', role=Technician.Role.SUPPORT_MANAGER,
+            employment_type='staff',
+        )
+        self.assertNotIn(coo, list(escalation_deciders(support, self.country)))
+
+    def test_a_role_in_use_cannot_be_deleted(self):
+        self.add_coo()
+        self.client.post('/tasks/roles/', {'action': 'delete_role', 'role': self.coo_role.pk})
+        self.assertTrue(type(self.coo_role).objects.filter(pk=self.coo_role.pk).exists())
+        Technician.objects.filter(custom_role=self.coo_role).update(custom_role=None)
+        self.client.post('/tasks/roles/', {'action': 'delete_role', 'role': self.coo_role.pk})
+        self.assertFalse(type(self.coo_role).objects.filter(pk=self.coo_role.pk).exists())
+        self.assertFalse(RolePermission.objects.filter(role=self.coo_role.key).exists())
+
+
+class StaffAccountSettingsTests(TaskTestCase):
+    """My profile: a new email is confirmed by a link sent there, the old
+    address is told, and the sign-in name follows; signing out of the app
+    on every phone (website) or the other phones (app)."""
+
+    def setUp(self):
+        super().setUp()
+        self.tech_user.username = self.tech_user.email = 'tech1@example.com'
+        self.tech_user.save()
+        self.client.login(username='tech1@example.com', password='pass12345')
+
+    def link_in(self, message):
+        import re
+        return re.search(r'http://testserver(/tasks/my-profile/email/[^/\s]+/)', message.body).group(1)
+
+    def test_a_new_email_changes_only_once_its_link_is_opened(self):
+        from django.contrib.admin.models import LogEntry
+        response = self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'wrong',
+        })
+        self.assertIn('password', response.context['email_form'].errors)
+        self.assertEqual(len(mail.outbox), 0)
+
+        self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'pass12345',
+        })
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')  # not yet
+        self.assertEqual(mail.outbox[-1].to, ['new.tech@example.com'])
+        link = self.link_in(mail.outbox[-1])
+
+        self.client.logout()  # works signed out too
+        self.client.get(link)
+        self.tech_user.refresh_from_db()
+        self.assertEqual((self.tech_user.email, self.tech_user.username), ('new.tech@example.com', 'new.tech@example.com'))
+        self.assertEqual(mail.outbox[-1].to, ['tech1@example.com'])  # the old address is told
+        self.assertIn('new.tech@example.com', mail.outbox[-1].body)
+        self.assertIn('Staff email changed from tech1@example.com to new.tech@example.com',
+                      LogEntry.objects.latest('pk').change_message)
+        # Once only.
+        self.client.get(link)
+        self.assertTrue(self.client.login(username='new.tech@example.com', password='pass12345'))
+        self.assertEqual(User.objects.filter(email='new.tech@example.com').count(), 1)
+
+    def test_a_link_is_refused_once_the_email_is_taken(self):
+        self.client.post('/tasks/my-profile/', {
+            'action': 'change_email', 'email': 'new.tech@example.com', 'password': 'pass12345',
+        })
+        link = self.link_in(mail.outbox[-1])
+        User.objects.create_user('new.tech@example.com', email='new.tech@example.com', password='x')
+        self.client.get(link)
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')
+
+    def test_the_app_needs_the_password_for_a_new_email(self):
+        token = Token.objects.create(user=self.tech_user)
+        auth = {'HTTP_AUTHORIZATION': f'Token {token.key}'}
+        response = self.client.post('/api/me/', {'email': 'new.tech@example.com', 'phone': '0501'}, **auth)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('password', response.json())
+        self.technician.refresh_from_db()
+        self.assertNotEqual(self.technician.phone, '0501')  # nothing saved
+        response = self.client.post('/api/me/', {
+            'email': 'new.tech@example.com', 'password': 'pass12345', 'phone': '0501',
+        }, **auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('new.tech@example.com', response.json()['notice'])
+        self.tech_user.refresh_from_db()
+        self.assertEqual(self.tech_user.email, 'tech1@example.com')
+        self.assertEqual(mail.outbox[-1].to, ['new.tech@example.com'])
+
+    def test_signing_out_of_the_phones(self):
+        token = Token.objects.create(user=self.tech_user)
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[this]', created_at=timezone.now())
+        PushDevice.objects.create(technician=self.technician, token='ExponentPushToken[lost]', created_at=timezone.now())
+        # From the app: the others go; this phone gets a fresh sign-in and keeps its notifications.
+        response = self.client.post('/api/me/sign-out-others/', {'push_token': 'ExponentPushToken[this]'},
+                                    HTTP_AUTHORIZATION=f'Token {token.key}')
+        fresh = response.json()['token']
+        self.assertNotEqual(fresh, token.key)
+        self.assertFalse(Token.objects.filter(key=token.key).exists())
+        self.assertEqual(list(PushDevice.objects.values_list('token', flat=True)), ['ExponentPushToken[this]'])
+        # From the website: every phone.
+        self.client.post('/tasks/my-profile/', {'action': 'sign_out_phones'})
+        self.assertFalse(Token.objects.filter(user=self.tech_user).exists())
+        self.assertFalse(PushDevice.objects.exists())
+
+    def test_the_admin_cannot_give_someone_an_email_already_in_use(self):
+        manager_user = User.objects.create_user('manager9', password='pass12345')
+        manager = Technician.objects.create(user=manager_user, country=self.country, full_name='Manager', language='en',
+                                            role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager9', password='pass12345')
+        self.assertNotIn('email', self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/').context['form'].fields)
+        manager.role = Technician.Role.ADMIN  # their login email: the Admin's alone
+        manager.save(update_fields=['role'])
+        User.objects.create_user('taken@example.com', email='taken@example.com', password='x')
+        self.client.login(username='manager9', password='pass12345')
+        page = self.client.get(f'/tasks/technicians/{self.technician.pk}/edit/')
+        form = page.context['form']
+        data = {name: ('' if form[name].value() is None else form[name].value()) for name in form.fields if name != 'photo'}
+        data.update({'email': 'taken@example.com', 'has_transport': '', 'can_carry_large': ''})
+        response = self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', data)
+        self.assertContains(response, 'An account with this email address already exists.')
+        data['email'] = 'tech.renamed@example.com'
+        self.client.post(f'/tasks/technicians/{self.technician.pk}/edit/', data)
+        self.tech_user.refresh_from_db()
+        self.assertEqual((self.tech_user.email, self.tech_user.username),
+                         ('tech.renamed@example.com', 'tech.renamed@example.com'))
+        self.assertEqual(mail.outbox[-1].to, ['tech1@example.com'])
+
+
+class PartsNeededTests(TaskTestCase):
+    """The spare parts a repair needs, before the visit (tasks.parts_needed):
+    from our stock — held for it — or ordered, the customer reading
+    "Waiting for parts" until they arrive."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = Technician.objects.get(user=self.supervisor_user)
+        self.task = Task.objects.create(
+            task_number='AE-0901', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            responsible_supervisor=self.owner,
+        )
+        self.url = f'/tasks/{self.task.pk}/'
+        self.client.login(username='supervisor1', password='pass12345')
+
+    def add(self, **data):
+        return self.client.post(self.url, {'action': 'add_part_needed', 'quantity': 1, 'source': 'stock', **data})
+
+    def test_a_part_from_stock_is_held_for_the_repair(self):
+        from reference.models import Part
+        from tasks.stock import parts_held
+        Part.objects.create(code='BELT-01', description='Running belt')
+        self.add(product_code='BELT-01', quantity=2)
+        line = self.task.parts_needed.get()
+        self.assertEqual((line.description, line.quantity), ('Running belt', 2))  # the catalogue's description
+        self.assertEqual(parts_held(self.country)['BELT-01'], [(self.task, 2)])
+
+    def test_an_ordered_part_keeps_the_customer_waiting_until_it_arrives(self):
+        from customers.progress import BEING_ARRANGED, progress_steps, visit_progress
+        self.add(product_code='CONSOLE-9', description='Console board', source='ordered', expected_on='2026-11-20')
+        progress = visit_progress(self.task)
+        self.assertIn('20 November', str(progress[0]))
+        self.assertEqual([state for _label, state in progress_steps(progress)][0], 'current')
+        # Scheduled meanwhile: the task page warns.
+        self.task.scheduled_date = timezone.localdate()
+        self.task.save(update_fields=['scheduled_date'])
+        self.assertTrue(self.client.get(self.url).context['scheduled_before_parts'])
+        self.task.scheduled_date = None
+        self.task.save(update_fields=['scheduled_date'])
+        line = self.task.parts_needed.get()
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        self.assertEqual(visit_progress(self.task), BEING_ARRANGED)
+
+    def test_the_warehouse_prepares_them_and_the_report_starts_with_them(self):
+        self.add(product_code='BELT-01', description='Belt', quantity=2)
+        warehouse = User.objects.create_user('wh1', password='pass12345')
+        Technician.objects.create(user=warehouse, country=self.country, full_name='Wael Warehouse', language='en',
+                                  role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff')
+        self.client.login(username='wh1', password='pass12345')
+        page = self.client.get('/tasks/parts-to-prepare/')
+        self.assertEqual([row['task'] for row in page.context['rows']], [self.task])
+        self.client.post(self.url, {'action': 'parts_prepared'})
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.parts_prepared_by, warehouse)
+        self.assertEqual(self.client.get('/tasks/parts-to-prepare/').context['rows'], [])
+        # A technician can't mark them, nor open the list.
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.client.get('/tasks/parts-to-prepare/').status_code, 403)
+        # The lead sees them, and the report's "Parts used" starts with them.
+        TaskAssignment.objects.create(task=self.task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=['status'])
+        self.assertContains(self.client.get(f'/tasks/my/{self.task.pk}/'), 'BELT-01')
+        report = self.client.get(f'/tasks/my/{self.task.pk}/report/')
+        self.assertEqual(report.context['part_formset'].initial[0]['part_code'], 'BELT-01')
+
+    def test_only_its_owner_changes_them(self):
+        self.client.login(username='tech1', password='pass12345')
+        self.assertEqual(self.add(product_code='X-1').status_code, 403)
+        self.assertFalse(self.task.parts_needed.exists())
+
+    def test_the_customer_is_told_once_when_parts_are_ordered(self):
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        self.add(product_code='BELT-01', description='Belt')  # from stock: nothing to tell
+        self.assertEqual(mail.outbox, [])
+        self.add(product_code='CONSOLE-9', description='Console board', source='ordered', expected_on='2026-11-20')
+        (email,) = mail.outbox
+        self.assertEqual(email.to, ['ali@example.com'])
+        self.assertIn('Parts ordered', email.subject)
+        self.assertIn('20 November 2026', email.body)
+        self.assertIn('arrange the visit', email.body)
+        self.add(product_code='MOTOR-2', description='Motor', source='ordered')  # a second one: not again
+        self.assertEqual(len(mail.outbox), 1)
+
+
+class PartsArrivalTests(PartsNeededTests):
+    """The last ordered part in: "All parts are in", once, to the people on
+    the task and the country's warehouse manager; correcting a part is a
+    manager's; a part shipment keeps its own preparing step."""
+
+    def setUp(self):
+        super().setUp()
+        self.warehouse = Technician.objects.create(
+            user=User.objects.create_user('wh2', password='pass12345'), country=self.country, full_name='Wael Warehouse',
+            language='en', role=Technician.Role.WAREHOUSE_MANAGER, employment_type='staff',
+        )
+
+    def arrivals(self):
+        return list(self.task.events.filter(event_type=TaskEvent.EventType.PARTS_ARRIVED))
+
+    def test_told_once_to_the_owner_and_the_warehouse(self):
+        from tasks.models import TaskEventRecipient
+        from tasks.updates import describe
+        self.add(product_code='CONSOLE-9', source='ordered')
+        self.add(product_code='BELT-01', source='ordered')
+        first, second = self.task.parts_needed.all()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {'action': 'part_arrived', 'line': first.pk})
+        self.assertEqual(self.arrivals(), [])  # one still on order
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {'action': 'part_arrived', 'line': second.pk})
+        (event,) = self.arrivals()
+        self.assertEqual(describe(event), 'All parts are in — schedule the visit')
+        told = set(TaskEventRecipient.objects.filter(event=event).values_list('technician', flat=True))
+        self.assertTrue({self.owner.pk, self.warehouse.pk} <= told)
+
+    def test_received_at_the_warehouse_counts(self):
+        from reference.models import TaskType
+        from tasks.parts_needed import check_received
+        self.add(product_code='CONSOLE-9', source='ordered')
+        receiving = Task.objects.create(
+            task_number='AE-0902', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+            task_type=TaskType.objects.create(code='recv9', name='Receiving', name_ar='استلام', category='receiving'),
+        )
+        TaskProduct.objects.create(task=receiving, kind='part', product_code='CONSOLE-9', status='done', for_task=self.task)
+        check_received(receiving, self.supervisor_user)
+        self.assertEqual(len(self.arrivals()), 1)
+
+    def _as_manager(self):
+        manager = User.objects.create_user('manager6', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager6', password='pass12345')
+
+    def _correct(self, line, **fields):
+        data = {'action': 'edit_part_needed', 'line': line.pk, f'part{line.pk}-quantity': 1}
+        data.update({f'part{line.pk}-{name}': value for name, value in fields.items()})
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(self.url, data)
+
+    def test_the_last_ordered_part_corrected_to_stock_is_all_in(self):
+        self.add(product_code='CONSOLE-9', source='ordered')
+        line = self.task.parts_needed.get()
+        self._as_manager()
+        self._correct(line, product_code='CONSOLE-9', source='stock')
+        self.assertEqual(len(self.arrivals()), 1)
+
+    def test_a_part_corrected_to_ordered_tells_the_customer(self):
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        self.add(product_code='BELT-01', description='Belt')
+        self._as_manager()
+        self._correct(self.task.parts_needed.get(), product_code='BELT-01', source='ordered')
+        self.assertIn('Parts ordered', mail.outbox[-1].subject)
+
+    def test_another_code_takes_the_catalogues_description(self):
+        from reference.models import Part
+        Part.objects.create(code='MOTOR-2', description='Drive motor')
+        self.add(product_code='BELT-01', description='Belt')
+        line = self.task.parts_needed.get()
+        self._as_manager()
+        self._correct(line, product_code='MOTOR-2', source='stock')
+        line.refresh_from_db()
+        self.assertEqual(line.description, 'Drive motor')
+
+    def test_dates_in_the_bell_follow_the_readers_language(self):
+        from tasks.updates import describe
+        self.task.scheduled_date = date(2026, 11, 20)
+        self.task.save(update_fields=['scheduled_date'])
+        event = TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.PARTS_ARRIVED,
+                                         occurred_at=timezone.now(), actor=self.supervisor_user)
+        with translation.override('ar'):
+            self.assertNotIn('Nov', describe(event))
+
+    def test_correcting_a_part_is_a_managers_and_it_counts_as_new(self):
+        from tasks.parts_needed import mark_prepared
+        self.add(product_code='BELT-01', source='ordered')
+        line = self.task.parts_needed.get()
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        mark_prepared(self.task, self.supervisor_user)
+        edit = {'action': 'edit_part_needed', 'line': line.pk, f'part{line.pk}-product_code': 'BELT-02',
+                f'part{line.pk}-quantity': 3, f'part{line.pk}-source': 'ordered'}
+        self.assertEqual(self.client.post(self.url, edit).status_code, 403)  # the owner (a supervisor) can't
+        manager = User.objects.create_user('manager5', password='pass12345')
+        Technician.objects.create(user=manager, country=self.country, full_name='Mona Manager', language='en',
+                                  role=Technician.Role.MANAGER, employment_type='staff')
+        self.client.login(username='manager5', password='pass12345')
+        self.client.post(self.url, edit)
+        line.refresh_from_db()
+        self.task.refresh_from_db()
+        self.assertEqual((line.product_code, line.quantity, self.task.parts_prepared_at), ('BELT-02', 3, None))
+        # It arrives again: told again.
+        self.client.post(self.url, {'action': 'part_arrived', 'line': line.pk})
+        self.assertEqual(len(self.arrivals()), 2)
+
+    def test_a_part_shipment_keeps_its_own_preparing_step(self):
+        from reference.models import TaskType
+        from tasks.parts_needed import to_prepare
+        from tasks.shipments import for_customer
+        self.task.task_type = TaskType.objects.create(code='ship9', name='Spare Part Shipment', name_ar='شحن', category='part_shipment')
+        self.task.save(update_fields=['task_type'])
+        self.add(product_code='BELT-01', source='ordered', expected_on='2026-11-20')
+        self.assertIn('20 November', str(for_customer(self.task)['progress'][0]))
+        self.client.post(self.url, {'action': 'part_arrived', 'line': self.task.parts_needed.get().pk})
+        self.assertEqual(to_prepare(self.country), [])
+        self.assertFalse(self.client.get(self.url).context['can_prepare_parts'])
+
+
+class VisitReminderTests(TaskTestCase):
+    """The day before a visit, from 9 AM in its country: one reminder, only
+    for a visit the customer was told of at least a week before
+    (tasks.views.send_visit_reminders, run hourly)."""
+
+    def setUp(self):
+        super().setUp()
+        self.site.contact_email = 'ali@example.com'
+        self.site.save(update_fields=['contact_email'])
+        dubai = ZoneInfo('Asia/Dubai')
+        self.now = datetime(2026, 11, 12, 10, 0, tzinfo=dubai)
+        self.task = Task.objects.create(
+            task_number='AE-0950', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=self.now - timedelta(days=5),
+            created_by=self.supervisor_user, status=Task.Status.ASSIGNED,
+            scheduled_for=datetime(2026, 11, 13, 14, 30, tzinfo=dubai),
+            schedule_notified_at=self.now - timedelta(days=7),
+        )
+
+    def remind(self, now=None):
+        from tasks.views import send_visit_reminders
+        return send_visit_reminders(now or self.now)
+
+    def test_reminded_once_the_day_before(self):
+        self.assertEqual(self.remind(), 1)
+        (email,) = mail.outbox
+        self.assertIn('Reminder: your visit tomorrow', email.subject)
+        self.assertIn('2:30 PM', email.body)
+        self.assertEqual(self.remind(self.now + timedelta(hours=1)), 0)
+
+    def test_not_before_nine_in_the_morning(self):
+        self.assertEqual(self.remind(self.now.replace(hour=8)), 0)
+
+    def test_not_for_a_visit_planned_less_than_a_week_before(self):
+        self.task.schedule_notified_at = self.now - timedelta(days=5)  # 6 days before it
+        self.task.save(update_fields=['schedule_notified_at'])
+        self.assertEqual(self.remind(), 0)
+
+    def test_not_for_a_time_they_were_not_told(self):
+        # Moved after they were told, without telling them again.
+        TaskEvent.objects.create(task=self.task, event_type=TaskEvent.EventType.RESCHEDULED,
+                                 occurred_at=self.now - timedelta(days=1), actor=self.supervisor_user)
+        self.assertEqual(self.remind(), 0)
+
+    def test_not_for_a_visit_they_were_never_told_of(self):
+        self.task.schedule_notified_at = None
+        self.task.save(update_fields=['schedule_notified_at'])
+        self.assertEqual(self.remind(), 0)
+
+
+class SearchAsPeopleTypeTests(TaskTestCase):
+    """Search finds names with Arabic spelling variants folded, and phone numbers by their
+    digits whatever the format (spots/indexes.py: __matches, __phone)."""
+
+    def setUp(self):
+        super().setUp()
+        self.customer.name = 'نادي أحمد الرياضى'
+        self.customer.contact_phone = '+971 50 123 4567'
+        self.customer.save(update_fields=['name', 'contact_phone'])
+        self.task = Task.objects.create(
+            task_number='AE-0777', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+
+    def found(self, text):
+        from tasks.views import search_tasks
+        return list(search_tasks(Task.objects.all(), text))
+
+    def test_arabic_spelling_variants_find_each_other(self):
+        self.assertEqual(self.found('احمد'), [self.task])     # أ written as ا
+        self.assertEqual(self.found('الرياضي'), [self.task])  # ى written as ي
+        self.assertEqual(self.found('Marina'), [self.task])   # English as before
+        self.assertEqual(self.found('marina branch'), [self.task])
+
+    def test_a_phone_number_in_any_format(self):
+        for typed in ('0501234567', '050 123 4567', '+971501234567', '50-123-4567'):
+            self.assertEqual(self.found(typed), [self.task], typed)
+        self.assertEqual(self.found('050'), [])  # too few digits to mean a number
+
+    def test_a_request_by_its_contact_phone(self):
+        from tasks.views import search_tickets
+        ticket = CustomerTicket.objects.create(
+            country=self.country, ticket_number='AE-T0777', customer=self.customer, site=self.site,
+            company_name='Fitness First', contact_name='علي', contact_phone='+971 55 765 4321',
+            description='-', submitted_at=timezone.now(),
+        )
+        self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), '055 765 4321')), [ticket])
+        self.assertEqual(list(search_tickets(CustomerTicket.objects.all(), 'على')), [ticket])
+
+
+class EquipmentGoldenPathTests(TaskTestCase):
+    """The whole equipment chain as people do it — received at the Dubai warehouse,
+    loaded, sent to a gym, installed, what wasn't installed followed up — with the
+    warehouse stock checked at every step and the customer's machine list at the end."""
+
+    def setUp(self):
+        super().setUp()
+        from rest_framework.authtoken.models import Token
+        ours = Customer.objects.create(country=self.country, name='Profit Sports Solutions', segment='other',
+                                       is_internal=True)
+        self.warehouse = Site.objects.create(customer=ours, name='Dubai warehouse', address='Jebel Ali')
+        self.types = {
+            step: TaskType.objects.create(code=step[:4], name=step.title(), name_ar=step, category=step)
+            for step in ('receiving', 'loading', 'installation')
+        }
+        self.manager = Technician.objects.create(
+            user=User.objects.create_user('manager1', password='pass12345'), country=self.country,
+            full_name='Mona Manager', language='en', role=Technician.Role.MANAGER, employment_type='staff',
+        )
+        self.manager_token = Token.objects.create(user=self.manager.user).key
+        self.technician.language = 'en'
+        self.technician.save(update_fields=['language'])
+
+    def stock(self):
+        from tasks.stock import machine_stock
+        return machine_stock(self.warehouse).get('EXCITE-RUN', 0)
+
+    def task(self, number, step, site):
+        task = Task.objects.create(
+            task_number=number, site=site, task_type=self.types[step], brand=self.brand,
+            priority=Task.Priority.NORMAL, source=Task.Source.INTERNAL, billing_type=Task.BillingType.CHARGEABLE,
+            reported_at=timezone.now(), created_by=self.supervisor_user, status=Task.Status.IN_PROGRESS,
+            responsible_supervisor=Technician.objects.get(user=self.supervisor_user),
+        )
+        TaskAssignment.objects.create(task=task, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+        return task
+
+    def file_checklist(self, task, rows):
+        """The lead files the step's report with its checklist (website)."""
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'],
+                        'checklist-TOTAL_FORMS': str(len(rows)), 'checklist-INITIAL_FORMS': str(len(rows)),
+                        'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
+        for index, row in enumerate(rows):
+            payload.update({f'checklist-{index}-{key}': value for key, value in row.items()})
+        if task.task_type.category == 'loading':  # proof of dispatch: the loaded truck
+            payload['dispatch_photo'] = SimpleUploadedFile('truck.png', REAL_PNG, content_type='image/png')
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/my/{task.pk}/report/', payload)
+        self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
+
+    def test_a_loaded_machine_has_its_serial_or_says_it_was_out_of_reach(self):
+        loading = self.task('AE-0102', 'loading', self.warehouse)
+        line = TaskProduct.objects.create(task=loading, product_code='EXCITE-RUN')
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'], 'checklist-TOTAL_FORMS': '1',
+                        'checklist-INITIAL_FORMS': '1', 'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000',
+                        'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+                        'checklist-0-status': 'done', 'checklist-0-serial_number': ''})
+        self.client.login(username='tech1', password='pass12345')
+        response = self.client.post(f'/tasks/my/{loading.pk}/report/', payload)
+        self.assertContains(response, 'Serial not reachable (packed)')
+        self.assertContains(response, 'or tick')
+        line.refresh_from_db()
+        self.assertEqual(line.status, TaskProduct.Status.PENDING)  # nothing saved
+
+    def test_received_loaded_installed_and_followed_up(self):
+        # 1. Received: three treadmills counted in at the warehouse.
+        receiving = self.task('AE-0101', 'receiving', self.warehouse)
+        line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', quantity=3)
+        self.file_checklist(receiving, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done'}])
+        self.assertEqual(self.stock(), 3)
+
+        # 2. The manager plans a loading of two (from the app): they leave stock at once.
+        loading = self.task('AE-0102', 'loading', self.warehouse)
+        planned = self.client.post(f'/api/tasks/{loading.pk}/lines/', json.dumps({'lines': [
+            {'product_code': 'EXCITE-RUN', 'quantity': 2},
+        ]}), content_type='application/json', HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(planned.status_code, 200, planned.content)
+        self.assertEqual(self.stock(), 1)
+
+        # 3. Loaded: one serial read from its sticker, the other packed out of reach.
+        first, second = loading.products.order_by('pk')
+        self.file_checklist(loading, [
+            {'id': first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
+            {'id': second.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': '', 'tested_working': 'on',
+             'serial_unreachable': 'on'},
+        ])
+        self.assertEqual(self.stock(), 1)
+        second.refresh_from_db()
+        self.assertTrue(second.serial_unreachable)
+        from tasks.stock import not_installed_yet
+        self.assertEqual([row['where'] for row in not_installed_yet(self.country)], ['not_sent', 'not_sent'])
+
+        # 4. The manager sends both to the gym's installation.
+        self.client.login(username='manager1', password='pass12345')
+        self.client.post(f'/tasks/{loading.pk}/', {
+            'action': 'create_next_step', 'step': 'installation', 'site': self.site.pk,
+            'lines': [first.pk, second.pk], 'supervisor': self.supervisor_user.technician.pk,
+        })
+        installation = Task.objects.get(previous_task=loading)
+        self.assertEqual(sorted(installation.products.values_list('serial_number', flat=True)), ['', 'TG-1'])
+        self.assertEqual({row['where'] for row in not_installed_yet(self.country)}, {'on_its_way'})
+        installation.status = Task.Status.IN_PROGRESS
+        installation.save(update_fields=['status'])
+        TaskAssignment.objects.create(task=installation, technician=self.technician, role=TaskAssignment.Role.LEAD,
+                                      assigned_at=timezone.now(), is_active=True)
+
+        # 5. Installed: one in place (its serial confirmed), one left for later. The one packed
+        #    out of reach at loading says so to the installer.
+        carried_first, carried_second = installation.products.order_by('source_line_id')
+        self.client.login(username='tech1', password='pass12345')
+        self.assertContains(self.client.get(f'/tasks/my/{installation.pk}/report/'), 'Serial not taken at loading')
+        self.file_checklist(installation, [
+            {'id': carried_first.pk, 'product_code': 'EXCITE-RUN', 'status': 'done', 'serial_number': 'TG-1', 'tested_working': 'on'},
+            {'id': carried_second.pk, 'product_code': 'EXCITE-RUN', 'status': 'later', 'serial_number': ''},
+        ])
+        self.assertTrue(Asset.objects.filter(site=self.site, serial_no='TG-1', code='EXCITE-RUN').exists())
+        # The installed one has left "Loaded, not installed yet"; the other waits at the gym.
+        self.assertEqual([(row['line'], row['where']) for row in not_installed_yet(self.country)], [(second, 'waiting')])
+        self.assertEqual(self.stock(), 1)  # installing doesn't touch the warehouse
+
+        # 6. What wasn't installed is followed up, carrying the machine on.
+        self.client.login(username='supervisor1', password='pass12345')
+        self.client.post(f'/tasks/{installation.pk}/', {'action': 'create_follow_up'})
+        follow_up = Task.objects.get(previous_task=installation)
+        self.assertEqual(follow_up.products.get().source_line, carried_second)
+        self.assertEqual([(row['line'], row['where'], row['task']) for row in not_installed_yet(self.country)],
+                         [(second, 'on_its_way', follow_up)])
+        # The journey of the installed machine, from the warehouse to the gym.
+        self.assertEqual(carried_first.source_line, first)
+
+    def test_beyond_the_warehouse_stock_only_with_a_reason(self):
+        from tasks.stock import machine_stock
+        loading = self.task('AE-0103', 'loading', self.warehouse)
+        url = f'/api/tasks/{loading.pk}/lines/'
+        plan = {'lines': [{'product_code': 'EXCITE-RUN', 'quantity': 2}]}  # nothing in stock
+        refused = self.client.post(url, json.dumps(plan), content_type='application/json',
+                                   HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn('say why', refused.json()['detail'])
+        self.assertFalse(loading.products.exists())  # nothing saved
+        saved = self.client.post(url, json.dumps({**plan, 'stock_reason': 'Two came back from a demo'}),
+                                 content_type='application/json', HTTP_AUTHORIZATION=f'Token {self.manager_token}')
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(machine_stock(self.warehouse)['EXCITE-RUN'], -2)
+        event = loading.events.get(event_type=TaskEvent.EventType.BEYOND_STOCK)
+        self.assertIn('Two came back from a demo', event.note)
+
+    def test_the_machines_opening_stock_from_a_file(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.login(username='manager1', password='pass12345')
+        RolePermission.objects.update_or_create(
+            role=Technician.Role.MANAGER, permission=RolePermission.Permission.VIEW_STOCK, defaults={'allowed': True},
+        )
+        sheet = b'Code,Qty\nEXCITE-RUN,5\nBENCH-01,3\n,4\nBIKE-2,not a number\n'
+        for _ in range(2):  # the same file twice: still 5 and 3
+            self.client.post('/tasks/stock/', {
+                'action': 'import_machines', 'warehouse': self.warehouse.pk,
+                'file': SimpleUploadedFile('opening.csv', sheet, content_type='text/csv'),
+            })
+        from tasks.stock import machine_stock
+        self.assertEqual(machine_stock(self.warehouse), {'EXCITE-RUN': 5, 'BENCH-01': 3})
+        page = self.client.get('/tasks/stock/')
+        self.assertContains(page, 'Loaded, not installed yet')
+        self.assertContains(page, 'opening stock')
+
+    def test_what_went_wrong_is_followed_up_by_the_manager(self):
+        receiving = self.task('AE-0104', 'receiving', self.warehouse)
+        line = TaskProduct.objects.create(task=receiving, product_code='EXCITE-RUN', quantity=4)
+        self.file_checklist(receiving, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done',
+                                         'received': '3', 'rest_status': 'damaged', 'note': 'Crushed in transit'}])
+        # (its missing delivery note is followed up too — a second internal task)
+        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL, description__icontains='Crushed')
+        self.assertEqual(follow_up.assigned_to, self.manager)
+        self.assertIn('AE-0104', follow_up.subject)
+        self.assertIn('Crushed in transit', follow_up.description)
+        # Nothing wrong: nothing to follow up.
+        receiving_ok = self.task('AE-0105', 'receiving', self.warehouse)
+        line_ok = TaskProduct.objects.create(task=receiving_ok, product_code='EXCITE-RUN', quantity=2)
+        Task.objects.filter(pk=receiving_ok.pk).update(delivery_note='tasks/delivery_notes/dn.pdf')  # with its note
+        self.file_checklist(receiving_ok, [{'id': line_ok.pk, 'product_code': 'EXCITE-RUN', 'status': 'done'}])
+        self.assertFalse(CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL, linked_task=receiving_ok).exists())
+
+    def test_one_serial_per_brand(self):
+        other_branch = Site.objects.create(customer=self.customer, name='Downtown Branch', address='Dubai')
+        Asset.objects.create(site=other_branch, brand=self.brand, model_name='Run', serial_no='TG-7')
+        installation = self.task('AE-0106', 'installation', self.site)
+        line = TaskProduct.objects.create(task=installation, product_code='EXCITE-RUN')
+        self.file_checklist(installation, [{'id': line.pk, 'product_code': 'EXCITE-RUN', 'status': 'done',
+                                            'serial_number': 'tg-7', 'tested_working': 'on'}])
+        # Not a second machine: the manager is asked to check it.
+        self.assertEqual(Asset.objects.filter(serial_no__iexact='TG-7').count(), 1)
+        follow_up = CustomerTicket.objects.get(kind=CustomerTicket.Kind.INTERNAL)
+        self.assertIn('Downtown Branch', follow_up.description)
+
+
+    def test_proof_of_dispatch_and_commissioning_are_required(self):
+        payload = TaskSupervisorApprovalTests._report_payload(self)
+        payload.update({'findings': '', 'work_lines': ['bolts'], 'checklist-TOTAL_FORMS': '1',
+                        'checklist-INITIAL_FORMS': '1', 'checklist-MIN_NUM_FORMS': '0', 'checklist-MAX_NUM_FORMS': '1000'})
+        self.client.login(username='tech1', password='pass12345')
+        # A loading without its dispatch photo: not filed.
+        loading = self.task('AE-0107', 'loading', self.warehouse)
+        line = TaskProduct.objects.create(task=loading, product_code='EXCITE-RUN')
+        response = self.client.post(f'/tasks/my/{loading.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-8',
+        })
+        self.assertContains(response, 'Add the dispatch photo')
+        self.assertFalse(WorkReport.objects.filter(task=loading).exists())
+        # An installed machine not ticked "tested — working": not filed.
+        installation = self.task('AE-0108', 'installation', self.site)
+        line = TaskProduct.objects.create(task=installation, product_code='EXCITE-RUN')
+        response = self.client.post(f'/tasks/my/{installation.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-9',
+        })
+        self.assertContains(response, 'assembled, levelled and tested')
+        self.assertFalse(WorkReport.objects.filter(task=installation).exists())
+        # Ticked, with the handover: filed, and the customer's report says so.
+        self.client.post(f'/tasks/my/{installation.pk}/report/', {
+            **payload, 'checklist-0-id': line.pk, 'checklist-0-product_code': 'EXCITE-RUN',
+            'checklist-0-status': 'done', 'checklist-0-serial_number': 'TG-9', 'checklist-0-tested_working': 'on',
+            'handover_demo': 'on', 'handover_manuals': 'on',
+        })
+        report = WorkReport.objects.get(task=installation)
+        self.assertEqual((report.handover_demo, report.handover_manuals, report.handover_packaging), (True, True, False))
+        from reports.pdf import render_visit_report_html
+        html = render_visit_report_html(report, 'en')
+        self.assertIn('Manuals left', html)
+
+    def test_an_installation_site_is_checked_ready(self):
+        installation = self.task('AE-0109', 'installation', self.site)
+        self.client.login(username='supervisor1', password='pass12345')  # its owner
+        installation.scheduled_date = timezone.localdate()
+        installation.status = Task.Status.ASSIGNED
+        installation.save(update_fields=['scheduled_date', 'status'])
+        self.assertContains(self.client.get(f'/tasks/{installation.pk}/'), "confirmed ready yet")
+        self.client.post(f'/tasks/{installation.pk}/', {
+            'action': 'site_readiness', 'space_and_floor': 'on', 'power': 'on', 'access': 'on', 'date_confirmed': 'on',
+        })
+        installation.refresh_from_db()
+        self.assertTrue(installation.site_readiness.is_ready)
+        self.assertNotContains(self.client.get(f'/tasks/{installation.pk}/'), "confirmed ready yet")
+        # From the app: the same checks, and someone who isn't its owner or a manager can't.
+        app = self.client.get(f'/api/tasks/{installation.pk}/', HTTP_AUTHORIZATION=f'Token {self.manager_token}').json()
+        self.assertTrue(app['site_readiness']['is_ready'])
+        self.client.logout()
+        token = Token.objects.create(user=self.tech_user).key
+        refused = self.client.post(f'/api/tasks/{installation.pk}/site-readiness/', {'power': False},
+                                   HTTP_AUTHORIZATION=f'Token {token}')
+        self.assertIn(refused.status_code, (403, 404))
+
+
+
+class DatabaseRulesTests(TaskTestCase):
+    """Rules the database keeps itself, whatever the code (docs/database_design_v2.md)."""
+
+    def setUp(self):
+        super().setUp()
+        self.task = Task.objects.create(
+            task_number='AE-0901', site=self.site, priority=Task.Priority.NORMAL, source=Task.Source.PHONE,
+            billing_type=Task.BillingType.CHARGEABLE, reported_at=timezone.now(), created_by=self.supervisor_user,
+        )
+
+    def refused(self, make):
+        from django.db import IntegrityError, transaction
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            make()
+
+    def test_one_pending_time_change_per_task(self):
+        ask = dict(task=self.task, requested_by=self.supervisor_user.technician, requested_scheduled_for=timezone.now(),
+                   created_at=timezone.now(), status=ScheduleChangeRequest.Status.PENDING)
+        ScheduleChangeRequest.objects.create(**ask)
+        self.refused(lambda: ScheduleChangeRequest.objects.create(**ask))
+        ScheduleChangeRequest.objects.create(**{**ask, 'status': ScheduleChangeRequest.Status.DENIED})  # decided ones: any number
+
+    def test_quantities_of_at_least_one(self):
+        from tasks.models import TaskPartNeeded
+        self.refused(lambda: TaskProduct.objects.create(task=self.task, product_code='X', quantity=0))
+        self.refused(lambda: TaskPartNeeded.objects.create(task=self.task, product_code='X', quantity=0,
+                                                            created_by=self.supervisor_user))

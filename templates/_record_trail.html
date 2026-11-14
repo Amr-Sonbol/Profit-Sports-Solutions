@@ -1,0 +1,10 @@
+{% load i18n %}{% comment %}One quiet line at a record's foot: who created it, who last changed it, the Admin's full history; anything removed folded away (people.templatetags.record_trail).{% endcomment %}
+{% if created or changed or removed or history_url %}
+<p class="record-trail">{% if created %}{% translate "Created by" %} <bdi>{{ created_by }}</bdi> · {{ created.at|date:"j M Y" }}{% endif %}{% if created and changed %} · {% endif %}{% if changed %}<span title="{{ changed_fields }}">{% translate "Last changed by" %} <bdi>{{ changed_by }}</bdi> · {{ changed.at|date:"j M Y" }}</span>{% endif %}{% if history_url %}{% if created or changed %} · {% endif %}<a href="{{ history_url }}">{% translate "History" %}</a>{% endif %}</p>
+{% if removed %}
+<details class="record-trail">
+    <summary>{% blocktranslate count count=removed|length %}{{ count }} item removed{% plural %}{{ count }} items removed{% endblocktranslate %}</summary>
+    <ul>{% for item in removed %}<li><bdi>{{ item.what }}</bdi> — <bdi>{{ item.by }}</bdi> · {{ item.at|date:"j M Y" }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% endif %}

@@ -9,6 +9,27 @@
 </div>
 
 {% if 'view_tasks' in role_permissions %}{% url 'tasks:task_list' as task_list_url %}{% endif %}
+{% if company_summary %}{% with summary=company_summary %}
+{# The whole company at a glance, for whoever watches it (tasks.alarms.company_summary): live counts, each to its list. #}
+{% url 'tasks:ticket_list' as ticket_list_url %}{% url 'customers:customer_list' as customer_list_url %}{% url 'tasks:staff_accounts' as staff_accounts_url %}
+<section class="section">
+    <h2>{% translate "Across the company" %}</h2>
+    <div class="stat-row">
+        {% translate "Blocked over 2 working hours" as label %}{% include "_stat_tile.html" with value=summary.blocked_long label=label url=task_list_url query="alarm=blocked_long&country=all" level=summary.blocked_long|yesno:"critical," %}
+        {% translate "Blocked" as label %}{% include "_stat_tile.html" with value=summary.blocked label=label url=task_list_url query="status=blocked&country=all" level=summary.blocked|yesno:"warning," %}
+        {% translate "No day after 24 working hours" as label %}{% include "_stat_tile.html" with value=summary.unscheduled_overdue label=label url=task_list_url query="alarm=unscheduled&country=all" level=summary.unscheduled_overdue|yesno:"critical," %}
+        {% translate "New tasks, last 24 hours" as label %}{% include "_stat_tile.html" with value=summary.new_tasks_today label=label url=task_list_url query="status=open&country=all" level="" %}
+        {% translate "Reports to review" as label %}{% include "_stat_tile.html" with value=summary.reports_to_review label=label url=task_list_url query="status=pending_supervisor_review&country=all" level="" %}
+        {% translate "Reports to approve" as label %}{% include "_stat_tile.html" with value=summary.reports_to_approve label=label url=task_list_url query="status=completed&country=all" level="" %}
+        {% translate "Reports waiting over 2 working days" as label %}{% include "_stat_tile.html" with value=summary.reports_late label=label url=task_list_url query="status=completed&country=all" level=summary.reports_late|yesno:"critical," %}
+        {% translate "New customer requests" as label %}{% include "_stat_tile.html" with value=summary.new_requests label=label url=ticket_list_url query="status=new&country=all" level="" %}
+        {% translate "Escalated requests" as label %}{% include "_stat_tile.html" with value=summary.escalated_requests label=label url=ticket_list_url query="status=new&country=all" level=summary.escalated_requests|yesno:"warning," %}
+        {% translate "Locked staff logins" as label %}{% include "_stat_tile.html" with value=summary.locked_staff label=label url=staff_accounts_url query="status=locked" level=summary.locked_staff|yesno:"warning," %}
+        {% translate "Locked customer logins" as label %}{% include "_stat_tile.html" with value=summary.locked_customers label=label url=customer_list_url query="portal=locked&country=all" level=summary.locked_customers|yesno:"warning," %}
+    </div>
+</section>
+<h2>{% translate "This country" %}</h2>
+{% endwith %}{% endif %}
 {% if 'assign_tasks' in role_permissions %}{% url 'tasks:technician_availability' as availability_url %}{% endif %}
 <div class="stat-row">
     {% blocktranslate with available=stats.available_count total=stats.technician_count asvar available_value %}{{ available }} of {{ total }}{% endblocktranslate %}

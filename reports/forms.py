@@ -3,13 +3,13 @@ import binascii
 
 from django import forms
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.validators import FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import Part
 
 from .models import CustomerFeedback, WorkReport
 from .phrases import Recommendation, WorkLine
+from spots.uploads import SafeFileValidator
 
 SIGNATURE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -37,7 +37,7 @@ class WorkReportForm(forms.ModelForm):
     signature = forms.FileField(
         required=False, label=_('Customer signature'),
         widget=forms.FileInput(attrs={'accept': 'image/*'}),
-        validators=[FileExtensionValidator(allowed_extensions=SIGNATURE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SIGNATURE_EXTENSIONS)],
     )
     # A signature drawn on screen — the web page's signature pad and the
     # mobile app both send it as a PNG data URL. Turned into the same
@@ -66,6 +66,7 @@ class WorkReportForm(forms.ModelForm):
         model = WorkReport
         fields = [
             'findings', 'work_lines', 'action_taken', 'resolved', 'customer_name',
+            'handover_demo', 'handover_manuals', 'handover_packaging',
             'signature_waived_reason', 'recommendations', 'recommendation',
         ]
         widgets = {

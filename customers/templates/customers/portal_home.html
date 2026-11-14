@@ -24,7 +24,7 @@
     </div>
 
     <section class="section portal-next">
-        <h2>{% translate "Your next visit" %}</h2>
+        <h2>{% if next_visit_under_way %}{% translate "Your visit now" %}{% else %}{% translate "Your next visit" %}{% endif %}</h2>
         {% if next_visit %}
         <a href="{% url 'customers:portal_visit' next_visit.pk %}" class="portal-next__body portal-next__link">
             <div class="portal-next__day">
@@ -39,7 +39,7 @@
             <span class="badge {{ next_visit.progress.1 }}">{{ next_visit.progress.0 }}</span>
         </a>
         {% else %}
-        <p class="empty-state">{% translate "No visit is booked at the moment. We will let you know as soon as one is." %}</p>
+        <p class="empty-state">{% translate "No visit is scheduled at the moment. We will let you know as soon as one is." %}</p>
         {% endif %}
     </section>
 

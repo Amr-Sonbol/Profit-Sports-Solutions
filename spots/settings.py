@@ -97,6 +97,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Where a page may load scripts, styles and images from (spots.middleware).
+    'spots.middleware.ContentSecurityPolicyMiddleware',
     # Serves STATIC_ROOT directly — no nginx in front on Render, so Django
     # itself has to hand out static files efficiently in production. Safe
     # in dev too: STATIC_ROOT is never populated there (collectstatic only
@@ -114,6 +116,8 @@ MIDDLEWARE = [
     'spots.hosts.PortalHostMiddleware',
     # Who is making the request, so an email that fails later can be shown to them (spots.email_failures).
     'spots.email_failures.CurrentUserMiddleware',
+    # Who is making the request and from where, for the audit trail of what it changes (spots.audit).
+    'spots.audit.AuditContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     # An admin viewing the portal as a customer (customers.views.view_as_start):
     # after messages (it uses them), before the language and timezone, so those
@@ -204,7 +208,24 @@ DATABASES = {
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
         'OPTIONS': {'connect_timeout': 5},
+        # Keep each connection for a minute instead of opening a new one per
+        # request (each costs a round trip to a hosted database); checked
+        # before reuse, so one the database dropped is replaced, not used.
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        'CONN_HEALTH_CHECKS': True,
     }
+}
+
+
+# The cache lives in the database (python manage.py createcachetable, run at
+# start-up): every server process shares it and it survives a restart. Used
+# for limits like one "Forgot your password?" email per address in a while
+# (spots.throttle).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'spots_cache',
+    },
 }
 
 
@@ -262,8 +283,26 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 # django.contrib.staticfiles serves STATICFILES_DIRS on the fly instead.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Uploaded files: on Cloudflare R2 once R2_BUCKET is set (spots.storage — private,
+# opened only through the app's own check), else on disk (MEDIA_ROOT). R2's EU
+# jurisdiction by default (docs/hardening_plan.md D9: data location).
+R2_BUCKET = config('R2_BUCKET', default='')
+R2_ACCOUNT_ID = config('R2_ACCOUNT_ID', default='')
+R2_JURISDICTION = config('R2_JURISDICTION', default='eu')
+R2_ENDPOINT = (
+    f"https://{R2_ACCOUNT_ID}.{R2_JURISDICTION + '.' if R2_JURISDICTION else ''}r2.cloudflarestorage.com"
+    if R2_BUCKET else ''
+)
 STORAGES = {
     'default': {
+        'BACKEND': 'spots.storage.PrivateMediaStorage',
+        'OPTIONS': {
+            'bucket_name': R2_BUCKET, 'endpoint_url': R2_ENDPOINT, 'region_name': 'auto',
+            'access_key': config('R2_ACCESS_KEY_ID', default=''),
+            'secret_key': config('R2_SECRET_ACCESS_KEY', default=''),
+            'signature_version': 's3v4',
+        },
+    } if R2_BUCKET else {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
@@ -299,6 +338,14 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@profitsportssolutions.com')
+
+# Customer Service: every email to a customer is signed by the team (tasks/email/_signature.html),
+# its replies go to the team's mailbox, and on the live server it's sent from it
+# (CUSTOMER_FROM_EMAIL: "Profit Sports Solutions <service@profitsports.solutions>", once the domain
+# sends through its own provider — docs/go_live_plan.md); here, from DEFAULT_FROM_EMAIL.
+CUSTOMER_SERVICE_EMAIL = config('CUSTOMER_SERVICE_EMAIL', default='service@profitsports.solutions')
+CUSTOMER_SERVICE_PHONE = config('CUSTOMER_SERVICE_PHONE', default='+971 58 698 1212')
+CUSTOMER_FROM_EMAIL = config('CUSTOMER_FROM_EMAIL', default='') or None
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

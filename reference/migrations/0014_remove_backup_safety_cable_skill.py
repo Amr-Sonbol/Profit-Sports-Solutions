@@ -19,6 +19,9 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('reference', '0013_add_uniform_conduct_area'),
+        # Deleting a skill reaches its technician skills: after their ordering stopped naming
+        # the skill's brand (removed in reference 0010), whatever order a fresh database is built in.
+        ('people', '0017_alter_technicianskill_options_and_more'),
     ]
 
     operations = [

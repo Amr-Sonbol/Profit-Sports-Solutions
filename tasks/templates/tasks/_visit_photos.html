@@ -1,0 +1,97 @@
+{% load i18n %}
+{# The task's machine cards (tasks.views.visit_photo_cards), as in the app: what the customer reported (their words), then serial plate, before, after side by side — all three needed before the report is sent. `editable` (the technician's My task): an empty slot offers the customer's photo ("Use this") and their own "+"; a machine not saved yet is saved here; a new one is added below. Read-only (approving): a missing one is said, in red. Each photo shows once. #}
+{% load static %}
+<div class="visit-photos">
+    {% for card in visit_photos.cards %}
+    <section class="visit-photos__card">
+        <h3 class="visit-photos__title">{% include "_icon.html" with name="dumbbell" %}{{ card.title }}{% if card.serial_no %} <span class="muted" dir="ltr">· {{ card.serial_no }}</span>{% endif %}</h3>
+        {% if card.reported %}{% with machine=card.reported.machine %}
+        <div class="visit-photos__reported">
+            <span class="badge {% if machine.problem == 'not_working' %}badge--bad{% elif machine.problem == 'other' or machine.problem == 'parts' %}badge--muted{% else %}badge--warning{% endif %}">{{ machine.get_problem_display }}</span>
+            {% if machine.description %}<p class="machine-card__words" dir="auto">{{ machine.description|linebreaksbr }}</p>{% endif %}
+        </div>
+        {% endwith %}{% endif %}
+        {% if card.registered %}
+        <div class="visit-photos__row">
+            {% for column in card.columns %}
+            <div class="visit-photos__column">
+                <span class="muted">{{ column.label }}</span>
+                {% for photo in column.photos %}
+                <a href="{{ photo.url }}" target="_blank" rel="noopener">{% if photo.media_type == 'video' %}<span class="visit-photos__img visit-photos__video">▶</span>{% else %}<img src="{{ photo.url }}" alt="{{ column.label }}" class="visit-photos__img" loading="lazy">{% endif %}</a>
+                {% if photo.source == 'customer' %}<span class="field__help">{% blocktranslate with name=photo.uploaded_by.technician.full_name|default:photo.uploaded_by.get_username %}From the customer · confirmed by {{ name }}{% endblocktranslate %}</span>{% endif %}
+                {% endfor %}
+                {% for item in column.offered %}
+                <a href="{{ item.file.url }}" target="_blank" rel="noopener">{% if item.kind == 'video' %}<span class="visit-photos__img visit-photos__video">▶</span>{% else %}<img src="{{ item.file.url }}" alt="{{ column.label }}" class="visit-photos__img" loading="lazy">{% endif %}</a>
+                <span class="field__help">{% if item.added_by_staff %}{% translate "Added by our team" %}{% else %}{% translate "The customer's" %}{% endif %}</span>
+                {% endfor %}
+                {# One decision for the slot: all the customer's photos for it, or the technician's own. #}
+                {% if column.offered %}
+                <form method="post" class="visit-photos__add">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="confirm_customer_file">
+                    <input type="hidden" name="asset" value="{{ card.asset.pk }}">
+                    <input type="hidden" name="slot" value="{{ column.purpose }}">
+                    <button type="submit" class="button">✓ {% if column.offered|length > 1 %}{% blocktranslate count count=column.offered|length %}Use this{% plural %}Use these ({{ count }}){% endblocktranslate %}{% else %}{% translate "Use this" %}{% endif %}</button>
+                </form>
+                {% endif %}
+                {% if editable %}
+                <form method="post" enctype="multipart/form-data" class="visit-photos__add" novalidate data-photo-slot>
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="upload">
+                    <input type="hidden" name="asset" value="{{ card.asset.pk }}">
+                    <input type="hidden" name="purpose" value="{{ column.purpose }}">
+                    <label class="button button--secondary">{% if column.offered %}{% translate "+ Take my own" %}{% else %}+ {{ column.label }}{% endif %}<input type="file" name="file" accept="{% if column.purpose == 'before' %}image/*,video/*{% else %}image/*{% endif %}"{% if column.purpose != 'serial_plate' %} multiple{% endif %} class="visually-hidden" data-photo-slot-input></label>
+                    <noscript><button type="submit" class="button">{% translate "Upload" %}</button></noscript>
+                </form>
+                {% elif not column.photos %}
+                <span class="field__error">{{ column.missing }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% elif card.register_form %}
+        {# A machine the customer reported that isn't on their list: saved here, then its photos. #}
+        <form method="post" class="form-grid visit-photos__register" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="register_machine">
+            {% for field in card.register_form %}{% if field.is_hidden %}{{ field }}{% else %}<label class="field">{{ field.label }} {{ field }}</label>{% endif %}{% endfor %}
+            <div class="field field--submit"><button type="submit" class="button">{% translate "Save this machine" %}</button></div>
+        </form>
+        {% else %}
+        <p class="field__help">{% translate "Not saved yet: save this machine in the report, then add its serial plate, before and after." %}</p>
+        {% endif %}
+        {% if card.also_sent %}
+        <div class="visit-photos__also">
+            <span class="muted">{% translate "Also sent by the customer" %}</span>
+            <div class="media-grid">{% for item in card.also_sent %}<figure class="media-item"><a href="{{ item.file.url }}" target="_blank" rel="noopener">{% if item.kind == 'video' %}<span class="visit-photos__img visit-photos__video">▶</span>{% else %}<img src="{{ item.file.url }}" alt="" class="visit-photos__img" loading="lazy">{% endif %}</a>{% if item.added_by_staff %}<figcaption>{% translate "Added by our team" %}</figcaption>{% elif item.slot == 'serial_plate' %}<figcaption>{% translate "Serial plate" %}</figcaption>{% endif %}</figure>{% endfor %}</div>
+        </div>
+        {% endif %}
+    </section>
+    {% empty %}
+    <p class="empty-state">{% translate "No machines on this task yet." %}</p>
+    {% endfor %}
+    {% if visit_photos.others %}
+    <section class="visit-photos__card">
+        <h3 class="visit-photos__title">{% translate "Other photos" %}</h3>
+        <div class="visit-photos__row">
+            {% for photo in visit_photos.others %}
+            <a href="{{ photo.url }}" target="_blank" rel="noopener" class="visit-photos__column"><img src="{{ photo.url }}" alt="{% translate 'Other photos' %}" class="visit-photos__img" loading="lazy"></a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    {% if visit_photos.new_machine_form %}
+    {# A machine not on the task: added here, then its serial plate, before and after. #}
+    <details class="disclosure">
+        <summary class="button button--secondary">{% translate "+ Add a machine at this branch" %}</summary>
+        <form method="post" class="disclosure__body form-grid" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="register_machine">
+            {% for field in visit_photos.new_machine_form %}{% if field.is_hidden %}{{ field }}{% else %}
+            <div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+            {% endif %}{% endfor %}
+            <div class="field field--submit"><button type="submit" class="button">{% translate "Save this machine" %}</button></div>
+        </form>
+    </details>
+    {% endif %}
+</div>

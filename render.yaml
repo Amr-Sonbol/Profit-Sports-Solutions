@@ -15,29 +15,21 @@
 # push" would happily deploy code the test suite hasn't even seen yet.
 # The GitHub Actions deploy job (gated on the test job passing) is the
 # only thing that triggers a deploy, via the hook above.
+# Sizes (docs/hardening_plan.md D9, researched 13 Nov 2026): a 1 CPU / 2 GB web
+# server (report PDFs need up to ~200 MB each) and a 1 GB database with 20 GB of
+# disk — in the Pro workspace (7 days of point-in-time recovery). Grow when the
+# monitoring says so (the plan's triggers): a second web server, then a larger
+# database with a standby.
 databases:
   - name: spots-db
-    plan: 0.1c-256mb  # "Basic-256mb" on the pricing page, ~$6/mo
+    plan: 0.5c-1g
+    diskSizeGB: 20
     region: frankfurt
 
-services:
-  - name: spots-web
-    type: web
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: 0.5c-512mb  # "Starter" on the pricing page, ~$7/mo
-    region: frankfurt
-    autoDeployTrigger: off
-    healthCheckPath: /accounts/login/
-    dockerCommand: sh -c 'gunicorn spots.wsgi:application --bind 0.0.0.0:$PORT --workers 3'
-    # Ticket attachments, technician photos, task documents, ... — see
-    # docs/database_design_v2.md. Mounted at the app's own MEDIA_ROOT
-    # (spots/settings.py) so uploads survive a redeploy instead of
-    # disappearing with the old container.
-    disk:
-      name: media
-      mountPath: /app/media
-      sizeGB: 5
+# Settings every service shares — fixed values and generated secrets only (a group
+# can't hold the ones typed in on Render: each service asks for those itself).
+envVarGroups:
+  - name: spots-settings
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -51,6 +43,45 @@ services:
         value: "31536000"
       - key: ALLOWED_HOSTS
         value: ""
+      # Errors and slow pages (Sentry, SENTRY_DSN on each service): a tenth of the requests timed.
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
+      # Email (the host, account and sender typed in on each service): without
+      # them every notification is only printed to the log — see tasks/checks.py.
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+
+# Each service also asks, on Render, for: the email server's host, account,
+# password and sender; Sentry's address; and Cloudflare R2's bucket, account and
+# keys (photos, reports and documents — spots.storage; until they're filled in,
+# files stay on the web server's disk).
+services:
+  - name: spots-web
+    type: web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: 1c-2g
+    region: frankfurt
+    autoDeployTrigger: off
+    healthCheckPath: /accounts/login/
+    # Two worker processes of four threads each (a slow upload or PDF doesn't hold
+    # up everyone); 60 s before a stuck request is cut; each worker renewed after
+    # ~1,000 requests, so memory never creeps.
+    dockerCommand: sh -c 'gunicorn spots.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 2 --threads 4 --timeout 60 --max-requests 1000 --max-requests-jitter 100'
+    # Uploads until R2 is set up: mounted at the app's own MEDIA_ROOT so they
+    # survive a redeploy. Once the files are moved to R2 (manage.py
+    # copy_media_to_storage), remove this disk: deploys then have no downtime
+    # and a second web server becomes possible.
+    disk:
+      name: media
+      mountPath: /app/media
+      sizeGB: 5
+    envVars:
+      - fromGroup: spots-settings
       - key: DB_NAME
         fromDatabase:
           name: spots-db
@@ -71,20 +102,122 @@ services:
         fromDatabase:
           name: spots-db
           property: port
-      # Without these every notification email (escalations, ticket
-      # confirmations, feedback requests) is only printed to the log —
-      # see tasks/checks.py. The sync: false ones are filled in on Render.
-      - key: EMAIL_BACKEND
-        value: django.core.mail.backends.smtp.EmailBackend
       - key: EMAIL_HOST
         sync: false
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_USE_TLS
-        value: "True"
       - key: EMAIL_HOST_USER
         sync: false
       - key: EMAIL_HOST_PASSWORD
         sync: false
       - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
+  # The scheduled jobs (docs/go_live_plan.md): every hour, the customers'
+  # day-before visit reminders and the end of expired sign-ins; on the 1st of
+  # each month at 03:00, the Audit log's two-year clean-up.
+  - name: spots-hourly
+    type: cron
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: 0.5c-512mb
+    region: frankfurt
+    schedule: "0 * * * *"
+    dockerCommand: sh -c 'python manage.py send_visit_reminders && python manage.py clearsessions'
+    envVars:
+      - fromGroup: spots-settings
+      - key: DB_NAME
+        fromDatabase:
+          name: spots-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: spots-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: spots-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: spots-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: spots-db
+          property: port
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+
+  - name: spots-monthly
+    type: cron
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: 0.5c-512mb
+    region: frankfurt
+    schedule: "0 3 1 * *"
+    dockerCommand: sh -c 'python manage.py prune_audit --keep-days 730'
+    envVars:
+      - fromGroup: spots-settings
+      - key: DB_NAME
+        fromDatabase:
+          name: spots-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: spots-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: spots-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: spots-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: spots-db
+          property: port
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
         sync: false

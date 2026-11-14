@@ -18,7 +18,7 @@
         <dl class="detail-grid">
             <div>
                 <dt>{% translate "Date" %}</dt>
-                <dd>{% if report %}{{ report.submitted_at|date:"l j F Y" }}{% elif booked %}{{ day|date:"l j F Y" }}{% else %}{% translate "Date to be set" %}{% endif %}</dd>
+                <dd>{% if report %}{{ report.submitted_at|date:"l j F Y" }}{% elif day %}{{ day|date:"l j F Y" }}{% else %}{% translate "Date to be set" %}{% endif %}</dd>
             </div>
             {% if not report and booked and visit.scheduled_for %}
             <div>
@@ -37,7 +37,18 @@
             </div>
             {% endif %}
         </dl>
+        {% if visit.quotation and visit.quote_status == 'sent' %}
+        <div class="review-callout">
+            <p><strong>{% translate "A quotation is waiting for your answer" %}</strong> — {% include "_attachment.html" with file=visit.quotation %}</p>
+            <form method="post" class="button-row">
+                {% csrf_token %}
+                <button type="submit" name="action" value="quote_approve" class="button">{% translate "Approve the quotation" %}</button>
+                <button type="submit" name="action" value="quote_refuse" class="button button--secondary">{% translate "Refuse" %}</button>
+            </form>
+        </div>
+        {% endif %}
         {% if report %}
+        {% include "tasks/_approvals.html" with approvals=visit.approvals staff=False %}
         <p class="portal-actions">
             <a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}" target="_blank" rel="noopener" class="button">{% translate "Download the report (PDF)" %}</a>
             {% if report_changed %}<a href="{% url 'customers:portal_visit_report_pdf' visit.pk %}?version=signed" target="_blank" rel="noopener" class="button button--secondary">{% translate "The version you signed" %}</a>{% endif %}

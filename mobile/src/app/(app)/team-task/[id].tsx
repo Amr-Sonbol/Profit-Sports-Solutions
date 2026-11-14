@@ -9,10 +9,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiRequestError } from '@/api/client';
 import {
-  approveTaskReport, assignTask, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction, uploadFileTo,
+  approveTaskReport, assignTask, type NewBranch, createFollowUp, createNextStep, fetchAssignmentCandidates, fetchTeamTaskDetail, manageTask, type AssignAction, uploadFileTo,
 } from '@/api/endpoints';
 import { CustomerRequest } from '@/components/customer-request';
 import { ShipmentSteps } from '@/components/shipment-steps';
+import { BranchCard } from '@/components/branch-card';
+import { PartsNeededPanel } from '@/components/parts-needed-panel';
+import { SiteReadinessPanel } from '@/components/site-readiness-panel';
+import { VisitPhotos } from '@/components/visit-photos';
 import { TaskActionsPanel } from '@/components/task-actions';
 import { TaskMessages } from '@/components/task-messages';
 import { confirmAction } from '@/confirm';
@@ -23,7 +27,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { hm } from '@/hours';
-import type { Assignment, Candidate, TeamTaskDetail } from '@/types';
+import type { Approval, Assignment, Candidate, TeamTaskDetail } from '@/types';
 import { when } from '@/task-time';
 import { ChoicePicker } from '@/components/choice-picker';
 import { useSession } from '@/context/auth';
@@ -68,13 +72,23 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
   const theme = useTheme();
   const [step, setStep] = useState(nextStep.steps[0]?.value ?? '');
   const [site, setSite] = useState('');
+  const [supervisor, setSupervisor] = useState('');
   const [chosen, setChosen] = useState<number[]>(nextStep.lines.map((line) => line.id));
+  // "+ New branch" (an installation only; whoever creates branches gets customers to choose from).
+  const [newBranch, setNewBranch] = useState<NewBranch | null>(null);
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const sites = nextStep.steps.find((option) => option.value === step)?.sites ?? [];
+  // Who supervises it there: only people in the chosen site's country.
+  const siteCountry = sites.find((option) => option.value === site)?.country;
+  const supervisors = (nextStep.supervisors ?? []).filter((person) => person.country === siteCountry);
 
   const create = async () => {
-    if (!site) {
+    if (newBranch && !(newBranch.customer && newBranch.name.trim() && newBranch.address.trim())) {
+      setError('Choose the customer, and enter the new branch\'s name and address.');
+      return;
+    }
+    if (!site && !newBranch) {
       setError('Choose where the next step is.');
       return;
     }
@@ -84,7 +98,7 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     setIsBusy(true);
     setError('');
     try {
-      const created = await createNextStep(taskId, step, site, chosen);
+      const created = await createNextStep(taskId, step, site, chosen, supervisor, newBranch ?? undefined);
       alert('Sent on', t('{number}, with {count} machines.', { number: created.task_number, count: chosen.length }));
       onCreated(created.id);
     } catch (err) {
@@ -114,7 +128,49 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
           );
         })}
       </ThemedView>
-      <ChoicePicker label="Where" choices={sites} value={site} onChange={setSite} placeholder="Country — customer — site" />
+      <ChoicePicker
+        label="Where" choices={sites} value={site} placeholder="Country — customer — site"
+        onChange={(value) => {
+          setSite(value);
+          setSupervisor('');
+        }}
+      />
+      {step === 'installation' && (nextStep.customers ?? []).length ? (
+        newBranch ? (
+          <ThemedView style={styles.manageBox}>
+            <ThemedText type="smallBold">New branch</ThemedText>
+            <ChoicePicker
+              label="Customer" choices={nextStep.customers ?? []} value={newBranch.customer}
+              onChange={(value) => setNewBranch({ ...newBranch, customer: value })}
+            />
+            {(['name', 'address', 'contact', 'phone'] as const).map((key) => (
+              <TextInput
+                key={key} value={newBranch[key]} onChangeText={(value) => setNewBranch({ ...newBranch, [key]: value })}
+                placeholder={t(BRANCH_FIELDS[key])} placeholderTextColor={theme.textSecondary}
+                style={{ borderWidth: 1, borderRadius: 8, padding: 10, color: theme.text, borderColor: theme.backgroundSelected }}
+              />
+            ))}
+            <ThemedText type="small" themeColor="textSecondary">The machines go to this new branch; the customer is told by email.</ThemedText>
+            <SecondaryButton label="Cancel the new branch" onPress={() => setNewBranch(null)} />
+          </ThemedView>
+        ) : (
+          <SecondaryButton
+            label="+ New branch"
+            onPress={() => setNewBranch({ customer: '', name: '', address: '', contact: '', phone: '' })}
+          />
+        )
+      ) : null}
+      {site && nextStep.supervisors ? (
+        <>
+          <ChoicePicker
+            label="Supervisor there" choices={supervisors} value={supervisor} onChange={setSupervisor} optional
+            placeholder="Same as this task (same country only)"
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Going to another country? Choose who supervises it there.
+          </ThemedText>
+        </>
+      ) : null}
       <ThemedText type="small" themeColor="textSecondary">The machines to carry, with their serials and colours:</ThemedText>
       {nextStep.lines.map((line) => {
         const on = chosen.includes(line.id);
@@ -133,6 +189,9 @@ function NextStepPanel({ taskId, nextStep, onCreated }: {
     </ThemedView>
   );
 }
+
+// The new branch's fields, as their placeholders say them.
+const BRANCH_FIELDS = { name: 'Branch name', address: 'Address', contact: 'Contact name', phone: 'Contact phone' } as const;
 
 /** A file's own name from its address: ".../ticket_attachments/3f9c/IMG_0001.jpg?x" → "IMG_0001.jpg". */
 function fileName(url: string): string {
@@ -322,6 +381,9 @@ export default function TeamTaskScreen() {
   }
 
   const canApprove = task.can_supervisor_approve || task.can_manager_approve;
+  // Photos show as pictures by the report (VisitPhotos) once there is one; the files list has the rest.
+  const files = task.report || canApprove
+    ? task.attachments.filter((item) => item.media_type !== 'photo') : task.attachments;
 
   return (
     <ThemedView style={styles.container}>
@@ -333,33 +395,13 @@ export default function TeamTaskScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <OfflineNotice offline={offline} />
           <ThemedText type="title" style={styles.taskNumber}>{task.task_number}</ThemedText>
-          <ThemedText type="subtitle" style={styles.customer}>{task.customer_name}</ThemedText>
-          <ThemedText themeColor="textSecondary">{task.site_name} — {task.site_address}</ThemedText>
+          {/* The branch first, set apart: who and where (components/branch-card). */}
+          <BranchCard task={task} />
           <ThemedView style={styles.quickRow}>
             <Ionicons name="time-outline" size={18} color={theme.text} />
             <ThemedText type="smallBold">{when(task)}</ThemedText>
           </ThemedView>
           <ThemedView style={styles.quickRow}>
-            {task.directions_url ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(task.directions_url!)}
-              >
-                <Ionicons name="navigate-outline" size={16} color={theme.primary} />
-                <ThemedText type="small" themeColor="primary">Directions</ThemedText>
-              </TouchableOpacity>
-            ) : null}
-            {task.site_contact_phone ? (
-              <TouchableOpacity
-                style={[styles.quickButton, { borderColor: theme.primary }]}
-                onPress={() => Linking.openURL(`tel:${task.site_contact_phone}`)}
-              >
-                <Ionicons name="call-outline" size={16} color={theme.primary} />
-                <ThemedText type="small" themeColor="primary" numberOfLines={1}>
-                  Call {task.site_contact_name || task.site_contact_phone}
-                </ThemedText>
-              </TouchableOpacity>
-            ) : null}
             {me?.permissions?.includes('create_tasks') ? (
               <TouchableOpacity
                 style={[styles.quickButton, { borderColor: theme.primary }]}
@@ -394,16 +436,38 @@ export default function TeamTaskScreen() {
             <Row label="Priority" value={task.priority_display} />
             {task.task_type_name ? <Row label="Type" value={task.task_type_name} /> : null}
             {task.brand_name ? <Row label="Brand" value={task.brand_name} /> : null}
-            {task.required_skill_name ? <Row label="Required skill" value={task.required_skill_name} /> : null}
+            {task.about_display ? (
+              <Row label="About" value={task.done_by === 'subcontractor'
+                ? `${task.about_display} · ${task.subcontractor_name}` : task.about_display} />
+            ) : null}
+            {task.created_by ? <Row label="Created by" value={creatorText(task.created_by)} /> : null}
+            {task.last_changed ? <Row label="Last changed by" value={creatorText(task.last_changed)} /> : null}
             {task.responsible_supervisor_name ? (
               <Row label="Supervisor" value={task.responsible_supervisor_name} />
             ) : null}
             {task.estimated_hours ? <Row label="Estimated hours" value={hm(task.estimated_hours)} /> : null}
           </ThemedView>
 
+          {/* An installation's site checked ready before the truck goes (as on the website). */}
+          {task.site_readiness ? (
+            <SiteReadinessPanel taskId={task.id} readiness={task.site_readiness} onChanged={load} />
+          ) : null}
+
+          {/* The spare parts this repair needs (as on the website): its owner adds them; the warehouse prepares them. */}
+          {task.parts_needed?.length || task.can_change_parts ? (
+            <PartsNeededPanel
+              taskId={task.id} parts={task.parts_needed ?? []} prepared={Boolean(task.parts_prepared)}
+              canChange={Boolean(task.can_change_parts)} canEdit={Boolean(task.can_edit_parts)}
+              canPrepare={Boolean(task.can_prepare_parts)} onChanged={load}
+            />
+          ) : null}
+
           {task.from_request ? (
-            // What the customer reported, machine by machine, with their photos.
-            <CustomerRequest request={task.from_request} directionsUrl={task.directions_url} />
+            // What the customer reported; once there's a report, each machine is on its card above Approve.
+            <CustomerRequest
+              request={task.from_request}
+              hideMachines={Boolean(task.report || canApprove) && (task.machine_cards ?? []).length > 0}
+            />
           ) : task.description ? (
             <ThemedView style={styles.section}>
               <ThemedText type="smallBold">Description</ThemedText>
@@ -428,10 +492,10 @@ export default function TeamTaskScreen() {
             </ThemedView>
           ) : null}
 
-          {task.attachments.length > 0 || canAddDocuments ? (
+          {files.length > 0 || canAddDocuments ? (
             <ThemedView style={styles.section}>
-              <ThemedText type="smallBold">Photos and files ({task.attachments.length})</ThemedText>
-              {task.attachments.map((attachment) => (
+              <ThemedText type="smallBold">{t('Files ({count})', { count: files.length })}</ThemedText>
+              {files.map((attachment) => (
                 <TouchableOpacity
                   key={attachment.id} style={styles.attachment} onPress={() => Linking.openURL(attachment.url)}
                 >
@@ -531,16 +595,10 @@ export default function TeamTaskScreen() {
                 >
                   <ThemedText style={!candidate.is_available ? styles.unavailable : undefined}>
                     {candidate.full_name}
-                    {candidate.skill_level != null ? ` — ${t('level {level}', { level: candidate.skill_level ?? '' })}` : ''}
                     {candidate.visiting_from ? ` (${t('visiting from {country}', { country: candidate.visiting_from ?? '' })})` : ''}
                   </ThemedText>
-                  <ThemedText themeColor="textSecondary" type="small">
-                    {!candidate.is_available
-                      ? 'Unavailable'
-                      : candidate.next_task_number
-                        ? `Next: ${candidate.next_task_number}${candidate.next_task_at
-                          ? ` ${t('on {date}', { date: new Date(candidate.next_task_at).toLocaleString(locale()) })}` : ''}`
-                        : 'No bookings'}
+                  <ThemedText type="small" style={{ color: DAY_DOT[candidate.day_state] }}>
+                    {'● '}<ThemedText themeColor="textSecondary" type="small">{candidate.day_text}</ThemedText>
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -582,6 +640,17 @@ export default function TeamTaskScreen() {
               <Row label="Resolved" value={task.report.resolved ? 'Yes' : 'No'} />
               <Row label="Time on site" value={hm(task.report.labour_hours)} />
               <Row label="Signed by" value={task.report.customer_name || '—'} />
+              {task.approvals?.reviewed ? (
+                <Row label="Reviewed by" value={approvalText(task.approvals.reviewed)} />
+              ) : null}
+              {task.approvals?.approved ? (
+                <Row label="Approved by" value={approvalText(task.approvals.approved)} />
+              ) : null}
+              {task.approvals?.waiting === 'review' ? (
+                <Row label="Approvals" value={t("Waiting for the supervisor's review")} />
+              ) : task.approvals?.waiting === 'approval' ? (
+                <Row label="Approvals" value={t('Waiting for the final approval')} />
+              ) : null}
               <ThemedText type="small" themeColor="textSecondary">Findings</ThemedText>
               <ThemedText>{task.report.findings}</ThemedText>
               {task.report.action_taken ? (
@@ -600,6 +669,16 @@ export default function TeamTaskScreen() {
                   ))}
                 </>
               ) : null}
+            </ThemedView>
+          ) : null}
+
+          {/* The photos, for whoever checks the work: before beside after, right above Approve. */}
+          {task.report || canApprove ? (
+            <ThemedView style={styles.section}>
+              <ThemedText type="smallBold">Photos</ThemedText>
+              <VisitPhotos
+                cards={task.machine_cards ?? []} attachments={task.attachments} reported={task.from_request?.machines}
+              />
             </ThemedView>
           ) : null}
 
@@ -794,6 +873,29 @@ function errorText(err: ApiRequestError): string {
   }
   return err.message;
 }
+
+/** "Sara Super (Supervisor) · 13 Nov 2026, 10:05" — who reviewed or approved the report. */
+function approvalText(person: Approval): string {
+  const when = new Date(person.at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const role = person.role ? ` (${person.role})` : '';
+  const instead = person.instead ? ` — ${t('Instead of the Technical Support Manager')}` : '';
+  return `${person.name}${role} · ${when}${instead}`;
+}
+
+/** "Sara Super (Supervisor) · 13 Nov 2026, 10:05" — who created the task. */
+function creatorText(person: { name: string; role: string; at: string | null }): string {
+  const when = person.at ? ` · ${new Date(person.at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })}` : '';
+  return `${person.name}${person.role ? ` (${person.role})` : ''}${when}`;
+}
+
+// A person's day at a glance: the dot's colour (the words come from the server, translated).
+const DAY_DOT: Record<string, string> = {
+  free: '#2E7D32', busy: '#B26A00', clash: '#C62828', off: '#C62828', no_day: '#9E9E9E',
+};
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

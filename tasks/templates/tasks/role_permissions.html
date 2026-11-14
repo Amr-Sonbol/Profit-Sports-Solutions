@@ -12,6 +12,71 @@
     {% translate "Permissions for each role. Self-service technician screens (My schedule, My skills, etc.) are not listed here; they remain available to all signed-in technicians regardless of role." %}
 </p>
 
+{# A new role, based on a built-in one: its switches start as that role's (tasks.views.role_permissions). #}
+<div class="section">
+    <h2>{% translate "Your roles" %}</h2>
+    <p class="field__help">{% translate "Make a role for a position the built-in roles don't fit, such as a COO: choose the role it's based on, then change its switches below. Its people follow the fixed rules of the role it's based on." %}</p>
+    {% if custom_rows %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% translate "Name" %}</th>
+                    <th>{% translate "Based on" %}</th>
+                    <th>{% translate "People" %}</th>
+                    <th><span class="visually-hidden">{% translate "Actions" %}</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in custom_rows %}{% with role=row.role %}
+                <tr>
+                    <td>
+                        <form method="post" class="row-actions__inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="rename_role">
+                            <input type="hidden" name="role" value="{{ role.pk }}">
+                            {{ row.form.name }} {{ row.form.name_ar }}
+                            <button type="submit" class="button button--secondary">{% translate "Rename" %}</button>
+                        </form>
+                    </td>
+                    <td>{{ role.get_based_on_display }}</td>
+                    <td>{{ role.people_count }}</td>
+                    <td>
+                        {% if not role.people_count %}
+                        <form method="post" data-confirm="{% blocktranslate with name=role.name %}Delete the role “{{ name }}”?{% endblocktranslate %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_role">
+                            <input type="hidden" name="role" value="{{ role.pk }}">
+                            {% blocktranslate asvar delete_label with name=role.name %}Delete {{ name }}{% endblocktranslate %}
+                            <button type="submit" class="machine-card__remove portal-person__remove" title="{{ delete_label }}">
+                                {% include "_icon.html" with name="x" %}<span class="visually-hidden">{{ delete_label }}</span>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endwith %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    <details class="disclosure portal-add"{% if new_role_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "+ New role" %}</summary>
+        <form method="post" class="disclosure__body portal-add__form" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="new_role">
+            {% for field in new_role_form %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <button type="submit" class="button">{% translate "Add role" %}</button>
+        </form>
+    </details>
+</div>
+
 <form method="post" novalidate>
     {% csrf_token %}
     <input type="hidden" name="action" value="save_permissions">
@@ -20,8 +85,8 @@
             <thead>
                 <tr>
                     <th>{% translate "Permission" %}</th>
-                    {% for role in roles %}
-                    <th>{{ role.label }}</th>
+                    {% for column in columns %}
+                    <th>{{ column.label }}{% if column.custom %}<span class="compact-table__sub">{% blocktranslate with base=column.custom.get_based_on_display %}based on {{ base }}{% endblocktranslate %}</span>{% endif %}</th>
                     {% endfor %}
                 </tr>
             </thead>

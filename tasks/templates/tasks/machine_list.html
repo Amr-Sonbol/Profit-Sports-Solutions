@@ -70,4 +70,19 @@
     <p class="empty-state">{% translate "There are no machines on record in your country. A machine is added the first time a technician records it in a work report." %}</p>
     {% endif %}
 </div>
+{% if can_recall %}
+<details class="section">
+    <summary>{% blocktranslate with count=page_obj.paginator.count %}A factory recall for these {{ count }} machines{% endblocktranslate %}</summary>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="recall">
+        <div class="field field--wide">
+            <label for="recall-notice">{% translate "The factory's notice" %}</label>
+            <textarea name="notice" id="recall-notice" rows="3" required></textarea>
+            <p class="field__help">{% translate "One inspection visit per branch is created for every machine this search finds, with their serial numbers." %}</p>
+        </div>
+        <div class="form-actions"><button type="submit" class="button" data-confirm="{% translate "Create one visit per branch for these machines?" %}">{% translate "Create the visits" %}</button></div>
+    </form>
+</details>
+{% endif %}
 {% endblock %}

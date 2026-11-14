@@ -38,7 +38,7 @@
                         <a href="{% url 'tasks:technician_detail' row.technician.pk %}">{{ row.technician.full_name }}</a>
                     </td>
                     <td>{{ row.technician.country.display_name }}</td>
-                    <td>{{ row.technician.get_role_display }}</td>
+                    <td>{{ row.technician.title }}</td>
                     <td>
                         {% if row.certification.is_certified %}
                         <span class="badge badge--good">{% translate "Certified" %}</span>

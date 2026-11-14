@@ -1,13 +1,19 @@
 from django.contrib import admin
 
-from .models import Asset, Customer, Site
+from .models import Asset, Customer, PortalUser, Site
 
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'country', 'segment', 'contact_name', 'contact_phone', 'contact_email', 'user', 'is_active']
-    search_fields = ['name', 'code', 'contact_name', 'contact_email', 'user__username']
+    list_display = ['name', 'code', 'country', 'segment', 'contact_name', 'contact_phone', 'contact_email', 'is_active']
+    search_fields = ['name', 'code', 'contact_name', 'contact_email', 'portal_users__user__username']
     list_filter = ['country', 'segment', 'is_active']
+
+
+@admin.register(PortalUser)
+class PortalUserAdmin(admin.ModelAdmin):
+    list_display = ['user', 'customer', 'must_change_password', 'invited_at']
+    search_fields = ['user__username', 'user__first_name', 'customer__name']
 
 
 @admin.register(Site)

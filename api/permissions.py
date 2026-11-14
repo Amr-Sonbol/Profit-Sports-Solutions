@@ -23,7 +23,7 @@ def has_role_permission(request, permission):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return False
-    return RolePermission.objects.filter(role=technician.role, permission=permission, allowed=True).exists()
+    return RolePermission.objects.filter(role=technician.permission_role, permission=permission, allowed=True).exists()
 
 
 def require_role_permission(permission):

@@ -46,6 +46,10 @@ class WorkReport(models.Model):
     )
     recommendation = models.TextField(_('other recommendation'), blank=True)
     resolved = models.BooleanField(_('resolved'))
+    # An installation's handover to the customer (on its report and its PDF).
+    handover_demo = models.BooleanField(_('shown to the customer how to use them'), default=False)
+    handover_manuals = models.BooleanField(_('manuals left with the customer'), default=False)
+    handover_packaging = models.BooleanField(_('packaging taken away'), default=False)
     labour_hours = models.DecimalField(_('labour hours'), max_digits=5, decimal_places=2)
     customer_name = models.CharField(_('customer name'), max_length=150, help_text=_('who signed'))
     signature_url = models.URLField(_('signature URL'), blank=True)
@@ -149,6 +153,7 @@ class PartUsed(models.Model):
         verbose_name = _('part used')
         verbose_name_plural = _('parts used')
         ordering = ['report', 'part_code']
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='part_used_quantity_at_least_one')]
 
     def __str__(self):
         return f'{self.report} — {self.part_code}'

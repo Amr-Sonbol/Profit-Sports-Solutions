@@ -1,10 +1,12 @@
+from django.utils import timezone
+from django.db.models import Q
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import Country
 
 from .models import RolePermission, Technician
-from .permissions import get_active_country
+from .permissions import allowed_permissions, get_active_country
 
 
 def notification_bell(request):
@@ -27,18 +29,15 @@ def notification_bell(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return {}
-    can_manage_tickets = RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.MANAGE_TICKETS, allowed=True,
-    ).exists()
+    allowed = allowed_permissions(request, technician)  # read once per page, shared with the menu
+    can_manage_tickets = RolePermission.Permission.MANAGE_TICKETS in allowed
     from tasks.models import TaskMessageRecipient, TaskNotification, TicketNotification
     country = get_active_country(request)
     items = []
     if can_manage_tickets:
         unseen_tickets = TicketNotification.objects.filter(seen_at__isnull=True).select_related('ticket__country')
         # The company-wide roles hear of every country's tickets, whichever country they're looking at.
-        if not RolePermission.objects.filter(
-            role=technician.role, permission=RolePermission.Permission.TICKETS_ALL_COUNTRIES, allowed=True,
-        ).exists():
+        if RolePermission.Permission.TICKETS_ALL_COUNTRIES not in allowed:
             unseen_tickets = unseen_tickets.filter(ticket__country=country)
         # A new ticket: only to whoever is told of it, as by its email (tasks.alarms.new_ticket_people —
         # the chosen roles, or the admins when nobody of those reaches its country);
@@ -60,7 +59,7 @@ def notification_bell(request):
     if technician.is_manager_tier:
         unseen_tasks = TaskNotification.objects.filter(
             seen_at__isnull=True, task__site__customer__country=country,
-        ).select_related('task')
+        ).select_related('task__site')  # the bell names each one's branch
         items += [
             {'kind': 'new_task', 'created_at': notification.created_at, 'task': notification.task}
             for notification in unseen_tasks
@@ -82,13 +81,28 @@ def notification_bell(request):
             escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
         ).select_related('ticket')
     ]
-    from tasks.alarms import overdue_unscheduled_tasks
+    from tasks.alarms import company_unscheduled_tasks, long_blocked_tasks, overdue_unscheduled_tasks, watches_company
     # One entry for them all, so a busy day of them never pushes newer news (a new ticket) out of the ten shown.
-    overdue = overdue_unscheduled_tasks(country, technician)
+    # Whoever watches the whole company hears of every country's, whichever one they're looking at.
+    overdue = (company_unscheduled_tasks(technician) if watches_company(technician)
+               else overdue_unscheduled_tasks(country, technician))
+    # The Operations Manager hears later than the Technical Support Manager (tasks.alarms.ALARM_HOURS).
+    later = technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO)
     if len(overdue) == 1:
-        items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0]})
+        items.append({'kind': 'unscheduled_overdue', 'created_at': overdue[0].created_at, 'task': overdue[0],
+                      'later': later})
     elif overdue:
-        items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue)})
+        items.append({'kind': 'unscheduled_overdue_many', 'created_at': overdue[0].created_at, 'count': len(overdue),
+                      'later': later})
+    # Tasks still blocked on site after 2 working hours — for whoever watches the company
+    # (their supervisor heard at once); live, gone once unblocked.
+    blocked = long_blocked_tasks(technician)
+    if len(blocked) == 1:
+        items.append({'kind': 'blocked_long', 'created_at': blocked[0].blocked_since, 'task': blocked[0],
+                      'later': later})
+    elif blocked:
+        items.append({'kind': 'blocked_long_many', 'created_at': blocked[0].blocked_since, 'count': len(blocked),
+                      'later': later})
     from tasks.alarms import late_reports
     late = late_reports(technician)
     if len(late) == 1:
@@ -104,22 +118,77 @@ def notification_bell(request):
             assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
         ).exclude(kind=CustomerTicket.Kind.CUSTOMER)
     ]
+    # Follow-ups past their due date (docs/scenarios.md): whoever it's for and whoever opened it;
+    # still open three days later, whoever watches the company (the Operations Manager, the COO).
+    from datetime import timedelta
+
+    from tasks.alarms import watches_company
+    today = timezone.localdate()
+    overdue = CustomerTicket.objects.filter(
+        kind=CustomerTicket.Kind.INTERNAL, status=CustomerTicket.Status.NEW, due_on__lt=today,
+    )
+    mine = overdue.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
+    if watches_company(technician) and technician.role != technician.Role.SUPPORT_MANAGER:
+        mine = mine | overdue.filter(due_on__lt=today - timedelta(days=3))
+    mine = list(mine.distinct().order_by('due_on')[:10])
+    if mine:
+        items.append({'kind': 'follow_ups_overdue', 'created_at': timezone.now(), 'count': len(mine), 'ticket': mine[0]})
+    # Machines lent out and past their due-back date; branches whose warranty ends within 30
+    # days (docs/scenarios.md B, H) — whoever edits customers. Installations in the next 3 days
+    # whose site isn't confirmed ready — their owner (C10).
+    from customers.models import Asset, Site
+    from tasks.models import Task
+    if RolePermission.Permission.MANAGE_CUSTOMERS in allowed_permissions(request, technician):
+        loans = Asset.objects.filter(site__customer__country=country, on_loan_until__lt=today).count()
+        if loans:
+            items.append({'kind': 'loans_due', 'created_at': timezone.now(), 'count': loans})
+        ending = Site.objects.filter(customer__country=country, customer__is_active=True,
+                                     warranty_until__gte=today, warranty_until__lte=today + timedelta(days=30)).count()
+        if ending:
+            items.append({'kind': 'warranty_ending', 'created_at': timezone.now(), 'count': ending})
+    from tasks.equipment import is_installation, site_is_ready
+    soon = [task for task in Task.objects.filter(
+        responsible_supervisor=technician, task_type__category='installation',
+        status__in=['new', 'assigned', 'accepted'], scheduled_date__isnull=False,
+        scheduled_date__gte=today, scheduled_date__lte=today + timedelta(days=3),
+    ).select_related('task_type', 'site') if is_installation(task) and not site_is_ready(task)]
+    if soon:
+        items.append({'kind': 'readiness_due', 'created_at': timezone.now(), 'count': len(soon), 'task': soon[0]})
+    # Quotations sent a week ago with no answer (docs/scenarios.md E): their task's owner.
+    from datetime import timedelta as _days
+    from tasks.models import Task
+    quotes = Task.objects.filter(
+        responsible_supervisor=technician, quote_status=Task.QuoteStatus.SENT,
+        quote_status_at__lt=timezone.now() - _days(days=7),
+    ).count()
+    if quotes:
+        items.append({'kind': 'quotes_waiting', 'created_at': timezone.now(), 'count': quotes})
+    # Ordered parts past their expected date (docs/scenarios.md E): the task's owner, and whoever
+    # prepares parts in that country — until they arrive.
+    from tasks.models import TaskPartNeeded
+    from tasks.parts_needed import can_prepare
+    late_parts = TaskPartNeeded.objects.filter(
+        source=TaskPartNeeded.Source.ORDERED, arrived_at__isnull=True, expected_on__lt=today,
+    ).exclude(task__status__in=['closed', 'cancelled'])
+    late_parts = late_parts.filter(task__site__customer__country=country) if can_prepare(technician) else \
+        late_parts.filter(task__responsible_supervisor=technician)
+    late_count = late_parts.values('task').distinct().count()
+    if late_count:
+        items.append({'kind': 'parts_late', 'created_at': timezone.now(), 'count': late_count})
     # Customer logins locked out right now — live, so they clear the moment
     # someone unlocks them (or the lockout times out on its own).
-    if RolePermission.objects.filter(
-        role=technician.role, permission=RolePermission.Permission.CUSTOMER_ACCOUNTS, allowed=True,
-    ).exists():
+    if RolePermission.Permission.CUSTOMER_ACCOUNTS in allowed:
         from django.db.models.functions import Lower
 
         from customers.accounts import locked_usernames
-        from customers.models import Customer
+        from customers.models import PortalUser
         locked = locked_usernames()
         if locked:
             items += [
-                {'kind': 'customer_locked', 'created_at': locked[customer.login], 'customer': customer}
-                for customer in Customer.objects.annotate(login=Lower('user__username')).filter(
-                    login__in=list(locked), is_active=True,
-                )
+                {'kind': 'customer_locked', 'created_at': locked[person.login], 'customer': person.customer}
+                for person in PortalUser.objects.annotate(login=Lower('user__username')).filter(
+                    login__in=list(locked), customer__is_active=True,
+                ).select_related('customer')
             ]
     # The phone app's errors not looked at yet — the admins'; gone once the list is opened.
     if technician.role == Technician.Role.ADMIN:
@@ -147,7 +216,7 @@ def notification_bell(request):
     from tasks.updates import describe
     unseen_updates = TaskEventRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, event__task__site__customer__country=country,
-    ).select_related('event__task__site', 'event__actor__technician')
+    ).select_related('event__task__site__customer__country', 'event__actor__technician')  # its date in the task's country
     items += [
         {
             'kind': 'task_update', 'created_at': recipient.event.occurred_at, 'task': recipient.event.task,
@@ -159,7 +228,7 @@ def notification_bell(request):
     ]
     unseen_messages = TaskMessageRecipient.objects.filter(
         technician=technician, seen_at__isnull=True, message__task__site__customer__country=country,
-    ).select_related('message__task', 'message__sent_by__technician')
+    ).select_related('message__task__site', 'message__sent_by__technician')
     items += [
         {
             'kind': 'task_message', 'created_at': recipient.message.sent_at, 'task': recipient.message.task,
@@ -177,7 +246,7 @@ def notification_bell(request):
     items.sort(key=lambda item: item['created_at'], reverse=True)
     # The overdue-scheduling alarm is the oldest item by nature — kept on
     # top so it's never pushed out of the ten shown by newer ones.
-    items.sort(key=lambda item: not item['kind'].startswith(('unscheduled_overdue', 'report_late')))
+    items.sort(key=lambda item: not item['kind'].startswith(('unscheduled_overdue', 'report_late', 'blocked_long')))
     return {
         'unseen_notifications': items[:10],
         'unseen_notification_count': len(items),
@@ -193,9 +262,7 @@ def role_permissions(request):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         return {}
-    allowed = set(
-        RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
-    )
+    allowed = set(allowed_permissions(request, technician))
     pages = nav_pages(technician, allowed)
     # My profile is the row at the top of the sidebar, not a menu page; on
     # it, that row lights up rather than whichever page shares its /tasks/.
@@ -253,12 +320,15 @@ def nav_pages(technician, allowed):
         add('tasks:team_progress', _('Team progress'), 'bar-chart', 'team')
         add('tasks:technician_hours', _('Hours'), 'clock', 'team')
         add('tasks:team_map', _('Team map'), 'map-pin', 'team')
-    if RolePermission.Permission.MANAGE_CUSTOMERS in allowed:
+    if RolePermission.Permission.VIEW_CUSTOMERS in allowed:
         add('customers:customer_list', _('Customers'), 'building', 'customers')
     if RolePermission.Permission.MANAGE_PARTS in allowed:
         add('tasks:part_list', _('Parts'), 'package', 'customers')
     if RolePermission.Permission.VIEW_STOCK in allowed:
         add('tasks:stock', _('Stock'), 'archive', 'customers')
+    # The repairs' parts to get ready (tasks.parts_needed.can_prepare).
+    if technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER:
+        add('tasks:parts_to_prepare', _('Parts to prepare'), 'package', 'customers')
     if RolePermission.Permission.VIEW_MACHINES in allowed:
         add('tasks:machine_list', _('Machines'), 'dumbbell', 'customers')
     if RolePermission.Permission.MANAGE_TICKETS in allowed:

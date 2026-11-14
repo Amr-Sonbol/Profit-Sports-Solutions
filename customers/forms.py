@@ -6,14 +6,13 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.utils.translation import gettext_lazy as _
 
-from django.core.validators import FileExtensionValidator
-
 from reference.models import Brand, Country
 from tasks.forms import new_password_fields
 from tasks.models import MAX_TICKET_ATTACHMENT_BYTES, SERIAL_PHOTO_EXTENSIONS
 from tasks.location import parse_coordinates
 
 from .models import Asset, Customer, Site
+from spots.uploads import SafeFileValidator
 
 
 class PortalLoginForm(AuthenticationForm):
@@ -26,12 +25,12 @@ class PortalLoginForm(AuthenticationForm):
     }
 
 
-class CreateLoginForm(forms.Form):
-    """Just an email — it becomes both the login username and the address
-    the welcome link is sent to (accounts.send_welcome), one thing for the
-    customer to remember instead of a separate invented username. The
-    customer sets their own password through that link.
+class AddPortalUserForm(forms.Form):
+    """One more person at a customer who signs in to the portal: their name,
+    and their email — both their username and where the welcome link goes
+    (accounts.add_person, send_welcome). They set their own password there.
     """
+    name = forms.CharField(max_length=150, label=_('Name'))
     email = forms.EmailField(label=_('Email'))
 
     def clean_email(self):
@@ -168,6 +167,7 @@ class CustomerEditForm(forms.ModelForm):
         fields = [
             'name', 'code', 'segment', 'language',
             'contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address',
+            'own_maintenance_team',
         ]
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),
@@ -271,7 +271,7 @@ class SiteEditForm(forms.ModelForm):
         model = Site
         fields = [
             'name', 'address', 'contact_name', 'contact_phone', 'contact_email', 'access_notes',
-            'warranty_start', 'warranty_until',
+            'warranty_start', 'warranty_until', 'ppm_every_months',
         ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 2}),
@@ -360,10 +360,12 @@ class ChangeLoginEmailForm(forms.Form):
         return email
 
 
-class PortalEmailChangeForm(forms.Form):
-    """A customer changing their own sign-in email: the new address and
-    their current password. Nothing changes until they open the link sent
-    to the new address (accounts.send_email_change_link)."""
+class SignInEmailChangeForm(forms.Form):
+    """Someone changing their own sign-in email — a customer in the portal,
+    staff on My profile or in the app: the new address and their current
+    password. Nothing changes until they open the link sent to the new
+    address (customers.accounts.send_email_change_link,
+    tasks.views.send_staff_email_change_link)."""
 
     email = forms.EmailField(label=_('New sign-in email'))
     password = forms.CharField(label=_('Your current password'), strip=False, widget=forms.PasswordInput)
@@ -413,25 +415,48 @@ class PortalPasswordHelpForm(forms.Form):
     email = forms.EmailField(label=_('Your login email'))
 
 
+class MyAccountForm(forms.Form):
+    """The portal's Settings → My account: this person's own name and the
+    language the portal shows in for them (the header's EN/AR switch sets
+    the same) — never anyone else's at their company."""
+
+    name = forms.CharField(label=_('Your name'), max_length=150)
+    language = forms.ChoiceField(
+        label=_('Language'), help_text=_('The language this portal shows in for you.'),
+        choices=Customer._meta.get_field('language').choices,
+    )
+
+    def __init__(self, *args, person, **kwargs):
+        self.person = person
+        kwargs.setdefault('initial', {'name': person.user.first_name, 'language': person.portal_language})
+        super().__init__(*args, **kwargs)
+
+    def save(self):
+        self.person.user.first_name = self.cleaned_data['name'].strip()
+        self.person.user.save(update_fields=['first_name'])
+        self.person.language = self.cleaned_data['language']
+        self.person.save(update_fields=['language'])
+
+
 class CustomerSettingsForm(forms.ModelForm):
-    """The portal's Settings: the customer's own contact details and
-    addresses, and the language the portal shows in (the header's EN/AR
-    switch sets the same field). Their login email is changed by staff
-    (Customer accounts), not here."""
+    """The portal's Settings → Company: the customer's contact details and
+    addresses, shared by everyone at the company (each change is in the
+    Audit log). Sign-in emails are each person's own (My account)."""
 
     class Meta:
         model = Customer
-        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address', 'language']
+        fields = ['contact_name', 'contact_phone', 'contact_email', 'billing_address', 'shipping_address',
+                  'notify_on_the_way']
         labels = {
             'contact_name': _('Contact name'), 'contact_phone': _('Contact phone number'),
             'contact_email': _('Contact email'), 'billing_address': _('Invoice address'),
-            'shipping_address': _('Delivery address'), 'language': _('Language'),
+            'shipping_address': _('Delivery address'), 'notify_on_the_way': _('Email us when your technician is on the way'),
         }
         help_texts = {
             'contact_email': _('Where we send updates about your requests.'),
             'billing_address': _('The address invoices should be issued to.'),
             'shipping_address': _('Where spare and replacement parts should be delivered.'),
-            'language': _('The language this portal shows in.'),
+            'notify_on_the_way': _('Sent to each branch contact when our technician sets off for a visit.'),
         }
         widgets = {
             'billing_address': forms.Textarea(attrs={'rows': 2}),
@@ -492,13 +517,14 @@ class CustomerMachineForm(forms.ModelForm):
         if len(sites) == 1:
             self.fields['site'].initial = sites[0].pk
         self.fields['brand'].queryset = Brand.objects.filter(is_active=True).order_by('name')
+        self.fields['brand'].empty_label = _('Choose the brand')
         self.fields['serial_no'].required = True
-        self.fields['sticker_photo'].validators.append(FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
+        self.fields['sticker_photo'].validators.append(SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS))
 
     def clean_sticker_photo(self):
         photo = self.cleaned_data.get('sticker_photo')
         if photo and photo.size > MAX_TICKET_ATTACHMENT_BYTES:
-            raise forms.ValidationError(_('The photo is too large. The maximum size is 25 MB.'))
+            raise forms.ValidationError(_('The file exceeds the 25 MB limit. Please select a smaller file or a shorter video.'))
         return photo
 
     def clean(self):

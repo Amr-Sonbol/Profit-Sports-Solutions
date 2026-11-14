@@ -1,0 +1,40 @@
+# Dependabot: GitHub opens a pull request when a library this project uses
+# has a newer version — and, above all, a security fix. Every such pull
+# request runs the test suite (.github/workflows/tests.yml) like any other;
+# nothing is merged or deployed without someone looking at it.
+#
+# Security fixes also need "Dependabot alerts" and "Dependabot security
+# updates" switched on in the repository's Settings → Code security.
+version: 2
+updates:
+  # The website and the server (Django and friends): one weekly pull request
+  # for minor and patch updates together, a separate one for each major.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The phone app: Expo pins its libraries to the SDK (npx expo install
+  # --fix keeps them in step), so routine version bumps would break it —
+  # none here. Security fixes still come (they ignore this limit).
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  # The server's base image (Dockerfile: python:3.12-slim).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+
+  # The GitHub Actions the test workflow uses.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

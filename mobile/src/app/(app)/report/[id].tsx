@@ -4,6 +4,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Switch, TouchableOpacity } from 'react-native';
+import { BranchCard } from '@/components/branch-card';
+import { MACHINE_PHOTO_KINDS, PhotoSlots, type PhotoKind } from '@/components/photo-slots';
 import { TextInput } from '@/components/text-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
@@ -11,7 +13,8 @@ import { WebView } from 'react-native-webview';
 
 import { API_BASE_URL, ApiRequestError } from '@/api/client';
 import {
-  fetchMyReport, fetchMyTaskDetail, fetchParts, previewMyReport, submitMyReport, uploadTaskAttachment,
+  confirmTaskPhotos, fetchMyReport, fetchMyTaskDetail, fetchParts, previewMyReport, registerTaskMachine,
+  submitMyReport, uploadTaskAttachment,
 } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -29,12 +32,6 @@ import type {
 import { alert, t } from '@/i18n';
 
 // The photos a machine's card takes, each saved as that machine's.
-const MACHINE_PHOTO_KINDS: { purpose: 'fault' | 'serial_plate' | 'before' | 'after'; label: string }[] = [
-  { purpose: 'fault', label: 'Fault' },
-  { purpose: 'serial_plate', label: 'Serial plate' },
-  { purpose: 'before', label: 'Before' },
-  { purpose: 'after', label: 'After' },
-];
 
 // Text fields only — quantity/cost are typed as text and sent as-is; the
 // API (PartUsedItemForm) does the number validation, same as the web form.
@@ -113,6 +110,10 @@ export default function ReportScreen() {
   const [actionTaken, setActionTaken] = useState('');
   // Not chosen until the technician chooses (a saved report opens with its answer): never "Yes" by default.
   const [resolved, setResolved] = useState<boolean | null>(null);
+  // An installation's handover to the customer, and a loading's proof of dispatch.
+  const [handover, setHandover] = useState({ handover_demo: false, handover_manuals: false, handover_packaging: false });
+  const [hasDispatchPhoto, setHasDispatchPhoto] = useState(false);
+  const [dispatchUploading, setDispatchUploading] = useState(false);
   // The visit's time as "1:32", worked out by the server from the taps — shown, not typed.
   const [labourHours, setLabourHours] = useState('');
   const [timeIsFinal, setTimeIsFinal] = useState(false);
@@ -191,6 +192,7 @@ export default function ReportScreen() {
       setChecklist(reportResult.data.checklist ?? null);
       setChecklistStatuses(reportResult.data.checklist_statuses ?? []);
       setChecklistStep(reportResult.data.checklist_step || 'installation');
+      setHasDispatchPhoto(Boolean(reportResult.data.has_dispatch_photo));
       // What the report records, or the machines the customer reported.
       setMachines((reportResult.data.machines ?? []).map((machine) => machineRow(machine, reportBrands)));
       const pending = pendingReportFor(Number(id));
@@ -227,6 +229,11 @@ export default function ReportScreen() {
         if (pending.error) {
           setErrors({ form: t('This report could not be sent: {error} Please correct it and submit again.', { error: pending.error ?? '' }) });
         }
+      } else if (!report && reportResult.data.parts_suggested?.length) {
+        // Not filed yet: "Parts used" starts with the parts the task needed — correct it to what was fitted.
+        setParts(reportResult.data.parts_suggested.map((part) => ({
+          part_code: part.part_code, description: part.description, quantity: String(part.quantity),
+        })));
       } else if (report) {
         setFindings(report.findings);
         setActionTaken(report.action_taken);
@@ -295,30 +302,106 @@ export default function ReportScreen() {
 
   // A photo taken from a machine's card belongs to that machine, so it's clear what it shows.
   const [photoUploading, setPhotoUploading] = useState('');
-  const addMachinePhoto = async (row: MachineRow, purpose: 'fault' | 'serial_plate' | 'before' | 'after') => {
-    if (!row.asset_id) {
-      return;
-    }
+  // Before (the fault) can be a video; the serial plate and after are photos.
+  const pickPhoto = async (purpose: PhotoKind['purpose']) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       alert('Permission required', 'Access to the photo library is required to attach a photo.');
+      return [];
+    }
+    // The serial plate: one photo (a new one replaces it); before and after: several at once.
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: purpose === 'before' ? ['images', 'videos'] : ['images'],
+      allowsMultipleSelection: purpose !== 'serial_plate', selectionLimit: 5, quality: 0.8,
+    });
+    return result.canceled ? [] : result.assets;
+  };
+
+  // A loading's proof of dispatch: a photo of the loaded truck, or of the signed delivery note.
+  const addDispatchPhoto = async () => {
+    const files = await pickPhoto('after');
+    if (!files.length) {
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 });
-    if (result.canceled || !result.assets[0]) {
+    setDispatchUploading(true);
+    try {
+      for (const file of files) {
+        await uploadTaskAttachment(
+          Number(id), file.uri, file.fileName ?? 'dispatch.jpg', file.mimeType ?? 'image/jpeg', 'delivery_note',
+        );
+      }
+      setHasDispatchPhoto(true);
+    } catch (err) {
+      alert('Upload failed', err instanceof ApiRequestError ? err.message : t('Please try again. ({error})', { error: String(err) }));
+    } finally {
+      setDispatchUploading(false);
+    }
+  };
+
+  // The machine cards (the task's: the same photos as on the task screen and approving), fresh.
+  const refreshCards = async () => {
+    try {
+      setTask(await fetchMyTaskDetail(Number(id)));
+    } catch {
+      // No connection: the card shows what it had; the next load catches up.
+    }
+  };
+  const cardFor = (row: MachineRow) => (task?.machine_cards ?? []).find((card) => card.asset_id === row.asset_id);
+
+  // "Use this" / "Use these": the customer's photos of this machine as its Serial or Before.
+  const takeCustomerPhoto = async (row: MachineRow, slot: 'serial_plate' | 'before') => {
+    if (!row.asset_id) {
       return;
     }
-    const file = result.assets[0];
     setPhotoUploading(row.key);
     try {
-      const saved = await uploadTaskAttachment(
-        Number(id), file.uri, file.fileName ?? 'upload.jpg', file.mimeType ?? 'image/jpeg', purpose, row.asset_id,
-      );
-      if (saved) {
-        setMachines((rows) => rows.map((other) => (
-          other.key === row.key ? { ...other, photos: [...(other.photos ?? []), saved] } : other
-        )));
+      await confirmTaskPhotos(Number(id), row.asset_id, slot);
+      await refreshCards();
+    } catch (err) {
+      alert('Not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
+    } finally {
+      setPhotoUploading('');
+    }
+  };
+
+  // A machine added here (or one the customer reported that isn't on their list): saved now, so its
+  // serial plate, before and after can be taken before the report is sent.
+  const saveMachine = async (row: MachineRow) => {
+    if (!row.brand_id) {
+      alert('Choose the brand', 'Pick the brand from the list under the box.');
+      return;
+    }
+    setPhotoUploading(row.key);
+    try {
+      const saved = await registerTaskMachine(Number(id), {
+        brand: row.brand_id, model_name: row.model_name ?? '', serial_no: row.serial_no, no_serial: Boolean(row.no_serial),
+        code: row.code ?? '', ticket_machine: row.ticket_machine_id ?? null,
+      });
+      updateMachine(row.key, { asset_id: saved.asset_id, name: saved.name, serial_no: saved.serial_no, ticket_machine_id: null });
+      await refreshCards();
+    } catch (err) {
+      alert('Not saved', err instanceof ApiRequestError ? err.message : 'Please try again.');
+    } finally {
+      setPhotoUploading('');
+    }
+  };
+
+  const addMachinePhoto = async (row: MachineRow, purpose: PhotoKind['purpose']) => {
+    if (!row.asset_id) {
+      return;
+    }
+    const files = await pickPhoto(purpose);
+    if (!files.length) {
+      return;
+    }
+    setPhotoUploading(row.key);
+    try {
+      for (const file of files) {
+        await uploadTaskAttachment(
+          Number(id), file.uri, file.fileName ?? 'upload.jpg', file.mimeType ?? 'image/jpeg', purpose, row.asset_id,
+        );
       }
+      await refreshCards();
     } catch (err) {
       alert('Upload failed', err instanceof ApiRequestError ? err.message : t('Please try again. ({error})', { error: String(err) }));
     } finally {
@@ -361,6 +444,7 @@ export default function ReportScreen() {
       ...(checklist ? {
         checklist: checklist.map(({ photo_url: _photo, added_on_site: _added, ...row }) => row),
       } : {}),
+      ...(checklistStep === 'installation' ? handover : {}),
   });
 
   // "Review report": the report exactly as the customer will get it, and
@@ -577,6 +661,7 @@ export default function ReportScreen() {
           ) : <ThemedView style={styles.reviewPage} />}
           <ThemedView style={styles.reviewActions}>
             {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}
+            {errors.photos ? <ThemedText themeColor="danger" style={styles.formError}>{errors.photos}</ThemedText> : null}
             {!signed ? (
               <TouchableOpacity
                 style={[styles.secondaryButton, { borderColor: theme.primary }]}
@@ -637,6 +722,31 @@ export default function ReportScreen() {
                   taskId={Number(id)} step={checklistStep} rows={checklist} statuses={checklistStatuses} onChange={setChecklist}
                 />
                 {errors.checklist ? <ThemedText themeColor="danger" type="small">{errors.checklist}</ThemedText> : null}
+                {checklistStep === 'loading' ? (
+                  <TouchableOpacity onPress={addDispatchPhoto} disabled={dispatchUploading}>
+                    <ThemedText type="smallBold" themeColor={hasDispatchPhoto ? 'textSecondary' : 'primary'}>
+                      {hasDispatchPhoto
+                        ? 'Dispatch photo taken ✓ (add another)'
+                        : dispatchUploading ? 'Uploading…' : '+ Dispatch photo: the loaded truck, or the signed delivery note'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ) : null}
+                {errors.dispatch_photo ? <ThemedText themeColor="danger" type="small">{errors.dispatch_photo}</ThemedText> : null}
+                {checklistStep === 'installation' ? (
+                  <ThemedView>
+                    <ThemedText type="smallBold">Handover to the customer</ThemedText>
+                    {([
+                      ['handover_demo', 'Shown to the customer how to use them'],
+                      ['handover_manuals', 'Manuals left with the customer'],
+                      ['handover_packaging', 'Packaging taken away'],
+                    ] as const).map(([key, label]) => (
+                      <ThemedView key={key} style={styles.serialRow}>
+                        <Switch value={handover[key]} onValueChange={(value) => setHandover((now) => ({ ...now, [key]: value }))} />
+                        <ThemedText type="small" style={styles.serialLabel}>{label}</ThemedText>
+                      </ThemedView>
+                    ))}
+                  </ThemedView>
+                ) : null}
               </>
             ) : (
               <>
@@ -645,6 +755,8 @@ export default function ReportScreen() {
               hint="For each machine: pick what you found, what you did, and its status. Add any machine that isn't listed."
             />
             <ThemedView style={styles.section}>
+              {/* The branch first, set apart from the machines (as on the task and approving). */}
+              {task ? <BranchCard task={task} /> : null}
               {machines.map((row) => (
                 <ThemedView key={row.key} style={[styles.partCard, { borderColor: theme.backgroundSelected }]}>
                   {/* Added by mistake, just now: take it back. The task's own machines have no ✕. */}
@@ -755,39 +867,28 @@ export default function ReportScreen() {
                   {/* A machine that came with the task stays: one not worked on is marked "Not worked on", with why. */}
                   <ThemedText type="smallBold">Photos of this machine</ThemedText>
                   {row.asset_id ? (
-                    <>
-                      {row.photos?.length ? (
-                        <ThemedView style={styles.photoRow}>
-                          {row.photos.map((photo) => (
-                            <TouchableOpacity key={photo.id} onPress={() => Linking.openURL(photo.url)} style={styles.photoItem}>
-                              <Image
-                                source={{ uri: photo.url, cacheKey: `task-photo-${photo.id}` }} cachePolicy="disk"
-                                style={styles.photoThumb} contentFit="cover"
-                              />
-                              <ThemedText type="small" themeColor="textSecondary">{photo.purpose_display}</ThemedText>
-                            </TouchableOpacity>
-                          ))}
-                        </ThemedView>
-                      ) : null}
-                      {photoUploading === row.key ? <ActivityIndicator /> : (
-                        <ThemedView style={styles.chipRow}>
-                          {MACHINE_PHOTO_KINDS.map(({ purpose, label }) => (
-                            <TouchableOpacity
-                              key={purpose}
-                              style={[styles.suggestion, { borderColor: theme.primary }]}
-                              onPress={() => addMachinePhoto(row, purpose)}
-                              disabled={Boolean(photoUploading)}
-                            >
-                              <ThemedText themeColor="primary" type="small">+ {label}</ThemedText>
-                            </TouchableOpacity>
-                          ))}
-                        </ThemedView>
+                    // The same photos as on the task screen: the task's card for this machine.
+                    <PhotoSlots
+                      kinds={MACHINE_PHOTO_KINDS} photos={cardFor(row)?.photos ?? row.photos ?? []}
+                      candidates={(cardFor(row)?.customer_files ?? []).filter(
+                        (item) => !(cardFor(row)?.photos ?? []).some((photo) => photo.purpose === item.slot),
                       )}
+                      onAdd={(purpose) => addMachinePhoto(row, purpose)}
+                      onUse={(slot) => takeCustomerPhoto(row, slot)}
+                      isBusy={photoUploading === row.key} disabled={Boolean(photoUploading)}
+                    />
+                  ) : photoUploading === row.key ? <ActivityIndicator /> : (
+                    <>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Save this machine to add its serial plate, before and after.
+                      </ThemedText>
+                      <TouchableOpacity
+                        style={[styles.suggestion, { borderColor: theme.primary }]} onPress={() => saveMachine(row)}
+                        disabled={Boolean(photoUploading)}
+                      >
+                        <ThemedText themeColor="primary" type="small">Save this machine</ThemedText>
+                      </TouchableOpacity>
                     </>
-                  ) : (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      A new machine gets its photos once the report is sent and it&apos;s registered: open the report again to add them.
-                    </ThemedText>
                   )}
                 </ThemedView>
               ))}
@@ -1057,6 +1158,7 @@ export default function ReportScreen() {
             </ThemedView>
 
             {errors.form ? <ThemedText themeColor="danger" style={styles.formError}>{errors.form}</ThemedText> : null}
+            {errors.photos ? <ThemedText themeColor="danger" style={styles.formError}>{errors.photos}</ThemedText> : null}
 
             <StepTitle number={6} title="Review and send" hint="See the report exactly as the customer will get it, then send it." />
             <TouchableOpacity
@@ -1134,9 +1236,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 const styles = StyleSheet.create({
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, backgroundColor: 'transparent' },
-  photoItem: { alignItems: 'center', gap: 2 },
-  photoThumb: { width: 72, height: 72, borderRadius: Spacing.one },
+
   removeX: {
     position: 'absolute', top: Spacing.two, end: Spacing.two, zIndex: 1,
     borderWidth: 1, borderRadius: Spacing.one, padding: 2,

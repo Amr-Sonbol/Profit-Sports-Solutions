@@ -42,6 +42,8 @@ export default function PlanLinesScreen() {
   const [locked, setLocked] = useState(false);
   const [lockedReason, setLockedReason] = useState('');
   const [stock, setStock] = useState<{ code: string; quantity: number }[] | null>(null);
+  // A loading beyond the warehouse's stock: only with the manager's reason.
+  const [stockReason, setStockReason] = useState('');
   const [perMachine, setPerMachine] = useState(false);
   const [receiving, setReceiving] = useState(false);
   const [error, setError] = useState('');
@@ -75,7 +77,7 @@ export default function PlanLinesScreen() {
     setError('');
     try {
       const filled = (lines ?? []).filter((line) => line.product_code.trim()).map((line) => ({ ...line, brand: line.brand_id ?? '' }));
-      const saved = await saveTaskLines(Number(id), filled);
+      const saved = await saveTaskLines(Number(id), filled, stockReason);
       if (saved.warning) {
         // A loading planned beyond the warehouse's stock: saved, but say so.
         alert('Check the warehouse', saved.warning, [{ text: 'OK', onPress: () => router.back() }]);
@@ -113,6 +115,12 @@ export default function PlanLinesScreen() {
               <ThemedText type="small">
                 In this warehouse: {stock.length ? stock.map((row) => `${row.code} × ${row.quantity}`).join(' · ') : 'nothing in stock'}
               </ThemedText>
+            ) : null}
+            {stock && !locked ? (
+              <TextInput
+                style={inputStyle} value={stockReason} onChangeText={setStockReason}
+                placeholder="Reason, if this is more than the warehouse holds" placeholderTextColor={theme.textSecondary}
+              />
             ) : null}
             {error ? <ThemedText themeColor="danger">{error}</ThemedText> : null}
             {lines === null && !error ? <ActivityIndicator /> : null}

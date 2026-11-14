@@ -3,12 +3,13 @@ import secrets
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.db.models.functions import Upper
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from people.models import Technician
 from reference.models import Brand, Country
-from spots.indexes import contains_search_index
+from spots.indexes import contains_search_index, matches_search_index, phone_search_index
 
 
 class Customer(models.Model):
@@ -28,9 +29,20 @@ class Customer(models.Model):
         help_text=_("this company's account or reference code, if any"),
     )
     segment = models.CharField(_('segment'), max_length=20, choices=Segment.choices)
+    # An email to the branch contact when the technician sets off (tasks.views.tell_customer_on_the_way);
+    # the customer switches it off in the portal's Settings → Company.
+    # They fix their own machines: shipping the parts is the suggested answer to their requests.
+    own_maintenance_team = models.BooleanField(
+        _('has its own maintenance team'), default=False,
+        help_text=_('"Ship a part" is suggested for their requests (still changeable)'),
+    )
+    notify_on_the_way = models.BooleanField(
+        _('email when the technician is on the way'), default=True,
+        help_text=_('an email to the branch contact when our technician sets off for a visit'),
+    )
     language = models.CharField(
         _('language'), max_length=2, choices=Technician.Language.choices, default=Technician.Language.EN,
-        help_text=_('for the portal login, if this customer has one'),
+        help_text=_("the portal's language for anyone at this customer who hasn't chosen their own"),
     )
     # Their portal in their own gym's color (buttons, highlights); grey until they choose.
     brand_color = models.CharField(
@@ -77,24 +89,6 @@ class Customer(models.Model):
         help_text=_('delivery address for replacement parts, if different from the site, such as a warehouse or '
                     'head office'),
     )
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='customer', verbose_name=_('login account'),
-        help_text=_('one account covers every site under this customer; created by staff only, no '
-                    'self-registration'),
-    )
-    must_change_password = models.BooleanField(
-        _('must change password'), default=False,
-        help_text=_(
-            'set when staff create the login with a temporary system-generated password; at first sign-in, the '
-            'customer is guided through setting their own password and confirming their contact details before '
-            'accessing the rest of the portal',
-        ),
-    )
-    invited_at = models.DateTimeField(
-        _('invited at'), null=True, blank=True,
-        help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
-    )
     is_active = models.BooleanField(_('active'), default=True)
     # The company's own account in a country: its sites are the warehouses
     # that equipment is received at and loaded from. Never a portal login,
@@ -112,7 +106,7 @@ class Customer(models.Model):
         verbose_name = _('customer')
         verbose_name_plural = _('customers')
         ordering = ['name']
-        indexes = [contains_search_index('name', 'customer_name_trgm')]
+        indexes = [matches_search_index('name', 'customer_name_fold'), phone_search_index('contact_phone', 'customer_phone_digits')]
 
     def __str__(self):
         return self.name
@@ -141,9 +135,65 @@ class Customer(models.Model):
         self.is_active = is_active
         self.deactivation_reason = reason if not is_active else ''
         self.save(update_fields=['is_active', 'deactivation_reason'])
-        if self.user_id is not None and self.user.is_active != is_active:
-            self.user.is_active = is_active
-            self.user.save(update_fields=['is_active'])
+        for person in self.portal_users.select_related('user'):
+            if person.user.is_active != is_active:
+                person.user.is_active = is_active
+                person.user.save(update_fields=['is_active'])
+
+
+class PortalUser(models.Model):
+    """One person at a customer who signs in to the portal, with their own
+    email and password. Everyone sees the whole customer — every branch,
+    request, visit, report and machine — so head office sees it all in one
+    place; there are no per-branch limits (docs/go_live_plan.md). Created by
+    our staff only (the customer's Portal login section), never by sign-up.
+    Their name is the login's own (`user.first_name`), so it stays on what
+    they sent after they're removed.
+    """
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.CASCADE, related_name='portal_users', verbose_name=_('customer'),
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='portal_user',
+        verbose_name=_('login account'),
+    )
+    must_change_password = models.BooleanField(
+        _('must change password'), default=False,
+        help_text=_('invited or given a temporary password: at the next sign-in they set their own before '
+                    'anything else'),
+    )
+    invited_at = models.DateTimeField(
+        _('invited at'), null=True, blank=True,
+        help_text=_('when the portal welcome email was last sent; its link is valid for 7 days'),
+    )
+    # Their own (Settings → My account, or the header's EN/AR); empty: the company's.
+    language = models.CharField(
+        _('language'), max_length=2, choices=Technician.Language.choices, blank=True,
+        help_text=_("the language the portal shows in for this person; empty: the customer's"),
+    )
+
+    class Meta:
+        verbose_name = _('portal user')
+        verbose_name_plural = _('portal users')
+        ordering = ['pk']
+
+    def __str__(self):
+        return f'{self.name} ({self.customer})'
+
+    @property
+    def name(self):
+        return self.user.first_name or self.user.email or self.user.username
+
+    @property
+    def portal_language(self):
+        return self.language or self.customer.language
+
+
+def portal_customer(user):
+    """The customer this login belongs to, or None for anyone else (staff, anonymous)."""
+    person = getattr(user, 'portal_user', None) if user is not None else None
+    return person.customer if person is not None else None
 
 
 # New customers and new branches: the warranty from installation, and when
@@ -207,17 +257,41 @@ class Site(models.Model):
         validators=[MinValueValidator(0)],
     )
 
+    # Our own sites (the customer marked is_internal): a warehouse holds stock to load; a
+    # showroom shows machines (not offered for loading). Customers' branches: blank.
+    class Kind(models.TextChoices):
+        WAREHOUSE = 'warehouse', _('Warehouse')
+        SHOWROOM = 'showroom', _('Showroom')
+
+    kind = models.CharField(_('kind'), max_length=10, choices=Kind.choices, blank=True)
+
+    # Preventive maintenance under contract: every N months. Closing one plans the next on the
+    # calendar (tasks.views.plan_next_ppm); empty, none is planned.
+    ppm_every_months = models.PositiveSmallIntegerField(
+        _('preventive maintenance every (months)'), null=True, blank=True,
+        help_text=_('Under a maintenance contract: closing one visit plans the next.'),
+    )
+
     class Meta:
         verbose_name = _('site')
         verbose_name_plural = _('sites')
         ordering = ['customer__name', 'name']
         indexes = [
-            contains_search_index('name', 'site_name_trgm'),
-            contains_search_index('address', 'site_address_trgm'),
+            matches_search_index('name', 'site_name_fold'),
+            matches_search_index('address', 'site_address_fold'),
+            phone_search_index('contact_phone', 'site_phone_digits'),
         ]
 
     def __str__(self):
         return f'{self.customer.name} — {self.name}'
+
+    @property
+    def directions_url(self):
+        """Google Maps to the branch: its pin if it has one, else its name and address."""
+        from urllib.parse import quote
+
+        place = f'{self.latitude},{self.longitude}' if self.latitude is not None else f'{self.name}, {self.address}'
+        return 'https://www.google.com/maps/search/?api=1&query=' + quote(place)
 
     def save(self, *args, **kwargs):
         if self.warranty_start and not self.warranty_until:
@@ -322,17 +396,40 @@ class Asset(models.Model):
         _('model name'), max_length=150, help_text=_('free text as shown on the plate'),
     )
     serial_no = models.CharField(_('serial number'), max_length=100, blank=True)
+    # Lent out (a demo machine, say): moved to the customer's branch, due back by this date —
+    # past it, the bell (tasks.views.machine_detail "Move"); moved back, cleared.
+    on_loan_until = models.DateField(_('on loan until'), null=True, blank=True)
+    # The installation's line it came from (tasks.equipment.register_installed_machines):
+    # a corrected report corrects this machine, not a second one.
+    installed_from = models.OneToOneField(
+        'tasks.TaskProduct', on_delete=models.SET_NULL, null=True, blank=True, related_name='installed_machine',
+        verbose_name=_('installed from'),
+    )
     # The product code (e.g. BENCH-01) — on the delivery note and the sticker, beside the serial.
     code = models.CharField(_('code'), max_length=100, blank=True)
     installed_on = models.DateField(_('installed on'), null=True, blank=True)
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.ACTIVE)
     # The customer's photo of the sticker, when they added it themselves — what the office checks it against.
     sticker_photo = models.FileField(_('sticker photo'), upload_to=_asset_sticker_path, null=True, blank=True)
+    # A machine the technician added during a visit, registered then — so its photos can be
+    # taken before the report; pending until the report records it.
+    registered_on_task = models.ForeignKey(
+        'tasks.Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='registered_assets',
+        verbose_name=_('registered on task'),
+        help_text=_('the visit where the technician added it, before its report'),
+    )
 
     class Meta:
         verbose_name = _('asset')
         verbose_name_plural = _('assets')
         ordering = ['site__name', 'model_name']
+        constraints = [
+            # One machine per serial number and brand, whatever the case it's typed in
+            # (the forms say so first; this keeps it even when two people save at once).
+            models.UniqueConstraint(
+                Upper('serial_no'), 'brand', condition=~models.Q(serial_no=''), name='asset_one_serial_per_brand',
+            ),
+        ]
         indexes = [
             models.Index(fields=['site', 'status']),
             contains_search_index('serial_no', 'asset_serial_trgm'),
@@ -353,7 +450,8 @@ class CustomerNotification(models.Model):
     class Kind(models.TextChoices):
         REPORT_READY = 'report_ready', _('Visit report ready')
         REPLY = 'reply', _('Reply to a request')
-        VISIT_BOOKED = 'visit_booked', _('Visit booked or moved')
+        VISIT_BOOKED = 'visit_booked', _('Visit scheduled or moved')
+        ON_THE_WAY = 'on_the_way', _('Technician on the way')
         REQUEST_CLOSED = 'request_closed', _('Request resolved')
         PART_SHIPPED = 'part_shipped', _('Part shipped')
 

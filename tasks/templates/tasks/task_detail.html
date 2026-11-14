@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load i18n report_text %}
+{% load i18n report_text  record_trail %}
 
 {% block title %}{{ task.task_number }} — Profit Sports Solutions{% endblock %}
 
@@ -21,29 +21,23 @@
 {% if departed_on_task %}
 <p class="flash flash--error">
     {% translate "A member of this task team has left the company." %}
-    {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
+    {% if 'assign_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_assign' task.pk %}">{% translate "Reassign" %}</a>{% endif %}
 </p>
 {% endif %}
 
 {% if shipment %}{% include "tasks/_shipment_panel.html" %}{% endif %}
 
+{% if site_not_ready %}<p class="flash flash--warning">{% translate "This installation is scheduled, but its site isn't confirmed ready yet." %} <a href="#site-readiness">{% translate "Site ready for the installation?" %}</a></p>{% endif %}
+{% if scheduled_before_parts %}<p class="flash flash--warning">{% translate "This visit is scheduled, but some ordered parts haven't arrived yet. Check they'll be in before the visit, or move it." %} <a href="#parts-needed">{% translate "Parts needed" %}</a></p>{% endif %}
+
+{% include "tasks/_branch_card.html" with with_terms=True %}
+
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Details" %}</h2>
-        {% if 'create_tasks' in role_permissions %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
+        {% if 'create_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit" %}</a>{% endif %}
     </div>
     <dl class="detail-grid">
-        <div>
-            <dt>{% translate "Customer / Site" %}</dt>
-            <dd>{{ task.site.customer.name }} — {{ task.site.name }}
-                {# The branch's warranty for everyone; its commercial terms for managers and admins. #}
-                {% with site=task.site %}<span class="terms-row">{% include "_warranty_label.html" %}{% if user.technician.is_manager_tier %} {% include "_terms_labels.html" %}{% endif %}</span>{% endwith %}
-            </dd>
-        </div>
-        <div>
-            <dt>{% translate "Address" %}</dt>
-            <dd>{{ task.site.address|default:"—" }}</dd>
-        </div>
         <div>
             <dt>{% translate "Type" %}</dt>
             <dd>{{ task.task_type.display_name|default:"—" }}</dd>
@@ -53,10 +47,6 @@
             <dd>{{ task.brand.name|default:"—" }}</dd>
         </div>
         <div>
-            <dt>{% translate "Required skill" %}</dt>
-            <dd>{{ task.required_skill.display_name|default:"—" }}{% if task.min_level %} ({% translate "level" %} {{ task.min_level }}){% endif %}</dd>
-        </div>
-        <div>
             <dt>{% translate "Billing type" %}</dt>
             <dd>{{ task.get_billing_type_display }}</dd>
         </div>
@@ -64,10 +54,26 @@
             <dt>{% translate "Source" %}</dt>
             <dd>{{ task.get_source_display }}</dd>
         </div>
+        {% if repeat_visits >= 2 %}
+        <div>
+            <dt>{% translate "Repeat visits" %}</dt>
+            <dd><span class="badge badge--warning">{% blocktranslate with count=repeat_visits|add:1 %}visit {{ count }} in 90 days{% endblocktranslate %}</span></dd>
+        </div>
+        {% endif %}
+        <div>
+            <dt>{% translate "About" %}</dt>
+            <dd>{{ task.get_about_display }}{% if task.done_by == 'subcontractor' %} · {% translate "by" %} <bdi>{{ task.subcontractor_name }}</bdi>{% if task.subcontractor_contact %} <span class="muted" dir="ltr">({{ task.subcontractor_contact }})</span>{% endif %}{% endif %}</dd>
+        </div>
         <div>
             <dt>{% translate "Responsible supervisor" %}</dt>
             <dd>{{ task.responsible_supervisor.full_name|default:"—" }}</dd>
         </div>
+        {% with creator=task.creator %}
+        <div>
+            <dt>{% translate "Created by" %}</dt>
+            <dd><bdi>{{ creator.name }}</bdi>{% if creator.role %} <span class="muted">({{ creator.role }})</span>{% endif %}{% if creator.at %} · {{ creator.at|date:"j M Y, H:i" }}{% endif %}</dd>
+        </div>
+        {% endwith %}
         <div>
             <dt>{% translate "Reported" %}</dt>
             <dd>{{ task.reported_at|date:"SHORT_DATETIME_FORMAT" }}</dd>
@@ -190,7 +196,7 @@
 <div class="section">
     <div class="section__header">
         <h2>{% translate "Assignment" %}</h2>
-        {% if 'assign_tasks' in role_permissions %}<a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>{% endif %}
+        {% if 'assign_tasks' in role_permissions and can_change %}<a href="{% url 'tasks:task_assign' task.pk %}" class="button">{% translate "Manage assignment" %}</a>{% endif %}
     </div>
     {% if active_lead or active_helpers %}
     <ul class="plain-list">
@@ -266,6 +272,17 @@
                 {% if task.quotation %}
                 {% include "_attachment.html" with file=task.quotation %}
                 {% if task.quotation_uploaded_at %}<span class="muted">{{ task.quotation_uploaded_at|date:"SHORT_DATETIME_FORMAT" }}</span>{% endif %}
+                <br>{% if task.quote_status %}<span class="badge badge--{% if task.quote_status == 'approved' %}good{% elif task.quote_status == 'refused' %}bad{% else %}neutral{% endif %}">{{ task.get_quote_status_display }}</span>{% if task.quote_status_at %} <span class="muted">{{ task.quote_status_at|date:"j M Y" }}</span>{% endif %}{% endif %}
+                {% if can_change %}
+                <form method="post" class="inline-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="quote_status">
+                    <select name="quote_status" aria-label="{% translate 'Quotation' %}">
+                        {% for value, label in quote_statuses %}<option value="{{ value }}"{% if task.quote_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="button button--secondary">{% translate "Save" %}</button>
+                </form>
+                {% endif %}
                 {% else %}—{% endif %}
             </dd>
         </div>
@@ -308,7 +325,7 @@
     {# Shipping: company and tracking number; "Notify the customer" always there, usable once a tracking number is set (and the branch has an email). A part shipment has its own panel for these. #}
     {% if not shipment %}
     {# The PAK reference number on its own, apart from shipping. #}
-    <h3>{% translate "PAK reference number" %}</h3>
+    <h3>{% translate "Panatta PAK" %}</h3>
     <p dir="ltr">{{ task.pak_reference_number|default:"—" }}</p>
 
     <h3>{% translate "Shipping" %}</h3>
@@ -334,7 +351,7 @@
         {% else %}
         <button type="button" class="button button--secondary" disabled title="{% translate 'Add a contact email address for this site first.' %}">{% translate "Notify the customer" %}</button>
         {% endif %}
-        {% if user.technician.is_manager_tier %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit shipping" %}</a>{% endif %}
+        {% if user.technician.is_manager_tier and can_change %}<a href="{% url 'tasks:task_edit' task.pk %}" class="button button--secondary">{% translate "Edit shipping" %}</a>{% endif %}
     </div>
     {% if not task.shipping_tracking_number %}<p class="field__help">{% translate "Add a tracking number (Edit) first; then you can send it to the customer." %}</p>
     {% elif not task.site.contact_email %}<p class="field__help">{% translate "Add a contact email address for this site first." %}</p>{% endif %}
@@ -373,6 +390,112 @@
     <p class="field__help">{% translate "Please add a contact email address for this site before requesting feedback." %}</p>
     {% endif %}
     {% endif %}
+</div>
+{% endif %}
+
+{# An installation's site checked ready before the truck goes (tasks.models.SiteReadiness). #}
+{% if is_installation %}
+<div class="section" id="site-readiness">
+    <h2>{% translate "Site ready for the installation?" %}</h2>
+    {% if site_readiness %}<p class="field__help">{% blocktranslate with name=site_readiness.checked_by.get_full_name|default:site_readiness.checked_by.get_username when=site_readiness.checked_at|date:"SHORT_DATETIME_FORMAT" %}Checked by {{ name }}, {{ when }}.{% endblocktranslate %}{% if site_readiness.is_ready %} <span class="badge badge--good">{% translate "Ready" %}</span>{% endif %}</p>{% endif %}
+    {% if can_change_parts %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="site_readiness">
+        <label class="checkbox"><input type="checkbox" name="space_and_floor"{% if site_readiness.space_and_floor %} checked{% endif %}> {% translate "Space and floor ready" %}</label>
+        <label class="checkbox"><input type="checkbox" name="power"{% if site_readiness.power %} checked{% endif %}> {% translate "Power sockets where the machines go" %}</label>
+        <label class="checkbox"><input type="checkbox" name="access"{% if site_readiness.access %} checked{% endif %}> {% translate "Access for the delivery (lift, doors, parking)" %}</label>
+        <label class="checkbox"><input type="checkbox" name="date_confirmed"{% if site_readiness.date_confirmed %} checked{% endif %}> {% translate "The customer confirmed the date" %}</label>
+        <div class="field"><label for="readiness-note">{% translate "Note" %}</label><textarea id="readiness-note" name="note" rows="2">{{ site_readiness.note }}</textarea></div>
+        <div class="form-actions"><button type="submit" class="button button--secondary">{% translate "Save the site checks" %}</button></div>
+    </form>
+    {% elif not site_readiness %}<p class="empty-state">{% translate "Not checked yet." %}</p>{% endif %}
+</div>
+{% endif %}
+
+{# The spare parts this repair needs (tasks.parts_needed): from our stock, or ordered until they arrive. #}
+{% if parts_needed or can_change_parts %}
+<div class="section" id="parts-needed">
+    <h2>{% translate "Parts needed" %}</h2>
+    {% if parts_needed %}
+    <div class="table-wrap">
+        <table class="compact-table">
+            <thead><tr><th>{% translate "Code" %}</th><th>{% translate "Description" %}</th><th>{% translate "Quantity" %}</th><th>{% translate "Status" %}</th><th><span class="visually-hidden">{% translate "Actions" %}</span></th></tr></thead>
+            <tbody>
+                {% for row in parts_needed %}{% with line=row.line %}
+                <tr>
+                    <td dir="ltr">{{ line.product_code }}</td>
+                    <td>{{ line.description|default:"—" }}</td>
+                    <td>{{ line.quantity }}</td>
+                    <td>
+                        {% if row.state == 'stock' %}<span class="badge badge--good">{% translate "From our stock" %}</span>
+                        {% elif row.state == 'arrived' %}<span class="badge badge--good">{% translate "Arrived" %}</span>
+                        {% else %}<span class="badge badge--warning">{% translate "Ordered" %}</span>{% if line.expected_on %} <span class="muted">{% blocktranslate with date=line.expected_on|date:"j M" %}expected {{ date }}{% endblocktranslate %}</span>{% endif %}{% endif %}
+                    </td>
+                    <td class="row-actions__inline">
+                        {# Correcting a part: managers only. #}
+                        {% if can_edit_parts %}{% for line_pk, form in part_edit_forms.items %}{% if line_pk == line.pk %}
+                        <details class="disclosure">
+                            <summary class="button button--secondary">{% translate "Edit" %}</summary>
+                            <form method="post" class="disclosure__body form-grid" novalidate>
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="edit_part_needed"><input type="hidden" name="line" value="{{ line.pk }}">
+                                {% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}
+                                <div class="field field--submit"><button type="submit" class="button">{% translate "Save" %}</button></div>
+                            </form>
+                        </details>
+                        {% endif %}{% endfor %}{% endif %}
+                        {% if can_change_parts %}
+                        {% if row.state == 'waiting' %}
+                        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="part_arrived"><input type="hidden" name="line" value="{{ line.pk }}"><button type="submit" class="button button--secondary">{% translate "Arrived" %}</button></form>
+                        {% endif %}
+                        <form method="post" data-confirm="{% translate 'Remove this part?' %}">{% csrf_token %}<input type="hidden" name="action" value="remove_part_needed"><input type="hidden" name="line" value="{{ line.pk }}">
+                            {% blocktranslate asvar remove_label with code=line.product_code %}Remove {{ code }}{% endblocktranslate %}
+                            <button type="submit" class="machine-card__remove portal-person__remove" title="{{ remove_label }}">{% include "_icon.html" with name="x" %}<span class="visually-hidden">{{ remove_label }}</span></button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endwith %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    {% if parts_needed %}
+    <p class="muted">
+        {% if task.parts_prepared_at %}{% blocktranslate with name=task.parts_prepared_by.technician.full_name|default:task.parts_prepared_by.get_username time=task.parts_prepared_at|date:"SHORT_DATETIME_FORMAT" %}Prepared by {{ name }}, {{ time }}.{% endblocktranslate %}
+        {% else %}{% translate "Not prepared by the warehouse yet." %}{% endif %}
+        {% if task.delivery_note %}<a href="{{ task.delivery_note.url }}" target="_blank" rel="noopener">{% translate "Delivery note" %}</a>{% endif %}
+    </p>
+    {% if can_prepare_parts and not task.parts_prepared_at %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="parts_prepared"><button type="submit" class="button">{% translate "Mark the parts prepared" %}</button></form>
+    {% endif %}
+    {% endif %}
+    {% if can_change_parts %}
+    <details class="disclosure"{% if part_form.errors %} open{% endif %}>
+        <summary class="button button--secondary">{% translate "+ Add a part" %}</summary>
+        <form method="post" class="disclosure__body form-grid" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_part_needed">
+            {% for field in part_form %}
+            <div class="field {% if field.errors %}field--error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="field field--submit"><button type="submit" class="button">{% translate "Add part" %}</button></div>
+        </form>
+    </details>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if not report %}
+<div class="section">
+    <h2>{% translate "Photos" %}</h2>
+    {% include "tasks/_visit_photos.html" %}
 </div>
 {% endif %}
 
@@ -477,7 +600,7 @@
     <form method="post" class="next-step" data-confirm="{% translate "Send the machines on to the next step? A new task is made." %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_next_step">
-        <h3>{% translate "Send to installation" %}</h3>
+        <h3>{% translate "Send on" %}</h3>
         <div class="form-grid">
             <div class="field">
                 <label for="next-step">{% translate "Next step" %}</label>
@@ -487,7 +610,7 @@
             </div>
             <div class="field">
                 <label for="next-site">{% translate "Where" %}</label>
-                <select name="site" id="next-site" required>
+                <select name="site" id="next-site">
                     {% for step, label, sites in next_step_choices %}
                     <optgroup label="{{ label }}" data-for-step="{{ step }}">
                         {% for site in sites %}<option value="{{ site.pk }}">{{ site.customer.country.display_name }} — {{ site.customer.name }} — {{ site.name }}</option>{% endfor %}
@@ -495,12 +618,47 @@
                     {% endfor %}
                 </select>
             </div>
+            {# Who owns the new task: required in another country (tasks.views.next_step_supervisor). #}
+            <div class="field">
+                <label for="next-supervisor">{% translate "Supervisor there" %}</label>
+                <select name="supervisor" id="next-supervisor">
+                    <option value="">{% translate "Same as this task (same country only)" %}</option>
+                    {% regroup next_step_supervisors by country as by_country %}
+                    {% for group in by_country %}
+                    <optgroup label="{{ group.grouper.display_name }}">
+                        {% for person in group.list %}<option value="{{ person.pk }}">{{ person.full_name }} · {{ person.title }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <p class="field__help">{% translate "Going to another country? Choose who supervises it there." %}</p>
+            </div>
         </div>
+        {% if next_step_customers %}
+        {# Not in the list yet: a new branch, made here (an installation only). #}
+        <details class="new-branch">
+            <summary>{% translate "+ New branch" %}</summary>
+            <div class="form-grid">
+                <div class="field">
+                    <label for="new-branch-customer">{% translate "Customer" %}</label>
+                    <select name="new_branch_customer" id="new-branch-customer">
+                        <option value="">{% translate "Choose the customer" %}</option>
+                        {% for customer in next_step_customers %}<option value="{{ customer.pk }}">{{ customer.country.display_name }} — {{ customer.name }}</option>{% endfor %}
+                    </select>
+                    <p class="field__help"><a href="{% url 'customers:customer_create' %}" target="_blank" rel="noopener">{% translate "A new customer? Create it first" %}</a></p>
+                </div>
+                <div class="field"><label for="new-branch-name">{% translate "Branch name" %}</label><input type="text" name="new_branch_name" id="new-branch-name" maxlength="150"></div>
+                <div class="field field--wide"><label for="new-branch-address">{% translate "Address" %}</label><input type="text" name="new_branch_address" id="new-branch-address"></div>
+                <div class="field"><label for="new-branch-contact">{% translate "Contact name" %}</label><input type="text" name="new_branch_contact" id="new-branch-contact" maxlength="150"></div>
+                <div class="field"><label for="new-branch-phone">{% translate "Contact phone" %}</label><input type="tel" name="new_branch_phone" id="new-branch-phone" maxlength="30"></div>
+            </div>
+            <p class="field__help">{% translate "Filled in, the machines go to this new branch instead of the one chosen above; the customer is told by email." %}</p>
+        </details>
+        {% endif %}
         <p class="field__help">{% translate "The machines to carry, with their serial numbers and colors:" %}</p>
         {% for line in lines_to_carry %}
         <label class="checkbox-label"><input type="checkbox" name="lines" value="{{ line.pk }}" checked> {{ line.product_code }}{% if line.quantity > 1 %} × {{ line.quantity }}{% endif %}{% if line.serial_number %} · {{ line.serial_number }}{% endif %}</label>
         {% endfor %}
-        <button type="submit" class="button">{% translate "Send to installation" %}</button>
+        <button type="submit" class="button">{% translate "Send on" %}</button>
     </form>
     {% endif %}
     {% if still_to_install %}
@@ -531,6 +689,10 @@
     {% if report_changed_after_signing %}
     <p class="flash flash--error">{% blocktranslate with date=report.signed_at|date:"SHORT_DATETIME_FORMAT" %}This report has been changed since the customer signed it on {{ date }}. Please ask the customer to sign the updated report, or refer to the signed version.{% endblocktranslate %}</p>
     {% endif %}
+    {% include "tasks/_approvals.html" with approvals=task.approvals staff=True %}
+    {# The photos, for whoever checks the work: right above approving. #}
+    <h3>{% translate "Photos" %}</h3>
+    {% include "tasks/_visit_photos.html" %}
     {% if task.status == 'pending_supervisor_review' %}
     <p class="flash flash--info">{% translate "Awaiting review by the responsible supervisor before manager approval." %}</p>
         {% if can_approve_as_supervisor %}
@@ -733,7 +895,7 @@
         {% for task_message in task_messages %}
         <div class="chat-message {% if task_message.sent_by == user %}chat-message--mine{% endif %}">
             <div class="chat-meta">
-                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}{% if task_message.sent_by.technician %} <span class="muted">· {{ task_message.sent_by.technician.get_role_display }}</span>{% endif %}</span>
+                <span class="chat-name">{{ task_message.sent_by.technician.full_name|default:task_message.sent_by.get_username }}{% if task_message.sent_by.technician %} <span class="muted">· {{ task_message.sent_by.technician.title }}</span>{% endif %}</span>
                 <span class="muted">{{ task_message.sent_at|date:"SHORT_DATETIME_FORMAT" }}</span>
             </div>
             <div class="chat-bubble">
@@ -810,6 +972,33 @@
     <p class="empty-state">{% translate "No events recorded." %}</p>
     {% endif %}
 </div>
+{% with follow_ups=task.follow_ups.all %}{% if follow_ups %}
+<div class="section">
+    <h2>{% translate "Follow-ups" %}</h2>
+    <ul class="action-list">
+        {% for ticket in follow_ups %}
+        <li><a href="{% url 'tasks:internal_ticket' ticket.pk %}" class="action-row">
+            <span>{{ ticket.subject }} <span class="muted">({{ ticket.ticket_number }})</span></span>
+            <span class="badge {% if ticket.status != 'new' %}badge--good{% else %}badge--neutral{% endif %}">{% if ticket.status != 'new' %}{{ ticket.get_claim_outcome_display|default:_("Closed") }}{% elif ticket.due_on %}{% blocktranslate with day=ticket.due_on|date:"j M" %}Due {{ day }}{% endblocktranslate %}{% else %}{% translate "Open" %}{% endif %}</span>
+        </a></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}{% endwith %}
+<details class="section incident">
+    <summary>{% translate "Report a safety incident" %}</summary>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report_incident">
+        <div class="field field--wide">
+            <label for="incident-note">{% translate "What happened" %}</label>
+            <textarea name="incident_note" id="incident-note" rows="3" required></textarea>
+            <p class="field__help">{% translate "Someone hurt, or a machine dangerous: the Manager and the Operations Manager are told at once, and this task's machines are taken out of use." %}</p>
+        </div>
+        <div class="form-actions"><button type="submit" class="button button--danger">{% translate "Report" %}</button></div>
+    </form>
+</details>
+{% record_trail task show_created=False %}
 {% endblock %}
 
 {% block scripts %}

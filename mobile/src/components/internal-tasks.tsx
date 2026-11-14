@@ -90,20 +90,34 @@ export function InternalTasks() {
         </ThemedView>
       )}
       ListEmptyComponent={tickets !== null ? <ThemedText themeColor="textSecondary">No internal tasks here.</ThemedText> : undefined}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-          onPress={() => router.push(`/internal-task/${item.id}`)}
-        >
-          <ThemedText type="smallBold">{item.ticket_number}</ThemedText>
-          {item.subject ? <ThemedText>{item.subject}</ThemedText> : null}
-          <ThemedText type="small" numberOfLines={2}>{item.description}</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {item.status_display}{item.assigned_to ? ` · ${item.assigned_to}` : ''} · {ago(item.submitted_at)}
-          </ThemedText>
-        </TouchableOpacity>
-      )}
+      renderItem={({ item }) => <InternalTaskRow item={item} />}
     />
+  );
+}
+
+/** One internal task: number, subject, its words, status · who · when. `labelled`: says "Internal" (in "All in the country"). */
+export function InternalTaskRow({ item, labelled = false }: { item: InternalTicket; labelled?: boolean }) {
+  const router = useRouter();
+  const theme = useTheme();
+  return (
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.backgroundElement }]}
+      onPress={() => router.push(`/internal-task/${item.id}`)}
+    >
+      <ThemedView style={styles.titleRow}>
+        <ThemedText type="smallBold">{item.ticket_number}</ThemedText>
+        {labelled ? (
+          <ThemedView style={[styles.badge, { borderColor: theme.primary }]}>
+            <ThemedText type="small" themeColor="primary">Internal</ThemedText>
+          </ThemedView>
+        ) : null}
+      </ThemedView>
+      {item.subject ? <ThemedText>{item.subject}</ThemedText> : null}
+      <ThemedText type="small" numberOfLines={2}>{item.description}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {item.status_display}{item.assigned_to ? ` · ${item.assigned_to}` : ''} · {ago(item.submitted_at)}
+      </ThemedText>
+    </TouchableOpacity>
   );
 }
 
@@ -115,4 +129,6 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', gap: Spacing.two, backgroundColor: 'transparent' },
   filter: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.one },
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: 'transparent' },
+  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.two },
 });

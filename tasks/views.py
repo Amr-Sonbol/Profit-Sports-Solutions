@@ -2,39 +2,34 @@ import bisect
 import csv
 import logging
 import re
-import threading
-from collections import defaultdict
 from datetime import date, datetime, timedelta
 from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
-from email.mime.image import MIMEImage
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.contrib.staticfiles.finders import find as find_static_file
 from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.core.mail import EmailMultiAlternatives
 from django.core.paginator import Paginator
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 from django.db.models import (
-    Avg, Case, Count, Exists, IntegerField, Max, Min, OuterRef, Prefetch, ProtectedError, Q, Subquery, Sum, Value,
+    Avg, Case, Count, Exists, IntegerField, Max, OuterRef, Prefetch,
+    ProtectedError, Q, Subquery, Value,
     When,
 )
 from django.db.models.functions import Coalesce, Length
 from django.forms import formset_factory
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import formats, timezone, translation
-from django.utils.crypto import get_random_string, salted_hmac
+from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date, parse_time
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
@@ -42,21 +37,26 @@ from django.utils.translation import gettext_lazy, ngettext
 from rest_framework.authtoken.models import Token
 
 from customers.accounts import log_account_action
+from customers.forms import SignInEmailChangeForm
+from tasks.parts_needed import part_rows as parts_needed_rows
+from tasks.parts_needed import all_in as parts_all_in
+from tasks.parts_needed import can_prepare as can_prepare_parts
+from tasks.parts_needed import is_shipment as parts_is_shipment
+from tasks.parts_needed import report_parts as parts_needed_report_parts
 from customers.models import Asset, Customer, Site
 from customers import notify as notify_customer
-from customers.progress import is_booked, progress_steps, ticket_progress, visit_day, visit_progress
+from customers.progress import is_booked, progress_steps, ticket_progress, shown_day, visit_progress
 from people.models import (
     RELIABLE_LEVEL, NotificationSettings, PushDevice, RolePermission, Technician, TechnicianConduct,
     TechnicianConductAssessment, TechnicianSkill, TechnicianSkillAssessment, TechnicianTrip,
 )
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_admin,
+    ACTIVE_COUNTRY_SESSION_KEY, can_create_customers, can_manage_account, can_plan_equipment, get_active_country, is_last_active_admin, require_admin,
     require_all_countries, require_manager, require_permission,
     require_technician, scoped_or_404 as _scoped_or_404, tasks_for_role,
 )
-from spots.email_failures import current_user_id, record_failed_email
 from tasks.shipments import is_part_shipment, part_shipment_type
-from spots.hosts import portal_url, staff_url
+from spots.hosts import portal_url
 from tasks import answers
 from spots.media import signed_media_url
 from people.push import push_assigned, push_cancelled, push_in_their_language, push_removed
@@ -65,20 +65,20 @@ from reports.forms import PartUsedItemForm, WorkReportForm
 from reports.models import CustomerFeedback, PartUsed, WorkReport
 
 from .forms import (
-    CustomerPhotosForm,
-    AddHelperForm, AssignTicketForm, ChangePasswordForm, NewPasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm,
+    CustomerPhotosForm, CustomRoleForm, MachineStockImportForm, PartNeededForm, RegisterMachineForm,
+    AddHelperForm, AssignTicketForm, ChangePasswordForm, InternalTicketForm, InternalTicketNoteForm, ReassignInternalTicketForm, WaitingForForm,
     StaffTicketForm, BlockTaskForm, BrandCreateForm, CancelTaskForm, CloseTaskForm, RebookVisitForm, CloseTicketForm, ConductAreaCreateForm,
     CorrectEventTimeForm, CountryCreateForm, DecideEscalationForm, EscalateTicketForm,
     CreateTechnicianLoginForm, DeactivateTechnicianForm, DismissTicketForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NegligenceFlagForm, NewAssetForm, PartForm, PartImportForm, PauseTaskForm, RemoveAssignmentForm, ReviewLevelForm, SelfRateLevelForm, SelfRateSkillForm, SetLeadForm,
     SKILL_LEVEL_RUBRIC, SKILL_LEVEL_SHORT, NotificationSettingsForm,
     SkillCreateForm, StaffAttachmentUploadForm, StockCountForm, TaskAttachmentUploadForm, TaskCreateForm, TaskEditForm,
-    TaskMessageForm, TaskProductCheckForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
+    TaskMessageForm, TaskProductForm, TechnicianCreateForm, TechnicianFirstLoginForm,
     TechnicianEditForm, TechnicianTripForm, TicketEditForm, TicketInternalNoteForm, TicketLogisticsForm,
     TicketReplyForm,
 )
 from .location import record_tap
-from .stock import machine_stock, part_rows, record_count, stock_key
+from .stock import machine_stock, part_rows, record_count
 from .models import (
     CustomerTicket, CustomerTicketAttachment, ScheduleChangeRequest, ShippingCompany, Task, TaskAsset,
     TaskAssignment, TaskAttachment, TaskEvent, TaskMessage, TaskMessageRecipient, TaskNotification,
@@ -345,21 +345,6 @@ def _assignment_candidates(task, exclude_ids):
     ).exclude(pk__in=exclude_ids).select_related('country').order_by('full_name')
 
 
-def _candidates_with_skill_level(candidates_qs, task):
-    """Materialize candidates, annotating each with its level for the task's required skill."""
-    candidates = list(candidates_qs)
-    levels = {}
-    if task.required_skill_id:
-        levels = dict(
-            TechnicianSkill.objects.filter(
-                skill_id=task.required_skill_id, technician__in=candidates,
-            ).values_list('technician_id', 'level'),
-        )
-    for technician in candidates:
-        technician.skill_level = levels.get(technician.pk)
-    return candidates
-
-
 # A job with no estimated hours still takes up time: an hour, for clashes.
 DEFAULT_JOB_HOURS = 1
 
@@ -372,26 +357,33 @@ def _job_window(task):
     return task.scheduled_for, task.estimated_finish or task.scheduled_for + timedelta(hours=DEFAULT_JOB_HOURS)
 
 
-def _with_day_load(technicians, task):
-    """Annotate each technician with their other jobs on `task`'s day — no
-    limit, just so a supervisor sees how busy each person is:
-    `day_jobs` (their tasks that day, this one excluded, never cancelled),
-    `day_hours` (the estimates that are known) and `clashes` (those whose
-    time overlaps this task's). Nothing when the task has no day yet.
+def _with_day_load(technicians, task=None, day=None):
+    """Annotate each person with their jobs on a day — `task`'s day, or `day`
+    (New task's team panel: today) — so whoever plans sees at once who's free:
+    `day_jobs` (that day's tasks, `task` excluded, never cancelled), `day_hours`
+    (the known estimates), `clashes` (those overlapping `task`'s time),
+    `busy_from`/`busy_to` (the hours their timed jobs take) and `day_state`:
+    'off' (unavailable), 'clash', 'busy', 'free' — or 'no_day' before a day is
+    set. Sorted best first: free, then least busy; clashing and unavailable last.
     """
     technicians = list(technicians)
-    day = _calendar_day(task)
+    day = day or (_calendar_day(task) if task is not None else None)
     for technician in technicians:
         technician.day_jobs, technician.day_hours, technician.clashes = [], 0, []
+        technician.busy_from = technician.busy_to = None
     if day is None:
+        for technician in technicians:
+            technician.day_state = 'off' if not technician.is_available else 'no_day'
         return technicians
     by_technician = {technician.pk: technician for technician in technicians}
     assignments = TaskAssignment.objects.filter(
         technician__in=by_technician, is_active=True,
-    ).exclude(task=task).exclude(task__status=Task.Status.CANCELLED).filter(
+    ).exclude(task__status=Task.Status.CANCELLED).filter(
         Q(task__scheduled_for__date=day) | Q(task__scheduled_for__isnull=True, task__scheduled_date=day),
     ).select_related('task')
-    window = _job_window(task)
+    if task is not None:
+        assignments = assignments.exclude(task=task)
+    window = _job_window(task) if task is not None else None
     for assignment in assignments:
         technician, job = by_technician[assignment.technician_id], assignment.task
         technician.day_jobs.append(job)
@@ -402,7 +394,36 @@ def _with_day_load(technicians, task):
     for technician in technicians:
         technician.day_jobs.sort(key=_time_of_day)
         technician.clashes.sort(key=_time_of_day)
+        windows = [_job_window(job) for job in technician.day_jobs if _job_window(job)]
+        if windows:
+            technician.busy_from = timezone.localtime(min(start for start, _end in windows))
+            technician.busy_to = timezone.localtime(max(end for _start, end in windows))
+        technician.day_state = (
+            'off' if not technician.is_available else 'clash' if technician.clashes
+            else 'busy' if technician.day_jobs else 'free'
+        )
+    rank = {'free': 0, 'busy': 1, 'no_day': 1, 'clash': 2, 'off': 3}
+    technicians.sort(key=lambda t: (rank[t.day_state], len(t.day_jobs), t.full_name))
     return technicians
+
+
+def day_text(person):
+    """A person's day in words, as tasks/_day_state.html says it (for the app)."""
+    from django.utils.translation import ngettext
+    if person.day_state == 'off':
+        return f"{_('Unavailable')} — {person.get_unavailable_reason_display()}"
+    if person.day_state == 'no_day':
+        return _('Choose a day to see')
+    if person.day_state == 'free':
+        return _('No jobs that day')
+    if person.day_state == 'clash':
+        return ', '.join(_('Busy at %(time)s') % {'time': formats.time_format(timezone.localtime(job.scheduled_for))}
+                         + f' — {job.task_number}' for job in person.clashes)
+    text = ngettext('%(count)s job', '%(count)s jobs', len(person.day_jobs)) % {'count': len(person.day_jobs)}
+    if person.busy_from:
+        text += ' · ' + _('busy %(start)s–%(end)s') % {
+            'start': formats.time_format(person.busy_from), 'end': formats.time_format(person.busy_to)}
+    return text
 
 
 def _clash_warning(technician, task):
@@ -444,20 +465,9 @@ def _technicians_with_next_scheduled_task(technicians):
 
 
 def _supervisors_with_next_scheduled_task(supervisors):
-    """Same as _technicians_with_next_scheduled_task, but for whoever is
-    picked as a task's responsible_supervisor — that's a direct FK on
-    Task, not a TaskAssignment row, so the lookup is simpler.
-    """
-    supervisors = list(supervisors)
-    upcoming = Task.objects.filter(
-        responsible_supervisor__in=supervisors, status__in=OPEN_STATUSES, scheduled_for__gte=timezone.now(),
-    ).select_related('site__customer').order_by('scheduled_for')
-    next_by_supervisor = {}
-    for task in upcoming:
-        next_by_supervisor.setdefault(task.responsible_supervisor_id, task)
-    for supervisor in supervisors:
-        supervisor.next_scheduled_task = next_by_supervisor.get(supervisor.pk)
-    return supervisors
+    """Same as _technicians_with_next_scheduled_task: a supervisor is booked by
+    the jobs they're on (lead or helper), not the tasks they own."""
+    return _technicians_with_next_scheduled_task(supervisors)
 
 
 def _skills_with_current_rating(technician):
@@ -501,208 +511,6 @@ def _conduct_areas_with_current_rating(technician):
     return areas
 
 
-def _certification_reference():
-    """The active skills (non-cardio, cardio) and conduct areas the bar counts —
-    read once for a whole roster rather than once per person."""
-    return (
-        list(Skill.objects.filter(is_active=True, category=Skill.Category.OTHER).values_list('id', flat=True)),
-        list(Skill.objects.filter(is_active=True, category=Skill.Category.CARDIO).values_list('id', flat=True)),
-        list(ConductArea.objects.filter(is_active=True).values_list('id', flat=True)),
-    )
-
-
-def _confirmed_levels(technicians):
-    """{technician id: ({skill id: level}, {conduct area id: level})}, supervisor-confirmed only,
-    for many technicians in two queries."""
-    levels = {technician.pk: ({}, {}) for technician in technicians}
-    for technician_id, skill_id, level in TechnicianSkill.objects.filter(
-        technician__in=list(levels), source=TechnicianSkill.Source.SUPERVISOR,
-    ).values_list('technician_id', 'skill_id', 'level'):
-        levels[technician_id][0][skill_id] = level
-    for technician_id, area_id, level in TechnicianConduct.objects.filter(
-        technician__in=list(levels), source=TechnicianConduct.Source.SUPERVISOR,
-    ).values_list('technician_id', 'conduct_area_id', 'level'):
-        levels[technician_id][1][area_id] = level
-    return levels
-
-
-def _certification_status(technician, reference=None, levels=None):
-    """Confirmed-only progress toward the "reliable technician" bar: level
-    >= RELIABLE_LEVEL on every non-cardio skill and every conduct area,
-    counting only supervisor-confirmed ratings — a self-rating never counts
-    on its own (docs/database_design_v2.md, §3). Cardio (Advanced-level)
-    skills are excluded from the bar; clearing one just marks readiness in
-    that additional skill set, tracked separately as `cardio_ready`.
-    """
-    # A roster passes what it read once for everyone (_certification_reference, _confirmed_levels).
-    confirmed_skill_levels, confirmed_conduct_levels = levels or _confirmed_levels([technician])[technician.pk]
-    non_cardio_ids, cardio_ids, conduct_ids = reference or _certification_reference()
-
-    non_cardio_certified = sum(1 for i in non_cardio_ids if confirmed_skill_levels.get(i, 0) >= RELIABLE_LEVEL)
-    conduct_certified = sum(1 for i in conduct_ids if confirmed_conduct_levels.get(i, 0) >= RELIABLE_LEVEL)
-    total_required = len(non_cardio_ids) + len(conduct_ids)
-    total_certified = non_cardio_certified + conduct_certified
-
-    return {
-        'non_cardio_certified': non_cardio_certified,
-        'non_cardio_total': len(non_cardio_ids),
-        'conduct_certified': conduct_certified,
-        'conduct_total': len(conduct_ids),
-        'is_certified': total_required > 0 and total_certified == total_required,
-        'cardio_ready': any(confirmed_skill_levels.get(i, 0) >= RELIABLE_LEVEL for i in cardio_ids),
-    }
-
-
-def _ninety_day_progress(technician, certification):
-    """Where a technician stands against the 90-day certification target —
-    facts (day count, confirmed vs required), not a verdict. `on_track`
-    is one simple, disclosed comparison (confirmed share vs. elapsed
-    share of the 90 days) — a supervisor still judges what to do about
-    it; this never blocks or changes an assignment on its own.
-    """
-    if technician.hired_on is None:
-        return None
-
-    day_count = (timezone.localtime().date() - technician.hired_on).days
-    total_required = certification['non_cardio_total'] + certification['conduct_total']
-    total_certified = certification['non_cardio_certified'] + certification['conduct_certified']
-
-    expected_fraction = min(day_count / NINETY_DAY_TRACK_DAYS, 1)
-    actual_fraction = (total_certified / total_required) if total_required else 1
-
-    return {
-        'day_count': max(day_count, 0),
-        'days_remaining': max(NINETY_DAY_TRACK_DAYS - day_count, 0),
-        'total_certified': total_certified,
-        'total_required': total_required,
-        'on_track': actual_fraction >= expected_fraction,
-    }
-
-
-def _confirmed_points(technician):
-    """Sum of supervisor-confirmed levels across every non-cardio skill and
-    conduct area — the ranking number for the leaderboard. Self-ratings and
-    cardio skills don't count, matching the certification bar above.
-    """
-    skill_points = TechnicianSkill.objects.filter(
-        technician=technician, source=TechnicianSkill.Source.SUPERVISOR, skill__category=Skill.Category.OTHER,
-    ).aggregate(total=Sum('level'))['total'] or 0
-    conduct_points = TechnicianConduct.objects.filter(
-        technician=technician, source=TechnicianConduct.Source.SUPERVISOR,
-    ).aggregate(total=Sum('level'))['total'] or 0
-    return skill_points + conduct_points
-
-
-def _leaderboard(country):
-    """Technicians in this country ranked by confirmed certification
-    points, highest first. Visibility only — never used to change a level."""
-    technicians = Technician.objects.filter(
-        is_active=True, country=country, role=Technician.Role.TECHNICIAN,
-    ).order_by('full_name')
-    return sorted(
-        ((t, _confirmed_points(t)) for t in technicians),
-        key=lambda pair: pair[1], reverse=True,
-    )
-
-
-def _median_minutes(deltas):
-    if not deltas:
-        return None
-    ordered = sorted(deltas)
-    mid = len(ordered) // 2
-    if len(ordered) % 2:
-        return round(ordered[mid])
-    return round((ordered[mid - 1] + ordered[mid]) / 2)
-
-
-def _reliability_stats(technician):
-    """Facts only, never a combined score — docs/database_design_v2.md
-    §6's "months 4-8" stage: plain tasks-completed and on-time-arrival
-    numbers, nothing inferred yet needing more volume (first-time fix
-    rate stays out entirely; it needs the asset register maturing over
-    real time, not just a query). Only the lead's record is affected by
-    an outcome — helpers get a participation count, nothing else.
-    Broken down by brand, since one combined number hides exactly what
-    matters; a brand's own on-time % is hidden below
-    RELIABILITY_MIN_SAMPLE completed tasks for that brand specifically,
-    same reasoning as the overall figures below.
-    """
-    timing_events = TaskEvent.objects.filter(
-        event_type__in=[
-            TaskEvent.EventType.ARRIVED, TaskEvent.EventType.ASSIGNED, TaskEvent.EventType.ACCEPTED,
-        ],
-    ).order_by('occurred_at')
-
-    led_tasks = list(
-        Task.objects.filter(
-            assignments__technician=technician, assignments__role=TaskAssignment.Role.LEAD,
-            assignments__is_active=True, status__in=[Task.Status.COMPLETED, Task.Status.CLOSED],
-        )
-        .select_related('brand')
-        .prefetch_related(Prefetch('events', queryset=timing_events, to_attr='timing_events'))
-        .distinct(),
-    )
-    helped_count = Task.objects.filter(
-        assignments__technician=technician, assignments__role=TaskAssignment.Role.HELPER,
-        assignments__is_active=True, status__in=[Task.Status.COMPLETED, Task.Status.CLOSED],
-    ).distinct().count()
-
-    def _on_time_stats(tasks):
-        counted = 0
-        on_time = 0
-        for task in tasks:
-            if task.status == Task.Status.BLOCKED or not task.promised_at:
-                continue
-            arrived = next(
-                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ARRIVED), None,
-            )
-            if not arrived:
-                continue
-            counted += 1
-            if arrived.effective_at <= task.promised_at:
-                on_time += 1
-        if counted < RELIABILITY_MIN_SAMPLE:
-            return None, counted
-        return round(on_time / counted * 100), counted
-
-    def _acceptance_latency(tasks):
-        deltas = []
-        for task in tasks:
-            assigned = next(
-                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ASSIGNED), None,
-            )
-            accepted = next(
-                (e for e in task.timing_events if e.event_type == TaskEvent.EventType.ACCEPTED), None,
-            )
-            if assigned and accepted and accepted.effective_at > assigned.effective_at:
-                deltas.append((accepted.effective_at - assigned.effective_at).total_seconds() / 60)
-        return _median_minutes(deltas) if len(deltas) >= RELIABILITY_MIN_SAMPLE else None
-
-    overall_on_time_percent, overall_sample = _on_time_stats(led_tasks)
-
-    by_brand = defaultdict(list)
-    for task in led_tasks:
-        by_brand[task.brand].append(task)
-
-    brand_breakdown = []
-    for brand, tasks in sorted(by_brand.items(), key=lambda pair: pair[0].name if pair[0] else '￿'):
-        on_time_percent, sample = _on_time_stats(tasks)
-        brand_breakdown.append({
-            'brand': brand,
-            'completed': len(tasks),
-            'on_time_percent': on_time_percent,
-            'sample_size': sample,
-        })
-
-    return {
-        'total_completed': len(led_tasks),
-        'total_helped': helped_count,
-        'on_time_percent': overall_on_time_percent,
-        'on_time_sample_size': overall_sample,
-        'acceptance_latency_minutes': _acceptance_latency(led_tasks),
-        'by_brand': brand_breakdown,
-        'min_sample': RELIABILITY_MIN_SAMPLE,
-    }
 
 
 def _with_lead_prefetch(queryset):
@@ -733,14 +541,15 @@ def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
     and the newest of all those win — the same answer as one big OR, but
     without Postgres having to read every task to get it.
     """
-    sites = Site.objects.filter(Q(name__icontains=text) | Q(address__icontains=text)).values('pk')
-    customers = Customer.objects.filter(name__icontains=text).values('pk')
+    # Names and addresses with Arabic spelling variants folded; phones by their digits (spots/indexes.py).
+    sites = Site.objects.filter(Q(name__matches=text) | Q(address__matches=text)).values('pk')
+    customers = Customer.objects.filter(name__matches=text).values('pk')
     by_asset = TaskAsset.objects.filter(
         asset__in=Asset.objects.filter(serial_no__icontains=text).values('pk'),
     ).values('task_id')
     by_product = TaskProduct.objects.filter(serial_number__icontains=text).values('task_id')
     by_technician = TaskAssignment.objects.filter(
-        is_active=True, technician__full_name__icontains=text,
+        is_active=True, technician__full_name__matches=text,
     ).values('task_id')
     by_request = CustomerTicket.objects.filter(ticket_number__icontains=text).values('task_id')
     ids = set()
@@ -748,7 +557,7 @@ def search_tasks(tasks, text, limit=SEARCH_RESULT_LIMIT):
         Q(task_number__icontains=text), Q(pak_reference_number__icontains=text),
         Q(site__in=sites), Q(site__customer__in=customers), Q(pk__in=by_asset), Q(pk__in=by_product),
         Q(pk__in=by_technician), Q(pk__in=by_request),
-        Q(site__contact_phone__icontains=text), Q(site__customer__contact_phone__icontains=text),
+        Q(site__contact_phone__phone=text), Q(site__customer__contact_phone__phone=text),
     ):
         ids.update(tasks.filter(condition).order_by('-reported_at').values_list('pk', flat=True)[:limit])
     return tasks.filter(pk__in=ids).order_by('-reported_at')[:limit]
@@ -758,9 +567,9 @@ def search_tickets(tickets, text):
     """Tickets matching `text` in anything the office searches them by —
     number, gym, site, address, contact name or phone, PAK reference."""
     return tickets.filter(
-        Q(ticket_number__icontains=text) | Q(company_name__icontains=text)
-        | Q(site_description__icontains=text) | Q(site_address__icontains=text)
-        | Q(contact_name__icontains=text) | Q(contact_phone__icontains=text)
+        Q(ticket_number__icontains=text) | Q(company_name__matches=text)
+        | Q(site_description__matches=text) | Q(site_address__matches=text)
+        | Q(contact_name__matches=text) | Q(contact_phone__phone=text)
         | Q(pak_reference_number__icontains=text),
     )
 
@@ -960,6 +769,60 @@ def _attachment_media_type(uploaded_file):
     return TaskAttachment.MediaType.DOCUMENT
 
 
+PHOTO_COLUMNS = [
+    (TaskAttachment.Purpose.SERIAL_PLATE, gettext_lazy('Serial plate'), gettext_lazy('No serial plate photo')),
+    (TaskAttachment.Purpose.BEFORE, gettext_lazy('Before'), gettext_lazy('No photo before')),
+    (TaskAttachment.Purpose.AFTER, gettext_lazy('After'), gettext_lazy('No photo after')),
+]
+
+
+def visit_photo_cards(task, attachments, editable=False):
+    """The task's machine cards (task_machine_cards) as the website shows them,
+    like the app: what the customer reported for it, then serial plate,
+    before, after side by side — each column its photos, or that one is missing. Photos not of one machine (taken before
+    every photo belonged to one) under "Other photos", so none is lost."""
+    photos = [item for item in attachments if item.media_type in (TaskAttachment.MediaType.PHOTO, TaskAttachment.MediaType.VIDEO)]
+    machine_cards = task_machine_cards(task)
+    found = request_for_task(task, with_conversation=False)
+    reported = {card['machine'].pk: card for card in found['report']['machines']} if found else {}
+    cards = [
+        {
+            'asset': card['asset'], 'registered': card['registered'], 'title': card['name'], 'serial_no': card['serial_no'],
+            # What the customer reported: problem, their words, their photos (tasks/_customer_report.html's card).
+            'reported': reported.get(card['ticket_machine'].pk) if card['ticket_machine'] else None,
+            # The customer's photos it can still use, by slot (confirm_customer_files): in an
+            # empty slot for the technician; anything else once, under "Also sent by the customer".
+            'customer_files': card['customer_files'],
+            'also_sent': [
+                item for item in card['customer_files']
+                if not editable or not card['registered'] or any(photo.purpose == item['slot'] for photo in card['photos'])
+            ],
+            # Not saved yet (a machine the customer reported that isn't on their list): save it here.
+            'register_form': RegisterMachineForm(auto_id=False, initial={
+                'model_name': card['name'], 'serial_no': card['serial_no'],
+                'ticket_machine': card['ticket_machine'].pk if card['ticket_machine'] else None,
+            }) if editable and not card['registered'] else None,
+            'columns': [
+                {'purpose': purpose, 'label': label, 'missing': missing,
+                 'photos': [photo for photo in card['photos'] if photo.purpose == purpose],
+                 # The customer's for this slot, while it's empty: "Use this".
+                 'offered': [] if not editable or any(photo.purpose == purpose for photo in card['photos']) else [
+                     item for item in card['customer_files'] if item['slot'] == purpose
+                 ]}
+                for purpose, label, missing in PHOTO_COLUMNS
+            ],
+        }
+        for card in machine_cards
+    ]
+    on_cards = {photo.pk for card in machine_cards for photo in card['photos']}
+    others = [photo for photo in photos if photo.pk not in on_cards and photo.media_type == TaskAttachment.MediaType.PHOTO]
+    return {
+        'cards': cards, 'others': others, 'count': len(photos),
+        # A machine the technician adds at the branch (register_task_machine).
+        'new_machine_form': RegisterMachineForm(auto_id='new-machine-%s') if editable else None,
+    }
+
+
 def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachment.Source.TECHNICIAN, asset=None):
     path = default_storage.save(f'attachments/{task.pk}/{uploaded_file.name}', uploaded_file)
     return TaskAttachment.objects.create(
@@ -970,671 +833,8 @@ def _save_attachment(request, task, uploaded_file, purpose, source=TaskAttachmen
     )
 
 
-def _in_background(work):
-    """Run `work` once the request's changes are saved, on its own thread, so
-    the person doesn't wait for the mail server (or a PDF) — and nothing is
-    sent for a change that was rolled back. At once under the test runner
-    (settings.SEND_EMAILS_IN_BACKGROUND). Returns what `work` returned when
-    run at once, else None."""
-    if not settings.SEND_EMAILS_IN_BACKGROUND:
-        return work()
-
-    def run():
-        try:
-            work()
-        except Exception:  # noqa: BLE001 — nobody is waiting for it; log it, so it reaches Sentry
-            logger.exception('Background work failed')
-        finally:
-            connection.close()  # the thread's own database connection
-
-    transaction.on_commit(lambda: threading.Thread(target=run).start())
-    return None
 
 
-# What one email can carry in files: mail servers commonly refuse much more.
-MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
-
-
-def _send_notification_email(subject, text_body, template_name, context, recipient_list, attachment=None,
-                             background=True):
-    """Every outbound notification email in this app goes through here
-    — a plain-text body for clients that don't render HTML, and a
-    matching styled HTML alternative (tasks/templates/tasks/email/)
-    for everyone else. A failed send never blocks the action that
-    triggered it, but it's logged as an error, so it reaches Sentry
-    instead of vanishing.
-
-    attachment, when given, is a real file on the ticket/task itself
-    (e.g. a quotation) — attached as-is, not just linked — or a
-    (filename, bytes, mimetype) tuple for a generated one (the visit
-    report PDF), or a list of files (a message's). Files past
-    MAX_EMAIL_ATTACHMENT_BYTES in all are left out — the email links to
-    where they are anyway.
-
-    The email is built here (files read now), then sent in the background
-    (_in_background) unless `background` is False — for work that already
-    runs there. Returns whether it went out, or True once it's handed over.
-
-    The logo is embedded inline (a cid: reference, not a plain URL) —
-    this renders outside any request, and an email client fetches remote
-    images itself, from wherever it's reading the mail, which may have
-    no route at all to a local dev server. Embedding the actual bytes in
-    the message is the only way it reliably shows up everywhere.
-    """
-    html_body = render_to_string(template_name, {**context, 'logo_url': 'cid:logo'})
-    email = EmailMultiAlternatives(
-        subject=subject, body=text_body, from_email=None, to=recipient_list,
-    )
-    email.attach_alternative(html_body, 'text/html')
-    email.mixed_subtype = 'related'
-    logo_path = find_static_file('images/email_header.png')
-    if logo_path:
-        with open(logo_path, 'rb') as logo_file:
-            logo_image = MIMEImage(logo_file.read())
-        logo_image.add_header('Content-ID', '<logo>')
-        logo_image.add_header('Content-Disposition', 'inline', filename='email_header.png')
-        email.attach(logo_image)
-    if isinstance(attachment, tuple):
-        email.attach(*attachment)
-    elif attachment:
-        total = 0
-        for file in attachment if isinstance(attachment, list) else [attachment]:
-            if total + file.size > MAX_EMAIL_ATTACHMENT_BYTES:
-                continue
-            total += file.size
-            file.open('rb')
-            try:
-                email.attach(file.name.rsplit('/', 1)[-1], file.read())
-            finally:
-                file.close()
-    # Who caused it, read now: the background thread doesn't carry the request with it.
-    triggered_by_id = current_user_id()
-
-    def deliver():
-        try:
-            email.send()
-        except Exception as error:  # noqa: BLE001 — never block the action; but log it, so it reaches Sentry
-            logger.exception('Notification email failed: %s', subject)
-            if background:
-                # Nobody is waiting for this one: told on their next page instead (spots.email_failures).
-                record_failed_email(triggered_by_id, recipient_list, subject, error)
-            return False
-        return True
-
-    if background:
-        sent = _in_background(deliver)
-        return True if sent is None else sent
-    return deliver()
-
-
-def send_visit_report_copy(report, email_address):
-    """Email the customer the visit report PDF (reports.pdf), and record
-    where and when on the report. Both the PDF and its email are in the
-    report's language (reports.pdf.report_language — Arabic in Saudi
-    Arabia and Egypt), unlike other customer emails, which stay English.
-    Best-effort: a failure is logged, never raised, and the PDF stays
-    downloadable from the task page.
-    """
-    from reports.pdf import render_visit_report_pdf, report_language
-
-    task = report.task
-    customer = task.site.customer
-    language = report_language(customer)
-    try:
-        pdf = render_visit_report_pdf(report, language)
-    except Exception:  # noqa: BLE001 — same as a failed send: log it, don't break the report
-        logger.exception('Visit report PDF failed: %s', task.task_number)
-        return False
-    contact = task.site.contact_name or customer.contact_name or customer.name
-    with translation.override(language):
-        context = {
-            'contact': contact, 'site': task.site.name, 'number': task.task_number,
-            'date': formats.date_format(
-                timezone.localtime(report.submitted_at, ZoneInfo(customer.country.timezone)).date(), 'j F Y',
-            ),
-            'email_language': language,
-        }
-        subject = _('Visit report — %(number)s — Profit Sports Solutions') % context
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Please find attached the visit report for %(site)s, dated %(date)s.\n\n'
-            'Should you have any questions about the work carried out, please do not hesitate to contact us.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % context
-        # Already in the background (see save_work_report): send it from here.
-        sent = _send_notification_email(
-            subject, message, 'tasks/email/visit_report.html', context, [email_address],
-            attachment=(f'{task.task_number}-visit-report.pdf', pdf, 'application/pdf'), background=False,
-        )
-    if sent:
-        report.copy_sent_to = email_address
-        report.copy_sent_at = timezone.now()
-        report.save(update_fields=['copy_sent_to', 'copy_sent_at'])
-    return sent
-
-
-def _send_schedule_notification(task):
-    """Best-effort, and forced to English — same reasoning as
-    reports._send_feedback_email: a failed send shouldn't block the
-    supervisor's flow, and there's nowhere to read a customer's language
-    preference from. Manual every time; nothing calls this on its own.
-    """
-    country_tz = ZoneInfo(task.site.customer.country.timezone)
-    local_time = timezone.localtime(task.scheduled_for, country_tz)
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    date = local_time.strftime('%B %d, %Y')
-    time = local_time.strftime('%I:%M %p').lstrip('0')
-    with translation.override('en'):
-        subject = _('Confirming your upcoming Profit Sports Solutions visit — %(number)s') % {
-            'number': task.task_number,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'We are writing to confirm that our technician is scheduled to visit %(site)s on %(date)s at '
-            '%(time)s.\n\n'
-            'Should this time be inconvenient, please contact us to arrange an alternative.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'date': date, 'time': time}
-    _send_notification_email(
-        subject, message, 'tasks/email/schedule_notification.html',
-        {'contact': contact, 'site': site, 'date': date, 'time': time},
-        [task.site.effective_contact_email],
-    )
-
-
-def _send_delay_notice(task, reason):
-    """A different message from _send_schedule_notification: that one
-    confirms a plan, this one apologizes for one slipping — traffic, a
-    previous job running long, and so on. Always manual and always
-    needs a reason, since there's no automatic way to know the team is
-    running behind.
-    """
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    with translation.override('en'):
-        subject = _('Notice of a brief delay to your Profit Sports Solutions visit — %(number)s') % {
-            'number': task.task_number,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Please be advised that our technician for %(site)s is running behind schedule today: '
-            '%(reason)s\n\n'
-            'We sincerely apologise for any inconvenience and will arrive as soon as possible.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'reason': reason}
-    _send_notification_email(
-        subject, message, 'tasks/email/delay_notice.html',
-        {'contact': contact, 'site': site, 'reason': reason},
-        [task.site.effective_contact_email],
-    )
-
-
-# Public tracking-lookup URLs, one per carrier that has a stable one —
-# {tracking} is the only placeholder, filled in URL-encoded. Local
-# courier and Other have no universal page, so they're left out on
-# purpose; the email still names the carrier either way, just without
-# a link.
-CARRIER_TRACKING_URLS = {
-    ShippingCompany.DHL: 'https://www.dhl.com/en/express/tracking.html?AWB={tracking}',
-    ShippingCompany.FEDEX: 'https://www.fedex.com/fedextrack/?trknbr={tracking}',
-    ShippingCompany.UPS: 'https://www.ups.com/track?tracknum={tracking}',
-    ShippingCompany.ARAMEX: 'https://www.aramex.com/track/results?ShipmentNumber={tracking}',
-    ShippingCompany.TNT: 'https://www.tnt.com/express/en_us/site/shipping-tools/tracking.html?cons={tracking}',
-}
-
-
-def _send_shipping_notice(contact_name, entity_name, reference, company, tracking_number, contact_email):
-    """Shared by task detail and ticket review — the only two places a
-    shipping_tracking_number can live. Only the carrier and tracking
-    number go to the customer; pak_reference_number is internal and
-    never sent. `company` is the raw ShippingCompany code (or ''), not
-    its display label — needed as-is to look up a tracking URL.
-    """
-    carrier_label = ShippingCompany(company).label if company else ''
-    tracking_url = None
-    if company and tracking_number:  # a local courier often has none
-        url_template = CARRIER_TRACKING_URLS.get(company)
-        if url_template:
-            tracking_url = url_template.format(tracking=quote(tracking_number))
-    with translation.override('en'):
-        subject = _('Your shipment is on its way — %(reference)s') % {'reference': reference}
-        lines = [_('Tracking number: %(tracking)s') % {'tracking': tracking_number}] if tracking_number else []
-        if company:
-            lines.insert(0, _('Carrier: %(company)s') % {'company': carrier_label})
-            if tracking_url:
-                lines.append(_('Track your shipment here: %(url)s') % {'url': tracking_url})
-        tracking_lines = '\n'.join(lines)
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'We are pleased to inform you that your shipment for %(entity)s has been dispatched. You may track '
-            'it using the details below.\n\n'
-            '%(tracking_lines)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact_name, 'entity': entity_name, 'tracking_lines': tracking_lines}
-    _send_notification_email(
-        subject, message, 'tasks/email/shipping_notice.html',
-        {
-            'contact': contact_name, 'entity': entity_name, 'carrier_label': carrier_label,
-            'tracking_number': tracking_number, 'tracking_url': tracking_url,
-        },
-        [contact_email],
-    )
-
-
-def _send_shipment_notice_to_supervisor(request, task):
-    """Most shipments arrive against a factory tracking number, not a
-    customer request — the responsible_supervisor is the one staffing
-    the task and the one who actually needs to know parts are on the
-    way, so this fires whenever shipping_tracking_number changes,
-    separately from _send_shipping_notice above (which is the
-    customer-facing one, manual, and about a different audience
-    entirely). Best-effort, and only when there's a responsible
-    supervisor with a login and an email on file — same guard
-    _send_reply_to_staff uses for the same reason.
-    """
-    supervisor = task.responsible_supervisor
-    if not supervisor or not supervisor.user_id or not supervisor.user.email:
-        return
-    link = staff_url(request, reverse('tasks:task_detail', args=[task.pk]))
-    carrier_label = task.get_shipping_company_display() if task.shipping_company else ''
-    tracking_url = None
-    if task.shipping_company:
-        url_template = CARRIER_TRACKING_URLS.get(task.shipping_company)
-        if url_template:
-            tracking_url = url_template.format(tracking=quote(task.shipping_tracking_number))
-    with translation.override('en'):
-        subject = _('Your shipment is on its way — %(task_number)s') % {'task_number': task.task_number}
-        if task.shipping_company:
-            tracking_line = _('Carrier: %(company)s — tracking number %(tracking)s') % {
-                'company': carrier_label, 'tracking': task.shipping_tracking_number,
-            }
-        else:
-            tracking_line = _('Tracking number: %(tracking)s') % {'tracking': task.shipping_tracking_number}
-        message = _(
-            'A tracking number has been assigned to the shipment for %(task_number)s (%(site)s).\n\n'
-            '%(tracking_line)s\n\n'
-            'View the task:\n'
-            '%(link)s\n',
-        ) % {
-            'task_number': task.task_number, 'site': task.site.name,
-            'tracking_line': tracking_line, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/shipment_notice_supervisor.html',
-        {
-            'task_number': task.task_number, 'site': task.site.name, 'carrier_label': carrier_label,
-            'tracking_number': task.shipping_tracking_number, 'tracking_url': tracking_url, 'link': link,
-        },
-        [supervisor.user.email],
-    )
-
-
-def _send_feedback_email(request, feedback):
-    """Best-effort — a failed send shouldn't stop the supervisor's flow or
-    leave them staring at a 500. EMAIL_BACKEND defaults to the console in
-    dev, so this always "succeeds" locally.
-
-    Forced to English regardless of who sends it: there's nowhere to read a
-    customer's language preference from, and without this the email would
-    silently follow whichever language the supervisor's own UI happens to
-    be in — not the customer's.
-    """
-    task = feedback.task
-    country_tz = ZoneInfo(task.site.customer.country.timezone)
-    link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token]))
-    contact = task.site.effective_contact_name or task.site.customer.name
-    site = task.site.name
-    with translation.override('en'):
-        visit_date = timezone.localtime(task.report.submitted_at, country_tz).date().strftime('%B %d, %Y')
-        subject = _('We would value your feedback on your recent Profit Sports Solutions visit')
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Thank you for choosing Profit Sports Solutions. We completed a service visit at %(site)s on '
-            '%(date)s, and would greatly appreciate a moment of your time to share your feedback.\n\n'
-            '%(link)s\n\n'
-            'Your feedback helps us maintain the standard of service you expect from us.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': contact, 'site': site, 'date': visit_date, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/feedback_request.html',
-        {'contact': contact, 'site': site, 'date': visit_date, 'link': link},
-        [task.site.effective_contact_email],
-    )
-
-
-# Open tasks shown on the dashboard before "See all".
-DASHBOARD_TASK_LIMIT = 10
-# Periods in the dashboard's charts, the current one included: monthly by
-# default (what managers plan by), weekly on request.
-DASHBOARD_CHART_MONTHS = 12
-DASHBOARD_CHART_WEEKS = 8
-
-
-def _nice_ceiling(value):
-    """The smallest of 4, 6, 10, 20, 40, 60, 100, ... at or above `value`: a
-    chart's top gridline, always even so the middle one is a whole number.
-    """
-    step = 1
-    while True:
-        for factor in (2, 4, 6, 10):
-            if factor * step >= max(value, 4):
-                return factor * step
-        step *= 10
-
-
-def _period_starts(period):
-    """The first day of each chart period, oldest first: the last
-    DASHBOARD_CHART_MONTHS months, or the last DASHBOARD_CHART_WEEKS
-    Monday-based weeks, the current one included.
-    """
-    today = timezone.localdate()
-    if period == 'month':
-        starts = [today.replace(day=1)]
-        while len(starts) < DASHBOARD_CHART_MONTHS:
-            starts.insert(0, (starts[0] - timedelta(days=1)).replace(day=1))
-        return starts
-    this_monday = today - timedelta(days=today.weekday())
-    return [this_monday - timedelta(weeks=n) for n in range(DASHBOARD_CHART_WEEKS - 1, -1, -1)]
-
-
-def _period_chart(opened, completed, period, starts=None):
-    """Counts per period (see _period_starts, or the given `starts`) from
-    two lists of datetimes: what came in and what was finished. Bar
-    heights are percentages of a clean top value, so the template draws
-    them without arithmetic. Shared by the dashboard's tickets and tasks
-    charts and My progress.
-    """
-    starts = starts or _period_starts(period)
-    buckets = {start: {'opened': 0, 'completed': 0} for start in starts}
-
-    def bucket_of(moment):
-        day = timezone.localtime(moment).date()
-        return day.replace(day=1) if period == 'month' else day - timedelta(days=day.weekday())
-
-    for key, moments in (('opened', opened), ('completed', completed)):
-        for moment in moments:
-            bucket = buckets.get(bucket_of(moment))
-            if bucket is not None:
-                bucket[key] += 1
-
-    top = _nice_ceiling(max(max(b['opened'], b['completed']) for b in buckets.values()))
-    return {
-        'period': period,
-        'top': top,
-        'ticks': [top, top // 2, 0],
-        'periods': [
-            {
-                'start': start, 'is_current': start == starts[-1], **counts,
-                'opened_pct': round(counts['opened'] * 100 / top), 'completed_pct': round(counts['completed'] * 100 / top),
-            }
-            for start, counts in buckets.items()
-        ],
-    }
-
-
-def _tasks_chart(country, period):
-    """Tasks reported vs tasks whose first work report was submitted, per period."""
-    since = _period_starts(period)[0]
-    opened = Task.objects.filter(
-        site__customer__country=country, reported_at__date__gte=since,
-    ).values_list('reported_at', flat=True)
-    completed = TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task__site__customer__country=country,
-    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
-    return _period_chart(opened, completed, period)
-
-
-def _my_trend_chart(technician):
-    """One person's tasks completed per month, as a line (My progress):
-    the tasks they were on (lead or helper) by their first work report.
-    It starts the month their account was created, not before (so a new
-    technician doesn't start on months of nothing), and shows at most the
-    last year. Each month's `completed_pct` places its point; `line_points`
-    is the SVG polyline through them (x at each month's centre, 0-100 both
-    ways); `change` is this month against last, None in their first month.
-    """
-    joined = timezone.localtime(technician.user.date_joined).date().replace(day=1)
-    starts = [start for start in _period_starts('month') if start >= joined] or _period_starts('month')[-1:]
-    since = starts[0]
-    mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
-    completed = TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
-    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__date__gte=since).values_list('first', flat=True)
-    chart = _period_chart([], completed, 'month', starts=starts)
-    periods = chart['periods']
-    chart['line_points'] = ' '.join(
-        f"{(index + 0.5) * 100 / len(periods):.2f},{100 - period['completed_pct']}"
-        for index, period in enumerate(periods)
-    )
-    chart['this_month'] = periods[-1]['completed']
-    chart['change'] = periods[-1]['completed'] - periods[-2]['completed'] if len(periods) > 1 else None
-    chart['change_size'] = abs(chart['change'] or 0)
-    return chart
-
-
-def _tickets_chart(country, period):
-    """Customer tickets received vs resolved (converted, dismissed or closed: reviewed_at), per period."""
-    since = _period_starts(period)[0]
-    tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.CUSTOMER, country=country)
-    return _period_chart(
-        tickets.filter(submitted_at__date__gte=since).values_list('submitted_at', flat=True),
-        tickets.filter(reviewed_at__date__gte=since).values_list('reviewed_at', flat=True),
-        period,
-    )
-
-
-# Escalations listed one by one on the home page.
-HOME_ESCALATION_LIMIT = 5
-
-# A single Exists, not exclude(assignments__role=..., assignments__is_active=...):
-# exclude() lets those two match different assignments.
-HAS_ACTIVE_LEAD = Exists(
-    TaskAssignment.objects.filter(task=OuterRef('pk'), role=TaskAssignment.Role.LEAD, is_active=True),
-)
-
-
-def home_summary(request, technician):
-    """The home page: what's waiting on this person, each count linking to
-    the list behind it, and their own visits today. Each count is gated
-    by the same permission as the page it links to.
-    """
-    country = get_active_country(request)
-    allowed = set(
-        RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
-    )
-    task_list_url = reverse('tasks:task_list')
-    open_tasks = tasks_for_role(technician, Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=country))
-    actions = []
-
-    def add(label, count, url, level='warning'):
-        if count:
-            actions.append({'label': label, 'count': count, 'url': url, 'level': level})
-
-    if RolePermission.Permission.VIEW_TASKS in allowed:
-        add(_('Emergencies'), open_tasks.filter(priority=Task.Priority.EMERGENCY).count(),
-            f'{task_list_url}?priority=emergency', 'critical')
-    if RolePermission.Permission.ASSIGN_TASKS in allowed:
-        add(_('Tasks without a lead technician'), open_tasks.exclude(HAS_ACTIVE_LEAD).count(), f'{task_list_url}?lead=none')
-        add(_('Tasks not scheduled'), open_tasks.filter(scheduled_for__isnull=True, scheduled_date__isnull=True).count(),
-            f'{task_list_url}?scheduled=none')
-    if RolePermission.Permission.VIEW_TASKS in allowed:
-        if technician.role == Technician.Role.SUPPORT_MANAGER:
-            add(_('Reports awaiting your approval'), open_tasks.filter(status=Task.Status.COMPLETED).count(),
-                f'{task_list_url}?status=completed')
-        else:
-            add(_('Reports awaiting your review'),
-                open_tasks.filter(status=Task.Status.PENDING_SUPERVISOR_REVIEW, responsible_supervisor=technician).count(),
-                f'{task_list_url}?status=pending_supervisor_review&supervisor={technician.pk}')
-    if RolePermission.Permission.MANAGE_TICKETS in allowed:
-        add(_('New customer tickets'), CustomerTicket.objects.filter(
-            kind=CustomerTicket.Kind.CUSTOMER, status=CustomerTicket.Status.NEW, country=country,
-        ).count(), reverse('tasks:ticket_list'))
-    if {RolePermission.Permission.MANAGE_CUSTOMERS, RolePermission.Permission.VIEW_MACHINES} <= allowed:
-        add(_('Machines added by customers, to confirm'), Asset.objects.filter(
-            status=Asset.Status.PENDING, site__customer__country=country,
-        ).count(), f"{reverse('tasks:machine_list')}?status=pending")
-    if technician.role != Technician.Role.TECHNICIAN:
-        add(_('Internal tasks assigned to you'), CustomerTicket.objects.filter(
-            assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
-        ).exclude(kind=CustomerTicket.Kind.CUSTOMER).count(), reverse('tasks:internal_tickets'))
-    escalations = TicketEscalation.objects.filter(
-        escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
-    ).select_related('ticket').order_by('escalated_at')[:HOME_ESCALATION_LIMIT]
-    for escalation in escalations:
-        actions.append({
-            'label': _('Escalation awaiting your decision: %(company)s') % {'company': escalation.ticket.company_name},
-            'count': None, 'url': reverse('tasks:ticket_review', args=[escalation.ticket_id]), 'level': 'critical',
-        })
-
-    today = timezone.localdate()
-    visits = list(
-        Task.objects.filter(
-            assignments__technician=technician, assignments__is_active=True, status__in=OPEN_STATUSES,
-        ).filter(Q(scheduled_for__date=today) | Q(scheduled_date=today) | Q(status=Task.Status.IN_PROGRESS))
-        .select_related('site__customer').distinct().order_by('scheduled_for', 'task_number'),
-    )
-    return {
-        'actions': actions,
-        # A field technician has nothing to approve or assign; an empty
-        # "needs your action" box would only push their visits down.
-        'show_actions': bool(actions) or technician.role != Technician.Role.TECHNICIAN,
-        'visits': visits,
-        # The manager tier doesn't go on visits, so no empty "today" box for them.
-        'show_visits': bool(visits) or not technician.is_manager_tier,
-        'today': today,
-    }
-
-
-def waiting_for(technician, country):
-    """What's waiting on this person's decision, one item each, oldest first —
-    the app's Tasks → Waiting for me and the top of its Dashboard. The same
-    rules as the actions themselves: a report to review (its supervisor), a
-    report to approve (a manager), a schedule change to approve (a manager
-    who owns the task), a blocked task they own, an escalated request sent to
-    them, an internal task given to them.
-    """
-    allowed = set(RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True))
-    items = []
-
-    def task_item(kind, title, task, at, detail=''):
-        items.append({
-            'kind': kind, 'title': title, 'at': at, 'detail': detail,
-            'text': f'{task.task_number} · {task.site.customer.name} — {task.site.name}',
-            'opens': {'screen': 'team-task', 'id': task.pk},
-        })
-
-    if RolePermission.Permission.VIEW_TASKS in allowed:
-        open_tasks = tasks_for_role(technician, Task.objects.filter(
-            status__in=OPEN_STATUSES, site__customer__country=country,
-        )).select_related('site__customer')
-        if technician.role == Technician.Role.SUPPORT_MANAGER:  # the final approval is theirs
-            for task in open_tasks.filter(status=Task.Status.COMPLETED).annotate(
-                    at=Max('events__occurred_at')).order_by('at')[:50]:
-                task_item('approve_report', _('Report to approve'), task, task.at)
-        for task in open_tasks.filter(
-                status=Task.Status.PENDING_SUPERVISOR_REVIEW, responsible_supervisor=technician,
-        ).annotate(at=Max('events__occurred_at')).order_by('at')[:50]:
-            task_item('review_report', _('Report to review'), task, task.at)
-        if technician.is_manager_tier:
-            for change in ScheduleChangeRequest.objects.filter(
-                    status=ScheduleChangeRequest.Status.PENDING, task__in=open_tasks,
-            ).select_related('task__site__customer', 'requested_by').order_by('created_at')[:50]:
-                if task_owned_by(technician, change.task):
-                    when = formats.date_format(timezone.localtime(change.requested_scheduled_for), 'D j M, H:i')
-                    task_item('schedule_change', _('Visit time change to approve'), change.task, change.created_at,
-                              _('Asked for %(when)s') % {'when': when} + (f' — {change.reason}' if change.reason else ''))
-        for task in open_tasks.filter(status=Task.Status.BLOCKED, responsible_supervisor=technician).annotate(
-                at=Max('events__occurred_at', filter=Q(events__event_type=TaskEvent.EventType.BLOCKED))).order_by('at')[:50]:
-            task_item('blocked', _('Blocked'), task, task.at)
-    from tasks.alarms import late_reports
-    for task in late_reports(technician)[:50]:  # the Operations Manager's safety net
-        task_item('late_report', _('Report waiting %(days)s days for approval') % {'days': task.waiting_days},
-                  task, task.waiting_since, _('Waiting for the Technical Support Manager — you may approve it instead.'))
-    for escalation in TicketEscalation.objects.filter(
-            escalated_to=technician, decision=TicketEscalation.Decision.PENDING,
-    ).select_related('ticket').order_by('escalated_at')[:50]:
-        items.append({
-            'kind': 'escalation', 'title': _('Escalated to you'), 'at': escalation.escalated_at,
-            'text': f'{escalation.ticket.ticket_number} · {escalation.ticket.company_name}', 'detail': escalation.reason,
-            'opens': {'screen': 'ticket', 'id': escalation.ticket_id},
-        })
-    if technician.role != Technician.Role.TECHNICIAN:
-        for ticket in CustomerTicket.objects.filter(
-                assigned_to=technician, status=CustomerTicket.Status.NEW, country=country,
-        ).exclude(kind=CustomerTicket.Kind.CUSTOMER).order_by('submitted_at')[:50]:
-            items.append({
-                'kind': 'internal', 'title': _('Internal task for you'), 'at': ticket.submitted_at,
-                'text': f'{ticket.ticket_number} · {ticket.subject or ticket.get_kind_display()}', 'detail': '',
-                'opens': {'screen': 'internal-task', 'id': ticket.pk},
-            })
-    items.sort(key=lambda item: item['at'] or timezone.now())
-    return items
-
-
-def technician_workload(technicians, country):
-    """Each technician's work still to do, by its day in `country`: today,
-    upcoming (later, or no date yet) and overdue (its day has passed). Work
-    done and waiting for review or closing doesn't count. {technician id:
-    {'today', 'upcoming', 'overdue'}}."""
-    to_do = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED, Task.Status.IN_PROGRESS, Task.Status.BLOCKED]
-    country_zone = ZoneInfo(country.timezone)
-    today = timezone.now().astimezone(country_zone).date()
-    workload = {technician.id: {'today': 0, 'upcoming': 0, 'overdue': 0} for technician in technicians}
-    for technician_id, scheduled_for, scheduled_date in TaskAssignment.objects.filter(
-        technician__in=technicians, is_active=True, task__status__in=to_do,
-    ).values_list('technician_id', 'task__scheduled_for', 'task__scheduled_date'):
-        day = scheduled_for.astimezone(country_zone).date() if scheduled_for else scheduled_date
-        when = 'upcoming' if day is None or day > today else 'today' if day == today else 'overdue'
-        workload[technician_id][when] += 1
-    return workload
-
-
-def dashboard_overview(active_country, viewer=None):
-    """The dashboard's figures for a country: its technicians (with their
-    work still to do: today, upcoming, overdue), every open task in "needs someone first" order
-    (emergencies, then no lead, then no date) and the counts. The website's
-    Dashboard and the app's (api.views.DashboardView).
-    """
-    technicians = list(Technician.objects.filter(
-        is_active=True, country=active_country, role=Technician.Role.TECHNICIAN,
-    ).order_by('full_name'))
-    workload = technician_workload(technicians, active_country)
-    for technician in technicians:
-        technician.workload = workload[technician.id]
-
-    open_tasks = Task.objects.filter(status__in=OPEN_STATUSES, site__customer__country=active_country)
-    if viewer is not None:  # as this role sees tasks (a Warehouse Manager: stock work only)
-        open_tasks = tasks_for_role(viewer, open_tasks)
-    tasks = list(_with_lead_prefetch(
-        open_tasks
-        .select_related('site__customer', 'task_type')
-        .annotate(priority_rank=PRIORITY_RANK).order_by('priority_rank', 'scheduled_for', 'promised_at'),
-    ))
-    _attach_lead_technician(tasks)
-
-    for task in tasks:
-        task.is_unscheduled = task.scheduled_for is None and task.scheduled_date is None
-    stats = {
-        'available_count': sum(1 for t in technicians if t.is_available),
-        'technician_count': len(technicians),
-        'open_task_count': len(tasks),
-        'unassigned_count': sum(1 for t in tasks if t.lead_technician is None),
-        'unscheduled_count': sum(1 for t in tasks if t.is_unscheduled),
-        'emergency_count': sum(1 for t in tasks if t.priority == Task.Priority.EMERGENCY),
-    }
-    # What needs someone first: emergencies, then no lead, then no date.
-    # sorted() is stable, so the priority/schedule order holds within each.
-    tasks.sort(key=lambda t: (
-        t.priority != Task.Priority.EMERGENCY, t.lead_technician is not None, not t.is_unscheduled,
-    ))
-
-    return technicians, tasks, stats
 
 
 @login_required
@@ -1649,7 +849,11 @@ def dashboard(request):
     active_country = get_active_country(request)
     technicians, tasks, stats = dashboard_overview(active_country, viewer)
 
+    from tasks.alarms import company_summary
+
     context = {
+        # Everything to watch across the company, for whoever watches it (tasks.alarms).
+        'company_summary': company_summary(viewer),
         'technicians': technicians,
         'tasks': tasks[:DASHBOARD_TASK_LIMIT],
         'stats': stats,
@@ -1685,14 +889,19 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     if text:
         tasks = search_tasks(tasks, text, limit=None)
     if params.get('alarm') == 'unscheduled':
-        from tasks.alarms import overdue_unscheduled_tasks
-        tasks = tasks.filter(pk__in=[task.pk for task in overdue_unscheduled_tasks(active_country, technician)])
+        from tasks.alarms import company_unscheduled_tasks, overdue_unscheduled_tasks, watches_company
+        alarmed = (company_unscheduled_tasks(technician) if all_countries and watches_company(technician)
+                   else overdue_unscheduled_tasks(active_country, technician))
+        tasks = tasks.filter(pk__in=[task.pk for task in alarmed])
+    elif params.get('alarm') == 'blocked_long':
+        from tasks.alarms import long_blocked_tasks
+        tasks = tasks.filter(pk__in=[task.pk for task in long_blocked_tasks(technician)])
     task_id = params.get('task_id', '').strip()
     if task_id:
         tasks = tasks.filter(task_number__icontains=task_id)
     site = params.get('site', '').strip()
     if site:
-        tasks = tasks.filter(Q(site__name__icontains=site) | Q(site__address__icontains=site)).distinct()
+        tasks = tasks.filter(Q(site__name__matches=site) | Q(site__address__matches=site)).distinct()
     pak_reference = params.get('pak_reference', '').strip()
     if pak_reference:
         tasks = tasks.filter(pak_reference_number__icontains=pak_reference)
@@ -1706,7 +915,7 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     if customer_id:
         tasks = tasks.filter(site__customer_id=customer_id)
     elif customer_name:
-        tasks = tasks.filter(site__customer__name__icontains=customer_name)
+        tasks = tasks.filter(site__customer__name__matches=customer_name)
     technician_id = params.get('technician', '')
     if technician_id:
         tasks = tasks.filter(assignments__technician_id=technician_id, assignments__is_active=True).distinct()
@@ -1722,6 +931,16 @@ def filtered_tasks(params, technician, active_country, all_countries=False):
     priority = params.get('priority', '')
     if priority in Task.Priority.values:
         tasks = tasks.filter(priority=priority)
+    if params.get('about', '') in Task.About.values:
+        tasks = tasks.filter(about=params['about'])
+    if params.get('quote') == 'waiting':  # the bell's "quotations unanswered for a week"
+        tasks = tasks.filter(quote_status=Task.QuoteStatus.SENT,
+                             quote_status_at__lt=timezone.now() - timedelta(days=7))
+    if params.get('parts') == 'late':  # the bell's "ordered parts are late"
+        tasks = tasks.filter(
+            parts_needed__source='ordered', parts_needed__arrived_at__isnull=True,
+            parts_needed__expected_on__lt=timezone.localdate(),
+        ).distinct()
     if params.get('lead') == 'none':
         tasks = tasks.exclude(HAS_ACTIVE_LEAD)
     if params.get('scheduled') == 'none':
@@ -1753,16 +972,12 @@ def task_list(request):
     customer_name = request.GET.get('customer_name', '').strip()
     technician_id = request.GET.get('technician', '')
     shipping_company = request.GET.get('shipping_company', '')
-    scheduled_from = parse_date(request.GET.get('scheduled_from', '') or '')
-    scheduled_to = parse_date(request.GET.get('scheduled_to', '') or '')
     # The dashboard and home page tiles link here with one of these.
     priority = request.GET.get('priority', '')
     if priority not in Task.Priority.values:
         priority = ''
     unassigned = request.GET.get('lead') == 'none'
     unscheduled = request.GET.get('scheduled') == 'none'
-    # The bell's "waiting to be scheduled" entry links here (tasks.alarms).
-    overdue_scheduling = request.GET.get('alarm') == 'unscheduled'
     supervisor_id = request.GET.get('supervisor', '')
     if not supervisor_id.isdigit():
         supervisor_id = ''
@@ -1809,8 +1024,24 @@ def task_list(request):
     if supervisor_id:
         quick_filters.append(_('Assigned to you'))
 
+    # "All" means all: the country's internal tasks too, at the top — for Open or All
+    # (their statuses are their own), on the first page, with no field-task filter.
+    internal = []
+    if (technician.role != Technician.Role.TECHNICIAN and status in ('open', 'all') and not all_countries
+            and not filter_params and page_obj.number == 1):
+        internal = _visible_internal_tickets(technician, active_country).select_related('assigned_to')
+        if status == 'open':
+            internal = internal.filter(status=CustomerTicket.Status.NEW)
+        text = request.GET.get('q', '').strip()
+        if text:
+            internal = internal.filter(
+                Q(ticket_number__icontains=text) | Q(subject__icontains=text) | Q(description__icontains=text),
+            )
+        internal = list(internal.order_by('-submitted_at')[:50])
+
     context = {
         'page_obj': page_obj,
+        'internal_tasks': internal,
         'quick_filters': quick_filters,
         'quick_filter_params': {
             key: filter_params[key] for key in ('priority', 'lead', 'scheduled', 'supervisor') if key in filter_params
@@ -1837,12 +1068,17 @@ def task_list(request):
 
 
 def can_supervisor_approve(technician, task):
-    """The task's own responsible_supervisor signs off on a technician's
-    report before it ever reaches a manager; a manager can also do this
-    themselves (a superset, same as everywhere else), which matters if no
-    supervisor is set yet.
-    """
-    return technician.is_manager_tier or technician.id == task.responsible_supervisor_id
+    """The task's owner reviews a technician's report before it goes on to the
+    final approval; someone allowed to step in may instead (recorded:
+    _require_task_owner). Nobody else (docs/access_rules.md)."""
+    return can_change_task(technician, task)
+
+
+def gave_supervisor_approval(task, user):
+    """Whether `user` approved this task's latest report as its supervisor: the
+    final approval is then someone else's (two people, docs/access_rules.md)."""
+    last = task.events.filter(event_type=TaskEvent.EventType.SUPERVISOR_APPROVED).order_by('-occurred_at').first()
+    return last is not None and last.actor_id == user.pk
 
 
 def approve_report_as_supervisor(task, actor):
@@ -1866,8 +1102,8 @@ def can_give_final_approval(technician):
     """The final approval of a report, which closes the task, is the Technical
     Support Manager's (docs/access_rules.md); the Operations Manager and Admin
     may step in. The website's button, the app and Waiting for me."""
-    return technician.role in (
-        Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN,
+    return not technician.custom_role_id and technician.role in (
+        Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN,
     )
 
 
@@ -1877,6 +1113,8 @@ def require_final_approver(request, task):
     technician = require_technician(request)
     if not can_give_final_approval(technician):
         raise PermissionDenied
+    if task.status == Task.Status.COMPLETED and gave_supervisor_approval(task, request.user):
+        raise PermissionDenied  # the same person doesn't give both approvals
     if (technician.role != Technician.Role.SUPPORT_MANAGER and request.method == 'POST'
             and task.status == Task.Status.COMPLETED):  # only when there's a report to approve
         TaskEvent.objects.create(
@@ -1911,7 +1149,45 @@ def approve_report_as_manager(task, actor):
     TaskEvent.objects.create(
         task=task, event_type=TaskEvent.EventType.REPORT_APPROVED, occurred_at=timezone.now(), actor=actor,
     )
+    plan_next_ppm(task, actor)
     return True
+
+
+PPM_TYPE_CODE = 'preventive_maintenance'
+
+
+def _months_later(day, months):
+    """The same day `months` later (the month's last day when it's shorter)."""
+    from calendar import monthrange
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return day.replace(year=year, month=month, day=min(day.day, monthrange(year, month)[1]))
+
+
+def plan_next_ppm(task, actor):
+    """A preventive maintenance closed at a branch on a PPM contract (Site.ppm_every_months):
+    the next one, on the calendar that many months on (a day, the time set later), owned by
+    the same person — once (not when one is already planned). Returns it, or None."""
+    months = task.site.ppm_every_months
+    if not months or not task.task_type_id or task.task_type.code != PPM_TYPE_CODE:
+        return None
+    open_statuses = [Task.Status.NEW, Task.Status.ASSIGNED, Task.Status.ACCEPTED]
+    if Task.objects.filter(site=task.site, task_type=task.task_type, status__in=open_statuses).exists():
+        return None
+    next_visit = Task(
+        site=task.site, task_type=task.task_type, brand=task.brand, priority=Task.Priority.NORMAL,
+        source=Task.Source.INTERNAL, billing_type=task.billing_type, is_warranty=task.is_warranty,
+        reported_at=timezone.now(), created_by=actor, status=Task.Status.NEW,
+        responsible_supervisor=task.responsible_supervisor, previous_task=task,
+        scheduled_date=_months_later(timezone.localdate(), months),
+        description=_('Preventive maintenance under contract (every %(months)s months), after %(number)s.') % {
+            'months': months, 'number': task.task_number},
+    )
+    with transaction.atomic():
+        _save_new_task(next_visit)
+        TaskEvent.objects.create(task=next_visit, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(),
+                                 actor=actor)
+    return next_visit
 
 
 def _report_changed_after_signing(task):
@@ -2069,8 +1345,8 @@ def notify_shipping(task):
     if not task.site.effective_contact_email:
         return _('Please add a contact email address for this site before notifying the customer.')
     _send_shipping_notice(
-        task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
-        task.shipping_company, task.shipping_tracking_number, task.site.effective_contact_email,
+        task.site.customer.country, task.site.effective_contact_name or task.site.customer.name, task.site.name,
+        task.shipping_company, task.shipping_tracking_number, task.site.effective_contact_email, task=task,
     )
     return None
 
@@ -2107,20 +1383,408 @@ def rebook_visit(task, user, scheduled_for, note):
         task.save(update_fields=['schedule_notified_at', 'schedule_notified_by'])
 
 
+def ask_for_rating(task, user):
+    """The visit's rating, asked now: created, or asked again; None once they've rated it."""
+    feedback = getattr(task, 'feedback', None)
+    if feedback is not None and feedback.submitted_at:
+        return None
+    if feedback is None:
+        return CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), requested_by=user)
+    feedback.requested_at = timezone.now()
+    feedback.requested_by = user
+    feedback.save(update_fields=['requested_at', 'requested_by'])
+    return feedback
+
+
 def send_feedback_request(request, task):
+    """Asking again for the rating (the visit report's email already asked)."""
     if task.status != Task.Status.CLOSED:
         return _('Please close the task (submit its report) before requesting feedback.')
     if not task.site.effective_contact_email:
         return _('Please add a contact email address for this site before requesting feedback.')
-    feedback = getattr(task, 'feedback', None)
+    feedback = ask_for_rating(task, request.user)
     if feedback is None:
-        feedback = CustomerFeedback.objects.create(task=task, requested_at=timezone.now(), requested_by=request.user)
-    else:
-        feedback.requested_at = timezone.now()
-        feedback.requested_by = request.user
-        feedback.save(update_fields=['requested_at', 'requested_by'])
+        return _('The customer has already rated this visit.')
     _send_feedback_email(request, feedback)
     return None
+
+
+
+# ---- The task page's actions (task_detail): one handler each, by the form's `action` ----
+# Each returns the response (a redirect) once it has acted, or None for the page to show
+# again — with the form's errors kept in `forms` (task_page_forms).
+
+
+def task_page_forms():
+    """The task page's forms, blank: an action that fails keeps its own, with its errors."""
+    return {
+        'message_form': TaskMessageForm(), 'staff_upload_form': StaffAttachmentUploadForm(),
+        'close_task_form': CloseTaskForm(), 'rebook_form': RebookVisitForm(), 'cancel_task_form': CancelTaskForm(),
+        'negligence_form': NegligenceFlagForm(), 'part_form': PartNeededForm(),
+    }
+
+
+def _back_to(task, anchor=''):
+    return redirect(f"{reverse('tasks:task_detail', args=[task.pk])}{anchor}")
+
+
+def _said(request, error, done):
+    """An action's outcome on the page: its error, or what was done."""
+    if error:
+        messages.error(request, error)
+    else:
+        messages.success(request, done)
+
+
+def _action_site_readiness(request, task, technician, forms):
+    if not is_installation(task):
+        return None
+    if not can_change_task(technician, task):
+        raise PermissionDenied
+    readiness = save_site_readiness(task, request.user, request.POST)
+    messages.success(request, _('The site is confirmed ready.') if readiness.is_ready else _('Site checks saved.'))
+    return _back_to(task, '#site-readiness')
+
+
+def _action_add_message(request, task, technician, forms):
+    forms['message_form'] = form = TaskMessageForm(request.POST)
+    if form.is_valid():
+        _post_task_message(request, task, form.cleaned_data['message'])
+        messages.success(request, _('Message sent.'))
+        return _back_to(task)
+    return None
+
+
+def _action_notify_schedule(request, task, technician, forms):
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    _said(request, notify_schedule(task, request.user), _('The customer has been notified of the scheduled visit.'))
+    return _back_to(task)
+
+
+def _action_set_schedule_time(request, task, technician, forms):
+    setter = require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    _said(request, set_schedule_time(task, setter, request.user, request.POST.get('scheduled_time', '')), _('Time set.'))
+    return _back_to(task)
+
+
+def _action_request_schedule_change(request, task, technician, forms):
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    error = request_schedule_change(
+        task, technician, request.user,
+        request.POST.get('requested_scheduled_for', ''), request.POST.get('reason', ''),
+    )
+    _said(request, error, _('Change requested. A manager will review it.'))
+    return _back_to(task)
+
+
+def _pending_change(request, task):
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    return get_object_or_404(
+        ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
+        status=ScheduleChangeRequest.Status.PENDING,
+    )
+
+
+def _action_approve_schedule_change(request, task, technician, forms):
+    approve_schedule_change(task, _pending_change(request, task), request.user)
+    messages.success(request, _('Schedule change approved.'))
+    return _back_to(task)
+
+
+def _action_deny_schedule_change(request, task, technician, forms):
+    deny_schedule_change(task, _pending_change(request, task), request.user, request.POST.get('review_note', ''))
+    messages.success(request, _('Schedule change denied.'))
+    return _back_to(task)
+
+
+def _action_notify_delay(request, task, technician, forms):
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    _said(request, notify_delay(task, request.user, request.POST.get('delay_reason', '')),
+          _('The customer has been notified of the delay.'))
+    return _back_to(task)
+
+
+def _action_notify_shipping(request, task, technician, forms):
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    _said(request, notify_shipping(task), _('The customer has been notified of the tracking number.'))
+    return _back_to(task)
+
+
+def _action_upload_document(request, task, technician, forms):
+    if technician.role == Technician.Role.TECHNICIAN:
+        return None
+    _require_task_owner(request, task)
+    forms['staff_upload_form'] = form = StaffAttachmentUploadForm(request.POST, request.FILES)
+    if form.is_valid():
+        _save_attachment(request, task, form.cleaned_data['file'], form.cleaned_data['purpose'],
+                         source=TaskAttachment.Source.SUPERVISOR)
+        messages.success(request, _('Document added.'))
+        return _back_to(task)
+    return None
+
+
+def _action_approve_report_supervisor(request, task, technician, forms):
+    if not can_supervisor_approve(technician, task):
+        raise PermissionDenied
+    _require_task_owner(request, task)  # stepping in: recorded
+    if approve_report_as_supervisor(task, request.user):
+        messages.success(request, _('Approved. The task now awaits the Technical Support Manager\'s approval.'))
+    else:
+        messages.error(request, _('This task has no report awaiting supervisor review.'))
+    return _back_to(task)
+
+
+def _action_approve_report(request, task, technician, forms):
+    require_final_approver(request, task)
+    if approve_report_as_manager(task, request.user):
+        messages.success(request, _('Report approved. Task closed.'))
+    else:
+        messages.error(request, _('This task has no report awaiting approval.'))
+    return _back_to(task)
+
+
+def _action_correct_event(request, task, technician, forms):
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    event = get_object_or_404(task.events, pk=request.POST.get('event_id'), event_type__in=CORRECTABLE_EVENTS)
+    earliest, latest = _correction_window(event)
+    form = CorrectEventTimeForm(request.POST, earliest=earliest, latest=latest)
+    if form.is_valid():
+        correct_tap_time(task, event, request.user, form.cleaned_data)
+        messages.success(request, _('Time corrected.'))
+    else:
+        messages.error(request, ' '.join(error for errors in form.errors.values() for error in errors))
+    return _back_to(task)
+
+
+def _action_reopen(request, task, technician, forms):
+    # Admin-only — undoes a manager's close decision, back to "awaiting manager approval"
+    # (no further; the filed report itself is untouched — task_report_correct).
+    if technician.role != Technician.Role.ADMIN:
+        raise PermissionDenied
+    _said(request, reopen_task(task, request.user), _('Task reopened.'))
+    return _back_to(task)
+
+
+def _action_close_directly(request, task, technician, forms):
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    if task.status == Task.Status.CLOSED:
+        messages.error(request, _('This task is already closed.'))
+        return _back_to(task)
+    forms['close_task_form'] = form = CloseTaskForm(request.POST)
+    if form.is_valid():
+        close_task_directly(task, request.user, form.cleaned_data['note'])
+        messages.success(request, _('Task closed.'))
+        return _back_to(task)
+    return None
+
+
+def _action_rebook(request, task, technician, forms):
+    # A task stopped on site (blocked) gets a new visit: the same task, a new time, back to
+    # its team. The stop and its reason stay in the history; customer and lead are told.
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    if task.status != Task.Status.BLOCKED:
+        messages.error(request, _('Only a task stopped on site can be given a new visit here.'))
+        return _back_to(task)
+    forms['rebook_form'] = form = RebookVisitForm(request.POST)
+    if form.is_valid():
+        rebook_visit(task, request.user, form.cleaned_data['scheduled_for'], form.cleaned_data['note'])
+        messages.success(request, _('New visit booked.'))
+        return _back_to(task)
+    return None
+
+
+def _action_cancel_task(request, task, technician, forms):
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    if task.status not in CANCELLABLE_STATUSES:
+        messages.error(request, _('This task can no longer be cancelled.'))
+        return _back_to(task)
+    forms['cancel_task_form'] = form = CancelTaskForm(request.POST)
+    if form.is_valid():
+        cancel_task(task, request.user, form.cleaned_data['note'])
+        messages.success(request, _('Task cancelled.'))
+        return _back_to(task)
+    return None
+
+
+def _action_flag_negligence(request, task, technician, forms):
+    require_manager(request)
+    _require_task_owner(request, task)  # the owner, or someone stepping in
+    if task.status != Task.Status.CLOSED:
+        messages.error(request, _('Only closed tasks can be flagged.'))
+        return _back_to(task)
+    forms['negligence_form'] = form = NegligenceFlagForm(request.POST)
+    if form.is_valid():
+        flag_negligence(task, request.user, form.cleaned_data['note'])
+        messages.success(request, _('Task flagged.'))
+        return _back_to(task)
+    return None
+
+
+def _action_create_next_step(request, task, technician, forms):
+    # Sending equipment on (often to another country): the Manager, Project Manager or Admin.
+    viewer = require_manager(request)
+    if not can_plan_equipment(viewer):
+        raise PermissionDenied
+    step = request.POST.get('step')
+    if step not in NEXT_STEPS.get(equipment_step(task), ()):
+        raise Http404
+    chosen = [line for line in lines_to_carry(task) if str(line.pk) in request.POST.getlist('lines')]
+    task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
+    if task_type is None or not chosen:
+        messages.error(request, _('Choose at least one machine to carry to the next step.'))
+        return _back_to(task)
+    # "+ New branch": made here, so whoever sends the machines on is never stuck (3A).
+    site, error = (None, '')
+    if step == TaskType.Category.INSTALLATION:
+        site, error = new_branch_for_next_step(request, viewer, request.POST)
+    if error:
+        messages.error(request, error)
+        return _back_to(task)
+    site = site or get_object_or_404(next_step_sites(viewer, step), pk=request.POST.get('site'))
+    if task_type is None or not chosen:
+        messages.error(request, _('Choose at least one machine to carry to the next step.'))
+        return _back_to(task)
+    supervisor, error = next_step_supervisor(viewer, task, site, request.POST.get('supervisor'))
+    if error:
+        messages.error(request, error)
+        return _back_to(task)
+    next_task = create_next_step(request, task, task_type, site, chosen, supervisor)
+    messages.success(request, _('Next step %(number)s created with %(count)s machines.') % {
+        'number': next_task.task_number, 'count': len(chosen),
+    })
+    return _back_to(next_task)
+
+
+def _action_parts_prepared(request, task, technician, forms):
+    from tasks import parts_needed
+    if not parts_needed.can_prepare(technician) or not parts_needed.all_in(task):
+        raise PermissionDenied
+    parts_needed.mark_prepared(task, request.user)
+    messages.success(request, _('Parts marked as prepared.'))
+    return _back_to(task, '#parts-needed')
+
+
+def _action_edit_part_needed(request, task, technician, forms):
+    from tasks import parts_needed
+    if not technician.is_manager_tier:
+        raise PermissionDenied  # correcting a part: managers only
+    _require_task_owner(request, task)
+    line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
+    form = PartNeededForm(request.POST, prefix=f'part{line.pk}')
+    if form.is_valid():
+        parts_needed.edit_part(line, form.cleaned_data, request.user)
+        messages.success(request, _('Part changed.'))
+    else:
+        messages.error(request, ' '.join(error for errors in form.errors.values() for error in errors))
+    return _back_to(task, '#parts-needed')
+
+
+def _action_parts_needed(request, task, technician, forms):
+    """add_part_needed, part_arrived, remove_part_needed: the task's owner (or someone stepping in)."""
+    from tasks import parts_needed
+    _require_task_owner(request, task)
+    action = request.POST['action']
+    if action == 'add_part_needed':
+        forms['part_form'] = form = PartNeededForm(request.POST)
+        if form.is_valid():
+            parts_needed.add_part(task, request.user, form.cleaned_data)
+            messages.success(request, _('Part added.'))
+            return _back_to(task, '#parts-needed')
+        return None
+    line = get_object_or_404(task.parts_needed, pk=request.POST.get('line'))
+    if action == 'part_arrived':
+        parts_needed.mark_arrived(line, request.user)
+        messages.success(request, _('Marked as arrived.'))
+    else:
+        line.delete()
+        messages.success(request, _('Part removed.'))
+    return _back_to(task, '#parts-needed')
+
+
+def _action_create_follow_up(request, task, technician, forms):
+    require_permission(request, RolePermission.Permission.CREATE_TASKS)
+    _require_task_owner(request, task)
+    if not still_to_install(task):
+        messages.error(request, _('Nothing is left to install on this task.'))
+        return _back_to(task)
+    follow_up = create_follow_up(task, request.user, request)
+    messages.success(request, _('Follow-up task %(number)s created for the machines still to install.') % {
+        'number': follow_up.task_number,
+    })
+    return _back_to(follow_up)
+
+
+def _action_report_incident(request, task, technician, forms):
+    """Anyone on the task, or who can see it, reports a safety incident (docs/scenarios.md E)."""
+    note = request.POST.get('incident_note', '').strip()
+    if not note:
+        messages.error(request, _('Please say what happened.'))
+        return _back_to(task)
+    report_safety_incident(task, request.user, note)
+    messages.success(request, _('Safety incident reported: the Manager and the Operations Manager are told; '
+                                'its machines are out of use.'))
+    return _back_to(task)
+
+
+def _action_quote_status(request, task, technician, forms):
+    """The quotation: sent, approved or refused (an answer by phone, say) — its owner."""
+    _require_task_owner(request, task)
+    status = request.POST.get('quote_status', '')
+    if status not in Task.QuoteStatus.values or not task.quotation:
+        return _back_to(task)
+    task.quote_status, task.quote_status_at = status, timezone.now()
+    task.save(update_fields=['quote_status', 'quote_status_at'])
+    messages.success(request, _('Saved.'))
+    return _back_to(task)
+
+
+def _action_send_feedback_request(request, task, technician, forms):
+    require_manager(request)
+    _require_task_owner(request, task)
+    _said(request, send_feedback_request(request, task), _('The feedback request has been sent.'))
+    return _back_to(task)
+
+
+TASK_PAGE_ACTIONS = {
+    'quote_status': _action_quote_status,
+    'report_incident': _action_report_incident,
+    'site_readiness': _action_site_readiness,
+    'add_message': _action_add_message,
+    'notify_schedule': _action_notify_schedule,
+    'set_schedule_time': _action_set_schedule_time,
+    'request_schedule_change': _action_request_schedule_change,
+    'approve_schedule_change': _action_approve_schedule_change,
+    'deny_schedule_change': _action_deny_schedule_change,
+    'notify_delay': _action_notify_delay,
+    'notify_shipping': _action_notify_shipping,
+    'upload_document': _action_upload_document,
+    'approve_report_supervisor': _action_approve_report_supervisor,
+    'approve_report': _action_approve_report,
+    'correct_event': _action_correct_event,
+    'reopen': _action_reopen,
+    'close_directly': _action_close_directly,
+    'rebook': _action_rebook,
+    'cancel_task': _action_cancel_task,
+    'flag_negligence': _action_flag_negligence,
+    'create_next_step': _action_create_next_step,
+    'parts_prepared': _action_parts_prepared,
+    'edit_part_needed': _action_edit_part_needed,
+    'add_part_needed': _action_parts_needed,
+    'part_arrived': _action_parts_needed,
+    'remove_part_needed': _action_parts_needed,
+    'create_follow_up': _action_create_follow_up,
+    'send_feedback_request': _action_send_feedback_request,
+}
 
 
 @login_required
@@ -2129,7 +1793,7 @@ def task_detail(request, pk):
 
     task = _scoped_or_404(
         Task.objects.select_related(
-            'site__customer__country', 'task_type', 'brand', 'required_skill', 'created_by', 'report',
+            'site__customer__country', 'task_type', 'brand', 'created_by', 'report',
             'responsible_supervisor',
         ).prefetch_related('report__parts_used'),
         pk, requesting_technician, get_active_country(request), 'site__customer__country',
@@ -2148,241 +1812,14 @@ def task_detail(request, pk):
         ).update(seen_at=timezone.now())
         read_task_updates(task, requesting_technician)
 
-    message_form = TaskMessageForm()
-    if request.method == 'POST' and request.POST.get('action') == 'add_message':
-        message_form = TaskMessageForm(request.POST)
-        if message_form.is_valid():
-            _post_task_message(request, task, message_form.cleaned_data['message'])
-            messages.success(request, _('Message sent.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'notify_schedule':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
-        error = notify_schedule(task, request.user)
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('The customer has been notified of the scheduled visit.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'set_schedule_time':
-        set_time_technician = require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
-        error = set_schedule_time(task, set_time_technician, request.user, request.POST.get('scheduled_time', ''))
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('Time set.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'request_schedule_change':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
-        error = request_schedule_change(
-            task, requesting_technician, request.user,
-            request.POST.get('requested_scheduled_for', ''), request.POST.get('reason', ''),
-        )
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('Change requested. A manager will review it.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'approve_schedule_change':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        change_request = get_object_or_404(
-            ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
-            status=ScheduleChangeRequest.Status.PENDING,
-        )
-        approve_schedule_change(task, change_request, request.user)
-        messages.success(request, _('Schedule change approved.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'deny_schedule_change':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        change_request = get_object_or_404(
-            ScheduleChangeRequest, pk=request.POST.get('request_id'), task=task,
-            status=ScheduleChangeRequest.Status.PENDING,
-        )
-        deny_schedule_change(task, change_request, request.user, request.POST.get('review_note', ''))
-        messages.success(request, _('Schedule change denied.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'notify_delay':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
-        error = notify_delay(task, request.user, request.POST.get('delay_reason', ''))
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('The customer has been notified of the delay.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'notify_shipping':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        _require_task_owner(request, task)
-        error = notify_shipping(task)
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('The customer has been notified of the tracking number.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
+    # The page's actions, one handler each (TASK_PAGE_ACTIONS); a form with errors comes back in `forms`.
+    forms = task_page_forms()
+    handler = TASK_PAGE_ACTIONS.get(request.POST.get('action')) if request.method == 'POST' else None
+    if handler is not None:
+        response = handler(request, task, requesting_technician, forms)
+        if response is not None:
+            return response
     can_upload_staff_document = requesting_technician.role != Technician.Role.TECHNICIAN
-    staff_upload_form = StaffAttachmentUploadForm()
-    if request.method == 'POST' and request.POST.get('action') == 'upload_document' and can_upload_staff_document:
-        staff_upload_form = StaffAttachmentUploadForm(request.POST, request.FILES)
-        if staff_upload_form.is_valid():
-            _save_attachment(
-                request, task, staff_upload_form.cleaned_data['file'], staff_upload_form.cleaned_data['purpose'],
-                source=TaskAttachment.Source.SUPERVISOR,
-            )
-            messages.success(request, _('Document added.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'approve_report_supervisor':
-        if not can_supervisor_approve(requesting_technician, task):
-            raise PermissionDenied
-        if approve_report_as_supervisor(task, request.user):
-            messages.success(request, _('Approved. The task now awaits the Technical Support Manager\'s approval.'))
-        else:
-            messages.error(request, _('This task has no report awaiting supervisor review.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'approve_report':
-        require_final_approver(request, task)
-        if approve_report_as_manager(task, request.user):
-            messages.success(request, _('Report approved. Task closed.'))
-        else:
-            messages.error(request, _('This task has no report awaiting approval.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'correct_event':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        event = get_object_or_404(
-            task.events, pk=request.POST.get('event_id'), event_type__in=CORRECTABLE_EVENTS,
-        )
-        earliest, latest = _correction_window(event)
-        correct_form = CorrectEventTimeForm(request.POST, earliest=earliest, latest=latest)
-        if correct_form.is_valid():
-            correct_tap_time(task, event, request.user, correct_form.cleaned_data)
-            messages.success(request, _('Time corrected.'))
-        else:
-            messages.error(request, ' '.join(error for errors in correct_form.errors.values() for error in errors))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'reopen':
-        # Admin-only — undoes a manager's close decision, back to
-        # "awaiting manager approval" (not further back than that; the
-        # filed report itself is untouched — a manager can correct it
-        # closed or not, see task_report_correct).
-        if requesting_technician.role != Technician.Role.ADMIN:
-            raise PermissionDenied
-        error = reopen_task(task, request.user)
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('Task reopened.'))
-        return redirect('tasks:task_detail', pk=task.pk)
-
-    close_task_form = CloseTaskForm()
-    if request.method == 'POST' and request.POST.get('action') == 'close_directly':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        if task.status == Task.Status.CLOSED:
-            messages.error(request, _('This task is already closed.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        close_task_form = CloseTaskForm(request.POST)
-        if close_task_form.is_valid():
-            close_task_directly(task, request.user, close_task_form.cleaned_data['note'])
-            messages.success(request, _('Task closed.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    # A task stopped on site (blocked) gets a new visit: the same task, a new
-    # time, back to its team (assigned — or new, with nobody on it). The stop
-    # and its reason stay in the history; customer and lead are told, as for
-    # any booking.
-    rebook_form = RebookVisitForm()
-    if request.method == 'POST' and request.POST.get('action') == 'rebook':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        if task.status != Task.Status.BLOCKED:
-            messages.error(request, _('Only a task stopped on site can be given a new visit here.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        rebook_form = RebookVisitForm(request.POST)
-        if rebook_form.is_valid():
-            rebook_visit(task, request.user, rebook_form.cleaned_data['scheduled_for'], rebook_form.cleaned_data['note'])
-            messages.success(request, _('New visit booked.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    # Close and cancel share one form on the page (one reason box, `note`).
-    cancel_task_form = CancelTaskForm()
-    if request.method == 'POST' and request.POST.get('action') == 'cancel_task':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        if task.status not in CANCELLABLE_STATUSES:
-            messages.error(request, _('This task can no longer be cancelled.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        cancel_task_form = CancelTaskForm(request.POST)
-        if cancel_task_form.is_valid():
-            cancel_task(task, request.user, cancel_task_form.cleaned_data['note'])
-            messages.success(request, _('Task cancelled.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    negligence_form = NegligenceFlagForm()
-    if request.method == 'POST' and request.POST.get('action') == 'flag_negligence':
-        require_manager(request)
-        _require_task_owner(request, task)  # the owner, or someone stepping in
-        if task.status != Task.Status.CLOSED:
-            messages.error(request, _('Only closed tasks can be flagged.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        negligence_form = NegligenceFlagForm(request.POST)
-        if negligence_form.is_valid():
-            flag_negligence(task, request.user, negligence_form.cleaned_data['note'])
-            messages.success(request, _('Task flagged.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'create_next_step':
-        # Managers only: sending equipment on (often to another country) is theirs to decide.
-        viewer = require_manager(request)
-        step = request.POST.get('step')
-        if step not in NEXT_STEPS.get(equipment_step(task), ()):
-            raise Http404
-        site = get_object_or_404(next_step_sites(viewer, step), pk=request.POST.get('site'))
-        task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
-        chosen = [line for line in lines_to_carry(task) if str(line.pk) in request.POST.getlist('lines')]
-        if task_type is None or not chosen:
-            messages.error(request, _('Choose at least one machine to carry to the next step.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        next_task = create_next_step(request, task, task_type, site, chosen)
-        messages.success(request, _('Next step %(number)s created with %(count)s machines.') % {
-            'number': next_task.task_number, 'count': len(chosen),
-        })
-        return redirect('tasks:task_detail', pk=next_task.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'create_follow_up':
-        require_permission(request, RolePermission.Permission.CREATE_TASKS)
-        if not still_to_install(task):
-            messages.error(request, _('Nothing is left to install on this task.'))
-            return redirect('tasks:task_detail', pk=task.pk)
-        follow_up = create_follow_up(task, request.user)
-        messages.success(request, _('Follow-up task %(number)s created for the machines still to install.') % {
-            'number': follow_up.task_number,
-        })
-        return redirect('tasks:task_detail', pk=follow_up.pk)
-
-    if request.method == 'POST' and request.POST.get('action') == 'send_feedback_request':
-        require_manager(request)
-        error = send_feedback_request(request, task)
-        if error:
-            messages.error(request, error)
-        else:
-            messages.success(request, _('The feedback request has been sent.'))
-        return redirect('tasks:task_detail', pk=task.pk)
 
     assignments = task.assignments.select_related('technician')
     active_lead = next(
@@ -2411,29 +1848,64 @@ def task_detail(request, pk):
         'departed_on_task': task.status in NEEDS_REASSIGNING_STATUSES and task.assignments.filter(
             is_active=True, technician__is_active=False,
         ).exists(),
-        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
+        # Photos as machine and branch cards (visit_photo_cards); the list keeps the other files.
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand').exclude(
+            media_type=TaskAttachment.MediaType.PHOTO),
+        'visit_photos': visit_photo_cards(task, task.attachments.select_related('asset__brand', 'uploaded_by__technician')),
         # The customer's request, all of it (request_for_task).
         'from_request': request_for_task(task),
         'task_assets': task.task_assets.select_related('asset__site', 'asset__brand'),
         'products': task.products.select_related('brand', 'for_task'),
         # An installation's machines not installed yet, and the chain around it.
         'still_to_install': still_to_install(task),
+        # The parts it needs, each from stock, ordered or arrived; changed by its owner (or stepping in).
+        'parts_needed': parts_needed_rows(task),
+        # The warehouse marks them prepared once they're all in.
+        'can_prepare_parts': can_prepare_parts(requesting_technician) and parts_all_in(task) and not parts_is_shipment(task),
+        'can_edit_parts': requesting_technician.is_manager_tier,
+        # Each part's own edit form, filled in (managers only).
+        'part_edit_forms': {
+            row['line'].pk: PartNeededForm(prefix=f"part{row['line'].pk}", initial={
+                'product_code': row['line'].product_code, 'description': row['line'].description,
+                'quantity': row['line'].quantity, 'source': row['line'].source, 'expected_on': row['line'].expected_on,
+            }) for row in parts_needed_rows(task)
+        } if requesting_technician.is_manager_tier else {},
+        # Scheduled while an ordered part isn't in yet: said at the top of the page.
+        'scheduled_before_parts': bool(task.scheduled_for or task.scheduled_date) and any(
+            row['state'] == 'waiting' for row in parts_needed_rows(task)
+        ) and task.status not in (Task.Status.CLOSED, Task.Status.CANCELLED),
+        'part_form': forms['part_form'],
+        'can_change_parts': can_change_task(requesting_technician, task),
+        # An installation's site checked ready before the truck goes.
+        'site_readiness': getattr(task, 'site_readiness', None) if is_installation(task) else None,
+        'is_installation': is_installation(task),
+        'site_not_ready': is_installation(task) and bool(task.scheduled_for or task.scheduled_date)
+        and not site_is_ready(task) and task.status not in (Task.Status.CLOSED, Task.Status.CANCELLED,
+                                                           Task.Status.COMPLETED),
         'can_create_follow_up': _has_permission(requesting_technician, RolePermission.Permission.CREATE_TASKS),
         'next_tasks': task.next_tasks.all(),
         # Receiving / loading: machines ready to carry on, and where they can go.
         'lines_to_carry': lines_to_carry(task),
-        # Sending the machines on is the manager tier's only — not a supervisor's.
-        'can_send_on': requesting_technician.is_manager_tier,
+        # Sending the machines on: the Manager, Project Manager or Admin only.
+        'can_send_on': can_plan_equipment(requesting_technician),
         'next_step_choices': [
-            (step, TaskType.Category(step).label, next_step_sites(requesting_technician, step))
+            (step, next_step_label(step), next_step_sites(requesting_technician, step))
             for step in NEXT_STEPS.get(equipment_step(task), ())
         ],
+        # Who supervises it there, by country (next_step_supervisor).
+        'next_step_supervisors': (
+            next_step_supervisors(requesting_technician) if requesting_technician.is_manager_tier else []
+        ),
+        # "+ New branch" while sending on: whoever creates branches, among the customers they reach.
+        'next_step_customers': (
+            next_step_customers(requesting_technician) if can_create_customers(requesting_technician) else []
+        ),
         'report': getattr(task, 'report', None),
         'report_changed_after_signing': _report_changed_after_signing(task),
         'feedback': getattr(task, 'feedback', None),
-        'close_task_form': close_task_form,
-        'cancel_task_form': cancel_task_form,
-        'rebook_form': rebook_form,
+        'close_task_form': forms['close_task_form'],
+        'cancel_task_form': forms['cancel_task_form'],
+        'rebook_form': forms['rebook_form'],
         # The lead's confirmation (the "accepted" tap): who and when, shown under the status.
         'confirmed_event': task.events.filter(event_type=TaskEvent.EventType.ACCEPTED).select_related(
             'actor__technician',
@@ -2442,23 +1914,33 @@ def task_detail(request, pk):
         'stop_reason': task.events.filter(event_type=TaskEvent.EventType.BLOCKED).order_by('-occurred_at')
         .values_list('note', flat=True).first() if task.status == Task.Status.BLOCKED else '',
         'can_cancel': task.status in CANCELLABLE_STATUSES,
-        'negligence_form': negligence_form,
+        'negligence_form': forms['negligence_form'],
         'pending_schedule_request': pending_schedule_request,
         'customer_has_current_time': customer_has_current_time(task),
         'can_upload_staff_document': can_upload_staff_document,
-        'staff_upload_form': staff_upload_form,
-        'can_give_final_approval': can_give_final_approval(requesting_technician),
+        'staff_upload_form': forms['staff_upload_form'],
+        'can_give_final_approval': (
+            can_give_final_approval(requesting_technician) and not gave_supervisor_approval(task, request.user)
+        ),
+        # Edit, and the changes on the page: the owner, or someone allowed to step in.
+        'can_change': can_change_task(requesting_technician, task),
+        # Its machines visited twice or more in the last 90 days besides this (docs/scenarios.md E).
+        'repeat_visits': Task.objects.filter(
+            task_assets__asset__task_assets__task=task, reported_at__gte=timezone.now() - timedelta(days=90),
+        ).exclude(pk=task.pk).exclude(status=Task.Status.CANCELLED).distinct().count(),
+        'quote_statuses': Task.QuoteStatus.choices,
         'can_approve_as_supervisor': (
             requesting_technician.is_manager_tier
             or requesting_technician.id == task.responsible_supervisor_id
         ),
         'task_messages': task.messages.select_related('sent_by__technician'),
-        'message_form': message_form,
+        'message_form': forms['message_form'],
     }
     return render(request, 'tasks/task_detail.html', context)
 
 
-def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date, product_rows=None, is_loading=False):
+def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_date, product_rows=None, is_loading=False,
+                    stock_reason=''):
     """Saves a valid TaskEditForm with everything that goes with it, on the
     website (task_edit) and from the app (api.views.TaskEditView): a moved
     time recorded and the customer told; the machines (`product_rows`, or
@@ -2479,10 +1961,12 @@ def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_da
                 occurred_at=timezone.now(), actor=request.user,
             )
             notify_customer.visit_booked(updated_task)
+        short = ''
         if product_rows is not None:
             save_planned_lines(updated_task, product_rows)
+            if is_loading:  # beyond the warehouse's stock: only with a reason (BeyondStock undoes all this)
+                short = check_beyond_stock(updated_task, stock_reason, request.user)
     warnings = []
-    short = loading_shortfall(updated_task) if is_loading and product_rows is not None else ''
     if short:
         warnings.append(short)
     notices = []
@@ -2502,6 +1986,11 @@ def apply_task_edit(request, form, previous_scheduled_for, previous_scheduled_da
     ):
         _send_shipment_notice_to_supervisor(request, updated_task)
         notices.append(_('The supervisor has been notified of the shipment.'))
+    if (
+        {'scheduled_for', 'scheduled_date'} & set(form.changed_data)
+        and (updated_task.scheduled_for or updated_task.scheduled_date) and not site_is_ready(updated_task)
+    ):
+        warnings.append(SITE_NOT_READY)
     weekend_warning = _weekend_warning(updated_task)
     if weekend_warning and {'scheduled_for', 'scheduled_date', 'priority'} & set(form.changed_data):
         warnings.append(weekend_warning)
@@ -2537,10 +2026,12 @@ def task_edit(request, pk):
     previous_scheduled_for = task.scheduled_for
     previous_scheduled_date = task.scheduled_date
     products_locked = not is_manager and task.status in PRODUCTS_LOCKED_STATUSES
-    # A loading takes machines out of a warehouse's stock: the manager tier's decision, like sending them on.
+    # A loading's or an installation's machines: planned by the Manager, Project Manager or Admin
+    # only (people.permissions.can_plan_equipment) — a loading takes them out of a warehouse's stock.
     is_loading = equipment_step(task) == TaskType.Category.LOADING
-    loading_locked = is_loading and not is_manager
-    products_locked = products_locked or loading_locked
+    planned_by_managers = equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION)
+    equipment_locked = planned_by_managers and not can_plan_equipment(requesting_technician)
+    products_locked = products_locked or equipment_locked
 
     # No Delete: once a task has its machines, none is removed (save_planned_lines).
     TaskProductFormSet = formset_factory(TaskProductForm, extra=TASK_PRODUCT_ROWS)
@@ -2560,14 +2051,19 @@ def task_edit(request, pk):
         )
         product_formset = None if products_locked else TaskProductFormSet(request.POST, prefix='products')
         if form.is_valid() and (products_locked or product_formset.is_valid()):
-            done, warnings = apply_task_edit(
-                request, form, previous_scheduled_for, previous_scheduled_date,
-                None if products_locked else product_formset.cleaned_data, is_loading,
-            )
-            messages.success(request, done)
-            for warning in warnings:
-                messages.warning(request, warning)
-            return redirect('tasks:task_detail', pk=task.pk)
+            try:
+                done, warnings = apply_task_edit(
+                    request, form, previous_scheduled_for, previous_scheduled_date,
+                    None if products_locked else product_formset.cleaned_data, is_loading,
+                    request.POST.get('stock_reason', ''),
+                )
+            except BeyondStock as short:
+                messages.error(request, _('%(short)s To plan it anyway, say why.') % {'short': short})
+            else:
+                messages.success(request, done)
+                for warning in warnings:
+                    messages.warning(request, warning)
+                return redirect('tasks:task_detail', pk=task.pk)
     else:
         form = TaskEditForm(instance=task, country=task_country, is_manager=is_manager)
         product_formset = None if products_locked else TaskProductFormSet(initial=product_initial, prefix='products')
@@ -2578,7 +2074,7 @@ def task_edit(request, pk):
             product_form.fields['product_code'].widget.attrs['list'] = 'warehouse-codes'
     context = {
         'task': task, 'form': form, 'product_formset': product_formset, 'products_locked': products_locked,
-        'loading_locked': loading_locked,
+        'equipment_locked': equipment_locked,
         'is_installation': is_installation(task), 'is_receiving': equipment_step(task) == TaskType.Category.RECEIVING,
         # A loading is planned from what its warehouse holds (without this task's own lines).
         'warehouse_stock': warehouse_stock_for_planning(task) if is_loading else None,
@@ -2603,6 +2099,8 @@ def _task_form_for(requesting_technician, ticket, data=None):
     return TaskCreateForm(
         data, country=ticket.country, ticket=ticket, is_admin=requesting_technician.role == Technician.Role.ADMIN,
         can_assign=_has_permission(requesting_technician, RolePermission.Permission.ASSIGN_TASKS),
+        owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+        can_add_site=can_create_customers(requesting_technician),
     )
 
 
@@ -2711,6 +2209,16 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
     """
     cleaned = form.cleaned_data
     with transaction.atomic():
+        if ticket is not None:
+            # One task per request (or per machine), whatever the double clicks: the request is
+            # locked; one already made from it is returned instead of a second.
+            locked = CustomerTicket.objects.select_for_update().get(pk=ticket.pk)
+            done = [machine.task for machine in TicketMachine.objects.filter(
+                pk__in=[machine.pk for machine in selected_machines]).exclude(task=None).select_related('task')]
+            if selected_machines and len(done) == len(selected_machines):
+                return done[0]
+            if not selected_machines and locked.task_id and not ticket.machines.exists():
+                return locked.task
         site = cleaned.get('site')
         if not site:
             site = Site.objects.create(
@@ -2720,6 +2228,7 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
                 contact_phone=cleaned.get('new_site_contact_phone', '').strip(),
                 access_notes=cleaned.get('new_site_access_notes', '').strip(),
             )
+            tell_customer_new_branch(request, site)  # set up by us: the customer is told
 
         brand = cleaned.get('brand')
         if not brand and cleaned.get('new_brand_name'):
@@ -2746,6 +2255,8 @@ def create_task(request, form, creator, ticket=None, selected_machines=(), machi
         if task_type is not None and task_type.category == TaskType.Category.PART_SHIPMENT and selected_machines:
             machine_decision = TicketMachine.Decision.SHIP_PART
         task.task_type = task_type
+        if ticket is not None and ticket.about in Task.About.values:
+            task.about = ticket.about  # what the customer said it's about
         task.created_by = request.user
         # One owner from the start (docs/access_rules.md): the supervisor it's given to, else whoever created it.
         if not task.responsible_supervisor_id and creator.role != Technician.Role.TECHNICIAN:
@@ -2823,6 +2334,9 @@ def task_create(request):
         if not requesting_technician.is_any_manager:
             internal = internal.none()
         ticket = get_object_or_404(customer_tickets | internal, pk=ticket_id)
+        # Its times are its own country's (the visit time typed here, the customer's email) —
+        # not the country this person is looking at.
+        timezone.activate(ZoneInfo(ticket.country.timezone))
         if ticket.about == CustomerTicket.About.NEW_BRANCH and not ticket.site_id:
             # A branch that doesn't exist yet: added (and linked) from the request first.
             messages.error(request, _('Add the branch first (button above); then you can create its task here.'))
@@ -2861,6 +2375,8 @@ def task_create(request):
     if request.method == 'POST':
         form = lock_type(TaskCreateForm(
             request.POST, country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign,
+            owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+            can_add_site=can_create_customers(requesting_technician),
         ))
         if form.is_valid():
             task = create_task(request, form, requesting_technician, ticket, selected_machines, machine_decision)
@@ -2874,18 +2390,19 @@ def task_create(request):
                 messages.warning(request, clash)
             return redirect('tasks:task_detail', pk=task.pk)
     else:
-        form = lock_type(TaskCreateForm(country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign))
+        form = lock_type(TaskCreateForm(
+            country=country, ticket=ticket, is_admin=is_admin, can_assign=can_assign,
+            owner_required=requesting_technician.role == Technician.Role.TECHNICIAN,
+            can_add_site=can_create_customers(requesting_technician),
+        ))
         if selected_machines:
             form.fields['description'].initial = ticket_machines_text(selected_machines)[1]
 
     # So whoever's creating this can see everyone's upcoming schedule
     # right here and pick a date that doesn't collide — no separate trip
     # to the week board just to check.
-    team_schedule = _supervisors_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=country).exclude(role=Technician.Role.TECHNICIAN),
-    ) + _technicians_with_next_scheduled_task(
-        Technician.objects.filter(is_active=True, country=country, role=Technician.Role.TECHNICIAN),
-    )
+    # Each person's day today, best first (the same words as choosing the team on Assign).
+    team_schedule = _with_day_load(Technician.objects.filter(is_active=True, country=country), day=timezone.localdate())
     # Everyone's next booking shows; only those the creator oversees link to their schedule.
     _mark_openable(team_schedule, requesting_technician)
 
@@ -2921,367 +2438,6 @@ def _ticket_is_open(ticket):
     return True
 
 
-def send_ticket_confirmation_to_customer(request, ticket):
-    """The one email a customer gets right when they submit a ticket —
-    best-effort and forced to English, same reasoning as every other
-    outbound customer notification here. Public (no leading underscore):
-    customers.views.portal_ticket_new, a different app, calls this
-    directly, the same way it already calls save_new_ticket.
-    """
-    if not NotificationSettings.load().ticket_received_email:  # the admin's Notifications page
-        return
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('Ticket %(number)s received — Profit Sports Solutions') % {'number': ticket.ticket_number}
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Thank you for contacting us. We have received your request and created ticket #%(number)s.\n\n'
-            'Our team responds within 24 hours, Sunday to Friday. You will receive an email as soon as there '
-            'is an update.\n\n'
-            'Please ensure that photos or videos are attached for each issue. This will help our team '
-            'understand the problem and resolve your case promptly.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {'contact': ticket.contact_name, 'number': ticket.ticket_number}
-    _send_notification_email(
-        subject, message, 'tasks/email/ticket_confirmation.html',
-        {'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number, 'link': link},
-        [ticket.contact_email],
-    )
-
-
-# Staff setup links: the same kind of signed, one-time link as the
-# customer portal's (customers.accounts), with their own salt so a link
-# made for one can never open the other.
-STAFF_LINK_SALT = 'tasks.staff-setup-link'
-STAFF_LINK_VALID_DAYS = 7
-
-
-def _staff_link_fingerprint(user):
-    # Changes the moment the password does, so each link works only once.
-    return salted_hmac(STAFF_LINK_SALT, f'{user.pk}:{user.password}').hexdigest()[:20]
-
-
-def make_staff_link_token(user):
-    return signing.dumps({'u': user.pk, 'f': _staff_link_fingerprint(user)}, salt=STAFF_LINK_SALT)
-
-
-def staff_user_for_link_token(token):
-    """The staff login a setup link belongs to, or None if it's tampered
-    with, older than STAFF_LINK_VALID_DAYS, already used, or the login or
-    the person is no longer active."""
-    try:
-        data = signing.loads(token, salt=STAFF_LINK_SALT, max_age=timedelta(days=STAFF_LINK_VALID_DAYS))
-    except signing.BadSignature:
-        return None
-    user = get_user_model().objects.filter(
-        pk=data.get('u'), is_active=True, technician__is_active=True,
-    ).select_related('technician').first()
-    if user is None or data.get('f') != _staff_link_fingerprint(user):
-        return None
-    return user
-
-
-def send_staff_setup_link(request, technician):
-    """Emails a one-time link to set a password: for a new login, or for
-    anyone who can't sign in. No password ever goes by email. False if
-    there's no email address to send it to.
-    """
-    user = technician.user
-    if not user.email:
-        return False
-    link = staff_url(request, reverse('tasks:staff_setup', args=[make_staff_link_token(user)]))
-    context = {'contact': technician.full_name, 'username': user.get_username(), 'link': link,
-               'days': STAFF_LINK_VALID_DAYS}
-    with translation.override('en'):
-        subject = _('Set up your Profit Sports Solutions account')
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Your Profit Sports Solutions account has been created. Please set your password using the secure '
-            'link below. The link is valid for %(days)s days and can be used once.\n\n'
-            '%(link)s\n\n'
-            'Your username: %(username)s\n\n'
-            'If the link has expired, please ask your manager to send a new one.\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n'
-        ) % context
-    _send_notification_email(subject, message, 'tasks/email/staff_setup_link.html', context, [user.email])
-    technician.setup_link_sent_at = timezone.now()
-    technician.save(update_fields=['setup_link_sent_at'])
-    return True
-
-
-def _send_reply_to_customer(request, reply):
-    """Best-effort, and only when the customer gave an email — same
-    fail-silent pattern as every other customer-facing notification.
-    Any file attached to the reply (quotation, report, photo, whatever
-    staff chose to include) rides along on the email itself, not just
-    linked from the portal.
-    """
-    if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
-        return
-    ticket = reply.ticket
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('New reply on your ticket %(number)s — %(site)s') % {
-            'number': ticket.ticket_number, 'site': ticket.site_description,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Regarding ticket %(number)s:\n\n'
-            '%(reply_message)s\n\n'
-            'You may reply or view the full conversation here:\n'
-            '%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {
-            'contact': ticket.contact_name, 'number': ticket.ticket_number,
-            'reply_message': reply.message, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/reply_to_customer.html',
-        {
-            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
-            'reply_message': reply.message, 'link': link,
-        },
-        [ticket.contact_email], attachment=reply.all_files,
-    )
-
-
-def _send_request_closed(request, ticket):
-    """Tell the customer their request was resolved, with our answer (the
-    close reason) — best-effort, under the same Notifications switch as
-    our replies, and only when they gave an email."""
-    if not NotificationSettings.load().reply_to_customer_email:  # the admin's Notifications page
-        return
-    if not ticket.contact_email:
-        return
-    link = portal_url(request, reverse('tasks:ticket_status', args=[ticket.token]))
-    with translation.override('en'):
-        subject = _('Your request %(number)s has been resolved — %(site)s') % {
-            'number': ticket.ticket_number, 'site': ticket.site_description,
-        }
-        message = _(
-            'Dear %(contact)s,\n\n'
-            'Your request %(number)s has been resolved:\n\n'
-            '%(answer)s\n\n'
-            'You can view it here. If you need anything further, please send us a new request from the portal.\n'
-            '%(link)s\n\n'
-            'Best regards,\n'
-            'Profit Sports Solutions\n',
-        ) % {
-            'contact': ticket.contact_name, 'number': ticket.ticket_number,
-            'answer': ticket.close_reason, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/request_closed.html',
-        {
-            'contact': ticket.contact_name, 'ticket_number': ticket.ticket_number,
-            'answer': ticket.close_reason, 'link': link,
-        },
-        [ticket.contact_email],
-    )
-
-
-def _send_reply_to_staff(request, reply):
-    """Best-effort, and only when the ticket is assigned to someone with
-    a login and an email on file — there's no fixed office address to
-    fall back to.
-    """
-    if not NotificationSettings.load().reply_to_staff_email:  # the admin's Notifications page
-        return
-    ticket = reply.ticket
-    assignee = ticket.assigned_to
-    if not assignee or not assignee.user_id or not assignee.user.email:
-        return
-    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
-    with translation.override('en'):
-        subject = _('New customer reply — ticket %(number)s') % {'number': ticket.ticket_number}
-        message = _(
-            'The customer has replied to ticket %(number)s (%(company)s — %(site)s):\n\n'
-            '%(reply_message)s\n\n'
-            'View and reply:\n'
-            '%(link)s\n',
-        ) % {
-            'number': ticket.ticket_number, 'company': ticket.company_name, 'site': ticket.site_description,
-            'reply_message': reply.message, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/reply_to_staff.html',
-        {
-            'ticket_number': ticket.ticket_number, 'company': ticket.company_name,
-            'site': ticket.site_description, 'reply_message': reply.message, 'link': link,
-        },
-        [assignee.user.email],
-    )
-
-
-def _send_escalation_email(request, escalation):
-    """Best-effort email to whoever a ticket was escalated to."""
-    if not NotificationSettings.load().escalation_emails:  # the admin's Notifications page
-        return
-    recipient = escalation.escalated_to
-    if not recipient.user_id or not recipient.user.email:
-        return
-    ticket = escalation.ticket
-    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
-    with translation.override('en'):
-        subject = _('Ticket escalated to you — %(number)s') % {'number': ticket.ticket_number}
-        message = _(
-            '%(by)s has escalated ticket %(number)s (%(company)s — %(site)s) to you for a decision:\n\n'
-            '%(reason)s\n\n'
-            'Please record your decision here:\n'
-            '%(link)s\n',
-        ) % {
-            'by': escalation.escalated_by.full_name, 'number': ticket.ticket_number,
-            'company': ticket.company_name, 'site': ticket.site_description, 'reason': escalation.reason,
-            'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/ticket_escalated.html',
-        {
-            'escalated_by': escalation.escalated_by.full_name, 'ticket_number': ticket.ticket_number,
-            'company': ticket.company_name, 'site': ticket.site_description, 'reason': escalation.reason,
-            'link': link,
-        },
-        [recipient.user.email],
-    )
-
-
-def _send_escalation_decided_email(request, escalation):
-    """Best-effort email back to whoever escalated, once it's decided."""
-    if not NotificationSettings.load().escalation_emails:  # the admin's Notifications page
-        return
-    recipient = escalation.escalated_by
-    if not recipient.user_id or not recipient.user.email:
-        return
-    ticket = escalation.ticket
-    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
-    with translation.override('en'):
-        subject = _('Escalation decided — %(number)s') % {'number': ticket.ticket_number}
-        decision = escalation.get_decision_display()
-        message = _(
-            '%(by)s has issued a decision on the escalation of ticket %(number)s: %(decision)s.\n\n'
-            '%(note)s\n\n'
-            'Please continue processing the ticket here:\n'
-            '%(link)s\n',
-        ) % {
-            'by': escalation.escalated_to.full_name, 'number': ticket.ticket_number, 'decision': decision,
-            'note': escalation.decision_note, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/escalation_decided.html',
-        {
-            'decided_by': escalation.escalated_to.full_name, 'ticket_number': ticket.ticket_number,
-            'decision': decision, 'note': escalation.decision_note, 'link': link,
-        },
-        [recipient.user.email],
-    )
-
-
-def _staff_notification_recipients(country, roles, everywhere=None):
-    """Logins in this country, among these roles, with an email on file —
-    who gets alerted about a new ticket or a new task. The bell only
-    reaches someone already in the app; this reaches them either way.
-    `everywhere`: a permission whose roles hear from every country, not
-    only their own (a new ticket: tickets_all_countries).
-    """
-    in_reach = Q(country=country)
-    if everywhere:
-        in_reach |= Q(role__in=RolePermission.objects.filter(
-            permission=everywhere, allowed=True,
-        ).values('role'))
-    return list(
-        Technician.objects.filter(in_reach, is_active=True, role__in=roles, user__isnull=False)
-        .exclude(user__email='').values_list('user__email', flat=True).distinct()
-    )
-
-
-def send_new_ticket_email_to_staff(request, ticket):
-    """Best-effort, same fail-silent pattern as every other notification
-    here — the roles chosen on the admin's Notifications page (by default
-    whoever can manage_tickets), in the ticket's country, alongside the bell (people.context_processors.notification_
-    bell). Public (no leading underscore): customers.views.portal_ticket_
-    new calls this directly, the same way it already calls save_new_ticket.
-    """
-    # The chosen roles (by default the Technical Support Manager and the country's
-    # Country Support Manager); nobody of those: the admins (tasks.alarms).
-    from tasks.alarms import new_ticket_people
-    # Their phones too, opening the request in the app — whatever the email switch says.
-    people = list(new_ticket_people(ticket.country))
-    urgent = ticket.machines.filter(problem=TicketMachine.Problem.NOT_WORKING).exists()
-    transaction.on_commit(lambda: [push_in_their_language(
-        person,
-        lambda: _('New request — a machine is not working') if urgent else _('New request'),
-        lambda: _('%(number)s — %(company)s') % {'number': ticket.ticket_number, 'company': ticket.company_name},
-        {'type': 'ticket', 'ticket_id': ticket.pk},
-    ) for person in people])
-    switches = NotificationSettings.load()
-    if not switches.new_ticket_email:
-        return
-    recipients = list(
-        new_ticket_people(ticket.country).exclude(user__email='').values_list('user__email', flat=True).distinct()
-    )
-    if not recipients:
-        return
-    link = staff_url(request, reverse('tasks:ticket_review', args=[ticket.pk]))
-    with translation.override('en'):
-        subject = _('New ticket %(number)s — %(company)s') % {
-            'number': ticket.ticket_number, 'company': ticket.company_name,
-        }
-        message = _(
-            'A new ticket has been received.\n\n'
-            'Ticket: %(number)s\n'
-            'Company: %(company)s\n'
-            'Site: %(site)s\n'
-            'Description: %(description)s\n\n'
-            'Review the ticket:\n'
-            '%(link)s\n',
-        ) % {
-            'number': ticket.ticket_number, 'company': ticket.company_name,
-            'site': ticket.site_description, 'description': ticket.description, 'link': link,
-        }
-    _send_notification_email(
-        subject, message, 'tasks/email/new_ticket_to_staff.html',
-        {
-            'ticket_number': ticket.ticket_number, 'company': ticket.company_name,
-            'site': ticket.site_description, 'description': ticket.description, 'link': link,
-        },
-        recipients,
-    )
-
-
-def _send_new_task_email_to_staff(request, task):
-    """Best-effort, same fail-silent pattern as every other notification
-    here — the roles chosen on the admin's Notifications page (by default
-    managers and admins), in the task's country, alongside the bell.
-    """
-    switches = NotificationSettings.load()
-    if not switches.new_task_email:
-        return
-    recipients = _staff_notification_recipients(task.site.customer.country, switches.new_task_roles)
-    if not recipients:
-        return
-    link = staff_url(request, reverse('tasks:task_detail', args=[task.pk]))
-    with translation.override('en'):
-        subject = _('New task %(number)s — %(site)s') % {'number': task.task_number, 'site': task.site.name}
-        message = _(
-            'A new task has been created.\n\n'
-            'Task: %(number)s\n'
-            'Site: %(site)s\n'
-            'Description: %(description)s\n\n'
-            'View the task:\n'
-            '%(link)s\n',
-        ) % {'number': task.task_number, 'site': task.site.name, 'description': task.description, 'link': link}
-    _send_notification_email(
-        subject, message, 'tasks/email/new_task_to_staff.html',
-        {'task_number': task.task_number, 'site': task.site.name, 'description': task.description, 'link': link},
-        recipients,
-    )
 
 
 @login_required(login_url='customers:portal_login')
@@ -3293,8 +2449,10 @@ def ticket_status(request, token):
     only be submitted while signed in), so this only renders it for
     that same customer, never anyone else who happens to have the link.
     """
+    from customers.models import portal_customer
+
     ticket = get_object_or_404(CustomerTicket, token=token)
-    customer = getattr(request.user, 'customer', None)
+    customer = portal_customer(request.user)
     if customer is not None and ticket.customer_id != customer.id:
         # A link from an email for another account (two accounts, one inbox): say so plainly —
         # never whose it is — and show this account's own requests.
@@ -3333,8 +2491,9 @@ def ticket_status(request, token):
         'progress': ticket_progress(ticket),
         'steps': progress_steps(ticket_progress(ticket)) if ticket.heads_for_a_visit else None,
         'booked': ticket.task_id and is_booked(visit_progress(ticket.task)),
-        # The visit(s) it became — one, or one per group of machines — each with its report once in.
-        'visits': _ticket_visits(ticket),
+        # The visit(s) it became — one, or one per group of machines — each with its report once in;
+        # and the parts shipped for it, each with its courier's tracking link (never a "visit").
+        **_ticket_visits(ticket),
         'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         # Only what the customer may see is used from these: the dates and
         # customer_message — never reason, decision or decision_note.
@@ -3344,19 +2503,26 @@ def ticket_status(request, token):
 
 
 def _ticket_visits(ticket):
-    """The visits a customer's ticket became (its task, and those its
-    machines were split into), for the ticket page: progress, day, report."""
+    """What a customer's ticket became (its task, and those its machines
+    were split into), for the ticket page: {'visits': each with progress,
+    day and report; 'shipments': each part shipment as the customer sees it
+    (tasks.shipments.for_customer)}."""
+    from tasks import shipments
+
     tasks = {machine.task_id: machine.task for machine in ticket.machines.select_related('task__task_type', 'task__report')
              if machine.task_id}
     if ticket.task_id:
         tasks.setdefault(ticket.task_id, ticket.task)
-    visits = []
+    visits, parcels = [], []
     for task in sorted(tasks.values(), key=lambda task: task.reported_at):
+        if shipments.is_part_shipment(task):
+            parcels.append(shipments.for_customer(task))
+            continue
         visits.append({
-            'task': task, 'progress': visit_progress(task), 'day': visit_day(task),
+            'task': task, 'progress': visit_progress(task), 'day': shown_day(task, visit_progress(task)),
             'booked': is_booked(visit_progress(task)), 'has_report': getattr(task, 'report', None) is not None,
         })
-    return visits
+    return {'visits': visits, 'shipments': parcels}
 
 
 @login_required
@@ -3410,9 +2576,9 @@ def ticket_list(request):
     if ticket_id:
         tickets = tickets.filter(ticket_number__icontains=ticket_id)
     if company:
-        tickets = tickets.filter(company_name__icontains=company)
+        tickets = tickets.filter(company_name__matches=company)
     if site:
-        tickets = tickets.filter(Q(site_description__icontains=site) | Q(site_address__icontains=site))
+        tickets = tickets.filter(Q(site_description__matches=site) | Q(site_address__matches=site))
     if pak:
         tickets = tickets.filter(pak_reference_number__icontains=pak)
     if customer_id:
@@ -3425,7 +2591,7 @@ def ticket_list(request):
         tickets = tickets.filter(Q(customer_id=customer_id) | Q(company_name__iexact=customer.name))
         customer_name = customer_name or customer.name
     elif customer_name:
-        tickets = tickets.filter(Q(customer__name__icontains=customer_name) | Q(company_name__icontains=customer_name))
+        tickets = tickets.filter(Q(customer__name__matches=customer_name) | Q(company_name__matches=customer_name))
     if date:
         tickets = tickets.filter(submitted_at__date=date)
     if about in CustomerTicket.About.values:
@@ -3469,11 +2635,25 @@ def decide_request_next(request, technician, ticket, choice, machine_ids, superv
     to the customer; once no machine waits, closed and the customer told).
     The website's request page and the app (api.views.TicketNextView).
     Returns (error, success message, the new task or None).
+
+    One decision at a time per request: the request is locked while it's
+    decided, so a double click, or two people at once, never make two tasks.
     """
+    with transaction.atomic(), timezone.override(ZoneInfo(ticket.country.timezone)):  # its own country's times
+        locked = CustomerTicket.objects.select_for_update().get(pk=ticket.pk)
+        if not ticket.machines.exists() and locked.status != CustomerTicket.Status.NEW:
+            return _('This request has already been handled.'), '', None
+        return _decide_request_next(request, technician, ticket, choice, machine_ids, supervisor_id, lead_id, when,
+                                    reason, answer)
+
+
+def _decide_request_next(request, technician, ticket, choice, machine_ids, supervisor_id, lead_id, when, reason, answer):
     undecided = ticket.machines.filter(decision='')
     selected = list(undecided.filter(pk__in=[str(v) for v in machine_ids if str(v).isdigit()]))
     if undecided.exists() and not selected:
         return _('Please select at least one machine that has not been decided yet.'), '', None
+    if choice == 'visit' and not ticket.country.does_visits:
+        return _('We don\'t do visits in %(country)s: ship the parts instead.') % {'country': ticket.country.display_name}, '', None
     if choice in ('visit', 'ship'):
         if not ticket.site_id:
             return _('This request has no branch yet: use More options to choose one.'), '', None
@@ -3562,7 +2742,7 @@ def ticket_access(request, technician, pk):
     can_decide = bool(
         pending_escalation and pending_escalation.escalated_to_id == technician.id
         and RolePermission.objects.filter(
-            role=technician.role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
+            role=technician.permission_role, permission=RolePermission.Permission.DECIDE_ESCALATED_TICKETS, allowed=True,
         ).exists()
     )
     # Strictly one level up (Technician.escalates_to_role). Whoever holds
@@ -3579,6 +2759,309 @@ def ticket_access(request, technician, pk):
     }
 
 
+
+# ---- A request's page's actions (ticket_review): one handler each, by the form's `action` ----
+# Each returns the response once it has acted, or None for the page to show again — with
+# the form's errors kept in `forms` (ticket_page_forms). `access` is ticket_access's.
+
+
+def ticket_page_forms(ticket, technician):
+    """The request page's forms, blank: an action that fails keeps its own, with its errors."""
+    return {
+        'dismiss_form': DismissTicketForm(),
+        'assign_form': AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id}),
+        'logistics_form': TicketLogisticsForm(instance=ticket), 'edit_form': TicketEditForm(instance=ticket),
+        'reply_form': TicketReplyForm(), 'internal_note_form': TicketInternalNoteForm(),
+        'escalate_form': EscalateTicketForm(country=ticket.country, escalated_by=technician),
+        'decide_form': DecideEscalationForm(),
+    }
+
+
+def _back_to_request(ticket):
+    return redirect('tasks:ticket_review', pk=ticket.pk)
+
+
+def _request_decide_escalation(request, ticket, technician, access, forms):
+    if not access['can_decide']:
+        return None
+    forms['decide_form'] = form = DecideEscalationForm(request.POST)
+    if not form.is_valid():
+        return None
+    pending = access['pending_escalation']
+    pending.decision = form.cleaned_data['decision']
+    pending.decision_note = form.cleaned_data['decision_note']
+    pending.decided_at = timezone.now()
+    pending.save(update_fields=['decision', 'decision_note', 'decided_at'])
+    TicketNotification.objects.create(ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=timezone.now())
+    _send_escalation_decided_email(request, pending)
+    messages.success(request, _('The decision has been returned to the support desk.'))
+    return _back_to_request(ticket)
+
+
+def _request_next(request, ticket, technician, access, forms):
+    """"What happens next?": send a technician, ship a part, or answer without a visit."""
+    if not access['can_manage'] or ticket.status != CustomerTicket.Status.NEW:
+        return None
+    error, done, task = decide_request_next(
+        request, technician, ticket, request.POST.get('choice'), request.POST.getlist('machines'),
+        supervisor_id=request.POST.get('supervisor', ''), lead_id=request.POST.get('technician', ''),
+        when=request.POST.get('scheduled_for', ''), reason=request.POST.get('reason'),
+        answer=request.POST.get('answer', ''),
+    )
+    if error:
+        messages.error(request, error)
+    elif done:
+        messages.success(request, done)
+    return redirect('tasks:task_detail', pk=task.pk) if task is not None else _back_to_request(ticket)
+
+
+def _request_machines(request, ticket, technician, access, forms):
+    """The selected machines: a task for them (visit or part shipment, created on the
+    next page), or settled here without one."""
+    if not access['can_manage'] or ticket.status != CustomerTicket.Status.NEW:
+        return None
+    undecided = ticket.machines.filter(decision='')
+    selected = list(undecided.filter(pk__in=[v for v in request.POST.getlist('machines') if v.isdigit()]))
+    choice = request.POST.get('do')
+    if not selected:
+        messages.error(request, _('Please select at least one machine that has not been decided yet.'))
+    elif choice in TicketMachine.TASK_DECISIONS:
+        ids = ','.join(str(machine.pk) for machine in selected)
+        return redirect(f"{reverse('tasks:task_create')}?ticket={ticket.pk}&machines={ids}&decision={choice}")
+    elif choice in (TicketMachine.Decision.ADVICE, TicketMachine.Decision.NOT_COVERED):
+        note = request.POST.get('decision_note', '').strip()[:255]
+        TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
+            decision=choice, decision_note=note, decided_by=request.user, decided_at=timezone.now(),
+        )
+        settle_ticket_machines(ticket, request.user)
+        messages.success(request, _('Decision saved.'))
+    return _back_to_request(ticket)
+
+
+def _request_add_customer_photos(request, ticket, technician, access, forms):
+    """Sent another way (WhatsApp, email): onto the request, under its machine, so they reach the task."""
+    form = CustomerPhotosForm(request.POST, request.FILES, ticket=ticket)
+    if form.is_valid():
+        machine_id = form.cleaned_data['machine']
+        machine = ticket.machines.filter(pk=machine_id).first() if machine_id else None
+        for upload in form.cleaned_data['attachments']:
+            CustomerTicketAttachment.objects.create(
+                ticket=ticket, machine=machine, file=upload, uploaded_at=timezone.now(), added_by=request.user,
+            )
+        messages.success(request, _("The customer's photos have been added."))
+    else:
+        messages.error(request, ' '.join(str(e) for errors in form.errors.values() for e in errors))
+    return _back_to_request(ticket)
+
+
+def _request_create_branch(request, ticket, technician, access, forms):
+    """A customer's new branch, in one click from what they typed: name, address, contact
+    (the email is the one in their message, if any). Linked, so its task starts there."""
+    if not (ticket.about == CustomerTicket.About.NEW_BRANCH and ticket.customer_id and not ticket.site_id):
+        return None
+    if not can_create_customers(technician):
+        raise PermissionDenied
+    email = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', ticket.description or '')
+    site = ticket.customer.sites.filter(name__iexact=ticket.site_description.strip()).first()
+    if site is None:
+        site = Site.objects.create(
+            customer=ticket.customer, name=ticket.site_description.strip()[:150],
+            address=ticket.site_address, contact_name=ticket.contact_name, contact_phone=ticket.contact_phone,
+            contact_email=email.group(0) if email else '',
+        )
+    ticket.site = site
+    ticket.save(update_fields=['site'])
+    messages.success(request, _('Branch %(name)s created for %(customer)s.') % {
+        'name': site.name, 'customer': ticket.customer.name,
+    })
+    return _back_to_request(ticket)
+
+
+def _request_create_customer(request, ticket, technician, access, forms):
+    """A request from a company that isn't a customer yet: the customer (and its branch,
+    when one was given) made from what was typed — or, one of that name already in the
+    country, that one. For whoever creates customers and branches."""
+    if ticket.customer_id or not ticket.company_name.strip():
+        return None
+    if not can_create_customers(technician):
+        raise PermissionDenied
+    name = ticket.company_name.strip()
+    customer = Customer.objects.filter(country=ticket.country, name__iexact=name, is_internal=False).first()
+    if customer is None:
+        customer = Customer.objects.create(
+            country=ticket.country, name=name[:150], segment=Customer.Segment.OTHER,
+            contact_name=ticket.contact_name, contact_phone=ticket.contact_phone, contact_email=ticket.contact_email,
+        )
+        messages.success(request, _('Customer %(name)s created.') % {'name': customer.name})
+    else:
+        messages.info(request, _('%(name)s is already a customer: linked to it.') % {'name': customer.name})
+    ticket.customer = customer
+    ticket.save(update_fields=['customer'])
+    if ticket.site_description.strip() and ticket.site_address.strip():
+        site = customer.sites.filter(name__iexact=ticket.site_description.strip()).first() or Site.objects.create(
+            customer=customer, name=ticket.site_description.strip()[:150], address=ticket.site_address,
+            contact_name=ticket.contact_name, contact_phone=ticket.contact_phone, contact_email=ticket.contact_email,
+        )
+        ticket.site = site
+        ticket.save(update_fields=['site'])
+    return _back_to_request(ticket)
+
+
+def _request_escalate(request, ticket, technician, access, forms):
+    if not access['can_escalate']:
+        return None
+    forms['escalate_form'] = form = EscalateTicketForm(request.POST, country=ticket.country, escalated_by=technician)
+    if not form.is_valid():
+        return None
+    now = timezone.now()
+    pending = access['pending_escalation']
+    if pending is not None:
+        # Passing it up: this step ends as forwarded, and the one who raised it hears it went further.
+        pending.decision = TicketEscalation.Decision.FORWARDED
+        pending.decision_note = form.cleaned_data['reason']
+        pending.decided_at = now
+        pending.save(update_fields=['decision', 'decision_note', 'decided_at'])
+        TicketNotification.objects.create(ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=now)
+        _send_escalation_decided_email(request, pending)
+    escalation = TicketEscalation.objects.create(
+        ticket=ticket, escalated_by=technician, escalated_to=form.cleaned_data['escalated_to'],
+        reason=form.cleaned_data['reason'], customer_message=form.cleaned_data['customer_message'], escalated_at=now,
+    )
+    _send_escalation_email(request, escalation)
+    recipient = escalation.escalated_to
+    if not (recipient.user_id and recipient.user.email):
+        messages.warning(request, _(
+            '%(name)s has no email address on record and was therefore notified in the application '
+            'only. Please add an email address to their profile.',
+        ) % {'name': recipient.full_name})
+    push_in_their_language(
+        escalation.escalated_to,
+        lambda: _('Ticket escalated to you'),
+        lambda: _('%(number)s — %(company)s') % {'number': ticket.ticket_number, 'company': ticket.company_name},
+        {'type': 'ticket', 'ticket_id': ticket.pk},
+    )
+    messages.success(request, _('Escalated to %(name)s.') % {'name': escalation.escalated_to.full_name})
+    return _back_to_request(ticket)
+
+
+def _request_add_internal_note(request, ticket, technician, access, forms):
+    forms['internal_note_form'] = form = TicketInternalNoteForm(request.POST, request.FILES)
+    if form.is_valid():
+        add_ticket_note(request.user, ticket, form.cleaned_data['message'], form.cleaned_data['attachments'])
+        messages.success(request, _('Note added.'))
+        return _back_to_request(ticket)
+    return None
+
+
+def _request_add_reply(request, ticket, technician, access, forms):
+    if not _ticket_is_open(ticket):
+        return None
+    forms['reply_form'] = form = TicketReplyForm(request.POST, request.FILES)
+    if form.is_valid():
+        send_staff_reply(request, ticket, form.cleaned_data['message'], form.cleaned_data['attachments'])
+        messages.success(request, _('Reply sent.'))
+        return _back_to_request(ticket)
+    return None
+
+
+def _request_update_logistics(request, ticket, technician, access, forms):
+    forms['logistics_form'] = form = TicketLogisticsForm(request.POST, instance=ticket)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _('Logistics updated.'))
+        return _back_to_request(ticket)
+    return None
+
+
+def _request_edit_details(request, ticket, technician, access, forms):
+    forms['edit_form'] = form = TicketEditForm(request.POST, instance=ticket)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _('Ticket details updated.'))
+        return _back_to_request(ticket)
+    return None
+
+
+def _request_notify_shipping(request, ticket, technician, access, forms):
+    if not ticket.shipping_tracking_number:
+        messages.error(request, _('Please add a shipping tracking number before notifying the customer.'))
+    elif not ticket.contact_email:
+        messages.error(request, _('Please add a contact email address before notifying the customer.'))
+    else:
+        _send_shipping_notice(
+            ticket.country, ticket.contact_name, ticket.site_description, ticket.shipping_company,
+            ticket.shipping_tracking_number, ticket.contact_email, ticket=ticket,
+        )
+        messages.success(request, _('The customer has been notified of the tracking number.'))
+    return _back_to_request(ticket)
+
+
+def _request_dismiss(request, ticket, technician, access, forms):
+    if ticket.status != CustomerTicket.Status.NEW:
+        return None
+    forms['dismiss_form'] = form = DismissTicketForm(request.POST)
+    if form.is_valid():
+        ticket.status = CustomerTicket.Status.DISMISSED
+        ticket.dismissal_reason = form.cleaned_data['dismissal_reason']
+        ticket.reviewed_by = request.user
+        ticket.reviewed_at = timezone.now()
+        ticket.save(update_fields=['status', 'dismissal_reason', 'reviewed_by', 'reviewed_at'])
+        messages.success(request, _('Ticket dismissed.'))
+        return _back_to_request(ticket)
+    return None
+
+
+def _request_reopen(request, ticket, technician, access, forms):
+    # Admin-only: support can close, but reopening a decision someone signed off on is one
+    # step further — the same fixed floor as require_admin elsewhere.
+    if technician.role != Technician.Role.ADMIN:
+        return None
+    if ticket.status != CustomerTicket.Status.CLOSED:
+        messages.error(request, _('This ticket is not closed.'))
+    else:
+        ticket.status = CustomerTicket.Status.NEW
+        ticket.save(update_fields=['status'])
+        messages.success(request, _('Ticket reopened.'))
+    return _back_to_request(ticket)
+
+
+def _request_assign(request, ticket, technician, access, forms):
+    forms['assign_form'] = form = AssignTicketForm(request.POST, country=ticket.country)
+    if form.is_valid():
+        ticket.assigned_to = form.cleaned_data['assigned_to']
+        ticket.assigned_at = timezone.now()
+        ticket.save(update_fields=['assigned_to', 'assigned_at'])
+        messages.success(request, _('Ticket assigned.'))
+        return _back_to_request(ticket)
+    return None
+
+
+# (handler, whether it needs manage_tickets on this request). Deciding an escalation is for
+# whoever it was escalated to; every other action, for whoever handles the request.
+REQUEST_PAGE_ACTIONS = {
+    'decide_escalation': (_request_decide_escalation, False),
+    'next': (_request_next, True),
+    'machines': (_request_machines, True),
+    'add_customer_photos': (_request_add_customer_photos, True),
+    'create_branch': (_request_create_branch, True),
+    'create_customer': (_request_create_customer, True),
+    'escalate': (_request_escalate, True),
+    'add_internal_note': (_request_add_internal_note, True),
+    'add_reply': (_request_add_reply, True),
+    'update_logistics': (_request_update_logistics, True),
+    'edit_details': (_request_edit_details, True),
+    'notify_shipping': (_request_notify_shipping, True),
+    'dismiss': (_request_dismiss, True),
+    'reopen': (_request_reopen, True),
+    'assign': (_request_assign, True),
+}
+
+
+# The brand whose factory takes tickets (a PAK, opened in its portal).
+FACTORY_TICKET_BRAND = 'Panatta'
+
+
+@login_required
 def ticket_review(request, pk):
     """Dismiss, assign, or convert a ticket — restricted to manage_tickets
     like the rest of ticket triage. Whoever it's currently assigned to can
@@ -3598,225 +3081,19 @@ def ticket_review(request, pk):
     if can_manage and not request.viewing_as_user:
         ticket.notifications.filter(seen_at__isnull=True).update(seen_at=timezone.now())
 
-    dismiss_form = DismissTicketForm()
-    assign_form = AssignTicketForm(country=ticket.country, initial={'assigned_to': ticket.assigned_to_id})
-    logistics_form = TicketLogisticsForm(instance=ticket)
-    edit_form = TicketEditForm(instance=ticket)
-    reply_form = TicketReplyForm()
+    # A Panatta machine and no PAK yet: a reminder, never a rule (most requests need none).
+    pak_reminder = (
+        not ticket.pak_reference_number and ticket.status == CustomerTicket.Status.NEW
+        and ticket.machines.filter(asset__brand__name__iexact=FACTORY_TICKET_BRAND).exists()
+    )
     can_reply = _ticket_is_open(ticket)
-    internal_note_form = TicketInternalNoteForm()
-    escalate_form = EscalateTicketForm(country=ticket.country, escalated_by=technician)
-    decide_form = DecideEscalationForm()
-
-    if request.method == 'POST' and request.POST.get('action') == 'decide_escalation' and can_decide:
-        decide_form = DecideEscalationForm(request.POST)
-        if decide_form.is_valid():
-            pending_escalation.decision = decide_form.cleaned_data['decision']
-            pending_escalation.decision_note = decide_form.cleaned_data['decision_note']
-            pending_escalation.decided_at = timezone.now()
-            pending_escalation.save(update_fields=['decision', 'decision_note', 'decided_at'])
-            TicketNotification.objects.create(
-                ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=timezone.now(),
-            )
-            _send_escalation_decided_email(request, pending_escalation)
-            messages.success(request, _('The decision has been returned to the support desk.'))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-
-    if (
-        request.method == 'POST' and can_manage and request.POST.get('action') == 'next'
-        and ticket.status == CustomerTicket.Status.NEW
-    ):
-        # "What happens next?": send a technician, ship a part, or answer without a visit.
-        error, done, task = decide_request_next(
-            request, technician, ticket, request.POST.get('choice'), request.POST.getlist('machines'),
-            supervisor_id=request.POST.get('supervisor', ''), lead_id=request.POST.get('technician', ''),
-            when=request.POST.get('scheduled_for', ''), reason=request.POST.get('reason'),
-            answer=request.POST.get('answer', ''),
-        )
-        if error:
-            messages.error(request, error)
-        elif done:
-            messages.success(request, done)
-        if task is not None:
-            return redirect('tasks:task_detail', pk=task.pk)
-        return redirect('tasks:ticket_review', pk=ticket.pk)
-
-    if (
-        request.method == 'POST' and can_manage and request.POST.get('action') == 'machines'
-        and ticket.status == CustomerTicket.Status.NEW
-    ):
-        # The selected machines: a task for them (visit or part shipment,
-        # created on the next page), or settled here without one.
-        undecided = ticket.machines.filter(decision='')
-        selected = list(undecided.filter(pk__in=[v for v in request.POST.getlist('machines') if v.isdigit()]))
-        choice = request.POST.get('do')
-        if not selected:
-            messages.error(request, _('Please select at least one machine that has not been decided yet.'))
-        elif choice in TicketMachine.TASK_DECISIONS:
-            ids = ','.join(str(machine.pk) for machine in selected)
-            return redirect(f"{reverse('tasks:task_create')}?ticket={ticket.pk}&machines={ids}&decision={choice}")
-        elif choice in (TicketMachine.Decision.ADVICE, TicketMachine.Decision.NOT_COVERED):
-            note = request.POST.get('decision_note', '').strip()[:255]
-            TicketMachine.objects.filter(pk__in=[machine.pk for machine in selected]).update(
-                decision=choice, decision_note=note, decided_by=request.user, decided_at=timezone.now(),
-            )
-            settle_ticket_machines(ticket, request.user)
-            messages.success(request, _('Decision saved.'))
-        return redirect('tasks:ticket_review', pk=ticket.pk)
-
-    if request.method == 'POST' and can_manage:
-        action = request.POST.get('action')
-
-        if action == 'add_customer_photos':
-            # Sent another way (WhatsApp, email): onto the request, under its machine, so they reach the task.
-            photos_form = CustomerPhotosForm(request.POST, request.FILES, ticket=ticket)
-            if photos_form.is_valid():
-                machine_id = photos_form.cleaned_data['machine']
-                machine = ticket.machines.filter(pk=machine_id).first() if machine_id else None
-                for upload in photos_form.cleaned_data['attachments']:
-                    CustomerTicketAttachment.objects.create(
-                        ticket=ticket, machine=machine, file=upload, uploaded_at=timezone.now(), added_by=request.user,
-                    )
-                messages.success(request, _("The customer's photos have been added."))
-            else:
-                messages.error(request, ' '.join(str(e) for errors in photos_form.errors.values() for e in errors))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        if (action == 'create_branch' and ticket.about == CustomerTicket.About.NEW_BRANCH
-                and ticket.customer_id and not ticket.site_id):
-            # A customer's new branch, in one click from what they typed: name, address, contact
-            # (the email is the one in their message, if any). Linked, so its task starts there.
-            email = re.search(r'[\w.+-]+@[\w-]+\.[\w.-]+', ticket.description or '')
-            site = ticket.customer.sites.filter(name__iexact=ticket.site_description.strip()).first()
-            if site is None:
-                site = Site.objects.create(
-                    customer=ticket.customer, name=ticket.site_description.strip()[:150],
-                    address=ticket.site_address, contact_name=ticket.contact_name, contact_phone=ticket.contact_phone,
-                    contact_email=email.group(0) if email else '',
-                )
-            ticket.site = site
-            ticket.save(update_fields=['site'])
-            messages.success(request, _('Branch %(name)s created for %(customer)s.') % {
-                'name': site.name, 'customer': ticket.customer.name,
-            })
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        if action == 'escalate' and can_escalate:
-            escalate_form = EscalateTicketForm(request.POST, country=ticket.country, escalated_by=technician)
-            if escalate_form.is_valid():
-                now = timezone.now()
-                if pending_escalation is not None:
-                    # Passing it up: this step ends as forwarded, and the
-                    # one who raised it hears that it went further.
-                    pending_escalation.decision = TicketEscalation.Decision.FORWARDED
-                    pending_escalation.decision_note = escalate_form.cleaned_data['reason']
-                    pending_escalation.decided_at = now
-                    pending_escalation.save(update_fields=['decision', 'decision_note', 'decided_at'])
-                    TicketNotification.objects.create(
-                        ticket=ticket, kind=TicketNotification.Kind.ESCALATION_DECIDED, created_at=now,
-                    )
-                    _send_escalation_decided_email(request, pending_escalation)
-                escalation = TicketEscalation.objects.create(
-                    ticket=ticket, escalated_by=technician,
-                    escalated_to=escalate_form.cleaned_data['escalated_to'],
-                    reason=escalate_form.cleaned_data['reason'],
-                    customer_message=escalate_form.cleaned_data['customer_message'],
-                    escalated_at=now,
-                )
-                _send_escalation_email(request, escalation)
-                recipient = escalation.escalated_to
-                if not (recipient.user_id and recipient.user.email):
-                    messages.warning(request, _(
-                        '%(name)s has no email address on record and was therefore notified in the application '
-                        'only. Please add an email address to their profile.',
-                    ) % {'name': recipient.full_name})
-                push_in_their_language(
-                    escalation.escalated_to,
-                    lambda: _('Ticket escalated to you'),
-                    lambda: _('%(number)s — %(company)s') % {
-                        'number': ticket.ticket_number, 'company': ticket.company_name,
-                    },
-                    {'type': 'ticket', 'ticket_id': ticket.pk},
-                )
-                messages.success(request, _('Escalated to %(name)s.') % {'name': escalation.escalated_to.full_name})
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        if action == 'add_internal_note' and can_manage:
-            internal_note_form = TicketInternalNoteForm(request.POST, request.FILES)
-            if internal_note_form.is_valid():
-                add_ticket_note(
-                    request.user, ticket, internal_note_form.cleaned_data['message'],
-                    internal_note_form.cleaned_data['attachments'],
-                )
-                messages.success(request, _('Note added.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'add_reply' and can_reply:
-            reply_form = TicketReplyForm(request.POST, request.FILES)
-            if reply_form.is_valid():
-                send_staff_reply(request, ticket, reply_form.cleaned_data['message'], reply_form.cleaned_data['attachments'])
-                messages.success(request, _('Reply sent.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'update_logistics':
-            logistics_form = TicketLogisticsForm(request.POST, instance=ticket)
-            if logistics_form.is_valid():
-                logistics_form.save()
-                messages.success(request, _('Logistics updated.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'edit_details':
-            edit_form = TicketEditForm(request.POST, instance=ticket)
-            if edit_form.is_valid():
-                edit_form.save()
-                messages.success(request, _('Ticket details updated.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'notify_shipping':
-            if not ticket.shipping_tracking_number:
-                messages.error(request, _('Please add a shipping tracking number before notifying the customer.'))
-            elif not ticket.contact_email:
-                messages.error(request, _('Please add a contact email address before notifying the customer.'))
-            else:
-                _send_shipping_notice(
-                    ticket.contact_name, ticket.site_description, f'ticket #{ticket.pk}',
-                    ticket.shipping_company,
-                    ticket.shipping_tracking_number, ticket.contact_email,
-                )
-                messages.success(request, _('The customer has been notified of the tracking number.'))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'dismiss' and ticket.status == CustomerTicket.Status.NEW:
-            dismiss_form = DismissTicketForm(request.POST)
-            if dismiss_form.is_valid():
-                ticket.status = CustomerTicket.Status.DISMISSED
-                ticket.dismissal_reason = dismiss_form.cleaned_data['dismissal_reason']
-                ticket.reviewed_by = request.user
-                ticket.reviewed_at = timezone.now()
-                ticket.save(update_fields=['status', 'dismissal_reason', 'reviewed_by', 'reviewed_at'])
-                messages.success(request, _('Ticket dismissed.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'reopen' and technician.role == Technician.Role.ADMIN:
-            # Admin-only — support_manager can close, but reopening a
-            # decision someone already signed off on is one step further,
-            # same fixed-floor reasoning as require_admin elsewhere.
-            if ticket.status != CustomerTicket.Status.CLOSED:
-                messages.error(request, _('This ticket is not closed.'))
-            else:
-                ticket.status = CustomerTicket.Status.NEW
-                ticket.save(update_fields=['status'])
-                messages.success(request, _('Ticket reopened.'))
-            return redirect('tasks:ticket_review', pk=ticket.pk)
-
-        elif action == 'assign':
-            assign_form = AssignTicketForm(request.POST, country=ticket.country)
-            if assign_form.is_valid():
-                ticket.assigned_to = assign_form.cleaned_data['assigned_to']
-                ticket.assigned_at = timezone.now()
-                ticket.save(update_fields=['assigned_to', 'assigned_at'])
-                messages.success(request, _('Ticket assigned.'))
-                return redirect('tasks:ticket_review', pk=ticket.pk)
+    # The page's actions, one handler each (REQUEST_PAGE_ACTIONS); a form with errors comes back in `forms`.
+    forms = ticket_page_forms(ticket, technician)
+    action = REQUEST_PAGE_ACTIONS.get(request.POST.get('action')) if request.method == 'POST' else None
+    if action is not None and (can_manage or not action[1]):
+        response = action[0](request, ticket, technician, access, forms)
+        if response is not None:
+            return response
 
     context = {
         # Photos not tied to one of the ticket's machines (staff-opened and
@@ -3830,19 +3107,21 @@ def ticket_review(request, pk):
             Task.objects.filter(ticket_machines__ticket=ticket).distinct().order_by('pk')
             or ([ticket.task] if ticket.task_id else [])
         ),
-        'ticket': ticket, 'dismiss_form': dismiss_form, 'assign_form': assign_form,
-        'logistics_form': logistics_form, 'edit_form': edit_form, 'can_manage': can_manage,
+        'ticket': ticket, 'dismiss_form': forms['dismiss_form'], 'assign_form': forms['assign_form'],
+        'logistics_form': forms['logistics_form'], 'pak_reminder': pak_reminder, 'edit_form': forms['edit_form'], 'can_manage': can_manage,
+        # A customer's new branch: whoever creates branches (people.permissions.can_create_customers).
+        'can_create_branch': can_manage and can_create_customers(request.user.technician),
         # "What happens next?": who can be sent, and what the task will be (task_from_request).
         **_next_step_context(technician, ticket, can_manage),
-        'reply_form': reply_form, 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
+        'reply_form': forms['reply_form'], 'can_reply': can_reply, 'is_admin': technician.role == Technician.Role.ADMIN,
         'replies': ticket.replies.select_related('sent_by').prefetch_related('files'),
         'escalations': escalations, 'pending_escalation': pending_escalation,
-        'can_escalate': can_escalate, 'escalate_form': escalate_form,
+        'can_escalate': can_escalate, 'escalate_form': forms['escalate_form'],
         'escalation_role': Technician.Role(technician.escalates_to_role).label if technician.escalates_to_role else '',
-        'can_decide': can_decide, 'decide_form': decide_form,
+        'can_decide': can_decide, 'decide_form': forms['decide_form'],
     }
     if can_manage:
-        context['internal_note_form'] = internal_note_form
+        context['internal_note_form'] = forms['internal_note_form']
         context['internal_notes'] = ticket.internal_notes.select_related('author').prefetch_related('files')
     return render(request, 'tasks/ticket_review.html', context)
 
@@ -3851,15 +3130,22 @@ def can_step_in(technician, task):
     """Who may change a task instead of its owner, while they're away: the
     Operations Manager and Admin anywhere, the country Manager in their own
     country (docs/access_rules.md)."""
-    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.ADMIN):
+    if technician.custom_role_id:
+        return False  # a role made on Roles & permissions: only its switches
+    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN):
+        return True
+    # A loading or an installation: whoever plans its machines (the Manager, the Project Manager)
+    # may step in on it, whoever created it — recorded like any stepping in.
+    if can_plan_equipment(technician) and equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION):
         return True
     return technician.role == Technician.Role.MANAGER and technician.country_id == task.site.customer.country_id
 
 
 def task_owned_by(technician, task):
-    """True for the task's owner (its responsible supervisor), and for anyone
-    while it has no owner yet (from before the rule) — the role decides then."""
-    return not task.responsible_supervisor_id or task.responsible_supervisor_id == technician.id
+    """True for the task's owner (its responsible supervisor). A task with no
+    owner has nobody's: only someone allowed to step in changes it (and gives
+    it an owner)."""
+    return bool(task.responsible_supervisor_id) and task.responsible_supervisor_id == technician.id
 
 
 def can_change_task(technician, task):
@@ -3878,9 +3164,10 @@ def _require_task_owner(request, task):
         raise PermissionDenied
     if request.method == 'POST' and not getattr(request, '_stepped_in', False):
         request._stepped_in = True
+        owner = task.responsible_supervisor
         TaskEvent.objects.create(
             task=task, event_type=TaskEvent.EventType.STEPPED_IN, occurred_at=timezone.now(), actor=request.user,
-            note=_('Instead of %(name)s') % {'name': task.responsible_supervisor.full_name},
+            note=_('Instead of %(name)s') % {'name': owner.full_name} if owner else _('The task had no owner'),
         )
 
 
@@ -3999,9 +3286,7 @@ def task_assign(request, pk):
         'task': task,
         'active_lead': active_lead,
         'active_helpers': active_helpers,
-        'candidates': _mark_openable(_with_day_load(
-            _technicians_with_next_scheduled_task(_candidates_with_skill_level(candidates_qs, task)), task,
-        ), requesting_technician),
+        'candidates': _mark_openable(_with_day_load(candidates_qs, task), requesting_technician),
         'task_day': _calendar_day(task),
         'locked': locked,
         'manager_override': manager_override,
@@ -4025,14 +3310,14 @@ def technician_availability(request):
     """
     require_permission(request, RolePermission.Permission.ASSIGN_TASKS)
     active_country = get_active_country(request)
-    technicians = Technician.objects.filter(is_active=True, country=active_country).order_by('full_name')
+    viewer = request.user.technician
+    # Whose availability: the people this person oversees (the same as the app).
+    technicians = _people_i_oversee(viewer).filter(is_active=True, country=active_country).order_by('full_name')
     mark_unavailable_form = MarkUnavailableForm()
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        technician = get_object_or_404(
-            Technician, pk=request.POST.get('technician_id'), country=active_country,
-        )
+        technician = get_object_or_404(technicians, pk=request.POST.get('technician_id'))
 
         if action == 'mark_unavailable':
             mark_unavailable_form = MarkUnavailableForm(request.POST)
@@ -4429,6 +3714,9 @@ def _my_tasks(technician):
         tasks = list(tasks)
         for task in tasks:
             task.my_role = roles[task.pk]
+            # Owned, not on it: its task page (the job page is for whoever does the job).
+            if task.my_role == 'responsible':
+                task.page_url = reverse('tasks:task_detail', args=[task.pk])
         return tasks
 
     return mine, with_role
@@ -4526,79 +3814,6 @@ def technician_progress(request, pk):
     })
 
 
-def progress_context(request, technician):
-    """Everything My progress shows, for `technician`."""
-    skills = _skills_with_current_rating(technician)
-    conduct_areas = _conduct_areas_with_current_rating(technician)
-    certification = _certification_status(technician)
-    ninety_day = _ninety_day_progress(technician, certification)
-    reliability = _reliability_stats(technician)
-
-    leaderboard = _leaderboard(technician.country)
-    rank = next((position for position, (t, _points) in enumerate(leaderboard, start=1) if t.pk == technician.pk), None)
-
-    _today, start, end = _week_window(request, technician.country)
-    my_assignments = TaskAssignment.objects.filter(technician=technician, is_active=True)
-
-    assigned_count = Task.objects.filter(
-        Q(pk__in=my_assignments.values('task_id')),
-        Q(scheduled_for__date__range=(start, end))
-        | (Q(scheduled_for__isnull=True) & Q(status__in=OPEN_STATUSES)),
-    ).count()
-
-    # Their own taps — none for someone without a login.
-    completed_count = TaskEvent.objects.filter(
-        actor_id=technician.user_id, event_type=TaskEvent.EventType.COMPLETED, occurred_at__date__range=(start, end),
-    ).count() if technician.user_id else 0
-
-    # Same rule and figure as the supervisors' Hours page — lead, helper
-    # and handover hours alike. Any past month (?month=YYYY-MM), this one
-    # by default; never a future one, which has nothing yet.
-    this_month = timezone.localtime().date().replace(day=1)
-    month_first = min(_resolve_report_month(request), this_month)
-    month_start, month_end = _month_window(month_first)
-    month_reports = list(
-        WorkReport.objects.filter(
-            submitted_at__gte=month_start, submitted_at__lt=month_end,
-            task__assignments__technician=technician, task__assignments__role=TaskAssignment.Role.LEAD,
-            task__assignments__is_active=True,
-        ).select_related('task').distinct(),
-    )
-    own_row = next(
-        (row for row in _technician_hours_rows(technician.country, month_first) if row['technician'] == technician),
-        None,
-    )
-
-    context = {
-        'trend_chart': _my_trend_chart(technician),
-        'month_first': month_first,
-        'prev_month': _shift_month(month_first, -1),
-        'next_month': _shift_month(month_first, 1) if month_first < this_month else None,
-        'is_this_month': month_first == this_month,
-        'month_hours': own_row['hours'] if own_row else 0,
-        'month_report_count': len(month_reports),
-        'month_overrun_count': sum(1 for report in month_reports if report.is_overrun),
-        'skills': skills,
-        'conduct_areas': conduct_areas,
-        'certification': certification,
-        'ninety_day': ninety_day,
-        'rank': rank,
-        'leaderboard_size': len(leaderboard),
-        'assigned_count': assigned_count,
-        'completed_count': completed_count,
-        'reliability': reliability,
-    }
-    return context
-
-
-def _completed_in_month(technician, month_first):
-    """How many tasks someone was on (lead or helper) had their first work
-    report in that month — the figure My progress's line counts."""
-    start, end = _month_window(month_first)
-    mine = TaskAssignment.objects.filter(technician=technician).values('task_id')
-    return TaskEvent.objects.filter(
-        event_type=TaskEvent.EventType.REPORT_SUBMITTED, task_id__in=mine,
-    ).values('task_id').annotate(first=Min('occurred_at')).filter(first__gte=start, first__lt=end).count()
 
 
 @login_required
@@ -4620,120 +3835,6 @@ def team_progress(request):
     })
 
 
-# What a person's last tap today says about where they are now (team_today).
-_NOW_FROM_TAP = {
-    TaskEvent.EventType.EN_ROUTE: 'on_the_way', TaskEvent.EventType.ARRIVED: 'on_site',
-    TaskEvent.EventType.STARTED: 'working', TaskEvent.EventType.RESUMED: 'working',
-    TaskEvent.EventType.PAUSED: 'paused', TaskEvent.EventType.BLOCKED: 'blocked',
-}
-
-
-def team_today(viewer, country):
-    """The field team `viewer` oversees, as it is right now — the app's Team →
-    Today: off (sick, leave, holiday) or abroad on a trip; otherwise what their
-    last tap today says (on the way, on site, working, paused, blocked) or free,
-    with the task it's about, their next job today, how many of today's jobs are
-    done, where their last tap was, and their phone. People visiting from another
-    country on a trip are in it too. Same people as Team progress (team_progress_rows).
-    """
-    tz = ZoneInfo(country.timezone)
-    today = timezone.now().astimezone(tz).date()
-    visiting = TechnicianTrip.objects.filter(country=country, start_date__lte=today, end_date__gte=today)
-    abroad = {
-        trip.technician_id: trip for trip in TechnicianTrip.objects.filter(
-            start_date__lte=today, end_date__gte=today,
-        ).exclude(country=country).select_related('country')
-    }
-    people = list(_people_i_oversee(viewer).filter(
-        Q(country=country) | Q(pk__in=visiting.values('technician_id')),
-        is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
-    ).select_related('country', 'user').order_by('full_name'))
-    user_ids = [person.user_id for person in people if person.user_id]
-    last_taps = {}
-    for tap in TaskEvent.objects.filter(
-        actor_id__in=user_ids, occurred_at__date=today, event_type__in=list(_NOW_FROM_TAP) + [
-            TaskEvent.EventType.COMPLETED,
-        ],
-    ).select_related('task__site__customer').order_by('-occurred_at'):
-        last_taps.setdefault(tap.actor_id, tap)
-    todays = TaskAssignment.objects.filter(
-        technician__in=people, is_active=True, task__scheduled_for__date=today,
-    ).exclude(task__status=Task.Status.CANCELLED).select_related('task__site__customer').order_by('task__scheduled_for')
-    by_person = {}
-    for assignment in todays:
-        by_person.setdefault(assignment.technician_id, []).append(assignment.task)
-
-    def task_ref(task):
-        return {'id': task.pk, 'task_number': task.task_number, 'customer': task.site.customer.name,
-                'site': task.site.name, 'scheduled_for': task.scheduled_for}
-
-    rows = []
-    for person in people:
-        tasks = by_person.get(person.pk, [])
-        done = [task for task in tasks if task.status in (
-            Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED,
-        )]
-        tap = last_taps.get(person.user_id)
-        state, about = 'free', None
-        if not person.is_available:
-            state = 'off'
-        elif person.pk in abroad and person.country_id == country.pk:
-            state = 'abroad'
-        elif tap is not None and tap.event_type in _NOW_FROM_TAP and tap.task.status not in (
-            Task.Status.PENDING_SUPERVISOR_REVIEW, Task.Status.COMPLETED, Task.Status.CLOSED, Task.Status.CANCELLED,
-        ):
-            state, about = _NOW_FROM_TAP[tap.event_type], tap.task
-        upcoming = [task for task in tasks if task not in done and task != about and task.scheduled_for
-                    and task.scheduled_for >= timezone.now() - timedelta(hours=1)]
-        trip = abroad.get(person.pk)
-        rows.append({
-            'technician': person, 'state': state,
-            'off_reason': person.get_unavailable_reason_display() if state == 'off' else '',
-            'abroad': {'country': trip.country.display_name, 'until': trip.end_date} if state == 'abroad' else None,
-            'visiting_from': person.country.display_name if person.country_id != country.pk else '',
-            'since': tap.occurred_at if about is not None else None,
-            'task': task_ref(about) if about is not None else None,
-            'next': task_ref(upcoming[0]) if upcoming else None,
-            'today_total': len(tasks), 'today_done': len(done),
-            'location': ({'lat': float(tap.latitude), 'lng': float(tap.longitude),
-                          'away': tap.location_status == TaskEvent.LocationStatus.AWAY}
-                         if tap is not None and tap.latitude is not None else None),
-        })
-    # Who needs attention first: blocked, then at work, on the way, free, then away.
-    order = ['blocked', 'working', 'on_site', 'paused', 'on_the_way', 'free', 'abroad', 'off']
-    rows.sort(key=lambda row: order.index(row['state']))
-    return rows
-
-
-def team_progress_rows(viewer, country, month_first):
-    """Team progress's rows — the field team `viewer` oversees in
-    `country`, by rank. Shared with the app (api.views.TeamProgressView)."""
-    previous = _shift_month(month_first, -1)
-    ranks = {t.pk: position for position, (t, _points) in enumerate(_leaderboard(country), start=1)}
-    hours = {row['technician'].pk: row['hours'] for row in _technician_hours_rows(country, month_first)}
-    rows = []
-    reference = _certification_reference()
-    # The field team: a manager or admin sees supervisors here too.
-    for technician in _people_i_oversee(viewer).filter(
-        country=country, is_active=True, role__in=[Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN],
-    ).select_related('user').order_by('full_name'):
-        completed = _completed_in_month(technician, month_first)
-        certification = _certification_status(technician, reference)
-        rows.append({
-            'technician': technician,
-            'rank': ranks.get(technician.pk),
-            'completed': completed,
-            'change': completed - _completed_in_month(technician, previous),
-            'hours': hours.get(technician.pk, 0),
-            'certified': certification['non_cardio_certified'] + certification['conduct_certified'],
-            'required': certification['non_cardio_total'] + certification['conduct_total'],
-            'is_certified': certification['is_certified'],
-            'trend': _my_trend_chart(technician),
-        })
-    rows.sort(key=lambda row: (row['rank'] is None, row['rank'] or 0, row['technician'].full_name))
-    for row in rows:
-        row['change_size'] = abs(row['change'])
-    return rows
 
 
 def save_skill_self_rating(technician, skill, cleaned, today):
@@ -4898,6 +3999,103 @@ def my_skills(request):
     return render(request, 'tasks/my_skills.html', context)
 
 
+STAFF_EMAIL_CHANGE_SALT = 'tasks.staff-email-change'
+STAFF_EMAIL_CHANGE_VALID_DAYS = 2
+
+
+def change_login_email(request, technician, new_email, user=None):
+    """Every change to a staff login's email — by a manager (Staff accounts,
+    Edit person) or by the person themselves, once they open the link sent
+    to the new address. A login that signs in with its email follows it;
+    one with its own sign-in name keeps that. The old address is told, in
+    case it wasn't them, and it's in the Audit log (by `user` when they
+    acted through the link, signed out)."""
+    login = technician.user
+    old_email = login.email
+    if old_email.lower() == new_email.lower():
+        return
+    login.email = new_email
+    fields = ['email']
+    if old_email and login.username.lower() == old_email.lower():
+        login.username = new_email
+        fields.append('username')
+    login.save(update_fields=fields)
+    log_account_action(request, technician, f'Staff email changed from {old_email or "(none)"} to {new_email}', user=user)
+    if old_email and old_email.lower() != new_email.lower():
+        send_staff_email_changed_notice(technician, old_email)
+
+
+def send_staff_email_change_link(request, user, new_email):
+    """The confirmation link, to the new address: nothing changes until it's
+    opened (staff_email_confirm). In English, like every staff account email."""
+    token = signing.dumps({'u': user.pk, 'm': user.email, 'e': new_email}, salt=STAFF_EMAIL_CHANGE_SALT)
+    link = request.build_absolute_uri(reverse('tasks:staff_email_confirm', args=[token]))
+    contact = user.technician.full_name
+    context = {'contact': contact, 'link': link, 'days': STAFF_EMAIL_CHANGE_VALID_DAYS, 'new_email': new_email}
+    with translation.override('en'):
+        subject = _('Confirm your new Profit Sports Solutions sign-in email')
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'A request was made to use this address for your Profit Sports Solutions account. To confirm it, please '
+            'open the link below; it is valid for %(days)s days and can be used once.\n\n'
+            '%(link)s\n\n'
+            'If you did not ask for this, you can ignore this email: nothing changes.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n'
+        ) % context
+    _send_notification_email(subject, message, 'tasks/email/email_change.html', context, [new_email])
+
+
+def staff_email_change_for_token(token):
+    """(the login, its new email) for a confirmation link, or (None, None)
+    if it's tampered with, older than STAFF_EMAIL_CHANGE_VALID_DAYS, already
+    used (the email is no longer the one it was made for), the login is
+    disabled, or the new email has since been taken."""
+    try:
+        data = signing.loads(token, salt=STAFF_EMAIL_CHANGE_SALT, max_age=timedelta(days=STAFF_EMAIL_CHANGE_VALID_DAYS))
+    except signing.BadSignature:
+        return None, None
+    User = get_user_model()
+    user = User.objects.filter(pk=data.get('u'), is_active=True, technician__isnull=False).first()
+    new_email = data.get('e', '')
+    if user is None or user.email != data.get('m'):
+        return None, None
+    if User.objects.filter(Q(username__iexact=new_email) | Q(email__iexact=new_email)).exclude(pk=user.pk).exists():
+        return None, None
+    return user, new_email
+
+
+def send_staff_email_changed_notice(technician, old_email):
+    """Tell the old address its sign-in email was changed, in case it wasn't them."""
+    login = technician.user
+    context = {'contact': technician.full_name, 'new_email': login.email, 'username': login.get_username()}
+    with translation.override('en'):
+        subject = _('Your Profit Sports Solutions sign-in email was changed')
+        message = _(
+            'Dear %(contact)s,\n\n'
+            'The email address for your Profit Sports Solutions account was changed to %(new_email)s. You now sign '
+            'in with: %(username)s.\n\n'
+            'If you did not make this change, please contact your manager immediately.\n\n'
+            'Best regards,\n'
+            'Profit Sports Solutions\n'
+        ) % context
+    _send_notification_email(subject, message, 'tasks/email/email_changed.html', context, [old_email])
+
+
+def staff_email_confirm(request, token):
+    """Where the link sent to a staff member's new email lands: it switches
+    their login to it (change_login_email). Works once, signed in or not."""
+    user, new_email = staff_email_change_for_token(token)
+    if user is None:
+        messages.error(request, _('This confirmation link has expired or was already used. Please request a new one.'))
+    else:
+        change_login_email(request, user.technician, new_email, user=user)
+        messages.success(request, _('Your email is now %(email)s.') % {'email': new_email})
+    if request.user.is_authenticated and hasattr(request.user, 'technician'):
+        return redirect('tasks:my_profile')
+    return redirect('login')
+
+
 def sign_out_of_mobile_app(user):
     """When a manager steps in (a temporary password, "Sign out of every
     phone", a login turned off): the app's sign-in token stops working and
@@ -4923,7 +4121,7 @@ def send_password_changed_email(user, temporary=False):
         subject = _('Your Profit Sports Solutions password has been changed')
         if temporary:
             what = _(
-                'A manager has set a temporary password for your Profit Sports Solutions account (username: '
+                'An administrator has set a temporary password for your Profit Sports Solutions account (username: '
                 '%(username)s). You will be asked to choose your own password at your next sign-in, and you '
                 'have been signed out of the mobile app.'
             )
@@ -4951,8 +4149,27 @@ def my_profile(request):
     those sections.
     """
     technician = require_technician(request)
+    email_form = SignInEmailChangeForm(user=request.user)
+    action = request.POST.get('action') if request.method == 'POST' else None
 
-    if request.method == 'POST' and request.POST.get('action') == 'change_password':
+    if action == 'change_email':
+        profile_form = MyProfileForm(instance=technician)
+        password_form = ChangePasswordForm(request.user)
+        email_form = SignInEmailChangeForm(request.POST, user=request.user)
+        if email_form.is_valid():
+            new_email = email_form.cleaned_data['email']
+            send_staff_email_change_link(request, request.user, new_email)
+            messages.success(request, _(
+                'We have sent a confirmation link to %(email)s. Your email changes once you open it.'
+            ) % {'email': new_email})
+            return redirect('tasks:my_profile')
+    elif action == 'sign_out_phones':
+        # A lost or handed-on phone: the app signs out everywhere; this browser stays.
+        sign_out_of_mobile_app(request.user)
+        log_account_action(request, technician, 'Signed themselves out of the mobile app on every phone')
+        messages.success(request, _('You have been signed out of the app on all your phones.'))
+        return redirect('tasks:my_profile')
+    elif action == 'change_password':
         profile_form = MyProfileForm(instance=technician)
         password_form = ChangePasswordForm(request.user, request.POST)
         if password_form.is_valid():
@@ -4979,6 +4196,8 @@ def my_profile(request):
         'technician': technician,
         'profile_form': profile_form,
         'password_form': password_form,
+        'email_form': email_form,
+        'phones_signed_in': Token.objects.filter(user=request.user).exists(),
         'is_field_staff': technician.is_field_staff,
     }
     if not technician.is_manager_tier:
@@ -5102,6 +4321,9 @@ def technician_list(request):
         technician = get_object_or_404(
             _people_i_oversee(viewer), pk=request.POST.get('technician_id'), country=get_active_country(request),
         )
+        # Bringing someone back is a manager's, like letting them go (and turns their login back on).
+        if not (viewer.is_manager_tier and can_manage_account(viewer, technician)):
+            raise PermissionDenied
         technician.set_active(True)
         messages.success(request, _('Technician reactivated.'))
         return redirect(f"{reverse('tasks:technician_list')}?status=inactive")
@@ -5112,7 +4334,7 @@ def technician_list(request):
         is_active=not show_inactive, country=get_active_country(request),
     ).order_by('full_name')
     if search:
-        technicians = technicians.filter(full_name__icontains=search)
+        technicians = technicians.filter(full_name__matches=search)
 
     rows = []
     technicians = list(technicians)
@@ -5149,7 +4371,7 @@ def all_technicians(request):
     search = request.GET.get('q', '').strip()
     technicians = _people_i_oversee(viewer).filter(is_active=True).select_related('country').order_by('full_name')
     if search:
-        technicians = technicians.filter(full_name__icontains=search)
+        technicians = technicians.filter(full_name__matches=search)
 
     rows = []
     technicians = list(technicians)
@@ -5165,78 +4387,6 @@ def all_technicians(request):
     return render(request, 'tasks/all_technicians.html', {'rows': rows, 'search': search})
 
 
-def _handover_hours(technicians, period_start, period_end):
-    """Hours a lead put into a job before being taken off it — the report,
-    filed later by whoever took over, only credits the new lead. Keyed by
-    technician id, counted in the month the handover happened.
-    """
-    handovers = defaultdict(list)
-    for assignment in TaskAssignment.objects.filter(
-        technician__in=technicians, role=TaskAssignment.Role.LEAD, is_active=False, labour_hours__isnull=False,
-        ended_at__gte=period_start, ended_at__lt=period_end,
-    ).select_related('task__site__customer').order_by('ended_at'):
-        handovers[assignment.technician_id].append(assignment)
-    return handovers
-
-
-def _technician_hours_rows(active_country, period_start_date):
-    """One row per active technician in the country for that month: the
-    work reports they filed as lead, the ones they helped on, and their
-    hours — a report's hours count for everyone on the team, except where
-    the lead entered a helper's own (helper_hours), plus any hours put in
-    before a handover. Shared by the Hours page and its CSV export.
-    """
-    period_start, period_end = _month_window(period_start_date)
-    technicians = list(Technician.objects.filter(is_active=True, country=active_country).order_by('full_name'))
-    # By who worked on it, not where the task was — a technician's hours
-    # on a trip abroad still count at home (docs: technician_trip).
-    reports = WorkReport.objects.filter(
-        submitted_at__gte=period_start, submitted_at__lt=period_end,
-        task__assignments__technician__in=technicians, task__assignments__is_active=True,
-    ).distinct().select_related('task__site__customer').prefetch_related(
-        Prefetch(
-            'task__assignments', queryset=TaskAssignment.objects.filter(is_active=True), to_attr='active_assignments',
-        ),
-        'task__events',
-    ).order_by('submitted_at')
-
-    leads_reports = defaultdict(list)
-    helped_on = defaultdict(int)
-    helper_hours = defaultdict(int)
-    helped_reports = defaultdict(list)
-    for report in reports:
-        for assignment in report.task.active_assignments:
-            if assignment.role == TaskAssignment.Role.LEAD:
-                leads_reports[assignment.technician_id].append(report)
-            else:
-                helped_on[assignment.technician_id] += 1
-                hours = report.labour_hours if assignment.labour_hours is None else assignment.labour_hours
-                helper_hours[assignment.technician_id] += hours
-                helped_reports[assignment.technician_id].append((report, hours))
-
-    handovers = _handover_hours(technicians, period_start, period_end)
-
-    rows = []
-    for technician in technicians:
-        own_reports = leads_reports[technician.pk]
-        own_handovers = handovers[technician.pk]
-        rows.append({
-            'technician': technician,
-            'reports': own_reports,
-            'handovers': own_handovers,
-            'helped_reports': helped_reports[technician.pk],
-            'hours': (
-                sum(report.labour_hours for report in own_reports)
-                + helper_hours[technician.pk]
-                + sum(assignment.labour_hours for assignment in own_handovers)
-            ),
-            'estimated': sum(report.task.estimated_hours for report in own_reports if report.task.estimated_hours),
-            'helped_on': helped_on[technician.pk],
-            'overrun_count': sum(1 for report in own_reports if report.is_overrun),
-            'above_tapped_count': sum(1 for report in own_reports if report.is_above_tapped),
-            'away_count': sum(1 for report in own_reports if report.has_taps_away_from_site),
-        })
-    return rows
 
 
 # A scheduled visit with no "Arrived" this long after its time is flagged
@@ -5467,6 +4617,7 @@ def technician_overview(technician):
     }
 
 
+@login_required
 def technician_detail(request, pk):
     """Everything about one staff member, for whoever oversees them: their
     work still to do (today, upcoming, overdue), visits this month and
@@ -5498,7 +4649,7 @@ def view_as_user_start(request, pk):
     check a complaint (spots.middleware.ViewAsCustomerMiddleware) — view
     only, their password untouched, nothing sent or marked read for them;
     recorded in the Audit log. Not another admin."""
-    from django.contrib.admin.models import CHANGE, LogEntry
+    from django.contrib.admin.models import CHANGE
 
     from spots.middleware import VIEW_AS_USER_SESSION_KEY
 
@@ -5556,21 +4707,62 @@ def machine_list(request):
     if search:
         assets = assets.filter(
             Q(serial_no__icontains=search) | Q(model_name__icontains=search) | Q(code__icontains=search)
-            | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
-            | Q(site__customer__name__icontains=search)
+            | Q(brand__name__icontains=search) | Q(site__name__matches=search)
+            | Q(site__customer__name__matches=search)
         )
 
+    if request.GET.get('loan') == 'due':  # the bell's "on loan, due back"
+        assets = assets.filter(on_loan_until__lt=timezone.localdate())
     # Added by customers and not confirmed yet (?status=pending).
     pending_count = assets.filter(status=Asset.Status.PENDING).count()
     showing_pending = request.GET.get('status') == 'pending'
     if showing_pending:
         assets = assets.filter(status=Asset.Status.PENDING)
 
+    # A factory recall or safety notice (docs/scenarios.md H): one visit per branch for every
+    # machine this search finds — the manager tier, with the notice's words.
+    technician = request.user.technician
+    can_recall = technician.is_manager_tier and bool(search)
+    if request.method == 'POST' and request.POST.get('action') == 'recall' and can_recall:
+        notice = request.POST.get('notice', '').strip()
+        affected = list(assets.exclude(status=Asset.Status.RETIRED).exclude(status=Asset.Status.PENDING))
+        if not notice or not affected:
+            messages.error(request, _('Write the notice, and search for the machines it concerns.'))
+        else:
+            made = create_recall_visits(request, affected, notice)
+            messages.success(request, _('%(count)s visits created, one per branch.') % {'count': len(made)})
+        return redirect(f"{reverse('tasks:machine_list')}?q={search}")
+
     paginator = Paginator(assets, 25)
     page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'tasks/machine_list.html', {
         'page_obj': page_obj, 'search': search, 'pending_count': pending_count, 'showing_pending': showing_pending,
+        'can_recall': can_recall,
     })
+
+
+def create_recall_visits(request, machines, notice):
+    """One inspection visit per branch for these machines (a recall), its serials listed."""
+    by_site = {}
+    for machine in machines:
+        by_site.setdefault(machine.site, []).append(machine)
+    task_type = TaskType.objects.filter(code='safety_inspection').first()
+    made = []
+    for site, on_site in by_site.items():
+        task = Task(
+            site=site, task_type=task_type, brand=on_site[0].brand, priority=Task.Priority.HIGH,
+            source=Task.Source.INTERNAL, billing_type=Task.BillingType.WARRANTY, is_warranty=True,
+            reported_at=timezone.now(), created_by=request.user, status=Task.Status.NEW,
+            description=_('Factory recall: %(notice)s') % {'notice': notice},
+            reported_serial_numbers='\n'.join(machine.serial_no for machine in on_site if machine.serial_no),
+        )
+        with transaction.atomic():
+            _save_new_task(task)
+            TaskEvent.objects.create(task=task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(),
+                                     actor=request.user, note=notice)
+            TaskNotification.objects.create(task=task, created_at=timezone.now())
+        made.append(task)
+    return made
 
 
 @login_required
@@ -5609,8 +4801,46 @@ def machine_detail(request, pk):
             messages.success(request, _('Machine removed from the customer\'s list.'))
             return redirect(f"{reverse('tasks:machine_list')}?status=pending")
 
-    context = {'asset': asset, 'task_assets': task_assets, 'can_confirm': can_confirm}
+    # Sold from the showroom, relocated, taken back, removed (docs/scenarios.md B, E): whoever
+    # edits customers moves it to another branch or retires it — with the reason, in its history.
+    can_manage = asset.status != Asset.Status.PENDING and _has_permission(
+        requesting_technician, RolePermission.Permission.MANAGE_CUSTOMERS,
+    )
+    branches = _scoped_sites(requesting_technician, get_active_country(request)).exclude(pk=asset.site_id)
+    if request.method == 'POST' and can_manage and request.POST.get('action') in ('move', 'retire'):
+        from spots.audit import record
+        from people.models import AuditEntry
+        reason = request.POST.get('reason', '').strip()
+        if not reason:
+            messages.error(request, _('Please give the reason.'))
+            return redirect('tasks:machine_detail', pk=asset.pk)
+        if request.POST.get('action') == 'move':
+            branch = get_object_or_404(branches, pk=request.POST.get('site'))
+            asset.site = branch
+            # Lent (a demo machine): due back by then — the bell reminds; moved without it, it's not a loan.
+            asset.on_loan_until = parse_date(request.POST.get('on_loan_until', '') or '') or None
+            asset.save(update_fields=['site', 'on_loan_until'])
+            messages.success(request, _('Machine moved to %(site)s.') % {'site': branch})
+        else:
+            asset.status = Asset.Status.RETIRED
+            asset.save(update_fields=['status'])
+            messages.success(request, _('Machine retired: it is no longer on the customer\'s list.'))
+        record(AuditEntry.Action.CHANGED, asset, message=reason)  # the reason, beside the change itself
+        return redirect('tasks:machine_detail', pk=asset.pk)
+
+    context = {
+        'asset': asset, 'task_assets': task_assets, 'can_confirm': can_confirm,
+        'can_manage': can_manage and asset.status != Asset.Status.RETIRED, 'branches': branches,
+    }
     return render(request, 'tasks/machine_detail.html', context)
+
+
+def _scoped_sites(technician, country):
+    """Branches a machine can move to: customers' and ours (a showroom), in this person's countries."""
+    sites = Site.objects.filter(customer__is_active=True).select_related('customer')
+    if not technician.reaches_all_countries:
+        sites = sites.filter(customer__country=country)
+    return sites.order_by('customer__name', 'name')
 
 
 def close_task_directly(task, user, note):
@@ -5620,6 +4850,7 @@ def close_task_directly(task, user, note):
     TaskEvent.objects.create(
         task=task, event_type=TaskEvent.EventType.CLOSED, occurred_at=timezone.now(), actor=user, note=note,
     )
+    plan_next_ppm(task, user)
 
 
 def cancel_task(task, user, note):
@@ -5632,6 +4863,35 @@ def cancel_task(task, user, note):
     )
     for assignment in task.assignments.filter(is_active=True).select_related('technician'):
         push_cancelled(assignment.technician, task)
+    _back_to_the_desk(task)
+
+
+def _back_to_the_desk(task):
+    """A visit made from a request, cancelled: the request isn't settled. Its
+    machines wait for "What happens next?" again, the request is back on the
+    desk (its bell), and the customer is told (English and Arabic)."""
+    from tasks import customer_emails as emails
+
+    machines = TicketMachine.objects.filter(task=task)
+    tickets = {machine.ticket for machine in machines.select_related('ticket')}
+    tickets |= set(CustomerTicket.objects.filter(task=task))
+    machines.update(task=None, decision='', decision_reason='', decision_note='', decided_by=None, decided_at=None)
+    for ticket in tickets:
+        if ticket.status not in (CustomerTicket.Status.CONVERTED, CustomerTicket.Status.NEW):
+            continue
+        # Another visit still going for its other machines stays its visit; else none.
+        ticket.task = next((machine.task for machine in ticket.machines.exclude(task=None).select_related('task')
+                            if machine.task.status != Task.Status.CANCELLED), None)
+        ticket.status = CustomerTicket.Status.CONVERTED if ticket.task else CustomerTicket.Status.NEW
+        ticket.save(update_fields=['task', 'status'])
+        TicketNotification.objects.create(ticket=ticket, kind=TicketNotification.Kind.NEW_TICKET, created_at=timezone.now())
+        if ticket.kind == CustomerTicket.Kind.CUSTOMER:
+            emails.send(
+                country=ticket.country, recipient=ticket.contact_email,
+                contact=ticket.contact_name or ticket.company_name, title=emails.VISIT_CANCELLED_TITLE,
+                paragraphs=[emails.VISIT_CANCELLED_BODY, emails.VISIT_CANCELLED_NEXT],
+                values={'site': task.site.name}, ticket=ticket,
+            )
 
 
 def flag_negligence(task, user, note):
@@ -5769,6 +5029,15 @@ def move_open_tasks(technician, successor, actor):
                 assignment.ended_at = now
                 assignment.end_reason = TaskAssignment.EndReason.LEFT_COMPANY
                 assignment.save(update_fields=['is_active', 'ended_at', 'end_reason'])
+    # What they own goes with it: their open tasks and the requests and internal tasks they hold
+    # (saved one by one, so each handover is in the Audit log).
+    for owned in Task.objects.filter(responsible_supervisor=technician).exclude(
+            status__in=[Task.Status.CLOSED, Task.Status.CANCELLED]):
+        owned.responsible_supervisor = successor
+        owned.save(update_fields=['responsible_supervisor'])
+    for held in CustomerTicket.objects.filter(assigned_to=technician, status=CustomerTicket.Status.NEW):
+        held.assigned_to = successor
+        held.save(update_fields=['assigned_to'])
     return len(tasks)
 
 
@@ -5799,10 +5068,8 @@ def technician_edit(request, pk):
     technician = _scoped_or_404(
         _people_i_oversee(requesting_technician), pk, requesting_technician, get_active_country(request), 'country',
     )
-    # Someone below this person can look, but not change anything — an
-    # email or password change would let them sign in as them.
-    if request.method == 'POST' and not can_manage_account(requesting_technician, technician):
-        raise PermissionDenied
+    # Their record (name, phone, photo…): whoever oversees them (the queryset above).
+    # Their login and their leaving follow the rank (can_manage_account, below).
     was_last_admin = is_last_active_admin(technician) if technician.is_active else False
 
     form = TechnicianEditForm(instance=technician, is_manager=is_manager, is_admin=is_admin)
@@ -5830,9 +5097,11 @@ def technician_edit(request, pk):
 
     can_manage = is_manager and can_manage_account(requesting_technician, technician)
     login_form = CreateTechnicianLoginForm() if can_manage and technician.user_id is None else None
-    password_form = NewPasswordForm(user=technician.user) if can_manage and technician.user_id else None
+    # Nobody types in someone else's password: a forgotten one is fixed on Staff accounts
+    # (a setup link to their own email, or — the Admin — a generated temporary password).
+    has_login = can_manage and technician.user_id is not None
 
-    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and is_manager:
+    if request.method == 'POST' and request.POST.get('action') == 'deactivate' and can_manage:
         deactivate_form = DeactivateTechnicianForm(request.POST, technician=technician)
         if was_last_admin:
             messages.error(request, _('This is the only administrator able to sign in, so they cannot be '
@@ -5868,21 +5137,6 @@ def technician_edit(request, pk):
             messages.success(request, _('Login created. A setup link has been sent to %(email)s.') % {'email': email})
             return redirect('tasks:technician_edit', pk=technician.pk)
 
-    elif request.method == 'POST' and request.POST.get('action') == 'reset_password' and password_form is not None:
-        password_form = NewPasswordForm(user=technician.user, data=request.POST)
-        if password_form.is_valid():
-            password_form.save()
-            # Temporary: they choose their own at their next sign-in, so
-            # the manager who typed it doesn't keep knowing it.
-            technician.must_change_password = True
-            technician.save(update_fields=['must_change_password'])
-            sign_out_of_mobile_app(technician.user)
-            send_password_changed_email(technician.user, temporary=True)
-            log_account_action(request, technician, 'Staff temporary password set; signed out of the mobile app')
-            messages.success(request, _('The password has been reset. They will be asked to choose their own '
-                                        'at their next sign-in.'))
-            return redirect('tasks:technician_edit', pk=technician.pk)
-
     elif request.method == 'POST':
         form = TechnicianEditForm(
             request.POST, request.FILES, instance=technician, is_manager=is_manager, is_admin=is_admin,
@@ -5892,12 +5146,18 @@ def technician_edit(request, pk):
                                      'administrator role to someone else first.'))
         if form.is_valid():
             form.save()
+            if 'email' in form.changed_data and form.cleaned_data['email']:
+                change_login_email(request, technician, form.cleaned_data['email'])
+            elif 'email' in form.changed_data:  # removed: the login keeps its sign-in name
+                technician.user.email = ''
+                technician.user.save(update_fields=['email'])
+                log_account_action(request, technician, 'Staff email removed')
             messages.success(request, _('Technician updated.'))
             return redirect('tasks:technician_list')
 
     context = {
         'technician': technician, 'form': form, 'deactivate_form': deactivate_form,
-        'login_form': login_form, 'password_form': password_form, 'is_manager': is_manager,
+        'login_form': login_form, 'has_login': has_login, 'is_manager': is_manager,
         'trip_form': trip_form, 'trips': technician.trips.select_related('country'),
         'tasks_to_reassign': _tasks_to_reassign(technician) if not technician.is_active else [],
         # Still active: their open tasks, to move to someone in the same step as deactivating.
@@ -5978,22 +5238,63 @@ def role_permissions(request):
     edit here could lock every role out of ever fixing it again. Also
     the one screen a manager doesn't get, unlike every other manager-tier
     screen (see require_admin).
+
+    Every built-in role, and the roles the Admin made (CustomRole): a new one
+    is based on a built-in role (any but Admin) — its people follow that
+    role's fixed rules, and its own switches, which start as the base role's.
+    One can be renamed, or deleted once nobody has it (docs/access_rules.md).
     """
+    from django.db.models import Count
+
+    from people.models import CustomRole
+
     require_admin(request)
-
-    roles = [
-        Technician.Role.TECHNICIAN, Technician.Role.SUPERVISOR, Technician.Role.MANAGER,
-        Technician.Role.COUNTRY_SUPPORT, Technician.Role.SUPPORT_MANAGER, Technician.Role.OPERATIONS_MANAGER,
-        Technician.Role.WAREHOUSE_MANAGER, Technician.Role.ADMIN,
-    ]
+    custom_roles = list(CustomRole.objects.annotate(people_count=Count('people')))
+    columns = [{'key': value, 'label': label, 'custom': None} for value, label in Technician.Role.choices]
+    columns += [{'key': role.key, 'label': role.display_name, 'custom': role} for role in custom_roles]
     permissions = list(RolePermission.Permission)
+    new_role_form = CustomRoleForm(prefix='new')
+    action = request.POST.get('action') if request.method == 'POST' else None
 
-    if request.method == 'POST':
+    if action == 'new_role':
+        new_role_form = CustomRoleForm(request.POST, prefix='new')
+        if new_role_form.is_valid():
+            role = new_role_form.save()
+            # Its switches start as the base role's; the Admin changes them below.
+            base = set(RolePermission.objects.filter(role=role.based_on, allowed=True).values_list('permission', flat=True))
+            RolePermission.objects.bulk_create([
+                RolePermission(role=role.key, permission=permission, allowed=permission in base)
+                for permission in permissions
+            ])
+            log_account_action(request, role, f'Role "{role.name}" made, based on {role.get_based_on_display()}')
+            messages.success(request, _('Role “%(name)s” added, with the switches of %(base)s. Change them below.') % {
+                'name': role.name, 'base': role.get_based_on_display(),
+            })
+            return redirect('tasks:role_permissions')
+    elif action in ('rename_role', 'delete_role'):
+        role = get_object_or_404(CustomRole, pk=request.POST.get('role'))
+        if action == 'rename_role':
+            form = CustomRoleForm(request.POST, instance=role, renaming=True, prefix=f'role{role.pk}')
+            if form.is_valid():
+                form.save()
+                messages.success(request, _('Role renamed.'))
+            else:
+                messages.error(request, ' '.join(error for errors in form.errors.values() for error in errors))
+        elif role.people.exists():
+            messages.error(request, _('“%(name)s” is still given to someone. Give them another role first.') % {
+                'name': role.name})
+        else:
+            RolePermission.objects.filter(role=role.key).delete()
+            log_account_action(request, role, f'Role "{role.name}" deleted')
+            role.delete()
+            messages.success(request, _('Role deleted.'))
+        return redirect('tasks:role_permissions')
+    elif request.method == 'POST' and action in ('save_permissions', None, ''):  # the switches (as ever, the default)
         for permission in permissions:
-            for role in roles:
+            for column in columns:
                 RolePermission.objects.update_or_create(
-                    role=role, permission=permission,
-                    defaults={'allowed': f'{role}__{permission}' in request.POST},
+                    role=column['key'], permission=permission,
+                    defaults={'allowed': f'{column["key"]}__{permission}' in request.POST},
                 )
         messages.success(request, _('Permissions updated.'))
         return redirect('tasks:role_permissions')
@@ -6003,37 +5304,73 @@ def role_permissions(request):
         {
             'permission': permission,
             'cells': [
-                {
-                    'field_name': f'{role}__{permission}',
-                    'allowed': (role, permission) in allowed_pairs,
-                }
-                for role in roles
+                {'field_name': f'{column["key"]}__{permission}', 'allowed': (column['key'], permission) in allowed_pairs}
+                for column in columns
             ],
         }
         for permission in permissions
     ]
-
-    context = {'roles': roles, 'matrix': matrix}
-    return render(request, 'tasks/role_permissions.html', context)
+    custom_rows = [
+        {'role': role, 'form': CustomRoleForm(instance=role, renaming=True, prefix=f'role{role.pk}')}
+        for role in custom_roles
+    ]
+    return render(request, 'tasks/role_permissions.html', {
+        'columns': columns, 'matrix': matrix, 'new_role_form': new_role_form, 'custom_rows': custom_rows,
+    })
 
 
 @login_required
 def audit_log(request):
-    """Who did what, anywhere in Django admin — add/change/delete, with
-    the actor and a timestamp, for free from Django's own LogEntry.
-    Admin-only, same reasoning as Roles & permissions: this is oversight
-    of everyone, including other admins, so it stays off the manager-tier
-    floor. Covers /admin/ actions, plus every account action from Staff
-    and Customer accounts and the edit pages (customers.accounts.
-    log_account_action); task actions have their own trail (TaskEvent).
+    """Who did what, when, from where, and what it changed (spots.audit,
+    people.AuditEntry): every change to the records that matter, whichever page
+    or app screen made it, every sign-in (and failed one), every account action
+    and the admin site's. Admin-only — oversight of everyone, other admins
+    included. Searched by person, what happened, kind of record, dates and any
+    text; ?export=csv for the same rows as a spreadsheet. A task's own story is
+    on its page too (TaskEvent).
     """
+    import csv
+
+    from people.models import AuditEntry
     require_admin(request)
-
-    entries = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
-    paginator = Paginator(entries, 50)
-    page_obj = paginator.get_page(request.GET.get('page'))
-
-    return render(request, 'tasks/audit_log.html', {'page_obj': page_obj})
+    entries = AuditEntry.objects.all()
+    filters = {key: request.GET.get(key, '').strip() for key in ('who', 'action', 'kind', 'q', 'since', 'until', 'record')}
+    if filters['who']:
+        entries = entries.filter(actor_name__icontains=filters['who'])
+    if filters['action'] in AuditEntry.Action.values:
+        entries = entries.filter(action=filters['action'])
+    if filters['kind']:
+        entries = entries.filter(object_type=filters['kind'])
+    if filters['record']:
+        entries = entries.filter(object_id=filters['record'])
+    if filters['q']:
+        entries = entries.filter(
+            Q(object_repr__icontains=filters['q']) | Q(message__icontains=filters['q']) | Q(ip__startswith=filters['q']),
+        )
+    since, until = parse_date(filters['since']), parse_date(filters['until'])
+    if since:
+        entries = entries.filter(at__date__gte=since)
+    if until:
+        entries = entries.filter(at__date__lte=until)
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="audit-log.csv"'
+        response.write('\ufeff')  # so Excel reads Arabic names right
+        writer = csv.writer(response)
+        writer.writerow(['when (UTC)', 'who', 'IP', 'what', 'kind', 'record', 'name', 'changes', 'details'])
+        for entry in entries[:50000]:
+            writer.writerow([
+                entry.at.isoformat(), entry.actor_name, entry.ip or '', entry.get_action_display(), entry.object_type,
+                entry.object_id, entry.object_repr,
+                '; '.join(f'{field}: {pair[0]} -> {pair[1]}' for field, pair in entry.changes.items()), entry.message,
+            ])
+        return response
+    kinds = AuditEntry.objects.exclude(object_type='').values_list('object_type', flat=True).distinct().order_by('object_type')
+    return render(request, 'tasks/audit_log.html', {
+        'page_obj': Paginator(entries, 50).get_page(request.GET.get('page')),
+        'filters': filters, 'actions': AuditEntry.Action.choices, 'kinds': kinds,
+        'query': '&'.join(f'{key}={value}' for key, value in filters.items() if value),
+    })
 
 
 def _shift_month(first_of_month, delta):
@@ -6293,6 +5630,35 @@ def part_list(request):
     return render(request, 'tasks/part_list.html', context)
 
 
+def _machine_counts_from_file(uploaded_file):
+    """(code, quantity) from a CSV or an Excel sheet with Code and Qty columns
+    (found by their headings; without headings, the first two columns). A row
+    with no code or no whole number for its quantity is left out."""
+    if uploaded_file.name.lower().endswith('.xlsx'):
+        import openpyxl  # only the upload needs it
+        rows = [list(row) for row in openpyxl.load_workbook(uploaded_file, read_only=True).worksheets[0].iter_rows(values_only=True)]
+    else:
+        rows = list(csv.reader(uploaded_file.read().decode('utf-8-sig', errors='replace').splitlines()))
+    rows = [['' if cell is None else str(cell).strip() for cell in row] for row in rows if row]
+    code_col, quantity_col, start = 0, 1, 0
+    for index, row in enumerate(rows[:10]):
+        headings = [cell.lower() for cell in row]
+        if 'code' in headings:
+            code_col = headings.index('code')
+            quantity_col = next((headings.index(name) for name in ('qty', 'quantity') if name in headings), code_col + 1)
+            start = index + 1
+            break
+    for row in rows[start:]:
+        code = row[code_col] if code_col < len(row) else ''
+        quantity = row[quantity_col] if quantity_col < len(row) else ''
+        try:
+            quantity = int(float(quantity))
+        except ValueError:
+            continue
+        if code and quantity >= 0:
+            yield code, quantity
+
+
 def _part_rows_from_csv(uploaded_file):
     """A CSV's rows of code, description (a first row reading "code" is a
     header) as (code, description, colour, picture, quantity) — no colour,
@@ -6432,7 +5798,30 @@ def stock(request):
     country = get_active_country(request)
     can_count = technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER
     count_form = StockCountForm(country=country)
-    if request.method == 'POST':
+    import_form = MachineStockImportForm(country=country)
+    if request.method == 'POST' and request.POST.get('action') == 'import_machines':
+        # The machines' opening stock, a warehouse at once: each row's quantity recorded as a count.
+        if not can_count:
+            raise PermissionDenied
+        import_form = MachineStockImportForm(request.POST, request.FILES, country=country)
+        if import_form.is_valid():
+            upload, warehouse = import_form.cleaned_data['file'], import_form.cleaned_data['warehouse']
+            try:
+                rows = list(_machine_counts_from_file(upload))
+            except Exception:  # anything that isn't a readable sheet
+                import_form.add_error('file', _('This file could not be read. Save it again as .xlsx or .csv and retry.'))
+            else:
+                note = _('Opening stock — %(file)s') % {'file': upload.name}
+                with transaction.atomic():
+                    changed = sum(
+                        1 for code, quantity in rows
+                        if record_count(warehouse, TaskProduct.Kind.MACHINE, code, quantity, note, request.user)
+                    )
+                messages.success(request, _('%(count)s machine codes read for %(warehouse)s; %(changed)s changed the stock.') % {
+                    'count': len(rows), 'warehouse': warehouse.name, 'changed': changed,
+                })
+                return redirect('tasks:stock')
+    elif request.method == 'POST':
         if not can_count:
             raise PermissionDenied
         count_form = StockCountForm(request.POST, country=country)
@@ -6451,11 +5840,33 @@ def stock(request):
 
     warehouses = Site.objects.filter(customer__is_internal=True, customer__country=country).order_by('name')
     context = {
-        'country': country, 'can_count': can_count, 'count_form': count_form,
+        'country': country, 'can_count': can_count, 'count_form': count_form, 'import_form': import_form,
         'warehouses': [(site, machine_stock(site)) for site in warehouses],
         'parts': part_rows(country) if country else [],
     }
+    # Repairs whose parts are all in, for the warehouse to prepare (tasks.parts_needed.to_prepare).
+    from tasks.parts_needed import to_prepare
+    context['to_prepare'] = to_prepare(country)
+    # Machines that left a warehouse and aren't in place yet, the longest first (tasks.stock).
+    from tasks.stock import not_installed_yet
+    context['not_installed'] = not_installed_yet(country) if country else []
     return render(request, 'tasks/stock.html', context)
+
+
+@login_required
+def parts_to_prepare(request):
+    """The warehouse manager's list (and the manager tier's): the repairs whose
+    parts are all in and not prepared yet, the soonest visit first
+    (tasks.parts_needed.to_prepare); "Prepared" is on each task's page."""
+    from tasks.parts_needed import can_prepare, part_rows, to_prepare
+
+    technician = require_technician(request)
+    if not can_prepare(technician):
+        raise PermissionDenied
+    tasks = to_prepare(get_active_country(request))
+    return render(request, 'tasks/parts_to_prepare.html', {
+        'rows': [{'task': task, 'parts': part_rows(task)} for task in tasks],
+    })
 
 
 @login_required
@@ -6516,10 +5927,9 @@ def request_for_task(task, with_conversation=True):
     a machine), and — for the office, not the technician (with_conversation)
     — the conversation with support, with its files. Never internal notes.
     None when the task didn't come from a customer's request."""
-    ticket = getattr(task, 'ticket', None) or next(
-        (machine.ticket for machine in task.ticket_machines.select_related('ticket')[:1]), None,
-    )
-    if ticket is None or ticket.kind != CustomerTicket.Kind.CUSTOMER:
+    from tasks.customer_emails import request_of
+    ticket = request_of(task)
+    if ticket is None:
         return None
     attachments = ticket.attachments.order_by('uploaded_at')
     if task.ticket_machines.exists():
@@ -6610,6 +6020,8 @@ def ticket_for_app(request, technician, access):
         'id': ticket.pk, 'ticket_number': ticket.ticket_number, 'status': ticket.status,
         'status_display': ticket.get_status_display(), 'escalated': pending is not None,
         'submitted_at': ticket.submitted_at, 'company_name': ticket.company_name,
+        # The person at the customer who sent it from the portal; '' when staff opened it.
+        'sent_by': (ticket.submitted_by.first_name or ticket.submitted_by.email) if ticket.submitted_by_id else '',
         'customer_name': ticket.customer.name if ticket.customer_id else ticket.company_name,
         'site_name': ticket.site.name if ticket.site_id else ticket.site_description,
         'site_address': (ticket.site.address if ticket.site_id else '') or ticket.site_address,
@@ -6636,6 +6048,9 @@ def ticket_for_app(request, technician, access):
         'close_reason': ticket.close_reason or '',
         'can_manage': can_manage, 'can_reply': can_manage and _ticket_is_open(ticket),
         'next': next_step,
+        # The country's way of working (no visits in the USA) and the suggested answer.
+        'does_visits': ticket.country.does_visits,
+        'suggest_ship': not ticket.country.does_visits or bool(ticket.customer_id and ticket.customer.own_maintenance_team),
         'website_path': reverse('tasks:ticket_review', args=[ticket.pk]),
     }
 
@@ -6653,6 +6068,7 @@ def request_for_app(request, task):
     items_by_machine = [items(card['items']) for card in report['machines']]
     return {
         'machines': [{
+            'ticket_machine_id': card['machine'].pk,
             'name': card['machine'].machine_name, 'serial': card['machine'].serial,
             'problem': card['machine'].get_problem_display(), 'urgent': card['machine'].problem == TicketMachine.Problem.NOT_WORKING,
             'description': card['machine'].description, 'items': items(card['items']),
@@ -6684,8 +6100,8 @@ def ship_and_tell_customer(task, user, company, tracking):
         notify_customer.part_shipped(ticket)
     if task.site.effective_contact_email:
         _send_shipping_notice(
-            task.site.effective_contact_name or task.site.customer.name, task.site.name, task.task_number,
-            company, tracking, task.site.effective_contact_email,
+            task.site.customer.country, task.site.effective_contact_name or task.site.customer.name, task.site.name,
+            company, tracking, task.site.effective_contact_email, task=task,
         )
 
 
@@ -6703,9 +6119,14 @@ def shipment_for_app(task, technician):
         'pak_reference_number': task.pak_reference_number,
         'shipping_company': task.get_shipping_company_display() if task.shipping_company else '',
         'shipping_tracking_number': task.shipping_tracking_number,
-        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
+        'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY
+        and task.site.customer.country.has_warehouse,
         'companies': [{'value': value, 'label': str(label)} for value, label in ShippingCompany.choices],
         'send_to': shipments.send_to(task),
+        # From the factory straight to the customer; the only way where the country holds no stock.
+        'can_ship_direct': shipments.can_ship_direct(technician, task) and stage in (shipments.PREPARING, shipments.READY),
+        'direct_only': not task.site.customer.country.has_warehouse,
+        'ships_direct': task.ships_direct,
         # The warehouse manager's step, and the fitting visit after it (the office's panel).
         'can_prepare': shipments.can_prepare(technician, task) and stage in (shipments.PREPARING, shipments.READY),
         'shippers': [{'id': person.pk, 'name': person.full_name} for person in shipments.technicians_for(task)]
@@ -6729,6 +6150,10 @@ def _shipment_context(task, technician):
         'can_prepare': can_prepare and stage in (shipments.PREPARING, shipments.READY),
         'can_ship': shipments.can_ship(technician, task) and stage == shipments.READY,
         'can_book_fitting': can_prepare and stage == shipments.SHIPPED,
+        # From the factory straight to the customer; the only way where the country holds no stock.
+        'can_ship_direct': shipments.can_ship_direct(technician, task) and stage in (shipments.PREPARING, shipments.READY),
+        'direct_only': not task.site.customer.country.has_warehouse,
+        'ships_direct': task.ships_direct,
         'send_to': shipments.send_to(task),
         'technicians': shipments.technicians_for(task) if can_prepare else (),
         'companies': ShippingCompany.choices, 'blank_rows': range(3),
@@ -6771,10 +6196,24 @@ def _shipment_post(request, task, technician, back):
 
     action = request.POST.get('action')
     if request.method != 'POST' or not is_part_shipment(task) or action not in (
-        'shipment_ready', 'shipment_shipped', 'book_fitting',
+        'shipment_ready', 'shipment_shipped', 'shipment_direct', 'book_fitting',
     ):
         return None
     stage = shipments.stage(task)
+    if action == 'shipment_direct':
+        # From the factory straight to the customer: the PAK number, the courier and tracking — shipped.
+        if not shipments.can_ship_direct(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
+            raise PermissionDenied
+        company = request.POST.get('shipping_company', '')
+        if company not in ShippingCompany.values:
+            messages.error(request, _('Please choose the shipping company.'))
+            return redirect(back)
+        shipments.mark_shipped_direct(task, request.POST.get('pak_reference_number', '').strip()[:100])
+        ship_and_tell_customer(task, request.user, company, request.POST.get('shipping_tracking_number', ''))
+        messages.success(request, _('Shipped direct from the factory. The customer has been told.'))
+        return redirect(back)
+    if action in ('shipment_ready', 'shipment_shipped') and not shipments.from_our_stock(task):
+        raise PermissionDenied  # no stock of ours here: only "Sent direct from the factory"
     if action == 'shipment_ready':
         if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
             raise PermissionDenied
@@ -6807,16 +6246,31 @@ def _shipment_post(request, task, technician, back):
 
 
 @login_required
+@transaction.atomic
 def my_task_detail(request, pk):
     technician = require_technician(request)
 
     assignment = get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer', 'task__task_type', 'task__brand',
         ),
         task__pk=pk, technician=technician, is_active=True,
     )
     task = assignment.task
+    if request.method == 'POST' and request.POST.get('action') == 'report_incident':
+        note = request.POST.get('incident_note', '').strip()
+        if note:
+            report_safety_incident(task, request.user, note)
+            messages.success(request, _('Safety incident reported: the Manager and the Operations Manager are told; '
+                                        'its machines are out of use.'))
+        else:
+            messages.error(request, _('Please say what happened.'))
+        return redirect('tasks:my_task_detail', pk=task.pk)
+    if request.method == 'POST':
+        # One tap at a time on a task (a double tap, a slow connection): the task is locked,
+        # its state read again, so the second press finds the step already done.
+        list(Task.objects.select_for_update().filter(pk=task.pk).values_list('pk', flat=True))
+        task.refresh_from_db()
     is_lead = assignment.role == TaskAssignment.Role.LEAD
     next_action = _next_technician_action(task) if is_lead else None
     is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
@@ -6837,7 +6291,7 @@ def my_task_detail(request, pk):
         ).update(seen_at=timezone.now())
         read_task_updates(task, technician)
 
-    upload_form = TaskAttachmentUploadForm()
+    upload_form = TaskAttachmentUploadForm(site=task.site)
     block_form = BlockTaskForm()
     pause_form = PauseTaskForm()
     message_form = TaskMessageForm()
@@ -6859,6 +6313,8 @@ def my_task_detail(request, pk):
                 if new_status:
                     task.status = new_status
                     task.save(update_fields=['status'])
+            if event_type == TaskEvent.EventType.EN_ROUTE:
+                tell_customer_on_the_way(task, request.user)
             messages.success(request, _('Updated.'))
             if request.POST.get('next') == 'today':  # tapped on My schedule's Today card
                 return redirect('tasks:my_week')
@@ -6900,12 +6356,37 @@ def my_task_detail(request, pk):
                                           'time.'))
             return redirect('tasks:my_task_detail', pk=task.pk)
 
+        elif action == 'confirm_customer_file':
+            if confirm_customer_files(request, task, int(request.POST.get('asset') or 0), slot=request.POST.get('slot')):
+                messages.success(request, _('Photo confirmed.'))
+            else:
+                messages.error(request, _('That photo is no longer offered for this machine.'))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
+        elif action == 'register_machine':
+            register_form = RegisterMachineForm(request.POST)
+            if register_form.is_valid():
+                register_task_machine(task, register_form.cleaned_data)
+                messages.success(request, _('Machine saved. Now add its serial plate, before and after.'))
+                return redirect('tasks:my_task_detail', pk=task.pk)
+            messages.error(request, ' '.join(error for errors in register_form.errors.values() for error in errors))
+            return redirect('tasks:my_task_detail', pk=task.pk)
+
         elif action == 'upload':
-            upload_form = TaskAttachmentUploadForm(request.POST, request.FILES)
-            if upload_form.is_valid():
-                _save_attachment(
-                    request, task, upload_form.cleaned_data['file'], upload_form.cleaned_data['purpose'],
-                )
+            # Before and after: several at once, each checked on its own; the serial plate: one.
+            files = request.FILES.getlist('file')[:5] or [None]
+            forms_ = [
+                TaskAttachmentUploadForm(request.POST, {'file': file} if file else {}, site=task.site) for file in files
+            ]
+            upload_form = next((form for form in forms_ if not form.is_valid()), forms_[0])
+            if all(form.is_valid() for form in forms_):
+                for form in forms_[:1] if forms_[0].cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE else forms_:
+                    if form.cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE:
+                        replace_serial_plate(task, form.cleaned_data['asset'])
+                    _save_attachment(
+                        request, task, form.cleaned_data['file'], form.cleaned_data['purpose'],
+                        asset=form.cleaned_data['asset'],
+                    )
                 messages.success(request, _('Photo added.'))
                 return redirect('tasks:my_task_detail', pk=task.pk)
 
@@ -6929,7 +6410,12 @@ def my_task_detail(request, pk):
         'undoable_tap': undoable,
         'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
         'report': getattr(task, 'report', None),
-        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand'),
+        # Photos as machine and branch cards (visit_photo_cards); the list keeps the other files.
+        'attachments': task.attachments.select_related('uploaded_by', 'asset__brand').exclude(
+            media_type=TaskAttachment.MediaType.PHOTO),
+        'visit_photos': visit_photo_cards(task, task.attachments.select_related('asset__brand', 'uploaded_by__technician'), editable=True),
+        # The spare parts for this visit, and whether the warehouse prepared them.
+        'parts_needed': parts_needed_rows(task),
         # Negligence flags are a manager-only reliability signal — never
         # shown to the technician being flagged.
         'events': task.events.exclude(event_type=TaskEvent.EventType.NEGLIGENCE).order_by('occurred_at'),
@@ -6940,7 +6426,7 @@ def my_task_detail(request, pk):
         # never saw either before, even when the creator is the manager.
         'teammates': teammates,
         'created_by_name': created_by_technician.full_name if created_by_technician else task.created_by.get_username(),
-        'created_by_role_display': created_by_technician.get_role_display() if created_by_technician else '',
+        'created_by_role_display': created_by_technician.title if created_by_technician else '',
         'task_messages': task.messages.select_related('sent_by__technician'),
         'message_form': message_form,
     }
@@ -7015,9 +6501,28 @@ def save_work_report(request, task, technician, report_form, part_rows):
         # Only once the report is safely saved, so a rollback never sends a
         # copy of something that isn't there.
         # Drawing the PDF and sending it both happen in the background.
-        transaction.on_commit(lambda: _in_background(lambda: send_visit_report_copy(saved_report, copy_to)))
+        def send_copy():
+            # The rating asked in the same email: its link made here, where the request is —
+            # and withdrawn when the email doesn't go, so it never counts as asked.
+            asked_before = CustomerFeedback.objects.filter(task=task).exists()
+            feedback = ask_for_rating(task, request.user)
+            rating_link = portal_url(request, reverse('reports:feedback_form', args=[feedback.token])) if feedback else None
+
+            def send():
+                if not send_visit_report_copy(saved_report, copy_to, rating_link) and feedback and not asked_before:
+                    feedback.delete()
+            _in_background(send)
+        transaction.on_commit(send_copy)
+    # The customer's machines, from every save (a correction corrects them: tasks.equipment).
+    elsewhere = register_installed_machines(task)
     if saved_report.first_submission:
-        register_installed_machines(task)
+        if has_checklist(task):  # missing, damaged or wrong machines, a serial on file elsewhere: followed up
+            open_equipment_follow_up(task, request.user, elsewhere)
+        if equipment_step(task) == TaskType.Category.RECEIVING and not task.delivery_note:
+            # A container without its delivery note: followed up (docs/scenarios.md A).
+            open_quality_follow_up(task, request.user, _('Delivery note missing: %(number)s'))
+        if not saved_report.resolved:  # not settled on this visit: its owner follows it up
+            open_quality_follow_up(task, request.user, _('Not resolved on the visit: %(number)s'))
         notify_customer.report_ready(task)
         # A technician's own report needs their supervisor's sign-off
         # before a manager ever sees it; a supervisor filing it themselves
@@ -7047,306 +6552,6 @@ def save_work_report(request, task, technician, report_form, part_rows):
     return saved_report
 
 
-def save_planned_lines(task, rows):
-    """The machine lines as planned on the Edit screen and in the app
-    (TaskProductForm rows). A machine on the task is never removed: a row
-    for an existing line (its line_id — or, from an app that doesn't send
-    ids, the same code and serial) updates that line in place, keeping
-    what was recorded on it on site (status, photo); a line with no row is
-    simply kept; only new rows add lines. On a loading or an installation,
-    "BENCH-01 × 4" becomes four lines — one per machine, each with its own
-    serial and status to check off on site. Receiving keeps code ×
-    quantity (counted against the container's list), and only there can a
-    line be a spare part."""
-    step = equipment_step(task)
-    unused = {line.pk: line for line in task.products.all()}
-
-    def existing_for(cleaned):
-        if cleaned.get('line_id') in unused:
-            return unused.pop(cleaned['line_id'])
-        for pk, line in unused.items():
-            if (line.product_code, line.serial_number) == (cleaned.get('product_code'), cleaned.get('serial_number', '')):
-                return unused.pop(pk)
-        return None
-
-    for cleaned in rows:
-        line = existing_for(cleaned) if cleaned.get('product_code') or cleaned.get('line_id') else None
-        if line is not None:
-            # Corrected in place: its code, serial, colours — and on a receiving, its count.
-            if cleaned.get('product_code'):
-                line.product_code = cleaned['product_code']
-                line.serial_number = '' if step == TaskType.Category.RECEIVING else cleaned.get('serial_number', '')
-                for color in TaskProductForm.COLORS:
-                    setattr(line, color, cleaned[color])
-                line.brand = cleaned.get('brand') or line.brand or task.brand
-                if step == TaskType.Category.RECEIVING:
-                    line.quantity = cleaned['quantity']
-                    line.kind = cleaned.get('kind') or line.kind
-                    line.for_task = cleaned.get('for_task')
-                line.save()
-            continue
-        if not cleaned.get('product_code'):
-            continue
-        fields = {
-            'product_code': cleaned['product_code'], 'serial_number': cleaned.get('serial_number', ''),
-            **{color: cleaned[color] for color in TaskProductForm.COLORS},
-            'brand': cleaned.get('brand') or task.brand,
-        }
-        if step == TaskType.Category.RECEIVING:
-            TaskProduct.objects.create(
-                task=task, quantity=cleaned['quantity'], **{**fields, 'serial_number': ''},
-                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE, for_task=cleaned.get('for_task'),
-            )
-        elif step:
-            for _unit in range(cleaned['quantity']):
-                TaskProduct.objects.create(task=task, quantity=1, **fields)
-        else:
-            TaskProduct.objects.create(task=task, quantity=cleaned['quantity'], **fields)
-
-
-# Lines that weren't installed and still need to be: the follow-up's.
-STILL_TO_INSTALL = (TaskProduct.Status.MISSING, TaskProduct.Status.LATER, TaskProduct.Status.PENDING)
-
-
-# What can follow each step of the equipment chain. A receiving only adds
-# to the warehouse's stock; a loading is planned from that stock (its Edit
-# screen), so machines from two containers can go on one truck.
-NEXT_STEPS = {
-    TaskType.Category.LOADING: (TaskType.Category.INSTALLATION,),
-}
-
-
-def warehouse_stock_for_planning(task):
-    """{code: quantity} a loading can take from its warehouse — the stock
-    with this loading's own planned machines put back."""
-    stock = defaultdict(int, machine_stock(task.site))
-    for code in task.products.filter(kind=TaskProduct.Kind.MACHINE).values_list('product_code', flat=True):
-        stock[stock_key(code)] += 1
-    return {code: quantity for code, quantity in sorted(stock.items()) if quantity > 0}
-
-
-def loading_shortfall(task):
-    """A warning when a loading plans more of a code than its warehouse
-    holds — not a block: the warehouse floor is the truth, and a count
-    corrects the figure."""
-    short = {code: -quantity for code, quantity in machine_stock(task.site).items() if quantity < 0}
-    if not short:
-        return ''
-    return _('More planned than %(warehouse)s holds: %(codes)s. Check the warehouse, or record a count on the Stock '
-             'screen.') % {
-        'warehouse': task.site.name, 'codes': ', '.join(f'{code} ({quantity} short)' for code, quantity in short.items()),
-    }
-
-
-def lines_to_carry(task):
-    """A loading's machines that are loaded and not carried to an
-    installation yet."""
-    if equipment_step(task) not in NEXT_STEPS:
-        return []
-    return list(task.products.filter(
-        status=TaskProduct.Status.DONE, kind=TaskProduct.Kind.MACHINE, carried_to__isnull=True,
-    ).order_by('pk'))
-
-
-def next_step_sites(viewer, step):
-    """Where a next step can be: a warehouse (our own sites) for loading, a
-    customer's site for an installation — in every country for the manager
-    tier (the chain crosses borders; only they send machines on)."""
-    sites = Site.objects.filter(customer__is_active=True).select_related('customer__country')
-    sites = sites.filter(customer__is_internal=(step == TaskType.Category.LOADING))
-    if not viewer.reaches_all_countries:
-        sites = sites.filter(customer__country=viewer.country)
-    return sites.order_by('customer__country__name', 'customer__name', 'name')
-
-
-def create_next_step(request, task, task_type, site, lines):
-    """The chain's next step (loading, or an installation) at `site` — any
-    country — for exactly these machines: each carried over with its serial
-    and colours (source_line), to check off again there. Returns it."""
-    next_task = Task(
-        site=site, task_type=task_type, brand=task.brand, priority=task.priority, source=Task.Source.INTERNAL,
-        billing_type=task.billing_type, is_warranty=task.is_warranty, reported_at=timezone.now(),
-        created_by=request.user, status=Task.Status.NEW, previous_task=task,
-        # The supervisor carries over only within a country.
-        responsible_supervisor=task.responsible_supervisor if site.customer.country_id == task.site.customer.country_id else None,
-        description=_('Next step after %(number)s: %(count)s machines.') % {
-            'number': task.task_number, 'count': sum(line.quantity for line in lines),
-        },
-    )
-    with transaction.atomic():
-        _save_new_task(next_task)
-        # A received line is code × quantity: one line per machine from here on.
-        for line in lines:
-            for _unit in range(line.quantity):
-                TaskProduct.objects.create(
-                    task=next_task, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
-                    frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line, brand=line.brand,
-                )
-        TaskEvent.objects.create(task=next_task, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=request.user)
-        TaskNotification.objects.create(task=next_task, created_at=timezone.now())
-    _send_new_task_email_to_staff(request, next_task)
-    return next_task
-
-
-def still_to_install(task):
-    """An installation's machines not installed yet (missing, later, never
-    checked) once its report is in — what a follow-up task is for. Empty
-    once a follow-up was made for them."""
-    if not (is_installation(task) and has_checklist(task)) or getattr(task, 'report', None) is None             or task.next_tasks.exists():
-        return []
-    return list(task.products.filter(status__in=STILL_TO_INSTALL))
-
-
-def create_follow_up(task, user):
-    """A follow-up installation for exactly the machines still to install:
-    same site, type, brand and supervisor, linked as the next step, each
-    machine's line carried over (source_line) to check off again. Returns
-    the new task."""
-    lines = still_to_install(task)
-    follow_up = Task(
-        site=task.site, task_type=task.task_type, brand=task.brand, priority=task.priority,
-        source=Task.Source.INTERNAL, billing_type=task.billing_type, is_warranty=task.is_warranty,
-        responsible_supervisor=task.responsible_supervisor, reported_at=timezone.now(), created_by=user,
-        status=Task.Status.NEW, previous_task=task,
-        description=_('Follow-up of %(number)s: the machines still to install.') % {'number': task.task_number},
-    )
-    with transaction.atomic():
-        _save_new_task(follow_up)
-        for line in lines:
-            TaskProduct.objects.create(
-                task=follow_up, product_code=line.product_code, serial_number=line.serial_number, quantity=1,
-                frame=line.frame, arm=line.arm, padding=line.padding, trim=line.trim, source_line=line, brand=line.brand,
-            )
-        TaskEvent.objects.create(task=follow_up, event_type=TaskEvent.EventType.CREATED, occurred_at=timezone.now(), actor=user)
-        TaskNotification.objects.create(task=follow_up, created_at=timezone.now())
-    return follow_up
-
-
-def has_checklist(task):
-    """An equipment task (receiving, loading, installation) with machine
-    lines to check off."""
-    return bool(equipment_step(task)) and task.products.exists()
-
-
-def checklist_initial(task):
-    """The checklist's rows, from the task's lines."""
-    return [
-        {
-            'id': line.pk, 'product_code': line.product_code, 'kind': line.kind, 'quantity': line.quantity,
-            'status': '' if line.status == TaskProduct.Status.PENDING else line.status,
-            'serial_number': line.serial_number, 'frame': line.frame, 'arm': line.arm, 'padding': line.padding,
-            'trim': line.trim, 'replacement': line.replacement, 'note': line.note,
-            'photo_url': line.photo.url if line.photo else '', 'added_on_site': line.added_on_site,
-        }
-        for line in task.products.order_by('pk')
-    ]
-
-
-# The on-site checklist: the planned machines plus room to add one found on site.
-ChecklistFormSet = formset_factory(TaskProductCheckForm, extra=1)
-
-
-def make_checklist_formset(task, *args, **kwargs):
-    """The checklist formset for a task's step (its labels follow the step)."""
-    return ChecklistFormSet(
-        *args, initial=checklist_initial(task), prefix='checklist', form_kwargs={'step': equipment_step(task)}, **kwargs,
-    )
-
-
-def checklist_formset_rows(formset):
-    """A valid checklist formset's rows to save — its planned lines, and any
-    machine added on site (an untouched extra row is left out); None
-    without a checklist."""
-    if formset is None:
-        return None
-    return [
-        form.cleaned_data for form in formset
-        if form.cleaned_data.get('product_code') and (form.cleaned_data.get('id') or form.has_changed())
-    ]
-
-
-def save_checklist(task, rows):
-    """What really happened to each machine (TaskProductCheckForm rows,
-    with any new photo as `photo`): planned lines updated by `id`, machines
-    added on site created (and any added earlier but now left out removed)
-    — planned lines are never deleted here, only marked. On receiving, a
-    count short of the list splits the line: those that arrived, and the
-    rest as its own line, missing or damaged."""
-    lines = {line.pk: line for line in task.products.all()}
-    kept = set()
-    for cleaned in rows:
-        line = lines.get(cleaned.get('id'))
-        if line is None:
-            line = TaskProduct(
-                task=task, added_on_site=True, quantity=cleaned.get('quantity') or 1,
-                kind=cleaned.get('kind') or TaskProduct.Kind.MACHINE, brand=task.brand,
-            )
-        line.product_code = cleaned['product_code']
-        line.status = cleaned['status']
-        line.serial_number = cleaned['serial_number']
-        for color in TaskProductCheckForm.COLORS:
-            setattr(line, color, cleaned.get(color, getattr(line, color)))
-        line.replacement = cleaned.get('replacement', '')
-        line.note = cleaned.get('note', '')
-        if cleaned.get('photo'):
-            line.photo = cleaned['photo']
-        rest = None
-        received = cleaned.get('received')
-        if received is not None and received < line.quantity:
-            rest = TaskProduct(
-                task=task, kind=line.kind, for_task_id=line.for_task_id, product_code=line.product_code, brand=line.brand,
-                quantity=line.quantity - received,
-                status=cleaned.get('rest_status') or TaskProduct.Status.MISSING, note=line.note,
-                **{color: getattr(line, color) for color in TaskProductCheckForm.COLORS},
-            )
-            if received == 0:
-                line.status = rest.status
-                rest = None
-            else:
-                line.quantity = received
-        elif received is not None:
-            line.quantity = received
-        line.save()
-        kept.add(line.pk)
-        if rest is not None:
-            rest.photo = line.photo.name or None
-            rest.save()
-    task.products.filter(added_on_site=True).exclude(pk__in=kept).delete()
-
-
-def is_installation(task):
-    """True for an installation task (its type's category)."""
-    return equipment_step(task) == TaskType.Category.INSTALLATION
-
-
-# The equipment chain's steps, in order (TaskType.Category).
-EQUIPMENT_STEPS = (TaskType.Category.RECEIVING, TaskType.Category.LOADING, TaskType.Category.INSTALLATION)
-
-
-def equipment_step(task):
-    """'receiving', 'loading' or 'installation' for a step of the equipment
-    chain, else ''."""
-    category = task.task_type.category if task.task_type_id else ''
-    return category if category in EQUIPMENT_STEPS else ''
-
-
-def register_installed_machines(task):
-    """An installation's machines join the customer's machine list at its
-    site — each product line with a serial, under the task's brand, so the
-    customer can pick it in the portal and every visit builds its history.
-    A serial already on file at the site is that machine (not a second
-    one). Called when the installation's report is first sent; needs the
-    task's brand (the review says so when it's missing).
-    """
-    if not is_installation(task) or not task.brand_id:
-        return
-    today = timezone.localdate()
-    for product in task.products.filter(status=TaskProduct.Status.DONE).exclude(serial_number=''):
-        if not Asset.objects.filter(site=task.site, serial_no__iexact=product.serial_number).exists():
-            Asset.objects.create(
-                site=task.site, brand=task.brand, model_name=product.product_code, code=product.product_code,
-                serial_no=product.serial_number, installed_on=today,
-            )
 
 
 def report_problems(report, language):
@@ -7377,6 +6582,7 @@ def report_problems(report, language):
                 'machine': name,
             })
         typed += [(name, item.note), (name, item.action)]
+    problems += machine_photo_gaps(report.task, [item.asset for item in machines])
     # An installation's checklist says what was done; a repair visit picks it.
     if not report.work_lines and not report.action_taken.strip() and not has_checklist(report.task):
         problems.append(_('Pick the work performed.'))
@@ -7497,7 +6703,147 @@ def task_report_correct(request, pk):
     if getattr(task, 'report', None) is None or task.status not in MANAGER_REPORT_CORRECTABLE_STATUSES:
         messages.error(request, _('This task has no filed report to correct.'))
         return redirect('tasks:task_detail', pk=task.pk)
+    # A customer-signed report: its owner corrects it, or someone stepping in (recorded).
+    if not can_change_task(manager, task):
+        raise PermissionDenied
+    _require_task_owner(request, task)
     return _report_form(request, task, manager, reverse('tasks:task_detail', args=[task.pk]))
+
+
+def task_machine_cards(task):
+    """The task's machines as cards, the same on every screen — the task,
+    the report screen, and approving (app and website): the report's own
+    machines, or before the first filing those the customer reported. Each
+    with its photos (serial plate, before, after); one the customer reported
+    that isn't registered yet has no photos until it is (`registered`)."""
+    existing, new = report_machine_initial(task)
+    assets = {asset.pk: asset for asset in Asset.objects.filter(pk__in=[row['asset'] for row in existing]).select_related('brand')}
+    # What the customer reported for each machine: its request machine, by the machine or itself.
+    reported = list(task.ticket_machines.all())
+    by_asset = {machine.asset_id: machine for machine in reported if machine.asset_id}
+    by_pk = {machine.pk: machine for machine in reported}
+    photos = {}
+    for photo in task.attachments.filter(
+        media_type__in=[TaskAttachment.MediaType.PHOTO, TaskAttachment.MediaType.VIDEO], asset__isnull=False,
+    ).order_by('pk'):
+        photos.setdefault(photo.asset_id, []).append(photo)
+    used = set(task.attachments.exclude(customer_file='').values_list('customer_file', flat=True))
+    cards = [
+        {
+            'asset': assets[row['asset']], 'registered': True,
+            'name': ' '.join(part for part in (
+                assets[row['asset']].brand.name if assets[row['asset']].brand_id else '', assets[row['asset']].model_name,
+            ) if part),
+            'serial_no': assets[row['asset']].serial_no, 'photos': photos.get(row['asset'], []),
+            'ticket_machine': by_asset.get(row['asset']),
+            'customer_files': customer_files(by_asset.get(row['asset']), used),
+        }
+        for row in existing if row['asset'] in assets
+    ]
+    cards += [
+        {'asset': None, 'registered': False, 'name': row['model_name'], 'serial_no': row['serial_no'], 'photos': [],
+         'ticket_machine': by_pk.get(row['ticket_machine']), 'customer_files': customer_files(by_pk.get(row['ticket_machine']), used)}
+        for row in new
+    ]
+    return cards
+
+
+def customer_files(ticket_machine, used=frozenset()):
+    """The customer's photos and videos of one machine that the technician can
+    still confirm (confirm_customer_files): its serial-plate photo for the Serial
+    slot, its other photos and videos for Before. Each once: one already
+    confirmed isn't offered again."""
+    from .customer_report import file_kind
+
+    if ticket_machine is None:
+        return []
+    files = []
+    if ticket_machine.serial_photo and ticket_machine.serial_photo.name not in used:
+        files.append({'file': ticket_machine.serial_photo, 'kind': file_kind(ticket_machine.serial_photo),
+                      'slot': TaskAttachment.Purpose.SERIAL_PLATE, 'added_by_staff': False})
+    for attachment in sorted(ticket_machine.attachments.all(), key=lambda item: item.uploaded_at):
+        if attachment.file.name not in used and file_kind(attachment.file) in ('image', 'video'):
+            files.append({'file': attachment.file, 'kind': file_kind(attachment.file), 'slot': TaskAttachment.Purpose.BEFORE,
+                          'added_by_staff': attachment.added_by_id is not None})
+    return files
+
+
+def replace_serial_plate(task, asset):
+    """A machine has one serial-plate photo: a new one (taken or confirmed) replaces it."""
+    task.attachments.filter(asset=asset, purpose=TaskAttachment.Purpose.SERIAL_PLATE).delete()
+
+
+def confirm_customer_files(request, task, asset_id, slot=None, name=None):
+    """The technician's "Use this" / "Use these": the customer's photos (or
+    videos) of this machine for one slot — its serial plate, or all its fault
+    photos as Before — linked, not copied, and recorded as the customer's,
+    confirmed by whoever did it. `name`: just that one (apps from before).
+    Returns the new attachments; none when the card offers nothing like that."""
+    card = next((card for card in task_machine_cards(task) if card['asset'] and card['asset'].pk == asset_id), None)
+    offered = [
+        item for item in (card or {}).get('customer_files', [])
+        if (name and item['file'].name == name) or (not name and item['slot'] == slot)
+    ]
+    if not offered:
+        return []
+    if offered[0]['slot'] == TaskAttachment.Purpose.SERIAL_PLATE:
+        offered = offered[:1]
+        replace_serial_plate(task, card['asset'])
+    return [
+        TaskAttachment.objects.create(
+            task=task, storage_kind=TaskAttachment.StorageKind.FILE, url=request.build_absolute_uri(item['file'].url),
+            media_type=TaskAttachment.MediaType.VIDEO if item['kind'] == 'video' else TaskAttachment.MediaType.PHOTO,
+            purpose=item['slot'], source=TaskAttachment.Source.CUSTOMER, uploaded_by=request.user,
+            uploaded_at=timezone.now(), asset=card['asset'], customer_file=item['file'].name,
+        )
+        for item in offered
+    ]
+
+
+def register_task_machine(task, cleaned):
+    """A machine registered at the branch during the visit (RegisterMachineForm),
+    so its photos can be taken before the report: pending until the report
+    records it. A serial already on file at this branch is that machine.
+    One the customer reported that wasn't on their list now points at it."""
+    serial = (cleaned.get('serial_no') or '').strip()
+    asset = serial and Asset.objects.filter(site=task.site, serial_no__iexact=serial).first()
+    if not asset:
+        asset = Asset.objects.create(
+            site=task.site, brand=cleaned['brand'], model_name=cleaned['model_name'].strip(), serial_no=serial,
+            code=(cleaned.get('code') or '').strip(), status=Asset.Status.PENDING, registered_on_task=task,
+        )
+    elif not asset.registered_on_task_id and not task.task_assets.filter(asset=asset).exists():
+        asset.registered_on_task = task
+        asset.save(update_fields=['registered_on_task'])
+    if cleaned.get('ticket_machine'):
+        task.ticket_machines.filter(pk=cleaned['ticket_machine'], asset__isnull=True).update(asset=asset)
+    return asset
+
+
+def machine_photo_gaps(task, assets, unregistered=()):
+    """What stops a report being sent: every machine needs its serial plate,
+    before (the fault) and after — confirmed from the customer's or the
+    technician's own. `unregistered`: names of machines not saved yet, so
+    with no photos possible."""
+    have = set(task.attachments.filter(asset__in=assets).values_list('asset_id', 'purpose'))
+    gaps = []
+    for asset in assets:
+        missing = [str(label) for purpose, label, _missing in PHOTO_COLUMNS if (asset.pk, purpose) not in have]
+        if missing:
+            name = ' '.join(part for part in (asset.brand.name if asset.brand_id else '', asset.model_name, asset.serial_no) if part)
+            gaps.append(_('%(machine)s — still needed: %(photos)s.') % {'machine': name, 'photos': ', '.join(missing)})
+    for name in unregistered:
+        gaps.append(_('%(machine)s — save the machine first, then add its serial plate, before and after.') % {'machine': name})
+    return gaps
+
+
+def report_machine_photo_gaps(task, existing_rows, new_rows):
+    """machine_photo_gaps for the machines a report is about to record."""
+    return machine_photo_gaps(
+        task,
+        [row['asset'] for row in existing_rows if row.get('asset') and row.get('outcome')],
+        [row.get('model_name') or '' for row in new_rows if row.get('brand') and row.get('model_name') and row.get('outcome')],
+    )
 
 
 def report_machine_initial(task):
@@ -7508,17 +6854,22 @@ def report_machine_initial(task):
     and the app (api.views.MyTaskReportView).
     """
     task_assets = list(task.task_assets.all())
+    # Machines the technician registered during this visit (register_task_machine), not yet on the report.
+    registered = list(task.registered_assets.order_by('pk').values_list('pk', flat=True))
     if task_assets:
+        recorded = {ta.asset_id for ta in task_assets}
         return [
             {
                 'asset': ta.asset_id, 'outcome': ta.outcome, 'note': ta.note,
                 'finding_code': ta.finding_code, 'action_code': ta.action_code, 'action': ta.action,
             }
             for ta in task_assets
-        ], []
+        ] + [{'asset': pk} for pk in registered if pk not in recorded], []
     ticket_machines = list(task.ticket_machines.all())
+    reported = {machine.asset_id for machine in ticket_machines if machine.asset_id}
     return (
-        [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id],
+        [{'asset': machine.asset_id} for machine in ticket_machines if machine.asset_id]
+        + [{'asset': pk} for pk in registered if pk not in reported],
         [
             {
                 'model_name': machine.model_name, 'serial_no': machine.serial_no, 'code': machine.code,
@@ -7597,7 +6948,7 @@ def _report_form(request, task, technician, back_url):
             'unit_cost': part.unit_cost, 'currency_code': part.currency_code,
         }
         for part in parts
-    ]
+    ] if report else parts_needed_report_parts(task)
 
     helpers = _active_helpers(task)
     time_on_site = task.time_on_site()
@@ -7634,15 +6985,23 @@ def _report_form(request, task, technician, back_url):
                     drawn_signature='' if request.POST.get('signature_waived') else request.POST.get('signature_drawn', ''),
                 )
                 return HttpResponse(html)
-            with transaction.atomic():
-                if checklist_rows is not None:
-                    save_checklist(task, checklist_rows)
-                saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
+            gaps = report_machine_photo_gaps(task, existing_formset.cleaned_data, new_formset.cleaned_data)
+            if request.FILES.get('dispatch_photo') and equipment_step(task) == TaskType.Category.LOADING:
+                _save_attachment(request, task, request.FILES['dispatch_photo'], TaskAttachment.Purpose.DELIVERY_NOTE)
+            if dispatch_photo_missing(task):
+                gaps = [*gaps, DISPATCH_PHOTO_MISSING]
+            for gap in gaps:
+                report_form.add_error(None, gap)
+            if not gaps:
+                with transaction.atomic():
+                    if checklist_rows is not None:
+                        save_checklist(task, checklist_rows)
+                    saved_report = save_work_report(request, task, technician, report_form, part_formset.cleaned_data)
 
-                save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
+                    save_task_machines(task, existing_formset.cleaned_data, new_formset.cleaned_data)
 
-            messages.success(request, report_saved_message(saved_report.first_submission, task))
-            return redirect(back_url)
+                messages.success(request, report_saved_message(saved_report.first_submission, task))
+                return redirect(back_url)
     else:
         report_form = WorkReportForm(
             instance=report, require_signature=_requires_signature(task), helpers=helpers,
@@ -7673,6 +7032,9 @@ def _report_form(request, task, technician, back_url):
         # An equipment step: the machines are checked off here instead.
         'checklist_formset': checklist_formset,
         'equipment_step': equipment_step(task),
+        # A loading's proof of dispatch, once taken.
+        'dispatch_photos': task.attachments.filter(purpose=TaskAttachment.Purpose.DELIVERY_NOTE)
+        if equipment_step(task) == TaskType.Category.LOADING else [],
         # "1:32": the visit's time from the taps (Task.time_on_site).
         'time_on_site': hours_text(time_on_site),
         'time_is_final': report is not None and report.submitted_at is not None,
@@ -7681,7 +7043,7 @@ def _report_form(request, task, technician, back_url):
 
 
 def _has_permission(technician, permission):
-    return RolePermission.objects.filter(role=technician.role, permission=permission, allowed=True).exists()
+    return RolePermission.objects.filter(role=technician.permission_role, permission=permission, allowed=True).exists()
 
 
 @login_required
@@ -7704,16 +7066,29 @@ def ticket_open(request):
         ticket.country = country
         ticket.opened_by = request.user
         ticket.submitted_at = now
-        site = form.cleaned_data['site']
-        ticket.customer = site.customer
-        ticket.site = site
-        ticket.company_name = site.customer.name
-        ticket.customer_code = site.customer.code
-        ticket.site_description = site.name
-        ticket.site_address = site.address
-        ticket.contact_name = ticket.contact_name or site.effective_contact_name
-        ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
-        ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
+        site, branch_customer = form.cleaned_data['site'], form.cleaned_data.get('new_branch_customer')
+        ticket.about = form.cleaned_data['about']
+        if site is not None:
+            # A customer's branch: everything from it.
+            ticket.customer = site.customer
+            ticket.site = site
+            ticket.company_name = site.customer.name
+            ticket.customer_code = site.customer.code
+            ticket.site_description = site.name
+            ticket.site_address = site.address
+            ticket.contact_name = ticket.contact_name or site.effective_contact_name
+            ticket.contact_phone = ticket.contact_phone or site.effective_contact_phone
+            ticket.contact_email = ticket.contact_email or site.effective_contact_email or ''
+        elif branch_customer is not None:
+            # A new branch of a customer: created from the request ("Create the branch").
+            ticket.customer = branch_customer
+            ticket.company_name = branch_customer.name
+            ticket.customer_code = branch_customer.code
+            ticket.contact_name = ticket.contact_name or branch_customer.contact_name
+            ticket.contact_phone = ticket.contact_phone or branch_customer.contact_phone
+            ticket.contact_email = ticket.contact_email or branch_customer.contact_email or ''
+        # Else a caller who isn't a customer yet: their company typed in; the customer is created
+        # from the request ("Create the customer").
         with transaction.atomic():
             save_new_ticket(ticket)
             for uploaded_file in form.cleaned_data['attachments']:
@@ -7731,7 +7106,7 @@ def ticket_open(request):
     return render(request, 'tasks/staff_ticket_new.html', {
         'form': form, 'kind': CustomerTicket.Kind.CUSTOMER,
         # A caller who isn't a customer yet: whoever creates customers adds them from here.
-        'can_create_customer': _has_permission(technician, RolePermission.Permission.CUSTOMER_ACCOUNTS),
+        'can_create_customer': can_create_customers(technician),
     })
 
 
@@ -7801,12 +7176,16 @@ def reassign_internal_ticket(technician, user, ticket, assignee):
         _push_internal_ticket(assignee, ticket, _('New internal task assigned to you'))
 
 
-def close_internal_ticket(technician, user, ticket, result):
+def close_internal_ticket(technician, user, ticket, result, outcome=''):
+    """Closed with what came of it — a claim with its result (credit, replacement, rejected)."""
+    if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+        raise ValueError('A claim closes with its result.')
+    ticket.claim_outcome = outcome if ticket.is_claim else ''
     ticket.status = CustomerTicket.Status.CLOSED
     ticket.close_reason = result
     ticket.reviewed_by = user
     ticket.reviewed_at = timezone.now()
-    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at'])
+    ticket.save(update_fields=['status', 'close_reason', 'reviewed_by', 'reviewed_at', 'claim_outcome'])
     other = _other_on_internal_ticket(technician, ticket)
     if other:
         _push_internal_ticket(other, ticket, _('Internal task closed'))
@@ -7836,8 +7215,15 @@ def internal_ticket_for_app(request, technician, ticket):
         } for note in ticket.internal_notes.select_related('author__technician').prefetch_related('files').order_by('created_at')],
         'close_reason': ticket.close_reason if not is_open else '',
         'task': {'id': ticket.task_id, 'task_number': ticket.task.task_number} if ticket.task_id else None,
-        'can_convert': is_open and technician.is_any_manager,
-        'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'} for person in people],
+        'can_convert': is_open and technician.is_any_manager and can_act_on_internal_ticket(technician, ticket),
+        'linked_task': {'id': ticket.linked_task_id, 'task_number': ticket.linked_task.task_number}
+        if ticket.linked_task_id else None,
+        'due_on': ticket.due_on, 'waiting_for': ticket.get_waiting_for_display(),
+        'is_claim': ticket.is_claim, 'claim_outcome': ticket.get_claim_outcome_display(),
+        'claim_outcomes': [{'value': value, 'label': str(label)} for value, label in CustomerTicket.ClaimOutcome.choices],
+        # Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
+        'can_act': is_open and can_act_on_internal_ticket(technician, ticket),
+        'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'} for person in people],
         'website_path': reverse('tasks:internal_ticket', args=[ticket.pk]),
     }
 
@@ -7857,9 +7243,23 @@ def _visible_internal_tickets(technician, country):
     them or that they opened.
     """
     tickets = CustomerTicket.objects.filter(kind=CustomerTicket.Kind.INTERNAL, country=country)
-    if technician.is_any_manager or _has_permission(technician, RolePermission.Permission.MANAGE_TICKETS):
+    if technician.is_manager_tier or technician.role == Technician.Role.WAREHOUSE_MANAGER:
         return tickets
     return tickets.filter(Q(assigned_to=technician) | Q(opened_by=technician.user))
+
+
+def can_act_on_internal_ticket(technician, ticket):
+    """Notes, handing it on and closing it: the person it's for and whoever
+    opened it (docs/access_rules.md); the Operations Manager, the COO and the
+    Admin anywhere, the country Manager in theirs, when stepping in — each
+    change is in the Audit log. Everyone else who sees it only reads."""
+    if ticket.assigned_to_id == technician.pk or ticket.opened_by_id == technician.user_id:
+        return True
+    if technician.custom_role_id:
+        return False
+    if technician.role in (Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN):
+        return True
+    return technician.role == Technician.Role.MANAGER and technician.country_id == ticket.country_id
 
 
 @login_required
@@ -7874,10 +7274,12 @@ def internal_tickets(request):
     ).order_by('-submitted_at')
     if status == 'open':
         tickets = tickets.filter(status=CustomerTicket.Status.NEW)
+    elif status == 'overdue':
+        tickets = tickets.filter(status=CustomerTicket.Status.NEW, due_on__lt=timezone.localdate())
     elif status == 'closed':
         tickets = tickets.filter(status__in=[CustomerTicket.Status.CLOSED, CustomerTicket.Status.CONVERTED])
     return render(request, 'tasks/internal_tickets.html', {
-        'tickets': tickets[:200], 'status': status,
+        'tickets': tickets[:200], 'status': status, 'today': timezone.localdate(),
         # Anyone who can see the list can create one (ticket_open).
         'can_open': True,
     })
@@ -7901,7 +7303,10 @@ def internal_ticket(request, pk):
     reassign_form = ReassignInternalTicketForm(country=country, initial={'assigned_to': ticket.assigned_to})
     close_form = CloseTicketForm()
 
+    can_act = can_act_on_internal_ticket(technician, ticket)
     if request.method == 'POST' and is_open:
+        if not can_act:
+            raise PermissionDenied
         action = request.POST.get('action')
         if action == 'add_note':
             note_form = InternalTicketNoteForm(request.POST, request.FILES)
@@ -7919,9 +7324,20 @@ def internal_ticket(request, pk):
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
         elif action == 'close':
             close_form = CloseTicketForm(request.POST)
-            if close_form.is_valid():
-                close_internal_ticket(technician, request.user, ticket, close_form.cleaned_data['close_reason'])
+            outcome = request.POST.get('claim_outcome', '')
+            if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+                messages.error(request, _('A claim closes with its result: credit, replacement, or rejected.'))
+            elif close_form.is_valid():
+                close_internal_ticket(technician, request.user, ticket, close_form.cleaned_data['close_reason'], outcome)
                 messages.success(request, _('Internal task closed'))
+                return redirect('tasks:internal_ticket', pk=ticket.pk)
+        elif action == 'waiting':
+            waiting_form = WaitingForForm(request.POST)
+            if waiting_form.is_valid():
+                ticket.waiting_for = waiting_form.cleaned_data['waiting_for']
+                ticket.due_on = waiting_form.cleaned_data['due_on'] or ticket.due_on
+                ticket.save(update_fields=['waiting_for', 'due_on'])
+                messages.success(request, _('Saved.'))
                 return redirect('tasks:internal_ticket', pk=ticket.pk)
 
     return render(request, 'tasks/internal_ticket.html', {
@@ -7932,5 +7348,57 @@ def internal_ticket(request, pk):
         'note_form': note_form,
         'reassign_form': reassign_form,
         'close_form': close_form,
-        'can_convert': is_open and technician.is_any_manager,
+        'can_convert': is_open and can_act and technician.is_any_manager,
+        'can_act': is_open and can_act,
+        'waiting_form': WaitingForForm(initial={'waiting_for': ticket.waiting_for, 'due_on': ticket.due_on}),
+        'claim_outcomes': CustomerTicket.ClaimOutcome.choices,
+        'overdue': is_open and ticket.due_on is not None and ticket.due_on < timezone.localdate(),
     })
+
+
+# Moved to tasks/equipment.py; still importable from here.
+from .equipment import (  # noqa: E402,F401
+    BeyondStock, next_step_label, report_safety_incident, open_quality_follow_up, new_branch_for_next_step, next_step_customers, tell_customer_new_branch, ChecklistFormSet, DISPATCH_PHOTO_MISSING, EQUIPMENT_STEPS, FOLLOW_UP_STATUSES, NEXT_STEPS, SITE_NOT_READY, STILL_TO_INSTALL, _save_checklist, check_beyond_stock, checklist_formset_rows, checklist_initial, create_follow_up, create_next_step, dispatch_photo_missing, equipment_step, has_checklist, is_installation, lines_to_carry, loading_shortfall, make_checklist_formset, next_step_sites, next_step_supervisor, next_step_supervisors, open_equipment_follow_up, register_installed_machines, save_checklist, save_planned_lines, save_site_readiness, site_is_ready, site_readiness_for_app, still_to_install, warehouse_stock_for_planning,
+)
+
+
+# Moved to tasks/notices.py; still importable from here.
+from .notices import (  # noqa: E402,F401
+    CARRIER_TRACKING_URLS, CUSTOMER_EMAIL_TEMPLATES, CUSTOMER_SIGNATURE_TEXT, MAX_EMAIL_ATTACHMENT_BYTES, REMINDER_FROM_HOUR, REMINDER_NOTICE, _in_background, _send_delay_notice, _send_feedback_email, _send_notification_email, _send_schedule_notification, _send_shipment_notice_to_supervisor, _send_shipping_notice, send_visit_reminders, send_visit_report_copy, tell_customer_on_the_way,
+)
+
+
+# Moved to tasks/notices.py; still importable from here.
+from .notices import (  # noqa: E402,F401
+    STAFF_LINK_SALT, STAFF_LINK_VALID_DAYS, _send_escalation_decided_email, _send_escalation_email, _send_new_task_email_to_staff, _send_reply_to_customer, _send_reply_to_staff, _send_request_closed, _staff_link_fingerprint, _staff_notification_recipients, make_staff_link_token, send_new_ticket_email_to_staff, send_staff_setup_link, send_ticket_confirmation_to_customer, staff_user_for_link_token,
+)
+
+
+# Moved to tasks/stats.py; still importable from here.
+from .stats import (  # noqa: E402,F401
+    _certification_reference, _certification_status, _confirmed_levels, _confirmed_points, _leaderboard, _median_minutes, _ninety_day_progress, _reliability_stats,
+)
+
+
+# Moved to tasks/stats.py; still importable from here.
+from .stats import (  # noqa: E402,F401
+    DASHBOARD_CHART_MONTHS, DASHBOARD_CHART_WEEKS, DASHBOARD_OVERVIEW_TASKS, DASHBOARD_TASK_LIMIT, HAS_ACTIVE_LEAD, HOME_ESCALATION_LIMIT, _counted_by_period, _my_trend_chart, _nice_ceiling, _period_chart, _period_starts, _tasks_chart, _tickets_chart, dashboard_overview, home_summary, technician_workload, waiting_for,
+)
+
+
+# Moved to tasks/stats.py; still importable from here.
+from .stats import (  # noqa: E402,F401
+    _completed_in_month, _first_reports, progress_context,
+)
+
+
+# Moved to tasks/stats.py; still importable from here.
+from .stats import (  # noqa: E402,F401
+    _NOW_FROM_TAP, team_progress_rows, team_today,
+)
+
+
+# Moved to tasks/stats.py; still importable from here.
+from .stats import (  # noqa: E402,F401
+    _handover_hours, _technician_hours_rows,
+)

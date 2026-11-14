@@ -3,15 +3,15 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from customers.models import Asset, Customer, Site
 from people.models import Technician
-from reference.models import Brand, Country, Skill, TaskType
+from reference.models import Brand, Country, TaskType
 from reports.phrases import Action, Finding
-from spots.indexes import contains_search_index
+from spots.indexes import contains_search_index, matches_search_index, phone_search_index
+from spots.uploads import SafeFileValidator
 
 # A customer's own phone photos/videos of the fault — kept separate from
 # TaskAttachment's own list (tasks/forms.py) since this one has no LINK
@@ -125,11 +125,28 @@ class Task(models.Model):
         Brand, on_delete=models.PROTECT, related_name='tasks',
         null=True, blank=True, verbose_name=_('brand'),
     )
-    required_skill = models.ForeignKey(
-        Skill, on_delete=models.PROTECT, related_name='tasks',
-        null=True, blank=True, verbose_name=_('required skill'),
-    )
-    min_level = models.PositiveSmallIntegerField(_('minimum level'), null=True, blank=True)
+    # What it's about (a request's own "about"; chosen on New task) — machines, flooring,
+    # accessories, lockers or other: filtered, counted (the Monthly report), and machine-only
+    # steps stay with machines.
+    class About(models.TextChoices):
+        MACHINES = 'machines', _('Machines')
+        FLOORING = 'flooring', _('Flooring')
+        ACCESSORIES = 'accessories', _('Accessories')
+        LOCKERS = 'lockers', _('Lockers')
+        OTHER = 'other', _('Other')
+
+    about = models.CharField(_('about'), max_length=20, choices=About.choices, default=About.MACHINES)
+
+    # Who does it: our team, or a subcontractor (flooring, say) — our supervisor still checks
+    # the result and files the report.
+    class DoneBy(models.TextChoices):
+        OUR_TEAM = 'our_team', _('Our team')
+        SUBCONTRACTOR = 'subcontractor', _('A subcontractor')
+
+    done_by = models.CharField(_('done by'), max_length=20, choices=DoneBy.choices, default=DoneBy.OUR_TEAM)
+    subcontractor_name = models.CharField(_('subcontractor'), max_length=150, blank=True)
+    subcontractor_contact = models.CharField(_('subcontractor contact'), max_length=150, blank=True,
+                                             help_text=_('A phone number or an email.'))
     description = models.TextField(_('description'), blank=True, help_text=_('what the customer reported'))
     reported_serial_numbers = models.TextField(
         _('reported serial numbers'), blank=True,
@@ -182,24 +199,36 @@ class Task(models.Model):
             'assigned to perform the work'
         ),
     )
-    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    pak_reference_number = models.CharField(
+        _('Panatta PAK'), max_length=100, blank=True,
+        help_text=_('the ticket number opened in the Panatta portal, when the factory is involved — optional; internal, never shown to the customer'),
+    )
     shipping_company = models.CharField(
         _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
     )
     shipping_tracking_number = models.CharField(_('shipping tracking number'), max_length=100, blank=True)
+    # The quotation's answer (docs/scenarios.md E): sent, then approved or refused — by the
+    # customer on the portal, or recorded by the task's owner. Waiting a week: the owner is reminded.
+    class QuoteStatus(models.TextChoices):
+        SENT = 'sent', _('Sent to the customer')
+        APPROVED = 'approved', _('Approved')
+        REFUSED = 'refused', _('Refused')
+
+    quote_status = models.CharField(_('quotation'), max_length=10, choices=QuoteStatus.choices, blank=True)
+    quote_status_at = models.DateTimeField(_('quotation answered or sent'), null=True, blank=True)
     quotation = models.FileField(
         _('quotation'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     quotation_uploaded_at = models.DateTimeField(_('quotation uploaded at'), null=True, blank=True)
     factory_offer = models.FileField(
         _('factory offer'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     factory_offer_uploaded_at = models.DateTimeField(_('factory offer uploaded at'), null=True, blank=True)
     invoice = models.FileField(
         _('invoice'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
     )
     invoice_uploaded_at = models.DateTimeField(_('invoice uploaded at'), null=True, blank=True)
     invoice_visible_to_supervisor = models.BooleanField(
@@ -211,10 +240,16 @@ class Task(models.Model):
     )
     delivery_note = models.FileField(
         _('delivery note'), upload_to=_task_document_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TASK_DOCUMENT_EXTENSIONS)],
         help_text=_('the shipment paperwork; uploaded once the parts arrive'),
     )
     delivery_note_uploaded_at = models.DateTimeField(_('delivery note uploaded at'), null=True, blank=True)
+    # The warehouse got the repair's parts ready for the visit (tasks.parts_needed.mark_prepared).
+    parts_prepared_at = models.DateTimeField(_('parts prepared at'), null=True, blank=True)
+    parts_prepared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name=_('parts prepared by'),
+    )
     # The step before this one in an equipment chain — receiving from the
     # factory, loading at the warehouse, installing on site, a follow-up
     # for what wasn't installed — whose machine lines this one carried on.
@@ -222,6 +257,13 @@ class Task(models.Model):
         'self', on_delete=models.SET_NULL, null=True, blank=True, related_name='next_tasks',
         verbose_name=_('previous step'),
     )
+    # When the customer was told the technician is on the way: once a visit day
+    # (tasks.views.tell_customer_on_the_way), not again on a second tap or an undo.
+    on_the_way_notified_at = models.DateTimeField(_('customer told: on the way'), null=True, blank=True)
+    # A part shipment sent from the factory straight to the customer: no stock of ours moves.
+    ships_direct = models.BooleanField(_('sent direct from the factory'), default=False)
+    # The day-before reminder (tasks.views.send_visit_reminders): once per time the customer was told.
+    reminder_sent_at = models.DateTimeField(_('customer reminded'), null=True, blank=True)
     schedule_notified_at = models.DateTimeField(
         _('schedule notified at'), null=True, blank=True,
         help_text=_('when the customer was last emailed about the scheduled visit — never automatic'),
@@ -242,6 +284,16 @@ class Task(models.Model):
             contains_search_index('task_number', 'task_number_trgm'),
             contains_search_index('pak_reference_number', 'task_pak_trgm'),
         ]
+
+    def save(self, *args, **kwargs):
+        # One owner from the start (docs/access_rules.md): whoever created it, unless it was given
+        # to someone — however it's made (a screen, the app, a next step, a follow-up, an import).
+        if not self.responsible_supervisor_id and self.created_by_id:
+            from people.models import Technician
+            creator = Technician.objects.filter(user_id=self.created_by_id, is_active=True).first()
+            if creator is not None and creator.role != Technician.Role.TECHNICIAN:
+                self.responsible_supervisor = creator
+        super().save(*args, **kwargs)
 
     @property
     def estimated_finish(self):
@@ -292,6 +344,52 @@ class Task(models.Model):
     def __str__(self):
         return self.task_number
 
+
+    def approvals(self):
+        """Who reviewed and who approved this task's latest report, and whose turn
+        it is now (its history: TaskEvent). {'reviewed': person or None,
+        'approved': person or None, 'waiting': 'review' | 'approval' | None};
+        a person is {'name', 'role', 'at', 'instead'} — `instead` when the final
+        approval wasn't the Technical Support Manager's (stepping in)."""
+        from people.models import Technician
+
+        events = list(self.events.filter(event_type__in=[
+            TaskEvent.EventType.REPORT_SUBMITTED, TaskEvent.EventType.SUPERVISOR_APPROVED,
+            TaskEvent.EventType.REPORT_APPROVED,
+        ]).select_related('actor__technician').order_by('occurred_at', 'pk'))
+        # Only what happened to the latest report (a reopened task's earlier rounds are history).
+        latest = max((i for i, e in enumerate(events) if e.event_type == TaskEvent.EventType.REPORT_SUBMITTED), default=-1)
+        found = {'reviewed': None, 'approved': None}
+        for event in events[latest + 1:]:
+            technician = getattr(event.actor, 'technician', None) if event.actor_id else None
+            person = {
+                'name': technician.full_name if technician else (event.actor.get_username() if event.actor_id else '—'),
+                'role': technician.title if technician else '',
+                'at': event.occurred_at,
+                'instead': False,
+            }
+            if event.event_type == TaskEvent.EventType.SUPERVISOR_APPROVED:
+                found['reviewed'] = person
+            else:
+                person['instead'] = technician is None or technician.role != Technician.Role.SUPPORT_MANAGER
+                found['approved'] = person
+        found['waiting'] = {
+            self.Status.PENDING_SUPERVISOR_REVIEW: 'review', self.Status.COMPLETED: 'approval',
+        }.get(self.status)
+        return found
+
+    def creator(self):
+        """Who created this task, and when: {'name', 'role', 'at'} — the person
+        (their name and job title, or the account's name) and the time of its
+        "Created" history entry (None for a task made before entries existed)."""
+        user = self.created_by
+        technician = getattr(user, 'technician', None) if user is not None else None
+        created = self.events.filter(event_type=TaskEvent.EventType.CREATED).order_by('occurred_at').first()
+        return {
+            'name': technician.full_name if technician else (user.get_full_name() or user.get_username() if user else '—'),
+            'role': technician.title if technician else '',
+            'at': created.occurred_at if created else None,
+        }
 
 class CustomerTicket(models.Model):
     """A complaint or request submitted by a logged-in customer, picking
@@ -351,6 +449,11 @@ class CustomerTicket(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='tickets_opened', verbose_name=_('opened by'),
         help_text=_('the staff member who opened it; empty if opened by the customer'),
+    )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets_submitted', verbose_name=_('sent by'),
+        help_text=_('the person at the customer who sent it from the portal; empty if staff opened it'),
     )
     subject = models.CharField(
         _('subject'), max_length=200, blank=True,
@@ -421,7 +524,10 @@ class CustomerTicket(models.Model):
                     'converts it'),
     )
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
-    pak_reference_number = models.CharField(_('PAK reference number'), max_length=100, blank=True)
+    pak_reference_number = models.CharField(
+        _('Panatta PAK'), max_length=100, blank=True,
+        help_text=_('the ticket number opened in the Panatta portal, when the factory is involved — optional; internal, never shown to the customer'),
+    )
     shipping_company = models.CharField(
         _('shipping company'), max_length=20, choices=ShippingCompany.choices, blank=True,
     )
@@ -430,6 +536,29 @@ class CustomerTicket(models.Model):
         Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket',
         verbose_name=_('task'),
     )
+
+    # An internal task followed through (docs/scenarios.md): the task it's about, when it's
+    # due, who it's waiting on — and a claim (to the factory or the carrier) closes only with
+    # its result. Overdue: the bell of whoever it's for, then the Operations Manager's.
+    class WaitingFor(models.TextChoices):
+        FACTORY = 'factory', _('The factory')
+        SUPPLIER = 'supplier', _('A supplier')
+        CUSTOMER = 'customer', _('The customer')
+        COLLEAGUE = 'colleague', _('A colleague')
+
+    class ClaimOutcome(models.TextChoices):
+        CREDIT = 'credit', _('Credit received')
+        REPLACEMENT = 'replacement', _('Replacement received')
+        REJECTED = 'rejected', _('Rejected')
+
+    linked_task = models.ForeignKey(
+        Task, on_delete=models.SET_NULL, null=True, blank=True, related_name='follow_ups',
+        verbose_name=_('about task'),
+    )
+    due_on = models.DateField(_('due'), null=True, blank=True)
+    waiting_for = models.CharField(_('waiting for'), max_length=20, choices=WaitingFor.choices, blank=True)
+    is_claim = models.BooleanField(_('a claim'), default=False)
+    claim_outcome = models.CharField(_('claim result'), max_length=20, choices=ClaimOutcome.choices, blank=True)
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
         related_name='tickets_reviewed', verbose_name=_('reviewed by'),
@@ -453,12 +582,12 @@ class CustomerTicket(models.Model):
             # Every ticket list: one country, one status, newest first.
             models.Index(fields=['country', 'status', '-submitted_at'], name='ticket_country_status_idx'),
             contains_search_index('ticket_number', 'ticket_number_trgm'),
-            contains_search_index('company_name', 'ticket_company_trgm'),
-            contains_search_index('site_description', 'ticket_site_trgm'),
-            contains_search_index('site_address', 'ticket_address_trgm'),
+            matches_search_index('company_name', 'ticket_company_fold'),
+            matches_search_index('site_description', 'ticket_site_fold'),
+            matches_search_index('site_address', 'ticket_address_fold'),
             contains_search_index('pak_reference_number', 'ticket_pak_trgm'),
-            contains_search_index('contact_name', 'ticket_contact_trgm'),
-            contains_search_index('contact_phone', 'ticket_phone_trgm'),
+            matches_search_index('contact_name', 'ticket_contact_fold'),
+            phone_search_index('contact_phone', 'ticket_phone_digits'),
         ]
 
     def save(self, *args, **kwargs):
@@ -512,7 +641,7 @@ class TicketReply(models.Model):
     message = models.TextField(_('message'))
     attachment = models.FileField(
         _('attachment'), upload_to=_ticket_reply_attachment_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     sent_at = models.DateTimeField(_('sent at'))
 
@@ -538,7 +667,7 @@ class TicketReplyFile(models.Model):
     reply = models.ForeignKey(TicketReply, on_delete=models.CASCADE, related_name='files', verbose_name=_('reply'))
     file = models.FileField(
         _('file'), upload_to=_ticket_reply_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     class Meta:
@@ -730,7 +859,7 @@ class TicketInternalNote(models.Model):
     message = models.TextField(_('note'))
     attachment = models.FileField(
         _('attachment'), upload_to=_ticket_internal_note_attachment_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     created_at = models.DateTimeField(_('created at'))
 
@@ -754,7 +883,7 @@ class TicketInternalNoteFile(models.Model):
     note = models.ForeignKey(TicketInternalNote, on_delete=models.CASCADE, related_name='files', verbose_name=_('note'))
     file = models.FileField(
         _('file'), upload_to=_ticket_internal_note_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
 
     class Meta:
@@ -830,7 +959,7 @@ class TicketMachine(models.Model):
     code = models.CharField(_('code'), max_length=100, blank=True, help_text=_('the product code, if the customer knows it'))
     serial_photo = models.FileField(
         _('serial number sticker photo'), upload_to=_ticket_attachment_path, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=SERIAL_PHOTO_EXTENSIONS)],
         help_text=_("a photo of the machine's serial-number sticker, instead of or as well as typing it"),
     )
     problem = models.CharField(_('problem'), max_length=20, choices=Problem.choices)
@@ -906,7 +1035,7 @@ class CustomerTicketAttachment(models.Model):
     )
     file = models.FileField(
         _('file'), upload_to=_ticket_attachment_path,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_TICKET_ATTACHMENT_EXTENSIONS)],
     )
     # A photo staff added for the customer (sent on WhatsApp or by email); empty: the customer's own upload.
     added_by = models.ForeignKey(
@@ -981,6 +1110,35 @@ class TaskAssignment(models.Model):
         return f'{self.task.task_number} — {self.technician.full_name} ({self.role})'
 
 
+class SiteReadiness(models.Model):
+    """An installation's site checked ready before the truck goes, by the
+    task's owner or a manager (tasks.views.save_site_readiness): space and
+    floor, power, access, and the customer confirming the date. Scheduled while
+    it isn't ready: a warning, never a block."""
+
+    task = models.OneToOneField('Task', on_delete=models.CASCADE, related_name='site_readiness', verbose_name=_('task'))
+    space_and_floor = models.BooleanField(_('space and floor ready'), default=False)
+    power = models.BooleanField(_('power sockets where the machines go'), default=False)
+    access = models.BooleanField(_('access for the delivery (lift, doors, parking)'), default=False)
+    date_confirmed = models.BooleanField(_('the customer confirmed the date'), default=False)
+    note = models.TextField(_('note'), blank=True)
+    checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='site_readiness_checks',
+        verbose_name=_('checked by'),
+    )
+    checked_at = models.DateTimeField(_('checked at'))
+
+    CHECKS = ('space_and_floor', 'power', 'access', 'date_confirmed')
+
+    class Meta:
+        verbose_name = _('site readiness')
+        verbose_name_plural = _('site readiness')
+
+    @property
+    def is_ready(self):
+        return all(getattr(self, check) for check in self.CHECKS)
+
+
 class TaskEvent(models.Model):
     class EventType(models.TextChoices):
         CREATED = 'created', _('Created')
@@ -1009,6 +1167,10 @@ class TaskEvent(models.Model):
         NEGLIGENCE = 'negligence', _('Negligence reported')
         # A part shipment's two steps (tasks.shipments).
         PARTS_READY = 'parts_ready', _('Parts ready to ship')
+        # The last ordered part a task needed arrived (tasks.parts_needed.check_all_in).
+        PARTS_ARRIVED = 'parts_arrived', _('All parts are in')
+        # A loading planned beyond its warehouse's stock, with the manager's reason (note).
+        BEYOND_STOCK = 'beyond_stock', _('Planned beyond the stock')
         SHIPPED = 'shipped', _('Shipped')
         # Someone changed it instead of its owner, while away (docs/access_rules.md).
         STEPPED_IN = 'stepped_in', _('Changed instead of the owner')
@@ -1139,6 +1301,12 @@ class ScheduleChangeRequest(models.Model):
         verbose_name = _('schedule change request')
         verbose_name_plural = _('schedule change requests')
         ordering = ['-created_at']
+        constraints = [
+            # One request at a time per task, kept by the database too.
+            models.UniqueConstraint(
+                fields=['task'], condition=models.Q(status='pending'), name='one_pending_schedule_change_per_task',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.get_status_display()}'
@@ -1155,7 +1323,7 @@ class TaskAttachment(models.Model):
         DOCUMENT = 'document', _('Document')
 
     class Purpose(models.TextChoices):
-        FAULT = 'fault', _('Fault')
+        # "Before" shows the fault too: one kind, not two (tasks 0088 moved the old "fault" ones).
         SERIAL_PLATE = 'serial_plate', _('Serial plate')
         BEFORE = 'before', _('Before')
         AFTER = 'after', _('After')
@@ -1186,6 +1354,12 @@ class TaskAttachment(models.Model):
     asset = models.ForeignKey(
         'customers.Asset', on_delete=models.SET_NULL, null=True, blank=True, related_name='task_photos',
         verbose_name=_('machine'),
+    )
+    # The customer's own photo or video (its stored file) that the technician confirmed for this
+    # slot — linked, not copied; blank: one the technician took.
+    customer_file = models.CharField(
+        _("customer's file"), max_length=255, blank=True,
+        help_text=_("the customer's photo or video the technician confirmed for this machine's serial plate or before"),
     )
 
     class Meta:
@@ -1291,6 +1465,11 @@ class TaskProduct(models.Model):
         'reference.Brand', on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name=_('brand'),
     )
     serial_number = models.CharField(_('serial number'), max_length=100, blank=True)
+    # Loading: the sticker couldn't be reached (packed or stacked) — said, not forgotten;
+    # the installation reads it (docs: task_product).
+    serial_unreachable = models.BooleanField(_('serial not reachable at loading'), default=False)
+    # Installation: assembled, levelled and tested — working (commissioning), each installed machine.
+    tested_working = models.BooleanField(_('assembled, levelled and tested — working'), default=False)
     quantity = models.PositiveIntegerField(_('quantity'), default=1)
     frame = models.CharField(_('frame color'), max_length=100, default=DEFAULT_COLOR)
     arm = models.CharField(_('arm color'), max_length=100, default=DEFAULT_COLOR)
@@ -1321,6 +1500,7 @@ class TaskProduct(models.Model):
         verbose_name_plural = _('task products')
         ordering = ['task', 'product_code']
         indexes = [contains_search_index('serial_number', 'taskproduct_serial_trgm')]
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='task_product_quantity_at_least_one')]
 
     def __str__(self):
         return f'{self.task.task_number} — {self.product_code}'
@@ -1332,6 +1512,43 @@ class TaskProduct(models.Model):
             category = self.task.task_type.category if self.task.task_type_id else ''
             return STEP_DONE_LABELS.get(category, STEP_DONE_LABELS['installation'])
         return self.get_status_display()
+
+
+class TaskPartNeeded(models.Model):
+    """A spare part a repair needs, known before the visit (docs: task_part_needed):
+    code, description, quantity — from our stock (held for the task at once,
+    tasks.stock.parts_held) or ordered (then it arrives: received for this task,
+    or marked arrived — delivered direct). While an ordered one hasn't, the
+    customer reads "Waiting for parts" (customers.progress)."""
+
+    class Source(models.TextChoices):
+        STOCK = 'stock', _('From our stock')
+        ORDERED = 'ordered', _('Ordered')
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='parts_needed', verbose_name=_('task'))
+    product_code = models.CharField(_('code'), max_length=100)
+    description = models.CharField(_('description'), max_length=200, blank=True)
+    quantity = models.PositiveIntegerField(_('quantity'), default=1)
+    source = models.CharField(_('from'), max_length=10, choices=Source.choices, default=Source.STOCK)
+    expected_on = models.DateField(_('expected on'), null=True, blank=True, help_text=_('ordered: when it should arrive, if known'))
+    arrived_at = models.DateTimeField(
+        _('arrived'), null=True, blank=True, help_text=_('ordered: marked arrived by hand (delivered direct, say)'),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', verbose_name=_('added by'),
+    )
+    created_at = models.DateTimeField(_('added at'), auto_now_add=True)
+    # Changed since "All parts are in" was told: told again once it's in (check_all_in).
+    updated_at = models.DateTimeField(_('changed at'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('part needed')
+        verbose_name_plural = _('parts needed')
+        ordering = ['task', 'pk']
+        constraints = [models.CheckConstraint(condition=models.Q(quantity__gte=1), name='part_needed_quantity_at_least_one')]
+
+    def __str__(self):
+        return f'{self.task.task_number} — {self.product_code} × {self.quantity}'
 
 
 class StockAdjustment(models.Model):
@@ -1356,6 +1573,8 @@ class StockAdjustment(models.Model):
         verbose_name = _('stock count')
         verbose_name_plural = _('stock counts')
         ordering = ['-created_at']
+        # A count that matched changes nothing and isn't kept (tasks.stock.record_count).
+        constraints = [models.CheckConstraint(condition=~models.Q(quantity=0), name='stock_count_changes_something')]
 
     def __str__(self):
         return f'{self.site} — {self.product_code}: {self.quantity:+d}'

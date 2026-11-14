@@ -85,7 +85,10 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
         {checked} of {rows.length} checked
       </ThemedText>
       {rows.map((row, index) => {
-        const needsSerial = step === 'installation' && row.status === 'done' && !row.serial_number.trim();
+        const needsTest = step === 'installation' && row.status === 'done' && row.kind !== 'part' && !row.tested_working;
+        const needsSerial = row.status === 'done' && !row.serial_number.trim() && (
+          step === 'installation' || (step === 'loading' && row.kind !== 'part' && !row.serial_unreachable)
+        );
         const listed = Number(row.quantity) || 1;
         const short = receiving && row.id !== null && row.status === 'done' && (row.received ?? '') !== ''
           && Number(row.received) < listed;
@@ -95,7 +98,7 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
         return (
           <ThemedView
             key={row.id ?? `new-${index}`}
-            style={[styles.card, { borderColor: !row.status || needsSerial || needsReason ? theme.primary : theme.backgroundSelected }]}
+            style={[styles.card, { borderColor: !row.status || needsSerial || needsReason || needsTest ? theme.primary : theme.backgroundSelected }]}
           >
             {row.id && !row.added_on_site ? (
               <ThemedText type="smallBold">
@@ -167,12 +170,31 @@ export function InstallationChecklist({ taskId, step, rows, statuses, onChange }
               <TextInput
                 style={[inputStyle, needsSerial && { borderColor: theme.danger }]}
                 value={row.serial_number} onChangeText={(value) => update(index, { serial_number: value })}
-                placeholder={step === 'loading' ? 'Serial number from the sticker (optional)' : 'Serial number from the sticker'}
+                placeholder="Serial number from the sticker"
                 placeholderTextColor={theme.textSecondary} autoCapitalize="characters" autoCorrect={false}
               />
             ) : null}
+            {step === 'loading' && row.kind !== 'part' && !row.serial_number.trim() ? (
+              <Chip
+                label="Serial not reachable (packed)" on={!!row.serial_unreachable}
+                onPress={() => update(index, { serial_unreachable: !row.serial_unreachable })}
+              />
+            ) : null}
+            {step === 'installation' && row.status === 'done' && row.kind !== 'part' ? (
+              <Chip
+                label="Assembled, levelled and tested — working" on={!!row.tested_working}
+                onPress={() => update(index, { tested_working: !row.tested_working })}
+              />
+            ) : null}
+            {row.serial_not_taken_at_loading ? (
+              <ThemedText type="small" themeColor="primary">Serial not taken at loading — read it from the sticker.</ThemedText>
+            ) : null}
             {needsSerial ? (
-              <ThemedText type="small" themeColor="danger">This machine needs its serial number — type it from the sticker.</ThemedText>
+              <ThemedText type="small" themeColor="danger">
+                {step === 'loading'
+                  ? 'Type the serial from the sticker, or tick “Serial not reachable (packed)”.'
+                  : 'This machine needs its serial number — type it from the sticker.'}
+              </ThemedText>
             ) : null}
 
             {row.kind !== 'part' ? (

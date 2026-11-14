@@ -1,0 +1,8 @@
+{% load i18n %}{% comment %}One line: who reviewed and who approved the report (Task.approvals); "waiting" only to staff, only while it waits.{% endcomment %}
+{% with reviewed=approvals.reviewed approved=approvals.approved %}
+{% if reviewed or approved %}<p class="approvals-line">{% if reviewed %}{% translate "Reviewed by" %} <bdi>{{ reviewed.name }}</bdi>{% if reviewed.role %} ({{ reviewed.role }}){% endif %} · {{ reviewed.at|date:"j M Y" }}{% endif %}{% if reviewed and approved %} · {% endif %}{% if approved %}{% translate "Approved by" %} <bdi>{{ approved.name }}</bdi>{% if approved.role %} ({{ approved.role }}){% endif %} · {{ approved.at|date:"j M Y" }}{% if approved.instead and staff %} <span class="muted">({% translate "Instead of the Technical Support Manager" %})</span>{% endif %}{% endif %}</p>
+{% elif staff and approvals.waiting == 'review' %}<p class="approvals-line muted">{% translate "Waiting for the supervisor's review" %}</p>
+{% elif staff and approvals.waiting == 'approval' %}<p class="approvals-line muted">{% translate "Waiting for the final approval" %}</p>
+{% endif %}
+{% if reviewed and not approved and staff and approvals.waiting == 'approval' %}<p class="approvals-line muted">{% translate "Waiting for the final approval" %}</p>{% endif %}
+{% endwith %}

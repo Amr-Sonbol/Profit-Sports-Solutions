@@ -72,11 +72,47 @@ export interface TaskAttachment {
   uploaded_at: string;
   /** The machine it shows (taken from its card on the report); blank: the visit as a whole. */
   asset?: number | null;
+  /** 'customer': a customer's photo the technician confirmed. Older servers: absent. */
+  source?: string;
+  uploaded_by_name?: string;
   asset_name?: string;
+}
+
+/** A customer's photo or video of a machine the technician can still confirm for its slot ("Use this"). */
+export interface CustomerFile {
+  name: string;
+  kind: string;
+  slot: 'serial_plate' | 'before';
+  url: string;
+  /** Added for the customer by our team (from WhatsApp...). */
+  added_by_staff?: boolean;
+}
+
+/** One machine of the task as a photo card, the same on every screen (tasks.views.task_machine_cards). */
+export interface MachineCardData {
+  asset_id: number | null;
+  /** A machine the customer reported that isn't registered yet: no photos until it is. */
+  registered: boolean;
+  /** What the customer reported for it: from_request.machines with this id. */
+  ticket_machine_id?: number | null;
+  name: string;
+  serial_no: string;
+  photos: TaskAttachment[];
+  /** The customer's photos it can still use, each for its slot. Older servers: absent. */
+  customer_files?: CustomerFile[];
 }
 
 export interface TaskDetail {
   id: number;
+  // What it's about, and who does it (our team, or a subcontractor).
+  about?: string;
+  about_display?: string;
+  done_by?: 'our_team' | 'subcontractor';
+  subcontractor_name?: string;
+  /** Who created the task, and when (tasks.models.Task.creator). */
+  created_by?: { name: string; role: string; at: string | null };
+  /** Who last changed it (spots.audit.trail), or null. */
+  last_changed?: { name: string; role: string; at: string | null } | null;
   task_number: string;
   site_name: string;
   site_address: string;
@@ -88,7 +124,6 @@ export interface TaskDetail {
   priority_display: string;
   task_type_name: string;
   brand_name: string;
-  required_skill_name: string;
   description: string;
   reported_at: string;
   promised_at: string | null;
@@ -101,6 +136,13 @@ export interface TaskDetail {
   directions_url?: string;
   // The machines the customer reported for this task (portal ticket).
   machines?: { name: string; serial: string; problem: string; description: string }[];
+  /** The task's machines as photo cards. Older servers: absent. */
+  machine_cards?: MachineCardData[];
+  /** The spare parts for the visit: from our stock, ordered and waiting, or arrived. Older servers: absent. */
+  parts_needed?: import('@/api/endpoints').PartNeededRow[];
+  /** The warehouse got them ready for the visit. */
+  parts_prepared?: boolean;
+  delivery_note_url?: string;
   events: TaskEvent[];
   attachments: TaskAttachment[];
   // The one next step in accept -> en_route -> arrive -> start, or null
@@ -298,6 +340,8 @@ export interface TicketDetail {
   status_display: string;
   escalated: boolean;
   submitted_at: string;
+  /** The person at the customer who sent it from the portal; '' when staff opened it. */
+  sent_by?: string;
   company_name: string;
   customer_name: string;
   site_name: string;
@@ -321,6 +365,9 @@ export interface TicketDetail {
   close_reason: string;
   can_manage: boolean;
   can_reply: boolean;
+  /** The country does visits (not the USA); shipping suggested (no visits, or the customer's own team). Older servers: absent. */
+  does_visits?: boolean;
+  suggest_ship?: boolean;
   /** "What happens next?" — only while new and for whoever handles requests. */
   next: {
     supervisors: { value: number; label: string }[];
@@ -377,9 +424,22 @@ export interface TaskActions {
   reopen: boolean;
 }
 
+/** Who reviewed or approved a report (tasks.models.Task.approvals). */
+export interface Approval {
+  name: string;
+  role: string;
+  at: string;
+  instead: boolean;
+}
+
 export interface TeamTaskDetail extends TaskDetail {
   /** Older servers: absent. */
   actions?: TaskActions;
+  /** Parts needed: its owner changes them; the warehouse marks them prepared once all are in. */
+  can_change_parts?: boolean;
+  /** Correcting a part: managers only. */
+  can_edit_parts?: boolean;
+  can_prepare_parts?: boolean;
   lead: Assignment | null;
   helpers: Assignment[];
   report: WorkReport | null;
@@ -387,6 +447,7 @@ export interface TeamTaskDetail extends TaskDetail {
   can_assign: boolean;
   can_supervisor_approve: boolean;
   can_manager_approve: boolean;
+  approvals?: { reviewed: Approval | null; approved: Approval | null; waiting: 'review' | 'approval' | null };
   /** An equipment task's machines, the chain around it, and the follow-up offer. */
   equipment?: {
     lines: {
@@ -405,11 +466,17 @@ export interface TeamTaskDetail extends TaskDetail {
       /** The button's words: "Send to installation". */
       title: string;
       lines: { id: number; label: string }[];
-      steps: { value: string; label: string; sites: Choice[] }[];
+      steps: { value: string; label: string; sites: (Choice & { country?: number })[] }[];
+      /** Who can supervise it there; empty keeps this task's own (same country only). Older servers: absent. */
+      supervisors?: (Choice & { country: number })[];
+      /** "+ New branch": the customers it can be added to (whoever creates branches); empty otherwise. */
+      customers?: (Choice & { country: number })[];
     } | null;
   } | null;
   /** A manager's actions here (api/views.py TaskManageView). */
   manage?: { can_cancel: boolean; can_close: boolean; can_flag: boolean; correctable_event_ids: number[] };
+  /** An installation's site checked ready before the truck goes; null for any other task. */
+  site_readiness?: SiteReadiness | null;
 }
 
 export interface CataloguePart {
@@ -425,9 +492,9 @@ export interface Candidate {
   is_available: boolean;
   // Their home country when they're working here on a trip, else null.
   visiting_from: string | null;
-  skill_level: number | null;
-  next_task_number: string | null;
-  next_task_at: string | null;
+  // Their day, in words (tasks.views.day_text), and its kind for the dot.
+  day_state: 'free' | 'busy' | 'clash' | 'off' | 'no_day';
+  day_text: string;
 }
 
 /** A task on the Today screen (/api/my-today/). */
@@ -706,6 +773,16 @@ export interface InternalTicketDetail {
   status: string;
   status_display: string;
   is_open: boolean;
+  // Notes, handing on, closing: the person it's for, the opener, or someone stepping in.
+  can_act: boolean;
+  // Followed through (docs/scenarios.md): the task it's about, when it's due, who it waits on;
+  // a claim closes with its result.
+  linked_task?: { id: number; task_number: string } | null;
+  due_on?: string | null;
+  waiting_for?: string;
+  is_claim?: boolean;
+  claim_outcome?: string;
+  claim_outcomes?: { value: string; label: string }[];
   subject: string;
   description: string;
   assigned_to: { id: number; name: string } | null;
@@ -728,6 +805,8 @@ export interface TeamMap {
   pins: { name: string; detail: string; place: string; lat: number; lng: number; away: boolean; task_id: number }[];
   attention: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   without_taps: string[];
+  /** Where the map opens before anyone has tapped: the middle of the country's branches. Older servers: absent. */
+  area?: { latitude: number; longitude: number; delta: number } | null;
 }
 
 /** The manager's Dashboard (api/views.py DashboardView). */
@@ -736,6 +815,12 @@ export interface Dashboard {
   /** The decisions waiting on me (tasks.views.waiting_for). Older servers: absent. */
   waiting?: import('@/api/endpoints').WaitingItem[];
   actions: { label: string; count: number | null; level: 'critical' | 'warning'; url: string }[];
+  /** The whole company at a glance, for the Technical Support and Operations Managers (tasks.alarms.company_summary). */
+  company_summary?: {
+    blocked: number; blocked_long: number; unscheduled_overdue: number; new_tasks_today: number;
+    reports_to_review: number; reports_to_approve: number; reports_late: number;
+    new_requests: number; escalated_requests: number; locked_staff: number; locked_customers: number;
+  } | null;
   follow_ups: { text: string; level: 'critical' | 'warning'; task_id: number }[];
   stats: {
     available_count: number; technician_count: number; open_task_count: number;
@@ -758,6 +843,21 @@ export interface StaffAccount {
   has_login: boolean;
   is_active: boolean;
   can_manage: boolean;
+  /** A temporary password: the Admin's alone. Older servers: absent. */
+  can_set_password?: boolean;
+}
+
+/** An installation's site checked ready before the truck goes (api/views.py TaskSiteReadinessView). */
+export interface SiteReadiness {
+  space_and_floor: boolean;
+  power: boolean;
+  access: boolean;
+  date_confirmed: boolean;
+  note: string;
+  is_ready: boolean;
+  checked_by: string;
+  checked_at: string | null;
+  can_check: boolean;
 }
 
 /** One line on an equipment step's checklist (api/views.py MyTaskReportView). */
@@ -775,6 +875,12 @@ export interface ChecklistRow {
   /** '' until checked: done (installed), missing, damaged, wrong_item, returned, later. */
   status: string;
   serial_number: string;
+  /** Loading: the sticker couldn't be reached (packed) — said instead of the serial. */
+  serial_unreachable?: boolean;
+  /** Installation: assembled, levelled and tested — working (needed for an installed machine). */
+  tested_working?: boolean;
+  /** Installation: its serial wasn't taken at loading — read it from the sticker now. Older servers: absent. */
+  serial_not_taken_at_loading?: boolean;
   frame: string;
   arm: string;
   padding: string;
@@ -825,6 +931,10 @@ export interface Shipment {
   shippers?: { id: number; name: string }[];
   shipper?: string;
   can_book_fitting?: boolean;
+  /** From the factory straight to the customer (no stock of ours); the only way where the country holds none. */
+  can_ship_direct?: boolean;
+  direct_only?: boolean;
+  ships_direct?: boolean;
 }
 
 // One photo, video or file the customer sent (tasks.customer_report). `key`
@@ -839,6 +949,8 @@ export interface RequestFile {
 }
 
 export interface ReportedMachine {
+  /** Its request machine: the task's machine card with the same id shows it. Older servers: absent. */
+  ticket_machine_id?: number;
   name: string;
   serial: string;
   problem: string;

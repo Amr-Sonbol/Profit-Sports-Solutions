@@ -5,13 +5,10 @@
         <h2>{% translate "From the customer's request" %}</h2>
         {% if 'manage_tickets' in role_permissions %}<a href="{% url 'tasks:ticket_review' ticket.pk %}" class="task-number" dir="ltr">{{ ticket.ticket_number }}</a>{% else %}<span class="task-number" dir="ltr">{{ ticket.ticket_number }}</span>{% endif %}
     </div>
+    {# Who sent it. The branch, its address and directions are in the branch card above. #}
     <dl class="detail-grid">
         <div>
-            <dt>{% translate "Branch address" %}</dt>
-            <dd>{% with address=task.site.address|default:ticket.site_address %}{% if address %}<a href="https://www.google.com/maps/search/?api=1&amp;query={% if task.site.latitude %}{{ task.site.latitude }},{{ task.site.longitude }}{% else %}{{ task.site.name|urlencode }}%2C%20{{ address|urlencode }}{% endif %}" target="_blank" rel="noopener" dir="auto">{{ task.site.name }} — {{ address }}</a>{% else %}{{ task.site.name|default:"—" }}{% endif %}{% endwith %}</dd>
-        </div>
-        <div>
-            <dt>{% translate "Contact" %}</dt>
+            <dt>{% translate "Sent by" %}</dt>
             <dd>{{ ticket.contact_name|default:"—" }}</dd>
         </div>
         <div>
@@ -35,7 +32,8 @@
     {% endif %}
     {% if ticket.notes %}<p class="muted" dir="auto">{{ ticket.notes|linebreaksbr }}</p>{% endif %}
 
-    {% include "tasks/_customer_report.html" with report=from_request.report %}
+    {# Its machines are each on their own card below (tasks/_visit_photos.html), with the photos. #}
+    {% include "tasks/_customer_report.html" with report=from_request.report skip_machines=True %}
 
     {% if from_request.replies %}
     <h3>{% translate "Conversation with the customer" %}</h3>

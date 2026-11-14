@@ -9,14 +9,15 @@ request ends. Run before a release:
 """
 import re
 from datetime import date, datetime, timedelta
-from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from customers.models import Customer, Site
+from customers.models import Customer, PortalUser, Site
+from django.core.files.uploadedfile import SimpleUploadedFile
+from spots.test_files import REAL_JPEG, REAL_MP4
 from people.models import Technician
 from reference.models import Country
 from reports.models import CustomerFeedback
@@ -49,7 +50,9 @@ def form_data(form, **overrides):
 
 
 def links_in(message):
-    return re.findall(r'https?://[^\s"<>]+', message.body)
+    """The links into our app (the Customer Service signature's company website aside)."""
+    return [link for link in re.findall(r'https?://[^\s"<>]+', message.body)
+            if not link.startswith('https://profitsports.solutions')]
 
 
 @override_settings(
@@ -63,9 +66,8 @@ class LifecycleTestCase(TestCase):
         self.supervisor = self._staff('supervisor1', 'Sara Super', Technician.Role.SUPERVISOR)
         self.tech = self._staff('tech1', 'Tarek Tech', Technician.Role.TECHNICIAN)
         self.customer_user = User.objects.create_user('fitnessfirst', email='ali@fitnessfirst.example', password=PASSWORD)
-        self.customer = Customer.objects.create(
-            country=self.country, name='Fitness First', segment='gym', user=self.customer_user,
-        )
+        self.customer = Customer.objects.create(country=self.country, name='Fitness First', segment='gym')
+        PortalUser.objects.create(customer=self.customer, user=self.customer_user)
         self.site = Site.objects.create(
             customer=self.customer, name='Marina Branch', address='Dubai Marina',
             contact_name='Ali', contact_email='ali@fitnessfirst.example',
@@ -96,6 +98,13 @@ class LifecycleTestCase(TestCase):
             machines = [{'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
                          'description': 'Stops after 5 minutes, error E-07, since Monday.'}]
         for index, machine in enumerate(machines or []):
+            if need == 'repair':
+                # A repair needs the serial plate and the fault (TicketMachineForm), as from a real customer.
+                machine = {
+                    'serial_photo': SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg'),
+                    'files': [SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')],
+                    **machine,
+                }
             payload.update({f'machines-{index}-{key}': value for key, value in machine.items()})
         payload.update(overrides)
         return self.portal.post('/customers/portal/tickets/new/', payload)
@@ -148,6 +157,15 @@ class EveryKindOfRequestTests(LifecycleTestCase):
         ticket = self.newest_request()
         self.assertEqual(ticket.about, CustomerTicket.About.NEW_BRANCH)
         self.assertContains(self.staff.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
+
+    def test_a_repair_request_needs_the_serial_plate_and_the_fault(self):
+        for missing in ({'serial_photo': ''}, {'files': []}):
+            response = self.send_request(machines=[{
+                'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
+                'description': 'Stops.', **missing,
+            }])
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(CustomerTicket.objects.exists())
 
     def test_a_machine_request_without_a_serial_is_refused(self):
         response = self.send_request(machines=[{'which': 'new', 'model_name': 'Excite Run 700', 'problem': 'not_working',
@@ -357,7 +375,7 @@ class TaskTurnsTests(LifecycleTestCase):
         self.assertEqual(task.status, Task.Status.CANCELLED)
         open_requests = self.portal.get('/customers/portal/requests/').context['tickets']
         self.assertIn(ticket.pk, [t.pk for t in open_requests])
-        self.assertEqual(str(next(t for t in open_requests if t.pk == ticket.pk).progress[0]).split(' —')[0], 'Being arranged')
+        self.assertEqual(str(next(t for t in open_requests if t.pk == ticket.pk).progress[0]).split(' —')[0], 'Received')  # back to being prepared
 
     def test_a_signed_out_customer_from_the_rating_email_is_asked_to_sign_in(self):
         response = self.client_class(HTTP_HOST='portal.example.test').get('/reports/feedback/some-token/')
@@ -397,7 +415,7 @@ class ReliabilityTests(LifecycleTestCase):
         self.send_request()
         ticket = self.newest_request()
         # As on the live server: sent after the page answered (here at once, so the test can see it).
-        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'),                 patch('tasks.views._in_background', lambda work: work()):
+        with override_settings(EMAIL_BACKEND='tasks.test_lifecycle.BrokenMailBackend'),                 patch('tasks.notices._in_background', lambda work: work()):
             self.staff.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'add_reply', 'message': 'On it.'})
             self.send_request(about='other', need='assistance')  # the customer's own: for the admins
         failure = FailedEmail.objects.get(triggered_by=self.admin.user)
@@ -499,7 +517,6 @@ class NewRequestAlertsTests(LifecycleTestCase):
                             for item in self.staff.get('/tasks/tickets/').context['unseen_notifications']))
 
     def test_a_busy_day_of_overdue_tasks_never_hides_a_new_request_in_the_bell(self):
-        from people.context_processors import notification_bell
         long_ago = timezone.now() - timedelta(days=10)
         for index in range(15):
             Task.objects.create(
@@ -643,6 +660,17 @@ class PartShipmentTests(LifecycleTestCase):
         self.assertEqual(self.task.status, Task.Status.ASSIGNED)
 
 
+class NoWarehouseShipmentTests(PartShipmentTests):
+    """Where the country holds no stock (the USA): only "Sent direct from the
+    factory" — refused on the server, whatever a page or an older app sends."""
+
+    def test_nothing_is_prepared_from_a_stock_that_isnt_there(self):
+        self.country.has_warehouse = False
+        self.country.save(update_fields=['has_warehouse'])
+        self.assertEqual(self.ready(self.client_for('warehouse1')).status_code, 403)
+        self.assertFalse(self.task.products.filter(kind='part').exists())
+
+
 class PartShipmentFormTests(LifecycleTestCase):
     def test_the_type_is_set_and_fixed_from_the_decision(self):
         from tasks.shipments import part_shipment_type
@@ -699,6 +727,35 @@ class PartShipmentAppTests(PartShipmentTests):
         self.assertTrue(any('AX-77' in m.body for m in mail.outbox))
 
 
+class PartShipmentForTheCustomerTests(PartShipmentTests):
+    """The customer follows their parcel on their request, never as a visit."""
+
+    def test_being_prepared_then_shipped_with_a_tracking_link(self):
+        status = f'/tasks/tickets/status/{self.ticket.token}/'
+        page = self.portal.get(status)
+        self.assertEqual([(s['task'], str(s['progress'][0])) for s in page.context['shipments']], [(self.task, 'Being prepared')])
+        self.assertEqual(page.context['visits'], [])  # a parcel, not a visit
+        self.assertNotIn(self.task.pk, [v.pk for v in self.portal.get('/customers/portal/visits/').context['visits']])
+
+        self.ready(self.client_for('warehouse1'))
+        self.client_for('tech1').post(f'/tasks/my/{self.task.pk}/', {
+            'action': 'shipment_shipped', 'shipping_company': 'aramex', 'shipping_tracking_number': 'AX 77',
+        })
+        page = self.portal.get(status)
+        shipment = page.context['shipments'][0]
+        self.assertEqual((str(shipment['progress'][0]), shipment['company'], shipment['tracking']), ('Shipped', 'Aramex', 'AX 77'))
+        self.assertEqual(shipment['url'], 'https://www.aramex.com/track/results?ShipmentNumber=AX%2077')
+        self.assertContains(page, shipment['url'], count=3)  # its row, "Track your parcel" and the machines table
+
+    def test_a_local_courier_has_no_tracking_page(self):
+        self.ready(self.client_for('warehouse1'))
+        self.client_for('tech1').post(f'/tasks/my/{self.task.pk}/', {
+            'action': 'shipment_shipped', 'shipping_company': 'local_courier', 'shipping_tracking_number': 'LC-5',
+        })
+        shipment = self.portal.get(f'/tasks/tickets/status/{self.ticket.token}/').context['shipments'][0]
+        self.assertEqual((shipment['tracking'], shipment['url']), ('LC-5', ''))
+
+
 class PartShippedBellTests(PartShipmentTests):
     def test_the_customer_bell_says_the_part_is_on_its_way(self):
         self.ready(self.client_for('warehouse1'))
@@ -713,13 +770,18 @@ class PartShippedBellTests(PartShipmentTests):
 
 class NewBranchRequestTests(LifecycleTestCase):
     def test_one_click_creates_the_branch_from_the_request(self):
+        # The desk handles the request; a manager creates the branch (docs/access_rules.md).
         self._staff('desk1', 'UAE Desk', Technician.Role.COUNTRY_SUPPORT)
+        self._staff('support1', 'Tech Support', Technician.Role.SUPPORT_MANAGER)
         self.portal.post('/customers/portal/branches/new/', {
             'name': 'JBR Branch', 'address': 'JBR Walk', 'contact_name': 'Omar', 'contact_phone': '0509999999',
             'contact_email': 'omar@fitnessfirst.example', 'opening_date': '2026-12-01', 'message': 'Opens soon.',
         })
         ticket = self.newest_request()
-        desk = self.client_for('desk1')
+        counter = self.client_for('desk1')
+        self.assertNotContains(counter.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
+        self.assertEqual(counter.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'}).status_code, 403)
+        desk = self.client_for('support1')
         self.assertContains(desk.get(f'/tasks/tickets/{ticket.pk}/'), 'Create the branch')
         desk.post(f'/tasks/tickets/{ticket.pk}/', {'action': 'create_branch'})
         ticket.refresh_from_db()
@@ -791,7 +853,7 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         with override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
             self.send_request(contact_name='Ali Hassan', contact_phone='0501112222', **{
-                'machines-0-files': [SimpleUploadedFile('belt.jpg', b'jpg', content_type='image/jpeg')],
+                'machines-0-files': [SimpleUploadedFile('belt.jpg', REAL_JPEG, content_type='image/jpeg')],
             })
             ticket = self.newest_request()
             url = f'/tasks/tickets/{ticket.pk}/'
@@ -823,7 +885,8 @@ class EverythingFromTheRequestTests(LifecycleTestCase):
             self.assertEqual((got['ticket_number'], got['contact_phone']), (ticket.ticket_number, '0501112222'))
             self.assertEqual(got['conversation'], [])  # kept for older apps, always empty: never support's messages
             self.assertEqual(got['machines'][0]['serial'], 'TG-1')
-            self.assertEqual([(item['kind'], item['name']) for item in got['machines'][0]['items']], [('image', 'belt.jpg')])
+            self.assertEqual([(item['kind'], item['name']) for item in got['machines'][0]['items']],
+                             [('image', 'plate.jpg'), ('image', 'belt.jpg')])  # the plate (required) first
             self.assertTrue(got['machines'][0]['items'][0]['url'].endswith(tuple('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_:')))
             self.assertNotIn('SECRET', json.dumps(got))
 
@@ -891,6 +954,40 @@ class WhatHappensNextTests(LifecycleTestCase):
         self.assertTrue(is_part_shipment(self.ticket.task))
         self.assertEqual(set(self.ticket.machines.values_list('decision', flat=True)), {'ship_part'})
 
+    def test_where_we_do_no_visits_the_parts_are_shipped_direct_from_the_factory(self):
+        from django.core import mail
+        from tasks.models import TaskProduct
+        country = self.ticket.country
+        country.has_warehouse = country.does_visits = False
+        country.save(update_fields=['has_warehouse', 'does_visits'])
+        page = self.staff.get(self.url)
+        self.assertNotContains(page, 'value="visit"')  # no "Send a technician" here
+        self.next(choice='visit')
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.task)  # refused
+        self.next(choice='ship')
+        self.ticket.refresh_from_db()
+        task = self.ticket.task
+        detail = self.staff.get(f'/tasks/{task.pk}/')
+        self.assertTrue(detail.context['shipment']['direct_only'])
+        mail.outbox.clear()
+        self.staff.post(f'/tasks/{task.pk}/', {
+            'action': 'shipment_direct', 'pak_reference_number': 'PAK-77', 'shipping_company': 'dhl',
+            'shipping_tracking_number': '1234567890',
+        })
+        task.refresh_from_db()
+        self.assertEqual((task.ships_direct, task.pak_reference_number, task.status), (True, 'PAK-77', 'closed'))
+        self.assertFalse(task.products.filter(kind=TaskProduct.Kind.PART).exists())  # nothing left our stock
+        self.assertTrue(any('1234567890' in message.body for message in mail.outbox))  # the customer is told
+
+    def test_a_customer_with_its_own_team_is_suggested_shipping(self):
+        customer = self.ticket.customer
+        customer.own_maintenance_team = True
+        customer.save(update_fields=['own_maintenance_team'])
+        page = self.staff.get(self.url).content.decode()
+        self.assertIn('value="ship" checked', page)
+        self.assertNotIn('value="visit" checked', page)
+
     def test_split_one_machine_now_the_other_later(self):
         self.machines = self.machines[:1]
         self.next(choice='visit')
@@ -934,7 +1031,7 @@ class WhatHappensNextTests(LifecycleTestCase):
         self.next(choice='ship')
         self.ticket.refresh_from_db()
         page = self.staff.get(self.url)
-        self.assertContains(page, 'Shipping and PAK')
+        self.assertContains(page, 'Shipping and Panatta PAK')
         self.assertNotContains(page, 'value="update_logistics"')
 
 
@@ -950,8 +1047,8 @@ class CustomerReportTests(LifecycleTestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         self.send_request(machines=[
             {'which': 'new', 'model_name': 'Excite Run 700', 'serial_no': 'TG-1', 'problem': 'not_working',
-             'description': 'Dead.', 'files': [SimpleUploadedFile('dead.jpg', b'jpg', content_type='image/jpeg'),
-                                                SimpleUploadedFile('noise.mp4', b'mp4', content_type='video/mp4')]},
+             'description': 'Dead.', 'files': [SimpleUploadedFile('dead.jpg', REAL_JPEG, content_type='image/jpeg'),
+                                                SimpleUploadedFile('noise.mp4', REAL_MP4, content_type='video/mp4')]},
             {'which': 'new', 'model_name': 'Bike', 'serial_no': 'BK-2', 'problem': 'noise', 'description': 'Squeaks.'},
         ])
         self.ticket = self.newest_request()
@@ -961,20 +1058,21 @@ class CustomerReportTests(LifecycleTestCase):
         page = self.staff.get(self.url).content.decode()
         self.assertIn('2 machines', page)
         self.assertIn('<video src=', page)
-        excite, bike = page.index('Excite Run 700'), page.index('No photos sent for this machine.')
+        excite, bike = page.index('Excite Run 700'), page.index('<h3>Bike</h3>')
         self.assertLess(excite, page.index('dead.jpg'))
-        self.assertLess(page.index('dead.jpg'), bike)  # the photo under the first machine, the second has none
+        self.assertLess(page.index('dead.jpg'), bike)  # each machine's photos under it
+        self.assertLess(bike, page.index('fault.jpg'))
 
     def test_staff_add_whatsapp_photos_under_a_machine_and_the_technician_sees_them(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         bike = self.ticket.machines.get(serial_no='BK-2')
         self.staff.post(self.url, {'action': 'add_customer_photos', 'machine': bike.pk,
-                                   'attachments': [SimpleUploadedFile('whatsapp.jpg', b'jpg', content_type='image/jpeg')]})
-        attachment = bike.attachments.get()
+                                   'attachments': [SimpleUploadedFile('whatsapp.jpg', REAL_JPEG, content_type='image/jpeg')]})
+        attachment = bike.attachments.get(added_by__isnull=False)  # beside the customer's own fault photo
         self.assertEqual(attachment.added_by, self.admin.user)
         # Photos sent later in the conversation reach the technician too (never support's messages).
         self.portal.post(f'/tasks/tickets/status/{self.ticket.token}/', {
-            'message': 'Here is the plate.', 'attachments': [SimpleUploadedFile('plate.jpg', b'jpg', content_type='image/jpeg')],
+            'message': 'Here is the plate.', 'attachments': [SimpleUploadedFile('plate.jpg', REAL_JPEG, content_type='image/jpeg')],
         })
         self.staff.post(self.url, {'action': 'next', 'machines': [str(m.pk) for m in self.ticket.machines.all()],
                                    'choice': 'visit', 'technician': self.tech.pk})
@@ -986,7 +1084,8 @@ class CustomerReportTests(LifecycleTestCase):
 
     def test_the_request_list_counts_photos(self):
         page = self.staff.get('/tasks/tickets/')
-        self.assertContains(page, '2 photos or videos')
+        # Each machine's serial plate and fault (both required), and the first one's video.
+        self.assertContains(page, '5 photos or videos')
 
 
 class ReportMachinesTests(LifecycleTestCase):
@@ -1035,7 +1134,6 @@ class ReportMachinesTests(LifecycleTestCase):
         from django.test import RequestFactory
         from tasks.views import report_preview
         from reports.forms import WorkReportForm
-        from tasks.models import Technician
         png = 'data:image/png;base64,' + base64.b64encode(
             bytes.fromhex('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a1300000000049454e44ae426082'),
         ).decode()
@@ -1063,17 +1161,17 @@ class ReportMachinesTests(LifecycleTestCase):
         elsewhere = Asset.objects.create(site=other_site, brand=self.brand, model_name='Bike', serial_no='X-1')
         api = APIClient()
         api.force_authenticate(self.tech.user)
-        jpeg = lambda: SimpleUploadedFile('fault.jpg', b'\xff\xd8\xff\xe0' + b'0' * 64, content_type='image/jpeg')
+        jpeg = lambda: SimpleUploadedFile('fault.jpg', REAL_JPEG, content_type='image/jpeg')
         url = f'/api/my-tasks/{self.task.pk}/attachments/'
-        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': self.asset.pk}, format='multipart')
+        response = api.post(url, {'file': jpeg(), 'purpose': 'before', 'asset': self.asset.pk}, format='multipart')
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()['asset'], self.asset.pk)
         self.assertEqual(TaskAttachment.objects.get().asset, self.asset)
         # Only a machine at this task's branch.
-        response = api.post(url, {'file': jpeg(), 'purpose': 'fault', 'asset': elsewhere.pk}, format='multipart')
+        response = api.post(url, {'file': jpeg(), 'purpose': 'before', 'asset': elsewhere.pk}, format='multipart')
         self.assertEqual(response.status_code, 400)
         # The report shows it under its machine's card.
         from tasks.views import save_task_machines
         save_task_machines(self.task, [{'asset': self.asset, 'outcome': 'repaired', 'note': ''}], [])
         report = api.get(f'/api/my-tasks/{self.task.pk}/report/').json()
-        self.assertEqual([p['purpose'] for p in report['machines'][0]['photos']], ['fault'])
+        self.assertEqual([p['purpose'] for p in report['machines'][0]['photos']], ['before'])

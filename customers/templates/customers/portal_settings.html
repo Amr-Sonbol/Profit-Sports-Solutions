@@ -4,7 +4,8 @@
 {% block title %}{% translate "Settings" %} — Profit Sports Solutions{% endblock %}
 
 {% block content %}
-{# Four sections, each its own form with its button in the same place: a footer at the row's end. #}
+{# Two parts: My account (this person's own), then Company (shared by everyone at it). #}
+{# Each section is its own form, its button in the same place: a footer at the row's end. #}
 <div class="portal settings">
     <div class="page__header">
         <div>
@@ -12,14 +13,88 @@
         </div>
     </div>
 
+    <h2 class="settings__part">{% translate "My account" %}</h2>
+    <p class="settings__intro">{% translate "Only yours: nobody else at your company sees or changes these." %}</p>
+
     <section class="section">
-        <h2>{% translate "Your details" %}</h2>
+        <h3>{% translate "Name and language" %}</h3>
+        <p class="settings__intro">{% translate "How we address you, and the language the portal shows in for you." %}</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="account">
+            <div class="settings__stack">
+                {% for field in account_form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Save" %}</button>
+            </div>
+        </form>
+    </section>
+
+    {# Changing the sign-in email: the new address and their password; it switches once they open the link sent there. #}
+    <section class="section">
+        <h3>{% translate "Sign-in email" %}</h3>
+        <p class="settings__intro">{% blocktranslate with email=user.email|default:user.get_username %}You sign in with <strong dir="ltr">{{ email }}</strong>. To change it, enter the new address and your password: we send a confirmation link there, and the change happens once you open it.{% endblocktranslate %}</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="email">
+            <div class="settings__stack">
+                {% for field in email_form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Send confirmation link" %}</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="section">
+        <h3>{% translate "Change your password" %}</h3>
+        <p class="settings__intro">{% translate "Enter your current password, then the new one twice." %}</p>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="password">
+            {% if password_form.non_field_errors %}<p class="flash flash--error">{{ password_form.non_field_errors|join:" " }}</p>{% endif %}
+            <div class="settings__stack">
+                {% for field in password_form %}
+                <div class="field{% if field.errors %} field--error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
+                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                {% endfor %}
+                {% include "_show_password.html" %}
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">{% translate "Change password" %}</button>
+            </div>
+        </form>
+    </section>
+
+    <h2 class="settings__part">{% translate "Company" %}</h2>
+    <p class="settings__intro">{% blocktranslate with name=customer.name %}Shared by everyone at {{ name }}: a change here is a change for all of you.{% endblocktranslate %}</p>
+
+    <section class="section">
+        <h3>{% translate "Company details" %}</h3>
         <p class="settings__intro">{% translate "How we reach you, and where we send invoices and parts." %}</p>
         <form method="post" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="details">
             {% if details_form.non_field_errors %}<p class="flash flash--error">{{ details_form.non_field_errors|join:" " }}</p>{% endif %}
-            {# Contact, addresses, language: the groups come from the view (details_groups). #}
+            {# Contact, addresses: the groups come from the view (details_groups). #}
             {% for title, names in details_groups %}
             <fieldset class="settings__group">
                 <legend>{{ title }}</legend>
@@ -36,14 +111,14 @@
             </fieldset>
             {% endfor %}
             <div class="form-actions">
-                <button type="submit" class="button">{% translate "Save my details" %}</button>
+                <button type="submit" class="button">{% translate "Save company details" %}</button>
             </div>
         </form>
     </section>
 
     {# Their branches, those we've still to add, and the way to ask for a new one. #}
     <section class="section" id="branches">
-        <h2>{% translate "Your branches" %}</h2>
+        <h3>{% translate "Your branches" %}</h3>
         <p class="settings__intro">{% translate "The branches on your account. Opened a new one? Ask us to add it." %}</p>
         <ul class="action-list">
             {% for site in branches %}
@@ -65,8 +140,8 @@
 
     {# Their portal color: any from the picker, or their brand's exact code (brand-color.js keeps the two in step). #}
     <section class="section">
-        <h2>{% translate "Your portal color" %}</h2>
-        <p class="settings__intro">{% translate "Your gym's color. The portal's buttons and highlights use it." %}</p>
+        <h3>{% translate "Your portal color" %}</h3>
+        <p class="settings__intro">{% translate "Your gym's color. The portal's buttons and highlights use it, for everyone at your company." %}</p>
         {% with field=color_form.brand_color %}
         <form method="post" class="color-choice{% if field.errors %} field--error{% endif %}" novalidate data-color-choice>
             {% csrf_token %}
@@ -88,50 +163,18 @@
         {% endwith %}
     </section>
 
-    {# Changing the sign-in email: the new address and their password; it switches once they open the link sent there. #}
+    {# Read-only: our staff add and remove people (the customer's Portal login section). #}
     <section class="section">
-        <h2>{% translate "Sign-in email" %}</h2>
-        <p class="settings__intro">{% blocktranslate with email=user.email|default:user.get_username %}You sign in with <strong dir="ltr">{{ email }}</strong>. To change it, enter the new address and your password: we send a confirmation link there, and the change happens once you open it.{% endblocktranslate %}</p>
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <input type="hidden" name="action" value="email">
-            <div class="settings__stack">
-                {% for field in email_form %}
-                <div class="field{% if field.errors %} field--error{% endif %}">
-                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field }}
-                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                </div>
-                {% endfor %}
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="button">{% translate "Send confirmation link" %}</button>
-            </div>
-        </form>
-    </section>
-
-    <section class="section">
-        <h2>{% translate "Change your password" %}</h2>
-        <p class="settings__intro">{% translate "Enter your current password, then the new one twice." %}</p>
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <input type="hidden" name="action" value="password">
-            {% if password_form.non_field_errors %}<p class="flash flash--error">{{ password_form.non_field_errors|join:" " }}</p>{% endif %}
-            <div class="settings__stack">
-                {% for field in password_form %}
-                <div class="field{% if field.errors %} field--error{% endif %}">
-                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.help_text %}<p class="field__help">{{ field.help_text }}</p>{% endif %}
-                    {% for error in field.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
-                </div>
-                {% endfor %}
-                {% include "_show_password.html" %}
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="button">{% translate "Change password" %}</button>
-            </div>
-        </form>
+        <h3>{% translate "People with access" %}</h3>
+        <p class="settings__intro">{% translate "Everyone who can sign in to this portal. To add someone or remove access, contact us." %}</p>
+        <ul class="settings__people">
+            {% for someone in people %}
+            <li>
+                <strong>{{ someone.name }}{% if someone.user_id == user.pk %} <span class="muted">({% translate "you" %})</span>{% endif %}</strong>
+                <span class="muted" dir="ltr">{{ someone.user.email }}</span>
+            </li>
+            {% endfor %}
+        </ul>
     </section>
 </div>
 {% endblock %}

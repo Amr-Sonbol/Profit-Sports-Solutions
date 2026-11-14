@@ -27,13 +27,23 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                         </a>
                         {% elif notification.kind == 'unscheduled_overdue' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
-                            {% translate "Not scheduled within 24 working hours" %}
+                            {% if notification.later %}{% translate "Not scheduled within 3 working days" %}{% else %}{% translate "Not scheduled within 24 working hours" %}{% endif %}
                             — {{ notification.task.site.name }}
                             <span class="muted">({{ notification.task.task_number }})</span>
                         </a>
+                        {% elif notification.kind == 'blocked_long' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% if notification.later %}{% translate "Blocked for more than 2 working days" %}{% else %}{% translate "Blocked for more than 2 working hours" %}{% endif %}
+                            — {{ notification.task.site.name }}
+                            <span class="muted">({{ notification.task.task_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'blocked_long_many' %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=blocked_long&amp;country=all" class="notif-alarm">
+                            {% if notification.later %}{% blocktranslate count count=notification.count %}{{ count }} task blocked for more than 2 working days{% plural %}{{ count }} tasks blocked for more than 2 working days{% endblocktranslate %}{% else %}{% blocktranslate count count=notification.count %}{{ count }} task blocked for more than 2 working hours{% plural %}{{ count }} tasks blocked for more than 2 working hours{% endblocktranslate %}{% endif %}
+                        </a>
                         {% elif notification.kind == 'unscheduled_overdue_many' %}
-                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled" class="notif-alarm">
-                            {% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}
+                        <a href="{% url 'tasks:task_list' %}?alarm=unscheduled{% if user.technician.role == 'support_manager' or user.technician.role == 'operations_manager' %}&amp;country=all{% endif %}" class="notif-alarm">
+                            {% if notification.later %}{% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 3 working days{% plural %}{{ count }} tasks not scheduled within 3 working days{% endblocktranslate %}{% else %}{% blocktranslate count count=notification.count %}{{ count }} task not scheduled within 24 working hours{% plural %}{{ count }} tasks not scheduled within 24 working hours{% endblocktranslate %}{% endif %}
                         </a>
                         {% elif notification.kind == 'report_late' %}
                         <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
@@ -56,6 +66,30 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                             {% translate "Escalated to you — decision required" %}
                             — {{ notification.ticket.company_name }}
                             <span class="muted">({{ notification.ticket.ticket_number }})</span>
+                        </a>
+                        {% elif notification.kind == 'follow_ups_overdue' %}
+                        <a href="{% if notification.count == 1 %}{% url 'tasks:internal_ticket' notification.ticket.pk %}{% else %}{% url 'tasks:internal_tickets' %}?status=overdue{% endif %}" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} follow-up is overdue{% plural %}{{ count }} follow-ups are overdue{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'loans_due' %}
+                        <a href="{% url 'tasks:machine_list' %}?loan=due" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} machine on loan is due back{% plural %}{{ count }} machines on loan are due back{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'warranty_ending' %}
+                        <a href="{% url 'customers:customer_list' %}?warranty=ending">
+                            {% blocktranslate count count=notification.count %}{{ count }} branch's warranty ends within 30 days{% plural %}{{ count }} branches' warranties end within 30 days{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'readiness_due' %}
+                        <a href="{% url 'tasks:task_detail' notification.task.pk %}" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} installation soon — the site isn't confirmed ready{% plural %}{{ count }} installations soon — sites not confirmed ready{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'quotes_waiting' %}
+                        <a href="{% url 'tasks:task_list' %}?quote=waiting" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}{{ count }} quotation unanswered for a week{% plural %}{{ count }} quotations unanswered for a week{% endblocktranslate %}
+                        </a>
+                        {% elif notification.kind == 'parts_late' %}
+                        <a href="{% url 'tasks:task_list' %}?parts=late" class="notif-alarm">
+                            {% blocktranslate count count=notification.count %}Ordered parts are late for {{ count }} task{% plural %}Ordered parts are late for {{ count }} tasks{% endblocktranslate %}
                         </a>
                         {% elif notification.kind == 'internal_ticket' %}
                         <a href="{% url 'tasks:internal_ticket' notification.ticket.pk %}">
@@ -104,7 +138,7 @@ static/js/bell.js to refresh when someone comes back to the tab. display:content
                 <p class="empty-state">{% translate "No new notifications." %}</p>
                 {% endif %}
             </div>
-        {% elif user.customer %}
+        {% elif portal_customer %}
             {# A customer's bell (spots.context_processors.portal_nav): reports to rate, replies, visits booked. #}
             <input type="checkbox" id="notif-toggle" class="notif-toggle" hidden>
             <label for="notif-toggle" class="notif-bell" aria-label="{% translate 'Notifications' %}">

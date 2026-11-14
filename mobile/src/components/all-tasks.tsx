@@ -4,14 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { TextInput } from '@/components/text-field';
 
-import { fetchTaskFilterChoices, fetchTeamTasksPage } from '@/api/endpoints';
+import { fetchInternalTickets, fetchTaskFilterChoices, fetchTeamTasksPage } from '@/api/endpoints';
 import { ChoicePicker } from '@/components/choice-picker';
+import { InternalTaskRow } from '@/components/internal-tasks';
 import { TaskCard } from '@/components/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskListItem } from '@/types';
+import type { InternalTicket, TaskListItem } from '@/types';
 import { locale, t } from '@/i18n';
 
 type Option = { value: string; label: string };
@@ -27,7 +28,7 @@ const EXTRAS: [Exclude<Extra, '' | 'dates'>, string][] = [
 // "More filters": the website task list's own fields (tasks.views.filtered_tasks).
 const TEXT_FILTERS: [string, string][] = [
   ['customer_name', 'Customer'], ['site', 'Site (branch or city)'], ['serial_number', 'Machine serial number'],
-  ['pak_reference', 'PAK reference'],
+  ['pak_reference', 'Panatta PAK'],
 ];
 
 /**
@@ -36,7 +37,12 @@ const TEXT_FILTERS: [string, string][] = [
  * quick looks (no technician, no day, today, this week, dates), and "More
  * filters" with the website's own fields. 30 at a time, more as you scroll.
  */
-export function AllTasks() {
+/**
+ * `withInternal`: whoever has the Internal tab sees the country's internal
+ * tasks here too, at the top — "All" means all — following the search and
+ * Open / All; hidden for the filters only field tasks have.
+ */
+export function AllTasks({ withInternal = false }: { withInternal?: boolean }) {
   const router = useRouter();
   const theme = useTheme();
   const [query, setQuery] = useState('');
@@ -48,6 +54,7 @@ export function AllTasks() {
   const [showMore, setShowMore] = useState(false);
   const [choices, setChoices] = useState<{ statuses: Option[]; technicians: Option[]; shipping_companies: Option[] } | null>(null);
   const [items, setItems] = useState<TaskListItem[] | null>(null);
+  const [internal, setInternal] = useState<InternalTicket[]>([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -88,6 +95,20 @@ export function AllTasks() {
       if (ticket === latest.current) setLoading(false);
     }
   }, [params]);
+
+  // The internal tasks: only for Open or All (their statuses are their own), and no field-only filter.
+  const internalStatus = status === 'open' || status === 'all' ? status : null;
+  const fieldOnly = Boolean(extra) || Object.values(more).some((value) => value.trim());
+  const showsInternal = withInternal && Boolean(internalStatus) && !fieldOnly;
+  useEffect(() => {
+    if (!showsInternal || !internalStatus) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      fetchInternalTickets(internalStatus, query.trim()).then(setInternal).catch(() => setInternal([]));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [showsInternal, internalStatus, query]);
 
   // Typing waits for a short pause; any other change searches at once.
   const typing = useRef(false);
@@ -231,7 +252,14 @@ export function AllTasks() {
             </ThemedView>
           ) : null}
           {error ? <ThemedText themeColor="danger" type="small">{error}</ThemedText> : null}
-          {items ? <ThemedText type="small" themeColor="textSecondary">{count} tasks · newest first</ThemedText> : null}
+          {/* Internal tasks first ("All" means all), each labelled; then the field tasks. */}
+          {showsInternal && internal.length ? (
+            <ThemedView style={styles.internal}>
+              <ThemedText type="smallBold">{t('Internal tasks ({count})', { count: internal.length })}</ThemedText>
+              {internal.map((item) => <InternalTaskRow key={item.id} item={item} labelled />)}
+            </ThemedView>
+          ) : null}
+          {items ? <ThemedText type="small" themeColor="textSecondary">{t('{count} field tasks · newest first', { count })}</ThemedText> : null}
         </ThemedView>
       )}
       ListEmptyComponent={items && !loading ? <ThemedText themeColor="textSecondary">No tasks match.</ThemedText> : undefined}
@@ -242,6 +270,7 @@ export function AllTasks() {
 }
 
 const styles = StyleSheet.create({
+  internal: { gap: Spacing.two, backgroundColor: 'transparent' },
   list: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingBottom: Spacing.six },
   head: { gap: Spacing.two, marginBottom: Spacing.one, backgroundColor: 'transparent' },
   input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },

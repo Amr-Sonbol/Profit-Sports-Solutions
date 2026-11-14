@@ -52,7 +52,7 @@
                 {% endif %}
                 {% for error in form.site.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
             </div>
-            {% if user.technician.role == 'admin' %}
+            {% if form.can_add_site %}
             <input type="checkbox" id="toggle-new-site" class="toggle-checkbox" hidden>
             <label for="toggle-new-site" class="add-new-toggle">{% translate "+ Add new site" %}</label>
             <fieldset class="new-item-fieldset">
@@ -173,8 +173,8 @@
 </div>
 
 <div class="section">
-    <h2>{% translate "Team schedule" %}</h2>
-    <p class="field__help">{% translate "Existing bookings, so you can select a time without conflicts. Open a staff member's week for a full day-by-day overview of their workload." %}</p>
+    <h2>{% translate "Team today" %}</h2>
+    <p class="field__help">{% translate "Who is free today, best first. Open someone's name for their whole week." %}</p>
     {% if team_schedule %}
     <div class="table-wrap">
         <table>
@@ -182,39 +182,29 @@
                 <tr>
                     <th>{% translate "Name" %}</th>
                     <th>{% translate "Role" %}</th>
-                    <th>{% translate "Country" %}</th>
-                    <th>{% translate "Next scheduled" %}</th>
-                    <th></th>
+                    <th>{% translate "Today" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for person in team_schedule %}
                 <tr>
-                    <td>{{ person.full_name }}</td>
-                    <td>{{ person.get_role_display }}</td>
-                    <td>{{ active_country.display_name }}</td>
-                    <td>
-                        {% if person.next_scheduled_task %}
-                        <a href="{% url 'tasks:task_detail' person.next_scheduled_task.pk %}">
-                            {{ person.next_scheduled_task.scheduled_for|date:"SHORT_DATETIME_FORMAT" }}
-                        </a>
-                        {% else %}<span class="muted">{% translate "Free" %}</span>{% endif %}
-                    </td>
-                    <td>{% if 'view_technicians' in role_permissions and person.can_open %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{% translate "View schedule" %}</a>{% endif %}</td>
+                    <td>{% if 'view_technicians' in role_permissions and person.can_open %}<a href="{% url 'tasks:technician_board' person.pk %}" target="_blank" rel="noopener">{{ person.full_name }}</a>{% else %}{{ person.full_name }}{% endif %}</td>
+                    <td>{{ person.title }}</td>
+                    <td class="cell-wrap">{% include "tasks/_day_state.html" with person=person %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="empty-state">{% translate "There are no active supervisors or technicians in this country." %}</p>
+    <p class="empty-state">{% translate "No one in this country yet." %}</p>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 {{ form.warranty_site_ids|json_script:"warranty-site-ids" }}
-<script>
+<script nonce="{{ request.csp_nonce }}">
 // A branch under warranty: everything is free, so billing switches to
 // Warranty when it's picked (still changeable, e.g. damage not covered).
 (function () {

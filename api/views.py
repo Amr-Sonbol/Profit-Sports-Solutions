@@ -26,10 +26,12 @@ from customers import notify as notify_customer
 from customers.models import Asset, Customer
 from people.models import PushDevice, RolePermission, Technician, TechnicianConduct, TechnicianSkill, TechnicianTrip
 from customers.accounts import locked_usernames, log_account_action
+from customers.forms import SignInEmailChangeForm
 from people.context_processors import nav_groups, nav_pages
 from tasks.staff_accounts import StaffAccountStatus, URGENT_ACTIONS, staff_account_status, urgent_account_action
 from people.permissions import (
-    ACTIVE_COUNTRY_SESSION_KEY, can_manage_account, get_active_country, is_last_active_admin, require_manager,
+    ACTIVE_COUNTRY_SESSION_KEY, can_create_customers, can_manage_account, can_plan_equipment, can_set_password, get_active_country, is_last_active_admin,
+    require_manager,
     scoped_or_404,
 )
 from people.push import push_assigned, push_removed
@@ -37,8 +39,9 @@ from reference.models import Brand, ConductArea, Country, Part, Skill, TaskType
 from reports.pdf import hours_text, report_language
 from reports.phrases import Action, Finding, Recommendation, WorkLine
 from reports.forms import PartUsedItemForm, WorkReportForm
+from tasks.parts_needed import part_rows, report_parts
 from tasks.forms import (
-    AddHelperForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
+    AddHelperForm, RegisterMachineForm, BlockTaskForm, StaffAttachmentUploadForm, TaskEditForm, ChangePasswordForm, ExistingAssetOutcomeForm, MarkUnavailableForm, MyProfileForm,
     NewAssetForm, PauseTaskForm, ReviewLevelForm, TaskCreateForm, TaskProductCheckForm, TaskProductForm,
     CancelTaskForm, CloseTaskForm, DeactivateTechnicianForm, TechnicianCreateForm,
     CorrectEventTimeForm, NegligenceFlagForm, RebookVisitForm, TaskMessageForm,
@@ -49,37 +52,40 @@ from tasks.location import record_tap
 from tasks.models import CustomerTicket, ScheduleChangeRequest, ShippingCompany, Task, TaskMessageRecipient, TaskAsset, TaskAssignment, TaskAttachment, TaskEvent, TaskProduct
 from tasks.shipments import is_part_shipment
 from tasks.views import (
-    report_copy_default,
+    new_branch_for_next_step, next_step_customers, next_step_label, report_safety_incident, report_copy_default, send_staff_email_change_link, tell_customer_on_the_way, confirm_customer_files, register_task_machine, replace_serial_plate,
+    report_machine_photo_gaps,
     approve_schedule_change, deny_schedule_change, notify_delay, notify_schedule, notify_shipping,
     rebook_visit, reopen_task, request_schedule_change, send_feedback_request, set_schedule_time, shipment_ready,
     apply_task_edit, _form_values, customer_has_current_time, filtered_tasks, read_task_updates,
     request_for_app, ship_and_tell_customer, shipment_for_app,
-    ASSIGNMENT_LOCKED_STATUSES, BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
-    _assignment_candidates, _candidates_with_skill_level, _next_technician_action, _require_task_owner, _set_lead,
+    BLOCKABLE_STATUSES, assignment_changeable, OPEN_STATUSES, REPORT_EDITABLE_STATUSES, TECHNICIAN_ACTIONS,
+    _assignment_candidates, _next_technician_action, _with_day_load, day_text, _require_task_owner, _set_lead,
+    _ticket_is_open, can_act_on_internal_ticket, can_change_task,
     _active_helpers, _post_task_message, _requires_signature, _save_attachment, _task_is_paused,
-    _technicians_with_next_scheduled_task,
-    _with_lead_prefetch, approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
+    approve_report_as_manager, approve_report_as_supervisor, can_supervisor_approve,
     _calendar_context, _my_tasks, _overdue, _people_i_oversee, report_preview, _resolve_report_month, progress_context, report_machine_initial, report_saved_message, save_task_machines,
-    save_work_report, search_tasks, search_tickets, team_progress_rows, today_plan,
+    save_work_report, search_tickets, team_progress_rows, today_plan,
     save_conduct_review, save_conduct_self_rating, save_skill_review, save_skill_self_rating,
     send_password_changed_email, set_availability, skills_summary, _reliability_stats, create_task, _weekend_warning,
     _overseen_rows, _shift_month, _technician_hours_rows, _visible_internal_tickets, team_map_data,
     dashboard_overview, home_summary, CANCELLABLE_STATUSES, CORRECTABLE_EVENTS, _correction_window,
     cancel_task, close_task_directly, correct_tap_time, flag_negligence, checklist_initial, has_checklist,
     save_checklist, still_to_install, create_follow_up, equipment_step, NEXT_STEPS, create_next_step,
-    lines_to_carry, loading_shortfall, next_step_sites, save_planned_lines, warehouse_stock_for_planning,
+    BeyondStock, DISPATCH_PHOTO_MISSING, check_beyond_stock, dispatch_photo_missing, lines_to_carry,
+    is_installation, save_site_readiness, site_readiness_for_app, next_step_sites, next_step_supervisor, next_step_supervisors, save_planned_lines, warehouse_stock_for_planning,
     PRODUCTS_LOCKED_STATUSES, move_open_tasks, _tasks_to_reassign,
     create_staff_user,
     undo_last_tap,
     undoable_tap, SEARCH_RESULT_LIMIT,
     add_ticket_note, decide_request_next, send_staff_reply, ticket_access, ticket_for_app, team_today,
-    waiting_for, can_give_final_approval, require_final_approver, technician_overview,
+    waiting_for, can_give_final_approval, gave_supervisor_approval, require_final_approver, technician_overview,
     add_internal_ticket_note, close_internal_ticket, internal_ticket_for_app, open_internal_ticket,
     reassign_internal_ticket,
 )
 
 from spots.media import signed_media_url
 
+from .authentication import renew
 from .permissions import IsTechnician, has_role_permission, require_role_permission
 from .serializers import (
     CustomerTicketSerializer, TaskAttachmentSerializer, TaskDetailSerializer, TaskListSerializer, TeamTaskDetailSerializer, WorkReportSerializer,
@@ -106,8 +112,17 @@ class LoginView(APIView):
             return Response({'detail': 'Invalid username or password.'}, status=status.HTTP_400_BAD_REQUEST)
         if not user.is_active:
             return Response({'detail': 'This account is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
+        # The staff app: a customer's account is refused at the door (they use the portal), never given a token.
+        if getattr(user, 'technician', None) is None:
+            return Response({'detail': 'This app is for our staff. Customers use the customer portal.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         token, _created = Token.objects.get_or_create(user=user)
+        renew(token)  # a fresh 30 days (api.authentication.TOKEN_IDLE_DAYS)
+        # In the audit trail, like a website sign-in (spots.audit).
+        from people.models import AuditEntry
+        from spots.audit import client_ip, record
+        record(AuditEntry.Action.SIGNED_IN, user, user=user, ip=client_ip(request._request), message='app')
         # So Staff accounts' "Last sign-in" counts the app, not only the website.
         update_last_login(None, user)
         return Response({'token': token.key, **_me_payload(user, request)})
@@ -124,7 +139,7 @@ def _me_payload(user, request=None):
         'phone': technician.phone,
         'photo_url': signed_media_url(request, technician.photo.url) if technician.photo and request else '',
         'role': technician.role,
-        'role_display': technician.get_role_display(),
+        'role_display': technician.title,
         'employment_type_display': technician.get_employment_type_display(),
         'country': technician.country.display_name,
         'language': technician.language,
@@ -145,7 +160,7 @@ def _me_payload(user, request=None):
         # What this role may do (RolePermission), so the app shows only
         # the tabs that will open — the API still checks every request.
         'permissions': sorted(
-            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
         ),
     }
 
@@ -156,22 +171,54 @@ class MeView(APIView):
 
     def post(self, request):
         """Edit my profile, as on the website's My profile (MyProfileForm):
-        photo, language, phone and email — multipart; anything left out
-        stays as it is. Role, country and employment stay office-side.
+        photo, language and phone — multipart; anything left out stays as it
+        is. A new email needs `password` (the current one) and changes only
+        once the link sent there is opened, as on the website; `notice` says
+        so. Role, country and employment stay office-side.
         """
         technician = getattr(request.user, 'technician', None)
         if technician is None:
             raise PermissionDenied
         data = {
-            'language': technician.language, 'phone': technician.phone, 'email': request.user.email,
-            **{field: request.data[field] for field in ('language', 'phone', 'email') if field in request.data},
+            'language': technician.language, 'phone': technician.phone,
+            **{field: request.data[field] for field in ('language', 'phone') if field in request.data},
         }
         form = MyProfileForm(data, request.FILES, instance=technician)
-        if not form.is_valid():
-            return Response({field: [str(e) for e in errors] for field, errors in form.errors.items()},
+        new_email = (request.data.get('email') or '').strip()
+        email_form = None
+        if new_email and new_email.lower() != request.user.email.lower():
+            email_form = SignInEmailChangeForm(
+                {'email': new_email, 'password': request.data.get('password', '')}, user=request.user,
+            )
+        errors = {**form.errors, **(email_form.errors if email_form is not None else {})}
+        if not form.is_valid() or (email_form is not None and not email_form.is_valid()):
+            return Response({field: [str(e) for e in errs] for field, errs in errors.items()},
                             status=status.HTTP_400_BAD_REQUEST)
         form.save()
-        return Response(_me_payload(request.user, request))
+        payload = _me_payload(request.user, request)
+        if email_form is not None:
+            send_staff_email_change_link(request, request.user, new_email)
+            payload['notice'] = _(
+                'We have sent a confirmation link to %(email)s. Your email changes once you open it.'
+            ) % {'email': new_email}
+        return Response(payload)
+
+
+class SignOutOtherPhonesView(APIView):
+    """Profile → "Sign out of my other phones", for a lost or handed-on one:
+    the app's sign-in stops working everywhere, a fresh one is returned so
+    this phone stays signed in, and only this phone keeps its notifications
+    (`push_token`, if it has one)."""
+
+    def post(self, request):
+        technician = getattr(request.user, 'technician', None)
+        if technician is None:
+            raise PermissionDenied
+        Token.objects.filter(user=request.user).delete()
+        PushDevice.objects.filter(technician=technician).exclude(token=request.data.get('push_token') or '').delete()
+        token = Token.objects.create(user=request.user)
+        log_account_action(request, technician, 'Signed themselves out of the mobile app on their other phones')
+        return Response({'token': token.key})
 
 
 class MyPasswordView(APIView):
@@ -373,9 +420,14 @@ class MyScheduleView(APIView):
 # The fields the app's New task screen fills in — the website form's,
 # less adding a new site / brand / task type there (admin and desk work).
 APP_TASK_FIELDS = [
-    'site', 'task_type', 'brand', 'required_skill', 'min_level', 'description', 'priority', 'source',
+    'site', 'task_type', 'brand', 'about', 'done_by', 'subcontractor_name', 'subcontractor_contact',
+    'description', 'priority', 'source',
     'is_warranty', 'billing_type', 'reported_at', 'scheduled_for', 'estimated_hours', 'responsible_supervisor',
 ]
+
+
+# A new branch made from the app's New task (tasks.forms.TaskCreateForm's new-site fields).
+NEW_SITE_FIELDS = ['new_site_customer', 'new_site_name', 'new_site_address', 'new_site_contact_name', 'new_site_contact_phone']
 
 
 def require_role_permission_or_403(request, permission):
@@ -404,12 +456,15 @@ class TaskCreateView(APIView):
             raise PermissionDenied
         technician = request.user.technician
         return TaskCreateForm(data, country=get_active_country(request) or technician.country,
-                              is_admin=technician.role == Technician.Role.ADMIN)
+                              is_admin=technician.role == Technician.Role.ADMIN,
+                              owner_required=technician.role == Technician.Role.TECHNICIAN,
+                              can_add_site=can_create_customers(technician))
 
     def get(self, request):
         form = self._form(request)
         fields = {}
-        for name in APP_TASK_FIELDS:
+        # "+ New branch" too, for whoever creates customers and branches (the form has its fields then).
+        for name in APP_TASK_FIELDS + [name for name in NEW_SITE_FIELDS if name in form.fields]:
             field = form.fields[name]
             initial = form[name].initial
             fields[name] = {
@@ -423,7 +478,7 @@ class TaskCreateView(APIView):
         return Response({'fields': fields})
 
     def post(self, request):
-        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS}
+        data = {name: request.data.get(name, '') for name in APP_TASK_FIELDS + NEW_SITE_FIELDS}
         if str(data['is_warranty']).lower() not in ('true', '1', 'on'):
             data.pop('is_warranty')
         form = self._form(request, data)
@@ -447,19 +502,21 @@ def _task_line(task):
 
 
 class CustomersView(APIView):
-    """The app's Customers — the website's list (manage_customers): every
+    """The app's Customers — the website's list (view_customers): every
     active customer in the viewer's country, searchable by name."""
 
     permission_classes = [IsTechnician]
 
     def get(self, request):
-        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_CUSTOMERS)
         customers = Customer.objects.filter(
             is_active=True, country=get_active_country(request) or technician.country,
         ).prefetch_related('sites').order_by('name')
         search = request.query_params.get('q', '').strip()
         if search:
-            customers = customers.filter(Q(name__icontains=search) | Q(sites__name__icontains=search)).distinct()
+            customers = customers.filter(
+                Q(name__matches=search) | Q(sites__name__matches=search) | Q(contact_phone__phone=search),
+            ).distinct()
         return Response([
             {
                 'id': customer.pk, 'name': customer.name, 'segment': customer.get_segment_display(),
@@ -479,7 +536,7 @@ class CustomerView(APIView):
     permission_classes = [IsTechnician]
 
     def get(self, request, pk):
-        technician = require_role_permission_or_403(request, RolePermission.Permission.MANAGE_CUSTOMERS)
+        technician = require_role_permission_or_403(request, RolePermission.Permission.VIEW_CUSTOMERS)
         customer = scoped_or_404(Customer.objects, pk, technician, get_active_country(request), 'country')
         sites = customer.sites.prefetch_related('assets__brand').order_by('name')
         tasks = Task.objects.filter(site__customer=customer).select_related('site', 'task_type').order_by(
@@ -490,7 +547,7 @@ class CustomerView(APIView):
             'is_internal': customer.is_internal,
             'contact_name': customer.contact_name, 'contact_phone': customer.contact_phone,
             'contact_email': customer.contact_email, 'billing_address': customer.billing_address,
-            'has_portal': customer.user_id is not None,
+            'has_portal': customer.portal_users.filter(user__is_active=True).exists(),
             'sites': [
                 {
                     'id': site.pk, 'name': site.name, 'address': site.address,
@@ -524,8 +581,8 @@ class MachinesView(APIView):
         if search:
             assets = assets.filter(
                 Q(serial_no__icontains=search) | Q(model_name__icontains=search)
-                | Q(brand__name__icontains=search) | Q(site__name__icontains=search)
-                | Q(site__customer__name__icontains=search)
+                | Q(brand__name__icontains=search) | Q(site__name__matches=search)
+                | Q(site__customer__name__matches=search)
             )
         return Response([_machine(asset) for asset in assets[:100]])
 
@@ -672,7 +729,7 @@ class NewInternalTicketView(APIView):
         country = get_active_country(request) or technician.country
         people = ReassignInternalTicketForm(country=country).fields['assigned_to'].queryset
         return Response({
-            'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.get_role_display()}'}
+            'people': [{'value': person.pk, 'label': f'{person.full_name} — {person.title}'}
                        for person in people],
             'me': technician.pk,
         })
@@ -707,6 +764,8 @@ class InternalTicketView(APIView):
         technician, ticket = _internal_ticket_for(request, pk)
         if ticket.status != CustomerTicket.Status.NEW:
             return Response({'detail': str(_('This internal task is closed.'))}, status=400)
+        if not can_act_on_internal_ticket(technician, ticket):
+            raise PermissionDenied
         action = request.data.get('action')
         note = None
         if action == 'note':
@@ -721,9 +780,13 @@ class InternalTicketView(APIView):
             reassign_internal_ticket(technician, request.user, ticket, form.cleaned_data['assigned_to'])
         elif action == 'close':
             form = CloseTicketForm({'close_reason': request.data.get('result', '')})
+            outcome = str(request.data.get('claim_outcome', ''))
+            if ticket.is_claim and outcome not in CustomerTicket.ClaimOutcome.values:
+                return Response({'detail': str(_('A claim closes with its result: credit, replacement, or rejected.'))},
+                                status=400)
             if not form.is_valid():
                 return Response({'detail': str(_('Please write the result.'))}, status=400)
-            close_internal_ticket(technician, request.user, ticket, form.cleaned_data['close_reason'])
+            close_internal_ticket(technician, request.user, ticket, form.cleaned_data['close_reason'], outcome)
         else:
             return Response({'detail': 'Unknown action.'}, status=400)
         data = internal_ticket_for_app(request, technician, ticket)
@@ -773,7 +836,28 @@ class TeamMapView(APIView):
             'attention': [{'text': str(item['text']), 'level': item['level'], 'task_id': item['task_id']}
                           for item in data['attention']],
             'without_taps': [person.full_name for person in data['technicians'] if person.last_tap is None],
+            'area': _country_area(get_active_country(request) or technician.country),
         })
+
+
+def _country_area(country):
+    """Where the map opens before anyone has tapped: the middle of the
+    country's branches that have a map location — the median, so one
+    mistyped location (another continent) can't pull it away — spanning the
+    middle half of them. None with no located branch."""
+    from statistics import median
+
+    from customers.models import Site
+
+    points = list(Site.objects.filter(customer__country=country, latitude__isnull=False, longitude__isnull=False)
+                  .values_list('latitude', 'longitude'))
+    if not points:
+        return None
+    latitudes, longitudes = sorted(float(lat) for lat, _ in points), sorted(float(lng) for _, lng in points)
+    quarter = len(points) // 4
+    middle = slice(quarter, len(points) - quarter)
+    spread = max(latitudes[middle][-1] - latitudes[middle][0], longitudes[middle][-1] - longitudes[middle][0])
+    return {'latitude': median(latitudes), 'longitude': median(longitudes), 'delta': min(max(spread * 1.5, 0.3), 5)}
 
 
 class DashboardView(APIView):
@@ -797,8 +881,12 @@ class DashboardView(APIView):
         # The decisions themselves on top (waiting_for); the counts below leave out what that lists.
         waiting = waiting_for(viewer, country)
         listed = ('status=completed', 'status=pending_supervisor_review', '/tasks/tickets/internal/')
+        from tasks.alarms import company_summary
+
         return Response({
             'country': country.display_name,
+            # Everything to watch across the company, for whoever watches it; null for anyone else.
+            'company_summary': company_summary(viewer),
             'waiting': [{**item, 'title': str(item['title']), 'detail': str(item['detail'])} for item in waiting],
             'actions': [
                 {'label': str(item['label']), 'count': item['count'], 'level': item['level'], 'url': item['url']}
@@ -836,19 +924,21 @@ class StaffAccountsView(APIView):
         search = request.query_params.get('q', '').strip()
         if search:
             people = people.filter(
-                Q(full_name__icontains=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
+                Q(full_name__matches=search) | Q(user__username__icontains=search) | Q(user__email__icontains=search),
             )
         now = timezone.now()
         rows = []
         for person in people[:200]:
             status_value = staff_account_status(person, locked, now)
             rows.append({
-                'id': person.pk, 'name': person.full_name, 'role': person.get_role_display(),
+                'id': person.pk, 'name': person.full_name, 'role': person.title,
                 'username': person.user.username if person.user_id else '',
                 'status': status_value, 'status_display': str(StaffAccountStatus(status_value).label),
                 'has_login': person.user_id is not None,
                 'is_active': bool(person.user_id and person.user.is_active),
                 'can_manage': person.user_id is not None and can_manage_account(actor, person),
+                # A temporary password: the Admin's alone (people.permissions.can_set_password).
+                'can_set_password': can_set_password(actor),
             })
         return Response(rows)
 
@@ -888,7 +978,7 @@ class WebsiteMenuView(APIView):
     def get(self, request):
         technician = request.user.technician
         allowed = set(
-            RolePermission.objects.filter(role=technician.role, allowed=True).values_list('permission', flat=True),
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
         )
         with translation.override(technician.app_language):
             groups = nav_groups(nav_pages(technician, allowed), '')
@@ -1023,7 +1113,7 @@ class PersonView(APIView):
         return Response({
             'id': person.pk,
             'name': person.full_name,
-            'role': person.get_role_display(),
+            'role': person.title,
             'photo_url': signed_media_url(request, person.photo.url) if person.photo else '',
             'phone': person.phone,
             'email': person.user.email if person.user_id else '',
@@ -1241,7 +1331,7 @@ class TeamTodayView(APIView):
         return Response([{
             'id': row['technician'].pk,
             'name': row['technician'].full_name,
-            'role': row['technician'].get_role_display(),
+            'role': row['technician'].title,
             'photo_url': (signed_media_url(request, row['technician'].photo.url)
                           if row['technician'].photo else ''),
             'phone': row['technician'].phone,
@@ -1271,7 +1361,7 @@ class TeamProgressView(APIView):
                 {
                     'id': row['technician'].pk,
                     'name': row['technician'].full_name,
-                    'role': row['technician'].get_role_display(),
+                    'role': row['technician'].title,
                     'photo_url': (signed_media_url(request, row['technician'].photo.url)
                                   if row['technician'].photo else ''),
                     'rank': row['rank'],
@@ -1336,6 +1426,10 @@ class TaskFilterChoicesView(APIView):
 TEAM_LIST_PAGE_SIZE = 30
 
 
+# An older app asking for the country's tasks without pages gets at most this many (newest first).
+OLD_APP_TASK_LIMIT = 200
+
+
 class TaskListView(APIView):
     """The country's tasks — the website's task list, with the same filters
     (tasks.views.filtered_tasks: status, q, lead=none, scheduled=none,
@@ -1351,8 +1445,8 @@ class TaskListView(APIView):
         technician = request.user.technician
         tasks = filtered_tasks(params, technician, get_active_country(request))
         context = {'unread': _unread_messages(technician)}
-        if 'page' not in params:  # older apps: the whole list
-            return Response(TaskListSerializer(tasks, many=True, context=context).data)
+        if 'page' not in params:  # older apps: the list, newest first — capped, so it can't grow without end
+            return Response(TaskListSerializer(tasks[:OLD_APP_TASK_LIMIT], many=True, context=context).data)
         # A page at a time (?page=1, 2…, 30 each), with how many there are in all.
         page_number = int(params['page']) if str(params['page']).isdigit() and int(params['page']) > 0 else 1
         size = TEAM_LIST_PAGE_SIZE
@@ -1367,7 +1461,7 @@ class TaskListView(APIView):
 def _get_my_assignment(request, pk):
     return get_object_or_404(
         TaskAssignment.objects.select_related(
-            'task__site__customer__country', 'task__task_type', 'task__brand', 'task__required_skill',
+            'task__site__customer__country', 'task__task_type', 'task__brand',
         ),
         task__pk=pk, technician=request.user.technician, is_active=True,
     )
@@ -1388,6 +1482,7 @@ class MyTaskDetailView(APIView):
         next_action = _next_technician_action(task) if is_lead else None
         is_paused = is_lead and task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
         context = {
+            'request': request,  # signed links to the photos (spots.media)
             'next_action': next_action,
             'is_lead': is_lead,
             'can_file_report': is_lead and task.status in REPORT_EDITABLE_STATUSES and not is_paused,
@@ -1408,9 +1503,12 @@ class MyTaskActionView(APIView):
 
     permission_classes = [IsTechnician]
 
+    @transaction.atomic
     def post(self, request, pk):
         assignment = _get_my_assignment(request, pk)
-        task = assignment.task
+        # One tap at a time on a task (an app retry, a double tap): locked, read again.
+        task = Task.objects.select_for_update().get(pk=assignment.task_id)
+        assignment.task = task
         is_lead = assignment.role == TaskAssignment.Role.LEAD
         if not is_lead:
             return Response({'detail': 'Only the lead can act on this task.'}, status=status.HTTP_403_FORBIDDEN)
@@ -1430,6 +1528,13 @@ class MyTaskActionView(APIView):
             ship_and_tell_customer(task, request.user, company, str(request.data.get('shipping_tracking_number') or ''))
             return Response({'status': task.status})
 
+        if action == 'incident':  # a safety incident (tasks.equipment.report_safety_incident)
+            note = str(request.data.get('note', '')).strip()
+            if not note:
+                return Response({'detail': str(_('Please say what happened.'))}, status=status.HTTP_400_BAD_REQUEST)
+            report_safety_incident(task, request.user, note)
+            return Response({'status': task.status})
+
         if action == 'undo':
             if not undo_last_tap(task, request.user):
                 return Response(
@@ -1444,6 +1549,8 @@ class MyTaskActionView(APIView):
             if new_status:
                 task.status = new_status
                 task.save(update_fields=['status'])
+            if event_type == TaskEvent.EventType.EN_ROUTE:
+                tell_customer_on_the_way(task, request.user)
             return Response({'status': task.status})
 
         is_paused = task.status == Task.Status.IN_PROGRESS and _task_is_paused(task)
@@ -1479,17 +1586,16 @@ class MyTaskAttachmentView(APIView):
 
     def post(self, request, pk):
         assignment = _get_my_assignment(request, pk)
-        form = TaskAttachmentUploadForm(request.data, request.FILES)
+        # `asset`: the machine it shows (its card on the report) — only one at this task's branch;
+        # none: the branch as a whole, which has no serial plate.
+        form = TaskAttachmentUploadForm(request.data, request.FILES, site=assignment.task.site)
         if not form.is_valid():
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-        # `asset`: the machine it shows (its card on the report) — only one at this task's branch.
-        asset = None
-        if request.data.get('asset'):
-            asset = Asset.objects.filter(pk=request.data['asset'], site=assignment.task.site).first()
-            if asset is None:
-                return Response({'asset': ['That machine is not at this branch.']}, status=status.HTTP_400_BAD_REQUEST)
+        if form.cleaned_data['purpose'] == TaskAttachment.Purpose.SERIAL_PLATE:
+            replace_serial_plate(assignment.task, form.cleaned_data['asset'])
         attachment = _save_attachment(
-            request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'], asset=asset,
+            request, assignment.task, form.cleaned_data['file'], form.cleaned_data['purpose'],
+            asset=form.cleaned_data['asset'],
         )
         return Response(TaskAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -1639,6 +1745,8 @@ class MyTaskReportView(APIView):
             # final once the report has been sent.
             'time_on_site': hours_text(task.time_on_site()) or None,  # "1:32"
             'time_is_final': bool(report and report.submitted_at),
+            # Before the first filing: the parts the task needed, to correct to what was fitted.
+            'parts_suggested': [] if report else report_parts(task),
             # Each helper's hours box: empty = same as the report's.
             'helpers': [
                 {'id': a.pk, 'technician_name': a.technician.full_name, 'labour_hours': a.labour_hours}
@@ -1656,6 +1764,8 @@ class MyTaskReportView(APIView):
             ],
             # Which step: receiving, loading or installation (the screen's words follow it).
             'checklist_step': equipment_step(task),
+            # A loading's dispatch photo (the loaded truck or the delivery note), once taken.
+            'has_dispatch_photo': not dispatch_photo_missing(task) if equipment_step(task) == 'loading' else None,
         })
 
     def post(self, request, pk):
@@ -1728,7 +1838,8 @@ class MyTaskReportView(APIView):
                 TaskProductCheckForm(
                     {key: '' if row.get(key) is None else row.get(key) for key in (
                         'id', 'product_code', 'status', 'serial_number', 'frame', 'arm', 'padding', 'trim',
-                        'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status',
+                        'replacement', 'note', 'kind', 'quantity', 'received', 'rest_status', 'serial_unreachable',
+                        'tested_working',
                     )},
                     initial=known.get(row.get('id'), {}), step=equipment_step(task),
                 )
@@ -1763,6 +1874,17 @@ class MyTaskReportView(APIView):
                 drawn_signature='' if request.data.get('signature_waived_reason') else request.data.get('signature') or '',
             )
             return Response({'html': html, 'problems': [str(problem) for problem in problems]})
+
+        if dispatch_photo_missing(task):  # a loading leaves with its dispatch photo
+            return Response({'dispatch_photo': [str(DISPATCH_PHOTO_MISSING)]}, status=status.HTTP_400_BAD_REQUEST)
+        if machine_forms is not None:
+            gaps = report_machine_photo_gaps(
+                task,
+                [form.cleaned_data for form in machine_forms if isinstance(form, ExistingAssetOutcomeForm)],
+                [form.cleaned_data for form in machine_forms if isinstance(form, NewAssetForm)],
+            )
+            if gaps:
+                return Response({'photos': [str(gap) for gap in gaps]}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             if checklist_forms is not None:
@@ -1848,7 +1970,7 @@ class TaskMessagesView(APIView):
                 'id': message.pk, 'message': message.message, 'sent_at': message.sent_at,
                 'sent_by': getattr(getattr(message.sent_by, 'technician', None), 'full_name', '')
                 or message.sent_by.get_username(),
-                'role': getattr(getattr(message.sent_by, 'technician', None), 'get_role_display', lambda: '')(),
+                'role': getattr(getattr(message.sent_by, 'technician', None), 'title', ''),
                 'mine': message.sent_by_id == request.user.pk,
             }
             for message in task.messages.select_related('sent_by__technician').order_by('sent_at')
@@ -1876,7 +1998,7 @@ def _get_team_task(request, pk):
     """
     return scoped_or_404(
         Task.objects.select_related(
-            'site__customer__country', 'task_type', 'brand', 'required_skill', 'responsible_supervisor', 'report',
+            'site__customer__country', 'task_type', 'brand', 'responsible_supervisor', 'report',
         ).prefetch_related('assignments__technician', 'report__parts_used'),
         pk, request.user.technician, get_active_country(request), 'site__customer__country',
     )
@@ -1894,6 +2016,7 @@ def _team_task_response(request, task):
     technician = request.user.technician
     owns = _owns_task(request, task)
     context = {
+        'request': request,  # signed links to the photos (spots.media)
         'requires_signature': bool(task.task_type and task.task_type.requires_signature),
         'can_assign': (
             owns and has_role_permission(request, RolePermission.Permission.ASSIGN_TASKS)
@@ -1905,7 +2028,10 @@ def _team_task_response(request, task):
         'can_supervisor_approve': (
             task.status == Task.Status.PENDING_SUPERVISOR_REVIEW and can_supervisor_approve(technician, task)
         ),
-        'can_manager_approve': task.status == Task.Status.COMPLETED and can_give_final_approval(technician),
+        'can_manager_approve': (
+            task.status == Task.Status.COMPLETED and can_give_final_approval(technician)
+            and not gave_supervisor_approval(task, request.user)
+        ),
         # Negligence flags: the manager tier's only (TaskDetailSerializer.get_events).
         'show_negligence': technician.is_manager_tier,
         # What the customer reported, machine by machine, with their photos (as on the technician's own screen).
@@ -1914,6 +2040,9 @@ def _team_task_response(request, task):
         'shipment': shipment_for_app(task, technician),
     }
     data = TeamTaskDetailSerializer(task, context=context).data
+    data.update(_parts_payload(request, task))
+    # An installation's site checked ready before the truck goes (None for any other task).
+    data['site_readiness'] = site_readiness_for_app(task, technician)
     # What a manager can do here, as on the website's task page (TaskManageView).
     is_manager = technician.is_manager_tier
     # Its machines (an equipment task), the chain around it, and the follow-up offer.
@@ -1944,16 +2073,30 @@ def _team_task_response(request, task):
             ],
             'steps': [
                 {
-                    'value': step, 'label': str(TaskType.Category(step).label),
+                    'value': step, 'label': str(next_step_label(step)),
                     'sites': [
-                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}'}
+                        {'value': str(site.pk), 'label': f'{site.customer.country.display_name} — {site.customer.name} — {site.name}',
+                         'country': site.customer.country_id}
                         for site in next_step_sites(technician, step)
                     ],
                 }
                 for step in NEXT_STEPS.get(equipment_step(task), ())
             ],
+            # Who supervises it there: empty keeps this task's own, within its country;
+            # another country needs someone from there (tasks.views.next_step_supervisor).
+            'supervisors': [
+                {'value': str(person.pk), 'label': f'{person.country.display_name} — {person.full_name}',
+                 'country': person.country_id}
+                for person in next_step_supervisors(technician)
+            ],
+            # "+ New branch": whoever creates branches, among the customers they reach.
+            'customers': [
+                {'value': str(customer.pk), 'label': f'{customer.country.display_name} — {customer.name}',
+                 'country': customer.country_id}
+                for customer in next_step_customers(technician)
+            ] if can_create_customers(technician) else [],
             # The button's words.
-            'title': str(_('Send to installation')),
+            'title': str(_('Send on')),
         } if lines_to_carry(task) and technician.is_manager_tier else None,
     } if lines or task.previous_task_id else None
     data['actions'] = _task_actions(request, task, owns)
@@ -1985,9 +2128,11 @@ class TaskLinesView(APIView):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
         is_manager = request.user.technician.is_manager_tier
-        # A loading takes machines out of a warehouse's stock: the manager tier's decision.
-        if equipment_step(task) == TaskType.Category.LOADING and not is_manager:
-            return task, str(_('Only a manager plans the machines on a loading.'))
+        # A loading's or an installation's machines: the Manager, Project Manager or Admin only.
+        if equipment_step(task) in (TaskType.Category.LOADING, TaskType.Category.INSTALLATION) and not (
+            can_plan_equipment(request.user.technician)
+        ):
+            return task, str(_('Only a manager plans the machines on a loading or an installation.'))
         if not is_manager and task.status in PRODUCTS_LOCKED_STATUSES:
             return task, str(_('This task has been completed, so its products can only be changed by a manager or '
                                'administrator.'))
@@ -2038,9 +2183,15 @@ class TaskLinesView(APIView):
         errors = [form.errors for form in forms_ if not form.is_valid()]
         if errors:
             return Response({'lines': errors}, status=status.HTTP_400_BAD_REQUEST)
-        with transaction.atomic():
-            save_planned_lines(task, [form.cleaned_data for form in forms_])
-        warning = loading_shortfall(task) if equipment_step(task) == TaskType.Category.LOADING else ''
+        try:
+            with transaction.atomic():
+                save_planned_lines(task, [form.cleaned_data for form in forms_])
+                warning = ''
+                if equipment_step(task) == TaskType.Category.LOADING:  # beyond the stock: only with a reason
+                    warning = check_beyond_stock(task, str(request.data.get('stock_reason') or ''), request.user)
+        except BeyondStock as short:
+            return Response({'detail': str(_('%(short)s To plan it anyway, say why.') % {'short': short})},
+                            status=status.HTTP_400_BAD_REQUEST)
         return self.get(request, pk, warning=str(warning))
 
 
@@ -2054,19 +2205,184 @@ class TaskNextStepView(APIView):
 
     def post(self, request, pk):
         task = _get_team_task(request, pk)
-        viewer = require_manager(request)  # sending machines on is the manager tier's only
+        viewer = require_manager(request)  # sending machines on: the Manager, Project Manager or Admin only
+        if not can_plan_equipment(viewer):
+            raise PermissionDenied
         step = request.data.get('step')
         if step not in NEXT_STEPS.get(equipment_step(task), ()):
             return Response({'detail': 'Not a next step for this task.'}, status=status.HTTP_400_BAD_REQUEST)
-        site = get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
+        site, error = (None, '')
+        if step == TaskType.Category.INSTALLATION:  # "+ New branch", as on the website (3A)
+            site, error = new_branch_for_next_step(request._request, viewer, request.data)
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        site = site or get_object_or_404(next_step_sites(viewer, step), pk=request.data.get('site'))
         task_type = TaskType.objects.filter(category=step, is_active=True).order_by('pk').first()
         wanted = {str(value) for value in request.data.get('lines') or []}
         chosen = [line for line in lines_to_carry(task) if str(line.pk) in wanted]
         if task_type is None or not chosen:
             return Response({'detail': str(_('Choose at least one machine to carry to the next step.'))},
                             status=status.HTTP_400_BAD_REQUEST)
-        next_task = create_next_step(request._request, task, task_type, site, chosen)
+        supervisor, error = next_step_supervisor(viewer, task, site, request.data.get('supervisor'))
+        if error:
+            return Response({'detail': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        next_task = create_next_step(request._request, task, task_type, site, chosen, supervisor)
         return Response({'id': next_task.pk, 'task_number': next_task.task_number}, status=status.HTTP_201_CREATED)
+
+
+class MyTaskMachineView(APIView):
+    """Register a machine during the visit (RegisterMachineForm: brand, model,
+    serial_no or no_serial, code, ticket_machine), so its photos can be taken
+    now — tasks.views.register_task_machine. Returns its card."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        form = RegisterMachineForm(request.data)
+        if not form.is_valid():
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+        asset = register_task_machine(assignment.task, form.cleaned_data)
+        return Response({'asset_id': asset.pk, 'name': _machine_label(asset), 'serial_no': asset.serial_no},
+                        status=status.HTTP_201_CREATED)
+
+
+class MyTaskConfirmPhotoView(APIView):
+    """The technician's "Use this" / "Use these": the customer's photos of a
+    machine (`asset`) for one `slot` — serial_plate, or before (all of them) —
+    tasks.views.confirm_customer_files. (`name`: one photo, from apps before.)
+    Returns the attachments."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        assignment = _get_my_assignment(request, pk)
+        attachments = confirm_customer_files(
+            request, assignment.task, int(request.data.get('asset') or 0),
+            slot=request.data.get('slot'), name=request.data.get('name') or None,
+        )
+        if not attachments:
+            return Response({'detail': str(_('That photo is no longer offered for this machine.'))},
+                            status=status.HTTP_400_BAD_REQUEST)
+        data = TaskAttachmentSerializer(attachments, many=True, context={'request': request}).data
+        # One photo asked for (an app from before): that one, as it expects.
+        return Response(data[0] if request.data.get('name') else data, status=status.HTTP_201_CREATED)
+
+
+def _parts_payload(request, task):
+    """The team task page's Parts needed: who may change them (editing one: managers only),
+    and whether they can be marked prepared (not a part shipment: it has its own step)."""
+    from tasks.parts_needed import all_in, can_prepare, is_shipment
+    technician = request.user.technician
+    return {
+        'can_change_parts': can_change_task(technician, task),
+        'can_edit_parts': technician.is_manager_tier,
+        'can_prepare_parts': can_prepare(technician) and all_in(task) and task.parts_prepared_at is None
+        and not is_shipment(task),
+    }
+
+
+class TaskSiteReadinessView(APIView):
+    """An installation's site checks from the app (space_and_floor, power,
+    access, date_confirmed, note) — its owner or a manager, as on the website."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        task = _get_team_task(request, pk)
+        if not is_installation(task):
+            raise Http404
+        if not can_change_task(request.user.technician, task):
+            raise PermissionDenied
+        save_site_readiness(task, request.user, request.data)
+        task.refresh_from_db()
+        return Response(site_readiness_for_app(task, request.user.technician))
+
+
+class TaskPartsNeededView(APIView):
+    """The team task page's Parts needed (tasks.parts_needed), its owner or someone
+    stepping in: POST adds one (PartNeededForm: product_code, description, quantity,
+    source stock|ordered, expected_on); POST with `line` and `action` arrived|remove
+    marks an ordered one arrived, or removes one. Returns the task's parts."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        from tasks import parts_needed
+        from tasks.forms import PartNeededForm
+
+        task = _get_team_task(request, pk)
+        if request.data.get('action') == 'edit':
+            if not request.user.technician.is_manager_tier:
+                raise PermissionDenied  # correcting a part: managers only
+            _require_task_owner(request, task)
+            if not request.data.get('line'):
+                return Response({'detail': 'Which part?'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            _require_task_owner(request, task)
+        if request.data.get('line'):
+            line = get_object_or_404(task.parts_needed, pk=request.data['line'])
+            if request.data.get('action') == 'arrived':
+                parts_needed.mark_arrived(line, request.user)
+            elif request.data.get('action') == 'remove':
+                line.delete()
+            elif request.data.get('action') == 'edit':
+                form = PartNeededForm(request.data)
+                if not form.is_valid():
+                    return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+                parts_needed.edit_part(line, form.cleaned_data, request.user)
+            else:
+                return Response({'detail': 'Unknown action.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            form = PartNeededForm(request.data)
+            if not form.is_valid():
+                return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+            parts_needed.add_part(task, request.user, form.cleaned_data)
+        return Response({
+            'parts_needed': TaskDetailSerializer(task, context={'request': request}).data['parts_needed'],
+            **_parts_payload(request, task),
+        })
+
+
+class TaskPartsPreparedView(APIView):
+    """The warehouse (or the manager tier) marks a repair's parts prepared, once they're all in."""
+
+    permission_classes = [IsTechnician]
+
+    def post(self, request, pk):
+        from tasks.parts_needed import all_in, can_prepare, mark_prepared
+
+        task = _get_team_task(request, pk)
+        if not can_prepare(request.user.technician) or not all_in(task):
+            raise PermissionDenied
+        mark_prepared(task, request.user)
+        return Response({'parts_prepared': True})
+
+
+class PartsToPrepareView(APIView):
+    """The repairs whose parts are all in and not prepared yet, in the active
+    country, the soonest visit first (tasks.parts_needed.to_prepare) — the
+    warehouse manager's list."""
+
+    permission_classes = [IsTechnician]
+
+    def get(self, request):
+        from tasks.parts_needed import can_prepare, to_prepare
+
+        technician = request.user.technician
+        if not can_prepare(technician):
+            raise PermissionDenied
+        return Response([
+            {
+                'task_id': task.pk, 'task_number': task.task_number, 'customer': task.site.customer.name,
+                'site': task.site.name, 'scheduled_for': task.scheduled_for,
+                'parts': [
+                    {'code': row['line'].product_code, 'description': row['line'].description, 'quantity': row['line'].quantity}
+                    for row in part_rows(task)
+                ],
+            }
+            for task in to_prepare(get_active_country(request) or technician.country)
+        ])
 
 
 class TaskFollowUpView(APIView):
@@ -2080,9 +2396,10 @@ class TaskFollowUpView(APIView):
         task = _get_team_task(request, pk)
         if not has_role_permission(request, RolePermission.Permission.CREATE_TASKS):
             raise PermissionDenied
+        _require_task_owner(request, task)
         if not still_to_install(task):
             return Response({'detail': str(_('Nothing is left to install on this task.'))}, status=status.HTTP_400_BAD_REQUEST)
-        follow_up = create_follow_up(task, request.user)
+        follow_up = create_follow_up(task, request.user, request)
         return Response({'id': follow_up.pk, 'task_number': follow_up.task_number}, status=status.HTTP_201_CREATED)
 
 
@@ -2217,9 +2534,12 @@ def _describe_form(request, form):
         fields.append({
             'name': field.html_name, 'label': str(field.label), 'kind': kind, 'required': field.field.required,
             'value': value if kind != 'choice' else str(value or ''),
+            # No blank entry ("---------"): the app's picker offers its own "None" for an optional field,
+            # and two entries with one value break its list (duplicate keys).
             'choices': [
                 {'value': str(v), 'label': str(l)}
                 for v, l in (getattr(field.field, 'choices', None) or getattr(field.field.widget, 'choices', []))
+                if str(v) != ''
             ] if kind == 'choice' else [],
             'help': str(field.help_text or ''),
         })
@@ -2237,6 +2557,7 @@ class TaskDocumentView(APIView):
         task = _get_team_task(request, pk)
         if request.user.technician.role == Technician.Role.TECHNICIAN:
             raise PermissionDenied
+        _require_task_owner(request, task)
         form = StaffAttachmentUploadForm(request.data, request.FILES)
         if not form.is_valid():
             return Response(_form_errors(form), status=status.HTTP_400_BAD_REQUEST)
@@ -2317,9 +2638,25 @@ class BellView(APIView):
             if kind == 'new_task':
                 text = _('New task')
             elif kind == 'unscheduled_overdue':
-                text, alarm = _('Not scheduled within 24 working hours'), True
+                text = _('Not scheduled within 3 working days') if item.get('later') else _(
+                    'Not scheduled within 24 working hours')
+                alarm = True
             elif kind == 'report_late':
                 text, alarm = _('Report waiting more than 2 working days for approval'), True
+            elif kind == 'blocked_long':
+                text = _('Blocked for more than 2 working days') if item.get('later') else _(
+                    'Blocked for more than 2 working hours')
+                alarm = True
+            elif kind == 'blocked_long_many':
+                text = (ngettext(
+                    '%(count)s task blocked for more than 2 working days',
+                    '%(count)s tasks blocked for more than 2 working days', item['count'],
+                ) if item.get('later') else ngettext(
+                    '%(count)s task blocked for more than 2 working hours',
+                    '%(count)s tasks blocked for more than 2 working hours', item['count'],
+                )) % {'count': item['count']}
+                # Their Dashboard's company summary lists what needs watching.
+                alarm, opens = True, {'screen': 'app', 'path': '/dashboard'}
             elif kind == 'report_late_many':
                 text = ngettext(
                     '%(count)s report waiting more than 2 working days for approval',
@@ -2327,10 +2664,13 @@ class BellView(APIView):
                 ) % {'count': item['count']}
                 alarm, opens = True, {'screen': 'app', 'path': '/tasks'}  # each one is in Waiting for me
             elif kind == 'unscheduled_overdue_many':
-                text = ngettext(
+                text = (ngettext(
+                    '%(count)s task not scheduled within 3 working days',
+                    '%(count)s tasks not scheduled within 3 working days', item['count'],
+                ) if item.get('later') else ngettext(
                     '%(count)s task not scheduled within 24 working hours',
                     '%(count)s tasks not scheduled within 24 working hours', item['count'],
-                ) % {'count': item['count']}
+                )) % {'count': item['count']}
                 alarm, opens = True, {'screen': 'app', 'path': '/tasks?scope=all'}  # Tasks → All in the country
             elif kind == 'schedule_change_pending':
                 text, alarm = _('Change of visit time requested — approval required'), True
@@ -2423,17 +2763,32 @@ class TaskActionView(APIView):
                 rebook_visit(task, request.user, form.cleaned_data['scheduled_for'], form.cleaned_data['note'])
         elif action == 'send_feedback_request':
             require_manager(request)
+            _require_task_owner(request, task)
             error = send_feedback_request(request, task)
         elif action == 'reopen':
             if technician.role != Technician.Role.ADMIN:
                 raise PermissionDenied
             error = reopen_task(task, request.user)
+        elif action == 'shipment_direct':
+            # From the factory straight to the customer (tasks.shipments.mark_shipped_direct).
+            from tasks import shipments
+            if not is_part_shipment(task):
+                raise Http404
+            if not shipments.can_ship_direct(technician, task) or shipments.stage(task) not in (shipments.PREPARING, shipments.READY):
+                raise PermissionDenied
+            if data.get('shipping_company', '') not in ShippingCompany.values:
+                error = _('Please choose the shipping company.')
+            else:
+                shipments.mark_shipped_direct(task, str(data.get('pak_reference_number', '')).strip()[:100])
+                ship_and_tell_customer(task, request.user, data['shipping_company'], data.get('shipping_tracking_number', ''))
         elif action in ('shipment_ready', 'shipment_shipped', 'book_fitting'):
             # A part shipment's steps, as on the office's panel (tasks.shipments).
             from tasks import shipments
             if not is_part_shipment(task):
                 raise Http404
             stage = shipments.stage(task)
+            if action in ('shipment_ready', 'shipment_shipped') and not shipments.from_our_stock(task):
+                raise PermissionDenied  # no stock of ours here: only "Sent direct from the factory"
             if action == 'shipment_ready':
                 if not shipments.can_prepare(technician, task) or stage not in (shipments.PREPARING, shipments.READY):
                     raise PermissionDenied
@@ -2488,9 +2843,7 @@ class TeamTaskCandidatesView(APIView):
         task = _get_team_task(request, pk)
         _require_task_owner(request, task)
         assigned_ids = {a.technician_id for a in task.assignments.all() if a.is_active}
-        candidates = _technicians_with_next_scheduled_task(
-            _candidates_with_skill_level(_assignment_candidates(task, exclude_ids=assigned_ids), task),
-        )
+        candidates = _with_day_load(_assignment_candidates(task, exclude_ids=assigned_ids), task)
         return Response([
             {
                 'id': technician.pk,
@@ -2499,11 +2852,9 @@ class TeamTaskCandidatesView(APIView):
                 # Their home country when they're here on a trip, else null.
                 'visiting_from': technician.country.display_name
                 if technician.country_id != task.site.customer.country_id else None,
-                'skill_level': technician.skill_level,
-                'next_task_number': technician.next_scheduled_task.task_number
-                if technician.next_scheduled_task else None,
-                'next_task_at': technician.next_scheduled_task.scheduled_for
-                if technician.next_scheduled_task else None,
+                # Their day, in the same words as the website: 'free', 'busy', 'clash', 'off', 'no_day'.
+                'day_state': technician.day_state,
+                'day_text': str(day_text(technician)),
             }
             for technician in candidates
         ])
@@ -2619,6 +2970,7 @@ class TeamTaskApproveView(APIView):
         if task.status == Task.Status.PENDING_SUPERVISOR_REVIEW:
             if not can_supervisor_approve(technician, task):
                 raise PermissionDenied
+            _require_task_owner(request, task)
             approve_report_as_supervisor(task, request.user)
         elif task.status == Task.Status.COMPLETED:
             require_final_approver(request, task)
@@ -2810,8 +3162,7 @@ class TicketReplyView(APIView):
                 raise PermissionDenied
             add_ticket_note(request.user, ticket, message)
             return Response({'message': _('Note added.')}, status=201)
-        if not (access['can_manage'] and ticket.status not in (
-                CustomerTicket.Status.CLOSED, CustomerTicket.Status.DISMISSED)):
+        if not (access['can_manage'] and _ticket_is_open(ticket)):
             raise PermissionDenied
         send_staff_reply(request, ticket, message)
         return Response({'message': _('Reply sent.')}, status=201)

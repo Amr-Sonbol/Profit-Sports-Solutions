@@ -17,15 +17,15 @@ import { useSession } from '@/context/auth';
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
 /** Website pages that are tabs in the app (each shows with the same permission): not repeated here. */
-const TABS = new Set(['/tasks/', '/tasks/dashboard/', '/tasks/tickets/', '/tasks/tickets/internal/', '/tasks/tickets/internal/new/', '/tasks/technicians/', '/tasks/technicians/progress/']);
+const TABS = new Set(['/tasks/', '/tasks/dashboard/', '/tasks/tickets/', '/tasks/tickets/internal/', '/tasks/tickets/internal/new/', '/tasks/technicians/', '/tasks/technicians/progress/', '/tasks/technicians/map/']);
 
 /** Website pages the app has its own screen for: those open natively. */
 const NATIVE: Record<string, string> = {
   '/customers/': '/customers',
   '/tasks/machines/': '/machines',
   '/tasks/technicians/hours/': '/hours',
-  '/tasks/technicians/map/': '/team-map',
   '/tasks/technicians/accounts/': '/staff-accounts',
+  '/tasks/parts-to-prepare/': '/parts-to-prepare',
 };
 
 /** The website menu's icon names, as the nearest Ionicons. */

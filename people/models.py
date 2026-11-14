@@ -2,11 +2,11 @@ import secrets
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
-from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from reference.models import ConductArea, Country, Skill
+from spots.uploads import SafeFileValidator
 
 # Shared by TechnicianSkill, TechnicianConduct, and their assessment logs.
 SKILL_LEVEL_CHOICES = [(i, str(i)) for i in range(1, 5)]
@@ -51,6 +51,8 @@ class Technician(models.Model):
         COUNTRY_SUPPORT = 'country_support', _('Country Support Manager')
         WAREHOUSE_MANAGER = 'warehouse_manager', _('Warehouse Manager')
         OPERATIONS_MANAGER = 'operations_manager', _('Operations Manager')
+        # Every country, like the Operations Manager; above him on Staff accounts, below the Admin.
+        COO = 'coo', _('COO')
         # Like a Manager, in every country; no customer requests (docs/access_rules.md).
         PROJECT_MANAGER = 'project_manager', _('Project Manager')
         ADMIN = 'admin', _('Admin')
@@ -92,12 +94,28 @@ class Technician(models.Model):
         verbose_name=_('country'),
     )
     full_name = models.CharField(_('full name'), max_length=150)
+    # What they're called, apart from what they can do (`role`): a General
+    # Manager with an Operations Manager's access, a "Customer Service
+    # Coordinator" with Country Support's. Shown wherever a person is listed
+    # (`title`); the access role itself only where access is managed.
+    job_title = models.CharField(
+        _('job title'), max_length=100, blank=True,
+        help_text=_("What they're called, for example General Manager. Leave empty to use the role's name."),
+    )
     phone = models.CharField(_('phone'), max_length=30, blank=True)
     language = models.CharField(
         _('language'), max_length=2, choices=Language.choices,
         help_text=_('per person, not per country'),
     )
+    # The built-in role whose fixed rules apply (what the code checks: area,
+    # stepping in, approvals...). With a custom role, its base: the person's own
+    # switches then come from the custom role (permission_role).
     role = models.CharField(_('role'), max_length=20, choices=Role.choices)
+    custom_role = models.ForeignKey(
+        'people.CustomRole', on_delete=models.PROTECT, null=True, blank=True, related_name='people',
+        verbose_name=_('custom role'),
+        help_text=_('a role the Admin made, based on `role`; its own switches replace the base role\'s'),
+    )
     employment_type = models.CharField(
         _('employment type'), max_length=20, choices=EmploymentType.choices,
     )
@@ -121,7 +139,7 @@ class Technician(models.Model):
     )
     photo = models.FileField(
         _('photo'), upload_to=_technician_photo_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_PHOTO_EXTENSIONS)],
         help_text=_('shown on the roster, boards and task details'),
     )
 
@@ -157,9 +175,11 @@ class Technician(models.Model):
         on top: only admin can reach Roles & permissions itself (see
         require_admin) — checked separately with role == Role.ADMIN.
         """
+        if self.custom_role_id:
+            return False  # a role made on Roles & permissions: only its own switches (docs/access_rules.md)
         return self.role in (
-            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.ADMIN,
-            self.Role.PROJECT_MANAGER,
+            self.Role.MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO, self.Role.SUPPORT_MANAGER,
+            self.Role.ADMIN, self.Role.PROJECT_MANAGER,
         )
 
     @property
@@ -181,8 +201,11 @@ class Technician(models.Model):
         country's tasks, customers and people, the all-countries boards, the
         company-wide report and the shared lists (brands, countries, skills).
         A Manager is one per country, so stays in their own."""
+        if self.custom_role_id:
+            return False  # a role made on Roles & permissions stays in its own country
         return self.role in (
-            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER, self.Role.SUPPORT_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO,
+            self.Role.ADMIN,
         )
 
 
@@ -191,9 +214,12 @@ class Technician(models.Model):
         """Every manager role, not just the manager tier — who can see,
         open and convert any internal ticket in their country.
         """
+        if self.custom_role_id:
+            return False
         return self.role in (
             self.Role.MANAGER, self.Role.SUPPORT_MANAGER, self.Role.COUNTRY_SUPPORT,
-            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.ADMIN, self.Role.PROJECT_MANAGER,
+            self.Role.WAREHOUSE_MANAGER, self.Role.OPERATIONS_MANAGER, self.Role.COO, self.Role.ADMIN,
+            self.Role.PROJECT_MANAGER,
         )
 
     @property
@@ -203,6 +229,26 @@ class Technician(models.Model):
         Manager -> Operations Manager, who decides. None at the top.
         """
         return ESCALATION_CHAIN.get(self.role)
+
+    def get_role_display(self):
+        """The role's name: a custom role's own, or the built-in one's."""
+        if self.custom_role_id:
+            return self.custom_role.display_name
+        return str(dict(self.Role.choices).get(self.role, self.role))
+
+    @property
+    def permission_role(self):
+        """Whose switches (RolePermission rows) are this person's: their custom
+        role's, or their built-in role's."""
+        return self.custom_role.key if self.custom_role_id else self.role
+
+    def has_permission(self, permission):
+        return RolePermission.objects.filter(role=self.permission_role, permission=permission, allowed=True).exists()
+
+    @property
+    def title(self):
+        """What to call them: their job title, or their role's name without one."""
+        return self.job_title or self.get_role_display()
 
     def set_active(self, is_active, reason=''):
         """The one place is_active ever changes — keeps the linked login
@@ -216,6 +262,53 @@ class Technician(models.Model):
         if self.user_id is not None and self.user.is_active != is_active:
             self.user.is_active = is_active
             self.user.save(update_fields=['is_active'])
+
+
+class CustomRole(models.Model):
+    """A role the Admin made on Roles & permissions — "COO", "General Manager"
+    — based on a built-in role (`based_on`, any but Admin): its people follow
+    that role's fixed rules in the code, and its own switches (RolePermission
+    rows under `key`), which start as the base role's and the Admin then
+    changes (docs/access_rules.md).
+    """
+
+    name = models.CharField(_('name'), max_length=60, unique=True)
+    name_ar = models.CharField(_('name (Arabic)'), max_length=60, blank=True)
+    based_on = models.CharField(
+        _('based on'), max_length=20,
+        choices=[choice for choice in Technician.Role.choices if choice[0] != Technician.Role.ADMIN],
+    )
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('custom role')
+        verbose_name_plural = _('custom roles')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def key(self):
+        """Its switches' role key in RolePermission."""
+        return f'custom-{self.pk}'
+
+    @property
+    def display_name(self):
+        from django.utils.translation import get_language
+
+        return self.name_ar if self.name_ar and (get_language() or '').startswith('ar') else self.name
+
+
+def with_permission(permission):
+    """A Q for the people whose own switches allow `permission`: built-in roles
+    by role, custom roles by their key."""
+    from django.db.models import Q
+
+    keys = list(RolePermission.objects.filter(permission=permission, allowed=True).values_list('role', flat=True))
+    builtin = [key for key in keys if not key.startswith('custom-')]
+    custom = [int(key.split('-', 1)[1]) for key in keys if key.startswith('custom-')]
+    return Q(custom_role__isnull=True, role__in=builtin) | Q(custom_role_id__in=custom)
 
 
 ESCALATION_CHAIN = {
@@ -243,7 +336,9 @@ class RolePermission(models.Model):
         REVIEW_SKILLS = 'review_skills', _('Confirm technician skill levels')
         MANAGE_TICKETS = 'manage_tickets', _('Review customer-submitted tickets')
         MANAGE_TECHNICIANS = 'manage_technicians', _("Edit technicians' details and profile photos")
-        MANAGE_CUSTOMERS = 'manage_customers', _('View and edit customers and sites')
+        # Seeing customers (to plan the work) apart from changing them: a supervisor sees, doesn't edit.
+        VIEW_CUSTOMERS = 'view_customers', _('View customers and sites')
+        MANAGE_CUSTOMERS = 'manage_customers', _('Edit customers, sites and machines')
         VIEW_MACHINES = 'view_machines', _('View machines and their task/ticket history')
         DECIDE_ESCALATED_TICKETS = 'decide_escalated_tickets', _('Decide tickets escalated to them')
         MANAGE_PARTS = 'manage_parts', _('Maintain the parts catalogue')
@@ -252,7 +347,8 @@ class RolePermission(models.Model):
         CUSTOMER_ACCOUNTS = 'customer_accounts', _('Manage customer portal accounts')
         VIEW_STOCK = 'view_stock', _('View warehouse stock')
 
-    role = models.CharField(_('role'), max_length=20, choices=Technician.Role.choices)
+    # A built-in role's code, or a custom role's key ("custom-7": CustomRole.key).
+    role = models.CharField(_('role'), max_length=20)
     permission = models.CharField(_('permission'), max_length=30, choices=Permission.choices)
     allowed = models.BooleanField(_('allowed'), default=False)
 
@@ -265,7 +361,9 @@ class RolePermission(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.get_role_display()} — {self.get_permission_display()}: {self.allowed}'
+        # A built-in role by its name; a custom role ("custom-7") by its key.
+        role = dict(Technician.Role.choices).get(self.role, self.role)
+        return f'{role} — {self.get_permission_display()}: {self.allowed}'
 
 
 def _default_new_ticket_roles():
@@ -400,7 +498,7 @@ class TechnicianSkill(models.Model):
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician performing this repair'),
     )
 
@@ -443,7 +541,7 @@ class TechnicianSkillAssessment(models.Model):
     note = models.CharField(_('note'), max_length=255, blank=True)
     evidence = models.FileField(
         _('evidence'), upload_to=_skill_evidence_path, null=True, blank=True,
-        validators=[FileExtensionValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
+        validators=[SafeFileValidator(allowed_extensions=ALLOWED_SKILL_EVIDENCE_EXTENSIONS)],
         help_text=_('photo or video of the technician performing this repair'),
     )
 
@@ -556,6 +654,50 @@ class PushDevice(models.Model):
 
     def __str__(self):
         return f'{self.technician} — {self.token[:24]}'
+
+
+class AuditEntry(models.Model):
+    """One thing done in the system, for the Audit log (spots.audit): who, from
+    where, when, to which record, and what it changed (each field's value
+    before and after). Passwords are never kept, only that one changed."""
+
+    class Action(models.TextChoices):
+        CREATED = 'created', _('Created')
+        CHANGED = 'changed', _('Changed')
+        DELETED = 'deleted', _('Deleted')
+        ACCOUNT = 'account', _('Account action')
+        SIGNED_IN = 'signed_in', _('Signed in')
+        SIGN_IN_FAILED = 'sign_in_failed', _('Sign-in failed')
+        SIGNED_OUT = 'signed_out', _('Signed out')
+
+    at = models.DateTimeField(_('when'), db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_entries',
+        verbose_name=_('who'),
+    )
+    # Kept as it was, even if the account goes later.
+    actor_name = models.CharField(_('who (name)'), max_length=150, blank=True)
+    ip = models.GenericIPAddressField(_('IP address'), null=True, blank=True)
+    action = models.CharField(_('what'), max_length=20, choices=Action.choices)
+    object_type = models.CharField(_('kind of record'), max_length=100, blank=True)
+    object_id = models.CharField(_('record'), max_length=64, blank=True)
+    object_repr = models.CharField(_('record (name)'), max_length=200, blank=True)
+    # {field: [before, after]}
+    changes = models.JSONField(_('changes'), default=dict, blank=True)
+    message = models.TextField(_('details'), blank=True)
+
+    class Meta:
+        verbose_name = _('audit entry')
+        verbose_name_plural = _('audit entries')
+        ordering = ['-at', '-pk']
+        indexes = [
+            models.Index(fields=['object_type', 'object_id']),
+            models.Index(fields=['actor', 'at']),
+            models.Index(fields=['action', 'at']),
+        ]
+
+    def __str__(self):
+        return f'{self.at:%Y-%m-%d %H:%M} {self.actor_name or "—"} {self.action} {self.object_repr}'
 
 
 class AppError(models.Model):

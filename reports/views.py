@@ -32,6 +32,13 @@ def feedback_form(request, token):
             feedback.comment = form.cleaned_data['comment']
             feedback.submitted_at = timezone.now()
             feedback.save(update_fields=['rating', 'comment', 'submitted_at'])
+            if feedback.rating not in (None, '') and int(feedback.rating) <= 2:
+                # A low rating: the task's owner follows it up (docs/scenarios.md F).
+                from django.utils.translation import gettext
+
+                from tasks.equipment import open_quality_follow_up
+                open_quality_follow_up(feedback.task, None, gettext('Low rating (%(rating)s/5): %(number)s').replace(
+                    '%(rating)s', str(feedback.rating)))
             return redirect('reports:feedback_form', token=token)
     else:
         form = CustomerFeedbackForm()

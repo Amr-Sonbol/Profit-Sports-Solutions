@@ -42,7 +42,8 @@
     </div>
     <dl class="detail-grid">
         <div><dt>{% translate "Status" %}</dt><dd>{% include "tasks/_staff_account_status.html" with status=row.status %}</dd></div>
-        <div><dt>{% translate "Role" %}</dt><dd>{{ person.get_role_display }}</dd></div>
+        <div><dt>{% translate "Access role" %}</dt><dd>{{ person.get_role_display }}</dd></div>
+        {% if person.job_title %}<div><dt>{% translate "Job title" %}</dt><dd>{{ person.job_title }}</dd></div>{% endif %}
         <div><dt>{% translate "Country" %}</dt><dd>{{ person.country.display_name }}</dd></div>
         <div><dt>{% translate "Sign-in name" %}</dt><dd dir="ltr">{{ account.username|default:"—" }}</dd></div>
         <div><dt>{% translate "Email" %}</dt><dd dir="ltr">{{ account.email|default:"—" }}</dd></div>
@@ -65,7 +66,9 @@
         {% if account.email %}
         {% include "tasks/_staff_account_action.html" with action="send_setup_link" label=_("Send setup link") %}
         {% endif %}
+        {% if managed.can_set_password %}
         {% include "tasks/_staff_account_action.html" with action="temporary_password" label=_("Set a temporary password") %}
+        {% endif %}
         {% if person.app_sessions %}
         {% include "tasks/_staff_account_action.html" with action="sign_out_phones" label=_("Sign out of all devices") %}
         {% endif %}
@@ -73,6 +76,7 @@
         {% else %}
         {% include "tasks/_staff_account_action.html" with action="enable" label=_("Enable login") %}
         {% endif %}
+        {% if managed.can_set_password %}
         <form method="post" class="row-actions__inline">
             {% csrf_token %}
             <input type="hidden" name="action" value="change_email">
@@ -81,6 +85,7 @@
             <input type="email" name="email" required placeholder="{% translate 'New email' %}" aria-label="{% translate 'New email' %}">
             <button type="submit" class="button button--secondary">{% translate "Change email" %}</button>
         </form>
+        {% endif %}
     </div>
     <p class="field__help">{% translate "Link not received or expired: send a new setup link (please verify the email address first). Forgotten password: send a setup link, or set a temporary password and read it to them if email is unavailable. Lost or reassigned phone: sign them out of all devices. Locked out: unlock the account. Extended absence: disable their login." %}</p>
     {% endif %}
@@ -106,7 +111,7 @@
                 {% with person=row.person account=row.person.user %}
                 <tr>
                     <td><a href="?{% if list_query %}{{ list_query }}&{% endif %}manage={{ person.pk }}#manage">{{ person.full_name }}</a></td>
-                    <td>{{ person.get_role_display }}</td>
+                    <td>{{ person.title }}</td>
                     <td>{{ person.country.display_name }}</td>
                     <td dir="ltr">{{ account.username|default:"—" }}</td>
                     <td>{% include "tasks/_staff_account_status.html" with status=row.status %}</td>

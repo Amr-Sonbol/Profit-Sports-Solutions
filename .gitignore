@@ -15,3 +15,6 @@ docs/Stock.xlsx
 
 # This machine only: extra trusted certificates (e.g. an antivirus that scans outgoing mail), see .env SSL_CERT_FILE.
 local-certs/
+
+# Walkthrough sign-ins (tasks/management/commands/walkthrough_accounts.py): local only.
+walkthrough_logins.txt

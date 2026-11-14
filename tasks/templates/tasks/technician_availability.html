@@ -27,7 +27,7 @@
                 {% for technician in technicians %}
                 <tr>
                     <td>{{ technician.full_name }}</td>
-                    <td>{{ technician.get_role_display }}</td>
+                    <td>{{ technician.title }}</td>
                     <td>
                         {% if technician.is_available %}
                         <form method="post" class="inline-form" novalidate>

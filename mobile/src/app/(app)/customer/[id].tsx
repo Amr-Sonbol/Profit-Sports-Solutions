@@ -9,6 +9,7 @@ import { fetchCustomer } from '@/api/endpoints';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useSession } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import type { CustomerPage } from '@/types';
 import { locale, t } from '@/i18n';
@@ -23,6 +24,7 @@ export default function CustomerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { me } = useSession();
   const [customer, setCustomer] = useState<CustomerPage | null>(null);
   const [error, setError] = useState('');
 
@@ -67,9 +69,10 @@ export default function CustomerScreen() {
               () => Linking.openURL(`tel:${customer.contact_phone}`)) : null}
             {customer.contact_email ? button('mail-outline', 'Email',
               () => Linking.openURL(`mailto:${customer.contact_email}`)) : null}
-            {button('create-outline', 'Edit on the website', () => router.push({
+            {/* Editing: the edit switch (manage_customers) — a supervisor only sees the customer. */}
+            {me?.permissions?.includes('manage_customers') ? button('create-outline', 'Edit on the website', () => router.push({
               pathname: '/website', params: { path: `/customers/${customer.id}/edit/`, title: customer.name },
-            }))}
+            })) : null}
           </ThemedView>
           {customer.billing_address ? (
             <ThemedText type="small" themeColor="textSecondary">Billing: {customer.billing_address}</ThemedText>

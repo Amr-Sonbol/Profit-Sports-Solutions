@@ -8,6 +8,19 @@ from .models import RolePermission, Technician
 ACTIVE_COUNTRY_SESSION_KEY = 'active_country_id'
 
 
+def allowed_permissions(request, technician):
+    """The permissions `technician`'s role has, read once per request (the page's
+    own check, its menu and its bell all ask) — never kept longer, so a change on
+    the Roles & permissions screen applies from the very next page."""
+    cached = getattr(request, '_allowed_permissions', None)
+    if cached is None or cached[0] != technician.permission_role:
+        cached = (technician.permission_role, frozenset(
+            RolePermission.objects.filter(role=technician.permission_role, allowed=True).values_list('permission', flat=True),
+        ))
+        request._allowed_permissions = cached
+    return cached[1]
+
+
 def require_permission(request, permission):
     """Restrict a view to technicians whose role currently has this
     permission enabled. Configurable per role from the Roles & permissions
@@ -16,9 +29,7 @@ def require_permission(request, permission):
     technician = getattr(request.user, 'technician', None)
     if technician is None:
         raise PermissionDenied
-    if not RolePermission.objects.filter(
-        role=technician.role, permission=permission, allowed=True,
-    ).exists():
+    if permission not in allowed_permissions(request, technician):
         raise PermissionDenied
     return technician
 
@@ -83,9 +94,11 @@ STOCK_TASK_CATEGORIES = ('part_shipment', 'receiving', 'loading', 'installation'
 
 def tasks_for_role(technician, tasks):
     """A task list as this role sees it: a Warehouse Manager, only stock-related
-    tasks; everyone else, as their country (or every country) allows."""
+    tasks — and repairs that need parts, to prepare them (tasks.parts_needed);
+    everyone else, as their country (or every country) allows."""
     if technician.role == technician.Role.WAREHOUSE_MANAGER:
-        return tasks.filter(task_type__category__in=STOCK_TASK_CATEGORIES)
+        from django.db.models import Q
+        return tasks.filter(Q(task_type__category__in=STOCK_TASK_CATEGORIES) | Q(parts_needed__isnull=False)).distinct()
     return tasks
 
 
@@ -117,16 +130,69 @@ def require_admin(request):
     return technician
 
 
+# Whose logins each rank manages on Staff accounts (unlock, sign out phones,
+# turn off/on, setup link): never someone above or beside them.
+FIELD_AND_DESK_ROLES = (
+    Technician.Role.SUPERVISOR, Technician.Role.TECHNICIAN, Technician.Role.WAREHOUSE_MANAGER,
+    Technician.Role.COUNTRY_SUPPORT,
+)
+SENIOR_MANAGERS = (Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.SUPPORT_MANAGER)
+
+
 def can_manage_account(actor, target):
-    """Only an admin can change an admin's account, and only the manager
-    tier a manager's — otherwise someone below could reset a password or
-    change an email and sign in as the person above them.
-    """
+    """Whether `actor` may act on `target`'s login (docs/access_rules.md):
+    the Admin anyone's; the COO anyone's but the Admin's; the Operations
+    Manager anyone's but the Admin's and the COO's; the Manager, Project and
+    Technical Support Manager only the field and desk roles', in their own
+    country unless they reach every country. Nobody else, and never through
+    a role made on Roles & permissions (only its switches)."""
+    if actor.custom_role_id:
+        return False
+    if actor.role == Technician.Role.ADMIN:
+        return True
     if target.role == Technician.Role.ADMIN:
-        return actor.role == Technician.Role.ADMIN
-    if target.is_manager_tier:
-        return actor.is_manager_tier
-    return True
+        return False
+    if actor.role == Technician.Role.COO:
+        return True
+    if actor.role == Technician.Role.OPERATIONS_MANAGER:
+        return target.role != Technician.Role.COO
+    if actor.role in SENIOR_MANAGERS and target.role in FIELD_AND_DESK_ROLES:
+        return actor.reaches_all_countries or actor.country_id == target.country_id
+    return False
+
+
+# Who creates a customer or a branch — from a request, the Customers page or
+# while planning an installation (docs/access_rules.md). Editing them is the
+# "edit customers" switch.
+CUSTOMER_CREATORS = (
+    Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.SUPPORT_MANAGER,
+    Technician.Role.OPERATIONS_MANAGER, Technician.Role.COO, Technician.Role.ADMIN,
+)
+
+
+def can_create_customers(technician):
+    """Creates customers and branches: the roles in CUSTOMER_CREATORS (built-in)."""
+    return not technician.custom_role_id and technician.role in CUSTOMER_CREATORS
+
+
+# Who plans a loading's or an installation's machines, and sends loaded machines on
+# to an installation (docs/access_rules.md): everyone else views. A role made later
+# (a Coordinator, say) views too unless it is one of these.
+EQUIPMENT_PLANNERS = (Technician.Role.MANAGER, Technician.Role.PROJECT_MANAGER, Technician.Role.ADMIN)
+
+
+def can_plan_equipment(technician):
+    """Plans the machines on a loading or an installation, and sends loaded
+    machines on: the Manager, the Project Manager and the Admin (built-in roles only)."""
+    return not technician.custom_role_id and technician.role in EQUIPMENT_PLANNERS
+
+
+def can_set_password(actor):
+    """Only an admin sets someone else's password (a temporary one, or one
+    typed in) or changes their login email: whoever did either could sign
+    in as them. Everyone else sends the person a link to their own email
+    (a setup or password link), and the person chooses their own."""
+    return actor.role == Technician.Role.ADMIN
 
 
 def is_last_active_admin(technician):

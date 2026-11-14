@@ -3,6 +3,7 @@ import { currentLocation } from '@/location';
 
 import { API_BASE_URL, ApiRequestError, apiRequest, getActiveCountry, getToken } from './client';
 import type {
+  SiteReadiness,
   PlannedLine,
   TaskAttachment,
   ChecklistRow,
@@ -34,14 +35,64 @@ export function fetchMe() {
 }
 
 /** Edit my profile: phone, email, language and a new photo (any left out stay). */
-export function updateMe(changes: { phone?: string; email?: string; language?: string },
+/** A new email also needs `password`; it changes once the link sent there is opened (`notice` says so). */
+export function updateMe(changes: { phone?: string; email?: string; password?: string; language?: string },
   photo?: { uri: string; name: string; type: string }) {
   const form = new FormData();
   Object.entries(changes).forEach(([field, value]) => form.append(field, value ?? ''));
   if (photo) {
     form.append('photo', photo as unknown as Blob);
   }
-  return apiRequest<Me>('/api/me/', { method: 'POST', body: form, isFormData: true });
+  return apiRequest<Me & { notice?: string }>('/api/me/', { method: 'POST', body: form, isFormData: true });
+}
+
+/** "Use this" / "Use these": the customer's photos of a machine for one slot (serial plate or before) —
+ * tasks.views.confirm_customer_files. */
+export function confirmTaskPhotos(id: number, asset: number, slot: 'serial_plate' | 'before') {
+  return apiRequest<TaskAttachment[]>(`/api/my-tasks/${id}/confirm-photo/`, { method: 'POST', body: { asset, slot } });
+}
+
+/** A machine registered during the visit, so its photos can be taken now (tasks.views.register_task_machine). */
+export function registerTaskMachine(id: number, machine: {
+  brand: number; model_name: string; serial_no: string; no_serial: boolean; code: string; ticket_machine?: number | null;
+}) {
+  return apiRequest<{ asset_id: number; name: string; serial_no: string }>(`/api/my-tasks/${id}/machines/`, {
+    method: 'POST', body: machine,
+  });
+}
+
+/** One part a repair needs (tasks.parts_needed). */
+export type PartNeededRow = {
+  id: number; code: string; description: string; quantity: number;
+  state: 'stock' | 'waiting' | 'arrived'; expected_on: string | null;
+};
+
+/** Add a part needed, or (with `line`) mark one arrived / remove one — the task's owner. */
+export function changeTaskParts(id: number, body: Record<string, string | number>) {
+  return apiRequest<{ parts_needed: PartNeededRow[]; can_change_parts: boolean; can_prepare_parts: boolean }>(
+    `/api/tasks/${id}/parts-needed/`, { method: 'POST', body },
+  );
+}
+
+/** The warehouse (or a manager): the repair's parts are prepared. */
+export function markPartsPrepared(id: number) {
+  return apiRequest<{ parts_prepared: boolean }>(`/api/tasks/${id}/parts-prepared/`, { method: 'POST', body: {} });
+}
+
+/** The repairs whose parts are all in, to prepare — the soonest visit first. */
+export type PartsToPrepare = {
+  task_id: number; task_number: string; customer: string; site: string; scheduled_for: string | null;
+  parts: { code: string; description: string; quantity: number }[];
+};
+export function fetchPartsToPrepare() {
+  return apiRequest<PartsToPrepare[]>('/api/parts-to-prepare/');
+}
+
+/** A lost or handed-on phone: every other phone is signed out; the fresh token keeps this one in. */
+export function signOutOtherPhones(pushToken: string | null) {
+  return apiRequest<{ token: string }>('/api/me/sign-out-others/', {
+    method: 'POST', body: { push_token: pushToken ?? '' },
+  });
 }
 
 /** Signs out every other phone; the fresh token returned keeps this one in. */
@@ -162,6 +213,8 @@ export function saveTaskEdit(id: number, values: Record<string, string | boolean
 export function fetchMyReport(id: number) {
   return apiRequest<{
     report: WorkReport | null;
+    /** Before the first filing: the parts the task needed (code, description, quantity). */
+    parts_suggested?: { part_code: string; description: string; quantity: number }[];
     helpers?: ReportHelper[];
     send_copy_to?: string;
     // The visit's time from the taps as "1:32", and whether the report was sent (then fixed).
@@ -180,6 +233,8 @@ export function fetchMyReport(id: number) {
     checklist?: ChecklistRow[] | null;
     checklist_statuses?: Choice[];
     checklist_step?: 'receiving' | 'loading' | 'installation' | '';
+    /** A loading: whether its dispatch photo (the loaded truck or the delivery note) is in. */
+    has_dispatch_photo?: boolean | null;
   }>(
     `/api/my-tasks/${id}/report/`,
   );
@@ -509,9 +564,19 @@ export function createFollowUp(id: number) {
 }
 
 /** The chain's next step (loading / installation) at a site, for the machines chosen. */
-export function createNextStep(id: number, step: string, site: string, lines: number[]) {
+/** A new branch made while sending machines on (an installation): its customer and details. */
+export type NewBranch = { customer: string; name: string; address: string; contact: string; phone: string };
+
+export function createNextStep(id: number, step: string, site: string, lines: number[], supervisor = '', newBranch?: NewBranch) {
   return apiRequest<{ id: number; task_number: string }>(`/api/tasks/${id}/next-step/`, {
-    method: 'POST', body: { step, site, lines },
+    method: 'POST',
+    body: {
+      step, site, lines, supervisor,
+      ...(newBranch ? {
+        new_branch_customer: newBranch.customer, new_branch_name: newBranch.name, new_branch_address: newBranch.address,
+        new_branch_contact: newBranch.contact, new_branch_phone: newBranch.phone,
+      } : {}),
+    },
   });
 }
 
@@ -537,9 +602,9 @@ export function fetchTaskLines(id: number) {
 }
 
 /** Replaces the plan; on a loading or an installation "× 4" becomes four lines. */
-export function saveTaskLines(id: number, lines: PlannedLine[]) {
+export function saveTaskLines(id: number, lines: PlannedLine[], stockReason = '') {
   return apiRequest<TaskLines>(`/api/tasks/${id}/lines/`, {
-    method: 'POST', body: { lines },
+    method: 'POST', body: { lines, stock_reason: stockReason },
   });
 }
 
@@ -558,3 +623,11 @@ export function fetchNewPersonForm() {
 export function createPerson(values: Record<string, string>) {
   return apiRequest<{ id: number; name: string; has_login: boolean }>('/api/people/new/', { method: 'POST', body: values });
 }
+
+/** An installation's site checks (its owner or a manager). */
+export function saveSiteReadiness(id: number, checks: {
+  space_and_floor: boolean; power: boolean; access: boolean; date_confirmed: boolean; note: string;
+}) {
+  return apiRequest<SiteReadiness>(`/api/tasks/${id}/site-readiness/`, { method: 'POST', body: checks });
+}
+

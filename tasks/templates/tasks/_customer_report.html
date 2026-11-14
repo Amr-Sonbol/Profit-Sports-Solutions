@@ -1,4 +1,4 @@
-{% load i18n %}{% comment %}What the customer reported, machine by machine (tasks.customer_report): name, serial, problem, their words, their photos and videos — then files not tied to a machine, and what they sent later. Plain HTML: a photo opens full size in a new tab, a video plays in the browser's own player. `report` is customer_report(...).{% endcomment %}
+{% load i18n %}{% comment %}What the customer reported, machine by machine (tasks.customer_report): name, serial, problem, their words, their photos and videos — then files not tied to a machine, and what they sent later. Plain HTML: a photo opens full size in a new tab, a video plays in the browser's own player. `report` is customer_report(...). `skip_machines`: on a task's pages, where each machine's card (tasks/_visit_photos.html) shows its part of the report.{% endcomment %}
 <div class="customer-report">
     <p class="customer-report__summary">
         {% blocktranslate count count=report.machines|length %}{{ count }} machine{% plural %}{{ count }} machines{% endblocktranslate %}
@@ -6,7 +6,7 @@
         {% if report.videos %}· {% blocktranslate count count=report.videos %}{{ count }} video{% plural %}{{ count }} videos{% endblocktranslate %}{% endif %}
     </p>
 
-    {% for card in report.machines %}{% with machine=card.machine %}
+    {% if not skip_machines %}{% for card in report.machines %}{% with machine=card.machine %}
     <article class="machine-card">
         <header class="machine-card__head">
             <h3>{{ machine.machine_name }}</h3>
@@ -23,7 +23,7 @@
         {% endif %}
         {% if machine.asset_id and 'view_machines' in role_permissions %}<p class="machine-card__history"><a href="{% url 'tasks:machine_detail' machine.asset_id %}">{% translate "See this machine's history" %}</a></p>{% endif %}
     </article>
-    {% endwith %}{% endfor %}
+    {% endwith %}{% endfor %}{% endif %}
 
     {% if report.other %}
     <h3>{% translate "Other files" %}</h3>

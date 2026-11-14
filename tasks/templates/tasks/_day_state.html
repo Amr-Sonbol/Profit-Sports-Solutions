@@ -1,0 +1,9 @@
+{% load i18n %}{% comment %}One person's day in plain words with a coloured dot (tasks.views._with_day_load): New task's team panel, Assign.{% endcomment %}
+<span class="day-state day-state--{{ person.day_state }}">
+{% if person.day_state == 'off' %}{% translate "Unavailable" %} — {{ person.get_unavailable_reason_display }}
+{% elif person.day_state == 'no_day' %}<span class="muted">{% translate "Choose a day to see" %}</span>
+{% elif person.day_state == 'free' %}{% translate "No jobs that day" %}
+{% elif person.day_state == 'clash' %}{% for job in person.clashes %}{% if not forloop.first %}, {% endif %}{% blocktranslate with time=job.scheduled_for|time:"TIME_FORMAT" %}Busy at {{ time }}{% endblocktranslate %} — <a href="{% url 'tasks:task_detail' job.pk %}" class="task-number" dir="ltr">{{ job.task_number }}</a>{% endfor %}
+{% else %}{% blocktranslate count count=person.day_jobs|length %}{{ count }} job{% plural %}{{ count }} jobs{% endblocktranslate %}{% if person.busy_from %} · {% blocktranslate with start=person.busy_from|time:"TIME_FORMAT" end=person.busy_to|time:"TIME_FORMAT" %}busy {{ start }}–{{ end }}{% endblocktranslate %}{% endif %}
+{% endif %}
+</span>

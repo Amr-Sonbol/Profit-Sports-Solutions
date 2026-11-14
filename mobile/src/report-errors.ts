@@ -14,6 +14,9 @@ export function fieldErrorsFrom(body: unknown): FieldErrors {
         const messages = Object.values(first as Record<string, string[]>).flat();
         errors[field] = messages[0] ?? `Please review the ${field} entries.`;
       }
+    } else if (field === 'photos' && Array.isArray(value)) {
+      // Every machine still missing a photo, one per line — not just the first.
+      errors[field] = value.map(String).join('\n');
     } else if (Array.isArray(value)) {
       errors[field] = String(value[0]);
     }

@@ -35,6 +35,14 @@ def send_push(technicians, title, body, data=None):
     messages = [
         {'to': token, 'title': title, 'body': body, 'data': data or {}, 'sound': 'default'} for token in tokens
     ]
+    # Sent once the change is saved (never for one rolled back), off the request: a slow
+    # push service never holds up the person, nor the server (spots.background).
+    from spots.background import in_background
+    in_background(lambda: _deliver(tokens, messages))
+
+
+def _deliver(tokens, messages):
+    """Expo's push service: the messages, then forget the phones it says are gone."""
     request = Request(
         EXPO_PUSH_URL, data=json.dumps(messages).encode(),
         headers={'Content-Type': 'application/json', 'Accept': 'application/json'},

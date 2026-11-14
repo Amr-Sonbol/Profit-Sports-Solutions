@@ -5,6 +5,7 @@ django-axes==8.3.1
 djangorestframework==3.18.2
 gunicorn==23.0.0
 openpyxl==3.1.5
+Pillow==13.0.0
 psycopg==3.3.5
 psycopg-binary==3.3.5
 python-decouple==3.8
@@ -15,3 +16,6 @@ tzdata==2026.3
 urllib3==2.8.0
 weasyprint==70.0
 whitenoise==6.12.0
+# Uploads on Cloudflare R2 (spots.storage), S3-compatible.
+boto3==1.35.36
+django-storages[s3]==1.14.4

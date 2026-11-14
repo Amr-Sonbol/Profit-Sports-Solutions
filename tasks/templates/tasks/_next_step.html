@@ -39,13 +39,16 @@
         <div class="next-choices">
             <fieldset class="next-tabs">
                 <legend class="visually-hidden">{% translate "What happens next?" %}</legend>
+                {# No visits in this country (the USA); a customer with its own team: shipping is suggested. #}
+                {% if ticket.country.does_visits %}
                 <label class="next-tab">
-                    <input type="radio" name="next_choice" value="visit" checked>
+                    <input type="radio" name="next_choice" value="visit"{% if not ticket.customer.own_maintenance_team %} checked{% endif %}>
                     <span class="next-tab__title">{% translate "Send a technician" %}</span>
                     <span class="next-tab__hint">{% translate "A visit, created in one step" %}</span>
                 </label>
+                {% endif %}
                 <label class="next-tab">
-                    <input type="radio" name="next_choice" value="ship">
+                    <input type="radio" name="next_choice" value="ship"{% if not ticket.country.does_visits or ticket.customer.own_maintenance_team %} checked{% endif %}>
                     <span class="next-tab__title">{% translate "Ship a part" %}</span>
                     <span class="next-tab__hint">{% translate "Sent by courier, no visit" %}</span>
                 </label>
@@ -56,7 +59,8 @@
                 </label>
             </fieldset>
 
-            {# 1. A technician: who and when; everything else from the request. #}
+            {# 1. A technician: who and when; everything else from the request. Not where we do no visits. #}
+            {% if ticket.country.does_visits %}
             <div class="next-choice next-choice--visit">
                 <p class="field__help">{% if next_plan.task_type %}{{ next_plan.task_type.display_name|default:next_plan.task_type.name }}{% endif %}{% if next_plan.priority == 'high' %} · {% translate "High priority (a machine isn't working)" %}{% endif %}{% if next_warranty %} · {% translate "Under warranty: free" %}{% endif %}</p>
                 {% if ticket.site %}
@@ -93,6 +97,7 @@
                 <p class="muted">{% translate "This request has no branch yet: use More options to choose one." %}</p>
                 {% endif %}
             </div>
+            {% endif %}
 
             {# 2. A part: to the warehouse manager to prepare (tasks.shipments). #}
             <div class="next-choice next-choice--ship">

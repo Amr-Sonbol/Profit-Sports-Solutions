@@ -8,9 +8,24 @@
     <h1>{% translate "Audit log" %}</h1>
 </div>
 
-<p class="muted">
-    {% translate "All additions, changes and deletions made through Django admin, together with every account action (logins created, passwords reset, accounts unlocked, devices signed out, logins enabled or disabled), newest first. A task's history is shown on its detail page." %}
-</p>
+<p class="muted">{% translate "Who did what, when, from where, and what it changed: every change to customers, branches, machines, staff, roles, settings, tasks, requests, reports and stock, every sign-in (and failed one), and every account action. Newest first. Passwords are never shown, only that one changed." %}</p>
+
+<form method="get" class="filters filters--panel">
+    <input type="search" name="who" value="{{ filters.who }}" placeholder="{% translate 'Who' %}" aria-label="{% translate 'Who' %}">
+    <select name="action" aria-label="{% translate 'What' %}">
+        <option value="">{% translate "Anything" %}</option>
+        {% for value, label in actions %}<option value="{{ value }}"{% if filters.action == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <select name="kind" aria-label="{% translate 'Kind of record' %}">
+        <option value="">{% translate "Any record" %}</option>
+        {% for kind in kinds %}<option value="{{ kind }}"{% if filters.kind == kind %} selected{% endif %}>{{ kind }}</option>{% endfor %}
+    </select>
+    <input type="date" name="since" value="{{ filters.since }}" aria-label="{% translate 'From' %}">
+    <input type="date" name="until" value="{{ filters.until }}" aria-label="{% translate 'To' %}">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="{% translate 'Record, details or IP' %}" aria-label="{% translate 'Search' %}">
+    <button type="submit" class="button button--secondary">{% translate "Search" %}</button>
+    <a class="button button--secondary" href="?{{ query }}{% if query %}&{% endif %}export=csv">{% translate "Export (CSV)" %}</a>
+</form>
 
 <div class="section">
     <div class="table-wrap">
@@ -19,32 +34,25 @@
                 <tr>
                     <th>{% translate "When" %}</th>
                     <th>{% translate "Who" %}</th>
-                    <th>{% translate "Action" %}</th>
-                    <th>{% translate "Model" %}</th>
-                    <th>{% translate "Object" %}</th>
-                    <th>{% translate "Details" %}</th>
+                    <th>{% translate "What" %}</th>
+                    <th>{% translate "Record" %}</th>
+                    <th>{% translate "Changes" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for entry in page_obj %}
                 <tr>
-                    <td>{{ entry.action_time|date:"SHORT_DATETIME_FORMAT" }}</td>
-                    <td>{{ entry.user }}</td>
+                    <td>{{ entry.at|date:"SHORT_DATETIME_FORMAT" }}{% if entry.ip %}<br><span class="muted" dir="ltr">{{ entry.ip }}</span>{% endif %}</td>
+                    <td>{{ entry.actor_name|default:"—" }}</td>
+                    <td><span class="badge badge--{% if entry.action == 'deleted' or entry.action == 'sign_in_failed' %}warning{% else %}muted{% endif %}">{{ entry.get_action_display }}</span></td>
+                    <td>{% if entry.object_repr %}{{ entry.object_repr }}<br>{% endif %}<span class="muted">{{ entry.object_type }}{% if entry.object_id %} #{{ entry.object_id }}{% endif %}</span></td>
                     <td>
-                        {% if entry.is_addition %}
-                        <span class="badge badge--neutral">{% translate "Added" %}</span>
-                        {% elif entry.is_change %}
-                        <span class="badge badge--muted">{% translate "Changed" %}</span>
-                        {% elif entry.is_deletion %}
-                        <span class="badge badge--status-closed">{% translate "Deleted" %}</span>
-                        {% endif %}
+                        {% if entry.message %}<p>{{ entry.message }}</p>{% endif %}
+                        {% if entry.changes %}<ul class="audit-changes">{% for field, pair in entry.changes.items %}<li><strong>{{ field }}</strong>: <span dir="auto">{{ pair.0|default:"—" }}</span> → <span dir="auto">{{ pair.1|default:"—" }}</span></li>{% endfor %}</ul>{% endif %}
                     </td>
-                    <td>{{ entry.content_type }}</td>
-                    <td>{{ entry.object_repr }}</td>
-                    <td>{{ entry.get_change_message }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="empty-state">{% translate "No entries recorded." %}</td></tr>
+                <tr><td colspan="5" class="empty-state">{% translate "No entries recorded." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -53,13 +61,9 @@
 
 {% if page_obj.has_other_pages %}
 <div class="pagination">
-    {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>
-    {% endif %}
+    {% if page_obj.has_previous %}<a href="?{{ query }}{% if query %}&{% endif %}page={{ page_obj.previous_page_number }}">{% translate "Previous" %}</a>{% endif %}
     <span class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</span>
-    {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>
-    {% endif %}
+    {% if page_obj.has_next %}<a href="?{{ query }}{% if query %}&{% endif %}page={{ page_obj.next_page_number }}">{% translate "Next" %}</a>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

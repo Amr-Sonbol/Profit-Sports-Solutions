@@ -68,6 +68,18 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
     }
   };
 
+  // From the factory straight to the customer: the PAK number, courier and tracking — shipped, nothing from our stock.
+  const shippedDirect = async () => {
+    const result = await act(
+      { action: 'shipment_direct', pak_reference_number: pak, shipping_company: company, shipping_tracking_number: tracking },
+      ['Shipped direct from the factory?', 'The customer is told, with the tracking number.'],
+      'Shipped. The customer has been told.',
+    );
+    if (result) {
+      onChanged(result);
+    }
+  };
+
   const shipped = async () => {
     const result = await act(
       { action: 'shipment_shipped', shipping_company: company, shipping_tracking_number: tracking },
@@ -112,7 +124,7 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
         <ThemedText type="small">{shipment.shipping_company} · {shipment.shipping_tracking_number}</ThemedText>
       ) : null}
 
-      {shipment.can_prepare ? (
+      {shipment.can_prepare && !shipment.direct_only ? (
         <ThemedView style={[styles.box, { borderColor: theme.primary }]}>
           <ThemedText type="smallBold">Ready to ship</ThemedText>
           {rows.map((row, index) => (
@@ -132,7 +144,7 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
             <ThemedText type="small" themeColor="primary">+ Add a part</ThemedText>
           </TouchableOpacity>
           <TextInput
-            style={inputStyle} value={pak} onChangeText={setPak} placeholder="PAK reference number (optional)"
+            style={inputStyle} value={pak} onChangeText={setPak} placeholder="Panatta PAK (optional)"
             placeholderTextColor={theme.textSecondary}
           />
           <ThemedText type="small">Who ships it</ThemedText>
@@ -151,7 +163,37 @@ export function ShipmentSteps({ task, onChanged }: { task: TeamTaskDetail; onCha
         </ThemedView>
       ) : null}
 
-      {shipment.can_ship ? (
+      {shipment.can_ship_direct ? (
+        <ThemedView style={[styles.box, { borderColor: theme.primary }]}>
+          <ThemedText type="smallBold">Sent direct from the factory</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            The factory ships it straight to the customer: nothing leaves our stock.
+          </ThemedText>
+          <TextInput
+            style={inputStyle} value={pak} onChangeText={setPak} placeholder="Panatta PAK"
+            placeholderTextColor={theme.textSecondary} autoCapitalize="characters"
+          />
+          <ThemedView style={styles.row}>
+            {shipment.companies.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.chip, { borderColor: theme.primary }, company === option.value && { backgroundColor: theme.primary }]}
+                onPress={() => setCompany(option.value)}
+              >
+                <ThemedText type="small" style={company === option.value ? { color: theme.onPrimary } : undefined}>{option.label}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </ThemedView>
+          <TextInput
+            style={inputStyle} value={tracking} onChangeText={setTracking} placeholder="Tracking number (optional)"
+            placeholderTextColor={theme.textSecondary}
+          />
+          <Button label="Shipped direct" onPress={shippedDirect} disabled={isBusy || !company} />
+        </ThemedView>
+      ) : null}
+      {shipment.ships_direct ? <ThemedText type="small" themeColor="textSecondary">Sent direct from the factory.</ThemedText> : null}
+
+      {shipment.can_ship && !shipment.direct_only ? (
         <ThemedView style={[styles.box, { borderColor: theme.primary }]}>
           <ThemedText type="smallBold">Shipped</ThemedText>
           <ThemedView style={styles.row}>

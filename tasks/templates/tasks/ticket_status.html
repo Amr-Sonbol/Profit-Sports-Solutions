@@ -38,12 +38,12 @@
     <h2>{% translate "Your request" %}</h2>
     <dl class="detail-grid">
         <div>
-            <dt>{% translate "Site / location" %}</dt>
+            <dt>{% translate "Branch" %}</dt>
             <dd>{{ ticket.site_description }}</dd>
         </div>
         <div>
             <dt>{% translate "Submitted" %}</dt>
-            <dd>{{ ticket.submitted_at|date:"SHORT_DATE_FORMAT" }}</dd>
+            <dd>{{ ticket.submitted_at|date:"j M Y" }}{% if ticket.submitted_by %} · {% blocktranslate with name=ticket.submitted_by.first_name|default:ticket.submitted_by.email %}Sent by {{ name }}{% endblocktranslate %}{% endif %}</dd>
         </div>
         <div>
             <dt>{% translate "Request type" %}</dt>
@@ -74,13 +74,40 @@
     {% endfor %}
 </div>
 
+{% if shipments %}
+{# The parts shipped for it (tasks.shipments.for_customer): a parcel, never a visit. #}
+<div class="section">
+    <h2>{% translate "Your parts" %}</h2>
+    <ul class="action-list">
+        {% for shipment in shipments %}
+        <li class="action-row portal-row">
+            <span class="portal-row__main">
+                <strong>{% translate "Part shipment" %}</strong>
+                <span class="muted" dir="ltr">{{ shipment.task.task_number }}</span>
+                {% if shipment.shipped and shipment.company %}
+                <span>{{ shipment.company }}{% if shipment.tracking %} · {% translate "Tracking number" %}
+                    {% if shipment.url %}<a href="{{ shipment.url }}" target="_blank" rel="noopener" dir="ltr">{{ shipment.tracking }}</a>{% else %}<span dir="ltr">{{ shipment.tracking }}</span>{% endif %}{% endif %}</span>
+                {% endif %}
+            </span>
+            {% if shipment.url %}
+            <span class="portal-row__links">
+                <a href="{{ shipment.url }}" target="_blank" rel="noopener">{% translate "Track your parcel" %}</a>
+            </span>
+            {% endif %}
+            <span class="badge {{ shipment.progress.1 }}">{{ shipment.progress.0 }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 {% if visits %}
 <div class="section">
     <h2>{% if visits|length == 1 %}{% translate "Your visit" %}{% else %}{% translate "Your visits" %}{% endif %}</h2>
     <ul class="action-list">
         {% for visit in visits %}
         <li class="action-row portal-row">
-            <span class="portal-row__day">{% if visit.booked %}{{ visit.day|date:"j M" }}{% elif visit.has_report %}{{ visit.task.report.submitted_at|date:"j M Y" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
+            <span class="portal-row__day">{% if visit.has_report %}{{ visit.task.report.submitted_at|date:"j M Y" }}{% elif visit.day %}{{ visit.day|date:"j M Y" }}{% else %}<span class="muted">{% translate "Date to be set" %}</span>{% endif %}</span>
             <span class="portal-row__main">
                 <a href="{% url 'customers:portal_visit' visit.task.pk %}"><strong>{{ visit.task.task_type.display_name|default:_("Service visit") }}</strong></a>
                 <span class="muted" dir="ltr">{{ visit.task.task_number }}</span>
